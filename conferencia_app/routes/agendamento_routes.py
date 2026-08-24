@@ -28,7 +28,7 @@ from ..models import (
 )
 from ..services.email_service import enviar_email_agendamento_update
 from ..compras.services import compras_service
-from ..services.erp_estoque_service import buscar_estoque_grv
+from ..services.erp_estoque_service import buscar_consumo_kardex_grv, buscar_estoque_grv
 from ..services.agendamento_service import (
     PRIORIDADES_SOLICITACAO,
     STATUS_ATIVOS,
@@ -314,7 +314,12 @@ def _oc_ja_recebida(status_oc_nome: str) -> bool:
     return bool(re.search(r"RECEB|ENCERR|CONCL|FINAL|ATEND", status))
 
 
-def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict]) -> dict:
+def _calcular_risco_estoque_oc(
+    numero_oc: str,
+    estoque_aliases: dict[str, dict],
+    consumo_kardex_por_codigo: dict[str, dict] | None = None,
+    consulta_oc: dict | None = None,
+) -> dict:
     risco_estoque = "sem_base_calculo"
     risco_estoque_label = "Sem base de cálculo"
     risco_estoque_detalhe = "Sem itens válidos da OC para cálculo de cobertura."
@@ -326,19 +331,22 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
             "risco_estoque_detalhe": risco_estoque_detalhe,
         }
 
-    try:
-        consulta = consultar_oc_agendamento(numero_oc)
-    except Exception:
-        return {
-            "risco_estoque": risco_estoque,
-            "risco_estoque_label": risco_estoque_label,
-            "risco_estoque_detalhe": risco_estoque_detalhe,
-        }
+    consulta = consulta_oc
+    if not isinstance(consulta, dict):
+        try:
+            consulta = consultar_oc_agendamento(numero_oc)
+        except Exception:
+            return {
+                "risco_estoque": risco_estoque,
+                "risco_estoque_label": risco_estoque_label,
+                "risco_estoque_detalhe": risco_estoque_detalhe,
+            }
 
     itens = consulta.get("itens") if isinstance(consulta, dict) else []
     if not isinstance(itens, list):
         itens = []
 
+    consumo_kardex_por_codigo = consumo_kardex_por_codigo or {}
     resumo_itens: dict[str, dict[str, float]] = {}
     for item in itens:
         if not isinstance(item, dict):
@@ -349,11 +357,17 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
         qtd = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd") or item.get("volume") or 0)
         if qtd <= 0:
             qtd = 1.0
-        consumo = _to_float(item.get("consumo_diario") or item.get("consumo_medio_diario") or 0)
-        slot = resumo_itens.setdefault(codigo, {"qtd": 0.0, "consumo": 0.0})
+        consumo_item = _to_float(item.get("consumo_diario") or item.get("consumo_medio_diario") or 0)
+        consumo_kardex = float((consumo_kardex_por_codigo.get(codigo) or {}).get("consumo_medio_diario") or 0)
+        estoque_medio = float((consumo_kardex_por_codigo.get(codigo) or {}).get("estoque_medio_periodo") or 0)
+
+        consumo = consumo_kardex if consumo_kardex > 0 else consumo_item
+        slot = resumo_itens.setdefault(codigo, {"qtd": 0.0, "consumo": 0.0, "estoque_medio": 0.0})
         slot["qtd"] += qtd
         if consumo > 0:
             slot["consumo"] = max(slot["consumo"], consumo)
+        if estoque_medio > 0:
+            slot["estoque_medio"] = max(slot["estoque_medio"], estoque_medio)
 
     if not resumo_itens:
         return {
@@ -363,36 +377,36 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
         }
 
     cobertura_critica = False
-    cobertura_atencao = False
     faltas = 0
-    baixos = 0
     sem_cadastro_estoque = 0
     itens_com_estoque = 0
+    itens_com_consumo_kardex = 0
+    menor_cobertura = None
     for codigo_item, vals in resumo_itens.items():
         qtd_oc = float(vals.get("qtd") or 0)
         consumo_diario = float(vals.get("consumo") or 0)
+        estoque_medio = float(vals.get("estoque_medio") or 0)
         estoque_item = estoque_aliases.get(codigo_item) or {}
         if not estoque_item:
             sem_cadastro_estoque += 1
             continue
 
         itens_com_estoque += 1
-        saldo = float(estoque_item.get("qtde_total") or 0)
+        saldo_atual = float(estoque_item.get("qtde_total") or 0)
+        saldo_referencia = estoque_medio if estoque_medio > 0 else saldo_atual
         if consumo_diario > 0:
-            dias_cobertura = saldo / consumo_diario if consumo_diario else 0
-            if dias_cobertura < 3:
+            if float((consumo_kardex_por_codigo.get(codigo_item) or {}).get("consumo_medio_diario") or 0) > 0:
+                itens_com_consumo_kardex += 1
+            dias_cobertura = saldo_referencia / consumo_diario if consumo_diario else 0
+            menor_cobertura = dias_cobertura if menor_cobertura is None else min(menor_cobertura, dias_cobertura)
+            if dias_cobertura < 7:
                 cobertura_critica = True
                 faltas += 1
-            elif dias_cobertura < 7:
-                cobertura_atencao = True
-                baixos += 1
             continue
-        if saldo + 0.0001 < qtd_oc:
+
+        if saldo_referencia + 0.0001 < qtd_oc:
             cobertura_critica = True
             faltas += 1
-        elif saldo < (qtd_oc * 1.5):
-            cobertura_atencao = True
-            baixos += 1
 
     if sem_cadastro_estoque > 0 and itens_com_estoque == 0:
         risco_estoque = "sem_estoque"
@@ -403,24 +417,31 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
     elif cobertura_critica:
         risco_estoque = "critico"
         risco_estoque_label = "Estoque crítico"
-        risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
-    elif cobertura_atencao or sem_cadastro_estoque > 0:
-        risco_estoque = "critico"
-        risco_estoque_label = "Estoque crítico"
-        if baixos > 0 and sem_cadastro_estoque > 0:
+        if menor_cobertura is not None:
             risco_estoque_detalhe = (
-                f"{baixos} item(ns) com cobertura curta e {sem_cadastro_estoque} sem registro no estoque GRV."
+                f"Cobertura mínima de {menor_cobertura:.1f} dia(s); {faltas} item(ns) abaixo de 7 dias."
             )
-        elif baixos > 0:
-            risco_estoque_detalhe = f"{baixos} item(ns) com cobertura curta de estoque."
         else:
-            risco_estoque_detalhe = (
-                f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV."
-            )
+            risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
+        if sem_cadastro_estoque > 0:
+            risco_estoque_detalhe += f" {sem_cadastro_estoque} item(ns) sem registro no estoque GRV."
+    elif sem_cadastro_estoque > 0:
+        risco_estoque = "sem_estoque"
+        risco_estoque_label = "Sem estoque"
+        risco_estoque_detalhe = f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV."
+    elif itens_com_consumo_kardex == 0:
+        risco_estoque = "sem_base_calculo"
+        risco_estoque_label = "Sem base de cálculo"
+        risco_estoque_detalhe = "Sem histórico de consumo do kardex para calcular cobertura diária."
     else:
         risco_estoque = "normal"
         risco_estoque_label = "Estoque normal"
-        risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
+        if menor_cobertura is not None:
+            risco_estoque_detalhe = (
+                f"Cobertura mínima de {menor_cobertura:.1f} dia(s), com consumo médio diário pelo kardex."
+            )
+        else:
+            risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
 
     return {
         "risco_estoque": risco_estoque,
@@ -451,6 +472,34 @@ def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
     if not pendentes:
         return riscos
 
+    consultas_por_oc: dict[str, dict] = {}
+    codigos_itens: set[str] = set()
+    for numero in pendentes:
+        try:
+            consulta = consultar_oc_agendamento(numero)
+        except Exception:
+            continue
+        if not isinstance(consulta, dict):
+            continue
+        consultas_por_oc[numero] = consulta
+        itens = consulta.get("itens") if isinstance(consulta, dict) else []
+        if not isinstance(itens, list):
+            continue
+        for item in itens:
+            if not isinstance(item, dict):
+                continue
+            codigo_item = _codigo_item_oc(item)
+            if codigo_item:
+                codigos_itens.add(codigo_item)
+
+    consumo_kardex_por_codigo: dict[str, dict] = {}
+    if codigos_itens:
+        try:
+            consumo_payload = buscar_consumo_kardex_grv(codigos=list(codigos_itens), forcar_atualizacao=False)
+            consumo_kardex_por_codigo = consumo_payload.get("por_codigo") or {}
+        except Exception:
+            current_app.logger.warning("Calendário de recebimento sem base kardex: histórico de consumo indisponível")
+
     try:
         estoque_payload = buscar_estoque_grv(forcar_atualizacao=False)
         estoque_aliases = _mapa_estoque_aliases(estoque_payload.get("por_codigo") or {})
@@ -458,7 +507,12 @@ def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
         return riscos
 
     for numero in pendentes:
-        risco_payload = _calcular_risco_estoque_oc(numero, estoque_aliases)
+        risco_payload = _calcular_risco_estoque_oc(
+            numero,
+            estoque_aliases,
+            consumo_kardex_por_codigo=consumo_kardex_por_codigo,
+            consulta_oc=consultas_por_oc.get(numero),
+        )
         riscos[numero] = risco_payload
         _RECEBIMENTO_RISCO_CACHE[numero] = dict(risco_payload)
 

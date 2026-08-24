@@ -1041,6 +1041,80 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _safe_ident(name: str) -> str:
+    ident = str(name or "").strip()
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", ident):
+        raise ValueError(f"Identificador inválido: {name}")
+    return ident
+
+
+def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
+    candidatos = [
+        "tkardex",
+        "t_kardex",
+        "tkardex_produto",
+        "tmov_estoque",
+        "tmovimento_estoque",
+        "tproduto_movimento",
+        "tproduto_mov",
+        "tmov_produto",
+    ]
+    code_cols = ["codigo_interno", "cod_interno", "codigo", "cod_produto", "produto"]
+    date_cols = ["data_movimento", "dt_movimento", "data", "dt_lancamento", "dt_emissao", "dt"]
+    qty_cols = ["qtde", "quantidade", "qtd", "qtde_movimentada", "volume"]
+    tipo_cols = ["tipo_movimento", "tp_movimento", "movimento", "operacao", "natureza"]
+    saldo_cols = ["saldo", "qtde_saldo", "saldo_atual"]
+    empresa_cols = ["cod_empresa", "empresa"]
+
+    for tabela in candidatos:
+        cur.execute(
+            """
+            select column_name
+            from information_schema.columns
+            where table_schema = 'public' and table_name = %s
+            """,
+            (tabela,),
+        )
+        cols = {str(row[0]).strip().lower() for row in cur.fetchall() if row and row[0]}
+        if not cols:
+            continue
+
+        code_col = next((c for c in code_cols if c in cols), None)
+        date_col = next((c for c in date_cols if c in cols), None)
+        qty_col = next((c for c in qty_cols if c in cols), None)
+        if not code_col or not date_col or not qty_col:
+            continue
+
+        tipo_col = next((c for c in tipo_cols if c in cols), None)
+        saldo_col = next((c for c in saldo_cols if c in cols), None)
+        empresa_col = next((c for c in empresa_cols if c in cols), None)
+
+        select_tipo = f"{_safe_ident(tipo_col)}::text" if tipo_col else "''::text"
+        select_saldo = f"{_safe_ident(saldo_col)}::double precision" if saldo_col else "null::double precision"
+
+        filtros = [f"{_safe_ident(date_col)}::date between %s and %s"]
+        if empresa_col:
+            filtros.append(f"{_safe_ident(empresa_col)} = %s")
+        filtros.append(f"upper(trim({_safe_ident(code_col)}::text)) = any(%s::text[])")
+
+        sql = f"""
+            select
+                upper(trim({_safe_ident(code_col)}::text)) as codigo_interno,
+                {_safe_ident(date_col)}::date as data_movimento,
+                coalesce({_safe_ident(qty_col)}, 0)::double precision as quantidade,
+                {select_tipo} as tipo_movimento,
+                {select_saldo} as saldo
+            from public.{_safe_ident(tabela)}
+            where {' and '.join(filtros)}
+        """
+        return {
+            "tabela": f"public.{tabela}",
+            "sql": sql,
+            "tem_empresa": bool(empresa_col),
+        }
+    return None
+
+
 def _compras_query_catalog() -> dict[str, str]:
     from conferencia_app.compras import queries as compras_queries
 
@@ -1582,6 +1656,117 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "empresa": empresa, "itens": itens, "codigos_ativos": codigos_ativos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar estoque no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/kardex-consumo")
+    def consultar_estoque_kardex_consumo():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            try:
+                janela_dias = int(payload.get("janela_dias") or 30)
+            except (TypeError, ValueError):
+                janela_dias = 30
+            janela_dias = max(7, min(janela_dias, 180))
+
+            codigos_raw = payload.get("codigos") or []
+            if not isinstance(codigos_raw, list):
+                return jsonify({"sucesso": False, "erro": "codigos_deve_ser_lista"}), 400
+
+            codigos = []
+            vistos = set()
+            for codigo in codigos_raw:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "consumos": {}, "janela_dias": janela_dias, "fonte": "sem_codigos"})
+
+            data_fim = date.today()
+            data_inicio = data_fim - timedelta(days=janela_dias - 1)
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    fonte = _detectar_fonte_kardex(cur)
+                    if not fonte:
+                        return jsonify(
+                            {
+                                "sucesso": True,
+                                "consumos": {},
+                                "janela_dias": janela_dias,
+                                "fonte": "indisponivel",
+                                "mensagem": "Nenhuma tabela de kardex/movimentação compatível foi encontrada.",
+                            }
+                        )
+
+                    params = [data_inicio, data_fim]
+                    if fonte["tem_empresa"]:
+                        params.append(empresa)
+                    params.append(codigos)
+                    cur.execute(fonte["sql"], tuple(params))
+                    rows = cur.fetchall()
+
+            agregados: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                codigo = re.sub(r"[^A-Z0-9]", "", str(row[0] or "").strip().upper())
+                if not codigo:
+                    continue
+                data_mov = row[1]
+                quantidade = float(row[2] or 0)
+                tipo_mov = str(row[3] or "").strip().upper()
+                saldo = row[4]
+
+                slot = agregados.setdefault(codigo, {"saida_total": 0.0, "dias_saida": set(), "saldos": []})
+                tokens_saida = ("SAIDA", "CONSUMO", "BAIXA", "EXPED", "VENDA", "S")
+                is_saida = quantidade < 0 or any(tok in tipo_mov for tok in tokens_saida)
+                if is_saida and quantidade != 0:
+                    slot["saida_total"] += abs(quantidade)
+                    if data_mov is not None:
+                        slot["dias_saida"].add(str(data_mov))
+
+                if saldo is not None:
+                    try:
+                        slot["saldos"].append(float(saldo))
+                    except (TypeError, ValueError):
+                        pass
+
+            consumos: dict[str, dict[str, Any]] = {}
+            for codigo in codigos:
+                slot = agregados.get(codigo) or {"saida_total": 0.0, "dias_saida": set(), "saldos": []}
+                saida_total = float(slot.get("saida_total") or 0)
+                dias_saida = len(slot.get("dias_saida") or set())
+                saldos = [float(v) for v in (slot.get("saldos") or [])]
+                estoque_medio = (sum(saldos) / len(saldos)) if saldos else 0.0
+                consumos[codigo] = {
+                    "consumo_medio_diario": round(saida_total / float(janela_dias), 6),
+                    "saida_total_periodo": round(saida_total, 6),
+                    "dias_com_saida": dias_saida,
+                    "estoque_medio_periodo": round(estoque_medio, 6),
+                }
+
+            return jsonify(
+                {
+                    "sucesso": True,
+                    "empresa": empresa,
+                    "janela_dias": janela_dias,
+                    "inicio": data_inicio.isoformat(),
+                    "fim": data_fim.isoformat(),
+                    "fonte": fonte["tabela"],
+                    "consumos": consumos,
+                }
+            )
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar consumo do kardex no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/conserto")
