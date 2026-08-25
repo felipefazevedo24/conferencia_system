@@ -46,7 +46,7 @@
         <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Finance</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Fiscal</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="ia-m-concluido">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Descartado</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Dif. Improcedente</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
     </div>
 
     <div class="eui-card">
@@ -163,7 +163,7 @@
     };
     const LABEL_STATUS = {
         Validacao: "Aguardando gestor", Finance: "Aguardando Finance",
-        Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Descartado",
+        Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Dif. Improcedente",
     };
     function badgeStatus(a) {
         const cor = CORES_STATUS[a.status_modulo] || "#475569";
@@ -215,7 +215,7 @@
         const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Descartar", true);
+            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Dif. Improcedente", true);
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
             itens += it("finance", "fa-coins", "Confirmar ajuste executado");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
@@ -262,7 +262,7 @@
                 const justificativa = prompt("Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:") || "";
                 await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa }) });
             } else if (act === "descartar") {
-                const motivo = prompt("Motivo do descarte (obrigatório - ex.: erro de contagem, não precisa de ajuste):") || "";
+                const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
                 if (!motivo.trim()) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
             } else if (act === "finance") {

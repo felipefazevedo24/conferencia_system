@@ -533,7 +533,7 @@ def api_descartar_ajuste(ajuste_id):
         ajuste = ajuste_svc.descartar_divergencia(ajuste, session.get("username", "desconhecido"), payload.get("motivo"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"message": "Divergência descartada.", "ajuste": _fmt_ajuste(ajuste)})
+    return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])

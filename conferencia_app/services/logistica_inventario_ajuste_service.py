@@ -124,7 +124,7 @@ def descartar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, motiv
         raise ValueError("Este ajuste não está aguardando validação do gestor.")
     motivo = (motivo or "").strip()
     if not motivo:
-        raise ValueError("Informe o motivo do descarte.")
+        raise ValueError("Informe o motivo pra marcar como improcedente.")
     ajuste.gestor_justificativa = motivo[:500]
     ajuste.gestor_confirmado_em = datetime.now()
     ajuste.gestor_confirmado_por = usuario
@@ -173,7 +173,7 @@ def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInv
     (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA), alem do acesso normal ao
     modulo. Nao pula pra fora do fluxo (nao reabre um "Descartado")."""
     if ajuste.status_modulo == "Descartado":
-        raise ValueError("Este ajuste foi descartado - não há como avançar.")
+        raise ValueError("Essa diferença foi marcada como improcedente - não há como avançar.")
     proximo = _proximo_modulo(ajuste.status_modulo)
     if proximo is None:
         raise ValueError("Este ajuste já está na última etapa (Concluído) - não há como avançar mais.")
