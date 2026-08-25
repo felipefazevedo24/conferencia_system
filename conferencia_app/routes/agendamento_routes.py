@@ -1030,6 +1030,10 @@ def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:
     return False
 
 
+def _is_origem_central_solicitante(row: AgendamentoSolicitacao) -> bool:
+    return str(row.origem_documento or "").strip() == "SOLICITACAO_USUARIO"
+
+
 def _filtro_solicitacao_visivel():
     return true()
 
@@ -1459,12 +1463,11 @@ def dashboard_central_viagens():
         query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
 
-    # Exibir todas as solicitacoes ativas na Central (automaticas e manuais)
-    # para evitar que solicitacoes criadas pelo solicitante fiquem ocultas.
+    # Exibir somente fluxos automaticos e o novo canal de solicitacao do usuario.
+    # Isso evita trazer historico manual legado para a Central.
     automaticas = []
     for row in rows:
-        tipo = str(row.tipo or "").strip()
-        if tipo in {"COLETA", "ENTREGA", "AVULSA"}:
+        if _is_origem_central_solicitante(row) or _is_origem_automatica(row):
             automaticas.append(row)
     if termo:
         def match(row: AgendamentoSolicitacao) -> bool:
@@ -1999,7 +2002,7 @@ def central_viagens_reorganizar(solicitacao_id: int):
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_cancelar(solicitacao_id: int):
     row = _get_solicitacao_visivel(solicitacao_id)
-    if not row or not _is_origem_automatica(row):
+    if not row or not (_is_origem_automatica(row) or _is_origem_central_solicitante(row)):
         return jsonify({"error": "Viagem não encontrada."}), 404
     if row.status in {"Concluida", "Cancelada"}:
         return jsonify({"error": "Viagem já finalizada."}), 409
@@ -2031,7 +2034,7 @@ def central_viagens_excluir(solicitacao_id: int):
     if not is_admin_session():
         return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
     row = _get_solicitacao_visivel(solicitacao_id)
-    if not row or not _is_origem_automatica(row):
+    if not row or not (_is_origem_automatica(row) or _is_origem_central_solicitante(row)):
         return jsonify({"error": "Viagem não encontrada."}), 404
     if row.status == "EmRota":
         return jsonify({"error": "Não é possível excluir viagem em rota."}), 409
@@ -2096,7 +2099,7 @@ def central_viagens_excluir_lote():
 
     for sid in ids:
         row = _get_solicitacao_visivel(sid)
-        if not row or not _is_origem_automatica(row):
+        if not row or not (_is_origem_automatica(row) or _is_origem_central_solicitante(row)):
             falhas.append({"id": sid, "erro": "Viagem não encontrada."})
             continue
         if row.status == "EmRota":
@@ -2626,11 +2629,7 @@ def criar_solicitacao_agendamento():
         if not parceiro.get("uf"):
             parceiro["uf"] = "--"
 
-    origem_documento = "Manual"
-    if tipo == "COLETA" and consulta.get("encontrada"):
-        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "GoogleSheets").strip() or "GoogleSheets"
-    elif tipo == "ENTREGA" and consulta.get("encontrada"):
-        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "ERPPostgres").strip() or "ERPPostgres"
+    origem_documento = "SOLICITACAO_USUARIO"
 
     usuario = session.get("username", "desconhecido")
     agora = datetime.now()
