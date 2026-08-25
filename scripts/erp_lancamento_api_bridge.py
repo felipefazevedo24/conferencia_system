@@ -1689,7 +1689,15 @@ def create_app() -> Flask:
                     )
                     estoque_sql = ESTOQUE_SQL.format(
                         deposito_custo_expr=deposito_coluna or "null::double precision",
-                        produto_custo_expr=f"p.{produto_coluna}" if produto_coluna else "null::double precision",
+                        produto_custo_expr=(
+                            "coalesce(" + ", ".join(
+                                f"nullif(p.{coluna}, 0)"
+                                for coluna in ("custo_medio", "custo", "custo_unitario", "preco_custo", "valor_custo")
+                                if ("tproduto", coluna) in colunas_custo
+                            ) + ")"
+                            if produto_coluna
+                            else "null::double precision"
+                        ),
                     )
                     cur.execute(estoque_sql, (empresa,))
                     cols = [desc[0] for desc in cur.description]
