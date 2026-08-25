@@ -19,6 +19,7 @@ from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
     buscar_estoque_grv,
+    custo_medio_para,
     qtde_grv_para,
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
@@ -381,23 +382,27 @@ def criar_inventario_inicial():
         )
         localizacao_erp["erro"] = str(exc)
 
-    # Consulta o saldo do GRV UMA VEZ, no exato momento da contagem, e grava
-    # esse snapshot no proprio registro (qtde_grv_no_momento/grv_consultado_em)
-    # - a tela de consulta (Inventario Realizado) usa esse valor gravado em
-    # vez de reconsultar o GRV em tempo real depois, senao uma contagem que
+    # Consulta o saldo e o custo medio do GRV UMA VEZ, no exato momento da
+    # contagem, e grava esse snapshot no proprio registro
+    # (qtde_grv_no_momento/custo_medio_no_momento/grv_consultado_em) - a
+    # tela de consulta (Inventario Realizado) usa esse valor gravado em vez
+    # de reconsultar o GRV em tempo real depois, senao uma contagem que
     # batia com o GRV na hora em que foi feita passaria a aparecer como
     # divergente so porque o estoque girou normalmente depois. Tambem
     # detecta divergencia e, se houver, abre automaticamente um ajuste no
-    # Modulo 02 (Validacao) pro gestor revisar - nao falha a contagem se o
-    # GRV estiver indisponivel, so fica sem snapshot e sem ajuste.
+    # Modulo 02 (Validacao) pro gestor revisar, com o custo medio junto pra
+    # calcular o impacto financeiro (R$) - nao falha a contagem se o GRV
+    # estiver indisponivel, so fica sem snapshot e sem ajuste.
     ajuste_aberto = None
     try:
         estoque_grv = buscar_estoque_grv()
         qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv)
+        custo_medio = custo_medio_para(row.codigo_produto, row.local_codigo, estoque_grv)
         row.qtde_grv_no_momento = qtde_grv
+        row.custo_medio_no_momento = custo_medio
         row.grv_consultado_em = datetime.now()
         db.session.commit()
-        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv)
+        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio)
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
     except Exception as exc:  # noqa: BLE001
@@ -453,6 +458,12 @@ PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
 
 
 def _fmt_ajuste(a) -> dict:
+    # Impacto financeiro (R$) da divergencia = diferenca (qtde) * custo
+    # medio - calculado aqui na hora, nao armazenado (evita duplicar dado
+    # derivado). Fica None se o GRV nao tinha custo pro codigo naquele
+    # momento (custo_medio None) - a tela mostra "—" nesse caso, sem tentar
+    # adivinhar um valor.
+    diferenca_valor = (a.diferenca * a.custo_medio) if a.custo_medio is not None else None
     return {
         "id": a.id,
         "codigo_produto": a.codigo_produto,
@@ -461,6 +472,8 @@ def _fmt_ajuste(a) -> dict:
         "qtde_contada": a.qtde_contada,
         "qtde_estoque_no_momento": a.qtde_estoque_no_momento,
         "diferenca": a.diferenca,
+        "custo_medio": a.custo_medio,
+        "diferenca_valor": diferenca_valor,
         "status_modulo": a.status_modulo,
         "status_slug": a.status_slug,
         "criado_em": a.criado_em.strftime("%d/%m/%Y %H:%M") if a.criado_em else None,

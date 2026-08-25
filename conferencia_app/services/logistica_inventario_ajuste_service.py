@@ -65,12 +65,15 @@ def ajuste_aberto_para(codigo_produto: str, local_codigo: str) -> LogisticaInven
 def detectar_divergencia(
     contagem: LogisticaInventarioInicial,
     qtde_grv: float | None,
+    custo_medio: float | None = None,
 ) -> LogisticaInventarioAjuste | None:
     """Chamado logo apos salvar uma contagem (Modulo 01). Se `qtde_grv` for
     None (codigo nao encontrado no GRV, ou API do GRV fora do ar), nao ha
     base de comparacao - nao cria ajuste. Se ja existir um ajuste aberto
     pro mesmo item+local, nao duplica (so o primeiro fica em fila pro
-    gestor)."""
+    gestor). `custo_medio` (tproduto_deposito.custo_medio) e' opcional -
+    fica None se o GRV nao tiver custo pro codigo - e vira snapshot no
+    ajuste pra calcular o impacto financeiro (R$) da divergencia."""
     if qtde_grv is None:
         return None
     diferenca = float(contagem.quantidade or 0) - float(qtde_grv)
@@ -87,6 +90,7 @@ def detectar_divergencia(
         qtde_contada=float(contagem.quantidade or 0),
         qtde_estoque_no_momento=float(qtde_grv),
         diferenca=diferenca,
+        custo_medio=float(custo_medio) if custo_medio is not None else None,
         status_modulo="Validacao",
         status_slug=status_slug("Validacao"),
     )

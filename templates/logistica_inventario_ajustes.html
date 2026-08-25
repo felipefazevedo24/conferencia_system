@@ -74,11 +74,13 @@
                             <th>Qtd Contada</th>
                             <th>Qtd Estoque</th>
                             <th>Diferença</th>
+                            <th>Custo Médio</th>
+                            <th>Diferença R$</th>
                             <th>Status</th>
                             <th style="text-align:right;">Ação</th>
                         </tr>
                     </thead>
-                    <tbody id="ia-tbody"><tr><td colspan="8" class="ia-empty">Carregando…</td></tr></tbody>
+                    <tbody id="ia-tbody"><tr><td colspan="10" class="ia-empty">Carregando…</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -119,6 +121,9 @@
     }
     function fmtQtd(v) {
         return Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+    }
+    function fmtMoeda(v) {
+        return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
     let ajustesCache = [];
@@ -181,10 +186,14 @@
     function renderTabela(lista) {
         const tb = $("ia-tbody");
         if (!lista.length) {
-            tb.innerHTML = '<tr><td colspan="8" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="10" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
             return;
         }
-        tb.innerHTML = lista.map((a) => `
+        tb.innerHTML = lista.map((a) => {
+            const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
+            const valorClasse = temCusto ? (a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg") : "";
+            const valorTexto = temCusto ? `${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}` : "—";
+            return `
             <tr>
                 <td>${escapeHtml(a.criado_em)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
@@ -192,10 +201,13 @@
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
                 <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+                <td>${temCusto ? fmtMoeda(a.custo_medio) : "—"}</td>
+                <td class="${valorClasse}">${valorTexto}</td>
                 <td>${badgeStatus(a)}${historicoHtml(a)}</td>
                 <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
-        `).join("");
+        `;
+        }).join("");
     }
 
     function ajustePorId(id) {

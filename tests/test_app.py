@@ -4788,6 +4788,55 @@ def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
     assert registros["SKU-DIV"]["divergente"] is True
 
 
+def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp_path):
+    """O ajuste automatico criado quando uma contagem diverge do GRV grava
+    o custo medio (tproduto_deposito.custo_medio) junto com a quantidade -
+    a API de ajustes calcula diferenca_valor (R$) = diferenca * custo_medio
+    na hora de responder, sem armazenar o valor derivado. Sem custo no GRV
+    pro codigo, custo_medio/diferenca_valor ficam None (nao adivinha valor)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    estoque_fake = {
+        "por_local": {
+            "SKU-CUSTO|A01-05": {"qtde_total": 8, "custo_medio": 12.5},
+            "SKU-SEM-CUSTO|A01-06": {"qtde_total": 3, "custo_medio": None},
+        },
+        "por_codigo": {
+            "SKU-CUSTO": {"qtde_total": 8.0, "custo_medio": 12.5},
+            "SKU-SEM-CUSTO": {"qtde_total": 3.0, "custo_medio": None},
+        },
+    }
+    with patch(
+        "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv",
+        return_value=estoque_fake,
+    ):
+        resp_com_custo = client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01-05", "codigo_produto": "SKU-CUSTO",
+            "unidade_medida": "UN", "quantidade": 10,
+        })
+        resp_sem_custo = client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01-06", "codigo_produto": "SKU-SEM-CUSTO",
+            "unidade_medida": "UN", "quantidade": 5,
+        })
+
+    assert resp_com_custo.get_json()["ajuste_aberto"] is not None
+    assert resp_sem_custo.get_json()["ajuste_aberto"] is not None
+
+    ajustes = {a["codigo_produto"]: a for a in client.get("/api/logistica/inventario-ajustes").get_json()["ajustes"]}
+
+    com_custo = ajustes["SKU-CUSTO"]
+    assert com_custo["diferenca"] == 2.0
+    assert com_custo["custo_medio"] == 12.5
+    assert com_custo["diferenca_valor"] == 25.0
+
+    sem_custo = ajustes["SKU-SEM-CUSTO"]
+    assert sem_custo["diferenca"] == 2.0
+    assert sem_custo["custo_medio"] is None
+    assert sem_custo["diferenca_valor"] is None
+
+
 def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_por_vez(tmp_path):
     """"Pular Etapa" (espelho do "Pular Status" do Comex) so avanca com a
     permissao extra de gerencia (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA) - o

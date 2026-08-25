@@ -112,12 +112,23 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "item": item.get("item") or "",
             "unidade": item.get("unidade") or "",
             "localizacoes": [],
+            "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })
-        agregado["qtde_total"] += float(item.get("qtde_total") or 0)
+        qtde_item = float(item.get("qtde_total") or 0)
+        agregado["qtde_total"] += qtde_item
         agregado["qtde_disponivel"] += float(item.get("qtde_disponivel") or 0)
         agregado["qtde_reservada"] += float(item.get("qtde_reservada") or 0)
+        agregado["_custo_total"] += float(item.get("custo_medio") or 0) * qtde_item
         if local:
             agregado["localizacoes"].append(local)
+
+    # Custo medio ponderado pela quantidade em cada localizacao (nao da pra
+    # so somar custo_medio de linhas diferentes) - vira None se nao tiver
+    # quantidade nenhuma pra ponderar (custo indefinido nesse caso).
+    for agregado in por_codigo.values():
+        custo_total = agregado.pop("_custo_total")
+        qtde = agregado["qtde_total"]
+        agregado["custo_medio"] = (custo_total / qtde) if qtde else None
 
     resultado = {"por_local": por_local, "por_codigo": por_codigo}
     _CACHE["dados"] = resultado
@@ -274,3 +285,26 @@ def qtde_grv_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any
     if agregado is None:
         return None
     return float(agregado.get("qtde_total") or 0)
+
+
+def custo_medio_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any]) -> float | None:
+    """Resolve o custo medio (tproduto_deposito.custo_medio) do GRV pra um
+    item do inventario, mesma logica de casamento do qtde_grv_para: codigo+
+    local primeiro (mais preciso), senao a media ponderada pela quantidade
+    em cada localizacao (ver buscar_estoque_grv). Retorna None se o codigo
+    nao existir no GRV ou nao tiver quantidade nenhuma pra calcular a media."""
+    codigo = str(codigo_produto or "").strip().upper()
+    local = str(local_codigo or "").strip().upper()
+    if not codigo:
+        return None
+
+    chave_local = f"{codigo}|{local}"
+    if local and chave_local in estoque.get("por_local", {}):
+        custo = estoque["por_local"][chave_local].get("custo_medio")
+        return float(custo) if custo is not None else None
+
+    agregado = estoque.get("por_codigo", {}).get(codigo)
+    if agregado is None:
+        return None
+    custo = agregado.get("custo_medio")
+    return float(custo) if custo is not None else None
