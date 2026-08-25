@@ -755,7 +755,7 @@ ESTOQUE_SQL = """
             case
                 when sum(coalesce(qtde_total, 0)) > 0
                     then sum(coalesce({deposito_custo_expr}, 0) * coalesce(qtde_total, 0)) / sum(coalesce(qtde_total, 0))
-                else null
+                else avg(nullif({deposito_custo_expr}, 0))
             end as custo_medio
         from public.tproduto_deposito
         group by cod_empresa, cod_produto
