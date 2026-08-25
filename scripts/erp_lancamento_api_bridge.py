@@ -754,7 +754,7 @@ ESTOQUE_SQL = """
             -- da pra so tirar a media simples entre depositos diferentes.
             case
                 when sum(coalesce(qtde_total, 0)) > 0
-                    then sum(coalesce(custo_medio, 0) * coalesce(qtde_total, 0)) / sum(coalesce(qtde_total, 0))
+                    then sum(coalesce({deposito_custo_expr}, 0) * coalesce(qtde_total, 0)) / sum(coalesce(qtde_total, 0))
                 else null
             end as custo_medio
         from public.tproduto_deposito
@@ -782,7 +782,7 @@ ESTOQUE_SQL = """
         coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
         -- Custo medio: so vem de tproduto_deposito (nao ha fallback legado
         -- confiavel em tproduto pra isso) - fica null se nao encontrado.
-        d.custo_medio,
+        coalesce(d.custo_medio, {produto_custo_expr}) as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
         coalesce(p.cod_grupo::text, '') as grupo
@@ -797,6 +797,24 @@ ESTOQUE_SQL = """
       and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
       and coalesce(p.inativo, 0) = 0
         order by coalesce(p.localizacao_estoque, ''), p.codigo_interno
+"""
+
+
+ESTOQUE_CUSTO_COLUNAS_SQL = """
+    select table_name, column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name in ('tproduto_deposito', 'tproduto')
+      and column_name in ('custo_medio', 'custo', 'custo_unitario', 'preco_custo', 'valor_custo')
+    order by
+        case column_name
+            when 'custo_medio' then 1
+            when 'custo' then 2
+            when 'custo_unitario' then 3
+            when 'preco_custo' then 4
+            when 'valor_custo' then 5
+            else 99
+        end
 """
 
 
@@ -1657,7 +1675,23 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(ESTOQUE_SQL, (empresa,))
+                    cur.execute(ESTOQUE_CUSTO_COLUNAS_SQL)
+                    colunas_custo = {(str(row[0]), str(row[1])) for row in cur.fetchall()}
+                    deposito_coluna = next(
+                        (coluna for coluna in ("custo_medio", "custo", "custo_unitario", "preco_custo", "valor_custo")
+                         if ("tproduto_deposito", coluna) in colunas_custo),
+                        None,
+                    )
+                    produto_coluna = next(
+                        (coluna for coluna in ("custo_medio", "custo", "custo_unitario", "preco_custo", "valor_custo")
+                         if ("tproduto", coluna) in colunas_custo),
+                        None,
+                    )
+                    estoque_sql = ESTOQUE_SQL.format(
+                        deposito_custo_expr=deposito_coluna or "null::double precision",
+                        produto_custo_expr=f"p.{produto_coluna}" if produto_coluna else "null::double precision",
+                    )
+                    cur.execute(estoque_sql, (empresa,))
                     cols = [desc[0] for desc in cur.description]
                     itens = [dict(zip(cols, row)) for row in cur.fetchall()]
                     cur.execute(ESTOQUE_CODIGOS_ATIVOS_SQL, (empresa,))
