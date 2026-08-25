@@ -782,7 +782,7 @@ ESTOQUE_SQL = """
         coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
         -- Custo medio: so vem de tproduto_deposito (nao ha fallback legado
         -- confiavel em tproduto pra isso) - fica null se nao encontrado.
-        coalesce(d.custo_medio, {produto_custo_expr}) as custo_medio,
+        coalesce(nullif(d.custo_medio, 0), {produto_custo_expr}) as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
         coalesce(p.cod_grupo::text, '') as grupo
