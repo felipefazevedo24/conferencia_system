@@ -91,6 +91,30 @@ def _cancelar_solicitacao_entrega_cif(romaneio, motivo: str = "") -> None:
         )
 
 
+def _gerar_viagem_automatica_st(romaneio) -> None:
+    """Tenta criar viagem automática para romaneio de serviço de terceiro.
+
+    Fluxo best-effort: nunca bloqueia a finalização/expedição do romaneio.
+    """
+    try:
+        from ..routes.viagem_routes import garantir_viagem_automatica_romaneio_st
+
+        usuario = session.get("username", "sistema")
+        ok, viagem_id, msg = garantir_viagem_automatica_romaneio_st(romaneio, usuario=usuario)
+        if ok:
+            current_app.logger.info(
+                "Romaneio ST %s: viagem automática %s (%s).",
+                getattr(romaneio, "numero_romaneio", None),
+                viagem_id,
+                msg,
+            )
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao criar viagem automática ST do romaneio %s.",
+            getattr(romaneio, "numero_romaneio", None),
+        )
+
+
 def _calcular_totais_nfs(nfs: list) -> tuple[float, int]:
     peso_total = sum(_parse_float(getattr(nf, "peso_bruto", 0) or 0) for nf in (nfs or []))
     volumes_total = sum(_parse_int(getattr(nf, "qtde_volumes", 0) or 0) for nf in (nfs or []))
@@ -1090,6 +1114,7 @@ def finalizar_romaneio(romaneio_id):
         _notificar_cce_modalidade_faturamento(romaneio, divergentes)
 
     _gerar_solicitacao_entrega_cif(romaneio)
+    _gerar_viagem_automatica_st(romaneio)
 
     if divergentes and aprovar:
         mensagem = (
@@ -1141,6 +1166,7 @@ def expedir_romaneio(romaneio_id):
     db.session.commit()
 
     _gerar_solicitacao_entrega_cif(romaneio)
+    _gerar_viagem_automatica_st(romaneio)
 
     return jsonify({"message": "Romaneio expedido com sucesso."})
 

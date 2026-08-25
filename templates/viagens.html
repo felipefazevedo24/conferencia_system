@@ -2696,6 +2696,7 @@ async function openDetalhe(id){
         ? `<input id="det-numero-nf" class="form-control form-control-sm" placeholder="${inputDocPlaceholder}" style="width:180px" value="${s.numero_nf&&s.numero_nf!=='A definir'?s.numero_nf:''}">`
         : `<input id="det-numero-oc" class="form-control form-control-sm" placeholder="${inputDocPlaceholder}" style="width:180px" value="${s.numero_oc&&s.numero_oc!=='A definir'?s.numero_oc:''}">`;
     const docTipo = s.tipo==='ENTREGA' ? 'nf' : 'oc';
+    const bloqueadaAvulsa = avulsaAguardandoAprovacao(s);
     detalheBody.innerHTML=`
         ${buildStepper(s.status)}
         <div class="rt-split" style="margin-top:16px">
@@ -2715,7 +2716,8 @@ async function openDetalhe(id){
         ${s.cancelamento_pendente?`<div class="rt-mini mt-3" style="border-color:#9f2f2f;background:rgba(176,56,56,.04)"><span style="color:#9f2f2f"><i class="fas fa-triangle-exclamation"></i> Cancelamento solicitado por ${s.cancelamento_solicitado_por}</span><p>${s.cancelamento_motivo_pendente||'Sem motivo'}</p></div>`:''}
         <div class="rt-mini mt-3" style="border-left:4px solid #155eef"><span><i class="fas fa-bolt"></i> Proxima acao</span><p>${proximaAcao(s)}</p></div>
         <div class="rt-inline mt-3">
-            <button class="btn btn-outline-primary btn-sm" type="button" onclick="openAlocarModal(${s.id})"><i class="fas fa-truck"></i> Alocar</button>
+            <button class="btn btn-outline-primary btn-sm" type="button" onclick="openAlocarModal(${s.id})" ${bloqueadaAvulsa?'disabled title="Solicitação avulsa aguardando aprovação de Admin"':''}><i class="fas fa-truck"></i> Alocar</button>
+            ${bloqueadaAvulsa && rtState.userRole==='Admin' ? `<button class="btn btn-outline-warning btn-sm" type="button" onclick="aprovarAvulsa(${s.id})"><i class="fas fa-user-check"></i> Aprovar avulsa</button>` : ''}
             <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatusSol(${s.id},'EmRota')" ${!s.veiculo?'disabled title="Aloque um veículo antes"':''}><i class="fas fa-road"></i> Em rota</button>
             ${rtState.userRole==='Admin'?`<button class="btn btn-success btn-sm" type="button" onclick="updateStatusSol(${s.id},'Concluida')"><i class="fas fa-check"></i> Concluir</button>`:''}
             ${s.status!=='Concluida'&&s.status!=='Cancelada'&&!s.cancelamento_pendente?`<button class="btn btn-outline-danger btn-sm" type="button" onclick="openCancelarModal(${s.id})"><i class="fas fa-xmark"></i> ${rtState.userRole==='Admin'?'Cancelar direto':'Solicitar cancelamento'}</button>`:''}

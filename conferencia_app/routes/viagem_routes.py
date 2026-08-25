@@ -224,6 +224,113 @@ def _normalizar_placa(valor: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(valor or "").upper())
 
 
+def _solicitacao_avulsa_aprovada(sol: AgendamentoSolicitacao | None) -> bool:
+    if not sol:
+        return False
+    if str(sol.tipo or "").strip().upper() != "AVULSA":
+        return True
+    return str(sol.status or "").strip() == "Aprovada"
+
+
+def _validar_aprovacao_avulsa(sol: AgendamentoSolicitacao | None) -> str | None:
+    if _solicitacao_avulsa_aprovada(sol):
+        return None
+    return "Solicitação avulsa precisa de aprovação de Admin antes de ser alocada em viagem."
+
+
+def _resolver_motorista_por_nome(nome: str | None) -> AgendamentoMotorista | None:
+    nome_limpo = str(nome or "").strip()
+    if not nome_limpo:
+        return None
+    exato = AgendamentoMotorista.query.filter(func.lower(AgendamentoMotorista.nome) == nome_limpo.lower()).first()
+    if exato:
+        return exato
+    return (
+        AgendamentoMotorista.query
+        .filter(AgendamentoMotorista.nome.ilike(f"%{nome_limpo}%"))
+        .order_by(AgendamentoMotorista.id.desc())
+        .first()
+    )
+
+
+def garantir_viagem_automatica_romaneio_st(romaneio, *, usuario: str = "sistema") -> tuple[bool, int | None, str]:
+    """Cria uma viagem avulsa automática para romaneio ST quando possível.
+
+    Regras:
+    - Só cria quando há ao menos uma NF ST (com ordem_compra) no romaneio.
+    - Evita duplicidade usando marcador AUTO_ROMANEIO_ST:<id> em observacao.
+    - Exige veículo interno casado pela placa do romaneio.
+    """
+    if not romaneio:
+        return False, None, "Romaneio inválido."
+
+    nfs = list(getattr(romaneio, "nfs", []) or [])
+    if not any(str(getattr(nf, "ordem_compra", "") or "").strip() for nf in nfs):
+        return False, None, "Romaneio não possui NF de serviço de terceiro."
+
+    marcador = f"AUTO_ROMANEIO_ST:{int(romaneio.id)}"
+    existente = (
+        Viagem.query
+        .filter(Viagem.observacao.ilike(f"%{marcador}%"))
+        .filter(Viagem.status != "Cancelada")
+        .order_by(Viagem.id.desc())
+        .first()
+    )
+    if existente:
+        return True, int(existente.id), "Viagem automática já existia."
+
+    placa_romaneio = _normalizar_placa(getattr(romaneio, "placa", None))
+    veiculo = None
+    if placa_romaneio:
+        veiculos = AgendamentoVeiculo.query.filter_by(ativo=True).all()
+        for item in veiculos:
+            if _normalizar_placa(item.placa) == placa_romaneio:
+                veiculo = item
+                break
+    if not veiculo:
+        return False, None, "Romaneio ST sem veículo interno compatível pela placa."
+
+    motorista = _resolver_motorista_por_nome(getattr(romaneio, "motorista", None))
+    saida = datetime.combine(getattr(romaneio, "data_romaneio", date.today()), datetime.min.time())
+    saida = saida.replace(hour=8, minute=0, second=0, microsecond=0)
+    retorno = saida + timedelta(minutes=int(current_app.config.get("VIAGEM_DURACAO_PADRAO_MINUTOS", 180)))
+
+    responsavel = (
+        str(getattr(romaneio, "motorista", "") or "").strip()
+        or str(getattr(romaneio, "transportadora", "") or "").strip()
+        or str(usuario or "sistema")
+    )
+    viagem = Viagem(
+        codigo=_proximo_codigo(),
+        veiculo_id=veiculo.id,
+        motorista_id=(motorista.id if motorista else None),
+        motorista_nome=(motorista.nome if motorista else None),
+        tipo="ENTREGA",
+        status="Planejada",
+        titulo=f"Romaneio ST {romaneio.numero_romaneio}",
+        observacao=f"{marcador} | Gerada automaticamente a partir do romaneio de serviço de terceiro.",
+        saida_prevista=saida,
+        retorno_previsto=retorno,
+        origem_label="Expedição",
+        criado_por=str(usuario or "sistema"),
+        criado_em=datetime.now(),
+        atualizado_em=datetime.now(),
+        avulsa=True,
+        funcionario_responsavel=responsavel[:160],
+    )
+    db.session.add(viagem)
+    db.session.flush()
+    _log_evento(
+        viagem.id,
+        "OBSERVACAO",
+        "Viagem criada automaticamente",
+        descricao=f"Gatilho automático do romaneio ST {romaneio.numero_romaneio}.",
+        severidade="info",
+    )
+    db.session.commit()
+    return True, int(viagem.id), "Viagem automática ST criada."
+
+
 def _viagem_resumo_mapa(v: Viagem | None) -> dict | None:
     if not v:
         return None
@@ -1450,6 +1557,9 @@ def parada_realocar(pid: int):
     sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
     if not sol:
         return jsonify({"sucesso": False, "msg": "Solicitação da parada não encontrada."}), 404
+    bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+    if bloqueio_avulsa:
+        return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
 
     if sol.veiculo_id and destino.veiculo_id and int(sol.veiculo_id) != int(destino.veiculo_id):
         return jsonify({"sucesso": False, "msg": "Solicitação está em veículo diferente da viagem de destino. Realoque antes de mover."}), 409
@@ -1628,6 +1738,9 @@ def nova_viagem_de_solicitacao(sid: int):
         return jsonify({"sucesso": False, "msg": "Solicitação não encontrada."}), 404
     if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return jsonify({"sucesso": False, "msg": "Solicitação finalizada não pode virar viagem."}), 409
+    bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+    if bloqueio_avulsa:
+        return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
     if not sol.veiculo_id:
         return jsonify({"sucesso": False, "msg": "Alocar veículo na solicitação antes de montar a viagem."}), 400
 
@@ -1695,6 +1808,56 @@ def nova_viagem_de_solicitacao(sid: int):
     return jsonify({"sucesso": True, "viagem": _viagem_dict(viagem, detalhada=True)})
 
 
+@viagem_bp.route("/nova-avulsa-de-solicitacao/<int:sid>", methods=["POST"])
+@permission_required(PERM)
+def nova_viagem_avulsa_de_solicitacao(sid: int):
+    sol = db.session.get(AgendamentoSolicitacao, sid)
+    if not sol:
+        return jsonify({"sucesso": False, "msg": "Solicitação não encontrada."}), 404
+    if str(sol.tipo or "").strip().upper() != "AVULSA":
+        return jsonify({"sucesso": False, "msg": "Esta ação é exclusiva para solicitação AVULSA."}), 409
+    if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Solicitação finalizada não pode virar viagem."}), 409
+    bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+    if bloqueio_avulsa:
+        return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
+    if not sol.veiculo_id:
+        return jsonify({"sucesso": False, "msg": "Alocar veículo na solicitação antes de montar a viagem avulsa."}), 400
+
+    motorista = AgendamentoMotorista.query.get(sol.motorista_id) if sol.motorista_id else None
+    viagem = Viagem(
+        codigo=_proximo_codigo(),
+        veiculo_id=sol.veiculo_id,
+        motorista_id=sol.motorista_id,
+        motorista_nome=sol.motorista_nome or (motorista.nome if motorista else None),
+        tipo="ALEATORIA",
+        status="Planejada",
+        titulo=f"Viagem avulsa {str(sol.codigo or ('#' + str(sol.id))).strip()}",
+        saida_prevista=sol.data_hora_saida_prevista,
+        retorno_previsto=sol.data_hora_retorno_prevista,
+        origem_label=str(sol.departamento_solicitante or "Logística").strip() or "Logística",
+        observacao=str(sol.observacoes_solicitante or "").strip() or "Viagem avulsa criada a partir de solicitação.",
+        criado_por=_user(),
+        criado_em=datetime.now(),
+        atualizado_em=datetime.now(),
+        avulsa=True,
+        funcionario_responsavel=(str(sol.solicitante or "").strip() or str(sol.parceiro_nome or "").strip() or _user())[:160],
+    )
+    db.session.add(viagem)
+    db.session.flush()
+
+    _sync_solicitacao_viagem(sol, viagem, "Alocada")
+    _log_evento(
+        viagem.id,
+        "OBSERVACAO",
+        "Viagem avulsa criada a partir de solicitação",
+        descricao=f"Solicitação {sol.codigo or sol.id} aprovada e convertida em viagem avulsa.",
+        severidade="info",
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "viagem": _viagem_dict(viagem, detalhada=True)})
+
+
 @viagem_bp.route("/<int:vid>/anexar-solicitacao/<int:sid>", methods=["POST"])
 @permission_required(PERM)
 def anexar_solicitacao_viagem(vid: int, sid: int):
@@ -1709,6 +1872,9 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
         return jsonify({"sucesso": False, "msg": "Solicitação não encontrada."}), 404
     if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return jsonify({"sucesso": False, "msg": "Solicitação finalizada não pode ser anexada."}), 409
+    bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+    if bloqueio_avulsa:
+        return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
 
     vinculo = (
         db.session.query(ViagemParada.id, ViagemParada.viagem_id, Viagem.codigo)
@@ -1821,6 +1987,9 @@ def montar_viagem_com_solicitacoes():
     for sol in solicitacoes:
         if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
             return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id} já está finalizada."}), 409
+        bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+        if bloqueio_avulsa:
+            return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id}: {bloqueio_avulsa}"}), 409
         if not sol.veiculo_id or not sol.motorista_id:
             return jsonify({"sucesso": False, "msg": f"Defina veículo e motorista da solicitação {sol.codigo or sol.id} antes de montar viagem."}), 409
 

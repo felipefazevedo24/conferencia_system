@@ -28,6 +28,7 @@ from ..models import (
 )
 from ..services.email_service import enviar_email_agendamento_update
 from ..compras.services import compras_service
+from ..services.erp_estoque_service import buscar_consumo_kardex_grv, buscar_estoque_grv
 from ..services.agendamento_service import (
     PRIORIDADES_SOLICITACAO,
     STATUS_ATIVOS,
@@ -64,6 +65,8 @@ agendamento_bp = Blueprint("agendamento", __name__)
 
 PRIORIDADE_ORDEM = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
 ANEXO_SOLICITACAO_SUBDIR = "agendamento_solicitacoes_anexos"
+_RECEBIMENTO_CACHE: dict[str, dict] = {}
+_RECEBIMENTO_RISCO_CACHE: dict[str, dict] = {}
 
 
 def _solicitacao_anexo_dir() -> str:
@@ -230,10 +233,10 @@ def _oc_modalidade_cif(oc_json) -> bool:
 
 
 def _to_date(value) -> date | None:
-    if isinstance(value, date):
-        return value
     if isinstance(value, datetime):
         return value.date()
+    if isinstance(value, date):
+        return value
     text = str(value or "").strip()
     if not text:
         return None
@@ -248,24 +251,382 @@ def _to_date(value) -> date | None:
         return None
 
 
+def _to_float(value) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    text = text.replace(" ", "")
+    if "," in text and "." in text:
+        text = text.replace(".", "").replace(",", ".")
+    elif "," in text:
+        text = text.replace(",", ".")
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _codigo_item_oc(item: dict) -> str:
+    for key in (
+        "cod_interno",
+        "codigo",
+        "codigo_produto",
+        "produto_codigo",
+        "codigo_item",
+        "codigo_material",
+        "item_codigo",
+        "material",
+    ):
+        code = re.sub(r"[^A-Z0-9]", "", str(item.get(key) or "").strip().upper())
+        if code:
+            return code
+    return ""
+
+
+def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict]:
+    aliases: dict[str, dict] = {}
+    for codigo, payload in (estoque_por_codigo or {}).items():
+        bruto = str(codigo or "").strip().upper()
+        normalizado = re.sub(r"[^A-Z0-9]", "", bruto)
+        if not bruto and not normalizado:
+            continue
+
+        chaves = {bruto, normalizado}
+        sem_zero = normalizado.lstrip("0")
+        if sem_zero:
+            chaves.add(sem_zero)
+
+        somente_digitos = re.sub(r"\D", "", normalizado)
+        if somente_digitos:
+            chaves.add(somente_digitos)
+            chaves.add(somente_digitos.lstrip("0") or "0")
+
+        for chave in chaves:
+            if chave:
+                aliases.setdefault(chave, payload)
+    return aliases
+
+
+def _oc_ja_recebida(status_oc_nome: str) -> bool:
+    status = str(status_oc_nome or "").strip().upper()
+    if not status:
+        return False
+    return bool(re.search(r"RECEB|ENCERR|CONCL|FINAL|ATEND", status))
+
+
+def _calcular_risco_estoque_oc(
+    numero_oc: str,
+    estoque_aliases: dict[str, dict],
+    consumo_kardex_por_codigo: dict[str, dict] | None = None,
+    consulta_oc: dict | None = None,
+) -> dict:
+    try:
+        dias_criticos = int(current_app.config.get("RECEBIMENTO_ESTOQUE_DIAS_CRITICOS", 2))
+    except (TypeError, ValueError):
+        dias_criticos = 2
+    dias_criticos = max(1, min(dias_criticos, 30))
+
+    risco_estoque = "sem_base_calculo"
+    risco_estoque_label = "Sem base de cálculo"
+    risco_estoque_detalhe = "Sem itens válidos da OC para cálculo de cobertura."
+
+    if not numero_oc or not estoque_aliases:
+        return {
+            "risco_estoque": risco_estoque,
+            "risco_estoque_label": risco_estoque_label,
+            "risco_estoque_detalhe": risco_estoque_detalhe,
+        }
+
+    consulta = consulta_oc
+    if not isinstance(consulta, dict):
+        try:
+            consulta = consultar_oc_agendamento(numero_oc)
+        except Exception:
+            return {
+                "risco_estoque": risco_estoque,
+                "risco_estoque_label": risco_estoque_label,
+                "risco_estoque_detalhe": risco_estoque_detalhe,
+            }
+
+    itens = consulta.get("itens") if isinstance(consulta, dict) else []
+    if not isinstance(itens, list):
+        itens = []
+
+    consumo_kardex_por_codigo = consumo_kardex_por_codigo or {}
+    resumo_itens: dict[str, dict[str, float]] = {}
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        codigo = _codigo_item_oc(item)
+        if not codigo:
+            continue
+        qtd = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd") or item.get("volume") or 0)
+        if qtd <= 0:
+            qtd = 1.0
+        consumo_item = _to_float(item.get("consumo_diario") or item.get("consumo_medio_diario") or 0)
+        consumo_kardex = float((consumo_kardex_por_codigo.get(codigo) or {}).get("consumo_medio_diario") or 0)
+        estoque_medio = float((consumo_kardex_por_codigo.get(codigo) or {}).get("estoque_medio_periodo") or 0)
+
+        consumo = consumo_kardex if consumo_kardex > 0 else consumo_item
+        slot = resumo_itens.setdefault(codigo, {"qtd": 0.0, "consumo": 0.0, "estoque_medio": 0.0})
+        slot["qtd"] += qtd
+        if consumo > 0:
+            slot["consumo"] = max(slot["consumo"], consumo)
+        if estoque_medio > 0:
+            slot["estoque_medio"] = max(slot["estoque_medio"], estoque_medio)
+
+    if not resumo_itens:
+        return {
+            "risco_estoque": risco_estoque,
+            "risco_estoque_label": risco_estoque_label,
+            "risco_estoque_detalhe": risco_estoque_detalhe,
+        }
+
+    cobertura_critica = False
+    faltas = 0
+    sem_cadastro_estoque = 0
+    itens_com_estoque = 0
+    itens_com_consumo_kardex = 0
+    menor_cobertura = None
+    for codigo_item, vals in resumo_itens.items():
+        qtd_oc = float(vals.get("qtd") or 0)
+        consumo_diario = float(vals.get("consumo") or 0)
+        estoque_medio = float(vals.get("estoque_medio") or 0)
+        estoque_item = estoque_aliases.get(codigo_item) or {}
+        if not estoque_item:
+            sem_cadastro_estoque += 1
+            continue
+
+        itens_com_estoque += 1
+        saldo_atual = float(estoque_item.get("qtde_total") or 0)
+        saldo_referencia = estoque_medio if estoque_medio > 0 else saldo_atual
+        if consumo_diario > 0:
+            if float((consumo_kardex_por_codigo.get(codigo_item) or {}).get("consumo_medio_diario") or 0) > 0:
+                itens_com_consumo_kardex += 1
+            dias_cobertura = saldo_referencia / consumo_diario if consumo_diario else 0
+            menor_cobertura = dias_cobertura if menor_cobertura is None else min(menor_cobertura, dias_cobertura)
+            if dias_cobertura < float(dias_criticos):
+                cobertura_critica = True
+                faltas += 1
+            continue
+
+        if saldo_referencia + 0.0001 < qtd_oc:
+            cobertura_critica = True
+            faltas += 1
+
+    if sem_cadastro_estoque > 0 and itens_com_estoque == 0:
+        risco_estoque = "sem_estoque"
+        risco_estoque_label = "Sem estoque"
+        risco_estoque_detalhe = (
+            f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV (nunca tiveram saldo registrado)."
+        )
+    elif cobertura_critica:
+        risco_estoque = "critico"
+        risco_estoque_label = "Estoque crítico"
+        if menor_cobertura is not None:
+            risco_estoque_detalhe = (
+                f"Cobertura mínima de {menor_cobertura:.1f} dia(s); {faltas} item(ns) abaixo de {dias_criticos} dia(s)."
+            )
+        else:
+            risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
+        if sem_cadastro_estoque > 0:
+            risco_estoque_detalhe += f" {sem_cadastro_estoque} item(ns) sem registro no estoque GRV."
+    elif sem_cadastro_estoque > 0:
+        risco_estoque = "sem_estoque"
+        risco_estoque_label = "Sem estoque"
+        risco_estoque_detalhe = f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV."
+    elif itens_com_consumo_kardex == 0:
+        risco_estoque = "sem_base_calculo"
+        risco_estoque_label = "Sem base de cálculo"
+        risco_estoque_detalhe = "Sem histórico de consumo do kardex para calcular cobertura diária."
+    else:
+        risco_estoque = "normal"
+        risco_estoque_label = "Estoque normal"
+        if menor_cobertura is not None:
+            risco_estoque_detalhe = (
+                f"Cobertura mínima de {menor_cobertura:.1f} dia(s), com consumo médio diário pelo kardex."
+            )
+        else:
+            risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
+
+    return {
+        "risco_estoque": risco_estoque,
+        "risco_estoque_label": risco_estoque_label,
+        "risco_estoque_detalhe": risco_estoque_detalhe,
+    }
+
+
+def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
+    numeros = []
+    vistos: set[str] = set()
+    for oc in ocs:
+        numero = str(oc or "").strip()
+        if not numero or numero in vistos:
+            continue
+        vistos.add(numero)
+        numeros.append(numero)
+
+    riscos: dict[str, dict] = {}
+    pendentes: list[str] = []
+    for numero in numeros:
+        cached = _RECEBIMENTO_RISCO_CACHE.get(numero)
+        if isinstance(cached, dict):
+            riscos[numero] = dict(cached)
+        else:
+            pendentes.append(numero)
+
+    if not pendentes:
+        return riscos
+
+    consultas_por_oc: dict[str, dict] = {}
+    codigos_itens: set[str] = set()
+    for numero in pendentes:
+        try:
+            consulta = consultar_oc_agendamento(numero)
+        except Exception:
+            continue
+        if not isinstance(consulta, dict):
+            continue
+        consultas_por_oc[numero] = consulta
+        itens = consulta.get("itens") if isinstance(consulta, dict) else []
+        if not isinstance(itens, list):
+            continue
+        for item in itens:
+            if not isinstance(item, dict):
+                continue
+            codigo_item = _codigo_item_oc(item)
+            if codigo_item:
+                codigos_itens.add(codigo_item)
+
+    consumo_kardex_por_codigo: dict[str, dict] = {}
+    if codigos_itens:
+        try:
+            consumo_payload = buscar_consumo_kardex_grv(codigos=list(codigos_itens), forcar_atualizacao=False)
+            consumo_kardex_por_codigo = consumo_payload.get("por_codigo") or {}
+        except Exception:
+            current_app.logger.warning("Calendário de recebimento sem base kardex: histórico de consumo indisponível")
+
+    try:
+        estoque_payload = buscar_estoque_grv(forcar_atualizacao=False)
+        estoque_aliases = _mapa_estoque_aliases(estoque_payload.get("por_codigo") or {})
+    except Exception:
+        return riscos
+
+    for numero in pendentes:
+        risco_payload = _calcular_risco_estoque_oc(
+            numero,
+            estoque_aliases,
+            consumo_kardex_por_codigo=consumo_kardex_por_codigo,
+            consulta_oc=consultas_por_oc.get(numero),
+        )
+        riscos[numero] = risco_payload
+        _RECEBIMENTO_RISCO_CACHE[numero] = dict(risco_payload)
+
+    return riscos
+
+
+def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, aviso: str = "") -> dict:
+    dias = []
+    cursor = inicio
+    while cursor <= fim:
+        dias.append(
+            {
+                "data": cursor.isoformat(),
+                "qtd_total": 0,
+                "qtd_coletas": 0,
+                "qtd_entregas": 0,
+                "qtd_sem_viagem": 0,
+                "qtd_atrasadas": 0,
+                "qtd_recebidas": 0,
+                "qtd_pendentes": 0,
+            }
+        )
+        cursor += timedelta(days=1)
+    return {
+        "visao": "mes",
+        "modo_mensal_habilitado": False,
+        "mes": f"{ano:04d}-{mes:02d}",
+        "data_ref": inicio.isoformat(),
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "resumo": {
+            "total": 0,
+            "coletas": 0,
+            "entregas": 0,
+            "coletas_sem_viagem": 0,
+            "atrasadas": 0,
+            "pico_dia": 0,
+            "dias_com_recebimento": 0,
+        },
+        "dias": dias,
+        "eventos": [],
+        "aviso": aviso,
+    }
+
+
+def _periodo_recebimento(visao: str, mes_ref: str, data_ref: str) -> tuple[date, date, date]:
+    if visao == "mes":
+        try:
+            mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
+        except ValueError as exc:
+            raise ValueError("Parâmetro 'mes' inválido. Use YYYY-MM.") from exc
+        ano = mes_base.year
+        mes = mes_base.month
+        fim_mes = monthrange(ano, mes)[1]
+        inicio = date(ano, mes, 1)
+        fim = date(ano, mes, fim_mes)
+        return inicio, fim, inicio
+
+    texto_ref = str(data_ref or "").strip()
+    if texto_ref:
+        ref = _to_date(texto_ref)
+        if ref is None:
+            raise ValueError("Parâmetro 'data_ref' inválido. Use YYYY-MM-DD.")
+    else:
+        ref = date.today()
+    inicio = ref - timedelta(days=ref.weekday())
+    fim = inicio + timedelta(days=6)
+    return inicio, fim, ref
+
+
 @agendamento_bp.route("/api/logistica/recebimento/calendario")
 @permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
 def recebimento_calendario_dados():
+    visao_req = str(request.args.get("visao") or "").strip().lower()
+    admin_mode = session.get("role") == "Admin"
+    visao = "mes" if (visao_req == "mes" and admin_mode) else "semana"
     mes_ref = str(request.args.get("mes") or "").strip()
+    data_ref = str(request.args.get("data_ref") or "").strip()
     try:
-        mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
-    except ValueError:
-        return jsonify({"error": "Parâmetro 'mes' inválido. Use YYYY-MM."}), 400
+        inicio, fim, referencia = _periodo_recebimento(visao, mes_ref, data_ref)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    ano = mes_base.year
-    mes = mes_base.month
-    dia_final = monthrange(ano, mes)[1]
-    inicio = date(ano, mes, 1)
-    fim = date(ano, mes, dia_final)
+    ano = inicio.year
+    mes = inicio.month
     hoje = date.today()
+    cache_key = f"{visao}:{inicio.isoformat()}:{fim.isoformat()}"
 
-    ocs = compras_service.ordens_compra_entregas(limite=5000)
-    cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    try:
+        ocs = compras_service.ordens_compra_entregas(limite=5000)
+        cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    except Exception:
+        current_app.logger.exception("Falha ao consultar OCs para calendário de recebimento")
+        cached = _RECEBIMENTO_CACHE.get(cache_key)
+        if cached:
+            resp = dict(cached)
+            resp["aviso"] = ""
+            resp["fonte_dados"] = "cache"
+            return jsonify(resp)
+        return jsonify(
+            _payload_vazio_recebimento(
+                ano,
+                mes,
+                inicio,
+                fim,
+                "Nao foi possivel consultar o ERP agora. Tente recarregar em alguns instantes.",
+            )
+        )
     cif_por_oc: dict[str, bool] = {}
     for row in cif_rows:
         oc_num = str(row.get("cod_ordem_compra") or "").strip()
@@ -293,20 +654,24 @@ def recebimento_calendario_dados():
         )
 
     ocs_mes = sorted({e["numero_oc"] for e in eventos_base})
+
     solicitacao_por_oc: dict[str, AgendamentoSolicitacao] = {}
     if ocs_mes:
-        solicitacoes = (
-            _query_solicitacoes_visiveis()
-            .filter(AgendamentoSolicitacao.tipo == "COLETA")
-            .filter(AgendamentoSolicitacao.numero_oc.in_(ocs_mes))
-            .filter(AgendamentoSolicitacao.status != "Cancelada")
-            .order_by(AgendamentoSolicitacao.id.desc())
-            .all()
-        )
-        for sol in solicitacoes:
-            oc_num = str(sol.numero_oc or "").strip()
-            if oc_num and oc_num not in solicitacao_por_oc:
-                solicitacao_por_oc[oc_num] = sol
+        try:
+            solicitacoes = (
+                _query_solicitacoes_visiveis()
+                .filter(AgendamentoSolicitacao.tipo == "COLETA")
+                .filter(AgendamentoSolicitacao.numero_oc.in_(ocs_mes))
+                .filter(AgendamentoSolicitacao.status != "Cancelada")
+                .order_by(AgendamentoSolicitacao.id.desc())
+                .all()
+            )
+            for sol in solicitacoes:
+                oc_num = str(sol.numero_oc or "").strip()
+                if oc_num and oc_num not in solicitacao_por_oc:
+                    solicitacao_por_oc[oc_num] = sol
+        except Exception:
+            current_app.logger.exception("Falha ao consultar solicitacoes de coleta no calendário de recebimento")
 
     viagem_por_solicitacao: dict[int, dict] = {}
     if solicitacao_por_oc:
@@ -344,6 +709,8 @@ def recebimento_calendario_dados():
     for row in eventos_base:
         previsao = row["previsao"]
         numero_oc = row["numero_oc"]
+        status_oc_nome = row["status_oc_nome"]
+        oc_recebida = _oc_ja_recebida(status_oc_nome)
         solicitacao = solicitacao_por_oc.get(numero_oc)
         viagem = viagem_por_solicitacao.get(int(solicitacao.id)) if solicitacao else None
         risco = "normal"
@@ -363,13 +730,38 @@ def recebimento_calendario_dados():
         else:
             total_entregas += 1
 
-        can_schedule = bool(tipo_logistico == "COLETA" and not viagem and _is_admin_or_compras())
+        can_schedule = bool(tipo_logistico == "COLETA" and not viagem and not oc_recebida and _is_admin_or_compras())
         data_key = previsao.isoformat()
+
+        cached_risco = _RECEBIMENTO_RISCO_CACHE.get(numero_oc) if numero_oc else None
+        if isinstance(cached_risco, dict):
+            risco_estoque = str(cached_risco.get("risco_estoque") or "sem_base_calculo")
+            risco_estoque_label = str(cached_risco.get("risco_estoque_label") or "Sem base de cálculo")
+            risco_estoque_detalhe = str(
+                cached_risco.get("risco_estoque_detalhe") or "Sem itens válidos da OC para cálculo de cobertura."
+            )
+        else:
+            risco_estoque = "pendente"
+            risco_estoque_label = "Calculando..."
+            risco_estoque_detalhe = "Risco de estoque será carregado ao abrir o dia."
         dia_ref = dias.setdefault(
             data_key,
-            {"data": data_key, "qtd_total": 0, "qtd_coletas": 0, "qtd_entregas": 0, "qtd_sem_viagem": 0, "qtd_atrasadas": 0},
+            {
+                "data": data_key,
+                "qtd_total": 0,
+                "qtd_coletas": 0,
+                "qtd_entregas": 0,
+                "qtd_sem_viagem": 0,
+                "qtd_atrasadas": 0,
+                "qtd_recebidas": 0,
+                "qtd_pendentes": 0,
+            },
         )
         dia_ref["qtd_total"] += 1
+        if oc_recebida:
+            dia_ref["qtd_recebidas"] += 1
+        else:
+            dia_ref["qtd_pendentes"] += 1
         if tipo_logistico == "COLETA":
             dia_ref["qtd_coletas"] += 1
         else:
@@ -384,10 +776,15 @@ def recebimento_calendario_dados():
                 "data": data_key,
                 "numero_oc": numero_oc,
                 "fornecedor": row["fornecedor"],
-                "status_oc": row["status_oc_nome"],
+                "status_oc": status_oc_nome,
+                "oc_recebida": oc_recebida,
+                "oc_recebida_label": "Recebida" if oc_recebida else "Pendente",
                 "tipo_logistico": tipo_logistico,
                 "tipo_logistico_label": "Coleta (nossa frota)" if tipo_logistico == "COLETA" else "Entrega do fornecedor",
                 "risco": risco,
+                "risco_estoque": risco_estoque,
+                "risco_estoque_label": risco_estoque_label,
+                "risco_estoque_detalhe": risco_estoque_detalhe,
                 "solicitacao": {
                     "id": int(solicitacao.id),
                     "codigo": str(solicitacao.codigo or f"LOG-{solicitacao.id}").strip(),
@@ -400,22 +797,102 @@ def recebimento_calendario_dados():
         )
 
     pico_dia = max((d["qtd_total"] for d in dias.values()), default=0)
-    return jsonify(
-        {
-            "mes": f"{ano:04d}-{mes:02d}",
-            "inicio": inicio.isoformat(),
-            "fim": fim.isoformat(),
-            "resumo": {
-                "total": len(eventos),
-                "coletas": total_coletas,
-                "entregas": total_entregas,
-                "coletas_sem_viagem": sem_viagem,
-                "atrasadas": atrasadas,
-                "pico_dia": pico_dia,
-            },
-            "dias": sorted(dias.values(), key=lambda d: d["data"]),
-            "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
-        }
+    payload = {
+        "visao": visao,
+        "modo_mensal_habilitado": bool(admin_mode),
+        "mes": f"{ano:04d}-{mes:02d}",
+        "data_ref": referencia.isoformat(),
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "resumo": {
+            "total": len(eventos),
+            "coletas": total_coletas,
+            "entregas": total_entregas,
+            "coletas_sem_viagem": sem_viagem,
+            "atrasadas": atrasadas,
+            "pico_dia": pico_dia,
+            "dias_com_recebimento": sum(1 for d in dias.values() if int(d.get("qtd_total") or 0) > 0),
+        },
+        "dias": sorted(dias.values(), key=lambda d: d["data"]),
+        "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
+        "aviso": "",
+    }
+    _RECEBIMENTO_CACHE[cache_key] = dict(payload)
+    return jsonify(payload)
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario/risco-estoque", methods=["POST"])
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_risco_estoque():
+    payload = request.get_json(silent=True) or {}
+    ocs = payload.get("ocs") if isinstance(payload, dict) else None
+    if not isinstance(ocs, list):
+        return jsonify({"error": "Informe uma lista de OCs em 'ocs'."}), 400
+
+    ocs_limpo = [str(oc or "").strip() for oc in ocs if str(oc or "").strip()][:300]
+    riscos = _calcular_risco_estoque_por_ocs(ocs_limpo)
+    return jsonify({"sucesso": True, "riscos": riscos})
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario/relatorio-dia")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_relatorio_dia():
+    data_ref = str(request.args.get("data") or "").strip()
+    alvo = _to_date(data_ref)
+    if not alvo:
+        return jsonify({"error": "Parâmetro 'data' inválido. Use YYYY-MM-DD."}), 400
+
+    inicio = alvo
+    fim = alvo
+    ocs = compras_service.ordens_compra_entregas(limite=5000)
+    cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    cif_por_oc: dict[str, bool] = {}
+    for row in cif_rows:
+        oc_num = str(row.get("cod_ordem_compra") or "").strip()
+        if not oc_num or oc_num in cif_por_oc:
+            continue
+        cif_por_oc[oc_num] = _oc_modalidade_cif(row.get("oc_json"))
+
+    eventos = []
+    for row in ocs:
+        previsao = _to_date(row.get("previsao_entrega"))
+        if not previsao or previsao < inicio or previsao > fim:
+            continue
+        numero_oc = str(row.get("cod_ordem_compra") or "").strip()
+        if not numero_oc:
+            continue
+        is_coleta = bool(cif_por_oc.get(numero_oc, False))
+        eventos.append(
+            {
+                "data": previsao.isoformat(),
+                "numero_oc": numero_oc,
+                "fornecedor": str(row.get("fornecedor") or "").strip() or "(Sem fornecedor)",
+                "status_oc": str(row.get("status_oc_nome") or "").strip(),
+                "programacao": "Coleta" if is_coleta else "Entrega fornecedor",
+            }
+        )
+
+    nome_arquivo = f"recebimento_{alvo.strftime('%Y%m%d')}.csv"
+    stream = io.StringIO()
+    writer = csv.writer(stream, delimiter=";")
+    writer.writerow(["Data", "OC", "Fornecedor", "Programacao", "Status OC"])
+    for evento in sorted(eventos, key=lambda e: e["numero_oc"]):
+        writer.writerow(
+            [
+                evento.get("data") or "",
+                evento.get("numero_oc") or "",
+                evento.get("fornecedor") or "",
+                evento.get("programacao") or "",
+                evento.get("status_oc") or "",
+            ]
+        )
+
+    payload = ("\ufeff" + stream.getvalue()).encode("utf-8")
+    return send_file(
+        io.BytesIO(payload),
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=nome_arquivo,
     )
 
 
@@ -977,35 +1454,17 @@ def dashboard_central_viagens():
     termo = str(request.args.get("q") or "").strip().lower()
     status = str(request.args.get("status") or "").strip()
 
-    query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA"]))
+    query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA", "AVULSA"]))
     if status:
         query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
 
-    # Regra operacional: coleta na Central deve representar apenas fluxo de OC
-    # (importada/gerada pelo Compras). Entregas continuam no fluxo automatico
-    # por romaneio/expedicao.
+    # Exibir todas as solicitacoes ativas na Central (automaticas e manuais)
+    # para evitar que solicitacoes criadas pelo solicitante fiquem ocultas.
     automaticas = []
     for row in rows:
         tipo = str(row.tipo or "").strip()
-        status_row = str(row.status or "").strip()
-        origem = str(row.origem_documento or "").strip()
-
-        if tipo == "ENTREGA":
-            automaticas.append(row)
-            continue
-
-        if tipo != "COLETA":
-            continue
-
-        # Regra operacional:
-        # - pendentes de coleta devem vir apenas do fluxo de OC
-        # - se a coleta ja estiver alocada/em rota/em andamento/concluida,
-        #   ela precisa continuar visivel na Central para gestao.
-        if status_row in {"Alocada", "EmRota", "EmAndamento", "Concluida"}:
-            automaticas.append(row)
-            continue
-        if origem == "ORDEM_DE_COMPRA":
+        if tipo in {"COLETA", "ENTREGA", "AVULSA"}:
             automaticas.append(row)
     if termo:
         def match(row: AgendamentoSolicitacao) -> bool:
@@ -1098,15 +1557,18 @@ def dashboard_central_viagens():
     if alterou_status:
         db.session.commit()
 
-    coletas = [c for c in cards if c.get("tipo") == "COLETA"]
+    # Sem aba AVULSA na Central, exibir AVULSA junto de Coletas para não ocultar solicitações.
+    coletas = [c for c in cards if c.get("tipo") in {"COLETA", "AVULSA"}]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
+    avulsas = [c for c in cards if c.get("tipo") == "AVULSA"]
 
     def _pendentes(arr: list[dict]) -> int:
-        return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Alocada"})
+        return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Aprovada", "Alocada"})
 
     resumo = {
         "coletas_pendentes": _pendentes(coletas),
         "entregas_pendentes": _pendentes(entregas),
+        "avulsas_pendentes": _pendentes(avulsas),
         "em_andamento": sum(1 for c in cards if c.get("status") in {"EmAndamento", "EmRota", "Alocada"}),
         "finalizadas": sum(1 for c in cards if c.get("status") == "Concluida"),
         "canceladas": sum(1 for c in cards if c.get("status") == "Cancelada"),
@@ -1118,7 +1580,8 @@ def dashboard_central_viagens():
             "resumo": resumo,
             "coletas": coletas,
             "entregas": entregas,
-            "counts": {"coletas": len(coletas), "entregas": len(entregas)},
+            "avulsas": avulsas,
+            "counts": {"coletas": len(coletas), "entregas": len(entregas), "avulsas": len(avulsas)},
             "veiculos": [
                 {
                     "id": row.id,
@@ -2092,7 +2555,186 @@ def atualizar_documento_solicitacao(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def criar_solicitacao_agendamento():
-    return jsonify({"error": "Criação manual de solicitação de viagem foi descontinuada. Use a Central de Viagens."}), 410
+    payload = request.get_json(silent=True) or {}
+    tipo = str(payload.get("tipo") or "").strip().upper()
+    prioridade = str(payload.get("prioridade") or "Media").strip()
+    if tipo not in TIPOS_SOLICITACAO:
+        return jsonify({"error": "Tipo de solicitação inválido."}), 400
+    if prioridade not in PRIORIDADES_SOLICITACAO:
+        return jsonify({"error": "Prioridade inválida."}), 400
+
+    avulsa = payload.get("avulsa") if isinstance(payload.get("avulsa"), dict) else {}
+
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
+    referencia_avulsa = str(payload.get("referencia_avulsa") or "").strip()
+    try:
+        prazo_limite = _parse_datetime(payload.get("prazo_limite"), "o prazo")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        data_desejada = _parse_datetime(payload.get("data_desejada"), "a data desejada")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    observacoes_solicitante = str(payload.get("observacoes_solicitante") or "").strip()
+    if tipo == "AVULSA":
+        extras_avulsa = []
+        for label, value in [
+            ("Finalidade", avulsa.get("finalidade")),
+            ("Centro de custo", avulsa.get("centro_custo")),
+            ("Responsavel", avulsa.get("responsavel")),
+            ("Local de retirada", avulsa.get("local_retirada")),
+            ("Previsao de devolucao", avulsa.get("previsao_devolucao")),
+        ]:
+            value = str(value or "").strip()
+            if value:
+                extras_avulsa.append(f"{label}: {value}")
+        if extras_avulsa:
+            observacoes_solicitante = "\n".join([observacoes_solicitante, *extras_avulsa]).strip()
+
+    if tipo == "AVULSA":
+        consulta = {"encontrada": False, "itens": []}
+        parceiro = {
+            "nome": "Uso avulso de veículo",
+            "logradouro": "Sem destino definido",
+            "cidade": "A definir",
+            "uf": "NA",
+            "observacoes": observacoes_solicitante,
+        }
+    else:
+        if (tipo == "COLETA" and numero_oc) or (tipo == "ENTREGA" and numero_nf):
+            consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
+        else:
+            consulta = {"encontrada": False, "itens": []}
+        parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
+        if not parceiro:
+            parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
+        local_solicitante = str(payload.get("local_solicitante") or "").strip()
+        if local_solicitante and not parceiro.get("logradouro"):
+            parceiro["logradouro"] = local_solicitante
+            if not parceiro.get("cidade"):
+                parceiro["cidade"] = local_solicitante.split("/")[-1].strip() if "/" in local_solicitante else "A definir"
+            if not parceiro.get("uf"):
+                parceiro["uf"] = "--"
+        if not (parceiro.get("nome") or parceiro.get("razao_social")):
+            parceiro["nome"] = "A definir"
+        if not parceiro.get("logradouro"):
+            parceiro["logradouro"] = str(payload.get("local_solicitante") or "A definir").strip() or "A definir"
+        if not parceiro.get("cidade"):
+            parceiro["cidade"] = "A definir"
+        if not parceiro.get("uf"):
+            parceiro["uf"] = "--"
+
+    origem_documento = "Manual"
+    if tipo == "COLETA" and consulta.get("encontrada"):
+        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "GoogleSheets").strip() or "GoogleSheets"
+    elif tipo == "ENTREGA" and consulta.get("encontrada"):
+        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "ERPPostgres").strip() or "ERPPostgres"
+
+    usuario = session.get("username", "desconhecido")
+    agora = datetime.now()
+    row = AgendamentoSolicitacao(
+        tipo=tipo,
+        status="Pendente",
+        prioridade=prioridade,
+        prazo_limite=prazo_limite,
+        data_desejada=data_desejada,
+        solicitante=usuario,
+        criado_em=agora,
+        atualizado_em=agora,
+        documento_tipo="OC" if tipo == "COLETA" else ("NF" if tipo == "ENTREGA" else "AVULSO"),
+        documento_numero=numero_oc if tipo == "COLETA" else (numero_nf if tipo == "ENTREGA" else (referencia_avulsa or f"AVULSO-{agora.strftime('%Y%m%d%H%M')}")),
+        numero_oc=numero_oc or None,
+        numero_nf=numero_nf or None,
+        origem_documento=origem_documento,
+        observacoes_solicitante=observacoes_solicitante or None,
+        observacoes_logistica=str(payload.get("observacoes_logistica") or "").strip() or None,
+        payload_origem=_json_text({"request": payload, "consulta": {"encontrada": consulta.get("encontrada"), "fonte": consulta.get("fonte")}}),
+    )
+    ok, msg = _aplicar_parceiro(row, parceiro, "Fornecedor" if tipo == "COLETA" else ("Cliente" if tipo == "ENTREGA" else "Avulso"))
+    if not ok:
+        return jsonify({"error": msg}), 400
+
+    rota = estimar_rota_agendamento(
+        {
+            "logradouro": row.logradouro,
+            "numero": row.numero,
+            "bairro": row.bairro,
+            "cidade": row.cidade,
+            "uf": row.uf,
+            "cep": row.cep,
+        }
+    )
+    if rota.get("km_estimado") is not None:
+        row.origem_latitude = rota.get("origem_latitude")
+        row.origem_longitude = rota.get("origem_longitude")
+        row.destino_latitude = rota.get("destino_latitude")
+        row.destino_longitude = rota.get("destino_longitude")
+        row.km_estimado = rota.get("km_estimado")
+        row.km_estimado_retorno = rota.get("km_estimado_retorno")
+
+    itens = payload.get("itens")
+    if not isinstance(itens, list) or not itens:
+        itens = list(consulta.get("itens") or [])
+    if tipo == "AVULSA" and (
+        not isinstance(itens, list)
+        or not any(str(item.get("descricao") or "").strip() for item in itens if isinstance(item, dict))
+    ):
+        itens = [{"descricao": "Reserva avulsa de veículo", "quantidade": 1, "unidade": "UN", "volumes": 0}]
+    if not isinstance(itens, list) or not itens:
+        itens = [{"descricao": "A definir pela logística", "quantidade": 1, "unidade": "UN", "volumes": 0}]
+
+    db.session.add(row)
+    db.session.flush()
+    row.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{row.id:04d}"
+    if not _sincronizar_itens(row, itens):
+        db.session.rollback()
+        return jsonify({"error": "Adicione pelo menos 1 item válido para continuar."}), 400
+    _registrar_historico(
+        row.id,
+        evento="CRIADA",
+        usuario=usuario,
+        status_novo="Pendente",
+        detalhe=f"Solicitação criada via {row.documento_tipo} {row.documento_numero}.",
+        payload=payload,
+    )
+    db.session.commit()
+    _notificar_solicitante_agendamento(row, "Solicitacao de transporte criada", "Sua solicitacao foi enviada para a logistica.")
+    return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row)}), 201
+
+
+@agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/aprovar-avulsa", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def aprovar_solicitacao_avulsa(solicitacao_id: int):
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+    if not is_admin_session():
+        return jsonify({"error": "Somente administrador pode aprovar solicitação avulsa."}), 403
+    if str(row.tipo or "").strip().upper() != "AVULSA":
+        return jsonify({"error": "Aprovação disponível apenas para solicitações AVULSAS."}), 409
+    status_atual = str(row.status or "").strip()
+    if status_atual in {"Concluida", "Cancelada"}:
+        return jsonify({"error": "Não é possível aprovar uma solicitação finalizada."}), 409
+    if status_atual == "Aprovada":
+        veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+        return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
+
+    usuario = session.get("username", "desconhecido")
+    row.status = "Aprovada"
+    row.atualizado_em = datetime.now()
+    _registrar_historico(
+        row.id,
+        evento="APROVADA_ADMIN_AVULSA",
+        usuario=usuario,
+        status_anterior=status_atual,
+        status_novo="Aprovada",
+        detalhe="Solicitação avulsa aprovada por administrador para liberação na montagem de viagem.",
+    )
+    db.session.commit()
+    veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+    return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/alocar", methods=["POST"])

@@ -12,6 +12,7 @@ tela de consulta, como o saldo que o GRV tinha NAQUELE momento."""
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Any
 from urllib.parse import quote
@@ -21,6 +22,8 @@ from flask import current_app
 
 _CACHE: dict[str, Any] = {"dados": None, "expira_em": 0.0}
 _CACHE_TTL_SEGUNDOS = 300
+_KARDEX_CACHE: dict[str, Any] = {"dados": {}, "expira_em": 0.0}
+_KARDEX_CACHE_TTL_SEGUNDOS = 900
 
 
 def _bridge_config() -> dict[str, Any]:
@@ -119,6 +122,79 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
     resultado = {"por_local": por_local, "por_codigo": por_codigo}
     _CACHE["dados"] = resultado
     _CACHE["expira_em"] = agora + _CACHE_TTL_SEGUNDOS
+    return resultado
+
+
+def buscar_consumo_kardex_grv(
+    codigos: list[str],
+    empresa: int = 1,
+    janela_dias: int = 30,
+    forcar_atualizacao: bool = False,
+) -> dict[str, Any]:
+    codigos_norm = []
+    vistos = set()
+    for codigo in codigos or []:
+        chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            codigos_norm.append(chave)
+
+    if not codigos_norm:
+        return {"por_codigo": {}, "fonte": "sem_codigos", "janela_dias": janela_dias}
+
+    try:
+        janela = int(janela_dias or 30)
+    except (TypeError, ValueError):
+        janela = 30
+    janela = max(7, min(janela, 180))
+
+    cache_key = f"{empresa}:{janela}:{'|'.join(codigos_norm)}"
+    agora = time.monotonic()
+    if not forcar_atualizacao and agora < float(_KARDEX_CACHE.get("expira_em") or 0):
+        dados_cache = _KARDEX_CACHE.get("dados") or {}
+        if cache_key in dados_cache:
+            return dados_cache[cache_key]
+
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar kardex no GRV.")
+
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/kardex-consumo",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "janela_dias": janela, "codigos": codigos_norm},
+        timeout=cfg["timeout"],
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de kardex."))
+
+    por_codigo: dict[str, dict[str, float]] = {}
+    raw = data.get("consumos") or {}
+    if isinstance(raw, dict):
+        for codigo, payload in raw.items():
+            if not isinstance(payload, dict):
+                continue
+            chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+            if not chave:
+                continue
+            por_codigo[chave] = {
+                "consumo_medio_diario": float(payload.get("consumo_medio_diario") or 0),
+                "saida_total_periodo": float(payload.get("saida_total_periodo") or 0),
+                "dias_com_saida": float(payload.get("dias_com_saida") or 0),
+                "estoque_medio_periodo": float(payload.get("estoque_medio_periodo") or 0),
+            }
+
+    resultado = {
+        "por_codigo": por_codigo,
+        "fonte": str(data.get("fonte") or ""),
+        "janela_dias": int(data.get("janela_dias") or janela),
+    }
+    dados_cache = _KARDEX_CACHE.get("dados") or {}
+    dados_cache[cache_key] = resultado
+    _KARDEX_CACHE["dados"] = dados_cache
+    _KARDEX_CACHE["expira_em"] = agora + _KARDEX_CACHE_TTL_SEGUNDOS
     return resultado
 
 
