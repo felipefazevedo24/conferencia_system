@@ -758,6 +758,12 @@ ESTOQUE_SQL = """
                 else null
             end as custo_medio
         from public.tproduto_deposito
+        -- So o deposito PRINCIPAL (cod_deposito = 1) conta pro saldo do
+        -- inventario - depositos como "EM PRODUCAO (MAO DE OBRA)" (3),
+        -- "EM PRODUCAO (PRODUTO)" (2) e "MEU EM PODER DE TERCEIROS" (140)
+        -- ficam de fora, senao o saldo esperado vem inflado com material
+        -- que fisicamente nao esta na prateleira do inventario.
+        where cod_deposito = 1
         group by cod_empresa, cod_produto
     )
     select
