@@ -749,14 +749,7 @@ ESTOQUE_SQL = """
             cod_produto,
             sum(coalesce(qtde_total, 0)) as qtde_total,
             sum(coalesce(qtde_reservada, 0)) as qtde_reservada,
-            sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel,
-            -- Custo medio ponderado pela quantidade de cada deposito - nao
-            -- da pra so tirar a media simples entre depositos diferentes.
-            case
-                when sum(coalesce(qtde_total, 0)) > 0
-                    then sum(coalesce(custo_medio, 0) * coalesce(qtde_total, 0)) / sum(coalesce(qtde_total, 0))
-                else null
-            end as custo_medio
+            sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel
         from public.tproduto_deposito
         -- So o deposito PRINCIPAL (cod_deposito = 1) conta pro saldo do
         -- inventario - depositos como "EM PRODUCAO (MAO DE OBRA)" (3),
@@ -786,9 +779,7 @@ ESTOQUE_SQL = """
         ) as qtde_total,
         coalesce(d.qtde_reservada, p.estoque_reservado, 0) as qtde_reservada,
         coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
-        -- Custo medio: so vem de tproduto_deposito (nao ha fallback legado
-        -- confiavel em tproduto pra isso) - fica null se nao encontrado.
-        d.custo_medio,
+        p.preco_custo as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
         coalesce(p.cod_grupo::text, '') as grupo
