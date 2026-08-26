@@ -36,7 +36,7 @@ def upgrade():
         if not _has_column(inspector, table, "custo_medio_no_momento"):
             op.add_column(table, sa.Column("custo_medio_no_momento", sa.Float(), nullable=True))
 
-    # Snapshot do custo medio (tproduto_deposito.custo_medio) no momento em
+    # Snapshot do custo medio (tproduto.preco_custo, vindo do bridge do ERP) no momento em
     # que a divergencia foi detectada - mesma logica de "nunca recalcular
     # depois" que ja vale pra qtde_contada/qtde_estoque_no_momento/diferenca.
     table_ajuste = "logistica_inventario_ajuste"

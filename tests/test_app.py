@@ -4790,7 +4790,7 @@ def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
 
 def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp_path):
     """O ajuste automatico criado quando uma contagem diverge do GRV grava
-    o custo medio (tproduto_deposito.custo_medio) junto com a quantidade -
+    o custo medio (tproduto.preco_custo, vindo do bridge do ERP) junto com a quantidade -
     a API de ajustes calcula diferenca_valor (R$) = diferenca * custo_medio
     na hora de responder, sem armazenar o valor derivado. Sem custo no GRV
     pro codigo, custo_medio/diferenca_valor ficam None (nao adivinha valor)."""

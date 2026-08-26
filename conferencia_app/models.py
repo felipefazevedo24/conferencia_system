@@ -1631,8 +1631,8 @@ class LogisticaInventarioInicial(db.Model):
     qtde_grv_no_momento = db.Column(db.Float)
     grv_consultado_em = db.Column(db.DateTime)
 
-    # Custo medio (tproduto_deposito.custo_medio) no mesmo momento/mesma
-    # consulta acima - usado pra calcular o impacto financeiro (R$) de uma
+    # Custo medio (tproduto.preco_custo, vindo do bridge do ERP) no mesmo
+    # momento/mesma consulta acima - usado pra calcular o impacto financeiro (R$) de uma
     # divergencia na tela de Ajuste de Estoque.
     custo_medio_no_momento = db.Column(db.Float)
 
@@ -1669,7 +1669,7 @@ class LogisticaInventarioAjuste(db.Model):
     qtde_estoque_no_momento = db.Column(db.Float, nullable=False)
     diferenca = db.Column(db.Float, nullable=False)  # qtde_contada - qtde_estoque_no_momento
 
-    # Custo medio (tproduto_deposito.custo_medio) no mesmo snapshot acima -
+    # Custo medio (tproduto.preco_custo) no mesmo snapshot acima -
     # null se o GRV nao tinha custo pro codigo. diferenca * custo_medio =
     # impacto financeiro (R$) da divergencia, calculado na hora de exibir
     # (nao armazenado, pra nao duplicar dado derivado).

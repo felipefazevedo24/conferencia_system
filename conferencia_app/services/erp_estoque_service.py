@@ -288,11 +288,12 @@ def qtde_grv_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any
 
 
 def custo_medio_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any]) -> float | None:
-    """Resolve o custo medio (tproduto_deposito.custo_medio) do GRV pra um
-    item do inventario, mesma logica de casamento do qtde_grv_para: codigo+
-    local primeiro (mais preciso), senao a media ponderada pela quantidade
-    em cada localizacao (ver buscar_estoque_grv). Retorna None se o codigo
-    nao existir no GRV ou nao tiver quantidade nenhuma pra calcular a media."""
+    """Resolve o custo medio (tproduto.preco_custo, vindo do bridge do ERP)
+    do GRV pra um item do inventario, mesma logica de casamento do
+    qtde_grv_para: codigo+local primeiro (mais preciso), senao a media
+    ponderada pela quantidade em cada localizacao (ver buscar_estoque_grv).
+    Retorna None se o codigo nao existir no GRV ou nao tiver quantidade
+    nenhuma pra calcular a media."""
     codigo = str(codigo_produto or "").strip().upper()
     local = str(local_codigo or "").strip().upper()
     if not codigo:
