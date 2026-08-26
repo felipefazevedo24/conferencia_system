@@ -997,6 +997,10 @@ document.addEventListener("DOMContentLoaded", function () {
     let recentCandidate = null;
 
     allLinks.forEach(link => {
+        link.addEventListener("click", function () {
+            if (window.innerWidth < 992) setShellCollapsed(true);
+        });
+
         const href = link.getAttribute("href");
         const normalizedHref = href ? href.split("#")[0] : "";
         if (!href) return;

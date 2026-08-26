@@ -2158,6 +2158,20 @@ code {
     .content-body {
         padding-top: 18px;
     }
+
+    .sidebar-flyout {
+        left: 12px !important;
+        right: 12px;
+        top: 76px !important;
+        width: auto;
+        max-height: calc(100dvh - 92px);
+        border-radius: 14px;
+    }
+
+    .sidebar-flyout .list-group-item {
+        min-height: 46px;
+        padding: 12px 14px;
+    }
 }
 
 @media (max-width: 720px) {
@@ -2179,6 +2193,35 @@ code {
 
     .content-body {
         padding: 16px 12px 10px;
+    }
+
+    #mobile-menu-toggle {
+        top: max(12px, env(safe-area-inset-top));
+        left: 12px;
+    }
+
+    .top-nav {
+        min-height: 66px;
+        padding-left: 68px;
+        padding-right: 12px;
+    }
+
+    .content-body > * {
+        min-width: 0;
+    }
+
+    button,
+    a,
+    input,
+    select,
+    textarea {
+        touch-action: manipulation;
+    }
+
+    .btn,
+    .btn-sap,
+    .eui-btn {
+        min-height: 44px;
     }
 
     .app-footer {
