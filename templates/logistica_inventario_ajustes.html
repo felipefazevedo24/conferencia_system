@@ -99,6 +99,7 @@
     const PODE_FINANCE = {{ pode_finance | tojson }};
     const PODE_FISCAL = {{ pode_fiscal | tojson }};
     const PODE_PULAR_ETAPA = {{ pode_pular_etapa | tojson }};
+    const PODE_ADMIN = {{ (user_role == 'Admin') | tojson }};
 
     function toast(msg, tipo) {
         const el = $("ia-toast");
@@ -235,6 +236,10 @@
         }
         const pular = btnPularEtapa();
         if (pular) itens += (itens ? "<hr>" : "") + pular;
+        if (PODE_ADMIN) {
+            itens += (itens ? "<hr>" : "") + it("atualizar-grv", "fa-arrows-rotate", "Atualizar quantidade GRV");
+            itens += it("estornar", "fa-rotate-left", "Estornar para validação", true);
+        }
         return itens || '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
     }
 
@@ -286,6 +291,12 @@
             } else if (act === "pular-etapa") {
                 if (!confirm("Pular direto para a próxima etapa? Isso ignora as validações normais da etapa atual - use só pra casos excepcionais.")) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/pular-etapa`, { method: "POST" });
+            } else if (act === "atualizar-grv") {
+                if (!confirm("Consultar agora a quantidade atual deste item no PostgreSQL/GRV? Apenas este ajuste será atualizado.")) return;
+                await api(`/api/logistica/inventario-ajustes/${id}/atualizar-grv`, { method: "POST" });
+            } else if (act === "estornar") {
+                if (!confirm("Estornar este ajuste para Validação? As confirmações de gestor, Finance e Fiscal serão limpas.")) return;
+                await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
             } else {
                 return;
             }

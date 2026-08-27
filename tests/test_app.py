@@ -4905,6 +4905,88 @@ def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp
     assert sem_custo["diferenca_valor"] is None
 
 
+def test_admin_atualiza_grv_individualmente_e_estorna_ajuste_de_qualquer_etapa(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste, LogisticaInventarioInicial
+
+        contagem = LogisticaInventarioInicial(
+            local_codigo="A01-07",
+            codigo_produto="SKU-ATUALIZA",
+            unidade_medida="UN",
+            quantidade=10,
+            criado_por="admin",
+            qtde_grv_no_momento=8,
+            custo_medio_no_momento=3,
+        )
+        db.session.add(contagem)
+        db.session.flush()
+        ajuste = LogisticaInventarioAjuste(
+            contagem_id=contagem.id,
+            codigo_produto="SKU-ATUALIZA",
+            local_codigo="A01-07",
+            unidade_medida="UN",
+            qtde_contada=10,
+            qtde_estoque_no_momento=8,
+            diferenca=2,
+            custo_medio=3,
+            status_modulo="Concluido",
+            status_slug="concluido",
+            gestor_confirmado_por="gestor",
+            gestor_confirmado_em=datetime.now(),
+            finance_concluido_por="finance",
+            finance_concluido_em=datetime.now(),
+            fiscal_concluido_por="fiscal",
+            fiscal_concluido_em=datetime.now(),
+            fiscal_nf_numero="NF-1",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    estoque_atual = {
+        "por_local": {"SKU-ATUALIZA|A01-07": {"qtde_total": 12, "custo_medio": 4}},
+        "por_codigo": {"SKU-ATUALIZA": {"qtde_total": 12, "custo_medio": 4}},
+    }
+    with patch(
+        "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv",
+        return_value=estoque_atual,
+    ):
+        resposta = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/atualizar-grv")
+
+    assert resposta.status_code == 200
+    with app.app_context():
+        ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+        contagem = db.session.get(LogisticaInventarioInicial, ajuste.contagem_id)
+        assert ajuste.qtde_estoque_no_momento == 12
+        assert ajuste.diferenca == -2
+        assert ajuste.custo_medio == 4
+        assert contagem.qtde_grv_no_momento == 12
+        assert contagem.custo_medio_no_momento == 4
+
+        ajuste.status_modulo = "Concluido"
+        ajuste.status_slug = "concluido"
+        ajuste.gestor_confirmado_por = "gestor"
+        ajuste.finance_concluido_por = "finance"
+        ajuste.fiscal_concluido_por = "fiscal"
+        ajuste.fiscal_nf_numero = "NF-2"
+        db.session.commit()
+
+    resposta_estorno = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/estornar")
+    assert resposta_estorno.status_code == 200
+    with app.app_context():
+        ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+        assert ajuste.status_modulo == "Validacao"
+        assert ajuste.status_slug == "validacao"
+        assert ajuste.gestor_confirmado_por is None
+        assert ajuste.finance_concluido_por is None
+        assert ajuste.fiscal_concluido_por is None
+        assert ajuste.fiscal_nf_numero is None
+
+
 def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_por_vez(tmp_path):
     """"Pular Etapa" (espelho do "Pular Status" do Comex) so avanca com a
     permissao extra de gerencia (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA) - o
