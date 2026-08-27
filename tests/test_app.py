@@ -1091,6 +1091,28 @@ def test_documento_entrada_kpis_e_timeline_trazem_governanca(tmp_path):
     assert any(item["tipo"] == "Governanca Fiscal" for item in timeline)
 
 
+def test_historico_conferencia_restrito_ao_admin(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        db.session.add(
+            Usuario(
+                username="conferente_teste",
+                password=generate_password_hash("conferente123"),
+                role="Conferente",
+            )
+        )
+        db.session.commit()
+    with client.session_transaction() as session:
+        session["username"] = "conferente_teste"
+        session["role"] = "Conferente"
+
+    assert client.get("/api/historico_completo").status_code == 403
+    assert client.get("/api/conferencia/nota/3000/historico").status_code == 403
+
+
 def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -3468,6 +3490,46 @@ def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):
     assert len(itens) == 1
     assert itens[0].codigo == "VEN1"
     assert itens[0].cfop == "5124"
+
+
+def test_importacao_xml_cfop_5902_sozinho_vai_direto_para_documento_entrada(tmp_path):
+    app = build_test_app(tmp_path)
+
+    xml_bytes = build_test_nfe_xml(
+        "4001-5902",
+        [{"codigo": "RET5902", "descricao": "Remessa para industrializacao", "cfop": "5902", "quantidade": "1.0000"}],
+    )
+
+    with app.app_context():
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+        item = ItemNota.query.filter_by(numero_nota="4001-5902").one()
+
+    assert item.status == "Concluído"
+    assert item.sem_conferencia_logistica is True
+    assert item.usuario_conferencia == "admin"
+    assert item.inicio_conferencia is not None
+    assert item.fim_conferencia is not None
+
+
+def test_importacao_xml_ignora_insumo_utilizado_servico_mesmo_com_cfop_5124(tmp_path):
+    app = build_test_app(tmp_path)
+
+    xml_bytes = build_test_nfe_xml(
+        "4001-INSUMO",
+        [
+            {"codigo": "INSUMO", "descricao": "  Insumo   Utilizado Serviço - taxa aplicada ", "cfop": "5124", "quantidade": "1.0000"},
+            {"codigo": "VEN4", "descricao": "Item conferível", "cfop": "5124", "quantidade": "2.0000"},
+        ],
+    )
+
+    with app.app_context():
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+        itens = ItemNota.query.filter_by(numero_nota="4001-INSUMO").all()
+
+    assert len(itens) == 1
+    assert itens[0].codigo == "VEN4"
 
 
 def test_importacao_xml_aceita_mesmo_numero_para_emitentes_diferentes(tmp_path):

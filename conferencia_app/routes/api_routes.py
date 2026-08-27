@@ -8,6 +8,7 @@ import io
 import json
 import re
 import os
+import unicodedata
 import shutil
 import tempfile
 import secrets
@@ -268,6 +269,7 @@ aprovar_solicitacao_devolucao_schema = AprovarSolicitacaoDevolucaoSchema()
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
+DESCRICAO_EXCLUIR_SEM_CONFERENCIA = "INSUMO UTILIZADO SERVICO"
 CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL = {"5124", "5125", "6124", "6125"}
 CNPJ_COLUMBIA_MACHINE = "30482274000125"
 
@@ -395,6 +397,13 @@ def _normalize_cfop(cfop: str) -> str:
     return re.sub(r"\D", "", str(cfop or ""))[:4]
 
 
+def _descricao_excluida_da_conferencia(descricao: str) -> bool:
+    texto = unicodedata.normalize("NFKD", str(descricao or ""))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = " ".join(texto.casefold().split())
+    return DESCRICAO_EXCLUIR_SEM_CONFERENCIA.casefold() in texto
+
+
 def _only_digits(value: str) -> str:
     return re.sub(r"\D", "", str(value or ""))
 
@@ -417,8 +426,13 @@ def _filter_itens_para_conferencia(itens):
     itens = list(itens or [])
     tem_cfop_principal = any(_normalize_cfop(item.cfop) in CFOPS_CONFERENCIA_PRINCIPAL for item in itens)
     if not tem_cfop_principal:
-        return itens
-    return [item for item in itens if _normalize_cfop(item.cfop) not in CFOPS_EXCLUIR_SEM_CONFERENCIA]
+        return [item for item in itens if not _descricao_excluida_da_conferencia(item.descricao)]
+    return [
+        item
+        for item in itens
+        if _normalize_cfop(item.cfop) not in CFOPS_EXCLUIR_SEM_CONFERENCIA
+        and not _descricao_excluida_da_conferencia(item.descricao)
+    ]
 
 
 def _auditar_inconsistencias_fiscais(itens_nota):
@@ -8520,7 +8534,7 @@ def detalhes_nota_liberada_lancamento(numero):
 
 
 @api_bp.route("/api/historico_completo")
-@roles_required("Admin", "Conferente", "Fiscal", "Logística", "Comex")
+@roles_required("Admin")
 def api_historico():
     data_ini = _parse_date(request.args.get("data_ini"))
     data_fim = _parse_date(request.args.get("data_fim"))
@@ -8538,7 +8552,7 @@ def api_historico():
 
 
 @api_bp.route("/api/conferencia/nota/<nota>/historico")
-@roles_required("Admin", "Conferente", "Fiscal", "Logística", "Comex")
+@roles_required("Admin")
 def api_conferencia_historico_nota(nota):
     """Historico cronologico de uma NF para o painel de logs da conferencia
     cega de recebimento (mesmos eventos da timeline, acessivel aos perfis de
