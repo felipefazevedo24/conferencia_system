@@ -4896,6 +4896,7 @@ def detalhe_nota_xml_auditor(numero_nota):
     itens = query.order_by(ItemNota.id.asc()).all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+    itens_visiveis = [item for item in itens if not _descricao_excluida_da_conferencia(item.descricao)]
 
     auditor_status = itens[0].auditor_status or "NaoAuditado"
     auditor_decisao = itens[0].auditor_decisao or "PendenteDecisao"
@@ -4933,7 +4934,7 @@ def detalhe_nota_xml_auditor(numero_nota):
                     "unidade": item.unidade_comercial,
                     "quantidade": item.qtd_real,
                 }
-                for item in itens
+                for item in itens_visiveis
             ],
         }
     )

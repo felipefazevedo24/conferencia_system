@@ -3514,6 +3514,8 @@ def test_importacao_xml_cfop_5902_sozinho_vai_direto_para_documento_entrada(tmp_
 
 def test_importacao_xml_ignora_insumo_utilizado_servico_mesmo_com_cfop_5124(tmp_path):
     app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
 
     xml_bytes = build_test_nfe_xml(
         "4001-INSUMO",
@@ -3530,6 +3532,10 @@ def test_importacao_xml_ignora_insumo_utilizado_servico_mesmo_com_cfop_5124(tmp_
 
     assert len(itens) == 1
     assert itens[0].codigo == "VEN4"
+
+    resposta_auditor = client.get("/api/xml_auditor/nota/4001-INSUMO")
+    assert resposta_auditor.status_code == 200
+    assert [item["codigo"] for item in resposta_auditor.get_json()["itens"]] == ["VEN4"]
 
 
 def test_importacao_xml_aceita_mesmo_numero_para_emitentes_diferentes(tmp_path):
