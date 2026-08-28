@@ -776,7 +776,7 @@ def _build_dashboard(metrics: dict) -> list[dict]:
                     "value": metrics["viagens_em_andamento"],
                     "caption": "Viagens com status EmAndamento.",
                     "icon": "fa-truck-fast",
-                    "href": "/logistica/viagens",
+                    "href": "/logistica/viagens?viagens=EM_ANDAMENTO",
                     "tone": "teal",
                 },
                 {

@@ -1959,7 +1959,19 @@ if (btnExcluirSelecionadas) {
 
 (async () => {
   await loadDashboard();
-  const vid = Number(new URLSearchParams(window.location.search).get('vid') || 0);
+  const params = new URLSearchParams(window.location.search);
+  const vid = Number(params.get('vid') || 0);
+  const viagensFiltro = String(params.get('viagens') || '').trim().toUpperCase();
+  if (viagensFiltro === 'EM_ANDAMENTO') {
+    state.tab = 'VIAGENS';
+    state.subfiltro = 'EM_ANDAMENTO';
+    document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
+    const tabViagens = document.querySelector('.vt-tab[data-tab="VIAGENS"]');
+    if (tabViagens) tabViagens.classList.add('is-active');
+    await loadViagens(true);
+    renderFilters();
+    renderTable();
+  }
   if (vid > 0) {
     state.tab = 'VIAGENS';
     state.subfiltro = 'PROGRAMADAS';
