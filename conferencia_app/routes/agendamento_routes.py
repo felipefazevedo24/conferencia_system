@@ -1572,7 +1572,7 @@ def dashboard_central_viagens():
         "coletas_pendentes": _pendentes(coletas),
         "entregas_pendentes": _pendentes(entregas),
         "avulsas_pendentes": _pendentes(avulsas),
-        "em_andamento": sum(1 for c in cards if c.get("status") in {"EmAndamento", "EmRota", "Alocada"}),
+        "em_andamento": Viagem.query.filter(Viagem.status == "EmAndamento").count(),
         "finalizadas": sum(1 for c in cards if c.get("status") == "Concluida"),
         "canceladas": sum(1 for c in cards if c.get("status") == "Cancelada"),
         "total": len(cards),
