@@ -356,23 +356,13 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
+                {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-coins"></i><span>Controladoria</span></span>
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-controladoria">
-                        {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_FATURAMENTO') %}
-                        <div class="submenu-subgroup" data-subgroup="contas-receber">
-                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-wallet submenu-icon"></i> Contas a receber <i class="fas fa-chevron-down submenu-chevron"></i></button>
-                            <div class="submenu-items">
-                                {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}<a href="/financeiro/contas-receber" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-usd"></i> Contas a receber</a>{% endif %}
-                                {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}<a href="/financeiro/faturamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Faturamento</a>{% endif %}
-                                {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}<a href="/boletos" class="list-group-item list-group-item-action" target="_blank"><i class="fas fa-barcode"></i> Consulta de Boletos</a>{% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
                         {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
                         <div class="submenu-subgroup" data-subgroup="contabilidade">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-scale-balanced submenu-icon"></i> Contabilidade <i class="fas fa-chevron-down submenu-chevron"></i></button>
@@ -1289,8 +1279,8 @@ if ("serviceWorker" in navigator) {
             statusEl.textContent = "Assistente do sistema";
             footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
-            await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema — recebimento, conferência, compras, expedição, romaneios, notas fiscais, contas a receber e mais. O que você precisa?", 900);
-            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"];
+            await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema: recebimento, conferência, compras, expedição, romaneios, notas fiscais e mais. O que você precisa?", 900);
+            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Como vejo o relatório de custos?"];
             renderChips(chips);
             flushAvisos();
             flushNovidades();
