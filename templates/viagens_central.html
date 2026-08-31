@@ -498,7 +498,7 @@ function renderSolicitacaoRow(row) {
   return `
     <tr class="vt-solicitacao-row" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span>${row.estoque_critico ? `<i class="fas fa-triangle-exclamation vt-stock-alert" title="${row.estoque_alerta || 'Estoque com cobertura critica.'}"></i>` : ''}</td>
+      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span></td>
       <td>${doc}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
@@ -1274,6 +1274,16 @@ async function carregarEstoqueSolicitacao(id) {
   if (!r.ok) {
     destino.textContent = d.error || 'Não foi possível consultar o estoque desta OC.';
     return;
+  }
+  const criticos = (d.estoque_itens || []).filter((item) => item.nivel === 'critico');
+  if (criticos.length) {
+    const tipoCell = document.querySelector(`.vt-solicitacao-row[data-row-id="${id}"] td:nth-child(2)`);
+    if (tipoCell && !tipoCell.querySelector('.vt-stock-alert')) {
+      const alerta = document.createElement('i');
+      alerta.className = 'fas fa-triangle-exclamation vt-stock-alert';
+      alerta.title = `${criticos.length} item(ns) com cobertura critica.`;
+      tipoCell.appendChild(alerta);
+    }
   }
   destino.outerHTML = tabelaEstoqueOc(d.estoque_itens) || '<div class="vt-mini" style="margin-top:14px;">Não há itens com código para consultar o estoque desta OC.</div>';
 }

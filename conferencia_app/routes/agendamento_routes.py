@@ -1654,13 +1654,6 @@ def dashboard_central_viagens():
     coletas = [c for c in cards if c.get("tipo") in {"COLETA", "AVULSA"}]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
     avulsas = [c for c in cards if c.get("tipo") == "AVULSA"]
-    numeros_oc = [str(card.get("numero_oc") or "").strip() for card in coletas]
-    riscos_estoque = _calcular_risco_estoque_por_ocs(numeros_oc)
-    for card in coletas:
-        numero_oc = str(card.get("numero_oc") or "").strip()
-        risco = riscos_estoque.get(numero_oc) or {}
-        card["estoque_critico"] = risco.get("risco_estoque") == "critico"
-        card["estoque_alerta"] = str(risco.get("risco_estoque_detalhe") or "")
 
     def _pendentes(arr: list[dict]) -> int:
         return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Aprovada", "Alocada"})
