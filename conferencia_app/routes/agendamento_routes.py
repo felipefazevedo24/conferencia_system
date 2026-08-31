@@ -23,6 +23,7 @@ from ..models import (
     AgendamentoSolicitacaoHistorico,
     AgendamentoSolicitacaoItem,
     AgendamentoVeiculo,
+    ExpedicaoRomaneio,
     Viagem,
     ViagemParada,
     Usuario,
@@ -1328,6 +1329,23 @@ def _serializar_solicitacao(
         except Exception:
             payload_origem = {}
     anexo = _extrair_anexo_payload(payload_origem)
+    tipo = str(registro.tipo or "").strip()
+    responsavel_origem = str(registro.solicitante or "").strip()
+    responsavel_origem_label = "Coleta inserida por" if tipo == "COLETA" else "Solicitacao inserida por"
+    if tipo == "ENTREGA":
+        responsavel_origem_label = "Romaneio autorizado por"
+        try:
+            romaneio_id = int(payload_origem.get("romaneio_id") or 0)
+        except (TypeError, ValueError):
+            romaneio_id = 0
+        romaneio = db.session.get(ExpedicaoRomaneio, romaneio_id) if romaneio_id else None
+        responsavel_origem = str(
+            getattr(romaneio, "expedido_por", None)
+            or getattr(romaneio, "atualizado_por", None)
+            or getattr(romaneio, "criado_por", None)
+            or payload_origem.get("responsavel_emissao")
+            or responsavel_origem
+        ).strip()
     endereco = {
         "logradouro": str(registro.logradouro or "").strip(),
         "numero": str(registro.numero or "").strip(),
@@ -1343,13 +1361,15 @@ def _serializar_solicitacao(
     return {
         "id": registro.id,
         "codigo": str(registro.codigo or f"LOG-{registro.id}").strip(),
-        "tipo": str(registro.tipo or "").strip(),
-        "tipo_label": {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(str(registro.tipo or "").strip(), str(registro.tipo or "").strip()),
+        "tipo": tipo,
+        "tipo_label": {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(tipo, tipo),
         "status": str(registro.status or "").strip(),
         "status_label": status_label_agendamento(registro.status),
         "prioridade": str(registro.prioridade or "").strip(),
         "prioridade_label": prioridade_label_agendamento(registro.prioridade),
         "solicitante": str(registro.solicitante or "").strip(),
+        "responsavel_origem": responsavel_origem,
+        "responsavel_origem_label": responsavel_origem_label,
         "criado_em": registro.criado_em.strftime("%d/%m/%Y %H:%M") if registro.criado_em else "",
         "documento_tipo": str(registro.documento_tipo or "").strip(),
         "documento_numero": str(registro.documento_numero or "").strip(),

@@ -519,6 +519,7 @@ function renderSolicitacaoDetalhe(row) {
       <div class="vt-detail-item"><strong>Documento</strong>${row.documento_tipo || '-'} ${row.documento_numero || '-'}</div>
       <div class="vt-detail-item"><strong>Parceiro</strong>${row.parceiro_nome || '-'}</div>
       <div class="vt-detail-item"><strong>Local</strong>${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}</div>
+      <div class="vt-detail-item"><strong>${row.responsavel_origem_label || 'Responsável pela origem'}</strong>${row.responsavel_origem || '-'}</div>
       <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
       <div class="vt-detail-item"><strong>Observações</strong>${row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
     </div>
