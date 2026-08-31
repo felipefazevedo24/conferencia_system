@@ -344,7 +344,7 @@ const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin')
 
 const state = {
   tab: 'SOLICITACOES',
-  subfiltro: 'PENDENTES',
+  subfiltro: null,
   q: '',
   coletas: [],
   entregas: [],
@@ -362,12 +362,6 @@ const state = {
 };
 
 let confirmacaoCallback = null;
-
-const subFiltrosSolicitacoes = [
-  { value: 'PENDENTES', label: 'Pendentes' },
-  { value: 'EM_ANDAMENTO', label: 'Em andamento' },
-  { value: 'CONCLUIDAS', label: 'Concluidas' }
-];
 
 const subFiltrosViagens = [
   { value: 'PROGRAMADAS', label: 'Programadas' },
@@ -479,7 +473,6 @@ function renderSolicitacaoRow(row) {
       <td>${motorista}</td>
       <td>${nf}</td>
       <td>${dataCol}</td>
-      <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
     </tr>
   `;
 }
@@ -498,32 +491,26 @@ function getRows() {
     return state.viagens;
   }
 
-  const base = [...state.coletas, ...state.entregas];
-  if (state.subfiltro === 'PENDENTES') {
-    return base.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada', 'Alocada'].includes(String(r.status || '').trim()));
-  }
-  if (state.subfiltro === 'EM_ANDAMENTO') {
-    return base.filter((r) => ['Alocada', 'EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
-  }
-  if (state.subfiltro === 'CONCLUIDAS') {
-    return base.filter((r) => ['Concluida'].includes(String(r.status || '').trim()));
-  }
-  return base;
+  return [...state.coletas, ...state.entregas].filter((row) => {
+    const status = String(row.status || '').trim();
+    return !row.viagem && !['Concluida', 'Cancelada'].includes(status);
+  });
 }
 
 function renderFilters() {
   const box = document.getElementById('vt-filtros');
-  const filtrosAtivos = state.tab === 'VIAGENS' ? subFiltrosViagens : subFiltrosSolicitacoes;
+  if (state.tab !== 'VIAGENS') {
+    box.innerHTML = '';
+    return;
+  }
+  const filtrosAtivos = subFiltrosViagens;
   box.innerHTML = filtrosAtivos.map((f) =>
     `<button class="vt-filter-chip ${state.subfiltro === f.value ? 'is-active' : ''}" data-subfiltro="${f.value}">${f.label}</button>`
   ).join('');
   box.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      state.subfiltro = btn.dataset.subfiltro || 'PENDENTES';
-      if (state.tab !== 'VIAGENS') state.selectedIds = [];
-      if (state.tab === 'VIAGENS') {
-        await loadViagens(true);
-      }
+      state.subfiltro = btn.dataset.subfiltro || 'PROGRAMADAS';
+      await loadViagens(true);
       renderFilters();
       renderTable();
     });
@@ -599,11 +586,11 @@ function renderTable() {
   if (bulkBar) bulkBar.style.display = 'flex';
 
   if (state.tab === 'SOLICITACOES') {
-    subtitulo.innerHTML = '<strong>Fila de solicitações</strong><br>Coletas e entregas na mesma lista. Selecione o que sai junto e crie uma única viagem.';
-    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Documento</th><th>Parceiro</th><th>Cidade/UF</th><th>Motorista</th><th>NF</th><th>Saída prevista</th><th>Situação</th></tr>';
+    subtitulo.innerHTML = '<strong>Fila de solicitações</strong><br>Coletas e entregas ainda disponíveis para uma nova viagem.';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Documento</th><th>Parceiro</th><th>Cidade/UF</th><th>Motorista</th><th>NF</th><th>Saída prevista</th></tr>';
 
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9" class="vt-empty">Nenhuma solicitação encontrada para os filtros atuais.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="vt-empty">Nenhuma solicitação disponível para criar viagem.</td></tr>';
       resumoMotoristas.innerHTML = '';
       atualizarSelecionadasUI();
       return;
@@ -1962,7 +1949,7 @@ Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
     state.tab = tab.dataset.tab;
-    state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : 'PENDENTES';
+    state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : null;
     if (state.tab === 'VIAGENS') state.selectedIds = [];
     if (state.tab === 'VIAGENS') {
       await loadViagens(true);
