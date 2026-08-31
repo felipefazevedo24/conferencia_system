@@ -342,6 +342,21 @@
 const CURRENT_USER_ROLE = {{ (user_role or '')|tojson }};
 const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin');
 
+[
+  'vt-actions-menu',
+  'modalDetalhe',
+  'modalRealocarParada',
+  'modalReorganizar',
+  'modalImportar',
+  'modalAlocar',
+  'modalConfirmacao',
+  'modalCancelarViagem',
+  'modalAdicionarSolicitacaoViagem',
+].forEach((id) => {
+  const element = document.getElementById(id);
+  if (element) document.body.appendChild(element);
+});
+
 const state = {
   tab: 'SOLICITACOES',
   subfiltro: null,
