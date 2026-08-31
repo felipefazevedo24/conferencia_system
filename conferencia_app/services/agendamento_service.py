@@ -97,10 +97,10 @@ _HEADER_ALIASES = {
 def status_label_agendamento(status: str | None) -> str:
     mapping = {
         "Pendente": "Pendente",
-        "EmAnalise": "Em anÃ¡lise",
+        "EmAnalise": "Em analise",
         "Alocada": "Alocada",
         "EmRota": "Em rota",
-        "Concluida": "ConcluÃ­da",
+        "Concluida": "Concluida",
         "Cancelada": "Cancelada",
     }
 
@@ -111,9 +111,9 @@ def status_label_agendamento(status: str | None) -> str:
 def prioridade_label_agendamento(prioridade: str | None) -> str:
     mapping = {
         "Baixa": "Baixa",
-        "Media": "MÃ©dia",
+        "Media": "Media",
         "Alta": "Alta",
-        "Critica": "CrÃ­tica",
+        "Critica": "Critica",
     }
     return mapping.get(str(prioridade or "").strip(), str(prioridade or "").strip() or "---")
 
@@ -455,7 +455,7 @@ def _path_padrao_cadastro(tipo: str) -> Path:
 def _model_por_tipo(tipo: str):
     tipo_limpo = str(tipo or "").strip().lower()
     if tipo_limpo not in _CADASTRO_MODELS:
-        raise ValueError("Tipo de cadastro invÃ¡lido.")
+        raise ValueError("Tipo de cadastro invalido.")
     return tipo_limpo, _CADASTRO_MODELS[tipo_limpo]
 
 
@@ -469,13 +469,13 @@ def _resolve_header_map(tipo: str, headers: list) -> dict[str, int]:
                 mapping[campo] = normalized[alias]
                 break
     if "nome" not in mapping:
-        raise RuntimeError(f"NÃ£o foi possÃ­vel identificar a coluna principal de nome em {tipo}.")
+        raise RuntimeError(f"Nao foi possivel identificar a coluna principal de nome em {tipo}.")
     return mapping
 
 
 def _abrir_workbook(arquivo=None, caminho: Path | None = None):
     if load_workbook is None:
-        raise RuntimeError("DependÃªncia openpyxl nÃ£o disponÃ­vel neste ambiente.")
+        raise RuntimeError("Dependencia openpyxl nao disponivel neste ambiente.")
     if arquivo is not None:
         data = arquivo.read()
         try:
@@ -484,7 +484,7 @@ def _abrir_workbook(arquivo=None, caminho: Path | None = None):
             pass
         return load_workbook(filename=io.BytesIO(data), read_only=True, data_only=True)
     if not caminho or not caminho.exists():
-        raise RuntimeError(f"Arquivo nÃ£o encontrado: {caminho}")
+        raise RuntimeError(f"Arquivo nao encontrado: {caminho}")
     return load_workbook(filename=str(caminho), read_only=True, data_only=True)
 
 
@@ -536,7 +536,7 @@ def importar_cadastros_excel(tipo: str, arquivo=None, nome_arquivo: str | None =
         rows = ws.iter_rows(values_only=True)
         header_row = next(rows, None)
         if not header_row:
-            raise RuntimeError("O arquivo estÃ¡ vazio.")
+            raise RuntimeError("O arquivo esta vazio.")
         header_map = _resolve_header_map(tipo_limpo, list(header_row))
 
         registros = []
@@ -549,7 +549,7 @@ def importar_cadastros_excel(tipo: str, arquivo=None, nome_arquivo: str | None =
             if not any(str(valor or "").strip() for valor in payload.values()):
                 continue
             if not payload["nome"]:
-                inconsistencias.append(f"Linha {idx}: nome nÃ£o informado.")
+                inconsistencias.append(f"Linha {idx}: nome nao informado.")
                 continue
             payload["fonte_arquivo"] = arquivo_origem
             payload["importado_em"] = importado_em
@@ -770,13 +770,13 @@ def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
     numero_oc_limpo = str(numero_oc or "").strip()
     fonte = obter_fonte_pedidos_erp_postgres()
     if not numero_oc_limpo:
-        return {"encontrada": False, "error": "Informe o nÃºmero da OC."}
+        return {"encontrada": False, "error": "Informe o numero da OC."}
 
     linhas = buscar_linhas_pedido(numero_oc_limpo)
     if not linhas:
         return {
             "encontrada": False,
-            "error": "OC nÃ£o encontrada na integraÃ§Ã£o atual.",
+            "error": "OC nao encontrada na integracao atual.",
             "numero_oc": numero_oc_limpo,
             "itens": [],
         }
@@ -828,9 +828,9 @@ def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
 
     warning = ""
     if not parceiro.get("nome"):
-        warning = "Fornecedor nÃ£o identificado automaticamente. Selecione ou digite o cadastro manualmente."
+        warning = "Fornecedor nao identificado automaticamente. Selecione ou digite o cadastro manualmente."
     elif not parceiro.get("logradouro"):
-        warning = "Fornecedor localizado, mas com endereÃ§o incompleto no cadastro."
+        warning = "Fornecedor localizado, mas com endereco incompleto no cadastro."
 
     return {
         "encontrada": True,
@@ -971,12 +971,12 @@ def _normalizar_itens_nf_emitida(documento: dict, numero_nf: str) -> list[dict]:
 def consultar_nf_agendamento(numero_nf: str) -> dict:
     numero_limpo = limpar_documento(numero_nf)
     if not numero_limpo:
-        return {"encontrada": False, "error": "Informe o nÃºmero da NF."}
+        return {"encontrada": False, "error": "Informe o numero da NF."}
 
     alguma_caixa_respondeu = False
     autenticacao_falhou = False
     documento_encontrado = None
-    # "todos" e "recebidos" retornam HTTP 500 no ambiente atual â€” usamos apenas as caixas suportadas
+    # "todos" e "recebidos" retornam HTTP 500 no ambiente atual; usamos apenas as caixas suportadas.
     for caixa in ("emitidos", "recebidos"):
         try:
             ok, status_code, payload = listar_nfes_consyste_por_caixa(
@@ -986,14 +986,14 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
                 timeout=20,
             )
         except Exception:
-            # Falha de rede nesta caixa: nÃ£o marca como indisponÃ­vel, tenta a prÃ³xima
+            # Falha de rede nesta caixa: nao marca como indisponivel, tenta a proxima.
             continue
 
         if status_code in {401, 403}:
             autenticacao_falhou = True
             continue
         if not ok:
-            # 500 em uma caixa especÃ­fica nÃ£o significa que o serviÃ§o estÃ¡ fora â€”
+            # HTTP 500 em uma caixa especifica nao significa que o servico esta fora.
             # basta que pelo menos uma caixa responda com 200
             continue
 
@@ -1001,7 +1001,7 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
         documentos = payload.get("documentos") if isinstance(payload, dict) else payload
         for documento in documentos or []:
             doc_num = limpar_documento(documento.get("numero"))
-            # Compara direto e tambÃ©m sem zeros Ã  esquerda (Consyste pode armazenar "000012345")
+            # Compara direto e tambem sem zeros a esquerda (Consyste pode armazenar "000012345").
             if doc_num == numero_limpo or (
                 doc_num and numero_limpo
                 and doc_num.lstrip("0") == numero_limpo.lstrip("0")
@@ -1016,18 +1016,18 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
             return {
                 "encontrada": False,
                 "numero_nf": numero_limpo,
-                "error": "A integraÃ§Ã£o Consyste recusou a consulta. Confira o token configurado.",
+                "error": "A integracao Consyste recusou a consulta. Confira o token configurado.",
             }
         if not alguma_caixa_respondeu:
             return {
                 "encontrada": False,
                 "numero_nf": numero_limpo,
-                "error": "Consyste indisponÃ­vel no momento. Tente novamente ou preencha os dados manualmente.",
+                "error": "Consyste indisponivel no momento. Tente novamente ou preencha os dados manualmente.",
             }
         return {
             "encontrada": False,
             "numero_nf": numero_limpo,
-            "error": f"NF {numero_limpo} nÃ£o encontrada na Consyste. Verifique o nÃºmero ou preencha os dados manualmente.",
+            "error": f"NF {numero_limpo} nao encontrada na Consyste. Verifique o numero ou preencha os dados manualmente.",
         }
 
     nome_cliente = _pick(documento_encontrado, "dest_nome", "cliente_nome", "destinatario_nome", "razao_social")
@@ -1077,7 +1077,7 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
 
     warning = ""
     if not parceiro["logradouro"] or not parceiro["cidade"] or not parceiro["uf"]:
-        warning = "A NF foi localizada, mas o endereÃ§o precisa ser complementado antes de salvar."
+        warning = "A NF foi localizada, mas o endereco precisa ser complementado antes de salvar."
 
     return {
         "encontrada": True,
