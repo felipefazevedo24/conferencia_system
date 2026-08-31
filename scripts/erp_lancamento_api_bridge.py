@@ -1055,7 +1055,14 @@ def _safe_ident(name: str) -> str:
     return ident
 
 
-def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
+def _detectar_fonte_kardex(
+    cur,
+    *,
+    data_inicio: date,
+    data_fim: date,
+    empresa: int,
+    codigos: list[str],
+) -> dict[str, Any] | None:
     candidatos = [
         "tkardex",
         "t_kardex",
@@ -1073,6 +1080,7 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
     saldo_cols = ["saldo", "qtde_saldo", "saldo_atual"]
     empresa_cols = ["cod_empresa", "empresa"]
 
+    fontes = []
     for tabela in candidatos:
         cur.execute(
             """
@@ -1115,12 +1123,26 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
             from public.{_safe_ident(tabela)}
             where {' and '.join(filtros)}
         """
-        return {
+        fonte = {
             "tabela": f"public.{tabela}",
             "sql": sql,
             "tem_empresa": bool(empresa_col),
         }
-    return None
+        parametros = [data_inicio, data_fim]
+        if empresa_col:
+            parametros.append(empresa)
+        parametros.append(codigos)
+        try:
+            cur.execute(f"select count(*) from ({sql}) as movimentos", tuple(parametros))
+            fonte["movimentos_encontrados"] = int(cur.fetchone()[0] or 0)
+        except Exception:
+            fonte["movimentos_encontrados"] = 0
+        fontes.append(fonte)
+
+    if not fontes:
+        return None
+    fontes.sort(key=lambda fonte: int(fonte.get("movimentos_encontrados") or 0), reverse=True)
+    return fontes[0]
 
 
 def _compras_query_catalog() -> dict[str, str]:
@@ -1705,7 +1727,13 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    fonte = _detectar_fonte_kardex(cur)
+                    fonte = _detectar_fonte_kardex(
+                        cur,
+                        data_inicio=data_inicio,
+                        data_fim=data_fim,
+                        empresa=empresa,
+                        codigos=codigos,
+                    )
                     if not fonte:
                         return jsonify(
                             {
@@ -1817,6 +1845,7 @@ def create_app() -> Flask:
                     "inicio": data_inicio.isoformat(),
                     "fim": data_fim.isoformat(),
                     "fonte": fonte["tabela"],
+                    "movimentos_encontrados": fonte.get("movimentos_encontrados", 0),
                     "consumos": consumos,
                 }
             )
