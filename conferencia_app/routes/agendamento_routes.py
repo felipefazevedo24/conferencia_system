@@ -308,6 +308,11 @@ def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict
     return aliases
 
 
+def _unidade_estoque_discreta(unidade: str | None) -> bool:
+    codigo = re.sub(r"[^A-Z]", "", str(unidade or "").upper())
+    return codigo in {"UN", "UND", "UNIDADE", "PC", "PCA", "PECA", "CX", "CAIXA", "KIT"}
+
+
 def _oc_ja_recebida(status_oc_nome: str) -> bool:
     status = str(status_oc_nome or "").strip().upper()
     if not status:
@@ -401,6 +406,8 @@ def _calcular_risco_estoque_oc(
         itens_com_estoque += 1
         saldo_atual = float(estoque_item.get("qtde_total") or 0)
         saldo_referencia = estoque_medio if estoque_medio > 0 else saldo_atual
+        if consumo_diario > 0 and _unidade_estoque_discreta(estoque_item.get("unidade")):
+            consumo_diario = float(math.ceil(consumo_diario))
         if consumo_diario > 0:
             if float((consumo_kardex_por_codigo.get(codigo_item) or {}).get("consumo_medio_diario") or 0) > 0:
                 itens_com_consumo_kardex += 1
@@ -490,9 +497,12 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
         quantidade_oc = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd"))
         estoque_item = estoque_por_codigo.get(codigo)
         consumo_item = consumo_por_codigo.get(codigo) or {}
+        unidade = str((estoque_item or {}).get("unidade") or item.get("unidade") or "UN").strip() or "UN"
         saldo_bruto = estoque_item.get("qtde_total") if estoque_item else None
         saldo = float(saldo_bruto or 0) if estoque_item else None
         consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
+        if consumo_diario > 0 and _unidade_estoque_discreta(unidade):
+            consumo_diario = float(math.ceil(consumo_diario))
         cobertura = math.ceil(saldo / consumo_diario) if saldo is not None and consumo_diario else None
         if saldo is None:
             nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
@@ -506,7 +516,7 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
             "codigo_item": codigo,
             "descricao": str(item.get("descricao") or "").strip(),
             "quantidade_oc": quantidade_oc,
-            "unidade": str((estoque_item or {}).get("unidade") or item.get("unidade") or "UN").strip() or "UN",
+            "unidade": unidade,
             "saldo_grv": saldo,
             "consumo_diario": consumo_diario,
             "cobertura_dias": cobertura,
