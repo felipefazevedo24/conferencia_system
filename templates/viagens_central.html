@@ -16,8 +16,13 @@
     .vt-filter-chip { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .vt-filter-chip.is-active { border-color: var(--eui-primary); color: var(--eui-primary); }
     .vt-table-wrap { overflow-x: auto; }
-    .vt-solicitacao-row { cursor: pointer; }
     .vt-solicitacao-row:hover td { background: var(--eui-surface-2); }
+    .vt-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
+    .vt-expand-btn:hover { background: var(--eui-primary-soft); }
+    .vt-solicitacao-detail td { background: var(--eui-surface-2); padding: 14px 18px; }
+    .vt-detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; }
+    .vt-detail-item { min-width: 0; font-size: 12px; color: var(--eui-text-soft); }
+    .vt-detail-item strong { display: block; margin-bottom: 2px; color: var(--eui-text); }
     .vt-empty { padding: 36px 18px; text-align: center; color: var(--eui-text-muted); }
     .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
@@ -59,6 +64,7 @@
     @media (max-width: 760px) {
         .vt-toolbar { align-items: stretch; }
         .vt-tabs { width: 100%; }
+          .vt-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .vt-grid-2 { grid-template-columns: 1fr; }
     }
 </style>
@@ -369,6 +375,7 @@ const state = {
   veiculos: [],
   motoristas: [],
   selectedIds: [],
+  expandedIds: [],
   posAlocacaoIds: [],
   posAlocacaoMotoristaId: null,
   autoCriarViagemAposAlocacao: false,
@@ -487,6 +494,7 @@ function renderSolicitacaoRow(row) {
   const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
   const typeClass = tipo === 'COLETA' ? 'coleta' : (tipo === 'ENTREGA' ? 'entrega' : 'avulsa');
   const dataCol = row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-';
+  const expanded = state.expandedIds.includes(Number(row.id));
   return `
     <tr class="vt-solicitacao-row" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
@@ -497,8 +505,25 @@ function renderSolicitacaoRow(row) {
       <td>${motorista}</td>
       <td>${nf}</td>
       <td>${dataCol}</td>
+      <td style="text-align:right;"><button class="vt-expand-btn" data-expand-id="${row.id}" title="${expanded ? 'Recolher detalhes' : 'Expandir detalhes'}"><i class="fas fa-chevron-${expanded ? 'up' : 'down'}"></i></button></td>
     </tr>
+    ${expanded ? renderSolicitacaoDetalhe(row) : ''}
   `;
+}
+
+function renderSolicitacaoDetalhe(row) {
+  const oc = String(row.numero_oc || row.documento_numero || '').trim();
+  return `<tr class="vt-solicitacao-detail"><td colspan="9">
+    <div class="vt-detail-grid">
+      <div class="vt-detail-item"><strong>Solicitação</strong>${row.codigo || '-'}</div>
+      <div class="vt-detail-item"><strong>Documento</strong>${row.documento_tipo || '-'} ${row.documento_numero || '-'}</div>
+      <div class="vt-detail-item"><strong>Parceiro</strong>${row.parceiro_nome || '-'}</div>
+      <div class="vt-detail-item"><strong>Local</strong>${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}</div>
+      <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
+      <div class="vt-detail-item"><strong>Observações</strong>${row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
+    </div>
+    ${row.tipo === 'COLETA' && oc ? `<div id="estoque-solicitacao-${row.id}" class="vt-mini" style="margin-top:14px;">Consultando estoque por item...</div>` : ''}
+  </td></tr>`;
 }
 
 function getRows() {
@@ -611,10 +636,10 @@ function renderTable() {
 
   if (state.tab === 'SOLICITACOES') {
     subtitulo.innerHTML = '<strong>Fila de solicitações</strong><br>Coletas e entregas ainda disponíveis para uma nova viagem.';
-    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Documento</th><th>Parceiro</th><th>Cidade/UF</th><th>Motorista</th><th>NF</th><th>Saída prevista</th></tr>';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Documento</th><th>Parceiro</th><th>Cidade/UF</th><th>Motorista</th><th>NF</th><th>Saída prevista</th><th aria-label="Detalhes"></th></tr>';
 
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="8" class="vt-empty">Nenhuma solicitação disponível para criar viagem.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="vt-empty">Nenhuma solicitação disponível para criar viagem.</td></tr>';
       resumoMotoristas.innerHTML = '';
       atualizarSelecionadasUI();
       return;
@@ -652,8 +677,16 @@ function renderTable() {
         atualizarSelecionadasUI();
       });
     });
-    body.querySelectorAll('.vt-solicitacao-row').forEach((el) => {
-      el.addEventListener('click', () => acaoVisualizar(Number(el.dataset.rowId)));
+    body.querySelectorAll('.vt-expand-btn').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const id = Number(button.dataset.expandId);
+        const expanded = state.expandedIds.includes(id);
+        state.expandedIds = expanded
+          ? state.expandedIds.filter((item) => item !== id)
+          : [...state.expandedIds, id];
+        renderTable();
+        if (!expanded) await carregarEstoqueSolicitacao(id);
+      });
     });
     atualizarSelecionadasUI();
     return;
@@ -1227,6 +1260,21 @@ function tabelaEstoqueOc(itens) {
     return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
   }).join('');
   return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo total GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+}
+
+async function carregarEstoqueSolicitacao(id) {
+  const row = rowById(id);
+  const oc = String(row?.numero_oc || row?.documento_numero || '').trim();
+  const destino = document.getElementById(`estoque-solicitacao-${id}`);
+  if (!row || row.tipo !== 'COLETA' || !oc || !destino) return;
+  const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(oc)}`);
+  const d = await r.json().catch(() => ({}));
+  if (!document.getElementById(`estoque-solicitacao-${id}`)) return;
+  if (!r.ok) {
+    destino.textContent = d.error || 'Não foi possível consultar o estoque desta OC.';
+    return;
+  }
+  destino.outerHTML = tabelaEstoqueOc(d.estoque_itens) || '<div class="vt-mini" style="margin-top:14px;">Não há itens com código para consultar o estoque desta OC.</div>';
 }
 
 async function acaoVisualizar(id) {
