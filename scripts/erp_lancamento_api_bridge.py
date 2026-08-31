@@ -1102,11 +1102,12 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
         filtros = [f"{_safe_ident(date_col)}::date between %s and %s"]
         if empresa_col:
             filtros.append(f"{_safe_ident(empresa_col)} = %s")
-        filtros.append(f"upper(trim({_safe_ident(code_col)}::text)) = any(%s::text[])")
+        codigo_normalizado = f"regexp_replace(upper(trim({_safe_ident(code_col)}::text)), '[^A-Z0-9]', '', 'g')"
+        filtros.append(f"{codigo_normalizado} = any(%s::text[])")
 
         sql = f"""
             select
-                upper(trim({_safe_ident(code_col)}::text)) as codigo_interno,
+                {codigo_normalizado} as codigo_interno,
                 {_safe_ident(date_col)}::date as data_movimento,
                 coalesce({_safe_ident(qty_col)}, 0)::double precision as quantidade,
                 {select_tipo} as tipo_movimento,
