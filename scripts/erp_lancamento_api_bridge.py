@@ -1080,7 +1080,45 @@ def _detectar_fonte_kardex(
     saldo_cols = ["saldo", "qtde_saldo", "saldo_atual"]
     empresa_cols = ["cod_empresa", "empresa"]
 
-    fontes = []
+    codigo_produto_normalizado = "regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g')"
+    sql_saida_industrial = f"""
+        select
+            {codigo_produto_normalizado} as codigo_interno,
+            coalesce(h.dt_efetiva::date, h.data::date) as data_movimento,
+            coalesce(i.qtde, 0)::double precision as quantidade,
+            coalesce(h.tipo_movimento_estoque, '')::text as tipo_movimento,
+            null::double precision as saldo
+        from public.tsaidaax i
+        join public.tsaida_e h
+          on h.cod_empresa = i.cod_empresa and h.codigo = i.cod_rel
+        join public.tproduto p
+          on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
+        where coalesce(h.dt_efetiva::date, h.data::date) between %s and %s
+          and i.cod_empresa = %s
+          and {codigo_produto_normalizado} = any(%s::text[])
+    """
+    fontes = [{
+        "tabela": "public.tsaida_e + public.tsaidaax",
+        "sql": sql_saida_industrial,
+        "tem_empresa": True,
+    }]
+
+    def contar_movimentos(fonte: dict) -> int:
+        parametros = [data_inicio, data_fim]
+        if fonte["tem_empresa"]:
+            parametros.append(empresa)
+        parametros.append(codigos)
+        try:
+            cur.execute("SAVEPOINT fonte_kardex")
+            cur.execute(f"select count(*) from ({fonte['sql']}) as movimentos", tuple(parametros))
+            total = int(cur.fetchone()[0] or 0)
+            cur.execute("RELEASE SAVEPOINT fonte_kardex")
+            return total
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT fonte_kardex")
+            cur.execute("RELEASE SAVEPOINT fonte_kardex")
+            return 0
+
     for tabela in candidatos:
         cur.execute(
             """
@@ -1128,16 +1166,11 @@ def _detectar_fonte_kardex(
             "sql": sql,
             "tem_empresa": bool(empresa_col),
         }
-        parametros = [data_inicio, data_fim]
-        if empresa_col:
-            parametros.append(empresa)
-        parametros.append(codigos)
-        try:
-            cur.execute(f"select count(*) from ({sql}) as movimentos", tuple(parametros))
-            fonte["movimentos_encontrados"] = int(cur.fetchone()[0] or 0)
-        except Exception:
-            fonte["movimentos_encontrados"] = 0
+        fonte["movimentos_encontrados"] = contar_movimentos(fonte)
         fontes.append(fonte)
+
+    for fonte in fontes:
+        fonte["movimentos_encontrados"] = contar_movimentos(fonte)
 
     if not fontes:
         return None
