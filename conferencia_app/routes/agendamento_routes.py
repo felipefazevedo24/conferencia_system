@@ -474,7 +474,7 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
         return [], "Estoque GRV indisponivel no momento."
 
     try:
-        consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=False)
+        consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=True)
         consumo_por_codigo = _mapa_estoque_aliases(consumo.get("por_codigo") or {})
     except Exception:
         consumo_por_codigo = {}
