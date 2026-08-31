@@ -625,14 +625,7 @@ function renderTable() {
   state.selectedIds = state.selectedIds.filter((id) => idsValidos.has(id));
 
   if (state.subfiltro === 'PENDENTES') {
-    const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada'].includes(String(r.status || '').trim()));
-
-    let html = '';
-    if (pendentesNaoAlocadas.length) {
-      html += pendentesNaoAlocadas.map((row) => renderSolicitacaoRow(row)).join('');
-    }
-
-    body.innerHTML = html || '<tr><td colspan="9" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+    body.innerHTML = rows.map((row) => renderSolicitacaoRow(row)).join('');
 
     const porMotoristaPendentes = rows.reduce((acc, row) => {
       const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
