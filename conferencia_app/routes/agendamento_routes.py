@@ -456,6 +456,67 @@ def _calcular_risco_estoque_oc(
     }
 
 
+def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
+    itens = consulta_oc.get("itens") if isinstance(consulta_oc, dict) else []
+    if not isinstance(itens, list):
+        return [], ""
+
+    codigos = [_codigo_item_oc(item) for item in itens if isinstance(item, dict)]
+    codigos = [codigo for codigo in dict.fromkeys(codigos) if codigo]
+    if not codigos:
+        return [], ""
+
+    try:
+        estoque = buscar_estoque_grv(forcar_atualizacao=False)
+        estoque_por_codigo = _mapa_estoque_aliases(estoque.get("por_codigo") or {})
+    except Exception:
+        current_app.logger.warning("Nao foi possivel consultar o estoque GRV para a OC.", exc_info=True)
+        return [], "Estoque GRV indisponivel no momento."
+
+    try:
+        consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=False)
+        consumo_por_codigo = _mapa_estoque_aliases(consumo.get("por_codigo") or {})
+    except Exception:
+        consumo_por_codigo = {}
+
+    saida = []
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        codigo = _codigo_item_oc(item)
+        if not codigo:
+            continue
+        quantidade_oc = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd"))
+        estoque_item = estoque_por_codigo.get(codigo)
+        consumo_item = consumo_por_codigo.get(codigo) or {}
+        saldo_bruto = estoque_item.get("qtde_disponivel") if estoque_item else None
+        if saldo_bruto is None and estoque_item:
+            saldo_bruto = estoque_item.get("qtde_total")
+        saldo = float(saldo_bruto or 0) if estoque_item else None
+        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0) or None
+        cobertura = (saldo / consumo_diario) if saldo is not None and consumo_diario else None
+        if saldo is None:
+            nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
+        elif cobertura is not None and cobertura < 2:
+            nivel, nivel_label = "critico", "Estoque critico"
+        elif cobertura is None and saldo + 0.0001 < quantidade_oc:
+            nivel, nivel_label = "critico", "Saldo abaixo da OC"
+        else:
+            nivel, nivel_label = "normal", "Estoque coberto"
+        saida.append({
+            "codigo_item": codigo,
+            "descricao": str(item.get("descricao") or "").strip(),
+            "quantidade_oc": quantidade_oc,
+            "unidade": str(item.get("unidade") or "UN").strip() or "UN",
+            "saldo_grv": saldo,
+            "consumo_diario": consumo_diario,
+            "cobertura_dias": cobertura,
+            "nivel": nivel,
+            "nivel_label": nivel_label,
+        })
+    return saida, ""
+
+
 def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
     numeros = []
     vistos: set[str] = set()
@@ -1609,6 +1670,7 @@ def central_viagens_consultar_oc(numero_oc: str):
         return jsonify(resultado), 404
 
     parceiro = resultado.get("fornecedor") if isinstance(resultado.get("fornecedor"), dict) else {}
+    estoque_itens, estoque_aviso = _estoque_por_item_oc(resultado)
     return jsonify(
         {
             "encontrada": True,
@@ -1617,6 +1679,8 @@ def central_viagens_consultar_oc(numero_oc: str):
             "itens": resultado.get("itens") or [],
             "warning": resultado.get("warning") or "",
             "fonte": resultado.get("fonte") or {},
+            "estoque_itens": estoque_itens,
+            "estoque_aviso": estoque_aviso,
         }
     )
 

@@ -72,7 +72,6 @@
             <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <a href="/logistica/recebimento-calendario" class="eui-btn eui-btn--ghost"><i class="fas fa-calendar-days"></i> Calendário de recebimento</a>
           <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--primary"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
@@ -215,8 +214,8 @@
             <div id="importState" class="vt-mini"></div>
             <div id="importErrors" class="vt-mini" style="color:var(--eui-danger);"></div>
             <div class="vt-preview">
-                <table class="erp-table">
-          <thead><tr><th>OC</th><th>Fornecedor</th><th>CNPJ</th><th>Cidade/UF</th><th>Endereço</th><th>Itens</th></tr></thead>
+                    <table class="erp-table">
+                  <thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível de estoque</th></tr></thead>
           <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar.</td></tr></tbody>
                 </table>
             </div>
@@ -1905,20 +1904,18 @@ async function consultarOcBridge() {
   state.ocConsulta = d;
   document.getElementById('btnConfirmarImport').disabled = false;
 
-  const f = d.fornecedor || {};
-  const itens = Array.isArray(d.itens) ? d.itens.length : 0;
+  const itensEstoque = Array.isArray(d.estoque_itens) ? d.estoque_itens : [];
   document.getElementById('importState').textContent = `OC ${d.numero_oc || numeroOc} localizada.`;
-  document.getElementById('importErrors').textContent = d.warning || '';
-  document.getElementById('previewBody').innerHTML = `
-    <tr>
-      <td>${d.numero_oc || '-'}</td>
-      <td>${f.nome || f.razao_social || '-'}</td>
-      <td>${f.cnpj_cpf || '-'}</td>
-      <td>${f.cidade || '-'} / ${f.uf || '-'}</td>
-      <td>${f.logradouro || '-'} ${f.numero || ''}</td>
-      <td>${itens}</td>
-    </tr>
-  `;
+  document.getElementById('importErrors').textContent = [d.warning, d.estoque_aviso].filter(Boolean).join(' ');
+  document.getElementById('previewBody').innerHTML = itensEstoque.length
+    ? itensEstoque.map((item) => {
+        const saldo = item.saldo_grv == null ? '-' : `${Number(item.saldo_grv).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
+        const consumo = item.consumo_diario == null ? '-' : `${Number(item.consumo_diario).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
+        const cobertura = item.cobertura_dias == null ? '-' : `${Number(item.cobertura_dias).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
+        const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : 'eui-badge--success');
+        return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
+      }).join('')
+    : '<tr><td colspan="6" class="vt-empty">A OC não possui itens com código para consultar o estoque.</td></tr>';
 }
 
 async function confirmarImportacaoOc() {
