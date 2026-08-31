@@ -1747,6 +1747,7 @@ function fecharMontagemPosAlocacao() {
 async function criarViagemComSolicitacoesSelecionadas() {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
   if (!ids.length) return;
+  showToast('Criando viagem...', 'info');
   const r = await fetch('/api/viagem/montar-com-solicitacoes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1882,12 +1883,12 @@ async function confirmarAlocacao() {
   state.selectedIds = [];
   closeModal('modalAlocar');
   showToast(`Alocação concluída. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
-  await loadDashboard();
   if (!falhas && state.posAlocacaoIds.length) {
     state.autoCriarViagemAposAlocacao = false;
     await criarViagemComSolicitacoesSelecionadas();
     return;
   }
+  await loadDashboard();
   state.autoCriarViagemAposAlocacao = false;
 }
 
