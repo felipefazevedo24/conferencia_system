@@ -1259,7 +1259,7 @@ function tabelaEstoqueOc(itens) {
     const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : (item.nivel === 'sem_consumo' ? 'eui-badge--info' : 'eui-badge--success'));
     return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
   }).join('');
-  return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo total GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+  return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo disponível GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
 }
 
 async function carregarEstoqueSolicitacao(id) {

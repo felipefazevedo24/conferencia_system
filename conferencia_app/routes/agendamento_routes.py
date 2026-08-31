@@ -404,7 +404,7 @@ def _calcular_risco_estoque_oc(
             continue
 
         itens_com_estoque += 1
-        saldo_atual = float(estoque_item.get("qtde_total") or 0)
+        saldo_atual = float(estoque_item.get("qtde_disponivel") or 0)
         saldo_referencia = estoque_medio if estoque_medio > 0 else saldo_atual
         if consumo_diario > 0 and _unidade_estoque_discreta(estoque_item.get("unidade")):
             consumo_diario = float(math.ceil(consumo_diario))
@@ -498,7 +498,7 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
         estoque_item = estoque_por_codigo.get(codigo)
         consumo_item = consumo_por_codigo.get(codigo) or {}
         unidade = str((estoque_item or {}).get("unidade") or item.get("unidade") or "UN").strip() or "UN"
-        saldo_bruto = estoque_item.get("qtde_total") if estoque_item else None
+        saldo_bruto = estoque_item.get("qtde_disponivel") if estoque_item else None
         saldo = float(saldo_bruto or 0) if estoque_item else None
         consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
         if consumo_diario > 0 and _unidade_estoque_discreta(unidade):
