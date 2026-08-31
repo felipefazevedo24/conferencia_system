@@ -16,6 +16,8 @@
     .vt-filter-chip { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .vt-filter-chip.is-active { border-color: var(--eui-primary); color: var(--eui-primary); }
     .vt-table-wrap { overflow-x: auto; }
+    .vt-solicitacao-row { cursor: pointer; }
+    .vt-solicitacao-row:hover td { background: var(--eui-surface-2); }
     .vt-empty { padding: 36px 18px; text-align: center; color: var(--eui-text-muted); }
     .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
@@ -90,9 +92,8 @@
     <div class="eui-card">
         <div class="eui-card__head" style="display:grid; gap:10px;">
             <div class="vt-tabs">
-                <button class="vt-tab is-active" data-tab="COLETA">Coletas <span class="count" id="count-coletas">0</span></button>
-                <button class="vt-tab" data-tab="ENTREGA">Entregas <span class="count" id="count-entregas">0</span></button>
-              <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
+                <button class="vt-tab is-active" data-tab="SOLICITACOES">Solicitações <span class="count" id="count-solicitacoes">0</span></button>
+                <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
             </div>
             <div class="vt-toolbar">
                 <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
@@ -342,7 +343,7 @@ const CURRENT_USER_ROLE = {{ (user_role or '')|tojson }};
 const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin');
 
 const state = {
-  tab: 'COLETA',
+  tab: 'SOLICITACOES',
   subfiltro: 'PENDENTES',
   q: '',
   coletas: [],
@@ -459,27 +460,26 @@ function isAvulsaNaoAprovada(row) {
 }
 
 function renderSolicitacaoRow(row) {
-  const doc = state.tab === 'COLETA'
+  const tipo = String(row.tipo || '').toUpperCase();
+  const doc = tipo === 'COLETA'
     ? (row.numero_oc || row.documento_numero || '-')
-    : (state.tab === 'ENTREGA' ? (row.romaneio_numero || row.orcamento || '-') : (row.codigo || row.documento_numero || '-'));
+    : (row.romaneio_numero || row.orcamento || row.numero_nf || row.documento_numero || '-');
   const nf = row.numero_nf || row.documento_numero || '-';
   const motorista = row.motorista?.nome || row.motorista_nome || '-';
   const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
-  const typeClass = state.tab === 'COLETA' ? 'coleta' : (state.tab === 'ENTREGA' ? 'entrega' : 'avulsa');
-  const dataCol = state.tab === 'COLETA'
-    ? (row.data_desejada_label || row.prazo_limite_label || '-')
-    : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
+  const typeClass = tipo === 'COLETA' ? 'coleta' : (tipo === 'ENTREGA' ? 'entrega' : 'avulsa');
+  const dataCol = row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-';
   return `
-    <tr>
+    <tr class="vt-solicitacao-row" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-      <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
+      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span></td>
       <td>${doc}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
       <td>${motorista}</td>
+      <td>${nf}</td>
       <td>${dataCol}</td>
       <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
-      <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
     </tr>
   `;
 }
@@ -498,9 +498,9 @@ function getRows() {
     return state.viagens;
   }
 
-  const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
+  const base = [...state.coletas, ...state.entregas];
   if (state.subfiltro === 'PENDENTES') {
-    return base.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada'].includes(String(r.status || '').trim()));
+    return base.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada', 'Alocada'].includes(String(r.status || '').trim()));
   }
   if (state.subfiltro === 'EM_ANDAMENTO') {
     return base.filter((r) => ['Alocada', 'EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
@@ -597,6 +597,56 @@ function renderTable() {
   }
 
   if (bulkBar) bulkBar.style.display = 'flex';
+
+  if (state.tab === 'SOLICITACOES') {
+    subtitulo.innerHTML = '<strong>Fila de solicitações</strong><br>Coletas e entregas na mesma lista. Selecione o que sai junto e crie uma única viagem.';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Documento</th><th>Parceiro</th><th>Cidade/UF</th><th>Motorista</th><th>NF</th><th>Saída prevista</th><th>Situação</th></tr>';
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9" class="vt-empty">Nenhuma solicitação encontrada para os filtros atuais.</td></tr>';
+      resumoMotoristas.innerHTML = '';
+      atualizarSelecionadasUI();
+      return;
+    }
+
+    body.innerHTML = rows.map((row) => renderSolicitacaoRow(row)).join('');
+    const porMotorista = rows.reduce((acc, row) => {
+      const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
+      acc[nome] = (acc[nome] || 0) + 1;
+      return acc;
+    }, {});
+    resumoMotoristas.innerHTML = Object.entries(porMotorista)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, qtd]) => `<span class="vt-chip">${nome}: ${qtd}</span>`)
+      .join('');
+
+    const checkAll = document.getElementById('vt-check-all');
+    if (checkAll) {
+      checkAll.checked = rows.every((row) => state.selectedIds.includes(Number(row.id)));
+      checkAll.addEventListener('change', () => {
+        state.selectedIds = checkAll.checked
+          ? Array.from(new Set([...state.selectedIds, ...idsVisiveis]))
+          : state.selectedIds.filter((id) => !idsVisiveis.includes(id));
+        renderTable();
+      });
+    }
+
+    body.querySelectorAll('.vt-check-row').forEach((el) => {
+      el.addEventListener('click', (event) => event.stopPropagation());
+      el.addEventListener('change', () => {
+        const id = Number(el.dataset.id);
+        state.selectedIds = el.checked
+          ? Array.from(new Set([...state.selectedIds, id]))
+          : state.selectedIds.filter((item) => item !== id);
+        atualizarSelecionadasUI();
+      });
+    });
+    body.querySelectorAll('.vt-solicitacao-row').forEach((el) => {
+      el.addEventListener('click', () => acaoVisualizar(Number(el.dataset.rowId)));
+    });
+    atualizarSelecionadasUI();
+    return;
+  }
 
   if (state.tab === 'COLETA') {
     subtitulo.innerHTML = '<strong>Solicitações de Coleta</strong><br>Coletas geradas automaticamente através da importação de Ordens de Compra.';
@@ -933,8 +983,9 @@ async function acaoCriarViagemSelecionadas() {
   }
 
   const motoristas = Array.from(new Set(rows.map((r) => Number(r.motorista?.id || 0)).filter((id) => id > 0)));
-  if (motoristas.length !== 1) {
-    showToast('As solicitações precisam estar alocadas para o mesmo motorista.', 'error');
+  const veiculos = Array.from(new Set(rows.map((r) => Number(r.veiculo?.id || 0)).filter((id) => id > 0)));
+  if (motoristas.length !== 1 || veiculos.length !== 1) {
+    showToast('As solicitações precisam ter o mesmo veículo e motorista. Selecione-as novamente para realocar pelo botão principal.', 'error');
     return;
   }
 
@@ -992,8 +1043,7 @@ function renderMetrics(resumo, counts) {
   document.getElementById('m-finalizadas').textContent = resumo.finalizadas || 0;
   document.getElementById('m-canceladas').textContent = resumo.canceladas || 0;
   document.getElementById('m-total').textContent = resumo.total || 0;
-  document.getElementById('count-coletas').textContent = counts.coletas || 0;
-  document.getElementById('count-entregas').textContent = counts.entregas || 0;
+  document.getElementById('count-solicitacoes').textContent = Number(counts.coletas || 0) + Number(counts.entregas || 0);
   document.getElementById('count-viagens').textContent = state.viagens.length || 0;
 }
 
@@ -1750,12 +1800,8 @@ async function confirmarAlocacao() {
   showToast(`Alocação concluída. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
   await loadDashboard();
   if (!falhas && state.posAlocacaoIds.length) {
-    if (state.autoCriarViagemAposAlocacao) {
-      state.autoCriarViagemAposAlocacao = false;
-      await criarViagemComSolicitacoesSelecionadas();
-      return;
-    }
-    setTimeout(() => { abrirMontagemPosAlocacao(); }, 250);
+    state.autoCriarViagemAposAlocacao = false;
+    await criarViagemComSolicitacoesSelecionadas();
     return;
   }
   state.autoCriarViagemAposAlocacao = false;
