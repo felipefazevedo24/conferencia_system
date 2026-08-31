@@ -396,6 +396,15 @@ function formatDateTime(valor) {
   });
 }
 
+function coberturaEstoqueHtml(item) {
+  const consumo = Number(item.consumo_diario || 0);
+  if (consumo <= 0) return '<span class="vt-mini">Sem consumo no período</span>';
+  const saldo = Number(item.saldo_grv || 0);
+  const dias = Number(item.cobertura_dias || 0);
+  const numero = (valor, casas) => valor.toLocaleString('pt-BR', { maximumFractionDigits: casas });
+  return `<strong>${numero(dias, 1)} dia(s)</strong><br><span class="vt-mini">${numero(saldo, 3)} &divide; ${numero(consumo, 3)}/dia</span>`;
+}
+
 function showToast(msg, type = 'info') {
   if (window.EUI && window.EUI.toast) {
     window.EUI.toast(msg, type);
@@ -1212,10 +1221,8 @@ function tabelaEstoqueOc(itens) {
   const linhas = itens.map((item) => {
     const saldo = item.saldo_grv == null ? '-' : `${Number(item.saldo_grv).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
     const consumo = item.consumo_diario == null ? '-' : `${Number(item.consumo_diario).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
-    const cobertura = Number(item.consumo_diario || 0) <= 0
-      ? 'Sem consumo no período'
-      : `${Number(item.cobertura_dias || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
-    const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : 'eui-badge--success');
+    const cobertura = coberturaEstoqueHtml(item);
+    const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : (item.nivel === 'sem_consumo' ? 'eui-badge--info' : 'eui-badge--success'));
     return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
   }).join('');
   return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo total GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
@@ -1937,10 +1944,8 @@ async function consultarOcBridge() {
     ? itensEstoque.map((item) => {
         const saldo = item.saldo_grv == null ? '-' : `${Number(item.saldo_grv).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
         const consumo = item.consumo_diario == null ? '-' : `${Number(item.consumo_diario).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
-        const cobertura = Number(item.consumo_diario || 0) <= 0
-          ? 'Sem consumo no período'
-          : `${Number(item.cobertura_dias || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
-        const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : 'eui-badge--success');
+        const cobertura = coberturaEstoqueHtml(item);
+        const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : (item.nivel === 'sem_consumo' ? 'eui-badge--info' : 'eui-badge--success'));
         return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
       }).join('')
     : '<tr><td colspan="6" class="vt-empty">A OC não possui itens com código para consultar o estoque.</td></tr>';

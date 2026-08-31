@@ -497,10 +497,10 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
             nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
         elif cobertura is not None and cobertura < 2:
             nivel, nivel_label = "critico", "Estoque critico"
-        elif cobertura is None and saldo + 0.0001 < quantidade_oc:
-            nivel, nivel_label = "critico", "Saldo abaixo da OC"
+        elif cobertura is None:
+            nivel, nivel_label = "sem_consumo", "Sem consumo no periodo"
         else:
-            nivel, nivel_label = "normal", "Estoque coberto"
+            nivel, nivel_label = "normal", "Cobertura adequada"
         saida.append({
             "codigo_item": codigo,
             "descricao": str(item.get("descricao") or "").strip(),
