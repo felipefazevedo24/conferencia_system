@@ -4,6 +4,7 @@ from calendar import monthrange
 import csv
 import io
 import json
+import math
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -492,7 +493,7 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
         saldo_bruto = estoque_item.get("qtde_total") if estoque_item else None
         saldo = float(saldo_bruto or 0) if estoque_item else None
         consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
-        cobertura = (saldo / consumo_diario) if saldo is not None and consumo_diario else None
+        cobertura = math.ceil(saldo / consumo_diario) if saldo is not None and consumo_diario else None
         if saldo is None:
             nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
         elif cobertura is not None and cobertura < 2:
@@ -505,7 +506,7 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
             "codigo_item": codigo,
             "descricao": str(item.get("descricao") or "").strip(),
             "quantidade_oc": quantidade_oc,
-            "unidade": str(item.get("unidade") or "UN").strip() or "UN",
+            "unidade": str((estoque_item or {}).get("unidade") or item.get("unidade") or "UN").strip() or "UN",
             "saldo_grv": saldo,
             "consumo_diario": consumo_diario,
             "cobertura_dias": cobertura,
@@ -1623,6 +1624,13 @@ def dashboard_central_viagens():
     coletas = [c for c in cards if c.get("tipo") in {"COLETA", "AVULSA"}]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
     avulsas = [c for c in cards if c.get("tipo") == "AVULSA"]
+    numeros_oc = [str(card.get("numero_oc") or "").strip() for card in coletas]
+    riscos_estoque = _calcular_risco_estoque_por_ocs(numeros_oc)
+    for card in coletas:
+        numero_oc = str(card.get("numero_oc") or "").strip()
+        risco = riscos_estoque.get(numero_oc) or {}
+        card["estoque_critico"] = risco.get("risco_estoque") == "critico"
+        card["estoque_alerta"] = str(risco.get("risco_estoque_detalhe") or "")
 
     def _pendentes(arr: list[dict]) -> int:
         return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Aprovada", "Alocada"})

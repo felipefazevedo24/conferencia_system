@@ -22,6 +22,7 @@
     .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
     .vt-type.entrega { background: #ecfdf3; color: #067647; }
+    .vt-stock-alert { color: var(--eui-danger); margin-left: 6px; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -489,7 +490,7 @@ function renderSolicitacaoRow(row) {
   return `
     <tr class="vt-solicitacao-row" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span></td>
+      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span>${row.estoque_critico ? `<i class="fas fa-triangle-exclamation vt-stock-alert" title="${row.estoque_alerta || 'Estoque com cobertura critica.'}"></i>` : ''}</td>
       <td>${doc}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
