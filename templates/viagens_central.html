@@ -1207,10 +1207,25 @@ document.addEventListener('click', () => {
   document.getElementById('vt-actions-menu').classList.remove('open');
 });
 
-function acaoVisualizar(id) {
+function tabelaEstoqueOc(itens) {
+  if (!Array.isArray(itens) || !itens.length) return '';
+  const linhas = itens.map((item) => {
+    const saldo = item.saldo_grv == null ? '-' : `${Number(item.saldo_grv).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
+    const consumo = item.consumo_diario == null ? '-' : `${Number(item.consumo_diario).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
+    const cobertura = Number(item.consumo_diario || 0) <= 0
+      ? 'Sem consumo no período'
+      : `${Number(item.cobertura_dias || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
+    const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : 'eui-badge--success');
+    return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
+  }).join('');
+  return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo total GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+}
+
+async function acaoVisualizar(id) {
   const row = rowById(id);
   if (!row) return;
   const anexoUrl = row.anexo?.url || '';
+  const oc = String(row.numero_oc || row.documento_numero || '').trim();
   document.getElementById('detalheBody').innerHTML = `
     <div><strong>Código:</strong> ${row.codigo || '-'}</div>
     <div><strong>Tipo:</strong> ${row.tipo_label || row.tipo}</div>
@@ -1223,8 +1238,19 @@ function acaoVisualizar(id) {
     <div><strong>Data Prevista:</strong> ${row.data_desejada_label || row.prazo_limite_label || '-'}</div>
     <div><strong>Transportadora:</strong> ${row.observacoes_logistica || '-'}</div>
     ${anexoUrl ? `<div><strong>Anexo:</strong> <a href="${anexoUrl}" target="_blank" rel="noopener">Abrir / imprimir documento</a></div>` : ''}
+    ${row.tipo === 'COLETA' && oc ? '<div id="detalhe-estoque-oc" class="vt-mini" style="margin-top:14px;">Consultando estoque por item...</div>' : ''}
   `;
   openModal('modalDetalhe');
+  if (row.tipo !== 'COLETA' || !oc) return;
+  const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(oc)}`);
+  const d = await r.json().catch(() => ({}));
+  const destino = document.getElementById('detalhe-estoque-oc');
+  if (!destino) return;
+  if (!r.ok) {
+    destino.textContent = d.error || 'Não foi possível consultar o estoque desta OC.';
+    return;
+  }
+  destino.outerHTML = tabelaEstoqueOc(d.estoque_itens) || '<div class="vt-mini" style="margin-top:14px;">Não há itens com código para consultar o estoque desta OC.</div>';
 }
 
 function acaoAbrirOrigem(id) {
@@ -1911,7 +1937,9 @@ async function consultarOcBridge() {
     ? itensEstoque.map((item) => {
         const saldo = item.saldo_grv == null ? '-' : `${Number(item.saldo_grv).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
         const consumo = item.consumo_diario == null ? '-' : `${Number(item.consumo_diario).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}`;
-        const cobertura = item.cobertura_dias == null ? '-' : `${Number(item.cobertura_dias).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
+        const cobertura = Number(item.consumo_diario || 0) <= 0
+          ? 'Sem consumo no período'
+          : `${Number(item.cobertura_dias || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} dia(s)`;
         const classe = item.nivel === 'critico' ? 'eui-badge--danger' : (item.nivel === 'sem_estoque' ? 'eui-badge--warning' : 'eui-badge--success');
         return `<tr><td><strong>${item.codigo_item || '-'}</strong><br><span class="vt-mini">${item.descricao || '-'}</span></td><td>${Number(item.quantidade_oc || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${item.unidade || ''}</td><td>${saldo}</td><td>${consumo}</td><td>${cobertura}</td><td><span class="eui-badge ${classe}">${item.nivel_label}</span></td></tr>`;
       }).join('')

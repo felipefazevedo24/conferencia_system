@@ -489,11 +489,9 @@ def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
         quantidade_oc = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd"))
         estoque_item = estoque_por_codigo.get(codigo)
         consumo_item = consumo_por_codigo.get(codigo) or {}
-        saldo_bruto = estoque_item.get("qtde_disponivel") if estoque_item else None
-        if saldo_bruto is None and estoque_item:
-            saldo_bruto = estoque_item.get("qtde_total")
+        saldo_bruto = estoque_item.get("qtde_total") if estoque_item else None
         saldo = float(saldo_bruto or 0) if estoque_item else None
-        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0) or None
+        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
         cobertura = (saldo / consumo_diario) if saldo is not None and consumo_diario else None
         if saldo is None:
             nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
