@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -1832,7 +1833,9 @@ def create_app() -> Flask:
                     "EM ANALISE",
                     "PLANEJADO",
                 )
-                texto_mov = re.sub(r"\s+", " ", tipo_mov)
+                texto_mov = unicodedata.normalize("NFKD", tipo_mov)
+                texto_mov = "".join(char for char in texto_mov if not unicodedata.combining(char))
+                texto_mov = re.sub(r"\s+", " ", texto_mov)
                 is_nao_mov = bool(texto_mov and any(tok in texto_mov for tok in tokens_nao_mov_estoque))
 
                 is_saida = False
