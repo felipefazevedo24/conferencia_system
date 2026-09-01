@@ -346,6 +346,7 @@ def estoque_materia_prima_api():
                 "descricao": str(reserva.get("descricao") or "").strip(),
                 "orcamento": str(reserva.get("numero_orcamento") or reserva.get("orcamento_descricao") or reserva.get("cod_orcamento") or "").strip(),
                 "versao": str(reserva.get("versao_orcamento") or "").strip(),
+                "cliente": str(reserva.get("cliente_orcamento") or reserva.get("cliente_os_orcamento") or reserva.get("cliente_os_descricao") or "").strip(),
                 "os": str(reserva.get("os_descricao") or reserva.get("os_por_orcamento") or "").strip(),
                 "cod_os": str(reserva.get("cod_os_descricao") or reserva.get("cod_os_por_orcamento") or "").strip(),
                 "titulo_os": str(reserva.get("titulo_os_descricao") or "").strip(),
