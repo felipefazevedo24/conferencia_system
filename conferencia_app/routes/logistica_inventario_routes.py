@@ -296,6 +296,7 @@ def estoque_materia_prima_api():
         saldo_disponivel = float(item.get("qtde_disponivel") or 0)
         saldo_reservado = float(item.get("qtde_reservada") or 0)
         estoque_minimo = float(item.get("estoque_minimo") or 0)
+        lote_economico = float(item.get("lote_economico") or 0)
         haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
         if termo and termo not in haystack:
             continue
@@ -311,6 +312,7 @@ def estoque_materia_prima_api():
             "saldo_reservado": saldo_reservado,
             "saldo_total": saldo_total,
             "estoque_minimo": estoque_minimo,
+            "lote_economico": lote_economico,
             "localizacoes": sorted(set(str(x or "").strip() for x in item.get("localizacoes") or [] if str(x or "").strip())),
         })
 
