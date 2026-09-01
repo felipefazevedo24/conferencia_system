@@ -175,9 +175,7 @@
 
     function detailRow(item) {
         if (!expanded.has(item.codigo)) return '';
-        const reservas = visaoAtual === 'produto_acabado'
-            ? `<strong>Reservas do produto acabado</strong>${reservasHtml(item)}`
-            : '';
+        const reservas = `<strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
         const colspan = visaoAtual === 'produto_acabado' ? 5 : 4;
         return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${reservas}</td></tr>`;
     }

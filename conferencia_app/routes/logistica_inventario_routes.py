@@ -327,12 +327,11 @@ def estoque_materia_prima_api():
         except Exception:
             current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
             consumo_por_codigo = {}
-        if visao == "produto_acabado":
-            try:
-                reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos)
-            except Exception:
-                current_app.logger.warning("Nao foi possivel consultar reservas de produto acabado.", exc_info=True)
-                reservas_por_codigo = {}
+        try:
+            reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos)
+        except Exception:
+            current_app.logger.warning("Nao foi possivel consultar reservas de estoque.", exc_info=True)
+            reservas_por_codigo = {}
 
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
@@ -340,7 +339,7 @@ def estoque_materia_prima_api():
         if consumo_diario > 0 and _unidade_estoque_discreta(row["unidade"]):
             consumo_diario = float(math.ceil(consumo_diario))
         cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
-        reservas = reservas_por_codigo.get(codigo_key, []) if visao == "produto_acabado" else []
+        reservas = reservas_por_codigo.get(codigo_key, [])
         row["consumo_diario"] = consumo_diario
         row["cobertura_dias"] = cobertura_dias
         row["nivel"] = nivel
