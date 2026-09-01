@@ -285,7 +285,7 @@ def estoque_materia_prima_api():
         haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
         if termo and termo not in haystack:
             continue
-        if not termo and not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
+        if not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
             continue
         candidatos.append({
             "codigo": codigo,

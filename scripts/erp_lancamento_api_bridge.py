@@ -764,22 +764,9 @@ ESTOQUE_SQL = """
         p.codigo_interno,
         p.nome as item,
         coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
-        -- Fonte principal: saldo por deposito (tproduto_deposito), que e o
-        -- saldo efetivo usado no GRV. Fallback para campos legados de
-        -- tproduto quando nao houver linha em tproduto_deposito.
-        coalesce(
-            d.qtde_total,
-            (
-                case
-                    when p.estoque is not null then coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0)
-                    when p.estoque_disponivel_uso is not null then coalesce(p.estoque_disponivel_uso, 0) + coalesce(p.estoque_reservado, 0)
-                    else null
-                end
-            ),
-            0
-        ) as qtde_total,
-        coalesce(d.qtde_reservada, p.estoque_reservado, 0) as qtde_reservada,
-        coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
+        coalesce(d.qtde_total, 0) as qtde_total,
+        coalesce(d.qtde_reservada, 0) as qtde_reservada,
+        coalesce(d.qtde_disponivel, 0) as qtde_disponivel,
         p.preco_custo as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
