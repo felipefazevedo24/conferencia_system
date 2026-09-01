@@ -364,6 +364,7 @@ def estoque_materia_prima_api():
 
     prioridade_nivel = {"critico": 0, "atencao": 1, "sem_consumo": 2, "sem_estoque": 3, "normal": 4}
     rows.sort(key=lambda row: (
+        0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
         prioridade_nivel.get(str(row.get("nivel") or ""), 9),
         row.get("cobertura_dias") is None,
         row.get("cobertura_dias") or 999999,
