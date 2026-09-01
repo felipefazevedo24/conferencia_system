@@ -28,9 +28,14 @@
     .mp-badge.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .mp-badge.sem_consumo { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
     .mp-badge.sem_estoque { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .mp-reservas { display: grid; gap: 6px; min-width: 220px; }
-    .mp-reserva { border: 1px solid var(--eui-border); border-radius: 8px; padding: 7px 8px; background: var(--eui-surface-2); font-size: 11px; color: var(--eui-text-soft); }
-    .mp-reserva strong { color: var(--eui-text); }
+    .mp-reservas { display: grid; gap: 8px; margin-top: 8px; min-width: 220px; }
+    .mp-reserva-resumo { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 10px; border-radius: 6px; background: var(--eui-primary-soft); color: var(--eui-text-soft); font-size: 12px; }
+    .mp-reserva-resumo strong { color: var(--eui-primary); }
+    .mp-reserva { display: grid; grid-template-columns: minmax(130px, auto) minmax(180px, 1fr) minmax(180px, 1fr); gap: 8px 18px; border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: 6px; padding: 10px 12px; background: var(--eui-surface); font-size: 12px; color: var(--eui-text-soft); }
+    .mp-reserva__quantidade { font-size: 14px; font-weight: 800; color: var(--eui-text); }
+    .mp-reserva__campo { display: grid; gap: 2px; }
+    .mp-reserva__rotulo { color: var(--eui-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+    .mp-reserva__valor { color: var(--eui-text-soft); font-weight: 700; }
     .mp-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
     .mp-expand-btn:hover { background: var(--eui-primary-soft); }
     .mp-item-row { cursor: pointer; }
@@ -43,6 +48,7 @@
         .mp-toolbar { align-items: stretch; }
         .mp-actions, .mp-search { width: 100%; }
         .mp-actions .eui-btn { flex: 1; justify-content: center; }
+        .mp-reserva { grid-template-columns: 1fr; gap: 7px; }
     }
 </style>
 {% endblock %}
@@ -150,8 +156,13 @@
         return `<div class="mp-reservas">${reservas.map((r) => {
             const os = r.os ? `OS ${esc(r.os)}${r.cod_os ? ` (${esc(r.cod_os)})` : ''}` : 'OS não localizada';
             const orc = r.orcamento ? `Orç. ${esc(r.orcamento)}${r.versao ? '/' + esc(r.versao) : ''}` : esc(r.descricao || 'Reserva');
-            const cliente = r.cliente ? `<br>Cliente: ${esc(r.cliente)}` : '<br>Cliente não localizado';
-            return `<div class="mp-reserva"><strong>${fmt(r.quantidade)} ${esc(item.unidade || '')}</strong><br>${orc}${cliente}<br>${os}${r.titulo_os ? '<br>' + esc(r.titulo_os) : ''}</div>`;
+            const cliente = r.cliente || 'Cliente não localizado';
+            const osCompleta = `${os}${r.titulo_os ? ' · ' + esc(r.titulo_os) : ''}`;
+            return `<div class="mp-reserva">
+                <span class="mp-reserva__quantidade">${fmt(r.quantidade)} ${esc(item.unidade || '')}</span>
+                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">Orçamento</span><span class="mp-reserva__valor">${orc}</span></span>
+                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">OS / Cliente</span><span class="mp-reserva__valor">${osCompleta}<br>${esc(cliente)}</span></span>
+            </div>`;
         }).join('')}</div>`;
     }
 
@@ -175,7 +186,7 @@
 
     function detailRow(item) {
         if (!expanded.has(item.codigo)) return '';
-        const reservas = `<strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
+        const reservas = `<div class="mp-reserva-resumo"><i class="fas fa-lock"></i> Quantidade reservada: <strong>${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</strong></div><strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
         const colspan = visaoAtual === 'produto_acabado' ? 5 : 4;
         return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${reservas}</td></tr>`;
     }
