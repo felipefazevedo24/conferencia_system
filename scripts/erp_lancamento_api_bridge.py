@@ -1795,6 +1795,62 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar reservas de produto acabado")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/estoque/ordens-compra-abertas")
+    def consultar_ordens_compra_abertas_estoque():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigos = []
+            vistos = set()
+            for codigo in payload.get("codigos") or []:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "ordens_compra": []})
+
+            sql = """
+                select
+                    regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') as codigo_key,
+                    item.cod_interno as codigo_interno,
+                    oc.codigo::text as ordem_compra,
+                    coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social, 'Fornecedor nao informado') as fornecedor,
+                    oc.prazo_entrega as prazo_entrega,
+                    sum(greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0))::double precision as quantidade_pendente
+                from public.tord_com oc
+                join public.tord_aux item
+                  on item.cod_empresa = oc.cod_empresa
+                 and item.cod_ord_compra = oc.codigo
+                left join public.tfornece f
+                  on f.cod_empresa = oc.cod_empresa
+                 and f.codigo = oc.cod_fornecedor
+                where oc.cod_empresa = %s
+                  and coalesce(oc.cancelado, 0) = 0
+                  and regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+                  and greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0) > 0
+                group by item.cod_interno, oc.codigo, oc.fornecedor, f.nome, f.razao_social, oc.prazo_entrega
+                order by item.cod_interno, oc.prazo_entrega nulls last, oc.codigo desc
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (empresa, codigos))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [_json_safe(dict(zip(cols, row))) for row in cur.fetchall()]
+            return jsonify({"sucesso": True, "ordens_compra": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar ordens de compra abertas para estoque")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/estoque/kardex-consumo")
     def consultar_estoque_kardex_consumo():
         cfg = _config()

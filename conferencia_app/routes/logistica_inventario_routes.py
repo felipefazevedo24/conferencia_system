@@ -23,6 +23,7 @@ from ..services.erp_estoque_service import (
     atualizar_localizacao_estoque,
     buscar_consumo_kardex_grv,
     buscar_estoque_grv,
+    buscar_ordens_compra_abertas_grv,
     buscar_reservas_produto_acabado_grv,
     custo_medio_para,
     qtde_grv_para,
@@ -320,6 +321,7 @@ def estoque_materia_prima_api():
     codigos = [row["codigo"] for row in rows]
     consumo_por_codigo = {}
     reservas_por_codigo = {}
+    ordens_compra_por_codigo = {}
     if codigos:
         try:
             consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=refresh)
@@ -357,6 +359,17 @@ def estoque_materia_prima_api():
             }
             for reserva in reservas[:20]
         ]
+
+    if visao in {"materia_prima", "revenda"}:
+        codigos_criticos = [row["codigo"] for row in rows if row["nivel"] == "critico"]
+        if codigos_criticos:
+            try:
+                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_criticos)
+            except Exception:
+                current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque critico.", exc_info=True)
+    for row in rows:
+        codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
+        row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
 
     if nivel_filtro:
         rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
