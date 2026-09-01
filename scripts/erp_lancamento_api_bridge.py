@@ -1749,11 +1749,14 @@ def create_app() -> Flask:
                     oi.cod_orcamento::text as cod_orcamento,
                     o.n_orcamento::text as numero_orcamento,
                     o.versao::text as versao_orcamento,
+                    o.cliente as cliente_orcamento,
                     substring(coalesce(r.descricao, '') from 'Orçamento:\\s*([^ ]+)') as orcamento_descricao,
                     substring(coalesce(r.descricao, '') from 'OS\\.?:\\s*([^ ]+)') as os_descricao,
+                    os_orc.cliente as cliente_os_orcamento,
                     os_orc.n_os::text as os_por_orcamento,
                     os_orc.codigo::text as cod_os_por_orcamento,
                     os_desc.codigo::text as cod_os_descricao,
+                    os_desc.cliente as cliente_os_descricao,
                     os_desc.titulo as titulo_os_descricao
                 from public.tproduto_dep_reserva r
                 join public.tproduto p
