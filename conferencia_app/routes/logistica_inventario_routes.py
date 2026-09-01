@@ -23,6 +23,7 @@ from ..services.erp_estoque_service import (
     atualizar_localizacao_estoque,
     buscar_consumo_kardex_grv,
     buscar_estoque_grv,
+    buscar_reservas_produto_acabado_grv,
     custo_medio_para,
     qtde_grv_para,
 )
@@ -36,7 +37,11 @@ INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
 ]
-FAMILIA_MATERIA_PRIMA = "N - 01 - MATÉRIA-PRIMA"
+ESTOQUE_VISOES = {
+    "materia_prima": {"label": "Matéria-prima", "familia": "N - 01 - MATÉRIA-PRIMA"},
+    "revenda": {"label": "Material para revenda", "familia": "N - 00 - MERCADORIA PARA REVENDA"},
+    "produto_acabado": {"label": "Produto acabado", "familia": "N - 04 - PRODUTOS"},
+}
 
 
 def _normalizar_busca(texto: str | None) -> str:
@@ -252,9 +257,10 @@ def inventario_consulta_page():
     )
 
 
+@logistica_inventario_bp.route("/logistica/estoque")
 @logistica_inventario_bp.route("/logistica/estoque-materia-prima")
 @permission_required(PERMISSION)
-def estoque_materia_prima_page():
+def estoque_page():
     return render_template(
         "logistica_estoque_materia_prima.html",
         user=session["username"],
@@ -263,8 +269,13 @@ def estoque_materia_prima_page():
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque-materia-prima", methods=["GET"])
+@logistica_inventario_bp.route("/api/logistica/estoque", methods=["GET"])
 @permission_required(PERMISSION)
 def estoque_materia_prima_api():
+    visao = str(request.args.get("visao") or "materia_prima").strip()
+    if visao not in ESTOQUE_VISOES:
+        visao = "materia_prima"
+    visao_cfg = ESTOQUE_VISOES[visao]
     termo = _normalizar_busca(request.args.get("q"))
     incluir_sem_saldo = str(request.args.get("incluir_sem_saldo") or "").strip().lower() in {"1", "true", "sim", "yes"}
     refresh = str(request.args.get("refresh") or "").strip() == "1"
@@ -274,7 +285,7 @@ def estoque_materia_prima_api():
         limite = 300
 
     estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
-    familia_alvo = _normalizar_busca(FAMILIA_MATERIA_PRIMA)
+    familia_alvo = _normalizar_busca(visao_cfg["familia"])
     candidatos = []
     for codigo, item in (estoque.get("por_codigo") or {}).items():
         if _normalizar_busca(item.get("familia")) != familia_alvo:
@@ -303,6 +314,7 @@ def estoque_materia_prima_api():
     rows = candidatos[:limite]
     codigos = [row["codigo"] for row in rows]
     consumo_por_codigo = {}
+    reservas_por_codigo = {}
     if codigos:
         try:
             consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=refresh)
@@ -310,6 +322,12 @@ def estoque_materia_prima_api():
         except Exception:
             current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
             consumo_por_codigo = {}
+        if visao == "produto_acabado":
+            try:
+                reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos)
+            except Exception:
+                current_app.logger.warning("Nao foi possivel consultar reservas de produto acabado.", exc_info=True)
+                reservas_por_codigo = {}
 
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
@@ -317,10 +335,23 @@ def estoque_materia_prima_api():
         if consumo_diario > 0 and _unidade_estoque_discreta(row["unidade"]):
             consumo_diario = float(math.ceil(consumo_diario))
         cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
+        reservas = reservas_por_codigo.get(codigo_key, []) if visao == "produto_acabado" else []
         row["consumo_diario"] = consumo_diario
         row["cobertura_dias"] = cobertura_dias
         row["nivel"] = nivel
         row["nivel_label"] = nivel_label
+        row["reservas"] = [
+            {
+                "quantidade": float(reserva.get("qtde") or 0),
+                "descricao": str(reserva.get("descricao") or "").strip(),
+                "orcamento": str(reserva.get("numero_orcamento") or reserva.get("orcamento_descricao") or reserva.get("cod_orcamento") or "").strip(),
+                "versao": str(reserva.get("versao_orcamento") or "").strip(),
+                "os": str(reserva.get("os_descricao") or reserva.get("os_por_orcamento") or "").strip(),
+                "cod_os": str(reserva.get("cod_os_descricao") or reserva.get("cod_os_por_orcamento") or "").strip(),
+                "titulo_os": str(reserva.get("titulo_os_descricao") or "").strip(),
+            }
+            for reserva in reservas[:20]
+        ]
 
     resumo = {
         "itens": len(rows),
@@ -331,7 +362,15 @@ def estoque_materia_prima_api():
         "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
     }
-    return jsonify({"familia": FAMILIA_MATERIA_PRIMA, "resumo": resumo, "items": rows, "limit": limite})
+    return jsonify({
+        "visao": visao,
+        "visao_label": visao_cfg["label"],
+        "familia": visao_cfg["familia"],
+        "visoes": ESTOQUE_VISOES,
+        "resumo": resumo,
+        "items": rows,
+        "limit": limite,
+    })
 
 
 @logistica_inventario_bp.route("/logistica/inventario-inicial")

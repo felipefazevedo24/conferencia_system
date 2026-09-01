@@ -1709,6 +1709,79 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar estoque no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/estoque/reservas-produto-acabado")
+    def consultar_reservas_produto_acabado():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+
+            codigos_raw = payload.get("codigos") or []
+            if not isinstance(codigos_raw, list):
+                return jsonify({"sucesso": False, "erro": "codigos_deve_ser_lista"}), 400
+            codigos = []
+            vistos = set()
+            for codigo in codigos_raw:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "reservas": []})
+
+            sql = """
+                select
+                    regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo_key,
+                    p.codigo_interno,
+                    p.nome as item,
+                    coalesce(r.qtde, 0)::double precision as qtde,
+                    coalesce(r.origem::text, '') as origem,
+                    coalesce(r.descricao, '') as descricao,
+                    coalesce(r.guid_lm, '') as guid_lm,
+                    oi.cod_orcamento::text as cod_orcamento,
+                    o.n_orcamento::text as numero_orcamento,
+                    o.versao::text as versao_orcamento,
+                    substring(coalesce(r.descricao, '') from 'Orçamento:\\s*([^ ]+)') as orcamento_descricao,
+                    substring(coalesce(r.descricao, '') from 'OS\\.?:\\s*([^ ]+)') as os_descricao,
+                    os_orc.n_os::text as os_por_orcamento,
+                    os_orc.codigo::text as cod_os_por_orcamento,
+                    os_desc.codigo::text as cod_os_descricao,
+                    os_desc.titulo as titulo_os_descricao
+                from public.tproduto_dep_reserva r
+                join public.tproduto p
+                  on p.cod_empresa = r.cod_empresa and p.codigo = r.cod_produto
+                left join public.torcamento_itens oi
+                  on oi.cod_empresa = r.cod_empresa and oi.guid_linha = r.guid_lm
+                left join public.torcamento o
+                  on o.cod_empresa = oi.cod_empresa and o.codigo = oi.cod_orcamento
+                left join public.tos os_orc
+                  on os_orc.cod_empresa = oi.cod_empresa and os_orc.cod_orcamento = oi.cod_orcamento
+                left join public.tos os_desc
+                  on os_desc.cod_empresa = r.cod_empresa and os_desc.n_os::text = substring(coalesce(r.descricao, '') from 'OS\\.?:\\s*([^ ]+)')
+                where r.cod_empresa = %s
+                  and r.cod_deposito = 1
+                  and coalesce(r.qtde, 0) <> 0
+                  and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+                order by p.codigo_interno, r.qtde desc
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (empresa, codigos))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [_json_safe(dict(zip(cols, row))) for row in cur.fetchall()]
+            return jsonify({"sucesso": True, "reservas": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar reservas de produto acabado")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/estoque/kardex-consumo")
     def consultar_estoque_kardex_consumo():
         cfg = _config()
