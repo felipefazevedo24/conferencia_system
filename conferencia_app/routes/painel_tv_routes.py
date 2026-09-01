@@ -514,13 +514,84 @@ def _coletar_planejamento() -> dict:
     }
 
 
+# Resumo do modulo Comex pro painel de TV: os 10 status granulares do
+# workflow (ver comex_service.MODULOS_SEQUENCIA) agrupados em 3 "baskets"
+# resumidos - mesmo modelo em colunas tipo kanban do Planejamento de
+# Tarefas acima, so que a fonte dos cards e o ComexProcesso em vez do
+# PlannerBoard.
+_COMEX_BASKETS = [
+    {"titulo": "Preparação", "color": "#fbbf24", "status": ("OC", "PO", "Cotacao", "Instrucao")},
+    {"titulo": "Trânsito", "color": "#3da5f4", "status": ("Coleta", "EmTransito", "Desembarque", "Desembaraco")},
+    {"titulo": "Entregue", "color": "#34d399", "status": ("Transporte", "NFCambio")},
+]
+_COMEX_STATUS_LABEL = {
+    "OC": "OC",
+    "PO": "PO",
+    "Cotacao": "Cotação",
+    "Instrucao": "Instrução",
+    "Coleta": "Coleta",
+    "EmTransito": "Em Trânsito",
+    "Desembarque": "Desembarque",
+    "Desembaraco": "Desembaraço",
+    "Transporte": "Transporte",
+    "NFCambio": "NF/Câmbio",
+}
+_COMEX_STATUS_PARA_BASKET = {
+    status: idx
+    for idx, basket in enumerate(_COMEX_BASKETS)
+    for status in basket["status"]
+}
+
+
+def _coletar_comex() -> dict:
+    """Resumo do modulo Comex pro painel de TV, nos 3 baskets acima. Cada
+    card mostra id do processo (ID OP), fornecedor e o status detalhado
+    (dentro da basket)."""
+    from ..models import ComexProcesso
+
+    # OCs combinadas na PO de outro processo somem da lista principal -
+    # mesma logica de listar_processos() do modulo Comex (comex_service).
+    processos = (
+        ComexProcesso.query
+        .filter(ComexProcesso.po_processo_principal_id.is_(None))
+        .order_by(ComexProcesso.atualizado_em.desc())
+        .all()
+    )
+
+    colunas_cards: list[list[dict]] = [[] for _ in _COMEX_BASKETS]
+    for p in processos:
+        idx = _COMEX_STATUS_PARA_BASKET.get(p.status_modulo)
+        if idx is None:
+            continue  # status fora do fluxo modelado (ex.: legado/futuro) - nao exibido na torre
+        colunas_cards[idx].append(
+            {
+                "id_op": p.id_op,
+                "fornecedor": p.fornecedor or "",
+                "status_detalhado": _COMEX_STATUS_LABEL.get(p.status_modulo, p.status_modulo),
+            }
+        )
+
+    total = sum(len(cards) for cards in colunas_cards)
+    colunas_data = [
+        {
+            "titulo": basket["titulo"],
+            "color": basket["color"],
+            "total": len(cards),
+            "cards": cards[:60],
+        }
+        for basket, cards in zip(_COMEX_BASKETS, colunas_cards)
+    ]
+
+    return {"kpis": {"total": total}, "colunas": colunas_data}
+
+
 @painel_tv_bp.route("/painel")
 def painel_tv_page():
     return render_template("painel_tv.html", show_compras=True, show_frota=True)
 @painel_tv_bp.route("/painel/recebimento-expedicao")
 def painel_tv_rec_exp_page():
     return render_template(
-        "painel_tv.html", show_compras=False, show_frota=False, show_planejamento=False
+        "painel_tv.html", show_compras=False, show_frota=False, show_planejamento=False, show_comex=False
     )
 
 
@@ -538,6 +609,16 @@ def painel_tv_indicadores():
 def painel_tv_planejamento():
     try:
         dados = _coletar_planejamento()
+    except Exception:
+        db.session.rollback()
+        raise
+    return jsonify(dados)
+
+
+@painel_tv_bp.route("/api/painel/comex")
+def painel_tv_comex():
+    try:
+        dados = _coletar_comex()
     except Exception:
         db.session.rollback()
         raise
