@@ -33,7 +33,11 @@
     .mp-reserva strong { color: var(--eui-text); }
     .mp-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
     .mp-expand-btn:hover { background: var(--eui-primary-soft); }
+    .mp-item-row { cursor: pointer; }
+    .mp-item-row:hover td { background: var(--eui-primary-soft); }
     .mp-detail-row td { background: var(--eui-surface-2); padding: 14px 18px; }
+    .mp-item-details { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; color: var(--eui-text-soft); font-size: 12px; }
+    .mp-item-details strong { color: var(--eui-text); }
     .mp-table-wrap { overflow-x: auto; }
     @media (max-width: 820px) {
         .mp-toolbar { align-items: stretch; }
@@ -163,9 +167,24 @@
         return `<td style="text-align:right;"><button class="mp-expand-btn" data-codigo="${esc(item.codigo || '')}" title="${isOpen ? 'Recolher reservas' : 'Ver reservas'}"><i class="fas fa-chevron-${isOpen ? 'up' : 'down'}"></i></button><div class="mp-muted">${totalReservas} reserva(s)</div></td>`;
     }
 
+    function detalhesItem(item) {
+        const unidade = esc(item.unidade || '');
+        return `<div class="mp-item-details">
+            <span>Disponível: <strong>${fmt(item.saldo_disponivel)} ${unidade}</strong></span>
+            <span>Reservado: <strong>${fmt(item.saldo_reservado)} ${unidade}</strong></span>
+            <span>Total: <strong>${fmt(item.saldo_total)} ${unidade}</strong></span>
+            <span>Estoque mínimo: <strong>${fmt(item.estoque_minimo)} ${unidade}</strong></span>
+            <span>Lote econômico: <strong>${fmt(item.lote_economico)} ${unidade}</strong></span>
+        </div>`;
+    }
+
     function detailRow(item) {
-        if (visaoAtual !== 'produto_acabado' || !expanded.has(item.codigo)) return '';
-        return `<tr class="mp-detail-row"><td colspan="10"><strong>Reservas do produto acabado</strong>${reservasHtml(item)}</td></tr>`;
+        if (!expanded.has(item.codigo)) return '';
+        const reservas = visaoAtual === 'produto_acabado'
+            ? `<strong>Reservas do produto acabado</strong>${reservasHtml(item)}`
+            : '';
+        const colspan = visaoAtual === 'produto_acabado' ? 10 : 9;
+        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${reservas}</td></tr>`;
     }
 
     function render(data) {
@@ -186,7 +205,7 @@
         $('mp-state').style.display = 'none';
         $('mp-table').style.display = 'table';
         $('mp-body').innerHTML = items.map((item) => `
-            <tr>
+            <tr class="mp-item-row" data-codigo="${esc(item.codigo || '')}" title="Clique para ver detalhes do item">
                 <td>
                     <div class="mp-item-main">
                         <span class="mp-code">${esc(item.codigo || '-')}</span>
@@ -209,6 +228,15 @@
         document.querySelectorAll('.mp-expand-btn').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const codigo = btn.dataset.codigo || '';
+                if (!codigo) return;
+                if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
+                render(data);
+            });
+        });
+        document.querySelectorAll('.mp-item-row').forEach((row) => {
+            row.addEventListener('click', (event) => {
+                if (event.target.closest('button')) return;
+                const codigo = row.dataset.codigo || '';
                 if (!codigo) return;
                 if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
                 render(data);
