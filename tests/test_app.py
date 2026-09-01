@@ -4293,6 +4293,64 @@ def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp
     assert sem_custo["diferenca_valor"] is None
 
 
+def test_inventario_ajustes_exportar_excel_com_custo_status_e_filtros(tmp_path):
+    """A tela de Ajuste de Estoque exporta pra Excel com as mesmas colunas
+    da tabela (custo medio, diferenca R$, status legivel) e respeita os
+    filtros de status e busca (mesmos usados na listagem em tela)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        db.session.add(LogisticaInventarioAjuste(
+            codigo_produto="SKU1", local_codigo="A01-01", unidade_medida="UN",
+            qtde_contada=10, qtde_estoque_no_momento=8, diferenca=2, custo_medio=5.5,
+            status_modulo="Validacao", status_slug="validacao",
+        ))
+        db.session.add(LogisticaInventarioAjuste(
+            codigo_produto="SKU2", local_codigo="B02-02", unidade_medida="UN",
+            qtde_contada=3, qtde_estoque_no_momento=3, diferenca=0, custo_medio=None,
+            status_modulo="Concluido", status_slug="concluido",
+            gestor_confirmado_por="gestor", finance_concluido_por="finance",
+            fiscal_concluido_por="fiscal", fiscal_nf_numero="NF-9",
+        ))
+        db.session.commit()
+
+    from openpyxl import load_workbook
+
+    resp = client.get("/api/logistica/inventario-ajustes/exportar")
+    assert resp.status_code == 200
+    assert resp.headers.get("Content-Type") == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    wb = load_workbook(io.BytesIO(resp.data))
+    rows = list(wb.active.iter_rows(values_only=True))
+    assert rows[0][0] == "Detectado em"
+    por_codigo = {r[2]: r for r in rows[1:]}
+
+    sku1 = por_codigo["SKU1"]
+    assert sku1[7] == 5.5     # custo medio
+    assert sku1[8] == 11.0    # diferenca R$ = 2 * 5.5
+    assert sku1[9] == "Aguardando gestor"
+
+    sku2 = por_codigo["SKU2"]
+    assert sku2[7] == "N/D"   # sem custo no momento
+    assert sku2[8] == "N/D"
+    assert sku2[9] == "Concluído"
+    assert sku2[18] == "fiscal"
+
+    resp_busca = client.get("/api/logistica/inventario-ajustes/exportar?busca=SKU1")
+    linhas_busca = list(load_workbook(io.BytesIO(resp_busca.data)).active.iter_rows(values_only=True))
+    assert len(linhas_busca) == 2
+    assert linhas_busca[1][2] == "SKU1"
+
+    resp_status = client.get("/api/logistica/inventario-ajustes/exportar?status=Concluido")
+    linhas_status = list(load_workbook(io.BytesIO(resp_status.data)).active.iter_rows(values_only=True))
+    assert len(linhas_status) == 2
+    assert linhas_status[1][2] == "SKU2"
+
+
 def test_admin_atualiza_grv_individualmente_e_estorna_ajuste_de_qualquer_etapa(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

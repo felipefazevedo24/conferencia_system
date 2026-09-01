@@ -53,6 +53,7 @@
         <div class="eui-card__head" style="justify-content:flex-end;">
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ia-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <a class="eui-btn eui-btn--subtle" id="ia-btn-exportar" href="/api/logistica/inventario-ajustes/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
                 <a class="eui-btn eui-btn--subtle" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventário</a>
                 <button class="eui-btn eui-btn--primary" id="ia-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
             </div>
@@ -130,7 +131,17 @@
     let ajustesCache = [];
     let filtroAtual = "";
 
+    function atualizarLinkExportar() {
+        const params = new URLSearchParams();
+        if (filtroAtual) params.set("status", filtroAtual);
+        const busca = $("ia-busca").value.trim();
+        if (busca) params.set("busca", busca);
+        const qs = params.toString();
+        $("ia-btn-exportar").href = "/api/logistica/inventario-ajustes/exportar" + (qs ? "?" + qs : "");
+    }
+
     async function carregar() {
+        atualizarLinkExportar();
         try {
             const params = new URLSearchParams();
             if (filtroAtual) params.set("status", filtroAtual);
@@ -325,7 +336,10 @@
         carregar();
     });
     $("ia-btn-atualizar").addEventListener("click", carregar);
-    $("ia-busca").addEventListener("input", () => renderTabela(filtrarPorBusca(ajustesCache)));
+    $("ia-busca").addEventListener("input", () => {
+        renderTabela(filtrarPorBusca(ajustesCache));
+        atualizarLinkExportar();
+    });
 
     carregar();
 })();
