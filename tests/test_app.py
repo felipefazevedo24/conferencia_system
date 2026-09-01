@@ -4335,10 +4335,18 @@ def test_inventario_ajustes_exportar_excel_com_custo_status_e_filtros(tmp_path):
     assert sku1[9] == "Aguardando gestor"
 
     sku2 = por_codigo["SKU2"]
-    assert sku2[7] == "N/D"   # sem custo no momento
-    assert sku2[8] == "N/D"
+    assert sku2[7] == "—"   # sem custo no momento
+    assert sku2[8] == "—"
     assert sku2[9] == "Concluído"
     assert sku2[18] == "fiscal"
+
+    # Celulas de moeda tem formatacao "R$" no proprio Excel (nao so o
+    # numero cru) - confere pelo cell.number_format, ja que values_only
+    # nao expoe isso.
+    ws = wb.active
+    linha_sku1 = next(idx for idx, r in enumerate(rows, start=1) if r and r[2] == "SKU1")
+    assert "R$" in ws.cell(row=linha_sku1, column=8).number_format
+    assert "R$" in ws.cell(row=linha_sku1, column=9).number_format
 
     resp_busca = client.get("/api/logistica/inventario-ajustes/exportar?busca=SKU1")
     linhas_busca = list(load_workbook(io.BytesIO(resp_busca.data)).active.iter_rows(values_only=True))

@@ -542,10 +542,10 @@ def exportar_inventario_ajustes_excel():
     headers = [
         "Detectado em",
         "Local",
-        "Código Produto",
+        "Cód. Produto",
         "Unidade",
-        "Qtde Contada",
-        "Qtde Estoque",
+        "Qtd Contada",
+        "Qtd Estoque",
         "Diferença",
         "Custo Médio",
         "Diferença R$",
@@ -562,8 +562,17 @@ def exportar_inventario_ajustes_excel():
     ]
     ws.append(headers)
 
+    # Mesmo formato de moeda com sinal (+/-) que a tela mostra (ex.: "+R$
+    # 69,96" / "-R$ 205,82") - sem isso o Excel exibe so o numero cru
+    # (69.96), o que parecia "sem valor" comparado com a tela.
+    FORMATO_MOEDA_SEM_SINAL = '"R$" #,##0.00'
+    FORMATO_MOEDA_COM_SINAL = '+"R$" #,##0.00;-"R$" #,##0.00'
+    COL_CUSTO_MEDIO = 8   # H
+    COL_DIFERENCA_VALOR = 9  # I
+
     for a in ajustes:
         diferenca_valor = (a.diferenca * a.custo_medio) if a.custo_medio is not None else None
+        linha = ws.max_row + 1
         ws.append([
             a.criado_em.strftime("%d/%m/%Y %H:%M:%S") if a.criado_em else "",
             a.local_codigo,
@@ -572,8 +581,8 @@ def exportar_inventario_ajustes_excel():
             float(a.qtde_contada or 0),
             float(a.qtde_estoque_no_momento or 0),
             float(a.diferenca or 0),
-            a.custo_medio if a.custo_medio is not None else "N/D",
-            diferenca_valor if diferenca_valor is not None else "N/D",
+            a.custo_medio if a.custo_medio is not None else "—",
+            diferenca_valor if diferenca_valor is not None else "—",
             LABEL_STATUS_AJUSTE.get(a.status_modulo, a.status_modulo),
             a.gestor_justificativa or "",
             a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M:%S") if a.gestor_confirmado_em else "",
@@ -585,6 +594,10 @@ def exportar_inventario_ajustes_excel():
             a.fiscal_concluido_em.strftime("%d/%m/%Y %H:%M:%S") if a.fiscal_concluido_em else "",
             a.fiscal_concluido_por or "",
         ])
+        if a.custo_medio is not None:
+            ws.cell(row=linha, column=COL_CUSTO_MEDIO).number_format = FORMATO_MOEDA_SEM_SINAL
+        if diferenca_valor is not None:
+            ws.cell(row=linha, column=COL_DIFERENCA_VALOR).number_format = FORMATO_MOEDA_COM_SINAL
 
     for col in ws.columns:
         max_len = 0
