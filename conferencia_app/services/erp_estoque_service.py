@@ -114,6 +114,7 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "familia": item.get("familia") or "",
             "grupo": item.get("grupo") or "",
             "estoque_minimo": float(item.get("estoque_minimo") or 0),
+            "lote_economico": float(item.get("lote_economico") or 0),
             "localizacoes": [],
             "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })

@@ -751,7 +751,8 @@ ESTOQUE_SQL = """
             sum(coalesce(qtde_total, 0)) as qtde_total,
             sum(coalesce(qtde_reservada, 0)) as qtde_reservada,
             sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel,
-            max(coalesce(estoque_minimo, 0)) as estoque_minimo
+            max(coalesce(estoque_minimo, 0)) as estoque_minimo,
+            max(coalesce(lote_economico, 0)) as lote_economico
         from public.tproduto_deposito
         -- So o deposito PRINCIPAL (cod_deposito = 1) conta pro saldo do
         -- inventario - depositos como "EM PRODUCAO (MAO DE OBRA)" (3),
@@ -768,7 +769,14 @@ ESTOQUE_SQL = """
         coalesce(d.qtde_total, 0) as qtde_total,
         coalesce(d.qtde_reservada, 0) as qtde_reservada,
         coalesce(d.qtde_disponivel, 0) as qtde_disponivel,
-        coalesce(d.estoque_minimo, p.estoque_minimo, 0) as estoque_minimo,
+        coalesce(nullif(d.estoque_minimo, 0), p.estoque_minimo, 0) as estoque_minimo,
+        case
+            when upper(trim(coalesce(p.unidade, ''))) = 'MM'
+             and coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) > 0
+             and coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) < 1000
+                then coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) * 1000
+            else coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0)
+        end as lote_economico,
         p.preco_custo as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,

@@ -97,6 +97,7 @@
                             <th>Reservado</th>
                             <th>Total</th>
                             <th>Mínimo</th>
+                            <th>Lote econ.</th>
                             <th>Consumo/dia</th>
                             <th>Cobertura</th>
                             <th>Nível</th>
@@ -164,7 +165,7 @@
 
     function detailRow(item) {
         if (visaoAtual !== 'produto_acabado' || !expanded.has(item.codigo)) return '';
-        return `<tr class="mp-detail-row"><td colspan="9"><strong>Reservas do produto acabado</strong>${reservasHtml(item)}</td></tr>`;
+        return `<tr class="mp-detail-row"><td colspan="10"><strong>Reservas do produto acabado</strong>${reservasHtml(item)}</td></tr>`;
     }
 
     function render(data) {
@@ -197,6 +198,7 @@
                 <td><span class="mp-num">${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.saldo_total)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.estoque_minimo)} ${esc(item.unidade || '')}</span></td>
+                <td><span class="mp-num">${fmt(item.lote_economico)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.consumo_diario)} ${esc(item.unidade || '')}</span></td>
                 <td>${cobertura(item)}</td>
                 <td>${badge(item)}</td>
