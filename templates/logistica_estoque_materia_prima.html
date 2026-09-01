@@ -36,6 +36,10 @@
     .mp-reserva__campo { display: grid; gap: 2px; }
     .mp-reserva__rotulo { color: var(--eui-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
     .mp-reserva__valor { color: var(--eui-text-soft); font-weight: 700; }
+    .mp-oc-status { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--eui-border); border-radius: 6px; font-size: 12px; }
+    .mp-oc-status--open { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .mp-oc-status--none { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .mp-oc-list { display: grid; gap: 5px; margin: 8px 0 0; color: var(--eui-text-soft); }
     .mp-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
     .mp-expand-btn:hover { background: var(--eui-primary-soft); }
     .mp-item-row { cursor: pointer; }
@@ -185,11 +189,21 @@
         </div>`;
     }
 
+    function ordensCompraHtml(item) {
+        if (!['materia_prima', 'revenda'].includes(visaoAtual) || item.nivel !== 'critico') return '';
+        const ordens = item.ordens_compra_abertas || [];
+        if (!ordens.length) {
+            return `<div class="mp-oc-status mp-oc-status--none"><strong><i class="fas fa-triangle-exclamation"></i> Sem OC em aberto</strong><br>Este material crítico ainda não possui reposição registrada.</div>`;
+        }
+        const pendente = ordens.reduce((total, ordem) => total + Number(ordem.quantidade_pendente || 0), 0);
+        return `<div class="mp-oc-status mp-oc-status--open"><strong><i class="fas fa-cart-shopping"></i> Reposição em andamento</strong><br>${ordens.length} OC(s) aberta(s), total pendente de <strong>${fmt(pendente)} ${esc(item.unidade || '')}</strong><div class="mp-oc-list">${ordens.map((ordem) => `<span><strong>OC ${esc(ordem.ordem_compra || '-')}</strong> · ${fmt(ordem.quantidade_pendente)} ${esc(item.unidade || '')} · ${esc(ordem.fornecedor || 'Fornecedor não informado')}${ordem.prazo_entrega ? ' · Prev. ' + esc(ordem.prazo_entrega) : ''}</span>`).join('')}</div></div>`;
+    }
+
     function detailRow(item) {
         if (!expanded.has(item.codigo)) return '';
         const reservas = `<div class="mp-reserva-resumo"><i class="fas fa-lock"></i> Quantidade reservada: <strong>${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</strong></div><strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
         const colspan = visaoAtual === 'produto_acabado' ? 5 : 4;
-        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${reservas}</td></tr>`;
+        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${ordensCompraHtml(item)}${reservas}</td></tr>`;
     }
 
     function render(data) {
