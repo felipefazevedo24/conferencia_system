@@ -4477,6 +4477,50 @@ def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
     assert card_entregue["status_detalhado"] == "NF/Câmbio"
 
 
+def test_painel_tv_comex_ultima_interacao_ignora_estorno_e_considera_comentario(tmp_path):
+    """O card da Torre de Controle mostra a ultima interacao (comentario OU
+    mudanca de processo) - um estorno NAO conta: comex_service.estornar()
+    nao avanca ComexProcesso.atualizado_em de proposito, senao um processo
+    parado que so foi estornado pareceria "recem mexido"."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import ComexComentario, ComexProcesso
+        from conferencia_app.services import comex_service as svc
+
+        # A: avancado ha 5 dias, estornado agora - ultima_interacao continua
+        # sendo a data do avanco (5 dias atras), nao a do estorno.
+        t0 = datetime.now() - timedelta(days=5)
+        a = ComexProcesso(
+            id_op="IM-2026-00001", status_modulo="PO", status_slug="po",
+            criado_por="ADMIN", fornecedor="F1", atualizado_em=t0,
+        )
+        db.session.add(a)
+        db.session.commit()
+        svc.estornar(a, "gerente")
+        assert a.status_modulo == "OC"
+        assert a.atualizado_em == t0  # nao mudou
+
+        # B: atualizado_em antigo, mas tem comentario mais recente - vence.
+        b = ComexProcesso(
+            id_op="IM-2026-00002", status_modulo="PO", status_slug="po",
+            criado_por="ADMIN", fornecedor="F2",
+            atualizado_em=datetime.now() - timedelta(days=3),
+        )
+        db.session.add(b)
+        db.session.commit()
+        coment_dt = datetime.now() - timedelta(days=1)
+        db.session.add(ComexComentario(processo_id=b.id, texto="Aguardando doc", criado_em=coment_dt, criado_por="ADMIN"))
+        db.session.commit()
+
+    data = client.get("/api/painel/comex").get_json()
+    por_id = {card["id_op"]: card for col in data["colunas"] for card in col["cards"]}
+
+    assert por_id["IM-2026-00001"]["ultima_interacao"] == t0.strftime("%d/%m %H:%M")
+    assert por_id["IM-2026-00002"]["ultima_interacao"] == coment_dt.strftime("%d/%m %H:%M")
+
+
 def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
     """Regressao: sincronizar_ordens() apagava e recriava os itens a cada
     ciclo (o poll automatico roda a cada poucos minutos), trocando o id de

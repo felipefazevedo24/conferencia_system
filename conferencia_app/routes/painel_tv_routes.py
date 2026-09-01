@@ -545,21 +545,42 @@ _COMEX_STATUS_PARA_BASKET = {
 
 def _coletar_comex() -> dict:
     """Resumo do modulo Comex pro painel de TV, nos 3 baskets acima. Cada
-    card mostra id do processo (ID OP), fornecedor e o status detalhado
-    (dentro da basket)."""
-    from ..models import ComexProcesso
+    card mostra id do processo (ID OP), fornecedor, o status detalhado
+    (dentro da basket) e a ultima interacao (comentario OU mudanca de
+    processo - estornos nao contam, ver comex_service.estornar)."""
+    from ..models import ComexComentario, ComexProcesso
 
     # OCs combinadas na PO de outro processo somem da lista principal -
     # mesma logica de listar_processos() do modulo Comex (comex_service).
     processos = (
         ComexProcesso.query
         .filter(ComexProcesso.po_processo_principal_id.is_(None))
-        .order_by(ComexProcesso.atualizado_em.desc())
         .all()
     )
 
+    # Data do comentario mais recente por processo - comex_service.estornar
+    # ja garante que ComexProcesso.atualizado_em nao avanca num estorno
+    # (so em mudancas de verdade), entao so falta somar os comentarios pra
+    # ter a "ultima interacao" completa.
+    ultimo_comentario_por_processo = dict(
+        db.session.query(
+            ComexComentario.processo_id,
+            func.max(ComexComentario.criado_em),
+        )
+        .group_by(ComexComentario.processo_id)
+        .all()
+    )
+
+    def _ultima_interacao(p) -> datetime | None:
+        candidatos = [p.atualizado_em, ultimo_comentario_por_processo.get(p.id)]
+        candidatos = [c for c in candidatos if c is not None]
+        return max(candidatos) if candidatos else None
+
+    processos_com_interacao = [(p, _ultima_interacao(p)) for p in processos]
+    processos_com_interacao.sort(key=lambda item: item[1] or datetime.min, reverse=True)
+
     colunas_cards: list[list[dict]] = [[] for _ in _COMEX_BASKETS]
-    for p in processos:
+    for p, ultima_interacao in processos_com_interacao:
         idx = _COMEX_STATUS_PARA_BASKET.get(p.status_modulo)
         if idx is None:
             continue  # status fora do fluxo modelado (ex.: legado/futuro) - nao exibido na torre
@@ -568,6 +589,7 @@ def _coletar_comex() -> dict:
                 "id_op": p.id_op,
                 "fornecedor": p.fornecedor or "",
                 "status_detalhado": _COMEX_STATUS_LABEL.get(p.status_modulo, p.status_modulo),
+                "ultima_interacao": ultima_interacao.strftime("%d/%m %H:%M") if ultima_interacao else "",
             }
         )
 

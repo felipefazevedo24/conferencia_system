@@ -671,11 +671,16 @@ def apagar_po(processo: ComexProcesso, usuario: str) -> ComexProcesso:
 def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     """Funcao "estornar" (requisito geral do Comex): volta o processo para o
     modulo anterior do workflow (ordem inversa: NF/Cambio -> Transporte ->
-    ... -> PO -> OC)."""
+    ... -> PO -> OC).
+
+    NAO atualiza `atualizado_em`/`atualizado_por` (do processo nem das OCs
+    desvinculadas) de proposito: esse campo e' usado como "ultima interacao"
+    em telas de acompanhamento (ex.: Torre de Controle) e um estorno e' um
+    retrocesso, nao um avanco/interacao real - contar como interacao
+    mascararia processos parados que so foram estornados."""
     anterior = _modulo_anterior(processo.status_modulo)
     if anterior is None:
         raise ValueError("Este processo já está no primeiro módulo (OC) - não há como estornar mais.")
-    agora = datetime.now()
 
     # Estornar a PO de volta pra OC desfaz o agrupamento: as OCs combinadas
     # (que tinham sumido da lista principal - ver salvar_po) voltam a
@@ -684,14 +689,10 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     if anterior == "OC":
         for vinculada in ComexProcesso.query.filter_by(po_processo_principal_id=processo.id).all():
             vinculada.po_processo_principal_id = None
-            vinculada.atualizado_em = agora
-            vinculada.atualizado_por = usuario
         processo.po_ocs_vinculadas = None
 
     processo.status_modulo = anterior
     processo.status_slug = status_slug(anterior)
-    processo.atualizado_em = agora
-    processo.atualizado_por = usuario
     db.session.commit()
     return processo
 
