@@ -26,6 +26,7 @@
     --warn: #f87171;
     --frota: #22d3ee;
     --plan: #a78bfa;
+    --comex: #2dd4bf;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -132,6 +133,7 @@
   .slides-nav .sdot.tone-expedicao.on { background: var(--expedicao); color: #3b2400; box-shadow: 0 4px 14px rgba(251,191,36,.35); }
   .slides-nav .sdot.tone-frota.on { background: var(--frota); color: #05293a; box-shadow: 0 4px 14px rgba(34,211,238,.30); }
   .slides-nav .sdot.tone-planejamento.on { background: var(--plan); color: #1f1740; box-shadow: 0 4px 14px rgba(167,139,250,.34); }
+  .slides-nav .sdot.tone-comex.on { background: var(--comex); color: #04302b; box-shadow: 0 4px 14px rgba(45,212,191,.34); }
   .slides-nav .sdot .sdot-ico { font-size: .95em; }
   .slides-nav .slides-play {
     border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
@@ -207,6 +209,11 @@
   .plan-task .pt-chip.prazo.atrasada { color: #f87171; border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.12); }
   .plan-task .pt-chip.prio-Alta, .plan-task .pt-chip.prio-Critica { color: #fbbf24; border-color: rgba(251,191,36,.5); }
   .plan-klist .empty, .plan-board .empty { color: var(--muted); font-size: clamp(11px,1.3vh,14px); padding: 10px; text-align: center; }
+
+  /* ---------- Painel Comex (mesmo modelo do Planejamento acima, mesmas
+     classes .plan-board/.plan-kcol/.plan-klist/.plan-task - so a cor muda) --- */
+  .comex .icon { background: rgba(45,212,191,.16); color: var(--comex); }
+  .comex .accent { color: var(--comex); }
 
   /* ---------- Painel operacional (Recebimento + Compras) ---------- */
   .flow::before { color: var(--recebimento); }
@@ -536,6 +543,20 @@
       </section>
     </section>
     {% endif %}
+
+    <!-- SLIDE 5: COMEX (Importação/Exportação) -->
+    {% if show_comex|default(true) %}
+    <section class="slide slide-comex" data-slide="comex">
+      <section class="panel comex" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-ship"></i></div>
+          <h2>Comex — Importação/Exportação</h2>
+          <div class="tag" id="comex-tag">—</div>
+        </div>
+        <div class="plan-board" id="comex-board"><div class="empty">Carregando…</div></div>
+      </section>
+    </section>
+    {% endif %}
   </main>
 
   <div id="toasts"></div>
@@ -545,6 +566,7 @@
   const SHOW_COMPRAS = {{ (show_compras|default(true))|tojson }};
   const SHOW_FROTA = {{ (show_frota|default(true))|tojson }};
   const SHOW_PLANEJAMENTO = {{ (show_planejamento|default(true))|tojson }};
+  const SHOW_COMEX = {{ (show_comex|default(true))|tojson }};
 
   const POLL_MS = 5000;
   const ICONS = { chegada: "fa-box", conferencia: "fa-magnifying-glass", lancamento: "fa-circle-check", expedicao: "fa-truck-fast" };
@@ -967,6 +989,7 @@
     expedicao: { label: "Expedição", icon: "fa-truck-fast" },
     frota: { label: "Frota", icon: "fa-truck-fast" },
     planejamento: { label: "Planejamento", icon: "fa-list-check" },
+    comex: { label: "Comex", icon: "fa-ship" },
   };
   let slideIdx = 0;
   let manualHold = false;         // quando true, pausa a rotacao automatica
@@ -1017,6 +1040,7 @@
     if (SLIDES[slideIdx] === "expedicao") { renderRecebimentoKanban(); }
     if (SHOW_FROTA && SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
     if (SHOW_PLANEJAMENTO && SLIDES[slideIdx] === "planejamento") pollPlanejamento();
+    if (SHOW_COMEX && SLIDES[slideIdx] === "comex") pollComex();
     resetSlideTiming();
   }
 
@@ -1213,6 +1237,52 @@
       '<div class="pt-title">' + esc(t.titulo) + "</div>" + meta + "</div>";
   }
 
+  let comexAt = 0;
+  async function pollComex() {
+    if (!SHOW_COMEX) return;
+    const comexBoard = $("comex-board");
+    if (!comexBoard) return;
+    if (Date.now() - comexAt < 30000 && comexBoard._sig) return;
+    comexAt = Date.now();
+    try {
+      const r = await fetch("/api/painel/comex", { cache: "no-store" });
+      const d = await r.json();
+      const k = d.kpis || {};
+      $("comex-tag").textContent = (k.total || 0) + " processo(s)";
+      const cols = d.colunas || [];
+      const sig = JSON.stringify(cols);
+      if (comexBoard._sig !== sig) {
+        comexBoard._sig = sig;
+        comexBoard.innerHTML = cols.length
+          ? cols.map(buildComexCol).join("")
+          : '<div class="empty">Sem processos.</div>';
+      }
+    } catch (e) {
+      comexBoard._sig = "";
+      comexBoard.innerHTML = '<div class="empty">Indisponível</div>';
+    }
+  }
+
+  function buildComexCol(c) {
+    const color = esc(c.color || "#2dd4bf");
+    const cards = (c.cards || []).map((p) => buildComexCard(p, color)).join("") ||
+      '<div class="empty">Sem processos</div>';
+    return '<div class="plan-kcol">' +
+      '<div class="plan-khead"><span class="kc-dot" style="background:' + color + '"></span>' +
+      '<span class="kc-title">' + esc(c.titulo) + "</span>" +
+      '<span class="kc-count">' + (c.total || 0) + "</span></div>" +
+      '<div class="plan-klist">' + cards + "</div></div>";
+  }
+
+  function buildComexCard(p, color) {
+    const chips = [];
+    if (p.fornecedor) chips.push('<span class="pt-chip"><i class="fas fa-industry"></i>' + esc(p.fornecedor) + "</span>");
+    if (p.status_detalhado) chips.push('<span class="pt-chip"><i class="fas fa-signal"></i>' + esc(p.status_detalhado) + "</span>");
+    const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
+    return '<div class="plan-task" style="border-left-color:' + color + '">' +
+      '<div class="pt-title">' + esc(p.id_op) + "</div>" + meta + "</div>";
+  }
+
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });
   });
@@ -1231,12 +1301,14 @@
   if (SHOW_COMPRAS) pollCompras();
   if (SHOW_FROTA) pollFrota();
   if (SHOW_PLANEJAMENTO) pollPlanejamento();
+  if (SHOW_COMEX) pollComex();
   setInterval(poll, POLL_MS);
   setInterval(autoScroll, 60);
   setInterval(carouselTick, 500);
   if (SHOW_COMPRAS) setInterval(pollCompras, 90000);
   if (SHOW_FROTA) setInterval(pollFrota, 8000);
   if (SHOW_PLANEJAMENTO) setInterval(pollPlanejamento, 30000);
+  if (SHOW_COMEX) setInterval(pollComex, 30000);
 })();
 </script>
 </body>

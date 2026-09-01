@@ -4879,6 +4879,66 @@ def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_
     assert resp_fim.status_code == 400
 
 
+def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
+    """A Torre de Controle (/api/painel/comex) resume os 10 status
+    granulares do Comex em 3 baskets (Preparação/Trânsito/Entregue), com
+    rótulo detalhado por card - e exclui OCs combinadas na PO de outro
+    processo, mesma regra da lista principal do Comex."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import ComexProcesso
+
+        dados = [
+            ("IM-2026-00001", "OC", "Fornecedor A"),
+            ("IM-2026-00002", "PO", "Fornecedor B"),
+            ("IA-2026-00003", "Cotacao", "Fornecedor C"),
+            ("IA-2026-00004", "Instrucao", "Fornecedor D"),
+            ("IM-2026-00005", "Coleta", "Fornecedor E"),
+            ("IM-2026-00006", "EmTransito", "Fornecedor F"),
+            ("IM-2026-00007", "Desembarque", "Fornecedor G"),
+            ("IM-2026-00008", "Desembaraco", "Fornecedor H"),
+            ("IM-2026-00009", "Transporte", "Fornecedor I"),
+            ("IM-2026-00010", "NFCambio", "Fornecedor J"),
+        ]
+        for id_op, status, fornecedor in dados:
+            db.session.add(ComexProcesso(
+                id_op=id_op, status_modulo=status, status_slug=status.lower(),
+                criado_por="ADMIN", fornecedor=fornecedor,
+            ))
+        principal = ComexProcesso(
+            id_op="IM-2026-00011", status_modulo="PO", status_slug="po",
+            criado_por="ADMIN", fornecedor="Fornecedor K",
+        )
+        db.session.add(principal)
+        db.session.commit()
+        db.session.add(ComexProcesso(
+            id_op="IM-2026-00012", status_modulo="OC", status_slug="oc",
+            criado_por="ADMIN", fornecedor="Fornecedor K",
+            po_processo_principal_id=principal.id,
+        ))
+        db.session.commit()
+
+    data = client.get("/api/painel/comex").get_json()
+
+    assert data["kpis"]["total"] == 11  # 10 originais + o principal; a combinada nao conta
+    titulos = [c["titulo"] for c in data["colunas"]]
+    assert titulos == ["Preparação", "Trânsito", "Entregue"]
+    assert [c["total"] for c in data["colunas"]] == [5, 4, 2]
+
+    todos_ids = {card["id_op"] for col in data["colunas"] for card in col["cards"]}
+    assert "IM-2026-00012" not in todos_ids
+    assert "IM-2026-00011" in todos_ids
+
+    card_transito = next(c for col in data["colunas"] for c in col["cards"] if c["id_op"] == "IM-2026-00006")
+    assert card_transito["status_detalhado"] == "Em Trânsito"
+    assert card_transito["fornecedor"] == "Fornecedor F"
+
+    card_entregue = next(c for col in data["colunas"] for c in col["cards"] if c["id_op"] == "IM-2026-00010")
+    assert card_entregue["status_detalhado"] == "NF/Câmbio"
+
+
 def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
     """Regressao: sincronizar_ordens() apagava e recriava os itens a cada
     ciclo (o poll automatico roda a cada poucos minutos), trocando o id de
