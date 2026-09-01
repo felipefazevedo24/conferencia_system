@@ -284,6 +284,8 @@ def estoque_materia_prima_api():
     except (TypeError, ValueError):
         limite = 300
 
+    nivel_filtro = str(request.args.get("nivel") or "").strip().lower()
+    somente_estoque_minimo = str(request.args.get("estoque_minimo") or "").strip().lower() in {"1", "true", "sim", "yes"}
     estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
     familia_alvo = _normalizar_busca(visao_cfg["familia"])
     candidatos = []
@@ -293,6 +295,7 @@ def estoque_materia_prima_api():
         saldo_total = float(item.get("qtde_total") or 0)
         saldo_disponivel = float(item.get("qtde_disponivel") or 0)
         saldo_reservado = float(item.get("qtde_reservada") or 0)
+        estoque_minimo = float(item.get("estoque_minimo") or 0)
         haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
         if termo and termo not in haystack:
             continue
@@ -307,11 +310,11 @@ def estoque_materia_prima_api():
             "saldo_disponivel": saldo_disponivel,
             "saldo_reservado": saldo_reservado,
             "saldo_total": saldo_total,
+            "estoque_minimo": estoque_minimo,
             "localizacoes": sorted(set(str(x or "").strip() for x in item.get("localizacoes") or [] if str(x or "").strip())),
         })
 
-    candidatos.sort(key=lambda row: (row["saldo_disponivel"] <= 0, row["codigo"]))
-    rows = candidatos[:limite]
+    rows = candidatos
     codigos = [row["codigo"] for row in rows]
     consumo_por_codigo = {}
     reservas_por_codigo = {}
@@ -354,9 +357,23 @@ def estoque_materia_prima_api():
             for reserva in reservas[:20]
         ]
 
+    if nivel_filtro:
+        rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
+    if somente_estoque_minimo:
+        rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
+
+    prioridade_nivel = {"critico": 0, "atencao": 1, "sem_consumo": 2, "sem_estoque": 3, "normal": 4}
+    rows.sort(key=lambda row: (
+        prioridade_nivel.get(str(row.get("nivel") or ""), 9),
+        row.get("cobertura_dias") is None,
+        row.get("cobertura_dias") or 999999,
+        row["codigo"],
+    ))
+    rows = rows[:limite]
+
     resumo = {
         "itens": len(rows),
-        "total_filtrado": len(candidatos),
+        "total_filtrado": len(rows),
         "criticos": sum(1 for row in rows if row.get("nivel") == "critico"),
         "atencao": sum(1 for row in rows if row.get("nivel") == "atencao"),
         "sem_consumo": sum(1 for row in rows if row.get("nivel") == "sem_consumo"),
@@ -804,9 +821,7 @@ def api_descartar_ajuste(ajuste_id):
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
 
-
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_finance_concluir_ajuste(ajuste_id):
     if not has_permission(PERMISSION_FINANCE):
         return jsonify({"error": "Você não tem permissão de Finance nesse fluxo - fale com a gerência."}), 403

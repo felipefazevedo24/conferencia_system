@@ -73,6 +73,14 @@
                     <input class="eui-input" id="mp-busca" type="search" placeholder="Buscar por código, descrição ou localização...">
                 </div>
                 <div class="mp-actions">
+                    <select class="eui-select" id="mp-nivel" style="min-width:180px;">
+                        <option value="">Todos os níveis</option>
+                        <option value="critico">Crítico</option>
+                        <option value="atencao">Monitorar</option>
+                        <option value="normal">Adequado</option>
+                        <option value="sem_consumo">Sem consumo</option>
+                    </select>
+                    <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
                     <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
                     <button class="eui-btn eui-btn--ghost" id="mp-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
@@ -88,6 +96,7 @@
                             <th>Disponível</th>
                             <th>Reservado</th>
                             <th>Total</th>
+                            <th>Mínimo</th>
                             <th>Consumo/dia</th>
                             <th>Cobertura</th>
                             <th>Nível</th>
@@ -155,7 +164,7 @@
 
     function detailRow(item) {
         if (visaoAtual !== 'produto_acabado' || !expanded.has(item.codigo)) return '';
-        return `<tr class="mp-detail-row"><td colspan="8"><strong>Reservas do produto acabado</strong>${reservasHtml(item)}</td></tr>`;
+        return `<tr class="mp-detail-row"><td colspan="9"><strong>Reservas do produto acabado</strong>${reservasHtml(item)}</td></tr>`;
     }
 
     function render(data) {
@@ -187,6 +196,7 @@
                 <td><span class="mp-num">${fmt(item.saldo_disponivel)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.saldo_total)} ${esc(item.unidade || '')}</span></td>
+                <td><span class="mp-num">${fmt(item.estoque_minimo)} ${esc(item.unidade || '')}</span></td>
                 <td><span class="mp-num">${fmt(item.consumo_diario)} ${esc(item.unidade || '')}</span></td>
                 <td>${cobertura(item)}</td>
                 <td>${badge(item)}</td>
@@ -211,6 +221,9 @@
         params.set('visao', visaoAtual);
         const q = $('mp-busca').value.trim();
         if (q) params.set('q', q);
+        const nivel = $('mp-nivel').value;
+        if (nivel) params.set('nivel', nivel);
+        if ($('mp-estoque-minimo').checked) params.set('estoque_minimo', '1');
         if ($('mp-sem-saldo').checked) params.set('incluir_sem_saldo', '1');
         if (refresh) params.set('refresh', '1');
         try {
@@ -229,6 +242,8 @@
         clearTimeout(timer);
         timer = setTimeout(() => carregar(false), 260);
     });
+    $('mp-nivel').addEventListener('change', () => carregar(false));
+    $('mp-estoque-minimo').addEventListener('change', () => carregar(false));
     $('mp-sem-saldo').addEventListener('change', () => carregar(false));
     $('mp-refresh').addEventListener('click', () => carregar(true));
     document.querySelectorAll('.mp-view-btn').forEach((btn) => {
