@@ -918,8 +918,8 @@
         finalizado: 'Notas — Lançamento finalizado',
     };
 
-    function buildNotaRef(numero, chaveAcesso, cnpjEmitente, fornecedor) {
-        return [String(numero || '').trim(), String(chaveAcesso || '').trim(), String(cnpjEmitente || '').trim(), String(fornecedor || '').trim()].join('||');
+    function buildNotaRef(numero, documentoRef, chaveAcesso, cnpjEmitente, fornecedor) {
+        return [String(numero || '').trim(), String(documentoRef || '').trim(), String(chaveAcesso || '').trim(), String(cnpjEmitente || '').trim(), String(fornecedor || '').trim()].join('||');
     }
 
     async function carregarKpis() {
@@ -962,9 +962,9 @@
                 const auditorInfo = n.status === 'AguardandoLiberacao'
                     ? `<span class="badge ${badgeClass(n.auditor_status)}" style="margin-left:6px;">${escapeHtml(n.auditor_status || 'NaoAuditado')}</span>`
                     : '';
-                const ref = buildNotaRef(n.numero, n.chave_acesso, n.cnpj_emitente, n.fornecedor);
+                const ref = buildNotaRef(n.numero, n.documento_ref, n.chave_acesso, n.cnpj_emitente, n.fornecedor);
                 return `
-                <tr class="de-list-row ${deNotaAberta === ref ? 'is-active' : ''}" data-ref="${escapeHtml(ref)}" data-numero="${escapeHtml(n.numero)}" data-chave="${escapeHtml(n.chave_acesso || '')}" data-cnpj="${escapeHtml(n.cnpj_emitente || '')}" data-fornecedor="${escapeHtml(n.fornecedor || '')}" data-status="${escapeHtml(n.status)}">
+                <tr class="de-list-row ${deNotaAberta === ref ? 'is-active' : ''}" data-ref="${escapeHtml(ref)}" data-numero="${escapeHtml(n.numero)}" data-documento-ref="${escapeHtml(n.documento_ref || '')}" data-chave="${escapeHtml(n.chave_acesso || '')}" data-cnpj="${escapeHtml(n.cnpj_emitente || '')}" data-fornecedor="${escapeHtml(n.fornecedor || '')}" data-status="${escapeHtml(n.status)}">
                     <td><strong>${escapeHtml(n.numero)}</strong>${alerta}</td>
                     <td>${escapeHtml(n.fornecedor || '---')}</td>
                     <td>${escapeHtml(n.pedido_compra || '---')}</td>
@@ -1209,6 +1209,7 @@
         if (!row) return;
         const ref = row.dataset.ref || '';
         const numero = row.dataset.numero;
+        const documentoRef = row.dataset.documentoRef || '';
         const chaveAcesso = row.dataset.chave || '';
         const cnpjEmitente = row.dataset.cnpj || '';
         const fornecedor = row.dataset.fornecedor || '';
@@ -1219,13 +1220,13 @@
         if (status === 'AguardandoLiberacao') {
             if (!DE_CAN_AUDITOR) { deToast('Você não tem permissão para auditoria fiscal.', 'err'); return; }
             mostrarPainel('de-panel-auditoria');
-            await selecionarNota({ numero, chave_acesso: chaveAcesso, cnpj_emitente: cnpjEmitente, fornecedor });
+            await selecionarNota({ numero, documento_ref: documentoRef, chave_acesso: chaveAcesso, cnpj_emitente: cnpjEmitente, fornecedor });
         } else {
             if (!DE_CAN_LANCAMENTO) { deToast('Você não tem permissão para o fluxo de lançamento.', 'err'); return; }
             mostrarPainel('de-panel-lancamento');
             notaSelecionada = numero;
             try {
-                await carregarDetalhes({ numero, chave_acesso: chaveAcesso, cnpj_emitente: cnpjEmitente, fornecedor });
+                await carregarDetalhes({ numero, documento_ref: documentoRef, chave_acesso: chaveAcesso, cnpj_emitente: cnpjEmitente, fornecedor });
             } catch (erro) {
                 exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Não foi possível carregar o painel detalhado.'));
             }
@@ -2089,6 +2090,7 @@
     function detalhesPayloadBase() {
         return {
             nota: String(detalhesSelecionados?.numero || '').trim(),
+            documento_ref: String(detalhesSelecionados?.documento_ref || '').trim(),
             chave_acesso: String(detalhesSelecionados?.chave_acesso || '').trim(),
             cnpj_emitente: String(detalhesSelecionados?.cnpj_emitente || '').trim(),
             fornecedor: String(detalhesSelecionados?.fornecedor || '').trim(),
@@ -2097,11 +2099,13 @@
 
     async function carregarDetalhes(selecao, force = false) {
         const numero = typeof selecao === 'object' && selecao !== null ? String(selecao.numero || '').trim() : String(selecao || '').trim();
+        const documentoRef = typeof selecao === 'object' && selecao !== null ? String(selecao.documento_ref || '').trim() : '';
         const chaveAcesso = typeof selecao === 'object' && selecao !== null ? String(selecao.chave_acesso || selecao.chave || '').trim() : '';
         const cnpjEmitente = typeof selecao === 'object' && selecao !== null ? String(selecao.cnpj_emitente || '').trim() : '';
         const fornecedor = typeof selecao === 'object' && selecao !== null ? String(selecao.fornecedor || '').trim() : '';
-        const chave = buildNotaRef(numero, chaveAcesso, cnpjEmitente, fornecedor);
+        const chave = buildNotaRef(numero, documentoRef, chaveAcesso, cnpjEmitente, fornecedor);
         const params = new URLSearchParams();
+        if (documentoRef) params.set('documento_ref', documentoRef);
         if (chaveAcesso) params.set('chave_acesso', chaveAcesso);
         if (cnpjEmitente) params.set('cnpj_emitente', cnpjEmitente);
         if (fornecedor) params.set('fornecedor', fornecedor);
@@ -2113,6 +2117,7 @@
             throw new Error('Não foi possível carregar os detalhes da NF.');
         }
         const dados = await resposta.json();
+        if (!dados.documento_ref) dados.documento_ref = documentoRef;
         if (!dados.chave_acesso) dados.chave_acesso = chaveAcesso;
         if (!dados.cnpj_emitente) dados.cnpj_emitente = cnpjEmitente;
         if (!dados.fornecedor) dados.fornecedor = fornecedor;
@@ -2156,6 +2161,8 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nota: String(numero || '').trim(),
+                    documento_ref: String(detalhesSelecionados?.documento_ref || '').trim(),
+                    chave_acesso: String(detalhesSelecionados?.chave_acesso || '').trim(),
                     confirmacao_nota: dadosExclusao.confirmacao,
                     motivo: dadosExclusao.motivo,
                     cnpj_emitente: String(detalhesSelecionados?.cnpj_emitente || '').trim(),
@@ -2167,7 +2174,7 @@
                 throw new Error(data.msg || data.error || (data.details && JSON.stringify(data.details)) || 'Erro na exclusão.');
             }
             deToast(`NF ${numero} excluída da fila de pendências.`, 'ok');
-            detalhesCache.delete(String(numero));
+            detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.documento_ref, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
             deNotaAberta = null;
             mostrarPainel('de-panel-vazio');
             await recarregarTudo();
@@ -2379,9 +2386,9 @@
         if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha no lançamento', escapeHtml(resultado.msg || 'Não foi possível gravar a escrituração fiscal.')); return; }
 
         fecharModalLancamento();
-        detalhesCache.delete(buildNotaRef(dados.numero, dados.chave_acesso, dados.cnpj_emitente, dados.fornecedor));
+        detalhesCache.delete(buildNotaRef(dados.numero, dados.documento_ref, dados.chave_acesso, dados.cnpj_emitente, dados.fornecedor));
         await recarregarTudo();
-        await carregarDetalhes({ numero: dados.numero, chave_acesso: dados.chave_acesso, cnpj_emitente: dados.cnpj_emitente, fornecedor: dados.fornecedor }, true);
+        await carregarDetalhes({ numero: dados.numero, documento_ref: dados.documento_ref, chave_acesso: dados.chave_acesso, cnpj_emitente: dados.cnpj_emitente, fornecedor: dados.fornecedor }, true);
 
         const textoConserto = resultado.conserto && Number(resultado.conserto.baixas_sugeridas || 0) > 0
             ? ` Abra a central de conserto para validar ${resultado.conserto.baixas_sugeridas} sugestão(ões) de baixa.` : '';
@@ -2480,7 +2487,7 @@
         if (!resp.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao retornar ao auditor.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
+        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.documento_ref, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
         await recarregarTudo();
         exibirFeedback('success', 'Documento retornado', 'O documento voltou para o Auditor. Você pode editar a OC e os dados.');
     }
@@ -2500,9 +2507,9 @@
         if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar o lançamento.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
+        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.documento_ref, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
         await recarregarTudo();
-        await carregarDetalhes({ numero, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
+        await carregarDetalhes({ numero, documento_ref: detalhesSelecionados?.documento_ref, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback('success', 'Lançamento estornado', escapeHtml(resultado.motivo || 'Estorno fiscal realizado com sucesso.'));
     }
 
@@ -2521,9 +2528,9 @@
         if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar a conferência.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
+        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.documento_ref, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
         await recarregarTudo();
-        await carregarDetalhes({ numero, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
+        await carregarDetalhes({ numero, documento_ref: detalhesSelecionados?.documento_ref, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback('success', 'Conferência estornada', 'A conferência de recebimento foi estornada. O conferente deverá refazer o checklist.');
     }
 
@@ -2543,9 +2550,9 @@
         });
         const resultado = await resposta.json();
         if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha na manifestação', escapeHtml(resultado.msg || 'Não foi possível enviar a confirmação da operação.')); return; }
-        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
+        detalhesCache.delete(buildNotaRef(numero, detalhesSelecionados?.documento_ref, detalhesSelecionados?.chave_acesso, detalhesSelecionados?.cnpj_emitente, detalhesSelecionados?.fornecedor));
         await recarregarTudo();
-        await carregarDetalhes({ numero, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
+        await carregarDetalhes({ numero, documento_ref: detalhesSelecionados?.documento_ref, chave_acesso: detalhesSelecionados?.chave_acesso, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback(resultado.idempotente ? 'info' : 'success', resultado.idempotente ? 'Manifestação já existente' : 'Manifestação enviada', escapeHtml(resultado.msg || 'Confirmação da operação enviada com sucesso.'));
     }
 
@@ -2561,6 +2568,7 @@
             tipo: String(tipo || 'xml'),
         });
         if (detalhesSelecionados.chave_acesso) params.set('chave_acesso', String(detalhesSelecionados.chave_acesso));
+        if (detalhesSelecionados.documento_ref) params.set('documento_ref', String(detalhesSelecionados.documento_ref));
         if (detalhesSelecionados.cnpj_emitente) params.set('cnpj_emitente', String(detalhesSelecionados.cnpj_emitente));
         if (detalhesSelecionados.fornecedor) params.set('fornecedor', String(detalhesSelecionados.fornecedor));
         window.open(`/api/consyste/documento?${params.toString()}`, '_blank');

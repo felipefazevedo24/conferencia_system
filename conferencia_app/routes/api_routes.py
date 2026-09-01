@@ -17,7 +17,7 @@ from datetime import timedelta
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
-from sqlalchemy import case, func, or_
+from sqlalchemy import String, case, cast, func, literal, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -917,8 +917,36 @@ def _normalizar_identidade_nf(cnpj_emitente=None, fornecedor=None):
     return cnpj, fornecedor_txt
 
 
-def _filtrar_query_por_identidade_nf(query, cnpj_emitente=None, fornecedor=None, chave_acesso=None):
+def _documento_ref_item(item: ItemNota) -> str:
+    chave = re.sub(r"\D", "", str(getattr(item, "chave_acesso", "") or "").strip())
+    if chave:
+        return chave
+    externo = str(getattr(item, "documento_externo_id", "") or "").strip()
+    if externo:
+        return f"doc:{externo}"
+    return f"item:{int(item.id)}" if getattr(item, "id", None) else ""
+
+
+def _documento_ref_expr():
+    return case(
+        (func.length(func.coalesce(ItemNota.chave_acesso, "")) > 0, ItemNota.chave_acesso),
+        (func.length(func.coalesce(ItemNota.documento_externo_id, "")) > 0, literal("doc:") + ItemNota.documento_externo_id),
+        else_=literal("item:") + cast(ItemNota.id, String),
+    )
+
+
+def _filtrar_query_por_identidade_nf(query, cnpj_emitente=None, fornecedor=None, chave_acesso=None, documento_ref=None):
+    ref = str(documento_ref or "").strip()
+    if ref.lower().startswith("item:"):
+        try:
+            return query.filter(ItemNota.id == int(ref.split(":", 1)[1]))
+        except (TypeError, ValueError):
+            return query.filter(ItemNota.id == -1)
+    if ref.lower().startswith("doc:"):
+        return query.filter(ItemNota.documento_externo_id == ref.split(":", 1)[1])
     chave = re.sub(r"\D", "", str(chave_acesso or "").strip())
+    if not chave and ref and not ref.lower().startswith("item:"):
+        chave = re.sub(r"\D", "", ref)
     if chave:
         return query.filter(ItemNota.chave_acesso == chave)
     cnpj, fornecedor_txt = _normalizar_identidade_nf(cnpj_emitente, fornecedor)
@@ -2282,9 +2310,11 @@ def documento_entrada_kpis_v2():
 
     status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
     decisoes_recusadas_variantes = ("xml recusado", "recusado")
+    documento_ref = _documento_ref_expr().label("documento_ref")
     sub_notas = (
         db.session.query(
             ItemNota.numero_nota.label("numero_nota"),
+            documento_ref,
             ItemNota.chave_acesso.label("chave_acesso"),
             ItemNota.cnpj_emitente.label("cnpj_emitente"),
             ItemNota.fornecedor.label("fornecedor"),
@@ -2301,7 +2331,7 @@ def documento_entrada_kpis_v2():
                 )
             ).label("tem_decisao_recusada"),
         )
-        .group_by(ItemNota.numero_nota, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+        .group_by(ItemNota.numero_nota, documento_ref, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
         .subquery()
     )
 
@@ -2332,12 +2362,13 @@ def documento_entrada_kpis_v2():
     importados_hoje_sub = (
         db.session.query(
             ItemNota.numero_nota,
+            documento_ref,
             ItemNota.chave_acesso,
             ItemNota.cnpj_emitente,
             ItemNota.fornecedor,
         )
         .filter(func.date(ItemNota.data_importacao) == hoje)
-        .group_by(ItemNota.numero_nota, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+        .group_by(ItemNota.numero_nota, documento_ref, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
         .subquery()
     )
     importados_hoje = db.session.query(func.count()).select_from(importados_hoje_sub).scalar() or 0
@@ -2367,9 +2398,11 @@ def documento_entrada_lista():
 
     status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
     decisoes_recusadas_variantes = ("xml recusado", "recusado")
+    documento_ref = _documento_ref_expr().label("documento_ref")
 
     base_query = db.session.query(
         ItemNota.numero_nota,
+        documento_ref,
         ItemNota.chave_acesso,
         ItemNota.cnpj_emitente,
         ItemNota.fornecedor,
@@ -2384,7 +2417,7 @@ def documento_entrada_lista():
         termo = f"%{busca}%"
         base_query = base_query.filter(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
 
-    base_query = base_query.group_by(ItemNota.numero_nota, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+    base_query = base_query.group_by(ItemNota.numero_nota, documento_ref, ItemNota.chave_acesso, ItemNota.cnpj_emitente, ItemNota.fornecedor)
 
     if etapa == "auditoria":
         # Auditoria deve conter apenas notas totalmente em AguardandoLiberacao.
@@ -2443,7 +2476,7 @@ def documento_entrada_lista():
         .limit(page_size)
         .all()
     )
-    chaves_pagina = [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip(), str(r[3] or "").strip()) for r in pagina]
+    chaves_pagina = [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip(), str(r[3] or "").strip(), str(r[4] or "").strip()) for r in pagina]
     numeros_pagina = sorted({k[0] for k in chaves_pagina if k[0]})
 
     itens_por_nota = {}
@@ -2451,6 +2484,7 @@ def documento_entrada_lista():
         for item in ItemNota.query.filter(ItemNota.numero_nota.in_(numeros_pagina)).all():
             chave_item = (
                 str(item.numero_nota or "").strip(),
+                _documento_ref_item(item),
                 str(item.chave_acesso or "").strip(),
                 str(item.cnpj_emitente or "").strip(),
                 str(item.fornecedor or "").strip(),
@@ -2464,7 +2498,8 @@ def documento_entrada_lista():
     notas = []
     for chave in chaves_pagina:
         numero = chave[0]
-        chave_acesso = chave[1]
+        documento_ref = chave[1]
+        chave_acesso = chave[2]
         itens_nota = itens_por_nota.get(chave, [])
         if not itens_nota:
             continue
@@ -2486,6 +2521,7 @@ def documento_entrada_lista():
 
         linha = {
             "numero": numero,
+            "documento_ref": documento_ref,
             "chave_acesso": chave_acesso,
             "fornecedor": fornecedor,
             "cnpj_emitente": str(itens_nota[0].cnpj_emitente or "").strip(),
@@ -6291,6 +6327,7 @@ def conferencia_dashboard():
     def _nf_key(item):
         return (
             str(item.numero_nota or "").strip(),
+            _documento_ref_item(item),
             str(item.chave_acesso or "").strip(),
             str(item.cnpj_emitente or "").strip(),
             str(item.fornecedor or "").strip(),
@@ -6334,7 +6371,7 @@ def conferencia_dashboard():
         alvo = [
             chave
             for chave in bucket_por_nota
-            if termo in chave[0].lower() or termo in ((chave[2] or "").lower())
+            if termo in chave[0].lower() or termo in ((chave[3] or "").lower())
         ]
     elif status_filtro in metricas:
         alvo = [chave for chave, bucket in bucket_por_nota.items() if bucket == status_filtro]
@@ -6362,7 +6399,7 @@ def conferencia_dashboard():
 
     notas = []
     for chave in alvo:
-        numero, chave_acesso, cnpj_emitente, fornecedor = chave
+        numero, documento_ref, chave_acesso, cnpj_emitente, fornecedor = chave
         rep = reps[chave]
         bucket = bucket_por_nota[chave]
         data = datas.get(chave)
@@ -6370,6 +6407,7 @@ def conferencia_dashboard():
             {
                 "codigo_conferencia": codigos.get(numero, "—"),
                 "numero": numero,
+                "documento_ref": documento_ref,
                 "chave_acesso": chave_acesso,
                 "fornecedor": fornecedor or "—",
                 "cnpj_emitente": cnpj_emitente,
@@ -6393,6 +6431,7 @@ def conferencia_dashboard():
 def excluir_nota_pendente():
     payload = excluir_nota_schema.load(request.json or {})
     numero_nota = str(payload.get("nota")).strip()
+    documento_ref = payload.get("documento_ref")
     chave_acesso = payload.get("chave_acesso")
     confirmacao_nota = str(payload.get("confirmacao_nota")).strip()
     motivo = payload.get("motivo").strip()
@@ -6411,7 +6450,7 @@ def excluir_nota_pendente():
         )
 
     query = ItemNota.query.filter_by(numero_nota=numero_nota)
-    query = _filtrar_query_por_identidade_nf(query, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query = _filtrar_query_por_identidade_nf(query, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "Nota não encontrada."}), 404
@@ -6460,6 +6499,7 @@ def excluir_nota_pendente():
 @api_bp.route("/api/itens/<nota>")
 @roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def buscar_itens(nota):
+    documento_ref = request.args.get("documento_ref")
     chave_acesso = request.args.get("chave_acesso") or request.args.get("chave")
     cnpj_emitente = request.args.get("cnpj_emitente")
     fornecedor_payload = request.args.get("fornecedor")
@@ -6478,7 +6518,7 @@ def buscar_itens(nota):
         )
 
     query_nota = ItemNota.query.filter_by(numero_nota=nota)
-    query_nota = _filtrar_query_por_identidade_nf(query_nota, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_nota = _filtrar_query_por_identidade_nf(query_nota, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens_nota = query_nota.all()
     if itens_nota:
         pedido = _coletar_pedidos_nota(itens_nota)
@@ -6696,6 +6736,7 @@ def validar():
     user = session["username"]
     dados = validar_schema.load(request.json or {})
     numero_nota = str(dados.get("nota"))
+    documento_ref = dados.get("documento_ref")
     chave_acesso = dados.get("chave_acesso")
     contagens = dados.get("contagens", {})
     motivos_itens = dados.get("motivos_itens", {})
@@ -6709,7 +6750,7 @@ def validar():
     forcar_pendencia = dados.get("forcar_pendencia") is True
 
     query_itens = ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente")
-    query_itens = _filtrar_query_por_identidade_nf(query_itens, chave_acesso=chave_acesso)
+    query_itens = _filtrar_query_por_identidade_nf(query_itens, chave_acesso=chave_acesso, documento_ref=documento_ref)
     itens_db = _filter_itens_para_conferencia(query_itens.all())
     if not itens_db:
         return jsonify({"sucesso": False, "msg": "NF sem itens pendentes para conferência."}), 404
@@ -7010,6 +7051,7 @@ def concluir_sem_conferencia_logistica():
     user = session["username"]
     dados = request.get_json() or {}
     numero_nota = str(dados.get("nota") or "").strip()
+    documento_ref = dados.get("documento_ref")
     chave_acesso = dados.get("chave_acesso")
     motivo = str(dados.get("motivo") or "").strip()
     funcionario_recebedor = str(dados.get("funcionario_recebedor") or "").strip()[:100]
@@ -7025,6 +7067,7 @@ def concluir_sem_conferencia_logistica():
         _filtrar_query_por_identidade_nf(
             ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente"),
             chave_acesso=chave_acesso,
+            documento_ref=documento_ref,
         ).all()
     )
     if not itens_db:
@@ -7086,11 +7129,12 @@ def concluir_sem_conferencia_logistica():
 def devolver_material():
     data = devolver_schema.load(request.json or {})
     numero_nota = data.get("nota")
+    documento_ref = data.get("documento_ref")
     chave_acesso = data.get("chave_acesso")
     motivo = data.get("motivo")
     usuario = session.get("username", "admin")
 
-    query_nota = _filtrar_query_por_identidade_nf(ItemNota.query.filter_by(numero_nota=numero_nota), chave_acesso=chave_acesso)
+    query_nota = _filtrar_query_por_identidade_nf(ItemNota.query.filter_by(numero_nota=numero_nota), chave_acesso=chave_acesso, documento_ref=documento_ref)
     nota_db = query_nota.first()
     if nota_db and nota_db.chave_acesso:
         manifestacao_result = _manifestar_operacao_nao_realizada(numero_nota, usuario, motivo, chave_acesso=chave_acesso)
@@ -7120,11 +7164,12 @@ def devolver_material():
 def solicitar_devolucao_recebimento():
     data = devolver_schema.load(request.json or {})
     numero_nota = str(data.get("nota"))
+    documento_ref = data.get("documento_ref")
     chave_acesso = data.get("chave_acesso")
     motivo = str(data.get("motivo") or "").strip()
     usuario = session.get("username", "sistema")
 
-    query_nota = _filtrar_query_por_identidade_nf(ItemNota.query.filter_by(numero_nota=numero_nota), chave_acesso=chave_acesso)
+    query_nota = _filtrar_query_por_identidade_nf(ItemNota.query.filter_by(numero_nota=numero_nota), chave_acesso=chave_acesso, documento_ref=documento_ref)
     nota_db = query_nota.first()
     if not nota_db:
         return jsonify({"sucesso": False, "msg": "Nota não encontrada."}), 404
@@ -7469,6 +7514,7 @@ def listar_concluidas():
 def confirmar_lancamento():
     payload = confirmar_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
+    documento_ref = payload.get("documento_ref")
     chave_acesso = payload.get("chave_acesso")
     cnpj_emitente = payload.get("cnpj_emitente")
     fornecedor_payload = payload.get("fornecedor")
@@ -7478,11 +7524,11 @@ def confirmar_lancamento():
     manifestar_destinatario = bool(payload.get("manifestar_destinatario", True))
 
     query_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído")
-    query_concluidos = _filtrar_query_por_identidade_nf(query_concluidos, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_concluidos = _filtrar_query_por_identidade_nf(query_concluidos, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens_concluidos = query_concluidos.all()
     if not itens_concluidos:
         query_lancados = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado")
-        query_lancados = _filtrar_query_por_identidade_nf(query_lancados, cnpj_emitente, fornecedor_payload, chave_acesso)
+        query_lancados = _filtrar_query_por_identidade_nf(query_lancados, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
         itens_lancados = query_lancados.all()
         mesmo_lancamento = [
             item
@@ -7652,6 +7698,7 @@ def confirmar_lancamento():
 def manifestar_destinatario_fiscal():
     payload = manifestar_destinatario_schema.load(request.json or {})
     numero_nota = str(payload.get("nota") or "").strip()
+    documento_ref = payload.get("documento_ref")
     chave_acesso = payload.get("chave_acesso")
     cnpj_emitente = payload.get("cnpj_emitente")
     fornecedor_payload = payload.get("fornecedor")
@@ -7659,7 +7706,7 @@ def manifestar_destinatario_fiscal():
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
     query_lancada = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado")
-    query_lancada = _filtrar_query_por_identidade_nf(query_lancada, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_lancada = _filtrar_query_por_identidade_nf(query_lancada, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     possui_lancamento = query_lancada.first()
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "A confirmação da operação só pode ser enviada para NF lançada."}), 409
@@ -7714,6 +7761,7 @@ def fiscal_erp_lancamento_status():
 def estornar_lancamento_fiscal():
     payload = estorno_lancamento_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
+    documento_ref = payload.get("documento_ref")
     chave_acesso = payload.get("chave_acesso")
     cnpj_emitente = payload.get("cnpj_emitente")
     fornecedor_payload = payload.get("fornecedor")
@@ -7721,7 +7769,7 @@ def estornar_lancamento_fiscal():
     usuario = session["username"]
 
     query_lancada = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado")
-    query_lancada = _filtrar_query_por_identidade_nf(query_lancada, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_lancada = _filtrar_query_por_identidade_nf(query_lancada, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     possui_lancamento = query_lancada.first()
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
@@ -7754,6 +7802,7 @@ def estornar_conferencia_recebimento():
     """Estorna a conferência de recebimento (exclui checklist e cria log de reversão)."""
     data = request.get_json(silent=True) or {}
     numero_nota = str(data.get("nota") or "").strip()
+    documento_ref = data.get("documento_ref")
     chave_acesso = data.get("chave_acesso")
     cnpj_emitente = data.get("cnpj_emitente")
     fornecedor_payload = data.get("fornecedor")
@@ -7770,7 +7819,7 @@ def estornar_conferencia_recebimento():
 
     # Recupera itens da nota para reset; se nada existir, bloqueia.
     query_itens = ItemNota.query.filter_by(numero_nota=numero_nota)
-    query_itens = _filtrar_query_por_identidade_nf(query_itens, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_itens = _filtrar_query_por_identidade_nf(query_itens, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens_nota = query_itens.all()
     if not checklist and not any((i.fim_conferencia or i.qtd_conferida or (i.status or "") == "Concluído") for i in itens_nota):
         return jsonify({"sucesso": False, "msg": "Não há conferência registrada para esta NF."}), 404
@@ -7824,6 +7873,7 @@ def retornar_doc_para_auditor():
     permitindo editar a OC, alterar dados ou excluir o documento."""
     data = request.get_json(silent=True) or {}
     numero_nota = str(data.get("nota") or "").strip()
+    documento_ref = data.get("documento_ref")
     chave_acesso = data.get("chave_acesso")
     cnpj_emitente = data.get("cnpj_emitente")
     fornecedor_payload = data.get("fornecedor")
@@ -7835,7 +7885,7 @@ def retornar_doc_para_auditor():
         return jsonify({"sucesso": False, "msg": "Informe um motivo com pelo menos 3 caracteres"}), 400
 
     query = ItemNota.query.filter_by(numero_nota=numero_nota)
-    query = _filtrar_query_por_identidade_nf(query, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query = _filtrar_query_por_identidade_nf(query, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "Documento não encontrado"}), 404
@@ -7930,12 +7980,13 @@ def listar_lancadas():
 @api_bp.route("/api/detalhes_nf/<numero>")
 @roles_required("Fiscal", "Admin")
 def detalhes_nf(numero):
+    documento_ref = request.args.get("documento_ref")
     chave_acesso = request.args.get("chave_acesso") or request.args.get("chave")
     cnpj_emitente = request.args.get("cnpj_emitente")
     fornecedor_payload = request.args.get("fornecedor")
 
     query_itens = ItemNota.query.filter_by(numero_nota=numero)
-    query_itens = _filtrar_query_por_identidade_nf(query_itens, cnpj_emitente, fornecedor_payload, chave_acesso)
+    query_itens = _filtrar_query_por_identidade_nf(query_itens, cnpj_emitente, fornecedor_payload, chave_acesso, documento_ref)
     itens = query_itens.all()
     if itens:
         pedido = _coletar_pedidos_nota(itens)
