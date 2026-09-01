@@ -1837,7 +1837,7 @@ def create_app() -> Flask:
                 where oc.cod_empresa = %s
                   and coalesce(oc.cancelado, 0) = 0
                   and regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
-                  and greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0) > 0
+                  and coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0) > 0.000001
                 group by item.cod_interno, oc.codigo, oc.fornecedor, f.nome, f.razao_social, oc.prazo_entrega
                 order by item.cod_interno, oc.prazo_entrega nulls last, oc.codigo desc
             """
