@@ -21,6 +21,7 @@ class ConsysteDownloadSchema(Schema):
 
 class ValidarSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     contagens = fields.Dict(required=True)
     motivos_itens = fields.Dict(required=False, load_default={})
     motivos_tipos = fields.Dict(required=False, load_default={})
@@ -35,6 +36,7 @@ class ValidarSchema(Schema):
 
 class DevolverMaterialSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     motivo = fields.Str(required=True, validate=validate.Length(min=1, max=500))
 
 
@@ -55,6 +57,7 @@ class CodigoMaterialItemSchema(Schema):
 
 class ConfirmarLancamentoSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     codigo = fields.Str(required=True, validate=validate.Length(min=1, max=80))
     codigo_material = fields.Str(required=False, load_default="", validate=validate.Length(max=50))
     codigos_materiais = fields.List(fields.Nested(CodigoMaterialItemSchema), required=False, load_default=[])
@@ -66,6 +69,7 @@ class ConfirmarLancamentoSchema(Schema):
 
 class ManifestarDestinatarioSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     idempotency_key = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
     cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
     fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
@@ -73,6 +77,7 @@ class ManifestarDestinatarioSchema(Schema):
 
 class EstornoLancamentoSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     motivo = fields.Str(required=True, validate=validate.Length(min=3, max=500))
     motivo_padrao = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
     complemento = fields.Str(required=False, load_default="", validate=validate.Length(max=300))
@@ -82,12 +87,14 @@ class EstornoLancamentoSchema(Schema):
 
 class NotaSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
     fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
 
 
 class ExcluirNotaPendenteSchema(Schema):
     nota = fields.Raw(required=True)
+    chave_acesso = fields.Str(required=False, load_default="", validate=validate.Length(max=60))
     confirmacao_nota = fields.Raw(required=True)
     motivo = fields.Str(required=True, validate=validate.Length(min=5, max=500))
     cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
