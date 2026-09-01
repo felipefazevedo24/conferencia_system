@@ -111,6 +111,8 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "qtde_reservada": 0.0,
             "item": item.get("item") or "",
             "unidade": item.get("unidade") or "",
+            "familia": item.get("familia") or "",
+            "grupo": item.get("grupo") or "",
             "localizacoes": [],
             "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })
