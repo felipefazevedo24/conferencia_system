@@ -1108,6 +1108,7 @@ a:hover {
 
 #page-content-wrapper {
     min-width: 0;
+    width: 100%;
     height: 100vh;
     height: 100dvh;
     flex: 1;
@@ -1115,6 +1116,7 @@ a:hover {
     flex-direction: column;
     overflow: hidden;
     overflow-x: clip;
+    background: var(--erp-bg);
 }
 
 .sidebar-search {

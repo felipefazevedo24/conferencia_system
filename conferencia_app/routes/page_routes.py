@@ -8,7 +8,6 @@ from ..extensions import db
 from ..models import (
     ActiveSession,
     AgendamentoSolicitacao,
-    BoletoContaReceber,
     CadastroWorkflowSolicitacao,
     ComexProcesso,
     ExpedicaoConferencia,
@@ -238,36 +237,6 @@ HOME_MODULES = [
         "metric_key": "expedicao_aberta",
     },
     {
-        "id": "faturamento",
-        "title": "Faturamento",
-        "subtitle": "Contas a receber",
-        "description": "Emita documentos fiscais e acompanhe o fluxo financeiro de saída.",
-        "href": "/financeiro/faturamento",
-        "icon": "fa-file-invoice-dollar",
-        "tone": "navy",
-        "tone": "navy",
-        "permission": "PAGE_FINANCEIRO_FATURAMENTO",
-        "section": "Controladoria",
-        "tone": "red",
-        "priority": 82,
-        "keywords": ["faturamento", "nota", "controladoria", "emissao"],
-        "metric_key": "boletos_gerados",
-    },
-    {
-        "id": "contas_receber",
-        "title": "Contas a Receber",
-        "subtitle": "Contas a receber",
-        "description": "Acompanhe títulos, boletos e a saúde do recebimento financeiro.",
-        "href": "/financeiro/contas-receber",
-        "icon": "fa-wallet",
-        "permission": "PAGE_FINANCEIRO_CONTAS_RECEBER",
-        "section": "Controladoria",
-        "tone": "red",
-        "priority": 80,
-        "keywords": ["contas", "receber", "controladoria", "boleto"],
-        "metric_key": "boletos_gerados",
-    },
-    {
         "id": "classificacao_contabil",
         "title": "Classificacao Contabil",
         "subtitle": "Contabilidade",
@@ -293,20 +262,6 @@ HOME_MODULES = [
         "tone": "red",
         "priority": 83,
         "keywords": ["custos", "usinagem", "solda", "energia", "qualidade", "oxigenio"],
-        "metric_key": "boletos_gerados",
-    },
-    {
-        "id": "consulta_boletos",
-        "title": "Consulta de Boletos",
-        "subtitle": "Contas a receber",
-        "description": "Acesse a consulta externa de boletos disponivel para clientes.",
-        "href": "/boletos",
-        "icon": "fa-barcode",
-        "permission": "PAGE_FINANCEIRO_CONTAS_RECEBER",
-        "section": "Controladoria",
-        "tone": "red",
-        "priority": 79,
-        "keywords": ["boleto", "consulta", "cliente", "controladoria"],
         "metric_key": "boletos_gerados",
     },
     {
@@ -398,7 +353,7 @@ SECTION_META = {
         "tone": "navy",
     },
     "Controladoria": {
-        "description": "Contas a receber, faturamento, boletos e classificação contábil.",
+        "description": "Classificação contábil e relatório de custos.",
         "icon": "fa-coins",
         "tone": "violet",
     },
@@ -428,7 +383,6 @@ def _build_home_metrics() -> dict:
         "planner_abertas": 0,
         "agendamento_ativo": 0,
         "expedicao_aberta": 0,
-        "boletos_gerados": 0,
         "sessoes_ativas": 0,
         "importadas_hoje": 0,
         "lancadas_hoje": 0,
@@ -498,7 +452,6 @@ def _build_home_metrics() -> dict:
             .filter(ExpedicaoConferenciaSimples.status == "Pendente de expedição")
             .count()
         )
-        metrics["boletos_gerados"] = BoletoContaReceber.query.filter_by(status="Gerado").count()
         metrics["sessoes_ativas"] = ActiveSession.query.filter_by(is_active=True).count()
         metrics["comex_ativo"] = (
             ComexProcesso.query.filter(ComexProcesso.processo_concluido_em.is_(None)).count()
@@ -567,9 +520,6 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
         "notas_liberadas": _fmt_metric(value, "NF lançada", "NFs lançadas"),
         "expedicao_conferencia": _fmt_metric(value, "operação aberta", "operações abertas"),
         "romaneios": _fmt_metric(value, "operação aberta", "operações abertas"),
-        "faturamento": _fmt_metric(value, "boleto gerado", "boletos gerados"),
-        "contas_receber": _fmt_metric(value, "boleto gerado", "boletos gerados"),
-        "consulta_boletos": _fmt_metric(value, "boleto gerado", "boletos gerados"),
         "emails_nfe": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "dashboard_admin": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "usuarios": _fmt_metric(value, "sessão ativa", "sessões ativas"),
@@ -673,8 +623,6 @@ _PERM_COMPRAS = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 _PERM_EXPEDICAO = ("PAGE_EXPEDICAO_CONFERENCIA", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_ROMANEIO")
 _PERM_LOGISTICA = ("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO", "PAGE_LOGISTICA_VIAGEM")
 _PERM_CONTROLADORIA = (
-    "PAGE_FINANCEIRO_FATURAMENTO",
-    "PAGE_FINANCEIRO_CONTAS_RECEBER",
     "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
     "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
 )
@@ -828,7 +776,7 @@ def _build_dashboard(metrics: dict) -> list[dict]:
                     "value": metrics["viagens_em_andamento"],
                     "caption": "Viagens com status EmAndamento.",
                     "icon": "fa-truck-fast",
-                    "href": "/logistica/viagens",
+                    "href": "/logistica/viagens?viagens=EM_ANDAMENTO",
                     "tone": "teal",
                 },
                 {
@@ -1001,18 +949,6 @@ def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
 
 
-@page_bp.route("/financeiro/faturamento")
-@permission_required("PAGE_FINANCEIRO_FATURAMENTO")
-def financeiro_faturamento_page():
-    return render_template("faturamento.html", user=session["username"])
-
-
-@page_bp.route("/financeiro/contas-receber")
-@permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
-def financeiro_contas_receber_page():
-    return render_template("contas_receber.html", user=session["username"])
-
-
 @page_bp.route("/financeiro/classificacao-contabil")
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_contabil_page():
@@ -1125,23 +1061,6 @@ def viagens_page():
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
     )
-
-
-@page_bp.route("/logistica/recebimento-calendario")
-@login_required
-def recebimento_calendario_page():
-    from conferencia_app.auth import has_permission
-
-    if not (has_permission("PAGE_LOGISTICA_AGENDAMENTO") or has_permission("PAGE_LOGISTICA_SOLICITACAO")):
-        return render_template("acesso_negado.html", user=session.get("username")), 403
-    return render_template(
-        "recebimento_calendario.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-        is_admin=session.get("role") == "Admin",
-    )
-
-
 
 
 @page_bp.route("/admin/usuarios")

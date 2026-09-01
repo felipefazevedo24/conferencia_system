@@ -166,6 +166,23 @@ def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: 
     return ajuste
 
 
+def estornar_para_validacao(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjuste:
+    """Reabre um ajuste em qualquer etapa, devolvendo-o para Validacao."""
+    ajuste.gestor_justificativa = None
+    ajuste.gestor_confirmado_em = None
+    ajuste.gestor_confirmado_por = None
+    ajuste.finance_observacao = None
+    ajuste.finance_concluido_em = None
+    ajuste.finance_concluido_por = None
+    ajuste.fiscal_nf_numero = None
+    ajuste.fiscal_concluido_em = None
+    ajuste.fiscal_concluido_por = None
+    ajuste.status_modulo = "Validacao"
+    ajuste.status_slug = status_slug("Validacao")
+    db.session.commit()
+    return ajuste
+
+
 def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInventarioAjuste:
     """Funcao "Pular Etapa" (requisito geral do Inventario, espelho do
     "Pular Status" do Comex): avanca o ajuste manualmente pra proxima etapa

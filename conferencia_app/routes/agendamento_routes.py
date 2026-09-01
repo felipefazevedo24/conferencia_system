@@ -4,6 +4,7 @@ from calendar import monthrange
 import csv
 import io
 import json
+import math
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -22,6 +23,7 @@ from ..models import (
     AgendamentoSolicitacaoHistorico,
     AgendamentoSolicitacaoItem,
     AgendamentoVeiculo,
+    ExpedicaoRomaneio,
     Viagem,
     ViagemParada,
     Usuario,
@@ -307,6 +309,11 @@ def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict
     return aliases
 
 
+def _unidade_estoque_discreta(unidade: str | None) -> bool:
+    codigo = re.sub(r"[^A-Z]", "", str(unidade or "").upper())
+    return codigo in {"UN", "UND", "UNIDADE", "PC", "PCA", "PECA", "CX", "CAIXA", "KIT"}
+
+
 def _oc_ja_recebida(status_oc_nome: str) -> bool:
     status = str(status_oc_nome or "").strip().upper()
     if not status:
@@ -398,8 +405,10 @@ def _calcular_risco_estoque_oc(
             continue
 
         itens_com_estoque += 1
-        saldo_atual = float(estoque_item.get("qtde_total") or 0)
+        saldo_atual = float(estoque_item.get("qtde_disponivel") or 0)
         saldo_referencia = estoque_medio if estoque_medio > 0 else saldo_atual
+        if consumo_diario > 0 and _unidade_estoque_discreta(estoque_item.get("unidade")):
+            consumo_diario = float(math.ceil(consumo_diario))
         if consumo_diario > 0:
             if float((consumo_kardex_por_codigo.get(codigo_item) or {}).get("consumo_medio_diario") or 0) > 0:
                 itens_com_consumo_kardex += 1
@@ -454,6 +463,68 @@ def _calcular_risco_estoque_oc(
         "risco_estoque_label": risco_estoque_label,
         "risco_estoque_detalhe": risco_estoque_detalhe,
     }
+
+
+def _estoque_por_item_oc(consulta_oc: dict) -> tuple[list[dict], str]:
+    itens = consulta_oc.get("itens") if isinstance(consulta_oc, dict) else []
+    if not isinstance(itens, list):
+        return [], ""
+
+    codigos = [_codigo_item_oc(item) for item in itens if isinstance(item, dict)]
+    codigos = [codigo for codigo in dict.fromkeys(codigos) if codigo]
+    if not codigos:
+        return [], ""
+
+    try:
+        estoque = buscar_estoque_grv(forcar_atualizacao=False)
+        estoque_por_codigo = _mapa_estoque_aliases(estoque.get("por_codigo") or {})
+    except Exception:
+        current_app.logger.warning("Nao foi possivel consultar o estoque GRV para a OC.", exc_info=True)
+        return [], "Estoque GRV indisponivel no momento."
+
+    try:
+        consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=True)
+        consumo_por_codigo = _mapa_estoque_aliases(consumo.get("por_codigo") or {})
+    except Exception:
+        consumo_por_codigo = {}
+
+    saida = []
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        codigo = _codigo_item_oc(item)
+        if not codigo:
+            continue
+        quantidade_oc = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd"))
+        estoque_item = estoque_por_codigo.get(codigo)
+        consumo_item = consumo_por_codigo.get(codigo) or {}
+        unidade = str((estoque_item or {}).get("unidade") or item.get("unidade") or "UN").strip() or "UN"
+        saldo_bruto = estoque_item.get("qtde_disponivel") if estoque_item else None
+        saldo = float(saldo_bruto or 0) if estoque_item else None
+        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
+        if consumo_diario > 0 and _unidade_estoque_discreta(unidade):
+            consumo_diario = float(math.ceil(consumo_diario))
+        cobertura = math.ceil(saldo / consumo_diario) if saldo is not None and consumo_diario else None
+        if saldo is None:
+            nivel, nivel_label = "sem_estoque", "Sem registro no GRV"
+        elif cobertura is not None and cobertura < 2:
+            nivel, nivel_label = "critico", "Estoque critico"
+        elif cobertura is None:
+            nivel, nivel_label = "sem_consumo", "Sem consumo no periodo"
+        else:
+            nivel, nivel_label = "normal", "Cobertura adequada"
+        saida.append({
+            "codigo_item": codigo,
+            "descricao": str(item.get("descricao") or "").strip(),
+            "quantidade_oc": quantidade_oc,
+            "unidade": unidade,
+            "saldo_grv": saldo,
+            "consumo_diario": consumo_diario,
+            "cobertura_dias": cobertura,
+            "nivel": nivel,
+            "nivel_label": nivel_label,
+        })
+    return saida, ""
 
 
 def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
@@ -1258,6 +1329,23 @@ def _serializar_solicitacao(
         except Exception:
             payload_origem = {}
     anexo = _extrair_anexo_payload(payload_origem)
+    tipo = str(registro.tipo or "").strip()
+    responsavel_origem = str(registro.solicitante or "").strip()
+    responsavel_origem_label = "Coleta inserida por" if tipo == "COLETA" else "Solicitacao inserida por"
+    if tipo == "ENTREGA":
+        responsavel_origem_label = "Romaneio autorizado por"
+        try:
+            romaneio_id = int(payload_origem.get("romaneio_id") or 0)
+        except (TypeError, ValueError):
+            romaneio_id = 0
+        romaneio = db.session.get(ExpedicaoRomaneio, romaneio_id) if romaneio_id else None
+        responsavel_origem = str(
+            getattr(romaneio, "expedido_por", None)
+            or getattr(romaneio, "atualizado_por", None)
+            or getattr(romaneio, "criado_por", None)
+            or payload_origem.get("responsavel_emissao")
+            or responsavel_origem
+        ).strip()
     endereco = {
         "logradouro": str(registro.logradouro or "").strip(),
         "numero": str(registro.numero or "").strip(),
@@ -1273,13 +1361,15 @@ def _serializar_solicitacao(
     return {
         "id": registro.id,
         "codigo": str(registro.codigo or f"LOG-{registro.id}").strip(),
-        "tipo": str(registro.tipo or "").strip(),
-        "tipo_label": {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(str(registro.tipo or "").strip(), str(registro.tipo or "").strip()),
+        "tipo": tipo,
+        "tipo_label": {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(tipo, tipo),
         "status": str(registro.status or "").strip(),
         "status_label": status_label_agendamento(registro.status),
         "prioridade": str(registro.prioridade or "").strip(),
         "prioridade_label": prioridade_label_agendamento(registro.prioridade),
         "solicitante": str(registro.solicitante or "").strip(),
+        "responsavel_origem": responsavel_origem,
+        "responsavel_origem_label": responsavel_origem_label,
         "criado_em": registro.criado_em.strftime("%d/%m/%Y %H:%M") if registro.criado_em else "",
         "documento_tipo": str(registro.documento_tipo or "").strip(),
         "documento_numero": str(registro.documento_numero or "").strip(),
@@ -1572,7 +1662,7 @@ def dashboard_central_viagens():
         "coletas_pendentes": _pendentes(coletas),
         "entregas_pendentes": _pendentes(entregas),
         "avulsas_pendentes": _pendentes(avulsas),
-        "em_andamento": sum(1 for c in cards if c.get("status") in {"EmAndamento", "EmRota", "Alocada"}),
+        "em_andamento": Viagem.query.filter(Viagem.status == "EmAndamento").count(),
         "finalizadas": sum(1 for c in cards if c.get("status") == "Concluida"),
         "canceladas": sum(1 for c in cards if c.get("status") == "Cancelada"),
         "total": len(cards),
@@ -1609,6 +1699,7 @@ def central_viagens_consultar_oc(numero_oc: str):
         return jsonify(resultado), 404
 
     parceiro = resultado.get("fornecedor") if isinstance(resultado.get("fornecedor"), dict) else {}
+    estoque_itens, estoque_aviso = _estoque_por_item_oc(resultado)
     return jsonify(
         {
             "encontrada": True,
@@ -1617,6 +1708,8 @@ def central_viagens_consultar_oc(numero_oc: str):
             "itens": resultado.get("itens") or [],
             "warning": resultado.get("warning") or "",
             "fonte": resultado.get("fonte") or {},
+            "estoque_itens": estoque_itens,
+            "estoque_aviso": estoque_aviso,
         }
     )
 

@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as et
+import unicodedata
 from datetime import datetime
 
 from ..extensions import db
@@ -7,6 +8,7 @@ from ..models import ItemNota
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
+DESCRICAO_EXCLUIR_SEM_CONFERENCIA = "INSUMO UTILIZADO SERVICO"
 
 
 def _txt(node, path, ns, default=""):
@@ -16,6 +18,12 @@ def _txt(node, path, ns, default=""):
 
 def _digits(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def _descricao_normalizada(value: str) -> str:
+    texto = unicodedata.normalize("NFKD", str(value or ""))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return " ".join(texto.casefold().split())
 
 
 def _normalizar_numero_nfse(valor: str) -> str:
@@ -404,6 +412,16 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
             for item in itens_xml
             if not (tem_cfop_principal and item["cfop"] in CFOPS_EXCLUIR_SEM_CONFERENCIA)
         ]
+        itens_filtrados = [
+            item
+            for item in itens_filtrados
+            if _descricao_normalizada(DESCRICAO_EXCLUIR_SEM_CONFERENCIA)
+            not in _descricao_normalizada(item["descricao"])
+        ]
+        somente_cfop_5902 = bool(itens_filtrados) and all(
+            str(item["cfop"] or "").strip()[:4] == "5902" for item in itens_filtrados
+        )
+        agora_sem_conferencia = datetime.now() if somente_cfop_5902 else None
 
         for item in itens_filtrados:
             db.session.add(
@@ -438,8 +456,12 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     tipo_pagamento_xml=tipo_pagamento_xml,
                     valor_pagamento_xml=valor_pagamento_xml,
                     vencimento_pagamento_xml=vencimento_pagamento_xml,
-                    status=status_inicial,
+                    status="Concluído" if somente_cfop_5902 else status_inicial,
                     usuario_importacao=user,
+                    usuario_conferencia=user if somente_cfop_5902 else None,
+                    inicio_conferencia=agora_sem_conferencia,
+                    fim_conferencia=agora_sem_conferencia,
+                    sem_conferencia_logistica=somente_cfop_5902,
                     valor_total=txt_total,
                     valor_imposto=txt_imposto,
                     data_emissao=data_emissao,

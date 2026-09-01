@@ -51,6 +51,15 @@ def _valido_email(e: str | None) -> bool:
     return bool(e and _RE_EMAIL.match(e.strip()))
 
 
+def _emails_validos(valor: str | None) -> list[str]:
+    emails = []
+    for email in re.split(r"[;,\s]+", str(valor or "").strip()):
+        email = email.strip()
+        if _valido_email(email) and email.lower() not in {item.lower() for item in emails}:
+            emails.append(email)
+    return emails
+
+
 # ---------- Dados resolvidos da NF ----------
 
 
@@ -687,16 +696,18 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
     # 1) Cadastro no GRV/Postgres (cliente/fornecedor)
     if nota.dest_cnpj:
         hit = buscar_email_cadastro_erp(nota.dest_cnpj)
-        if hit and _valido_email(hit.get("email")):
+        emails_erp = _emails_validos(hit.get("email")) if hit else []
+        if hit and emails_erp:
             telefone_hit = _somente_digitos(
                 hit.get("telefone") or hit.get("telefone_secundario") or hit.get("celular") or hit.get("whatsapp")
             )
             current_app.logger.info(
                 "NF-e %s: destinatario resolvido via GRV/Postgres (CNPJ %s -> %s).",
-                nota.numero, nota.dest_cnpj, hit["email"],
+                nota.numero, nota.dest_cnpj, ", ".join(emails_erp),
             )
             return {
-                "email": hit["email"],
+                "email": emails_erp[0],
+                "emails": emails_erp,
                 "fonte_email": "GRVPostgres",
                 "telefone": telefone_hit,
                 "dest_nome": nota.dest_nome or hit.get("nome", ""),
@@ -1646,6 +1657,9 @@ def enviar_nfe_por_email(
             e = e.strip()
             if _valido_email(e) and e not in cc_final:
                 cc_final.append(e)
+        for email in resolvido.get("emails", [destino_real])[1:]:
+            if email.lower() != destino_real.lower() and email.lower() not in {item.lower() for item in cc_final}:
+                cc_final.append(email)
 
     # Fallback: sem destinatario principal, mas ha CC -> usa o primeiro CC como principal.
     # O restante continua em copia. Mantem a nota como "enviada" em vez de ficar pendente.

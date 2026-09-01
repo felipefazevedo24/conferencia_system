@@ -44,7 +44,6 @@
   logísticas (coleta e entrega), com origem manual ou automática (Auto CIF).
 - **Romaneios de Expedição**: montagem, finalização e expedição de romaneios,
   com validação de modalidade de frete por NF.
-- **Financeiro (Contas a Receber / Boletos)**: acompanhamento de títulos.
 - **Cadastros e Workflow de Cadastro**: manutenção de dados e fluxos de
   atualização cadastral.
 
@@ -169,12 +168,6 @@
   (`/logistica/mapa-frota`): acompanhamento de viagens e localização da frota.
 - **Solicitar Transporte** (`/logistica/solicitar-transporte`): abertura de
   solicitações de transporte (coleta/entrega), manuais ou automáticas (Auto CIF).
-
-### Controladoria — Contas a receber
-- **Contas a receber** (`/financeiro/contas-receber`): acompanhamento dos
-  títulos a receber.
-- **Faturamento** (`/financeiro/faturamento`): apoio ao faturamento.
-- **Consulta de Boletos** (`/boletos`): consulta de boletos.
 
 ### Controladoria — Contabilidade
 - **Classificação contábil** (`/financeiro/classificacao-contabil`) e

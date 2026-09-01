@@ -16,7 +16,6 @@ from conferencia_app.bootstrap import initialize_database
 from conferencia_app.auth import check_active_session
 from conferencia_app.extensions import db
 from conferencia_app.models import (
-    BoletoContaReceber,
     ClassificacaoContabilItem,
     ClassificacaoContabilCompetencia,
     ClassificacaoContabilPadrao,
@@ -1091,6 +1090,28 @@ def test_documento_entrada_kpis_e_timeline_trazem_governanca(tmp_path):
     assert any(item["tipo"] == "Governanca Fiscal" for item in timeline)
 
 
+def test_historico_conferencia_restrito_ao_admin(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        db.session.add(
+            Usuario(
+                username="conferente_teste",
+                password=generate_password_hash("conferente123"),
+                role="Conferente",
+            )
+        )
+        db.session.commit()
+    with client.session_transaction() as session:
+        session["username"] = "conferente_teste"
+        session["role"] = "Conferente"
+
+    assert client.get("/api/historico_completo").status_code == 403
+    assert client.get("/api/conferencia/nota/3000/historico").status_code == 403
+
+
 def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -1523,34 +1544,6 @@ def test_portaria_pode_consultar_nfes_liberadas_mas_nao_baixar_documento(tmp_pat
 
     download = client.get("/api/consyste/documento?nota=322&tipo=xml")
     assert download.status_code == 403
-
-
-def test_financeiro_contas_receber_page_disponivel_para_fiscal(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    set_logged_user(client, "fiscal_teste", "Fiscal")
-
-    response = client.get("/financeiro/contas-receber")
-    assert response.status_code == 200
-    assert b"Contas a Receber" in response.data
-
-
-def test_portaria_sem_acesso_a_financeiro_contas_receber(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    login_portaria(client, app)
-
-    response = client.get("/financeiro/contas-receber")
-    assert response.status_code == 403
-
-
-def test_fiscal_sem_acesso_a_financeiro_faturamento(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    set_logged_user(client, "fiscal_teste", "Fiscal")
-
-    response = client.get("/financeiro/faturamento")
-    assert response.status_code == 403
 
 
 def test_financeiro_classificacao_contabil_page_e_api_filtram_desde_2026(tmp_path):
@@ -2601,555 +2594,6 @@ def test_financeiro_classificacao_contabil_aprovar_nao_fecha_e_fechar_bloqueia(t
     assert reprocessar_fechada.status_code == 409
 
 
-def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    set_logged_user(client, "fiscal_teste", "Fiscal")
-
-    with app.app_context():
-        db.session.add(
-            ItemNota(
-                numero_nota="CR100",
-                fornecedor="Fornecedor CR",
-                codigo="CR-1",
-                descricao="Item com pagamento",
-                qtd_real=1.0,
-                status="Lançado",
-                pagamento_xml=True,
-                tipo_pagamento_xml="01",
-                valor_pagamento_xml=150.75,
-            )
-        )
-        db.session.add(
-            ItemNota(
-                numero_nota="CR101",
-                fornecedor="Fornecedor sem pagamento",
-                codigo="CR-2",
-                descricao="Item sem pagamento",
-                qtd_real=1.0,
-                status="Lançado",
-                pagamento_xml=False,
-            )
-        )
-        db.session.commit()
-
-    response = client.get("/api/financeiro/contas-receber/notas")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["total"] == 1
-    assert data["itens"][0]["numero_nota"] == "CR100"
-    assert data["itens"][0]["boleto_gerado"] is False
-
-
-def test_api_financeiro_gerar_boleto_e_mostrar_na_lista(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    set_logged_user(client, "fiscal_teste", "Fiscal")
-
-    with app.app_context():
-        db.session.add(
-            ItemNota(
-                numero_nota="CR200",
-                fornecedor="Fornecedor boleto",
-                codigo="CR-3",
-                descricao="Item boleto",
-                qtd_real=1.0,
-                status="Lançado",
-                pagamento_xml=True,
-                tipo_pagamento_xml="15",
-                valor_pagamento_xml=500.00,
-                vencimento_pagamento_xml=datetime(2026, 4, 30),
-            )
-        )
-        db.session.commit()
-
-    gera = client.post(
-        "/api/financeiro/contas-receber/gerar-boleto",
-        json={
-            "nota": "CR200",
-            "cpf_cnpj": "12.345.678/0001-99",
-            "nome_pagador": "Cliente BB",
-        },
-    )
-    assert gera.status_code == 200
-    payload = gera.get_json()
-    assert payload["sucesso"] is True
-    assert payload["boleto"]["banco"] == "Banco do Brasil"
-
-    with app.app_context():
-        boleto = BoletoContaReceber.query.filter_by(numero_nota="CR200").first()
-        assert boleto is not None
-        assert boleto.cpf_cnpj_pagador == "12345678000199"
-        assert boleto.nome_pagador == "Cliente BB"
-        assert boleto.vencimento.strftime("%d/%m/%Y") == "30/04/2026"
-
-    lista = client.get("/api/financeiro/contas-receber/notas")
-    assert lista.status_code == 200
-    data = lista.get_json()
-    item = next((x for x in data["itens"] if x["numero_nota"] == "CR200"), None)
-    assert item is not None
-    assert item["boleto_gerado"] is True
-
-def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    set_logged_user(client, "fiscal_teste", "Fiscal")
-
-    with app.app_context():
-        db.session.add(
-            ItemNota(
-                numero_nota="CR210",
-                fornecedor="Fornecedor portal",
-                codigo="CR-4",
-                descricao="Item portal cliente",
-                qtd_real=1.0,
-                status="Lançado",
-                pagamento_xml=True,
-                tipo_pagamento_xml="15",
-                valor_pagamento_xml=321.45,
-                vencimento_pagamento_xml=datetime(2026, 5, 5),
-            )
-        )
-        db.session.commit()
-
-    gera = client.post(
-        "/api/financeiro/contas-receber/gerar-boleto",
-        json={
-            "nota": "CR210",
-            "cpf_cnpj": "123.456.789-01",
-            "nome_pagador": "Cliente Portal",
-        },
-    )
-    assert gera.status_code == 200
-
-    consulta = client.post(
-        "/api/boletos/consultar",
-        json={"modo": "cpf_cnpj", "cpf_cnpj": "12345678901"},
-    )
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["total"] == 1
-    assert payload["fonte"] == "local"
-    assert payload["boletos"][0]["banco"] == "Banco do Brasil"
-    assert payload["boletos"][0]["cpf_cnpj_pagador"] == "12345678901"
-    assert payload["boletos"][0]["nome_pagador"] == "Cliente Portal"
-
-
-def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-
-    titulos = [
-        {
-            "fonte": "grv_postgres",
-            "tipo": "titulo_aberto",
-            "id_grv": "1",
-            "nome_pagador": "Cliente Grupo",
-            "cpf_cnpj_pagador": "12345678000199",
-            "numero_nota": "9001",
-            "documento": "9001-A",
-            "orcamento": "3",
-            "valor": 100.0,
-            "valor_original": 100.0,
-            "valor_pago": 0.0,
-            "vencimento": "10/06/2026",
-            "status": "Em aberto",
-            "banco": "Banco do Brasil",
-            "url_boleto": "https://bb.example/boleto/1.pdf",
-        },
-        {
-            "fonte": "grv_postgres",
-            "tipo": "titulo_aberto",
-            "id_grv": "2",
-            "nome_pagador": "Cliente Grupo",
-            "cpf_cnpj_pagador": "12345678000199",
-            "numero_nota": "9002",
-            "documento": "9002-A",
-            "orcamento": "3",
-            "valor": 250.5,
-            "valor_original": 250.5,
-            "valor_pago": 0.0,
-            "vencimento": "05/06/2026",
-            "status": "Em aberto",
-            "banco": "Banco do Brasil",
-            "linha_digitavel": "00190.00009 00000.000000 00000.000000 1 00000000025050",
-        },
-    ]
-
-    with patch(
-        "conferencia_app.routes.boleto_routes.BBBoletoService.consultar_boletos",
-        return_value={"fonte": "grv_postgres", "boletos": titulos},
-    ):
-        consulta = client.post(
-            "/api/boletos/consultar",
-            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
-        )
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["agrupado"] is True
-    assert payload["total"] == 1
-    assert payload["total_titulos"] == 2
-    grupo = payload["boletos"][0]
-    assert grupo["tipo"] == "grupo_aberto"
-    assert grupo["titulo"] == "Orçamento 3"
-    assert grupo["quantidade_titulos"] == 2
-    assert grupo["valor"] == 350.5
-    assert grupo["vencimento"] == "05/06/2026"
-    assert len(grupo["titulos"]) == 2
-    assert grupo["titulos"][0]["url_boleto"] == "https://bb.example/boleto/1.pdf"
-    assert grupo["titulos"][1]["linha_digitavel"]
-
-
-def test_api_boletos_consulta_publica_por_cnpj_inclui_boleto_local_sem_documento_via_nf_grv(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-
-    with app.app_context():
-        db.session.add(
-            BoletoContaReceber(
-                numero_nota="NFLOCALDOC",
-                chave_acesso="",
-                banco="Banco do Brasil",
-                valor=500.0,
-                nosso_numero="LOCALDOC1",
-                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000050000",
-                codigo_barras="0019000000000050000",
-                status="Gerado",
-                usuario_geracao="teste",
-                cpf_cnpj_pagador=None,
-                nome_pagador=None,
-            )
-        )
-        db.session.commit()
-
-    titulos = [
-        {
-            "fonte": "grv_postgres",
-            "tipo": "titulo_aberto",
-            "id_grv": "100",
-            "nome_pagador": "Cliente Antigo",
-            "cpf_cnpj_pagador": "12345678000199",
-            "numero_nota": "NFLOCALDOC",
-            "documento": "NFLOCALDOC-1/1",
-            "orcamento": "90",
-            "valor": 500.0,
-            "valor_original": 500.0,
-            "valor_pago": 0.0,
-            "vencimento": "10/06/2026",
-            "status": "Em aberto",
-            "banco": "Banco do Brasil",
-            "pode_gerar_boleto": True,
-        }
-    ]
-
-    with patch(
-        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
-        return_value=titulos,
-    ), patch("conferencia_app.services.bb_boleto_service.BBBoletoService.is_configured", return_value=False):
-        consulta = client.post(
-            "/api/boletos/consultar",
-            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
-        )
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["total_titulos"] == 2
-    assert any(
-        titulo.get("nosso_numero") == "LOCALDOC1"
-        for grupo in payload["boletos"]
-        for titulo in grupo.get("titulos", [])
-    )
-
-
-def test_api_boletos_consulta_publica_por_cnpj_e_nf_encontra_boleto_local_sem_documento(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-
-    with app.app_context():
-        db.session.add(
-            BoletoContaReceber(
-                numero_nota="NFCPFNF",
-                chave_acesso="",
-                banco="Banco do Brasil",
-                valor=780.0,
-                nosso_numero="NFCPFNF1",
-                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000078000",
-                codigo_barras="0019000000000078000",
-                status="Gerado",
-                usuario_geracao="teste",
-                cpf_cnpj_pagador=None,
-                nome_pagador=None,
-            )
-        )
-        db.session.commit()
-
-    with patch(
-        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
-        return_value=[],
-    ), patch("conferencia_app.services.bb_boleto_service.BBBoletoService.is_configured", return_value=False):
-        consulta = client.post(
-            "/api/boletos/consultar",
-            json={
-                "modo": "cpf_cnpj",
-                "cpf_cnpj": "12.345.678/0001-99",
-                "numero_nota": "NFCPFNF",
-            },
-        )
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["total_titulos"] == 1
-    assert payload["boletos"][0]["titulos"][0]["nosso_numero"] == "NFCPFNF1"
-
-
-def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    app.config.update(
-        BB_CLIENT_ID="client-test",
-        BB_CLIENT_SECRET="secret-test",
-        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
-        BB_CONVENIO="1234567",
-    )
-
-    class FakeResp:
-        def __init__(self, payload, status_code=200):
-            self._payload = payload
-            self.status_code = status_code
-
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise RuntimeError("erro bb")
-
-        def json(self):
-            return self._payload
-
-    chamadas_get = []
-
-    def fake_bb_request(method, url, **kwargs):
-        if method == "POST":
-            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
-        chamadas_get.append(kwargs.get("params") or {})
-        return FakeResp(
-            {
-                "boletos": [
-                    {
-                        "numeroTituloCliente": "1234567890",
-                        "numeroTituloBeneficiario": "NF900",
-                        "valorOriginal": 450.25,
-                        "dataVencimento": "2026-06-15",
-                        "codigoLinhaDigitavel": "00190.00009 01234.567890 12345.678901 1 00000000045025",
-                        "urlImagemBoleto": "https://bb.example/boleto/NF900.pdf",
-                        "descricaoEstadoTituloCobranca": "Registrado",
-                        "pagador": {"nome": "Cliente API", "numeroInscricao": "12345678000199"},
-                    }
-                ]
-            }
-        )
-
-    with app.app_context(), patch(
-        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
-        return_value=[],
-    ), patch(
-        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
-        side_effect=fake_bb_request,
-    ):
-        from conferencia_app.services.bb_boleto_service import BBBoletoService
-
-        BBBoletoService._token_cache = {}
-        consulta = client.post(
-            "/api/boletos/consultar",
-            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
-        )
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["fonte"] == "bb_api"
-    assert payload["total"] == 1
-    assert payload["boletos"][0]["numero_nota"] == "NF900"
-    assert payload["boletos"][0]["nome_pagador"] == "Cliente API"
-    assert payload["boletos"][0]["titulos"][0]["url_boleto"] == "https://bb.example/boleto/NF900.pdf"
-    assert any(
-        params.get("cnpjPagador") == "123456780001"
-        and params.get("digitoCNPJPagador") == "99"
-        and params.get("numeroConvenio") == "1234567"
-        for params in chamadas_get
-    )
-
-
-def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    app.config.update(
-        BB_CLIENT_ID="client-test",
-        BB_CLIENT_SECRET="secret-test",
-        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
-        BB_CONVENIO="1234567",
-    )
-
-    class FakeResp:
-        def __init__(self, payload, status_code=200):
-            self._payload = payload
-            self.status_code = status_code
-
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise RuntimeError("erro bb")
-
-        def json(self):
-            return self._payload
-
-    chamadas_get = []
-
-    def fake_bb_request(method, url, **kwargs):
-        if method == "POST":
-            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
-        chamadas_get.append(kwargs.get("params") or {})
-        return FakeResp(
-            {
-                "boletos": [
-                    {
-                        "numeroTituloCliente": "99887766",
-                        "numeroTituloBeneficiario": "11435",
-                        "valorOriginal": 5239.5,
-                        "dataVencimento": "2026-06-20",
-                        "descricaoEstadoTituloCobranca": "Registrado",
-                        "pagador": {"nome": "Cliente NF", "numeroInscricao": "30482274000125"},
-                    }
-                ]
-            }
-        )
-
-    with app.app_context(), patch(
-        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
-        return_value=[],
-    ), patch(
-        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
-        side_effect=fake_bb_request,
-    ):
-        from conferencia_app.services.bb_boleto_service import BBBoletoService
-
-        BBBoletoService._token_cache = {}
-        consulta = client.post("/api/boletos/consultar", json={"modo": "nota", "numero_nota": "11435"})
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["total"] == 1
-    assert payload["boletos"][0]["nosso_numero"] == "99887766"
-    assert payload["boletos"][0]["valor"] == 5239.5
-    assert any(
-        "numeroTituloBeneficiario" not in params
-        and params.get("numeroConvenio") == "1234567"
-        for params in chamadas_get
-    )
-
-
-def test_api_boletos_consulta_publica_por_nf_ignora_sufixo_parcela_bb(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    app.config.update(
-        BB_CLIENT_ID="client-test",
-        BB_CLIENT_SECRET="secret-test",
-        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
-        BB_CONVENIO="1234567",
-    )
-
-    class FakeResp:
-        def __init__(self, payload, status_code=200):
-            self._payload = payload
-            self.status_code = status_code
-
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise RuntimeError("erro bb")
-
-        def json(self):
-            return self._payload
-
-    def fake_bb_request(method, url, **kwargs):
-        if method == "POST":
-            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
-        return FakeResp(
-            {
-                "boletos": [
-                    {
-                        "numeroTituloCliente": "PARCELA11439",
-                        "numeroTituloBeneficiario": "11439-1/2",
-                        "valorOriginal": 1000.0,
-                        "dataVencimento": "2026-06-20",
-                        "urlImagemBoleto": "https://bb.example/boleto/11439-1.pdf",
-                        "descricaoEstadoTituloCobranca": "Registrado",
-                        "pagador": {"nome": "Cliente Parcela", "numeroInscricao": "30482274000125"},
-                    }
-                ]
-            }
-        )
-
-    with app.app_context(), patch(
-        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
-        return_value=[],
-    ), patch(
-        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
-        side_effect=fake_bb_request,
-    ):
-        from conferencia_app.services.bb_boleto_service import BBBoletoService
-
-        BBBoletoService._token_cache = {}
-        consulta = client.post("/api/boletos/consultar", json={"modo": "nota", "numero_nota": "11439-1/2"})
-
-    assert consulta.status_code == 200
-    payload = consulta.get_json()
-    assert payload["sucesso"] is True
-    assert payload["total"] == 1
-    assert payload["boletos"][0]["numero_nota"] == "11439"
-    assert payload["boletos"][0]["documento"] == "11439-1/2"
-    assert payload["boletos"][0]["url_boleto"] == "https://bb.example/boleto/11439-1.pdf"
-
-
-def test_portal_cobranca_token_lista_documentos_e_boletos(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-
-    with app.app_context():
-        db.session.add(
-            BoletoContaReceber(
-                numero_nota="NFPORTAL",
-                chave_acesso="4" * 44,
-                banco="Banco do Brasil",
-                valor=199.9,
-                nosso_numero="PORTAL123",
-                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000019990",
-                codigo_barras="00190000000000000000000000000000000000000000",
-                status="Gerado",
-                usuario_geracao="teste",
-                cpf_cnpj_pagador="12345678000199",
-                nome_pagador="Cliente Portal Token",
-            )
-        )
-        db.session.commit()
-        from conferencia_app.services.cliente_portal_service import gerar_token_nf
-
-        token = gerar_token_nf("NFPORTAL", "4" * 44, "12345678000199")
-
-    page = client.get(f"/portal/cobranca/{token}")
-    assert page.status_code == 200
-
-    dados = client.get(f"/api/portal/cobranca/{token}")
-    assert dados.status_code == 200
-    payload = dados.get_json()
-    assert payload["sucesso"] is True
-    assert payload["nota"]["numero"] == "NFPORTAL"
-    assert payload["total_boletos"] == 1
-    assert payload["boletos"][0]["nosso_numero"] == "PORTAL123"
-
-
 def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
     app = build_test_app(tmp_path)
     app.config.update(
@@ -3415,40 +2859,6 @@ def test_scheduler_nfe_nao_reprocessa_falha_automaticamente(tmp_path):
         assert EmailNFEnviado.query.filter_by(numero_nf="9300").count() == 1
 
 
-def test_api_consyste_emissao_solicitar_bloqueada_para_admin(tmp_path):
-    app = build_test_app(tmp_path)
-    app.config["CONSYSTE_TOKEN"] = "token_teste_valido"
-    client = app.test_client()
-    login_admin(client)
-
-    response = client.post(
-        "/api/consyste/emissao/solicitar",
-        json={
-            "ambiente": 2,
-            "cnpj": "88309136000129",
-            "txt_payload": "NOTAFISCAL|1\nA|3.10||\nB|35||VENDA",
-        },
-    )
-    assert response.status_code == 403
-
-
-
-def test_api_consyste_emissao_consultar_bloqueada_para_admin(tmp_path):
-    app = build_test_app(tmp_path)
-    app.config["CONSYSTE_TOKEN"] = "token_teste_valido"
-    client = app.test_client()
-    login_admin(client)
-
-    response = client.post(
-        "/api/consyste/emissao/consultar",
-        json={
-            "ambiente": 2,
-            "emissao_id": "62b080477bbe81e57e06b5bc",
-        },
-    )
-    assert response.status_code == 403
-
-
 def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):
     app = build_test_app(tmp_path)
 
@@ -3468,6 +2878,52 @@ def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):
     assert len(itens) == 1
     assert itens[0].codigo == "VEN1"
     assert itens[0].cfop == "5124"
+
+
+def test_importacao_xml_cfop_5902_sozinho_vai_direto_para_documento_entrada(tmp_path):
+    app = build_test_app(tmp_path)
+
+    xml_bytes = build_test_nfe_xml(
+        "4001-5902",
+        [{"codigo": "RET5902", "descricao": "Remessa para industrializacao", "cfop": "5902", "quantidade": "1.0000"}],
+    )
+
+    with app.app_context():
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+        item = ItemNota.query.filter_by(numero_nota="4001-5902").one()
+
+    assert item.status == "Concluído"
+    assert item.sem_conferencia_logistica is True
+    assert item.usuario_conferencia == "admin"
+    assert item.inicio_conferencia is not None
+    assert item.fim_conferencia is not None
+
+
+def test_importacao_xml_ignora_insumo_utilizado_servico_mesmo_com_cfop_5124(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    xml_bytes = build_test_nfe_xml(
+        "4001-INSUMO",
+        [
+            {"codigo": "INSUMO", "descricao": "  Insumo   Utilizado Serviço - taxa aplicada ", "cfop": "5124", "quantidade": "1.0000"},
+            {"codigo": "VEN4", "descricao": "Item conferível", "cfop": "5124", "quantidade": "2.0000"},
+        ],
+    )
+
+    with app.app_context():
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+        itens = ItemNota.query.filter_by(numero_nota="4001-INSUMO").all()
+
+    assert len(itens) == 1
+    assert itens[0].codigo == "VEN4"
+
+    resposta_auditor = client.get("/api/xml_auditor/nota/4001-INSUMO")
+    assert resposta_auditor.status_code == 200
+    assert [item["codigo"] for item in resposta_auditor.get_json()["itens"]] == ["VEN4"]
 
 
 def test_importacao_xml_aceita_mesmo_numero_para_emitentes_diferentes(tmp_path):
@@ -4835,6 +4291,88 @@ def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp
     assert sem_custo["diferenca"] == 2.0
     assert sem_custo["custo_medio"] is None
     assert sem_custo["diferenca_valor"] is None
+
+
+def test_admin_atualiza_grv_individualmente_e_estorna_ajuste_de_qualquer_etapa(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste, LogisticaInventarioInicial
+
+        contagem = LogisticaInventarioInicial(
+            local_codigo="A01-07",
+            codigo_produto="SKU-ATUALIZA",
+            unidade_medida="UN",
+            quantidade=10,
+            criado_por="admin",
+            qtde_grv_no_momento=8,
+            custo_medio_no_momento=3,
+        )
+        db.session.add(contagem)
+        db.session.flush()
+        ajuste = LogisticaInventarioAjuste(
+            contagem_id=contagem.id,
+            codigo_produto="SKU-ATUALIZA",
+            local_codigo="A01-07",
+            unidade_medida="UN",
+            qtde_contada=10,
+            qtde_estoque_no_momento=8,
+            diferenca=2,
+            custo_medio=3,
+            status_modulo="Concluido",
+            status_slug="concluido",
+            gestor_confirmado_por="gestor",
+            gestor_confirmado_em=datetime.now(),
+            finance_concluido_por="finance",
+            finance_concluido_em=datetime.now(),
+            fiscal_concluido_por="fiscal",
+            fiscal_concluido_em=datetime.now(),
+            fiscal_nf_numero="NF-1",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    estoque_atual = {
+        "por_local": {"SKU-ATUALIZA|A01-07": {"qtde_total": 12, "custo_medio": 4}},
+        "por_codigo": {"SKU-ATUALIZA": {"qtde_total": 12, "custo_medio": 4}},
+    }
+    with patch(
+        "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv",
+        return_value=estoque_atual,
+    ):
+        resposta = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/atualizar-grv")
+
+    assert resposta.status_code == 200
+    with app.app_context():
+        ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+        contagem = db.session.get(LogisticaInventarioInicial, ajuste.contagem_id)
+        assert ajuste.qtde_estoque_no_momento == 12
+        assert ajuste.diferenca == -2
+        assert ajuste.custo_medio == 4
+        assert contagem.qtde_grv_no_momento == 12
+        assert contagem.custo_medio_no_momento == 4
+
+        ajuste.status_modulo = "Concluido"
+        ajuste.status_slug = "concluido"
+        ajuste.gestor_confirmado_por = "gestor"
+        ajuste.finance_concluido_por = "finance"
+        ajuste.fiscal_concluido_por = "fiscal"
+        ajuste.fiscal_nf_numero = "NF-2"
+        db.session.commit()
+
+    resposta_estorno = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/estornar")
+    assert resposta_estorno.status_code == 200
+    with app.app_context():
+        ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+        assert ajuste.status_modulo == "Validacao"
+        assert ajuste.status_slug == "validacao"
+        assert ajuste.gestor_confirmado_por is None
+        assert ajuste.finance_concluido_por is None
+        assert ajuste.fiscal_concluido_por is None
+        assert ajuste.fiscal_nf_numero is None
 
 
 def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_por_vez(tmp_path):

@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -1055,7 +1056,14 @@ def _safe_ident(name: str) -> str:
     return ident
 
 
-def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
+def _detectar_fonte_kardex(
+    cur,
+    *,
+    data_inicio: date,
+    data_fim: date,
+    empresa: int,
+    codigos: list[str],
+) -> dict[str, Any] | None:
     candidatos = [
         "tkardex",
         "t_kardex",
@@ -1072,6 +1080,45 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
     tipo_cols = ["tipo_movimento", "tp_movimento", "movimento", "operacao", "natureza"]
     saldo_cols = ["saldo", "qtde_saldo", "saldo_atual"]
     empresa_cols = ["cod_empresa", "empresa"]
+
+    codigo_produto_normalizado = "regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g')"
+    sql_saida_industrial = f"""
+        select
+            {codigo_produto_normalizado} as codigo_interno,
+            coalesce(h.dt_efetiva::date, h.data::date) as data_movimento,
+            coalesce(i.qtde, 0)::double precision as quantidade,
+            coalesce(h.tipo_movimento_estoque, '')::text as tipo_movimento,
+            null::double precision as saldo
+        from public.tsaidaax i
+        join public.tsaida_e h
+          on h.cod_empresa = i.cod_empresa and h.codigo = i.cod_rel
+        join public.tproduto p
+          on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
+        where coalesce(h.dt_efetiva::date, h.data::date) between %s and %s
+          and i.cod_empresa = %s
+          and {codigo_produto_normalizado} = any(%s::text[])
+    """
+    fontes = [{
+        "tabela": "public.tsaida_e + public.tsaidaax",
+        "sql": sql_saida_industrial,
+        "tem_empresa": True,
+    }]
+
+    def contar_movimentos(fonte: dict) -> int:
+        parametros = [data_inicio, data_fim]
+        if fonte["tem_empresa"]:
+            parametros.append(empresa)
+        parametros.append(codigos)
+        try:
+            cur.execute("SAVEPOINT fonte_kardex")
+            cur.execute(f"select count(*) from ({fonte['sql']}) as movimentos", tuple(parametros))
+            total = int(cur.fetchone()[0] or 0)
+            cur.execute("RELEASE SAVEPOINT fonte_kardex")
+            return total
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT fonte_kardex")
+            cur.execute("RELEASE SAVEPOINT fonte_kardex")
+            return 0
 
     for tabela in candidatos:
         cur.execute(
@@ -1102,11 +1149,12 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
         filtros = [f"{_safe_ident(date_col)}::date between %s and %s"]
         if empresa_col:
             filtros.append(f"{_safe_ident(empresa_col)} = %s")
-        filtros.append(f"upper(trim({_safe_ident(code_col)}::text)) = any(%s::text[])")
+        codigo_normalizado = f"regexp_replace(upper(trim({_safe_ident(code_col)}::text)), '[^A-Z0-9]', '', 'g')"
+        filtros.append(f"{codigo_normalizado} = any(%s::text[])")
 
         sql = f"""
             select
-                upper(trim({_safe_ident(code_col)}::text)) as codigo_interno,
+                {codigo_normalizado} as codigo_interno,
                 {_safe_ident(date_col)}::date as data_movimento,
                 coalesce({_safe_ident(qty_col)}, 0)::double precision as quantidade,
                 {select_tipo} as tipo_movimento,
@@ -1114,12 +1162,21 @@ def _detectar_fonte_kardex(cur) -> dict[str, Any] | None:
             from public.{_safe_ident(tabela)}
             where {' and '.join(filtros)}
         """
-        return {
+        fonte = {
             "tabela": f"public.{tabela}",
             "sql": sql,
             "tem_empresa": bool(empresa_col),
         }
-    return None
+        fonte["movimentos_encontrados"] = contar_movimentos(fonte)
+        fontes.append(fonte)
+
+    for fonte in fontes:
+        fonte["movimentos_encontrados"] = contar_movimentos(fonte)
+
+    if not fontes:
+        return None
+    fontes.sort(key=lambda fonte: int(fonte.get("movimentos_encontrados") or 0), reverse=True)
+    return fontes[0]
 
 
 def _compras_query_catalog() -> dict[str, str]:
@@ -1704,7 +1761,13 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    fonte = _detectar_fonte_kardex(cur)
+                    fonte = _detectar_fonte_kardex(
+                        cur,
+                        data_inicio=data_inicio,
+                        data_fim=data_fim,
+                        empresa=empresa,
+                        codigos=codigos,
+                    )
                     if not fonte:
                         return jsonify(
                             {
@@ -1770,7 +1833,9 @@ def create_app() -> Flask:
                     "EM ANALISE",
                     "PLANEJADO",
                 )
-                texto_mov = re.sub(r"\s+", " ", tipo_mov)
+                texto_mov = unicodedata.normalize("NFKD", tipo_mov)
+                texto_mov = "".join(char for char in texto_mov if not unicodedata.combining(char))
+                texto_mov = re.sub(r"\s+", " ", texto_mov)
                 is_nao_mov = bool(texto_mov and any(tok in texto_mov for tok in tokens_nao_mov_estoque))
 
                 is_saida = False
@@ -1816,6 +1881,7 @@ def create_app() -> Flask:
                     "inicio": data_inicio.isoformat(),
                     "fim": data_fim.isoformat(),
                     "fonte": fonte["tabela"],
+                    "movimentos_encontrados": fonte.get("movimentos_encontrados", 0),
                     "consumos": consumos,
                 }
             )

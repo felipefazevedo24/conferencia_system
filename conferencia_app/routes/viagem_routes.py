@@ -2554,6 +2554,267 @@ def reordenar_paradas_gestor(vid: int):
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
 
 
+# --------------------------------------------------------------------------- ASSISTENTE DE VIAGEM (WIZARD)
+@viagem_bp.route("/assistente/candidatos", methods=["GET"])
+@permission_required(PERM)
+def assistente_candidatos():
+    """Retorna lista de solicitações prontas para montar viagem (status Alocada/Aprovada).
+
+    Params opcionais:
+      - veiculo_id: filtra por um veículo específico
+      - motorista_id: filtra por um motorista específico
+      - data: filtra por data (YYYY-MM-DD)
+    """
+    veiculo_id = _parse_int(request.args.get("veiculo_id"))
+    motorista_id = _parse_int(request.args.get("motorista_id"))
+    data_str = (request.args.get("data") or "").strip()
+    try:
+        dia = datetime.strptime(data_str, "%Y-%m-%d").date() if data_str else date.today()
+    except ValueError:
+        dia = date.today()
+
+    # Já usadas em viagem não-cancelada
+    ja_usadas = {
+        r[0] for r in db.session.query(ViagemParada.solicitacao_id)
+        .join(Viagem, Viagem.id == ViagemParada.viagem_id)
+        .filter(ViagemParada.solicitacao_id.isnot(None))
+        .filter(Viagem.status != "Cancelada")
+        .all()
+    }
+
+    ini = datetime.combine(dia, datetime.min.time())
+    fim = ini + timedelta(days=1)
+
+    q = (AgendamentoSolicitacao.query
+         .filter(AgendamentoSolicitacao.veiculo_id.isnot(None))
+         .filter(AgendamentoSolicitacao.motorista_id.isnot(None))
+         .filter(AgendamentoSolicitacao.status.in_(["Alocada", "Aprovada"]))
+         .filter(_filtro_solicitacao_visivel_viagem())
+         .filter(AgendamentoSolicitacao.data_hora_saida_prevista >= ini)
+         .filter(AgendamentoSolicitacao.data_hora_saida_prevista < fim))
+    if veiculo_id:
+        q = q.filter(AgendamentoSolicitacao.veiculo_id == veiculo_id)
+    if motorista_id:
+        q = q.filter(AgendamentoSolicitacao.motorista_id == motorista_id)
+
+    candidatos = []
+    for sol in q.order_by(AgendamentoSolicitacao.data_hora_saida_prevista.asc()).all():
+        if sol.id in ja_usadas:
+            continue
+        veic = AgendamentoVeiculo.query.get(sol.veiculo_id)
+        mot = AgendamentoMotorista.query.get(sol.motorista_id)
+        candidatos.append({
+            "id": sol.id,
+            "codigo": sol.codigo,
+            "tipo": sol.tipo,
+            "status": sol.status,
+            "parceiro_nome": sol.parceiro_nome,
+            "cidade": sol.cidade,
+            "uf": sol.uf,
+            "saida_prevista": sol.data_hora_saida_prevista.isoformat() if sol.data_hora_saida_prevista else None,
+            "retorno_previsto": sol.data_hora_retorno_prevista.isoformat() if sol.data_hora_retorno_prevista else None,
+            "veiculo_id": sol.veiculo_id,
+            "veiculo_label": _veiculo_label(veic),
+            "motorista_id": sol.motorista_id,
+            "motorista_nome": sol.motorista_nome or (mot.nome if mot else None),
+        })
+
+    return jsonify({"data": dia.isoformat(), "candidatos": candidatos, "qtd": len(candidatos)})
+
+
+@viagem_bp.route("/assistente/sugerir-motorista", methods=["GET"])
+@permission_required(PERM)
+def assistente_sugerir_motorista():
+    """Recomenda motorista baseado na cidade/região da solicitação.
+
+    Params:
+      - cidade: nome da cidade
+      - uf: UF (opcional)
+      - veiculo_id: filtra motoristas alocados neste veículo
+    """
+    cidade = (request.args.get("cidade") or "").strip().upper()
+    uf = (request.args.get("uf") or "").strip().upper()
+    veiculo_id = _parse_int(request.args.get("veiculo_id"))
+
+    if not cidade:
+        return jsonify({"sucesso": False, "msg": "Informe a cidade."}), 400
+
+    # 1. Motoristas com histórico recente (últimas 30 dias) nesta cidade
+    dias_atras = datetime.now() - timedelta(days=30)
+    historico = (
+        db.session.query(Viagem.motorista_id, func.count(Viagem.id).label("qtd"))
+        .filter(Viagem.status == "Concluida")
+        .filter(Viagem.retorno_real >= dias_atras)
+        .filter(Viagem.motorista_id.isnot(None))
+        .join(ViagemParada, ViagemParada.viagem_id == Viagem.id)
+        .filter(ViagemParada.cidade.ilike(f"%{cidade}%"))
+        .group_by(Viagem.motorista_id)
+        .order_by(func.count(Viagem.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    recomendacoes = []
+    for mid, qtd in historico:
+        mot = AgendamentoMotorista.query.get(mid)
+        if mot and mot.ativo:
+            recomendacoes.append({
+                "id": mot.id,
+                "nome": mot.nome,
+                "score": "alto",
+                "motivo": f"{qtd} viagem(ens) recente(s) nesta cidade",
+            })
+
+    # 2. Se não houver histórico, listar motoristas ativos disponíveis
+    if not recomendacoes:
+        q = AgendamentoMotorista.query.filter_by(ativo=True)
+        if veiculo_id:
+            q = q.filter_by(veiculo_id=veiculo_id)
+        for mot in q.order_by(AgendamentoMotorista.nome).limit(10).all():
+            recomendacoes.append({
+                "id": mot.id,
+                "nome": mot.nome,
+                "score": "neutro",
+                "motivo": "Sem histórico recente nesta localidade",
+            })
+
+    return jsonify({"cidade": cidade, "recomendacoes": recomendacoes[:5]})
+
+
+@viagem_bp.route("/assistente/criar", methods=["POST"])
+@permission_required(PERM)
+def assistente_criar_viagem():
+    """Cria viagem completa com um único POST (wizard simplificado).
+
+    Body:
+    {
+      "solicitacao_ids": [1, 2, 3],  // IDs das solicitações para montar
+      "veiculo_id": 10,
+      "motorista_id": 5,
+      "saida_prevista": "2024-02-15T08:00",
+      "retorno_previsto": "2024-02-15T18:00",
+      "titulo": "Rota da manhã",  // opcional
+      "liberar": true  // opcional, liberarimediatamente após criação
+    }
+    """
+    payload = request.get_json(silent=True) or {}
+    ids_raw = payload.get("solicitacao_ids") or []
+    ids = [_parse_int(x) for x in ids_raw if _parse_int(x)]
+    if not ids:
+        return jsonify({"sucesso": False, "msg": "Informe pelo menos uma solicitação."}), 400
+
+    veiculo_id = _parse_int(payload.get("veiculo_id"))
+    motorista_id = _parse_int(payload.get("motorista_id"))
+    saida_prevista = _parse_dt(payload.get("saida_prevista"))
+    retorno_previsto = _parse_dt(payload.get("retorno_previsto"))
+    titulo = (payload.get("titulo") or "").strip()
+    liberar_agora = bool(payload.get("liberar"))
+
+    if not veiculo_id or not motorista_id:
+        return jsonify({"sucesso": False, "msg": "Veículo e motorista obrigatórios."}), 400
+
+    # Validar solicitações
+    sols = AgendamentoSolicitacao.query.filter(AgendamentoSolicitacao.id.in_(ids)).all()
+    por_id = {int(s.id): s for s in sols}
+    if len(sols) != len(ids):
+        return jsonify({"sucesso": False, "msg": f"Solicitação(ões) não encontrada(s)."}), 404
+
+    for sol in sols:
+        if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
+            return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id} já finalizada."}), 409
+        bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
+        if bloqueio_avulsa:
+            return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id}: {bloqueio_avulsa}"}), 409
+
+    # Validar conflito de recursos
+    conflito = _validar_conflito_recurso(
+        veiculo_id=veiculo_id,
+        motorista_id=motorista_id,
+        saida=saida_prevista or _parse_dt(sols[0].data_hora_saida_prevista) if sols else None,
+        retorno=retorno_previsto,
+    )
+    if conflito:
+        return jsonify({"sucesso": False, "msg": conflito}), 409
+
+    # Criar viagem
+    veiculo = AgendamentoVeiculo.query.get(veiculo_id)
+    motorista = AgendamentoMotorista.query.get(motorista_id)
+    if not veiculo:
+        return jsonify({"sucesso": False, "msg": "Veículo não encontrado."}), 404
+    if not motorista:
+        return jsonify({"sucesso": False, "msg": "Motorista não encontrado."}), 404
+
+    saida_prevista = saida_prevista or (sols[0].data_hora_saida_prevista if sols else None) or datetime.now()
+    retorno_previsto = retorno_previsto or (sols[0].data_hora_retorno_prevista if sols else None) or (saida_prevista + timedelta(hours=8))
+
+    viagem = Viagem(
+        codigo=_proximo_codigo(),
+        veiculo_id=veiculo_id,
+        motorista_id=motorista_id,
+        motorista_nome=motorista.nome,
+        tipo="MISTA",
+        status="Planejada",
+        titulo=titulo or f"Rota {motorista.nome}",
+        saida_prevista=saida_prevista,
+        retorno_previsto=retorno_previsto,
+        origem_label="Assistente de Viagem",
+        criado_por=_user(),
+        criado_em=datetime.now(),
+        atualizado_em=datetime.now(),
+    )
+    db.session.add(viagem)
+    db.session.flush()
+
+    # Adicionar paradas
+    seq = 1
+    for sol in sols:
+        parada = _parada_dict_from_solicitacao(sol.id, sequencia=seq)
+        if parada:
+            parada.viagem_id = viagem.id
+            db.session.add(parada)
+            seq += 1
+        _sync_solicitacao_viagem(sol, viagem, "Alocada")
+
+    _atualizar_tipo_viagem_por_paradas(viagem)
+
+    _log_evento(
+        viagem.id,
+        "OBSERVACAO",
+        "Viagem criada via Assistente",
+        descricao=f"{len(sols)} solicitação(ões) montadas. Criada por {_user()}.",
+        severidade="info",
+    )
+
+    # Opcionalmente liberar imediatamente
+    if liberar_agora:
+        paradas_regs = ViagemParada.query.filter_by(viagem_id=viagem.id).all()
+        checklist = _checklist_liberacao(viagem, paradas_regs)
+        if checklist["ok"]:
+            viagem.liberada = True
+            viagem.liberada_em = datetime.now()
+            viagem.liberada_por = _user()
+            _log_evento(
+                viagem.id,
+                "OBSERVACAO",
+                "Viagem liberada automaticamente",
+                descricao=f"Liberação automática via Assistente ({len(paradas_regs)} parada(s)).",
+                severidade="info",
+            )
+        else:
+            # Se falhar checklist, retorna aviso mas viagem ainda é criada
+            return jsonify({
+                "sucesso": True,
+                "viagem": _viagem_dict(viagem, detalhada=True),
+                "aviso": "Viagem criada mas não foi possível liberar automaticamente. Motivos: " + " | ".join(checklist["bloqueios"]),
+                "checklist": checklist,
+            }), 201
+
+    db.session.commit()
+    return jsonify({
+        "sucesso": True,
+        "viagem": _viagem_dict(viagem, detalhada=True),
+        "msg": f"Viagem {viagem.codigo} criada com sucesso." + (" Liberada para o motorista!" if liberar_agora else ""),
+    }), 201
 
 
 # --------------------------------------------------------------------------- ACESSO PUBLICO DO MOTORISTA (via token, sem login)

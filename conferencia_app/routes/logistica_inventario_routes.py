@@ -12,7 +12,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, ses
 from openpyxl import Workbook
 import requests
 
-from ..auth import has_permission, permission_required, permission_required_any
+from ..auth import has_permission, permission_required, permission_required_any, roles_required
 from ..extensions import db
 from ..models import LogisticaInventarioAjuste, LogisticaInventarioInicial
 from ..services.erp_estoque_service import (
@@ -522,7 +522,7 @@ def api_listar_ajustes():
 def api_confirmar_ajuste(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
-    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
     if not ajuste:
         return jsonify({"error": "Ajuste não encontrado."}), 404
     payload = request.get_json(silent=True) or {}
@@ -538,7 +538,7 @@ def api_confirmar_ajuste(ajuste_id):
 def api_descartar_ajuste(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
-    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
     if not ajuste:
         return jsonify({"error": "Ajuste não encontrado."}), 404
     payload = request.get_json(silent=True) or {}
@@ -579,6 +579,44 @@ def api_fiscal_concluir_ajuste(ajuste_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "NF de ajuste confirmada. Processo concluído.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/atualizar-grv", methods=["POST"])
+@roles_required("Admin")
+def api_atualizar_grv_ajuste(ajuste_id):
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    try:
+        estoque_grv = buscar_estoque_grv(forcar_atualizacao=True)
+        qtde_grv = qtde_grv_para(ajuste.codigo_produto, ajuste.local_codigo, estoque_grv)
+        if qtde_grv is None:
+            return jsonify({"error": "Produto não encontrado no estoque atual do GRV."}), 404
+        custo_medio = custo_medio_para(ajuste.codigo_produto, ajuste.local_codigo, estoque_grv)
+        ajuste.qtde_estoque_no_momento = qtde_grv
+        ajuste.diferenca = float(ajuste.qtde_contada or 0) - qtde_grv
+        ajuste.custo_medio = custo_medio
+        if ajuste.contagem_id:
+            contagem = db.session.get(LogisticaInventarioInicial, ajuste.contagem_id)
+            if contagem:
+                contagem.qtde_grv_no_momento = qtde_grv
+                contagem.custo_medio_no_momento = custo_medio
+                contagem.grv_consultado_em = datetime.now()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Não foi possível atualizar o GRV: {exc}"}), 502
+    return jsonify({"message": "Quantidade do GRV atualizada.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/estornar", methods=["POST"])
+@roles_required("Admin")
+def api_estornar_ajuste(ajuste_id):
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    ajuste = ajuste_svc.estornar_para_validacao(ajuste)
+    return jsonify({"message": "Ajuste estornado para validação.", "ajuste": _fmt_ajuste(ajuste)})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/pular-etapa", methods=["POST"])
