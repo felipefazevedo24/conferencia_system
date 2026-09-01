@@ -98,11 +98,6 @@
                         <tr>
                             <th>Material</th>
                             <th>Disponível</th>
-                            <th>Reservado</th>
-                            <th>Total</th>
-                            <th>Mínimo</th>
-                            <th>Lote econ.</th>
-                            <th>Consumo/dia</th>
                             <th>Cobertura</th>
                             <th>Nível</th>
                             <th id="mp-th-reservas" style="display:none; text-align:right;">Reservas</th>
@@ -183,7 +178,7 @@
         const reservas = visaoAtual === 'produto_acabado'
             ? `<strong>Reservas do produto acabado</strong>${reservasHtml(item)}`
             : '';
-        const colspan = visaoAtual === 'produto_acabado' ? 10 : 9;
+        const colspan = visaoAtual === 'produto_acabado' ? 5 : 4;
         return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${reservas}</td></tr>`;
     }
 
@@ -214,11 +209,6 @@
                     </div>
                 </td>
                 <td><span class="mp-num">${fmt(item.saldo_disponivel)} ${esc(item.unidade || '')}</span></td>
-                <td><span class="mp-num">${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</span></td>
-                <td><span class="mp-num">${fmt(item.saldo_total)} ${esc(item.unidade || '')}</span></td>
-                <td><span class="mp-num">${fmt(item.estoque_minimo)} ${esc(item.unidade || '')}</span></td>
-                <td><span class="mp-num">${fmt(item.lote_economico)} ${esc(item.unidade || '')}</span></td>
-                <td><span class="mp-num">${fmt(item.consumo_diario)} ${esc(item.unidade || '')}</span></td>
                 <td>${cobertura(item)}</td>
                 <td>${badge(item)}</td>
                 ${expandCell(item)}
