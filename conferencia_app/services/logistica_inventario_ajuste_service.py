@@ -99,10 +99,19 @@ def detectar_divergencia(
     return ajuste
 
 
-def listar_ajustes(status_modulo: str | None = None) -> list[LogisticaInventarioAjuste]:
+def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[LogisticaInventarioAjuste]:
     query = LogisticaInventarioAjuste.query
     if status_modulo:
         query = query.filter_by(status_modulo=status_modulo)
+    busca = (busca or "").strip()
+    if busca:
+        termo = f"%{busca}%"
+        query = query.filter(
+            db.or_(
+                LogisticaInventarioAjuste.local_codigo.ilike(termo),
+                LogisticaInventarioAjuste.codigo_produto.ilike(termo),
+            )
+        )
     return query.order_by(LogisticaInventarioAjuste.criado_em.desc()).all()
 
 

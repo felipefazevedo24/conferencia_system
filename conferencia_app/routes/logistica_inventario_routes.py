@@ -456,6 +456,17 @@ PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
 PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
 PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
 
+# Mesmos rotulos exibidos na tela (ver LABEL_STATUS em
+# logistica_inventario_ajustes.html) - usado na exportacao Excel pra nao
+# mostrar o nome interno do status_modulo pro usuario final.
+LABEL_STATUS_AJUSTE = {
+    "Validacao": "Aguardando gestor",
+    "Finance": "Aguardando Finance",
+    "Fiscal": "Aguardando Fiscal",
+    "Concluido": "Concluído",
+    "Descartado": "Dif. Improcedente",
+}
+
 
 def _fmt_ajuste(a) -> dict:
     # Impacto financeiro (R$) da divergencia = diferenca (qtde) * custo
@@ -515,6 +526,85 @@ def api_listar_ajustes():
         "pode_finance": has_permission(PERMISSION_FINANCE),
         "pode_fiscal": has_permission(PERMISSION_FISCAL),
     })
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/exportar", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def exportar_inventario_ajustes_excel():
+    status_modulo = request.args.get("status") or None
+    busca = request.args.get("busca") or ""
+    ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo, busca=busca)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ajustes de Estoque"
+
+    headers = [
+        "Detectado em",
+        "Local",
+        "Código Produto",
+        "Unidade",
+        "Qtde Contada",
+        "Qtde Estoque",
+        "Diferença",
+        "Custo Médio",
+        "Diferença R$",
+        "Status",
+        "Gestor - Justificativa",
+        "Gestor - Confirmado em",
+        "Gestor - Confirmado por",
+        "Finance - Observação",
+        "Finance - Concluído em",
+        "Finance - Concluído por",
+        "Fiscal - NF",
+        "Fiscal - Concluído em",
+        "Fiscal - Concluído por",
+    ]
+    ws.append(headers)
+
+    for a in ajustes:
+        diferenca_valor = (a.diferenca * a.custo_medio) if a.custo_medio is not None else None
+        ws.append([
+            a.criado_em.strftime("%d/%m/%Y %H:%M:%S") if a.criado_em else "",
+            a.local_codigo,
+            a.codigo_produto,
+            a.unidade_medida,
+            float(a.qtde_contada or 0),
+            float(a.qtde_estoque_no_momento or 0),
+            float(a.diferenca or 0),
+            a.custo_medio if a.custo_medio is not None else "N/D",
+            diferenca_valor if diferenca_valor is not None else "N/D",
+            LABEL_STATUS_AJUSTE.get(a.status_modulo, a.status_modulo),
+            a.gestor_justificativa or "",
+            a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M:%S") if a.gestor_confirmado_em else "",
+            a.gestor_confirmado_por or "",
+            a.finance_observacao or "",
+            a.finance_concluido_em.strftime("%d/%m/%Y %H:%M:%S") if a.finance_concluido_em else "",
+            a.finance_concluido_por or "",
+            a.fiscal_nf_numero or "",
+            a.fiscal_concluido_em.strftime("%d/%m/%Y %H:%M:%S") if a.fiscal_concluido_em else "",
+            a.fiscal_concluido_por or "",
+        ])
+
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            val = "" if cell.value is None else str(cell.value)
+            max_len = max(max_len, len(val))
+        ws.column_dimensions[col_letter].width = min(max(12, max_len + 2), 60)
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    nome_arquivo = f"ajustes_estoque_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/confirmar", methods=["POST"])
