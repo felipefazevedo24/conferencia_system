@@ -1204,6 +1204,9 @@
 {% block extra_js %}
 <script>
     let notaSel = "";
+    let chaveSel = "";
+    let cnpjSel = "";
+    let fornecedorSel = "";
     let notasPendentesCache = [];
     let metricasReceb = { pendente: 0, conferido: 0, divergencia: 0, lancado: 0 };
     let filtroReceb = null;
@@ -1551,17 +1554,19 @@
         return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     }
 
-    function _rcIdentityQuery(cnpjEmitente, fornecedor) {
+    function _rcIdentityQuery(cnpjEmitente, fornecedor, chaveAcesso = '') {
         const params = new URLSearchParams();
+        if (String(chaveAcesso || '').trim()) params.set('chave_acesso', String(chaveAcesso).trim());
         if (String(cnpjEmitente || '').trim()) params.set('cnpj_emitente', String(cnpjEmitente).trim());
         if (String(fornecedor || '').trim()) params.set('fornecedor', String(fornecedor).trim());
         const qs = params.toString();
         return qs ? `?${qs}` : '';
     }
 
-    function _rcFindNotaMeta(numero, cnpjEmitente = '', fornecedor = '') {
+    function _rcFindNotaMeta(numero, cnpjEmitente = '', fornecedor = '', chaveAcesso = '') {
         return notasPendentesCache.find((item) =>
             String(item.numero || '') === String(numero || '')
+            && (!String(chaveAcesso || '') || String(item.chave_acesso || '') === String(chaveAcesso || ''))
             && String(item.cnpj_emitente || '') === String(cnpjEmitente || '')
             && String(item.fornecedor || '') === String(fornecedor || '')
         ) || null;
@@ -1589,8 +1594,8 @@
             const lanc = n.status_slug === 'lancado' && n.numero_lancamento
                 ? `<div style="font-size:11px; color:#64748b; margin-top:2px;">Lanç.: ${_rcEsc(n.numero_lancamento)}</div>` : '';
             const acao = n.status_slug === 'pendente'
-                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}')"><i class="fas fa-barcode"></i> Conferir</button>`
-                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="abrirVisualizacao('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}')"><i class="fas fa-eye"></i> Visualizar</button>`;
+                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}','${_rcEsc(n.chave_acesso || '')}')"><i class="fas fa-barcode"></i> Conferir</button>`
+                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="abrirVisualizacao('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}','${_rcEsc(n.chave_acesso || '')}')"><i class="fas fa-eye"></i> Visualizar</button>`;
             return `<tr>
                 <td class="rc-cod">${_rcEsc(n.codigo_conferencia)}</td>
                 <td class="rc-nf">${_rcEsc(n.numero)}</td>
@@ -1773,12 +1778,15 @@
         }
     }
 
-    async function abrir(n, cnpjEmitente = '', fornecedor = '') {
+    async function abrir(n, cnpjEmitente = '', fornecedor = '', chaveAcesso = '') {
         notaSel = n;
+        chaveSel = chaveAcesso;
+        cnpjSel = cnpjEmitente;
+        fornecedorSel = fornecedor;
         lockAtivo = false;
         aplicarModoConferenciaVisualizacao(false);
-        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor);
-        let res = await fetch('/api/itens/' + n + _rcIdentityQuery(cnpjEmitente, fornecedor));
+        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor, chaveAcesso);
+        let res = await fetch('/api/itens/' + n + _rcIdentityQuery(cnpjEmitente, fornecedor, chaveAcesso));
         if (res.status === 423) {
             const d = await res.json();
             mostrarMensagemOperacional(`NF ${n} bloqueada por ${d.usuario}. Expira em: ${d.expira_em}`);
@@ -1796,14 +1804,17 @@
         renderItensConferencia(itens, false);
     }
 
-    async function abrirVisualizacao(n, cnpjEmitente = '', fornecedor = '') {
+    async function abrirVisualizacao(n, cnpjEmitente = '', fornecedor = '', chaveAcesso = '') {
         notaSel = n;
+        chaveSel = chaveAcesso;
+        cnpjSel = cnpjEmitente;
+        fornecedorSel = fornecedor;
         lockAtivo = false;
         pararHeartbeat();
         aplicarModoConferenciaVisualizacao(true);
-        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor);
+        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor, chaveAcesso);
         try {
-            const res = await fetch('/api/conferencia/nota/' + encodeURIComponent(n) + '/visualizacao' + _rcIdentityQuery(cnpjEmitente, fornecedor));
+            const res = await fetch('/api/conferencia/nota/' + encodeURIComponent(n) + '/visualizacao' + _rcIdentityQuery(cnpjEmitente, fornecedor, chaveAcesso));
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 mostrarMensagemOperacional(data.error || 'Não foi possível abrir a visualização da conferência.', true);
@@ -1863,7 +1874,7 @@
         const efetivarBtn = document.getElementById('btn-efetivar-ok');
 
         try {
-            const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes, chapas_itens: chapas }) });
+            const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, chave_acesso: chaveSel, contagens: contagens, conversoes_itens: conversoes, chapas_itens: chapas }) });
             let dados;
             try { dados = await res.json(); } catch (_) { dados = null; }
             ultimosDadosValidacao = dados;
@@ -1931,6 +1942,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     nota: notaSel,
+                    chave_acesso: chaveSel,
                     contagens: coletarContagens(),
                     conversoes_itens: coletarConversoes(),
                     chapas_itens: coletarChapas(),
@@ -2015,6 +2027,7 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 nota: notaSel,
+                chave_acesso: chaveSel,
                 contagens: coletarContagens(),
                 conversoes_itens: coletarConversoes(),
                 chapas_itens: coletarChapas(),
@@ -2242,7 +2255,7 @@
             const response = await fetch('/api/conferencia/sem_conferencia_logistica', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ nota: notaSel, motivo, funcionario_recebedor: funcionario }),
+                body: JSON.stringify({ nota: notaSel, chave_acesso: chaveSel, motivo, funcionario_recebedor: funcionario }),
             });
             const data = await response.json();
             if (!response.ok || !data.sucesso) {
@@ -2276,7 +2289,7 @@
         const response = await fetch('/api/recebimento/solicitar_devolucao', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ nota: notaSel, motivo }),
+            body: JSON.stringify({ nota: notaSel, chave_acesso: chaveSel, motivo }),
         });
         const data = await response.json();
 
@@ -2405,6 +2418,9 @@
         lockAtivo = false;
         aplicarModoConferenciaVisualizacao(false);
         notaSel = '';
+        chaveSel = '';
+        cnpjSel = '';
+        fornecedorSel = '';
         document.getElementById('conf-view').classList.add('hidden');
         document.getElementById('lista-view').classList.remove('hidden');
         await carregarNotas();
