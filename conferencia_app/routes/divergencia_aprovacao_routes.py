@@ -13,7 +13,6 @@ no mesmo registro DivergenciaPedidoAprovacao usado pelo bloqueio da liberacao.
 """
 from __future__ import annotations
 
-import os
 import re
 
 from flask import (
@@ -31,7 +30,6 @@ from ..models import DivergenciaPedidoAprovacao, ItemNota, Usuario
 from ..auth import has_permission, is_admin_role
 from ..services.pedidos_service import comparar_pedido_com_nf, PedidoERPIndisponivelError
 from ..services.consyste_service import download_documento_consyste
-from ..services.danfe_service import gerar_danfe, parse_nfe_xml
 
 
 divergencia_aprovacao_bp = Blueprint("divergencia_aprovacao", __name__)
@@ -212,30 +210,19 @@ def danfe_aprovacao(token):
     )
     chave = re.sub(r"\D", "", str(getattr(item, "chave_acesso", "") or ""))[:44]
     if len(chave) != 44:
-        return jsonify({"error": "NF sem chave de acesso para gerar o PDF."}), 404
+        return jsonify({"error": "NF sem chave de acesso para baixar o PDF."}), 404
 
+    # Baixa o PDF DIRETO da Consyste (nao gera DANFE localmente).
     try:
-        ok, status_code, xml_bytes = download_documento_consyste(
-            modelo="nfe", formato="xml", chave=chave, timeout=30
+        ok, status_code, pdf_bytes = download_documento_consyste(
+            modelo="nfe", formato="pdf", chave=chave, timeout=30
         )
     except Exception as exc:
-        return jsonify({"error": f"Erro ao buscar XML na Consyste: {exc}"}), 502
-    if not ok or not xml_bytes:
-        return jsonify({"error": f"XML não encontrado na Consyste (HTTP {status_code})."}), 404
+        return jsonify({"error": f"Erro ao baixar o PDF na Consyste: {exc}"}), 502
+    if not ok or not pdf_bytes:
+        return jsonify({"error": f"PDF não encontrado na Consyste (HTTP {status_code})."}), 404
 
-    try:
-        logo_path = os.path.normpath(os.path.join(current_app.root_path, "..", "static", "columbia_logo.png"))
-        pdf_bytes = gerar_danfe(xml_bytes, logo_path=logo_path, logo_url=current_app.config.get("EMPRESA_LOGO_URL", ""))
-    except Exception as exc:
-        current_app.logger.exception("Erro ao gerar DANFE (aprovacao divergencia): %s", exc)
-        return jsonify({"error": f"Erro ao gerar DANFE: {exc}"}), 500
-
-    nf_num = ""
-    try:
-        nf_num = str(parse_nfe_xml(xml_bytes).get("nNF") or "").strip()
-    except Exception:
-        pass
-    filename = f"DANFE_{nf_num or chave[:10]}.pdf"
+    filename = f"NFe_{registro.numero_nota or chave[:10]}.pdf"
     return current_app.response_class(
         pdf_bytes,
         mimetype="application/pdf",

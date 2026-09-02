@@ -93,43 +93,79 @@
     .status-banner.rejeitado { background: rgba(224,90,84,.14); color: #ffb4af; border: 1px solid rgba(224,90,84,.4); }
     .loading { text-align: center; color: var(--muted); padding: 30px; }
     .foot { text-align: center; color: var(--muted); font-size: 11px; margin-top: 24px; }
+
+    /* ===== Tela de login (centralizada) ===== */
+    .login-screen { min-height: calc(100dvh - 48px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .login-card {
+      width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 20px; padding: 34px 30px; box-shadow: 0 24px 60px rgba(0,0,0,.45);
+      position: relative; overflow: hidden;
+    }
+    .login-card::before {
+      content: ""; position: absolute; inset: 0 0 auto 0; height: 5px;
+      background: linear-gradient(90deg, #1c86f2, #7dc4ff, #11a36c);
+    }
+    .login-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; margin-bottom: 24px; }
+    .login-top .brand-badge { width: 60px; height: 60px; border-radius: 18px; font-size: 28px; }
+    .login-top h1 { font-size: 19px; margin: 6px 0 0; font-weight: 800; }
+    .login-top p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); max-width: 300px; }
+    .login-field { margin-bottom: 16px; position: relative; }
+    .login-field label { margin-bottom: 8px; }
+    .login-field .ico { position: absolute; left: 14px; top: 38px; color: var(--muted); font-size: 14px; pointer-events: none; }
+    .login-field input { padding-left: 40px; height: 48px; }
+    .login-card .btn-primary { width: 100%; height: 48px; font-size: 15px; margin-top: 4px; }
+    .login-foot { text-align: center; margin-top: 18px; font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="brand">
-      <div class="brand-badge">S</div>
-      <div>
-        <h1>Aprovação de divergência de recebimento</h1>
-        <p>Columbia Machine Brasil · Compras</p>
-      </div>
-    </div>
-
     {% if invalido %}
+      <div class="brand">
+        <div class="brand-badge">S</div>
+        <div>
+          <h1>Aprovação de divergência de recebimento</h1>
+          <p>Columbia Machine Brasil · Compras</p>
+        </div>
+      </div>
       <div class="card">
         <h2><i class="fas fa-triangle-exclamation" style="color:var(--amber)"></i> Link inválido ou expirado</h2>
         <p class="sub">Este link de aprovação não existe mais. Peça um novo pelo Auditor XML.</p>
       </div>
     {% else %}
 
-    <!-- LOGIN -->
-    <div class="card" id="login-card">
-      <h2><i class="fas fa-lock"></i> Faça login para ver e decidir</h2>
-      <p class="sub">Use seu usuário e senha do Sync. Somente Compras (ou administradores) podem aprovar.</p>
-      <div class="field">
-        <label for="username">Usuário</label>
-        <input id="username" autocomplete="username" placeholder="Seu usuário" autofocus>
+    <!-- LOGIN (tela centralizada) -->
+    <div class="login-screen" id="login-screen">
+      <div class="login-card">
+        <div class="login-top">
+          <div class="brand-badge">S</div>
+          <h1>Aprovação de recebimento</h1>
+          <p>Entre com seu usuário do Sync. Somente Compras ou administradores podem aprovar divergências.</p>
+        </div>
+        <div class="login-field">
+          <label for="username">Usuário</label>
+          <i class="fas fa-user ico"></i>
+          <input id="username" autocomplete="username" placeholder="Seu usuário" autofocus>
+        </div>
+        <div class="login-field">
+          <label for="password">Senha</label>
+          <i class="fas fa-lock ico"></i>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Sua senha">
+        </div>
+        <button class="btn btn-primary" id="btn-login"><i class="fas fa-right-to-bracket"></i> Entrar</button>
+        <div class="msg" id="login-msg"></div>
+        <div class="login-foot"><i class="fas fa-shield-halved"></i> Acesso protegido por link exclusivo + login</div>
       </div>
-      <div class="field">
-        <label for="password">Senha</label>
-        <input id="password" type="password" autocomplete="current-password" placeholder="Sua senha">
-      </div>
-      <button class="btn btn-primary" id="btn-login"><i class="fas fa-right-to-bracket"></i> Entrar</button>
-      <div class="msg" id="login-msg"></div>
     </div>
 
     <!-- CONTEUDO (apos login) -->
     <div id="conteudo" class="hidden">
+      <div class="brand">
+        <div class="brand-badge">S</div>
+        <div>
+          <h1>Aprovação de divergência de recebimento</h1>
+          <p>Columbia Machine Brasil · Compras</p>
+        </div>
+      </div>
       <div class="loading" id="loading"><i class="fas fa-spinner fa-spin"></i> Carregando dados da nota...</div>
 
       <div id="detalhe" class="hidden">
@@ -147,7 +183,7 @@
           </div>
           <div class="diverg-box" id="v-detalhe"></div>
           <div style="margin-top:14px">
-            <button class="btn btn-ghost" id="btn-pdf" onclick="abrirPdf()"><i class="fas fa-file-pdf"></i> Baixar PDF da NF-e (DANFE)</button>
+            <button class="btn btn-ghost" id="btn-pdf" onclick="abrirPdf()"><i class="fas fa-file-pdf"></i> Baixar PDF da NF-e (Consyste)</button>
           </div>
         </div>
 
@@ -196,7 +232,7 @@
 
     {% endif %}
 
-    <div class="foot">Acesso protegido por link exclusivo + login. Não compartilhe este endereço.</div>
+    <div class="foot" id="page-foot" {% if not invalido %}style="display:none"{% endif %}>Acesso protegido por link exclusivo + login. Não compartilhe este endereço.</div>
   </div>
 
   <script>
@@ -231,8 +267,9 @@
         const data = await r.json();
         if (!r.ok || !data.sucesso) { showMsg('login-msg', data.msg || 'Falha no login.', 'err'); btn.disabled = false; return; }
         jaLogado = true;
-        document.getElementById('login-card').classList.add('hidden');
+        document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('conteudo').classList.remove('hidden');
+        const pf = document.getElementById('page-foot'); if (pf) pf.style.display = '';
         carregarDados();
       } catch (e) {
         showMsg('login-msg', 'Erro de conexão. Tente de novo.', 'err');
@@ -294,7 +331,7 @@
             <td>${p.linha ?? ''}</td>
             <td>${p.nf_codigo ?? '—'}</td>
             <td>${p.nf_descricao ?? '—'}</td>
-            <td class="num">${num(p.nf_qtd)}</td>
+            <td class="num">${num(p.nf_qtd_original ?? p.nf_qtd)}</td>
             <td class="num">${p.po_qtd == null ? '—' : num(p.po_qtd)}</td>
             <td class="num">${money(p.nf_valor_unit)}</td>
             <td class="num">${p.po_valor_unit == null ? '—' : money(p.po_valor_unit)}</td>
