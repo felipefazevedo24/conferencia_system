@@ -3135,3 +3135,6 @@ class DivergenciaPedidoAprovacao(db.Model):
     # Confirma que o aviso REALMENTE saiu pro Teams (envio sincrono). Se False,
     # a proxima consulta tenta reenviar em vez de desistir pra sempre.
     teams_notificado = db.Column(db.Boolean, nullable=False, default=False)
+    # Token da URL publica de aprovacao (o link enviado no Teams). Quem tem o
+    # link ve a NF; alem disso a tela exige login+senha do Sync pra aprovar.
+    token = db.Column(db.String(64), unique=True, index=True)

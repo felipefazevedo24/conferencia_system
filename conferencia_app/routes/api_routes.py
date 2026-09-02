@@ -4950,9 +4950,11 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
             )
             db.session.add(registro)
         registro.detalhe = "\n".join(linhas_divergentes)[:4000]
+        if not registro.token:
+            registro.token = secrets.token_urlsafe(24)
         db.session.commit()
 
-        link = f"{_base_url_columbia()}/upload?stage=auditoria&nota={numero_nota}"
+        link = f"{_base_url_columbia()}/aprovar-divergencia/{registro.token}"
         enviado = teams_service.notificar_divergencia_pedido(
             numero_nota=numero_nota,
             fornecedor=fornecedor,
