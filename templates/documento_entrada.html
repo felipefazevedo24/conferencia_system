@@ -1859,6 +1859,48 @@
         });
     }
 
+    function montarSaldoInfoTexto({ poLinhaNum, poQtdTotal, saldoAntes, saldoDepois, previa }) {
+        const negativo = Number(saldoDepois) < -0.0001;
+        const rotulo = previa ? 'Prévia do saldo (salve para confirmar)' : 'Saldo';
+        const icone = negativo ? 'fa-triangle-exclamation' : 'fa-scale-balanced';
+        const aviso = negativo ? ' — SALDO INSUFICIENTE: esta linha do pedido não cobre a quantidade vinculada, confira se é a linha certa' : '';
+        const html = `<i class="fas ${icone}"></i> ${rotulo} da linha ${poLinhaNum} do pedido (total <strong>${Number(poQtdTotal || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>): antes desta linha do XML restava <strong>${Number(saldoAntes || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong> · depois desta linha resta <strong>${Number(saldoDepois || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>${aviso}`;
+        return { negativo, html };
+    }
+
+    function atualizarSaldoLive(idx) {
+        const pares = window.paresVinculacao || [];
+        const linhasPo = window.linhasPoVinculacao || [];
+        const p = pares[idx];
+        const select = document.getElementById(`select_${idx}`);
+        const saldoEl = document.getElementById(`saldo-info-${idx}`);
+        const hintEl = document.getElementById(`auto-hint-${idx}`);
+        if (!p || !select || !saldoEl) return;
+        if (hintEl) hintEl.innerHTML = '';
+        const valorSel = String(select.value || '').trim();
+        if (valorSel === '') {
+            saldoEl.className = 'vinc-saldo-info';
+            saldoEl.innerHTML = '';
+            return;
+        }
+        const novoPoIndex = parseInt(valorSel, 10);
+        const po = linhasPo[novoPoIndex];
+        if (!po) return;
+        const minhaQtd = Number(p.nf_qtd_kg ?? p.nf_qtd ?? 0);
+        // Soma o que as OUTRAS linhas do XML (pelo ultimo estado conhecido do
+        // servidor) ja apontam pra essa mesma linha do pedido - previa best-effort
+        // ate salvar (o valor final e sempre recalculado pelo backend ao salvar).
+        const outrasQtd = pares.reduce((acc, px, i) => {
+            if (i === idx || px.po_index !== novoPoIndex) return acc;
+            return acc + Number(px.nf_qtd_kg ?? px.nf_qtd ?? 0);
+        }, 0);
+        const saldoAntes = Number(po.qtd || 0) - outrasQtd;
+        const saldoDepois = saldoAntes - minhaQtd;
+        const info = montarSaldoInfoTexto({ poLinhaNum: novoPoIndex + 1, poQtdTotal: po.qtd, saldoAntes, saldoDepois, previa: true });
+        saldoEl.className = `vinc-saldo-info${info.negativo ? ' negativo' : ''}`;
+        saldoEl.innerHTML = info.html;
+    }
+
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
@@ -1895,10 +1937,17 @@
                     ? `<div class="vinc-status warn"><i class="fas fa-scale-balanced"></i> Rateio de saldo: soma das linhas vinculadas a esta linha do pedido = ${Number(p.rateio_soma_nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(p.po_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} do pedido${p.qtd_ok ? ' - fechou!' : ''}</div>`
                     : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>');
             const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
-                ? `<div class="vinculacao-auto-hint">${p.vinculo_manual ? 'Vínculo atual' : 'Vínculo automático sugerido'}: Linha ${p.po_index + 1}</div>` : '';
+                ? `<div class="vinculacao-auto-hint" id="auto-hint-${idx}">${p.vinculo_manual ? 'Vínculo atual' : 'Vínculo automático sugerido'}: Linha ${p.po_index + 1}</div>` : `<div class="vinculacao-auto-hint" id="auto-hint-${idx}"></div>`;
             const poVinculada = poIndexValido ? linhasPo[p.po_index] : (linhaManualValida ? linhasPo[p.linha_po_vinculada] : null);
-            const saldoNegativo = Number(p.po_saldo_depois) < -0.0001;
-            const saldoInfoHtml = poVinculada ? `<div class="vinc-saldo-info${saldoNegativo ? ' negativo' : ''}"><i class="fas ${saldoNegativo ? 'fa-triangle-exclamation' : 'fa-scale-balanced'}"></i> Saldo da linha ${(poIndexValido ? p.po_index : p.linha_po_vinculada) + 1} do pedido (total <strong>${Number(poVinculada.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>): antes desta linha do XML restava <strong>${Number(p.po_saldo_antes || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong> · depois desta linha resta <strong>${Number(p.po_saldo_depois || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>${saldoNegativo ? ' — SALDO INSUFICIENTE: esta linha do pedido não cobre a quantidade vinculada, confira se é a linha certa' : ''}</div>` : '';
+            let saldoClasse = 'vinc-saldo-info';
+            let saldoConteudo = '';
+            if (poVinculada) {
+                const poLinhaNum = (poIndexValido ? p.po_index : p.linha_po_vinculada) + 1;
+                const info = montarSaldoInfoTexto({ poLinhaNum, poQtdTotal: poVinculada.qtd, saldoAntes: p.po_saldo_antes, saldoDepois: p.po_saldo_depois, previa: false });
+                if (info.negativo) saldoClasse += ' negativo';
+                saldoConteudo = info.html;
+            }
+            const saldoInfoHtml = `<div class="${saldoClasse}" id="saldo-info-${idx}">${saldoConteudo}</div>`;
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1927,7 +1976,7 @@
                     <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
                     <div class="vinculacao-select-wrap">
                         <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
-                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" ${selectDisabled}>
+                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarSaldoLive(${idx})" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
                         </select>
