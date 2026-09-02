@@ -82,9 +82,10 @@
     .vinculacao-linha-xml-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #0f172a; }
     .vinculacao-linha-xml-dados div { display: flex; justify-content: space-between; }
     .vinculacao-linha-xml-dados strong { font-weight: 700; color: #2563eb; }
-    .vinculacao-select-wrap { margin: 12px 0; padding: 14px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; }
-    .vinculacao-select-label { display: block; font-size: 13px; font-weight: 800; color: #6d28d9; margin-bottom: 10px; text-transform: uppercase; }
-    .vinculacao-select { width: 100%; padding: 14px 16px; border: 2px solid #a78bfa; border-radius: 8px; font-size: 15px; font-weight: 700; font-family: inherit; background: #fff; color: #1f2937; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12); }
+    .vinculacao-select-wrap { margin: 14px 0; padding: 16px; background: linear-gradient(135deg, #f5f3ff, #ede9fe); border: 3px solid #7c3aed; border-radius: 12px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.2); }
+    .vinculacao-select-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: #5b21b6; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .03em; }
+    .vinculacao-select { width: 100%; padding: 16px 18px; border: 2px solid #7c3aed; border-radius: 10px; font-size: 16px; font-weight: 800; font-family: inherit; background: #fff; color: #1f2937; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 10px rgba(124, 58, 237, 0.18); }
+    .vinculacao-select:focus { outline: none; box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.28); }
     .vinculacao-select:hover { border-color: #2563eb; }
     .vinculacao-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
     .vinculacao-select:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; border-color: #cbd5e1; }
@@ -1874,6 +1875,14 @@
         return { negativo, html };
     }
 
+    function montarUsoOutrasNfsTexto(po) {
+        const uso = po && Array.isArray(po.uso_outras_nfs) ? po.uso_outras_nfs : [];
+        if (!uso.length) return '';
+        const partes = uso.map((u) => `NF ${u.numero_nota} (${Number(u.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ');
+        const total = Number(po.uso_outras_nfs_total || 0).toLocaleString('pt-BR', {maximumFractionDigits:2});
+        return `<div class="vinc-uso-outras-nfs"><i class="fas fa-clock-rotate-left"></i> Esta linha do pedido já foi usada por outra(s) NF(s) neste sistema: ${partes} = ${total} já contabilizado(s)</div>`;
+    }
+
     function atualizarSaldoLive(idx) {
         const pares = window.paresVinculacao || [];
         const linhasPo = window.linhasPoVinculacao || [];
@@ -1881,17 +1890,20 @@
         const select = document.getElementById(`select_${idx}`);
         const saldoEl = document.getElementById(`saldo-info-${idx}`);
         const hintEl = document.getElementById(`auto-hint-${idx}`);
+        const usoEl = document.getElementById(`uso-outras-nfs-${idx}`);
         if (!p || !select || !saldoEl) return;
         if (hintEl) hintEl.innerHTML = '';
         const valorSel = String(select.value || '').trim();
         if (valorSel === '') {
             saldoEl.className = 'vinc-saldo-info';
             saldoEl.innerHTML = '';
+            if (usoEl) usoEl.innerHTML = '';
             return;
         }
         const novoPoIndex = parseInt(valorSel, 10);
         const po = linhasPo[novoPoIndex];
         if (!po) return;
+        if (usoEl) usoEl.innerHTML = montarUsoOutrasNfsTexto(po);
         const minhaQtd = Number(p.nf_qtd_kg ?? p.nf_qtd ?? 0);
         // Soma o que as OUTRAS linhas do XML (pelo ultimo estado conhecido do
         // servidor) ja apontam pra essa mesma linha do pedido - previa best-effort
@@ -1906,6 +1918,7 @@
         saldoEl.className = `vinc-saldo-info${info.negativo ? ' negativo' : ''}`;
         saldoEl.innerHTML = info.html;
     }
+
 
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
@@ -1962,10 +1975,10 @@
                 : '';
             // Diagnostico: se essa linha do pedido ja foi usada por OUTRA NF no
             // sistema, mostra explicitamente (explica saldo insuficiente mesmo
-            // sem nenhum vinculo duplicado dentro desta NF).
-            const usoOutrasNfsHtml = (Array.isArray(p.po_uso_outras_nfs) && p.po_uso_outras_nfs.length)
-                ? `<div class="vinc-uso-outras-nfs"><i class="fas fa-clock-rotate-left"></i> Esta linha do pedido já foi usada por outra(s) NF(s) neste sistema: ${p.po_uso_outras_nfs.map((u) => `NF ${u.numero_nota} (${Number(u.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ')} = ${Number(p.po_uso_outras_nfs_total || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} já contabilizado(s)</div>`
-                : '';
+            // sem nenhum vinculo duplicado dentro desta NF). Le direto da linha
+            // do PEDIDO (linhasPo[poIndex]), nao do par, pra dar pra atualizar ao
+            // vivo quando o usuario troca a linha no select.
+            const usoOutrasNfsHtml = `<div id="uso-outras-nfs-${idx}">${montarUsoOutrasNfsTexto(poVinculada)}</div>`;
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1993,7 +2006,7 @@
                     <div class="vinc-link-arrow"><i class="fas fa-arrow-down"></i>&nbsp;vincular com&nbsp;<i class="fas fa-arrow-down"></i></div>
                     <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
                     <div class="vinculacao-select-wrap">
-                        <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
+                        <label class="vinculacao-select-label"><i class="fas fa-hand-pointer"></i> Selecione a linha do pedido correspondente a esta linha do XML</label>
                         <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarSaldoLive(${idx})" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
