@@ -126,6 +126,8 @@
     .vinc-section-tag.tag-po { background: #ede9fe; color: #6d28d9; }
     .vinc-link-arrow { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 12px; color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
     .vinc-link-arrow::before, .vinc-link-arrow::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
+    .vinc-saldo-info { margin-top: 8px; padding: 8px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; font-size: 11px; color: #0c4a6e; }
+    .vinc-saldo-info strong { color: #0369a1; }
     .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
@@ -308,6 +310,8 @@
     [data-theme="escuro"] .vinc-section-tag.tag-po { background: rgba(167,139,250,.18); color: #c4b5fd; }
     [data-theme="escuro"] .vinc-link-arrow { color: var(--rec-ink-500); }
     [data-theme="escuro"] .vinc-link-arrow::before, [data-theme="escuro"] .vinc-link-arrow::after { background: var(--rec-border); }
+    [data-theme="escuro"] .vinc-saldo-info { background: rgba(59,147,245,.10); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .vinc-saldo-info strong { color: #7dc4ff; }
     [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
     [data-theme="escuro"] .msg.ok { background: rgba(34,197,94,.12); color: #86efac; border-color: rgba(34,197,94,.30); }
@@ -1844,8 +1848,11 @@
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
-        const linhasPerfeitasReservadas = new Set(
-            pares.filter((px) => Number.isInteger(px.po_index) && px.po_index >= 0 && px.qtd_ok && px.valor_ok).map((px) => Number(px.po_index))
+        // Linhas do pedido com saldo zerado (ou negativo, se algo divergir) somem
+        // das opções de OUTRAS linhas do XML - só continuam visíveis pra quem já
+        // está vinculado a elas, senão o usuário fica escolhendo saldo que não existe.
+        const linhasEsgotadas = new Set(
+            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].saldo_restante) <= 0.0001)
         );
         const container = document.getElementById('vinculacoesContainer');
         container.innerHTML = pares.map((p, idx) => {
@@ -1854,7 +1861,7 @@
             const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
             const poSelecionada = matchPerfeito ? null : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
             const listaPoOptions = linhasPo.map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
-                .filter(({ idxPoOriginal }) => !linhasPerfeitasReservadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
+                .filter(({ idxPoOriginal }) => !linhasEsgotadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
                 .map(({ po, idxPoOriginal }) => {
                     const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
                     const codigoMaterial = (po.codigo_material || '').trim();
@@ -1863,7 +1870,9 @@
                     const pedidoTxt = pedidoPo ? `Pedido: ${pedidoPo} | ` : '';
                     const descricaoTxt = descricaoMaterial ? ` - ${descricaoMaterial}` : '';
                     const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
-                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                    const saldoPo = Number(po.saldo_restante);
+                    const saldoTxt = Number.isFinite(saldoPo) ? ` | Saldo disp.: ${saldoPo.toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}` : '';
+                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
                 }).join('');
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
@@ -1873,6 +1882,8 @@
                     : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>');
             const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
                 ? `<div class="vinculacao-auto-hint">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
+            const poVinculada = poIndexValido ? linhasPo[p.po_index] : (linhaManualValida ? linhasPo[p.linha_po_vinculada] : null);
+            const saldoInfoHtml = poVinculada ? `<div class="vinc-saldo-info"><i class="fas fa-scale-balanced"></i> Saldo da linha ${(poIndexValido ? p.po_index : p.linha_po_vinculada) + 1} do pedido (total <strong>${Number(poVinculada.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>): antes desta linha do XML restava <strong>${Number(p.po_saldo_antes || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong> · depois desta linha resta <strong>${Number(p.po_saldo_depois || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>` : '';
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1905,6 +1916,7 @@
                             ${listaPoOptions}
                         </select>
                         ${statusHtml}
+                        ${saldoInfoHtml}
                         ${detalheVinculoAuto}
                         ${editBtn}
                     </div>

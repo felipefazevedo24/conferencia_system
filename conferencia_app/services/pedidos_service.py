@@ -1033,7 +1033,39 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         atribuicoes[i] = linha_po_vinculada
         po_usadas.add(linha_po_vinculada)
 
-    # 2) Match automático 1-para-1 pelo melhor score (sem duplicar linha PO).
+    # 2) Rateio AUTOMÁTICO por código de material: quando 2+ linhas do XML sem
+    # vínculo manual têm o MESMO código de material e esse código corresponde a
+    # UMA ÚNICA linha do pedido (ainda livre), o sync já tenta distribuir/ratear
+    # o saldo dessa linha do PO entre elas, em vez de deixar pra vinculação manual.
+    codigo_para_po: dict[str, list[int]] = {}
+    for j, po in enumerate(linhas_po):
+        if j in po_usadas:
+            continue
+        codigo_po_norm = _normalizar_codigo_material(po.get("codigo_material"))
+        if codigo_po_norm:
+            codigo_para_po.setdefault(codigo_po_norm, []).append(j)
+
+    codigo_para_nf: dict[str, list[int]] = {}
+    for i, nf in enumerate(itens_nf):
+        if atribuicoes[i] is not None:
+            continue
+        codigo_nf_norm = _normalizar_codigo_material(nf.get("codigo"))
+        if codigo_nf_norm:
+            codigo_para_nf.setdefault(codigo_nf_norm, []).append(i)
+
+    for codigo_norm, indices_nf in codigo_para_nf.items():
+        candidatos_po = codigo_para_po.get(codigo_norm) or []
+        # Só distribui automaticamente quando o código bate com uma linha ÚNICA
+        # do pedido; se houver mais de uma linha do PO com o mesmo código, a
+        # correspondência fica ambígua e é resolvida no matching por score/manual.
+        if len(candidatos_po) != 1:
+            continue
+        j = candidatos_po[0]
+        for i in indices_nf:
+            atribuicoes[i] = j
+        po_usadas.add(j)
+
+    # 3) Match automático 1-para-1 pelo melhor score (sem duplicar linha PO).
     candidatos = []
     for i, nf in enumerate(itens_nf):
         if atribuicoes[i] is not None:
@@ -1111,6 +1143,21 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             mets[i]["rateio_po"] = True
             mets[i]["rateio_soma_nf_qtd"] = soma_nf_qtd
 
+    # Saldo restante por linha do PO nesta NF: soma o que já foi atribuído a cada
+    # linha (considerando a conversão aplicada) e calcula o que ainda sobra, de
+    # forma PROGRESSIVA (linha a linha, na ordem do XML) - ex.: "OC tem 50, a
+    # linha 1 usa 20 (resta 30), a linha 2 usa 10 (resta 20)". É o que permite
+    # esconder da vinculação as linhas do pedido já esgotadas (saldo 0).
+    uso_por_po: dict[int, dict] = {}
+    for po_index, indices in grupos_po.items():
+        po_qtd_total = float(linhas_po[po_index].get("qtd") or 0) if po_index < len(linhas_po) else 0.0
+        acumulado = 0.0
+        for i in indices:
+            acumulado += mets[i]["nf_qtd"]
+            mets[i]["po_saldo_antes"] = round(po_qtd_total - (acumulado - mets[i]["nf_qtd"]), 6)
+            mets[i]["po_saldo_depois"] = round(po_qtd_total - acumulado, 6)
+        uso_por_po[po_index] = {"usado": round(acumulado, 6), "saldo_restante": round(po_qtd_total - acumulado, 6)}
+
     pares = []
     for i, nf in enumerate(itens_nf):
         po_index = atribuicoes[i]
@@ -1147,6 +1194,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "ok": met["ok"],
                 "rateio_po": bool(met.get("rateio_po")),
                 "rateio_soma_nf_qtd": met.get("rateio_soma_nf_qtd"),
+                "po_saldo_antes": met.get("po_saldo_antes"),
+                "po_saldo_depois": met.get("po_saldo_depois"),
             }
         )
 
@@ -1160,6 +1209,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "linha": idx + 1,
                 "pedido_compra": po.get("pedido_compra") or "",
                 "qtd": po.get("qtd"),
+                "qtd_utilizada": uso_por_po.get(idx, {}).get("usado", 0.0),
+                "saldo_restante": uso_por_po.get(idx, {}).get("saldo_restante", po.get("qtd")),
                 "valor_unit": po.get("valor_unit"),
                 "codigo_material": po.get("codigo_material") or "",
                 "descricao_material": po.get("descricao_material") or "",
