@@ -1917,7 +1917,6 @@
             const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
             const poSelecionada = matchPerfeito ? null : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
             const listaPoOptions = linhasPo.map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
-                .filter(({ idxPoOriginal }) => !linhasEsgotadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
                 .map(({ po, idxPoOriginal }) => {
                     const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
                     const codigoMaterial = (po.codigo_material || '').trim();
@@ -1927,8 +1926,10 @@
                     const descricaoTxt = descricaoMaterial ? ` - ${descricaoMaterial}` : '';
                     const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
                     const saldoPo = Number(po.saldo_restante);
+                    const esgotado = linhasEsgotadas.has(idxPoOriginal) && poSelecionada !== idxPoOriginal;
                     const saldoTxt = Number.isFinite(saldoPo) ? ` | Saldo disp.: ${saldoPo.toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}` : '';
-                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                    const prefixo = esgotado ? '[SEM SALDO] ' : '';
+                    return `<option value="${idxPoOriginal}" ${selected}>${prefixo}${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
                 }).join('');
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
