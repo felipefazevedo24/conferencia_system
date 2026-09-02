@@ -82,13 +82,18 @@
     .vinculacao-linha-xml-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #0f172a; }
     .vinculacao-linha-xml-dados div { display: flex; justify-content: space-between; }
     .vinculacao-linha-xml-dados strong { font-weight: 700; color: #2563eb; }
-    .vinculacao-select-wrap { margin: 14px 0; padding: 16px; background: linear-gradient(135deg, #f5f3ff, #ede9fe); border: 3px solid #7c3aed; border-radius: 12px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.2); }
-    .vinculacao-select-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: #5b21b6; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .03em; }
-    .vinculacao-select { width: 100%; padding: 16px 18px; border: 2px solid #7c3aed; border-radius: 10px; font-size: 16px; font-weight: 800; font-family: inherit; background: #fff; color: #1f2937; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 10px rgba(124, 58, 237, 0.18); }
-    .vinculacao-select:focus { outline: none; box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.28); }
+    .vinculacao-select-wrap { margin: 12px 0; }
+    .vinculacao-select-label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px; text-transform: uppercase; }
+    .vinculacao-select { width: 100%; padding: 11px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; cursor: pointer; transition: all 0.2s; }
     .vinculacao-select:hover { border-color: #2563eb; }
     .vinculacao-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
     .vinculacao-select:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; border-color: #cbd5e1; }
+    .vinc-po-resumo { margin: 10px 0 14px; padding: 14px 16px; background: #f5f3ff; border: 1px solid #ddd6fe; border-left: 5px solid #7c3aed; border-radius: 8px; }
+    .vinc-po-resumo-titulo { font-size: 11px; font-weight: 800; color: #6d28d9; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .vinc-po-resumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px; color: #1f2937; }
+    .vinc-po-resumo-grid div { display: flex; justify-content: space-between; gap: 8px; }
+    .vinc-po-resumo-grid strong { font-weight: 800; color: #5b21b6; text-align: right; }
+    .vinc-po-resumo-vazio { font-size: 12px; color: #64748b; font-style: italic; }
     .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
     .vinc-status.ok { color: #166534; }
     .vinc-status.err { color: #991b1b; }
@@ -308,8 +313,11 @@
     [data-theme="escuro"] .conversao-select { background: var(--rec-surface); color: var(--rec-ink-900); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinculacao-auto-hint { color: #86efac; }
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
-    [data-theme="escuro"] .vinculacao-select-wrap { background: rgba(167,139,250,.10); border-color: var(--rec-border); }
-    [data-theme="escuro"] .vinculacao-select-label { color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-po-resumo { background: rgba(124,58,237,.10); border-color: var(--rec-border); border-left-color: #a78bfa; }
+    [data-theme="escuro"] .vinc-po-resumo-titulo { color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-po-resumo-grid { color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinc-po-resumo-grid strong { color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-po-resumo-vazio { color: var(--rec-ink-500); }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
@@ -1875,6 +1883,19 @@
         return { negativo, html };
     }
 
+    function montarPoResumoTexto(po) {
+        if (!po) return '<div class="vinc-po-resumo-vazio">Nenhuma linha do pedido selecionada ainda.</div>';
+        const saldo = po.saldo_restante !== undefined && po.saldo_restante !== null ? po.saldo_restante : po.qtd;
+        return `<div class="vinc-po-resumo-titulo"><i class="fas fa-file-contract"></i> Dados desta linha do pedido</div>
+            <div class="vinc-po-resumo-grid">
+                <div><span style="color:#64748b;">Código:</span> <strong>${po.codigo_material || '-'}</strong></div>
+                <div><span style="color:#64748b;">Descrição:</span> <strong>${po.descricao_material || '-'}</strong></div>
+                <div><span style="color:#64748b;">Quantidade do pedido:</span> <strong>${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span style="color:#64748b;">Saldo disponível:</span> <strong>${Number(saldo || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span style="color:#64748b;">Valor unit.:</span> <strong>R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+            </div>`;
+    }
+
     function montarUsoOutrasNfsTexto(po) {
         const uso = po && Array.isArray(po.uso_outras_nfs) ? po.uso_outras_nfs : [];
         if (!uso.length) return '';
@@ -1891,6 +1912,7 @@
         const saldoEl = document.getElementById(`saldo-info-${idx}`);
         const hintEl = document.getElementById(`auto-hint-${idx}`);
         const usoEl = document.getElementById(`uso-outras-nfs-${idx}`);
+        const resumoEl = document.getElementById(`po-resumo-${idx}`);
         if (!p || !select || !saldoEl) return;
         if (hintEl) hintEl.innerHTML = '';
         const valorSel = String(select.value || '').trim();
@@ -1898,12 +1920,14 @@
             saldoEl.className = 'vinc-saldo-info';
             saldoEl.innerHTML = '';
             if (usoEl) usoEl.innerHTML = '';
+            if (resumoEl) resumoEl.innerHTML = montarPoResumoTexto(null);
             return;
         }
         const novoPoIndex = parseInt(valorSel, 10);
         const po = linhasPo[novoPoIndex];
         if (!po) return;
         if (usoEl) usoEl.innerHTML = montarUsoOutrasNfsTexto(po);
+        if (resumoEl) resumoEl.innerHTML = montarPoResumoTexto(po);
         const minhaQtd = Number(p.nf_qtd_kg ?? p.nf_qtd ?? 0);
         // Soma o que as OUTRAS linhas do XML (pelo ultimo estado conhecido do
         // servidor) ja apontam pra essa mesma linha do pedido - previa best-effort
@@ -1923,11 +1947,13 @@
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
-        // Linhas do pedido com saldo zerado (ou negativo, se algo divergir) somem
-        // das opções de OUTRAS linhas do XML - só continuam visíveis pra quem já
-        // está vinculado a elas, senão o usuário fica escolhendo saldo que não existe.
+        // Esconde SO as linhas do pedido sem NENHUMA quantidade cadastrada no ERP
+        // (po.qtd <= 0 - fonte oficial, nao calculada por nos). NAO usa mais
+        // saldo_restante aqui: esse valor e calculado DENTRO desta NF (pode ficar
+        // negativo por engano de vinculo) e escondia linhas que na verdade tinham
+        // saldo de verdade no pedido.
         const linhasEsgotadas = new Set(
-            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].saldo_restante) <= 0.0001)
+            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].qtd) <= 0.0001)
         );
         const container = document.getElementById('vinculacoesContainer');
         container.innerHTML = pares.map((p, idx) => {
@@ -1936,6 +1962,7 @@
             const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
             const poSelecionada = matchPerfeito ? null : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
             const listaPoOptions = linhasPo.map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
+                .filter(({ idxPoOriginal }) => !linhasEsgotadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
                 .map(({ po, idxPoOriginal }) => {
                     const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
                     const codigoMaterial = (po.codigo_material || '').trim();
@@ -1945,10 +1972,8 @@
                     const descricaoTxt = descricaoMaterial ? ` - ${descricaoMaterial}` : '';
                     const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
                     const saldoPo = Number(po.saldo_restante);
-                    const esgotado = linhasEsgotadas.has(idxPoOriginal) && poSelecionada !== idxPoOriginal;
                     const saldoTxt = Number.isFinite(saldoPo) ? ` | Saldo disp.: ${saldoPo.toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}` : '';
-                    const prefixo = esgotado ? '[SEM SALDO] ' : '';
-                    return `<option value="${idxPoOriginal}" ${selected}>${prefixo}${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
                 }).join('');
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
@@ -2005,8 +2030,9 @@
                     </div>
                     <div class="vinc-link-arrow"><i class="fas fa-arrow-down"></i>&nbsp;vincular com&nbsp;<i class="fas fa-arrow-down"></i></div>
                     <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
+                    <div class="vinc-po-resumo" id="po-resumo-${idx}">${montarPoResumoTexto(poVinculada)}</div>
                     <div class="vinculacao-select-wrap">
-                        <label class="vinculacao-select-label"><i class="fas fa-hand-pointer"></i> Selecione a linha do pedido correspondente a esta linha do XML</label>
+                        <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
                         <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarSaldoLive(${idx})" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
@@ -2021,6 +2047,16 @@
                 </div>`;
         }).join('');
         document.getElementById('vinculacaoOverlay').classList.add('active');
+        // Validacao explicita: se alguma linha do pedido ficou com saldo negativo
+        // (foi vinculada acima do que ela tem disponivel), AVISA aqui na hora, em
+        // vez de deixar so o numero vermelho escondido dentro do card.
+        const linhasNegativas = pares.filter((p) => Number(p.po_saldo_depois) < -0.0001);
+        if (linhasNegativas.length) {
+            const detalhe = linhasNegativas
+                .map((p) => `Linha ${p.linha} do XML \u2192 Linha ${(p.po_index ?? p.linha_po_vinculada) + 1} do pedido (saldo ficaria em ${Number(p.po_saldo_depois).toLocaleString('pt-BR', {maximumFractionDigits:2})})`)
+                .join('\n');
+            vincAviso(`Atenção: com os vínculos atuais, ${linhasNegativas.length} linha(s) do pedido ficariam com saldo NEGATIVO (vinculado mais do que o pedido tem disponível):\n${detalhe}\nConfira se são as linhas certas antes de salvar.`, 'err');
+        }
     }
 
     function habilitarEdicaoVinculo(idx) {
