@@ -94,6 +94,7 @@
     .vinc-po-resumo-grid div { display: flex; justify-content: space-between; gap: 8px; }
     .vinc-po-resumo-grid strong { font-weight: 800; color: #5b21b6; text-align: right; }
     .vinc-po-resumo-vazio { font-size: 12px; color: #64748b; font-style: italic; }
+    .vinc-po-resumo-nota { margin-top: 10px; padding: 8px 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
     .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
     .vinc-status.ok { color: #166534; }
     .vinc-status.err { color: #991b1b; }
@@ -318,6 +319,7 @@
     [data-theme="escuro"] .vinc-po-resumo-grid { color: var(--rec-ink-900); }
     [data-theme="escuro"] .vinc-po-resumo-grid strong { color: #c4b5fd; }
     [data-theme="escuro"] .vinc-po-resumo-vazio { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-po-resumo-nota { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.35); color: #fcd34d; }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
@@ -1931,6 +1933,10 @@
     function montarPoResumoTexto(po) {
         if (!po) return '<div class="vinc-po-resumo-vazio">Nenhuma linha do pedido selecionada ainda.</div>';
         const saldo = po.saldo_restante !== undefined && po.saldo_restante !== null ? po.saldo_restante : po.qtd;
+        const semSaldo = Number(saldo || 0) <= 0.0001;
+        const notaSaldo = semSaldo
+            ? `<div class="vinc-po-resumo-nota"><i class="fas fa-circle-info"></i> O saldo vem do ERP (quantidade pedida − já recebida no ERP). Se esta OC já foi recebida/lançada no ERP, apagar a NF aqui no Sync <strong>não</strong> devolve o saldo — verifique a quantidade entregue da OC direto no ERP/GRV.</div>`
+            : '';
         return `<div class="vinc-po-resumo-titulo"><i class="fas fa-file-contract"></i> Dados desta linha do pedido</div>
             <div class="vinc-po-resumo-grid">
                 <div><span style="color:#64748b;">Código:</span> <strong>${po.codigo_material || '-'}</strong></div>
@@ -1938,7 +1944,7 @@
                 <div><span style="color:#64748b;">Quantidade do pedido:</span> <strong>${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
                 <div><span style="color:#64748b;">Saldo disponível:</span> <strong>${Number(saldo || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
                 <div><span style="color:#64748b;">Valor unit.:</span> <strong>R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
-            </div>`;
+            </div>${notaSaldo}`;
     }
 
     function montarUsoOutrasNfsTexto(po) {
@@ -2061,8 +2067,8 @@
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
-                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
-                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd_original ?? p.nf_qtd ?? 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
+                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit_original ?? p.nf_valor_unit ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
                             ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span style="color:#64748b;">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
                         </div>
                         <div class="vinc-conversao-wrap">
