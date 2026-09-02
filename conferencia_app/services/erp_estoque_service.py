@@ -111,6 +111,10 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "qtde_reservada": 0.0,
             "item": item.get("item") or "",
             "unidade": item.get("unidade") or "",
+            "familia": item.get("familia") or "",
+            "grupo": item.get("grupo") or "",
+            "estoque_minimo": float(item.get("estoque_minimo") or 0),
+            "lote_economico": float(item.get("lote_economico") or 0),
             "localizacoes": [],
             "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })
@@ -207,6 +211,80 @@ def buscar_consumo_kardex_grv(
     _KARDEX_CACHE["dados"] = dados_cache
     _KARDEX_CACHE["expira_em"] = agora + _KARDEX_CACHE_TTL_SEGUNDOS
     return resultado
+
+
+def buscar_reservas_produto_acabado_grv(
+    codigos: list[str],
+    empresa: int = 1,
+) -> dict[str, list[dict[str, Any]]]:
+    codigos_norm = []
+    vistos = set()
+    for codigo in codigos or []:
+        chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            codigos_norm.append(chave)
+    if not codigos_norm:
+        return {}
+
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar reservas no GRV.")
+
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/reservas-produto-acabado",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigos": codigos_norm},
+        timeout=cfg["timeout"],
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de reservas."))
+
+    por_codigo: dict[str, list[dict[str, Any]]] = {}
+    for row in data.get("reservas") or []:
+        codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
+        if codigo:
+            por_codigo.setdefault(codigo, []).append(row)
+    return por_codigo
+
+
+def buscar_ordens_compra_abertas_grv(
+    codigos: list[str],
+    empresa: int = 1,
+) -> dict[str, list[dict[str, Any]]]:
+    codigos_norm = []
+    vistos = set()
+    for codigo in codigos or []:
+        chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            codigos_norm.append(chave)
+    if not codigos_norm:
+        return {}
+
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar OCs abertas no GRV.")
+
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/ordens-compra-abertas",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigos": codigos_norm},
+        timeout=cfg["timeout"],
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de OCs abertas."))
+
+    por_codigo: dict[str, list[dict[str, Any]]] = {}
+    for row in data.get("ordens_compra") or []:
+        codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
+        if codigo:
+            por_codigo.setdefault(codigo, []).append(row)
+    return por_codigo
 
 
 class LocalizacaoEstoqueNaoEncontrada(Exception):

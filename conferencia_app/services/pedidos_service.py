@@ -882,9 +882,42 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             f = 1.0
         return f if f > 0 else 1.0
 
-    def _fatores_candidatos(nf_item: dict, po_item: dict) -> list[float]:
+    # Fator fixo unidade-de-peso -> KG. Pedidos de compra de chapa são sempre em
+    # KG; isso serve só de REFERÊNCIA pro conferente (independe do "melhor
+    # fator" adivinhado pelo matching), então nunca fica "escondido" atrás de
+    # uma conversão errada.
+    _FATOR_PESO_PARA_KG = {"T": 1000.0, "TON": 1000.0, "TONELADA": 1000.0, "KG": 1.0, "KGM": 1.0, "G": 0.001, "GR": 0.001, "GRAMA": 0.001}
+
+    def _qtd_em_kg(nf_item: dict):
+        unidade = str(nf_item.get("unidade_comercial") or "").strip().upper()
+        fator_peso = _FATOR_PESO_PARA_KG.get(unidade)
+        if fator_peso is None:
+            return None
+        qtd_original = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
+        return round(qtd_original * fator_peso, 6)
+
+    def _fatores_candidatos(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> list[float]:
         fator_manual = _normalizar_fator(nf_item.get("conversao_fator"))
         if bool(nf_item.get("conversao_manual")):
+            return [fator_manual]
+
+        # Unidade de PESO (T/KG/G): pedido de compra de chapa é sempre em KG, e o
+        # fator de conversão é FIXO pela unidade do XML (1T=1000KG) - NUNCA
+        # "adivinhado" tentando bater com o saldo do pedido. Do contrário o
+        # algoritmo inventa fatores sem sentido (tipo x5.922) só pra forçar a
+        # conta fechar, escondendo divergência real e mostrando quantidade absurda.
+        unidade_nf = str(nf_item.get("unidade_comercial") or "").strip().upper()
+        fator_peso = _FATOR_PESO_PARA_KG.get(unidade_nf)
+        if fator_peso is not None:
+            return [fator_peso]
+
+        po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
+        # Quando a linha do pedido não tem saldo/quantidade cadastrada (0 ou
+        # ausente), o "melhor" candidato por menor diferença SEMPRE vira o menor
+        # fator disponível (aproxima de zero) - isso "encolhe" a quantidade real
+        # da NF pra um valor sem sentido. Sem uma quantidade real do PO pra mirar,
+        # não há como inferir fator por tentativa; mantém a quantidade original.
+        if po_qtd <= 0:
             return [fator_manual]
 
         candidatos = {
@@ -900,15 +933,18 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         }
 
         nf_qtd_base = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
-        po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
-        if nf_qtd_base > 0 and po_qtd > 0:
+        # O candidato "ratio direto" (po_qtd / nf_qtd) força a linha da NF a bater
+        # sozinha com o saldo TOTAL da linha do PO. Isso é indevido quando a linha
+        # está em RATEIO (2+ linhas da NF vinculadas à mesma linha do pedido), pois
+        # cada linha isolada não precisa (nem deve) fechar sozinha com o pedido.
+        if permitir_ratio_direto and nf_qtd_base > 0 and po_qtd > 0:
             ratio = po_qtd / nf_qtd_base
             if 0.0001 <= ratio <= 10000:
                 candidatos.add(round(ratio, 6))
 
         return sorted(candidatos)
 
-    def _metricas_match(nf_item: dict, po_item: dict) -> dict:
+    def _metricas_match(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> dict:
         po_qtd = po_item["qtd"] if po_item else None
         po_valor_unit = po_item["valor_unit"] if po_item else None
         po_pedido = po_item.get("pedido_compra") if po_item else ""
@@ -922,7 +958,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         codigo_ok = bool(nf_codigo and po_codigo_norm and nf_codigo == po_codigo_norm)
 
         melhor = None
-        fatores = _fatores_candidatos(nf_item, po_item)
+        fatores = _fatores_candidatos(nf_item, po_item, permitir_ratio_direto=permitir_ratio_direto)
         for fator in fatores:
             nf_qtd = nf_qtd_base * fator
             nf_valor_unit = (nf_valor_total / nf_qtd) if nf_qtd > 0 else 0.0
@@ -1016,19 +1052,52 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     atribuicoes = [None] * total_nf
     po_usadas = set()
 
-    # 1) Respeita vínculo manual quando válido e ainda não utilizado.
+    # 1) Respeita vínculo manual quando válido. Mais de uma linha do XML pode
+    # apontar para a MESMA linha do pedido: é o caso de rateio/divisão de saldo,
+    # quando o fornecedor detalha em várias linhas da NF o que no pedido é uma
+    # única linha (ex.: várias linhas de chapas para 1 linha de OC).
     for i, nf in enumerate(itens_nf):
         linha_po_vinculada = nf.get("linha_po_vinculada")
         if not isinstance(linha_po_vinculada, int) or linha_po_vinculada < 0:
             continue
         if linha_po_vinculada >= len(linhas_po):
             continue
-        if linha_po_vinculada in po_usadas:
-            continue
         atribuicoes[i] = linha_po_vinculada
         po_usadas.add(linha_po_vinculada)
 
-    # 2) Match automático 1-para-1 pelo melhor score (sem duplicar linha PO).
+    # 2) Rateio AUTOMÁTICO por código de material: quando 2+ linhas do XML sem
+    # vínculo manual têm o MESMO código de material e esse código corresponde a
+    # UMA ÚNICA linha do pedido (ainda livre), o sync já tenta distribuir/ratear
+    # o saldo dessa linha do PO entre elas, em vez de deixar pra vinculação manual.
+    codigo_para_po: dict[str, list[int]] = {}
+    for j, po in enumerate(linhas_po):
+        if j in po_usadas:
+            continue
+        codigo_po_norm = _normalizar_codigo_material(po.get("codigo_material"))
+        if codigo_po_norm:
+            codigo_para_po.setdefault(codigo_po_norm, []).append(j)
+
+    codigo_para_nf: dict[str, list[int]] = {}
+    for i, nf in enumerate(itens_nf):
+        if atribuicoes[i] is not None:
+            continue
+        codigo_nf_norm = _normalizar_codigo_material(nf.get("codigo"))
+        if codigo_nf_norm:
+            codigo_para_nf.setdefault(codigo_nf_norm, []).append(i)
+
+    for codigo_norm, indices_nf in codigo_para_nf.items():
+        candidatos_po = codigo_para_po.get(codigo_norm) or []
+        # Só distribui automaticamente quando o código bate com uma linha ÚNICA
+        # do pedido; se houver mais de uma linha do PO com o mesmo código, a
+        # correspondência fica ambígua e é resolvida no matching por score/manual.
+        if len(candidatos_po) != 1:
+            continue
+        j = candidatos_po[0]
+        for i in indices_nf:
+            atribuicoes[i] = j
+        po_usadas.add(j)
+
+    # 3) Match automático 1-para-1 pelo melhor score (sem duplicar linha PO).
     candidatos = []
     for i, nf in enumerate(itens_nf):
         if atribuicoes[i] is not None:
@@ -1058,13 +1127,23 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             atribuicoes[i] = i
             po_usadas.add(i)
 
-    pares = []
+    # Rateio de saldo: quando 2+ linhas do XML apontam (manualmente) para a
+    # MESMA linha do pedido, a quantidade só "bate" quando a SOMA das linhas
+    # vinculadas àquela linha do PO fecha com o saldo da OC. Cada linha isolada
+    # NÃO deve tentar "descobrir" um fator de conversão que a faça bater sozinha
+    # com o saldo total (isso mascararia o rateio), então essas linhas ficam de
+    # fora da heurística de ratio-direto do _fatores_candidatos.
+    grupos_po: dict[int, list[int]] = {}
+    for i, po_index in enumerate(atribuicoes):
+        if isinstance(po_index, int):
+            grupos_po.setdefault(po_index, []).append(i)
+    indices_rateio = {i for indices in grupos_po.values() if len(indices) > 1 for i in indices}
+
+    mets = []
     for i, nf in enumerate(itens_nf):
         po_index = atribuicoes[i]
         po_row = linhas_po[po_index] if isinstance(po_index, int) and po_index < len(linhas_po) else None
-        linha_po_vinculada = nf.get("linha_po_vinculada")
-        usa_vinculo_manual = isinstance(linha_po_vinculada, int) and linha_po_vinculada >= 0
-        met = _metricas_match(nf, po_row) if po_row else {
+        met = _metricas_match(nf, po_row, permitir_ratio_direto=(i not in indices_rateio)) if po_row else {
             "po_qtd": None,
             "po_valor_unit": None,
             "po_pedido": "",
@@ -1080,6 +1159,43 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             "ok": False,
             "score": 0,
         }
+        mets.append(met)
+
+    for po_index, indices in grupos_po.items():
+        if len(indices) < 2:
+            continue
+        po_qtd = mets[indices[0]]["po_qtd"]
+        soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
+        qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
+        qtd_ok_grupo = po_qtd is not None and qtd_diff < 0.0001
+        for i in indices:
+            mets[i]["qtd_ok"] = qtd_ok_grupo
+            mets[i]["qtd_diff"] = qtd_diff
+            mets[i]["ok"] = qtd_ok_grupo and mets[i]["valor_ok"]
+            mets[i]["rateio_po"] = True
+            mets[i]["rateio_soma_nf_qtd"] = soma_nf_qtd
+
+    # Saldo restante por linha do PO nesta NF: soma o que já foi atribuído a cada
+    # linha (considerando a conversão aplicada) e calcula o que ainda sobra, de
+    # forma PROGRESSIVA (linha a linha, na ordem do XML) - ex.: "OC tem 50, a
+    # linha 1 usa 20 (resta 30), a linha 2 usa 10 (resta 20)". É o que permite
+    # esconder da vinculação as linhas do pedido já esgotadas (saldo 0).
+    uso_por_po: dict[int, dict] = {}
+    for po_index, indices in grupos_po.items():
+        po_qtd_total = float(linhas_po[po_index].get("qtd") or 0) if po_index < len(linhas_po) else 0.0
+        acumulado = 0.0
+        for i in indices:
+            acumulado += mets[i]["nf_qtd"]
+            mets[i]["po_saldo_antes"] = round(po_qtd_total - (acumulado - mets[i]["nf_qtd"]), 6)
+            mets[i]["po_saldo_depois"] = round(po_qtd_total - acumulado, 6)
+        uso_por_po[po_index] = {"usado": round(acumulado, 6), "saldo_restante": round(po_qtd_total - acumulado, 6)}
+
+    pares = []
+    for i, nf in enumerate(itens_nf):
+        po_index = atribuicoes[i]
+        met = mets[i]
+        linha_po_vinculada = nf.get("linha_po_vinculada")
+        usa_vinculo_manual = isinstance(linha_po_vinculada, int) and linha_po_vinculada >= 0
 
         pares.append(
             {
@@ -1094,6 +1210,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "nf_qtd": met["nf_qtd"],
                 "nf_qtd_original": float(nf.get("qtd_original") or met["nf_qtd"] or 0),
                 "nf_unidade": nf.get("unidade_comercial") or "UN",
+                "nf_qtd_kg": _qtd_em_kg(nf),
                 "conversao_fator": float(met.get("fator_aplicado") or nf.get("conversao_fator") or 1.0),
                 "conversao_unidade": nf.get("conversao_unidade") or (nf.get("unidade_comercial") or "UN"),
                 "po_qtd": met["po_qtd"],
@@ -1108,6 +1225,10 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "valor_ok": met["valor_ok"],
                 "valor_via_total": met["valor_via_total"],
                 "ok": met["ok"],
+                "rateio_po": bool(met.get("rateio_po")),
+                "rateio_soma_nf_qtd": met.get("rateio_soma_nf_qtd"),
+                "po_saldo_antes": met.get("po_saldo_antes"),
+                "po_saldo_depois": met.get("po_saldo_depois"),
             }
         )
 
@@ -1121,6 +1242,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "linha": idx + 1,
                 "pedido_compra": po.get("pedido_compra") or "",
                 "qtd": po.get("qtd"),
+                "qtd_utilizada": uso_por_po.get(idx, {}).get("usado", 0.0),
+                "saldo_restante": uso_por_po.get(idx, {}).get("saldo_restante", po.get("qtd")),
                 "valor_unit": po.get("valor_unit"),
                 "codigo_material": po.get("codigo_material") or "",
                 "descricao_material": po.get("descricao_material") or "",

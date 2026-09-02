@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}Estoque{% endblock %}
+{% block shell_title %}Estoque{% endblock %}
+
+{% block extra_head %}
+<style>
+    .mp-wrap { display: grid; gap: 16px; }
+    .mp-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+    .mp-search { flex: 1; min-width: 280px; position: relative; }
+    .mp-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); }
+    .mp-search input { padding-left: 36px; width: 100%; }
+    .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .mp-views { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
+    .mp-view-btn { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 12px; border-radius: 7px; cursor: pointer; }
+    .mp-view-btn.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .mp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--eui-text-soft); }
+    .mp-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
+    .mp-item-main { display: grid; gap: 3px; }
+    .mp-code { font-weight: 800; color: var(--eui-text); }
+    .mp-desc { font-size: 12px; color: var(--eui-text-soft); max-width: 460px; }
+    .mp-locs { font-size: 11px; color: var(--eui-muted); }
+    .mp-num { font-weight: 800; color: var(--eui-text); white-space: nowrap; }
+    .mp-muted { color: var(--eui-muted); font-size: 12px; }
+    .mp-badge { border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+    .mp-badge.normal { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .mp-badge.atencao { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .mp-badge.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .mp-badge.sem_consumo { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .mp-badge.sem_estoque { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .mp-reservas { display: grid; gap: 8px; margin-top: 8px; min-width: 220px; }
+    .mp-reserva-resumo { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 10px; border-radius: 6px; background: var(--eui-primary-soft); color: var(--eui-text-soft); font-size: 12px; }
+    .mp-reserva-resumo strong { color: var(--eui-primary); }
+    .mp-reserva { display: grid; grid-template-columns: minmax(130px, auto) minmax(180px, 1fr) minmax(180px, 1fr); gap: 8px 18px; border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: 6px; padding: 10px 12px; background: var(--eui-surface); font-size: 12px; color: var(--eui-text-soft); }
+    .mp-reserva__quantidade { font-size: 14px; font-weight: 800; color: var(--eui-text); }
+    .mp-reserva__campo { display: grid; gap: 2px; }
+    .mp-reserva__rotulo { color: var(--eui-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+    .mp-reserva__valor { color: var(--eui-text-soft); font-weight: 700; }
+    .mp-oc-status { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--eui-border); border-radius: 6px; font-size: 12px; }
+    .mp-oc-status--open { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .mp-oc-status--none { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .mp-oc-list { display: grid; gap: 5px; margin: 8px 0 0; color: var(--eui-text-soft); }
+    .mp-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
+    .mp-expand-btn:hover { background: var(--eui-primary-soft); }
+    .mp-item-row { cursor: pointer; }
+    .mp-item-row:hover td { background: var(--eui-primary-soft); }
+    .mp-detail-row td { background: var(--eui-surface-2); padding: 14px 18px; }
+    .mp-item-details { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; color: var(--eui-text-soft); font-size: 12px; }
+    .mp-item-details strong { color: var(--eui-text); }
+    .mp-table-wrap { overflow-x: auto; }
+    @media (max-width: 820px) {
+        .mp-toolbar { align-items: stretch; }
+        .mp-actions, .mp-search { width: 100%; }
+        .mp-actions .eui-btn { flex: 1; justify-content: center; }
+        .mp-reserva { grid-template-columns: 1fr; gap: 7px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eui-scope mp-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">LOGÍSTICA · INVENTÁRIO</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-boxes-stacked"></i> Estoque</h1>
+            <p class="eui-page-header__sub">Saldos do depósito 1 no GRV, com disponibilidade, reserva, total e cobertura por consumo.</p>
+        </div>
+    </header>
+
+    <div class="eui-stats" id="mp-kpis">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens listados</span><span class="eui-stat__value" id="mp-k-itens">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos</span><span class="eui-stat__value" id="mp-k-criticos">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Monitorar</span><span class="eui-stat__value" id="mp-k-atencao">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-warehouse"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo disponível</span><span class="eui-stat__value" id="mp-k-disponivel">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div class="mp-toolbar">
+                <div class="mp-views" role="group" aria-label="Visão do estoque">
+                    <button class="mp-view-btn active" type="button" data-visao="materia_prima">Matéria-prima</button>
+                    <button class="mp-view-btn" type="button" data-visao="revenda">Material para revenda</button>
+                    <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
+                </div>
+                <div class="mp-search">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input class="eui-input" id="mp-busca" type="search" placeholder="Buscar por código, descrição ou localização...">
+                </div>
+                <div class="mp-actions">
+                    <select class="eui-select" id="mp-nivel" style="min-width:180px;">
+                        <option value="">Todos os níveis</option>
+                        <option value="critico">Crítico</option>
+                        <option value="atencao">Monitorar</option>
+                        <option value="normal">Adequado</option>
+                        <option value="sem_consumo">Sem consumo</option>
+                    </select>
+                    <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
+                    <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
+                    <button class="eui-btn eui-btn--ghost" id="mp-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
+                </div>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="mp-state" id="mp-state">Carregando estoque...</div>
+            <div class="mp-table-wrap">
+                <table class="erp-table" id="mp-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Material</th>
+                            <th>Disponível</th>
+                            <th>Cobertura</th>
+                            <th>Nível</th>
+                            <th id="mp-th-reservas" style="display:none; text-align:right;">Reservas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mp-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    let timer = null;
+    let visaoAtual = 'materia_prima';
+    let expanded = new Set();
+
+    function fmt(valor, casas = 3) {
+        return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+    }
+
+    function esc(valor) {
+        return String(valor ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function badge(item) {
+        const nivel = item.nivel || 'normal';
+        const icon = nivel === 'critico' ? 'fa-triangle-exclamation' : (nivel === 'atencao' ? 'fa-clock' : (nivel === 'sem_consumo' ? 'fa-circle-info' : 'fa-circle-check'));
+        return `<span class="mp-badge ${nivel}"><i class="fas ${icon}"></i>${item.nivel_label || '-'}</span>`;
+    }
+
+    function cobertura(item) {
+        if (!item.consumo_diario) return '<span class="mp-muted">Sem consumo no período</span>';
+        const dias = Number(item.cobertura_dias || 0);
+        return `<span class="mp-num">${Math.ceil(dias)} dia(s)</span><br><span class="mp-muted">${fmt(item.saldo_disponivel)} ÷ ${fmt(item.consumo_diario)}/dia</span>`;
+    }
+
+    function reservasHtml(item) {
+        const reservas = item.reservas || [];
+        if (!reservas.length) return '<span class="mp-muted">Sem reserva detalhada</span>';
+        return `<div class="mp-reservas">${reservas.map((r) => {
+            const os = r.os ? `OS ${esc(r.os)}${r.cod_os ? ` (${esc(r.cod_os)})` : ''}` : 'OS não localizada';
+            const orc = r.orcamento ? `Orç. ${esc(r.orcamento)}${r.versao ? '/' + esc(r.versao) : ''}` : esc(r.descricao || 'Reserva');
+            const cliente = r.cliente || 'Cliente não localizado';
+            const osCompleta = `${os}${r.titulo_os ? ' · ' + esc(r.titulo_os) : ''}`;
+            return `<div class="mp-reserva">
+                <span class="mp-reserva__quantidade">${fmt(r.quantidade)} ${esc(item.unidade || '')}</span>
+                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">Orçamento</span><span class="mp-reserva__valor">${orc}</span></span>
+                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">OS / Cliente</span><span class="mp-reserva__valor">${osCompleta}<br>${esc(cliente)}</span></span>
+            </div>`;
+        }).join('')}</div>`;
+    }
+
+    function expandCell(item) {
+        if (visaoAtual !== 'produto_acabado') return '';
+        const isOpen = expanded.has(item.codigo);
+        const totalReservas = (item.reservas || []).length;
+        return `<td style="text-align:right;"><button class="mp-expand-btn" data-codigo="${esc(item.codigo || '')}" title="${isOpen ? 'Recolher reservas' : 'Ver reservas'}"><i class="fas fa-chevron-${isOpen ? 'up' : 'down'}"></i></button><div class="mp-muted">${totalReservas} reserva(s)</div></td>`;
+    }
+
+    function detalhesItem(item) {
+        const unidade = esc(item.unidade || '');
+        return `<div class="mp-item-details">
+            <span>Disponível: <strong>${fmt(item.saldo_disponivel)} ${unidade}</strong></span>
+            <span>Reservado: <strong>${fmt(item.saldo_reservado)} ${unidade}</strong></span>
+            <span>Total: <strong>${fmt(item.saldo_total)} ${unidade}</strong></span>
+            <span>Consumo médio/dia: <strong>${fmt(item.consumo_diario)} ${unidade}</strong></span>
+            <span>Estoque mínimo: <strong>${fmt(item.estoque_minimo)} ${unidade}</strong></span>
+            <span>Lote econômico: <strong>${fmt(item.lote_economico)} ${unidade}</strong></span>
+        </div>`;
+    }
+
+    function ordensCompraHtml(item) {
+        if (!['materia_prima', 'revenda'].includes(visaoAtual) || item.nivel !== 'critico') return '';
+        const ordens = item.ordens_compra_abertas || [];
+        if (!ordens.length) {
+            return `<div class="mp-oc-status mp-oc-status--none"><strong><i class="fas fa-triangle-exclamation"></i> Sem OC em aberto</strong><br>Este material crítico ainda não possui reposição registrada.</div>`;
+        }
+        const pendente = ordens.reduce((total, ordem) => total + Number(ordem.quantidade_pendente || 0), 0);
+        return `<div class="mp-oc-status mp-oc-status--open"><strong><i class="fas fa-cart-shopping"></i> Reposição em andamento</strong><br>${ordens.length} OC(s) aberta(s), total pendente de <strong>${fmt(pendente)} ${esc(item.unidade || '')}</strong><div class="mp-oc-list">${ordens.map((ordem) => `<span><strong>OC ${esc(ordem.ordem_compra || '-')}</strong> · ${fmt(ordem.quantidade_pendente)} ${esc(item.unidade || '')} · ${esc(ordem.fornecedor || 'Fornecedor não informado')}${ordem.prazo_entrega ? ' · Prev. ' + esc(ordem.prazo_entrega) : ''}</span>`).join('')}</div></div>`;
+    }
+
+    function detailRow(item) {
+        if (!expanded.has(item.codigo)) return '';
+        const reservas = `<div class="mp-reserva-resumo"><i class="fas fa-lock"></i> Quantidade reservada: <strong>${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</strong></div><strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
+        const colspan = visaoAtual === 'produto_acabado' ? 5 : 4;
+        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${ordensCompraHtml(item)}${reservas}</td></tr>`;
+    }
+
+    function render(data) {
+        const resumo = data.resumo || {};
+        $('mp-k-itens').textContent = resumo.itens || 0;
+        $('mp-k-criticos').textContent = resumo.criticos || 0;
+        $('mp-k-atencao').textContent = resumo.atencao || 0;
+        $('mp-k-disponivel').textContent = fmt(resumo.saldo_disponivel || 0, 1);
+
+        const items = data.items || [];
+        $('mp-th-reservas').style.display = visaoAtual === 'produto_acabado' ? '' : 'none';
+        if (!items.length) {
+            $('mp-table').style.display = 'none';
+            $('mp-state').style.display = 'block';
+            $('mp-state').textContent = 'Nenhum item encontrado.';
+            return;
+        }
+        $('mp-state').style.display = 'none';
+        $('mp-table').style.display = 'table';
+        $('mp-body').innerHTML = items.map((item) => `
+            <tr class="mp-item-row" data-codigo="${esc(item.codigo || '')}" title="Clique para ver detalhes do item">
+                <td>
+                    <div class="mp-item-main">
+                        <span class="mp-code">${esc(item.codigo || '-')}</span>
+                        <span class="mp-desc">${esc(item.descricao || '-')}</span>
+                        <span class="mp-locs">${esc((item.localizacoes || []).join(', ') || 'Sem localização')}</span>
+                    </div>
+                </td>
+                <td><span class="mp-num">${fmt(item.saldo_disponivel)} ${esc(item.unidade || '')}</span></td>
+                <td>${cobertura(item)}</td>
+                <td>${badge(item)}</td>
+                ${expandCell(item)}
+            </tr>
+            ${detailRow(item)}
+        `).join('');
+        document.querySelectorAll('.mp-expand-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const codigo = btn.dataset.codigo || '';
+                if (!codigo) return;
+                if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
+                render(data);
+            });
+        });
+        document.querySelectorAll('.mp-item-row').forEach((row) => {
+            row.addEventListener('click', (event) => {
+                if (event.target.closest('button')) return;
+                const codigo = row.dataset.codigo || '';
+                if (!codigo) return;
+                if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
+                render(data);
+            });
+        });
+    }
+
+    async function carregar(refresh = false) {
+        $('mp-state').style.display = 'block';
+        $('mp-state').textContent = 'Carregando estoque...';
+        const params = new URLSearchParams();
+        params.set('visao', visaoAtual);
+        const q = $('mp-busca').value.trim();
+        if (q) params.set('q', q);
+        const nivel = $('mp-nivel').value;
+        if (nivel) params.set('nivel', nivel);
+        if ($('mp-estoque-minimo').checked) params.set('estoque_minimo', '1');
+        if ($('mp-sem-saldo').checked) params.set('incluir_sem_saldo', '1');
+        if (refresh) params.set('refresh', '1');
+        try {
+            const resp = await fetch('/api/logistica/estoque?' + params.toString());
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || data.msg || 'Falha ao carregar estoque.');
+            render(data);
+        } catch (err) {
+            $('mp-table').style.display = 'none';
+            $('mp-state').style.display = 'block';
+            $('mp-state').textContent = err.message || 'Falha ao carregar estoque.';
+        }
+    }
+
+    $('mp-busca').addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => carregar(false), 260);
+    });
+    $('mp-nivel').addEventListener('change', () => carregar(false));
+    $('mp-estoque-minimo').addEventListener('change', () => carregar(false));
+    $('mp-sem-saldo').addEventListener('change', () => carregar(false));
+    $('mp-refresh').addEventListener('click', () => carregar(true));
+    document.querySelectorAll('.mp-view-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.mp-view-btn').forEach((item) => item.classList.remove('active'));
+            btn.classList.add('active');
+            visaoAtual = btn.dataset.visao || 'materia_prima';
+            expanded = new Set();
+            carregar(false);
+        });
+    });
+    carregar(false);
+})();
+</script>
+{% endblock %}

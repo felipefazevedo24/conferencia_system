@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
+import unicodedata
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -18,7 +21,10 @@ from ..models import LogisticaInventarioAjuste, LogisticaInventarioInicial
 from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
+    buscar_consumo_kardex_grv,
     buscar_estoque_grv,
+    buscar_ordens_compra_abertas_grv,
+    buscar_reservas_produto_acabado_grv,
     custo_medio_para,
     qtde_grv_para,
 )
@@ -32,6 +38,37 @@ INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
 ]
+ESTOQUE_VISOES = {
+    "materia_prima": {"label": "Matéria-prima", "familia": "N - 01 - MATÉRIA-PRIMA"},
+    "revenda": {"label": "Material para revenda", "familia": "N - 00 - MERCADORIA PARA REVENDA"},
+    "produto_acabado": {"label": "Produto acabado", "familia": "N - 04 - PRODUTOS"},
+}
+
+
+def _normalizar_busca(texto: str | None) -> str:
+    valor = unicodedata.normalize("NFKD", str(texto or "").strip().upper())
+    valor = "".join(ch for ch in valor if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", valor)
+
+
+def _unidade_estoque_discreta(unidade: str | None) -> bool:
+    codigo = re.sub(r"[^A-Z]", "", str(unidade or "").upper())
+    return codigo in {"UN", "UND", "UNIDADE", "PC", "PCA", "PECA", "CX", "CAIXA", "KIT"}
+
+
+def _nivel_cobertura(saldo_disponivel: float | None, consumo_diario: float) -> tuple[int | None, str, str]:
+    if saldo_disponivel is None:
+        return None, "sem_estoque", "Sem registro no GRV"
+    if consumo_diario <= 0:
+        return None, "sem_consumo", "Sem consumo no periodo"
+    dias = int(math.ceil(float(saldo_disponivel or 0) / consumo_diario))
+    critico = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7))
+    atencao = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15))
+    if dias <= critico:
+        return dias, "critico", "Cobertura critica"
+    if dias <= atencao:
+        return dias, "atencao", "Monitorar cobertura"
+    return dias, "normal", "Cobertura adequada"
 
 
 def _fmt_registro(row: LogisticaInventarioInicial, incluir_grv: bool = False) -> dict:
@@ -219,6 +256,154 @@ def inventario_consulta_page():
         user=session["username"],
         user_role=session.get("role", ""),
     )
+
+
+@logistica_inventario_bp.route("/logistica/estoque")
+@logistica_inventario_bp.route("/logistica/estoque-materia-prima")
+@permission_required(PERMISSION)
+def estoque_page():
+    return render_template(
+        "logistica_estoque_materia_prima.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+    )
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque-materia-prima", methods=["GET"])
+@logistica_inventario_bp.route("/api/logistica/estoque", methods=["GET"])
+@permission_required(PERMISSION)
+def estoque_materia_prima_api():
+    visao = str(request.args.get("visao") or "materia_prima").strip()
+    if visao not in ESTOQUE_VISOES:
+        visao = "materia_prima"
+    visao_cfg = ESTOQUE_VISOES[visao]
+    termo = _normalizar_busca(request.args.get("q"))
+    incluir_sem_saldo = str(request.args.get("incluir_sem_saldo") or "").strip().lower() in {"1", "true", "sim", "yes"}
+    refresh = str(request.args.get("refresh") or "").strip() == "1"
+    try:
+        limite = max(1, min(int(request.args.get("limit") or 300), 800))
+    except (TypeError, ValueError):
+        limite = 300
+
+    nivel_filtro = str(request.args.get("nivel") or "").strip().lower()
+    somente_estoque_minimo = str(request.args.get("estoque_minimo") or "").strip().lower() in {"1", "true", "sim", "yes"}
+    estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
+    familia_alvo = _normalizar_busca(visao_cfg["familia"])
+    candidatos = []
+    for codigo, item in (estoque.get("por_codigo") or {}).items():
+        if _normalizar_busca(item.get("familia")) != familia_alvo:
+            continue
+        saldo_total = float(item.get("qtde_total") or 0)
+        saldo_disponivel = float(item.get("qtde_disponivel") or 0)
+        saldo_reservado = float(item.get("qtde_reservada") or 0)
+        estoque_minimo = float(item.get("estoque_minimo") or 0)
+        lote_economico = float(item.get("lote_economico") or 0)
+        haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
+        if termo and termo not in haystack:
+            continue
+        if not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
+            continue
+        candidatos.append({
+            "codigo": codigo,
+            "descricao": str(item.get("item") or "").strip(),
+            "familia": str(item.get("familia") or "").strip(),
+            "grupo": str(item.get("grupo") or "").strip(),
+            "unidade": str(item.get("unidade") or "UN").strip() or "UN",
+            "saldo_disponivel": saldo_disponivel,
+            "saldo_reservado": saldo_reservado,
+            "saldo_total": saldo_total,
+            "estoque_minimo": estoque_minimo,
+            "lote_economico": lote_economico,
+            "localizacoes": sorted(set(str(x or "").strip() for x in item.get("localizacoes") or [] if str(x or "").strip())),
+        })
+
+    rows = candidatos
+    codigos = [row["codigo"] for row in rows]
+    consumo_por_codigo = {}
+    reservas_por_codigo = {}
+    ordens_compra_por_codigo = {}
+    if codigos:
+        try:
+            consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=refresh)
+            consumo_por_codigo = consumo.get("por_codigo") or {}
+        except Exception:
+            current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
+            consumo_por_codigo = {}
+        try:
+            reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos)
+        except Exception:
+            current_app.logger.warning("Nao foi possivel consultar reservas de estoque.", exc_info=True)
+            reservas_por_codigo = {}
+
+    for row in rows:
+        codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
+        consumo_diario = float((consumo_por_codigo.get(codigo_key) or {}).get("consumo_medio_diario") or 0)
+        if consumo_diario > 0 and _unidade_estoque_discreta(row["unidade"]):
+            consumo_diario = float(math.ceil(consumo_diario))
+        cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
+        reservas = reservas_por_codigo.get(codigo_key, [])
+        row["consumo_diario"] = consumo_diario
+        row["cobertura_dias"] = cobertura_dias
+        row["nivel"] = nivel
+        row["nivel_label"] = nivel_label
+        row["reservas"] = [
+            {
+                "quantidade": float(reserva.get("qtde") or 0),
+                "descricao": str(reserva.get("descricao") or "").strip(),
+                "orcamento": str(reserva.get("numero_orcamento") or reserva.get("orcamento_descricao") or reserva.get("cod_orcamento") or "").strip(),
+                "versao": str(reserva.get("versao_orcamento") or "").strip(),
+                "cliente": str(reserva.get("cliente_orcamento") or reserva.get("cliente_os_orcamento") or reserva.get("cliente_os_descricao") or "").strip(),
+                "os": str(reserva.get("os_descricao") or reserva.get("os_por_orcamento") or "").strip(),
+                "cod_os": str(reserva.get("cod_os_descricao") or reserva.get("cod_os_por_orcamento") or "").strip(),
+                "titulo_os": str(reserva.get("titulo_os_descricao") or "").strip(),
+            }
+            for reserva in reservas[:20]
+        ]
+
+    if visao in {"materia_prima", "revenda"}:
+        codigos_criticos = [row["codigo"] for row in rows if row["nivel"] == "critico"]
+        if codigos_criticos:
+            try:
+                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_criticos)
+            except Exception:
+                current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque critico.", exc_info=True)
+    for row in rows:
+        codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
+        row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
+
+    if nivel_filtro:
+        rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
+    if somente_estoque_minimo:
+        rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
+
+    prioridade_nivel = {"critico": 0, "atencao": 1, "sem_consumo": 2, "sem_estoque": 3, "normal": 4}
+    rows.sort(key=lambda row: (
+        0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
+        prioridade_nivel.get(str(row.get("nivel") or ""), 9),
+        row.get("cobertura_dias") is None,
+        row.get("cobertura_dias") or 999999,
+        row["codigo"],
+    ))
+    rows = rows[:limite]
+
+    resumo = {
+        "itens": len(rows),
+        "total_filtrado": len(rows),
+        "criticos": sum(1 for row in rows if row.get("nivel") == "critico"),
+        "atencao": sum(1 for row in rows if row.get("nivel") == "atencao"),
+        "sem_consumo": sum(1 for row in rows if row.get("nivel") == "sem_consumo"),
+        "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
+        "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
+    }
+    return jsonify({
+        "visao": visao,
+        "visao_label": visao_cfg["label"],
+        "familia": visao_cfg["familia"],
+        "visoes": ESTOQUE_VISOES,
+        "resumo": resumo,
+        "items": rows,
+        "limit": limite,
+    })
 
 
 @logistica_inventario_bp.route("/logistica/inventario-inicial")
@@ -651,9 +836,7 @@ def api_descartar_ajuste(ajuste_id):
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
 
-
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_finance_concluir_ajuste(ajuste_id):
     if not has_permission(PERMISSION_FINANCE):
         return jsonify({"error": "Você não tem permissão de Finance nesse fluxo - fale com a gerência."}), 403

@@ -91,6 +91,7 @@
     .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
     .vinc-status.ok { color: #166534; }
     .vinc-status.err { color: #991b1b; }
+    .vinc-status.warn { color: #7c3aed; }
     .vinc-edit-btn { margin-top: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .vinc-edit-btn:hover { border-color: #2563eb; color: #1d4ed8; }
 
@@ -120,6 +121,14 @@
     .vinculacao-auto-hint { margin-top: 8px; font-size: 11px; color: #166534; font-weight: 700; }
     .vinc-conversao-wrap { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .vinc-conversao-label { font-size: 11px; color: #334155; font-weight: 700; }
+    .vinc-section-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
+    .vinc-section-tag.tag-xml { background: #dbeafe; color: #1d4ed8; }
+    .vinc-section-tag.tag-po { background: #ede9fe; color: #6d28d9; }
+    .vinc-link-arrow { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 12px; color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .vinc-link-arrow::before, .vinc-link-arrow::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
+    .vinc-saldo-info { margin-top: 8px; padding: 8px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; font-size: 11px; color: #0c4a6e; }
+    .vinc-saldo-info.negativo { background: #fef2f2; border-color: #fecaca; color: #991b1b; font-weight: 700; }
+    .vinc-saldo-info strong { color: #0369a1; }
     .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
@@ -298,6 +307,13 @@
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
+    [data-theme="escuro"] .vinc-section-tag.tag-po { background: rgba(167,139,250,.18); color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-link-arrow { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-link-arrow::before, [data-theme="escuro"] .vinc-link-arrow::after { background: var(--rec-border); }
+    [data-theme="escuro"] .vinc-saldo-info { background: rgba(59,147,245,.10); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .vinc-saldo-info.negativo { background: rgba(239,68,68,.14); border-color: #7f1d1d; color: #fca5a5; }
+    [data-theme="escuro"] .vinc-saldo-info strong { color: #7dc4ff; }
     [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
     [data-theme="escuro"] .msg.ok { background: rgba(34,197,94,.12); color: #86efac; border-color: rgba(34,197,94,.30); }
@@ -732,7 +748,7 @@
     <div class="vinculacao-overlay-card">
         <div style="padding:18px 22px; background:var(--rec-blue-700); color:#fff;">
             <h3 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;"><i class="fas fa-link"></i> Vincular Linhas do Pedido</h3>
-            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Selecione qual linha do pedido de compra corresponde a cada linha do XML.</p>
+            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Pra cada linha da NOTA FISCAL (XML), escolha a linha correspondente do PEDIDO DE COMPRA (OC).</p>
         </div>
         <div style="padding:20px; max-height:62vh; overflow-y:auto;">
             <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -740,6 +756,17 @@
         <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
             <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
             <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
+        </div>
+    </div>
+</div>
+
+<div id="vincAvisoOverlay" class="modal-overlay" style="z-index:3600;" onclick="if(event.target===this)fecharVincAviso()">
+    <div class="modal-card" style="max-width:460px;">
+        <i id="vincAvisoIcon" class="fas fa-circle-check modal-icon" style="color:var(--rec-green-600);"></i>
+        <h4 id="vincAvisoTitulo">Tudo certo</h4>
+        <p id="vincAvisoTexto" style="white-space:pre-line;"></p>
+        <div class="modal-actions">
+            <button class="rec-btn rec-btn--success" type="button" onclick="fecharVincAviso()"><i class="fas fa-check"></i> Entendi</button>
         </div>
     </div>
 </div>
@@ -881,6 +908,25 @@
     const DE_IS_ADMIN = DE_ROOT.dataset.isAdmin === 'true';
     const DE_CAN_AUDITOR = DE_ROOT.dataset.canAuditor === 'true';
     const DE_CAN_LANCAMENTO = DE_ROOT.dataset.canLancamento === 'true';
+
+    // Os overlays de modal ficam aninhados dentro do conteudo rolavel da pagina.
+    // Em alguns navegadores o backdrop-filter (blur) de um elemento fixed nao
+    // "enxerga" irmaos que estao fora da stacking context do ancestral (ex.: a
+    // sidebar), borrando so a area do conteudo. Mover os overlays pra serem
+    // filhos diretos do <body> garante que o blur cubra a tela inteira.
+    ['modalOverlay', 'diagOverlay', 'vinculacaoOverlay', 'vincAvisoOverlay', 'pendenciaOverlay'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.parentElement !== document.body) document.body.appendChild(el);
+    });
+
+    // Marca o select de conversao como "tocado" so quando o usuario realmente
+    // muda o valor - o innerHTML e recriado a cada render, entao o listener
+    // fica delegado no document (nao nos elementos, que somem/voltam).
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.matches && e.target.matches('.conversao-select[data-item-id]')) {
+            e.target.dataset.touched = '1';
+        }
+    });
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -1754,7 +1800,10 @@
 
     function coletarConversoesAuditor() {
         const mapa = {};
-        document.querySelectorAll('.conversao-select[data-item-id]').forEach((el) => {
+        // So manda como "manual" o que o usuario de fato MEXEU no select (data-touched).
+        // Sem isso, o valor que o backend calculou sozinho volta no proximo request
+        // marcado como escolha manual e fica "preso" pra sempre (mesmo se errado).
+        document.querySelectorAll('.conversao-select[data-item-id][data-touched="1"]').forEach((el) => {
             const itemId = String(el.dataset.itemId || '').trim();
             if (!itemId) return;
             mapa[itemId] = parseConversaoValor(el.value);
@@ -1810,11 +1859,56 @@
         });
     }
 
+    function montarSaldoInfoTexto({ poLinhaNum, poQtdTotal, saldoAntes, saldoDepois, previa }) {
+        const negativo = Number(saldoDepois) < -0.0001;
+        const rotulo = previa ? 'Prévia do saldo (salve para confirmar)' : 'Saldo';
+        const icone = negativo ? 'fa-triangle-exclamation' : 'fa-scale-balanced';
+        const aviso = negativo ? ' — SALDO INSUFICIENTE: esta linha do pedido não cobre a quantidade vinculada, confira se é a linha certa' : '';
+        const html = `<i class="fas ${icone}"></i> ${rotulo} da linha ${poLinhaNum} do pedido (total <strong>${Number(poQtdTotal || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>): antes desta linha do XML restava <strong>${Number(saldoAntes || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong> · depois desta linha resta <strong>${Number(saldoDepois || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong>${aviso}`;
+        return { negativo, html };
+    }
+
+    function atualizarSaldoLive(idx) {
+        const pares = window.paresVinculacao || [];
+        const linhasPo = window.linhasPoVinculacao || [];
+        const p = pares[idx];
+        const select = document.getElementById(`select_${idx}`);
+        const saldoEl = document.getElementById(`saldo-info-${idx}`);
+        const hintEl = document.getElementById(`auto-hint-${idx}`);
+        if (!p || !select || !saldoEl) return;
+        if (hintEl) hintEl.innerHTML = '';
+        const valorSel = String(select.value || '').trim();
+        if (valorSel === '') {
+            saldoEl.className = 'vinc-saldo-info';
+            saldoEl.innerHTML = '';
+            return;
+        }
+        const novoPoIndex = parseInt(valorSel, 10);
+        const po = linhasPo[novoPoIndex];
+        if (!po) return;
+        const minhaQtd = Number(p.nf_qtd_kg ?? p.nf_qtd ?? 0);
+        // Soma o que as OUTRAS linhas do XML (pelo ultimo estado conhecido do
+        // servidor) ja apontam pra essa mesma linha do pedido - previa best-effort
+        // ate salvar (o valor final e sempre recalculado pelo backend ao salvar).
+        const outrasQtd = pares.reduce((acc, px, i) => {
+            if (i === idx || px.po_index !== novoPoIndex) return acc;
+            return acc + Number(px.nf_qtd_kg ?? px.nf_qtd ?? 0);
+        }, 0);
+        const saldoAntes = Number(po.qtd || 0) - outrasQtd;
+        const saldoDepois = saldoAntes - minhaQtd;
+        const info = montarSaldoInfoTexto({ poLinhaNum: novoPoIndex + 1, poQtdTotal: po.qtd, saldoAntes, saldoDepois, previa: true });
+        saldoEl.className = `vinc-saldo-info${info.negativo ? ' negativo' : ''}`;
+        saldoEl.innerHTML = info.html;
+    }
+
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
-        const linhasPerfeitasReservadas = new Set(
-            pares.filter((px) => Number.isInteger(px.po_index) && px.po_index >= 0 && px.qtd_ok && px.valor_ok).map((px) => Number(px.po_index))
+        // Linhas do pedido com saldo zerado (ou negativo, se algo divergir) somem
+        // das opções de OUTRAS linhas do XML - só continuam visíveis pra quem já
+        // está vinculado a elas, senão o usuário fica escolhendo saldo que não existe.
+        const linhasEsgotadas = new Set(
+            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].saldo_restante) <= 0.0001)
         );
         const container = document.getElementById('vinculacoesContainer');
         container.innerHTML = pares.map((p, idx) => {
@@ -1823,7 +1917,7 @@
             const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
             const poSelecionada = matchPerfeito ? null : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
             const listaPoOptions = linhasPo.map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
-                .filter(({ idxPoOriginal }) => !linhasPerfeitasReservadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
+                .filter(({ idxPoOriginal }) => !linhasEsgotadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
                 .map(({ po, idxPoOriginal }) => {
                     const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
                     const codigoMaterial = (po.codigo_material || '').trim();
@@ -1832,42 +1926,62 @@
                     const pedidoTxt = pedidoPo ? `Pedido: ${pedidoPo} | ` : '';
                     const descricaoTxt = descricaoMaterial ? ` - ${descricaoMaterial}` : '';
                     const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
-                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                    const saldoPo = Number(po.saldo_restante);
+                    const saldoTxt = Number.isFinite(saldoPo) ? ` | Saldo disp.: ${saldoPo.toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}` : '';
+                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt}${saldoTxt} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
                 }).join('');
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
                 ? '<div class="vinc-status ok"><i class="fas fa-check-circle"></i> Verde: quantidade e valor batem</div>'
-                : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>';
+                : (p.rateio_po
+                    ? `<div class="vinc-status warn"><i class="fas fa-scale-balanced"></i> Rateio de saldo: soma das linhas vinculadas a esta linha do pedido = ${Number(p.rateio_soma_nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(p.po_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} do pedido${p.qtd_ok ? ' - fechou!' : ''}</div>`
+                    : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>');
             const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
-                ? `<div class="vinculacao-auto-hint">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
+                ? `<div class="vinculacao-auto-hint" id="auto-hint-${idx}">${p.vinculo_manual ? 'Vínculo atual' : 'Vínculo automático sugerido'}: Linha ${p.po_index + 1}</div>` : `<div class="vinculacao-auto-hint" id="auto-hint-${idx}"></div>`;
+            const poVinculada = poIndexValido ? linhasPo[p.po_index] : (linhaManualValida ? linhasPo[p.linha_po_vinculada] : null);
+            let saldoClasse = 'vinc-saldo-info';
+            let saldoConteudo = '';
+            if (poVinculada) {
+                const poLinhaNum = (poIndexValido ? p.po_index : p.linha_po_vinculada) + 1;
+                const info = montarSaldoInfoTexto({ poLinhaNum, poQtdTotal: poVinculada.qtd, saldoAntes: p.po_saldo_antes, saldoDepois: p.po_saldo_depois, previa: false });
+                if (info.negativo) saldoClasse += ' negativo';
+                saldoConteudo = info.html;
+            }
+            const saldoInfoHtml = `<div class="${saldoClasse}" id="saldo-info-${idx}">${saldoConteudo}</div>`;
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
+            const badgeRateio = p.rateio_po ? '<span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;">Rateio de saldo do pedido</span>' : '';
             return `
                 <div class="vinculacao-card ${cardClasse}">
+                    <span class="vinc-section-tag tag-xml"><i class="fas fa-file-invoice"></i> Nota Fiscal (XML) · Linha ${p.linha}</span>
                     <div class="vinculacao-linha-xml">
-                        <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}</div>
+                        <div class="vinculacao-linha-xml-titulo">Dados desta linha do XML ${badgeVinculo}${badgeRateio}</div>
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
-                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
                             <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                            ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span style="color:#64748b;">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
                         </div>
                         <div class="vinc-conversao-wrap">
                             <label class="vinc-conversao-label">Conversão da quantidade:</label>
-                            <select class="conversao-select" data-item-id="${p.item_id}">
+                            <select class="conversao-select" data-item-id="${p.item_id}" data-touched="0">
                                 ${buildConversaoOptionsHtml(p.conversao_fator, p.conversao_unidade)}
                             </select>
                             <button type="button" class="vinc-edit-btn" onclick="consultarPedidoExcel()"><i class="fas fa-arrows-rotate"></i> Aplicar conversão</button>
                         </div>
                     </div>
+                    <div class="vinc-link-arrow"><i class="fas fa-arrow-down"></i>&nbsp;vincular com&nbsp;<i class="fas fa-arrow-down"></i></div>
+                    <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
                     <div class="vinculacao-select-wrap">
-                        <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
-                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" ${selectDisabled}>
+                        <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
+                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarSaldoLive(${idx})" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
                         </select>
                         ${statusHtml}
+                        ${saldoInfoHtml}
                         ${detalheVinculoAuto}
                         ${editBtn}
                     </div>
@@ -1889,6 +2003,23 @@
         document.getElementById('vinculacaoOverlay').classList.remove('active');
     }
 
+    function vincAviso(msg, tipo = 'ok') {
+        const overlay = document.getElementById('vincAvisoOverlay');
+        if (!overlay) { toast(msg, tipo); return; }
+        const ehErro = tipo !== 'ok';
+        const icon = document.getElementById('vincAvisoIcon');
+        const titulo = document.getElementById('vincAvisoTitulo');
+        const texto = document.getElementById('vincAvisoTexto');
+        if (icon) { icon.className = ehErro ? 'fas fa-triangle-exclamation modal-icon' : 'fas fa-circle-check modal-icon'; icon.style.color = ehErro ? 'var(--rec-red-600)' : 'var(--rec-green-600)'; }
+        if (titulo) titulo.textContent = ehErro ? 'Atenção na vinculação' : 'Tudo certo';
+        if (texto) texto.textContent = msg;
+        overlay.classList.add('active');
+    }
+
+    function fecharVincAviso() {
+        document.getElementById('vincAvisoOverlay')?.classList.remove('active');
+    }
+
     async function salvarVinculacoes() {
         const selects = document.querySelectorAll('.vinculacao-select');
         const pedidoAtual = (document.getElementById('pedidoCompra').value || '').trim();
@@ -1906,7 +2037,8 @@
             alteracoes.push({ itemId: parseInt(itemIdRaw, 10), linhaPoAtual, linhaPoDesejada });
         }
         const desejadas = alteracoes.filter((a) => Number.isInteger(a.linhaPoDesejada) && a.linhaPoDesejada >= 0).map((a) => a.linhaPoDesejada);
-        if (new Set(desejadas).size !== desejadas.length) { toast('A mesma linha do pedido foi selecionada para mais de um item da NF.', 'err'); return; }
+        // Nota: a MESMA linha do pedido pode ser selecionada para mais de um item da NF -
+        // é o rateio de saldo (fornecedor detalha em várias linhas o que no pedido é 1 linha só).
         try {
             for (const a of alteracoes) {
                 if (!Number.isInteger(a.linhaPoAtual) || a.linhaPoAtual < 0) continue;
@@ -1924,7 +2056,7 @@
             }
             vinculacoesAtualizadas = alteracoes.length;
         } catch (e) {
-            toast(`Erro ao vincular linha: ${e.message}`, 'err');
+            vincAviso(`Erro ao vincular linha: ${e.message}`, 'err');
             return;
         }
         const resultado = document.getElementById('pedidoResult');
@@ -1940,7 +2072,7 @@
                 body: JSON.stringify({ ...auditorPayloadBase(), pedido: pedidoAtual, conversoes_itens: coletarConversoesAuditor() }),
             });
         } catch (e) {
-            toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
+            vincAviso(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
             return;
         }
         const paresDivergentes = (reprocessado?.pares || []).filter((p) => !p.ok);
@@ -1956,22 +2088,22 @@
             if (vinculacaoOverlay) vinculacaoOverlay.classList.remove('active');
             const resposta = await confirmarAcao(`Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`, { corrigir: true });
             if (resposta === 'corrigir') {
-                toast('Ajuste as linhas divergentes destacadas abaixo.', 'err');
                 renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], auditorNotaSelecionada);
+                vincAviso('Ajuste as linhas divergentes destacadas abaixo (borda vermelha).', 'err');
                 return;
             }
             if (!resposta) {
-                toast('Vínculos salvos. As divergências continuam pendentes.', 'err');
+                vincAviso('Vínculos salvos. As divergências continuam pendentes.', 'err');
                 return;
             }
             const divergenciasParaLog = paresDivergentes.filter((p) => Number.isInteger(p.po_index) && p.po_index >= 0)
                 .map((p) => ({ linhaXml: Number(p.linha || 0), linhaPo: Number(p.po_index) + 1 }));
             if (divergenciasParaLog.length) {
                 try { await registrarObservacaoDivergenciaValor(divergenciasParaLog); }
-                catch (e) { toast(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err'); }
+                catch (e) { vincAviso(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err'); }
             }
         }
-        toast(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
+        vincAviso(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
         fecharModalVinculacao();
         await consultarPedidoExcel();
     }

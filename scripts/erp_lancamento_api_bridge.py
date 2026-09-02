@@ -817,7 +817,9 @@ ESTOQUE_SQL = """
             cod_produto,
             sum(coalesce(qtde_total, 0)) as qtde_total,
             sum(coalesce(qtde_reservada, 0)) as qtde_reservada,
-            sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel
+            sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel,
+            max(coalesce(estoque_minimo, 0)) as estoque_minimo,
+            max(coalesce(lote_economico, 0)) as lote_economico
         from public.tproduto_deposito
         -- So o deposito PRINCIPAL (cod_deposito = 1) conta pro saldo do
         -- inventario - depositos como "EM PRODUCAO (MAO DE OBRA)" (3),
@@ -831,22 +833,17 @@ ESTOQUE_SQL = """
         p.codigo_interno,
         p.nome as item,
         coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
-        -- Fonte principal: saldo por deposito (tproduto_deposito), que e o
-        -- saldo efetivo usado no GRV. Fallback para campos legados de
-        -- tproduto quando nao houver linha em tproduto_deposito.
-        coalesce(
-            d.qtde_total,
-            (
-                case
-                    when p.estoque is not null then coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0)
-                    when p.estoque_disponivel_uso is not null then coalesce(p.estoque_disponivel_uso, 0) + coalesce(p.estoque_reservado, 0)
-                    else null
-                end
-            ),
-            0
-        ) as qtde_total,
-        coalesce(d.qtde_reservada, p.estoque_reservado, 0) as qtde_reservada,
-        coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
+        coalesce(d.qtde_total, 0) as qtde_total,
+        coalesce(d.qtde_reservada, 0) as qtde_reservada,
+        coalesce(d.qtde_disponivel, 0) as qtde_disponivel,
+        coalesce(nullif(d.estoque_minimo, 0), p.estoque_minimo, 0) as estoque_minimo,
+        case
+            when upper(trim(coalesce(p.unidade, ''))) = 'MM'
+             and coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) > 0
+             and coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) < 1000
+                then coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0) * 1000
+            else coalesce(nullif(d.lote_economico, 0), p.lote_economico, 0)
+        end as lote_economico,
         p.preco_custo as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
@@ -1787,6 +1784,138 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "empresa": empresa, "itens": itens, "codigos_ativos": codigos_ativos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar estoque no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/reservas-produto-acabado")
+    def consultar_reservas_produto_acabado():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+
+            codigos_raw = payload.get("codigos") or []
+            if not isinstance(codigos_raw, list):
+                return jsonify({"sucesso": False, "erro": "codigos_deve_ser_lista"}), 400
+            codigos = []
+            vistos = set()
+            for codigo in codigos_raw:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "reservas": []})
+
+            sql = """
+                select
+                    regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo_key,
+                    p.codigo_interno,
+                    p.nome as item,
+                    coalesce(r.qtde, 0)::double precision as qtde,
+                    coalesce(r.origem::text, '') as origem,
+                    coalesce(r.descricao, '') as descricao,
+                    coalesce(r.guid_lm, '') as guid_lm,
+                    oi.cod_orcamento::text as cod_orcamento,
+                    o.n_orcamento::text as numero_orcamento,
+                    o.versao::text as versao_orcamento,
+                    o.cliente as cliente_orcamento,
+                    substring(coalesce(r.descricao, '') from 'Orçamento:\\s*([^ ]+)') as orcamento_descricao,
+                    substring(coalesce(r.descricao, '') from 'OS\\.?:\\s*([^ ]+)') as os_descricao,
+                    os_orc.cliente as cliente_os_orcamento,
+                    os_orc.n_os::text as os_por_orcamento,
+                    os_orc.codigo::text as cod_os_por_orcamento,
+                    os_desc.codigo::text as cod_os_descricao,
+                    os_desc.cliente as cliente_os_descricao,
+                    os_desc.titulo as titulo_os_descricao
+                from public.tproduto_dep_reserva r
+                join public.tproduto p
+                  on p.cod_empresa = r.cod_empresa and p.codigo = r.cod_produto
+                left join public.torcamento_itens oi
+                  on oi.cod_empresa = r.cod_empresa and oi.guid_linha = r.guid_lm
+                left join public.torcamento o
+                  on o.cod_empresa = oi.cod_empresa and o.codigo = oi.cod_orcamento
+                left join public.tos os_orc
+                  on os_orc.cod_empresa = oi.cod_empresa and os_orc.cod_orcamento = oi.cod_orcamento
+                left join public.tos os_desc
+                  on os_desc.cod_empresa = r.cod_empresa and os_desc.n_os::text = substring(coalesce(r.descricao, '') from 'OS\\.?:\\s*([^ ]+)')
+                where r.cod_empresa = %s
+                  and r.cod_deposito = 1
+                  and coalesce(r.qtde, 0) <> 0
+                  and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+                order by p.codigo_interno, r.qtde desc
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (empresa, codigos))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [_json_safe(dict(zip(cols, row))) for row in cur.fetchall()]
+            return jsonify({"sucesso": True, "reservas": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar reservas de produto acabado")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/ordens-compra-abertas")
+    def consultar_ordens_compra_abertas_estoque():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigos = []
+            vistos = set()
+            for codigo in payload.get("codigos") or []:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "ordens_compra": []})
+
+            sql = """
+                select
+                    regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') as codigo_key,
+                    item.cod_interno as codigo_interno,
+                    oc.codigo::text as ordem_compra,
+                    coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social, 'Fornecedor nao informado') as fornecedor,
+                    oc.prazo_entrega as prazo_entrega,
+                    sum(greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0))::double precision as quantidade_pendente
+                from public.tord_com oc
+                join public.tord_aux item
+                  on item.cod_empresa = oc.cod_empresa
+                 and item.cod_ord_compra = oc.codigo
+                left join public.tfornece f
+                  on f.cod_empresa = oc.cod_empresa
+                 and f.codigo = oc.cod_fornecedor
+                where oc.cod_empresa = %s
+                  and coalesce(oc.cancelado, 0) = 0
+                  and regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+                  and coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0) > 0.000001
+                group by item.cod_interno, oc.codigo, oc.fornecedor, f.nome, f.razao_social, oc.prazo_entrega
+                order by item.cod_interno, oc.prazo_entrega nulls last, oc.codigo desc
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (empresa, codigos))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [_json_safe(dict(zip(cols, row))) for row in cur.fetchall()]
+            return jsonify({"sucesso": True, "ordens_compra": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar ordens de compra abertas para estoque")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/estoque/kardex-consumo")
