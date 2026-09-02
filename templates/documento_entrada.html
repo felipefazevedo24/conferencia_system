@@ -121,6 +121,11 @@
     .vinculacao-auto-hint { margin-top: 8px; font-size: 11px; color: #166534; font-weight: 700; }
     .vinc-conversao-wrap { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .vinc-conversao-label { font-size: 11px; color: #334155; font-weight: 700; }
+    .vinc-section-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
+    .vinc-section-tag.tag-xml { background: #dbeafe; color: #1d4ed8; }
+    .vinc-section-tag.tag-po { background: #ede9fe; color: #6d28d9; }
+    .vinc-link-arrow { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 12px; color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .vinc-link-arrow::before, .vinc-link-arrow::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
     .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
@@ -299,6 +304,10 @@
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
+    [data-theme="escuro"] .vinc-section-tag.tag-po { background: rgba(167,139,250,.18); color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-link-arrow { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-link-arrow::before, [data-theme="escuro"] .vinc-link-arrow::after { background: var(--rec-border); }
     [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
     [data-theme="escuro"] .msg.ok { background: rgba(34,197,94,.12); color: #86efac; border-color: rgba(34,197,94,.30); }
@@ -733,7 +742,7 @@
     <div class="vinculacao-overlay-card">
         <div style="padding:18px 22px; background:var(--rec-blue-700); color:#fff;">
             <h3 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;"><i class="fas fa-link"></i> Vincular Linhas do Pedido</h3>
-            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Selecione qual linha do pedido de compra corresponde a cada linha do XML.</p>
+            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Pra cada linha da NOTA FISCAL (XML), escolha a linha correspondente do PEDIDO DE COMPRA (OC).</p>
         </div>
         <div style="padding:20px; max-height:62vh; overflow-y:auto;">
             <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -741,6 +750,17 @@
         <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
             <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
             <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
+        </div>
+    </div>
+</div>
+
+<div id="vincAvisoOverlay" class="modal-overlay" style="z-index:3600;" onclick="if(event.target===this)fecharVincAviso()">
+    <div class="modal-card" style="max-width:460px;">
+        <i id="vincAvisoIcon" class="fas fa-circle-check modal-icon" style="color:var(--rec-green-600);"></i>
+        <h4 id="vincAvisoTitulo">Tudo certo</h4>
+        <p id="vincAvisoTexto" style="white-space:pre-line;"></p>
+        <div class="modal-actions">
+            <button class="rec-btn rec-btn--success" type="button" onclick="fecharVincAviso()"><i class="fas fa-check"></i> Entendi</button>
         </div>
     </div>
 </div>
@@ -882,6 +902,16 @@
     const DE_IS_ADMIN = DE_ROOT.dataset.isAdmin === 'true';
     const DE_CAN_AUDITOR = DE_ROOT.dataset.canAuditor === 'true';
     const DE_CAN_LANCAMENTO = DE_ROOT.dataset.canLancamento === 'true';
+
+    // Os overlays de modal ficam aninhados dentro do conteudo rolavel da pagina.
+    // Em alguns navegadores o backdrop-filter (blur) de um elemento fixed nao
+    // "enxerga" irmaos que estao fora da stacking context do ancestral (ex.: a
+    // sidebar), borrando so a area do conteudo. Mover os overlays pra serem
+    // filhos diretos do <body> garante que o blur cubra a tela inteira.
+    ['modalOverlay', 'diagOverlay', 'vinculacaoOverlay', 'vincAvisoOverlay', 'pendenciaOverlay'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.parentElement !== document.body) document.body.appendChild(el);
+    });
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -1849,8 +1879,9 @@
             const badgeRateio = p.rateio_po ? '<span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;">Rateio de saldo do pedido</span>' : '';
             return `
                 <div class="vinculacao-card ${cardClasse}">
+                    <span class="vinc-section-tag tag-xml"><i class="fas fa-file-invoice"></i> Nota Fiscal (XML) · Linha ${p.linha}</span>
                     <div class="vinculacao-linha-xml">
-                        <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}${badgeRateio}</div>
+                        <div class="vinculacao-linha-xml-titulo">Dados desta linha do XML ${badgeVinculo}${badgeRateio}</div>
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
@@ -1865,8 +1896,10 @@
                             <button type="button" class="vinc-edit-btn" onclick="consultarPedidoExcel()"><i class="fas fa-arrows-rotate"></i> Aplicar conversão</button>
                         </div>
                     </div>
+                    <div class="vinc-link-arrow"><i class="fas fa-arrow-down"></i>&nbsp;vincular com&nbsp;<i class="fas fa-arrow-down"></i></div>
+                    <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
                     <div class="vinculacao-select-wrap">
-                        <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
+                        <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
                         <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
@@ -1891,6 +1924,23 @@
 
     function fecharModalVinculacao() {
         document.getElementById('vinculacaoOverlay').classList.remove('active');
+    }
+
+    function vincAviso(msg, tipo = 'ok') {
+        const overlay = document.getElementById('vincAvisoOverlay');
+        if (!overlay) { toast(msg, tipo); return; }
+        const ehErro = tipo !== 'ok';
+        const icon = document.getElementById('vincAvisoIcon');
+        const titulo = document.getElementById('vincAvisoTitulo');
+        const texto = document.getElementById('vincAvisoTexto');
+        if (icon) { icon.className = ehErro ? 'fas fa-triangle-exclamation modal-icon' : 'fas fa-circle-check modal-icon'; icon.style.color = ehErro ? 'var(--rec-red-600)' : 'var(--rec-green-600)'; }
+        if (titulo) titulo.textContent = ehErro ? 'Atenção na vinculação' : 'Tudo certo';
+        if (texto) texto.textContent = msg;
+        overlay.classList.add('active');
+    }
+
+    function fecharVincAviso() {
+        document.getElementById('vincAvisoOverlay')?.classList.remove('active');
     }
 
     async function salvarVinculacoes() {
@@ -1929,7 +1979,7 @@
             }
             vinculacoesAtualizadas = alteracoes.length;
         } catch (e) {
-            toast(`Erro ao vincular linha: ${e.message}`, 'err');
+            vincAviso(`Erro ao vincular linha: ${e.message}`, 'err');
             return;
         }
         const resultado = document.getElementById('pedidoResult');
@@ -1945,7 +1995,7 @@
                 body: JSON.stringify({ ...auditorPayloadBase(), pedido: pedidoAtual, conversoes_itens: coletarConversoesAuditor() }),
             });
         } catch (e) {
-            toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
+            vincAviso(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
             return;
         }
         const paresDivergentes = (reprocessado?.pares || []).filter((p) => !p.ok);
@@ -1961,22 +2011,22 @@
             if (vinculacaoOverlay) vinculacaoOverlay.classList.remove('active');
             const resposta = await confirmarAcao(`Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`, { corrigir: true });
             if (resposta === 'corrigir') {
-                toast('Ajuste as linhas divergentes destacadas abaixo.', 'err');
                 renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], auditorNotaSelecionada);
+                vincAviso('Ajuste as linhas divergentes destacadas abaixo (borda vermelha).', 'err');
                 return;
             }
             if (!resposta) {
-                toast('Vínculos salvos. As divergências continuam pendentes.', 'err');
+                vincAviso('Vínculos salvos. As divergências continuam pendentes.', 'err');
                 return;
             }
             const divergenciasParaLog = paresDivergentes.filter((p) => Number.isInteger(p.po_index) && p.po_index >= 0)
                 .map((p) => ({ linhaXml: Number(p.linha || 0), linhaPo: Number(p.po_index) + 1 }));
             if (divergenciasParaLog.length) {
                 try { await registrarObservacaoDivergenciaValor(divergenciasParaLog); }
-                catch (e) { toast(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err'); }
+                catch (e) { vincAviso(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err'); }
             }
         }
-        toast(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
+        vincAviso(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
         fecharModalVinculacao();
         await consultarPedidoExcel();
     }
