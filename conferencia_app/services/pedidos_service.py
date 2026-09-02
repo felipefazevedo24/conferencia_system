@@ -882,7 +882,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             f = 1.0
         return f if f > 0 else 1.0
 
-    def _fatores_candidatos(nf_item: dict, po_item: dict) -> list[float]:
+    def _fatores_candidatos(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> list[float]:
         fator_manual = _normalizar_fator(nf_item.get("conversao_fator"))
         if bool(nf_item.get("conversao_manual")):
             return [fator_manual]
@@ -901,14 +901,18 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
 
         nf_qtd_base = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
         po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
-        if nf_qtd_base > 0 and po_qtd > 0:
+        # O candidato "ratio direto" (po_qtd / nf_qtd) força a linha da NF a bater
+        # sozinha com o saldo TOTAL da linha do PO. Isso é indevido quando a linha
+        # está em RATEIO (2+ linhas da NF vinculadas à mesma linha do pedido), pois
+        # cada linha isolada não precisa (nem deve) fechar sozinha com o pedido.
+        if permitir_ratio_direto and nf_qtd_base > 0 and po_qtd > 0:
             ratio = po_qtd / nf_qtd_base
             if 0.0001 <= ratio <= 10000:
                 candidatos.add(round(ratio, 6))
 
         return sorted(candidatos)
 
-    def _metricas_match(nf_item: dict, po_item: dict) -> dict:
+    def _metricas_match(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> dict:
         po_qtd = po_item["qtd"] if po_item else None
         po_valor_unit = po_item["valor_unit"] if po_item else None
         po_pedido = po_item.get("pedido_compra") if po_item else ""
@@ -922,7 +926,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         codigo_ok = bool(nf_codigo and po_codigo_norm and nf_codigo == po_codigo_norm)
 
         melhor = None
-        fatores = _fatores_candidatos(nf_item, po_item)
+        fatores = _fatores_candidatos(nf_item, po_item, permitir_ratio_direto=permitir_ratio_direto)
         for fator in fatores:
             nf_qtd = nf_qtd_base * fator
             nf_valor_unit = (nf_valor_total / nf_qtd) if nf_qtd > 0 else 0.0
@@ -1016,14 +1020,15 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     atribuicoes = [None] * total_nf
     po_usadas = set()
 
-    # 1) Respeita vínculo manual quando válido e ainda não utilizado.
+    # 1) Respeita vínculo manual quando válido. Mais de uma linha do XML pode
+    # apontar para a MESMA linha do pedido: é o caso de rateio/divisão de saldo,
+    # quando o fornecedor detalha em várias linhas da NF o que no pedido é uma
+    # única linha (ex.: várias linhas de chapas para 1 linha de OC).
     for i, nf in enumerate(itens_nf):
         linha_po_vinculada = nf.get("linha_po_vinculada")
         if not isinstance(linha_po_vinculada, int) or linha_po_vinculada < 0:
             continue
         if linha_po_vinculada >= len(linhas_po):
-            continue
-        if linha_po_vinculada in po_usadas:
             continue
         atribuicoes[i] = linha_po_vinculada
         po_usadas.add(linha_po_vinculada)
@@ -1058,13 +1063,23 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             atribuicoes[i] = i
             po_usadas.add(i)
 
-    pares = []
+    # Rateio de saldo: quando 2+ linhas do XML apontam (manualmente) para a
+    # MESMA linha do pedido, a quantidade só "bate" quando a SOMA das linhas
+    # vinculadas àquela linha do PO fecha com o saldo da OC. Cada linha isolada
+    # NÃO deve tentar "descobrir" um fator de conversão que a faça bater sozinha
+    # com o saldo total (isso mascararia o rateio), então essas linhas ficam de
+    # fora da heurística de ratio-direto do _fatores_candidatos.
+    grupos_po: dict[int, list[int]] = {}
+    for i, po_index in enumerate(atribuicoes):
+        if isinstance(po_index, int):
+            grupos_po.setdefault(po_index, []).append(i)
+    indices_rateio = {i for indices in grupos_po.values() if len(indices) > 1 for i in indices}
+
+    mets = []
     for i, nf in enumerate(itens_nf):
         po_index = atribuicoes[i]
         po_row = linhas_po[po_index] if isinstance(po_index, int) and po_index < len(linhas_po) else None
-        linha_po_vinculada = nf.get("linha_po_vinculada")
-        usa_vinculo_manual = isinstance(linha_po_vinculada, int) and linha_po_vinculada >= 0
-        met = _metricas_match(nf, po_row) if po_row else {
+        met = _metricas_match(nf, po_row, permitir_ratio_direto=(i not in indices_rateio)) if po_row else {
             "po_qtd": None,
             "po_valor_unit": None,
             "po_pedido": "",
@@ -1080,6 +1095,28 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             "ok": False,
             "score": 0,
         }
+        mets.append(met)
+
+    for po_index, indices in grupos_po.items():
+        if len(indices) < 2:
+            continue
+        po_qtd = mets[indices[0]]["po_qtd"]
+        soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
+        qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
+        qtd_ok_grupo = po_qtd is not None and qtd_diff < 0.0001
+        for i in indices:
+            mets[i]["qtd_ok"] = qtd_ok_grupo
+            mets[i]["qtd_diff"] = qtd_diff
+            mets[i]["ok"] = qtd_ok_grupo and mets[i]["valor_ok"]
+            mets[i]["rateio_po"] = True
+            mets[i]["rateio_soma_nf_qtd"] = soma_nf_qtd
+
+    pares = []
+    for i, nf in enumerate(itens_nf):
+        po_index = atribuicoes[i]
+        met = mets[i]
+        linha_po_vinculada = nf.get("linha_po_vinculada")
+        usa_vinculo_manual = isinstance(linha_po_vinculada, int) and linha_po_vinculada >= 0
 
         pares.append(
             {
@@ -1108,6 +1145,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "valor_ok": met["valor_ok"],
                 "valor_via_total": met["valor_via_total"],
                 "ok": met["ok"],
+                "rateio_po": bool(met.get("rateio_po")),
+                "rateio_soma_nf_qtd": met.get("rateio_soma_nf_qtd"),
             }
         )
 
