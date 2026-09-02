@@ -4972,6 +4972,38 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
         current_app.logger.exception("Falha ao notificar divergência de pedido no Teams (NF %s)", numero_nota)
 
 
+def _reenviar_divergencia_teams(registro) -> bool:
+    """
+    Reenvia o card da divergência ao Teams a partir do próprio registro (usa
+    o `detalhe` já salvo). Chamado quando o operador tenta "Liberar para
+    conferência" e a NF está bloqueada - garante que o aviso realmente saia
+    mesmo que a 1ª tentativa (na detecção) tenha falhado. Gera o token se o
+    registro for antigo (criado antes da tela de aprovação existir).
+    Retorna True se o Teams confirmou o envio agora.
+    """
+    try:
+        if not registro.token:
+            registro.token = secrets.token_urlsafe(24)
+            db.session.commit()
+        linhas = [l.strip() for l in str(registro.detalhe or "").split("\n") if l.strip()]
+        link = f"{_base_url_columbia()}/aprovar-divergencia/{registro.token}"
+        enviado = teams_service.notificar_divergencia_pedido(
+            numero_nota=registro.numero_nota,
+            fornecedor=registro.fornecedor or "",
+            pedido_compra=registro.pedido_compra or "",
+            linhas_divergentes=linhas,
+            link_conferencia=link,
+            sync=True,
+        )
+        if enviado:
+            registro.teams_notificado = True
+            db.session.commit()
+        return bool(enviado)
+    except Exception:
+        current_app.logger.exception("Falha ao reenviar divergência ao Teams (NF %s)", getattr(registro, "numero_nota", ""))
+        return False
+
+
 def _divergencia_callback_token_valido() -> bool:
     esperado = str(os.environ.get("TEAMS_DIVERGENCIA_CALLBACK_TOKEN") or "").strip()
     if not esperado:
@@ -5519,6 +5551,20 @@ def liberar_nota_via_xml_auditor():
             .first()
         )
         if divergencia_pendente:
+            # Se o aviso ainda não saiu (1ª tentativa falhou ou registro antigo),
+            # reenvia agora - assim clicar "Liberar" garante que Compras seja avisada.
+            reenviado_agora = False
+            if not divergencia_pendente.teams_notificado:
+                reenviado_agora = _reenviar_divergencia_teams(divergencia_pendente)
+            aviso_extra = (
+                " O aviso foi enviado ao Teams agora."
+                if reenviado_agora
+                else (
+                    ""
+                    if divergencia_pendente.teams_notificado
+                    else " (Atenção: não foi possível enviar o aviso ao Teams - verifique a configuração do webhook.)"
+                )
+            )
             return jsonify(
                 {
                     "sucesso": False,
@@ -5526,7 +5572,7 @@ def liberar_nota_via_xml_auditor():
                     "msg": (
                         f"Divergência entre XML e pedido de compra aguardando aprovação de Compras via Teams "
                         f"(solicitado em {divergencia_pendente.solicitado_em.strftime('%d/%m/%Y %H:%M')}). "
-                        "A NF só pode ser liberada após a aprovação."
+                        f"A NF só pode ser liberada após a aprovação.{aviso_extra}"
                     ),
                 }
             ), 409
