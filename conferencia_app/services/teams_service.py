@@ -170,3 +170,38 @@ def notificar_solicitacao_nf(
         env_var=env_var,
         config_key=config_key,
     )
+
+
+def notificar_divergencia_pedido(
+    numero_nota: str,
+    fornecedor: str,
+    pedido_compra: str,
+    linhas_divergentes: list,
+    link_conferencia: str | None = None,
+    *,
+    env_var: str = "TEAMS_WEBHOOK_DIVERGENCIA_URL",
+    config_key: str = "webhook_divergencia_pedido",
+) -> None:
+    """
+    Notifica Compras (via Power Automate) de uma divergencia XML x Pedido que
+    precisa de aprovacao antes da NF poder ser liberada para conferencia.
+
+    Diferente de enviar_card(), aqui o payload NAO e um Adaptive Card pronto -
+    e um JSON simples com os dados da divergencia. O fluxo do Power Automate
+    (acao "Post adaptive card and wait for a response") monta o card com os
+    botoes Aprovar/Rejeitar por conta propria a partir desses campos, e chama
+    de volta POST /api/xml_auditor/divergencia/webhook-decisao com a decisao.
+    """
+    app = current_app._get_current_object()
+    url = _webhook_url(env_var, config_key)
+    if not url:
+        app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
+        return
+    payload = {
+        "numero_nota": str(numero_nota or ""),
+        "fornecedor": str(fornecedor or ""),
+        "pedido_compra": str(pedido_compra or ""),
+        "linhas_divergentes": [str(linha) for linha in (linhas_divergentes or [])],
+        "link_conferencia": str(link_conferencia or ""),
+    }
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
