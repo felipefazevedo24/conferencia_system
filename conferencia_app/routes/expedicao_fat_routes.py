@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from io import BytesIO
 
 from flask import (
     Blueprint,
@@ -9,6 +10,7 @@ from flask import (
     jsonify,
     render_template,
     request,
+    send_file,
     session,
 )
 from werkzeug.utils import secure_filename
@@ -22,6 +24,8 @@ from ..models import (
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesFoto,
 )
+from ..services import expedicao_etiqueta_pdf as etiqueta_pdf
+from ..services import expedicao_etiqueta_service as etiqueta_svc
 from ..services import expedicao_fat_service as svc
 from ..services import expedicao_log_service as log_svc
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
@@ -268,6 +272,47 @@ def obter_ordem_conf_cega(cod_ordem_fat):
     resumo["editavel"] = editavel
     resumo["historico"] = log_svc.listar_logs("fat", ordem.id)
     return jsonify(resumo)
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-red-molds.pdf")
+@permission_required(PERMISSION)
+def etiqueta_red_molds_pdf(cod_ordem_fat):
+    """Etiqueta de expedicao (Identificacao de Volume), modelo Red Molds,
+    pra impressao termica Zebra - uma pagina por volume. So disponivel a
+    partir do faturamento (a ordem precisa ter NF)."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    if not ordem.numero_nf:
+        return jsonify({"error": "Essa ordem ainda nao tem NF - etiqueta disponivel so apos o faturamento."}), 400
+
+    os_texto = "/".join(
+        dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip())
+    )
+
+    try:
+        qtde_volumes = int(float(str(ordem.qtde_volumes or "1").strip().replace(",", ".")))
+    except (TypeError, ValueError):
+        qtde_volumes = 1
+
+    cliente_erp = etiqueta_svc.buscar_endereco_cliente(ordem.cliente)
+    endereco_linhas = etiqueta_svc.montar_endereco_formatado(cliente_erp)
+
+    pdf_bytes = etiqueta_pdf.gerar_etiqueta_red_molds_pdf(
+        numero_nf=ordem.numero_nf,
+        orcamento=ordem.orcamento or "",
+        os_texto=os_texto,
+        cliente=ordem.cliente or "",
+        endereco_linhas=endereco_linhas,
+        qtde_volumes=qtde_volumes,
+    )
+
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"etiqueta_red_molds_{cod_ordem_fat}.pdf",
+    )
 
 
 def _fotos_dir() -> str:

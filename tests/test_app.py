@@ -5253,3 +5253,57 @@ def test_motorista_nao_realizada_exige_justificativa(tmp_path):
         atualizada = db.session.get(ViagemParada, parada_id)
         assert atualizada.status == "Nao_realizada"
         assert atualizada.observacao == "Cliente fechado no horario."
+
+
+def test_etiqueta_red_molds_bloqueia_sem_nf_e_gera_pdf_com_dados_e_volumes(tmp_path):
+    """A etiqueta de expedicao (Identificacao de Volume, modelo Red Molds)
+    so fica disponivel apos o faturamento (NF preenchida) - e gera uma
+    pagina por volume (VOL i/N), com NF/orcamento/OS/cliente/endereco
+    corretos. O endereco vem do ERP (tcliente) via bridge; se o bridge nao
+    achar o cliente, a etiqueta ainda sai, so sem endereco."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat, ExpedicaoOrdemFatItem
+
+        ordem = ExpedicaoOrdemFat(
+            cod_ordem_fat=9999, codigo_interno="OF-009999", cliente="PEPSICO DO BRASIL",
+            orcamento="7188", status="Faturado", numero_nf=None, qtde_volumes="2",
+        )
+        db.session.add(ordem)
+        db.session.commit()
+        db.session.add(ExpedicaoOrdemFatItem(ordem_id=ordem.id, linha=1, cod_interno="X1", item="Item 1", n_os="OS-1", qtde_a_faturar=1))
+        db.session.add(ExpedicaoOrdemFatItem(ordem_id=ordem.id, linha=2, cod_interno="X2", item="Item 2", n_os="OS-2", qtde_a_faturar=1))
+        db.session.commit()
+
+    resp_sem_nf = client.get("/api/expedicao/conf-cega/ordens/9999/etiqueta-red-molds.pdf")
+    assert resp_sem_nf.status_code == 400
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat
+        ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=9999).first()
+        ordem.numero_nf = "11868"
+        db.session.commit()
+
+    cliente_fake = {"endereco": "AV. INDEPENDENCIA", "numero": "", "bairro": "", "cidade": "IPORANGA", "uf": "SP", "cep": "18087101"}
+    with patch(
+        "conferencia_app.routes.expedicao_fat_routes.etiqueta_svc.buscar_endereco_cliente",
+        return_value=cliente_fake,
+    ):
+        resp = client.get("/api/expedicao/conf-cega/ordens/9999/etiqueta-red-molds.pdf")
+    assert resp.status_code == 200
+    assert resp.headers.get("Content-Type") == "application/pdf"
+
+    # PDF gerado sem compressao (ver expedicao_etiqueta_pdf.py) - da pra
+    # conferir o conteudo direto nos bytes crus, sem precisar de uma lib
+    # de leitura de PDF so pra teste.
+    corpo = resp.data
+    assert corpo.count(b"/Type /Page") - corpo.count(b"/Type /Pages") == 2  # 2 volumes = 2 paginas
+    assert b"11868" in corpo
+    assert b"7188" in corpo
+    assert b"OS-1/OS-2" in corpo
+    assert b"PEPSICO DO BRASIL" in corpo
+    assert b"VOL: 01/02" in corpo
+    assert b"VOL: 02/02" in corpo

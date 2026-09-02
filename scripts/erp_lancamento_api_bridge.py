@@ -558,6 +558,73 @@ CADASTRO_EMAIL_POR_CNPJ_SQL = """
 """
 
 
+# Endereco do cliente pra etiqueta de expedicao (Identificacao de Volume) -
+# so tem o NOME do cliente disponivel no Sync (nao tem codigo/CNPJ vindos da
+# API de faturamento), entao o casamento e' por nome (ilike, melhor match
+# primeiro). Nomes de coluna de endereco variam bastante entre instalacoes
+# de ERP - por isso o to_jsonb(c)->>'coluna' com varios candidatos, mesmo
+# padrao ja usado em CADASTRO_EMAIL_POR_CNPJ_SQL acima.
+CLIENTE_ENDERECO_POR_NOME_SQL = """
+    select
+        coalesce(to_jsonb(c)->>'codigo', '') as codigo,
+        coalesce(
+            nullif(to_jsonb(c)->>'razao_social', ''),
+            nullif(to_jsonb(c)->>'nome', ''),
+            nullif(to_jsonb(c)->>'fantasia', ''),
+            ''
+        ) as nome,
+        coalesce(
+            nullif(to_jsonb(c)->>'endereco', ''),
+            nullif(to_jsonb(c)->>'logradouro', ''),
+            nullif(to_jsonb(c)->>'rua', ''),
+            ''
+        ) as endereco,
+        coalesce(
+            nullif(to_jsonb(c)->>'numero', ''),
+            nullif(to_jsonb(c)->>'nro', ''),
+            nullif(to_jsonb(c)->>'numero_endereco', ''),
+            ''
+        ) as numero,
+        coalesce(nullif(to_jsonb(c)->>'complemento', ''), '') as complemento,
+        coalesce(nullif(to_jsonb(c)->>'bairro', ''), '') as bairro,
+        coalesce(
+            nullif(to_jsonb(c)->>'cidade', ''),
+            nullif(to_jsonb(c)->>'municipio', ''),
+            ''
+        ) as cidade,
+        coalesce(
+            nullif(to_jsonb(c)->>'uf', ''),
+            nullif(to_jsonb(c)->>'estado', ''),
+            ''
+        ) as uf,
+        regexp_replace(
+            coalesce(
+                to_jsonb(c)->>'cep',
+                to_jsonb(c)->>'cep_endereco',
+                ''
+            ),
+            '\\D',
+            '',
+            'g'
+        ) as cep
+    from public.tcliente c
+    where upper(
+        coalesce(to_jsonb(c)->>'razao_social', '') || ' ' ||
+        coalesce(to_jsonb(c)->>'nome', '') || ' ' ||
+        coalesce(to_jsonb(c)->>'fantasia', '')
+    ) like upper(%s)
+    order by length(
+        coalesce(
+            nullif(to_jsonb(c)->>'razao_social', ''),
+            nullif(to_jsonb(c)->>'nome', ''),
+            nullif(to_jsonb(c)->>'fantasia', ''),
+            ''
+        )
+    ) asc
+    limit 1
+"""
+
+
 CONTAS_RECEBER_ABERTO_SQL = """
     select
         r.codigo::text as codigo,
@@ -2042,6 +2109,36 @@ def create_app() -> Flask:
                     })
         except Exception as exc:
             app.logger.exception("Falha ao consultar e-mail de cadastro no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/cliente-endereco")
+    def consultar_cliente_endereco():
+        """Endereco do cliente por nome (melhor match) - usado pra montar a
+        etiqueta de expedicao (Identificacao de Volume)."""
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            nome = str(payload.get("nome") or "").strip()
+            if not nome:
+                return jsonify({"sucesso": False, "erro": "nome_obrigatorio"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(CLIENTE_ENDERECO_POR_NOME_SQL, (f"%{nome}%",))
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({"sucesso": True, "encontrado": False})
+
+                    cols = [desc[0] for desc in cur.description]
+                    cliente = dict(zip(cols, row))
+                    return jsonify({"sucesso": True, "encontrado": True, "cliente": cliente})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar endereco do cliente no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/contas-receber-aberto")

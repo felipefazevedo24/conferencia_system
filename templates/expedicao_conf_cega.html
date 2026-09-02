@@ -1058,6 +1058,7 @@
                     else if (act === "informar-nf") informarNf(cod);
                     else if (act === "fotos") abrirModalFotosPreexpedicao(cfg.apiBase, cod, ordemPorCod(cod));
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
+                    else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
                     else if (act === "excluir") excluirOrdem(cod);
                 });
@@ -1070,18 +1071,25 @@
             const s = o.status_slug;
             const it = (act, icon, label, danger) =>
                 `<button data-act="${act}" data-cod="${escapeHtml(cod)}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+            // Etiqueta de expedicao (Identificacao de Volume) - so faz sentido
+            // pra ordens de faturamento (tem NF/cliente/orcamento) a partir do
+            // faturamento em diante (precisa de NF pra imprimir).
+            const btnEtiqueta = () =>
+                (cfg.codKey === "cod_ordem_fat") ? it("imprimir-etiqueta-red-molds", "fa-tag", "Imprimir Etiqueta - Red Molds") : "";
             let itens = "";
             if (s === "pendente" || s === "faturado_sem_conf") {
                 const lbl = s === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
                 itens += it("conferir", "fa-barcode", lbl);
                 itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
             } else if (s === "faturado") {
+                itens += btnEtiqueta();
                 itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
                 itens += it("ver", "fa-eye", "Detalhes da conferência");
                 if (CE_IS_ADMIN && cfg.podeCorrigirNf) {
                     itens += "<hr>" + it("corrigir-nf", "fa-file-pen", "Corrigir NF");
                 }
             } else if (s === "romaneio" || s === "expedido") {
+                itens += btnEtiqueta();
                 if (s === "romaneio") {
                     itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
                 }
@@ -1132,6 +1140,11 @@
             const nf = o.numero_nf;
             if (!nf) { toast("Ordem sem NF vinculada ao registro de expedição.", "error"); return; }
             window.open("/expedicao/conferencia?q=" + encodeURIComponent(nf), "_blank");
+        }
+
+        // ── Etiqueta de expedição (Identificação de Volume) ─────────────────
+        function imprimirEtiquetaRedMolds(cod) {
+            window.open(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-red-molds.pdf`, "_blank");
         }
 
         // ── Anexar comprovante de entrega direto da fila de Expedição ────────
