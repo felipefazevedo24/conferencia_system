@@ -68,9 +68,13 @@ def _itens_nf_para_comparacao(itens_db: list[ItemNota]) -> list[dict]:
                 "qtd": qtd_original,
                 "qtd_original": qtd_original,
                 "unidade_comercial": i.unidade_comercial or "UN",
+                # Aprovacao de Compras precisa da comparacao HONESTA (crua): trava
+                # o fator em 1.0 (conversao_manual=True) pra o matching NAO "adivinhar"
+                # um fator que force a qtd bater com o pedido - senao ele mascara a
+                # divergencia de quantidade e infla o valor unitario.
                 "conversao_fator": 1.0,
                 "conversao_unidade": i.unidade_comercial or "UN",
-                "conversao_manual": False,
+                "conversao_manual": True,
                 "linha_po_vinculada": i.linha_po_vinculada,
                 "valor_unit": valor_unit,
                 "valor_total_linha": valor_total_linha,
