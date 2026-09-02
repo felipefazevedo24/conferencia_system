@@ -4902,8 +4902,10 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
     Assim que uma divergência de quantidade/valor entre XML e pedido é
     detectada (não só quando alguém tenta avançar mesmo assim), abre um pedido
     de aprovação de Compras e avisa no Teams. Enquanto ficar "Pendente", a
-    rota /liberar bloqueia a NF. Idempotente: só cria/avisa 1x por NF (não
-    repete enquanto já houver um pedido Pendente ou Aprovado).
+    rota /liberar bloqueia a NF. Idempotente pro REGISTRO (não cria duplicado
+    enquanto já houver um Pendente/Aprovado) mas RETENTA o envio ao Teams a
+    cada consulta enquanto teams_notificado continuar False (o envio é
+    síncrono aqui de propósito, pra sabermos com certeza se deu certo).
     """
     numero_nota = str(numero_nota or "").strip()
     if not numero_nota or not isinstance(resultado, dict):
@@ -4915,9 +4917,10 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
             DivergenciaPedidoAprovacao.query
             .filter(DivergenciaPedidoAprovacao.numero_nota == numero_nota)
             .filter(DivergenciaPedidoAprovacao.status.in_(("Pendente", "Aprovado")))
+            .order_by(DivergenciaPedidoAprovacao.id.desc())
             .first()
         )
-        if existente:
+        if existente and existente.teams_notificado:
             return
 
         linhas_divergentes = []
@@ -4937,24 +4940,32 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
         if not linhas_divergentes:
             return
 
-        registro = DivergenciaPedidoAprovacao(
-            numero_nota=numero_nota,
-            pedido_compra=str(numero_pedido or "")[:200],
-            fornecedor=str(fornecedor or "")[:100],
-            detalhe="\n".join(linhas_divergentes)[:4000],
-            status="Pendente",
-        )
-        db.session.add(registro)
+        registro = existente
+        if registro is None:
+            registro = DivergenciaPedidoAprovacao(
+                numero_nota=numero_nota,
+                pedido_compra=str(numero_pedido or "")[:200],
+                fornecedor=str(fornecedor or "")[:100],
+                status="Pendente",
+            )
+            db.session.add(registro)
+        registro.detalhe = "\n".join(linhas_divergentes)[:4000]
         db.session.commit()
 
         link = f"{_base_url_columbia()}/upload?stage=auditoria&nota={numero_nota}"
-        teams_service.notificar_divergencia_pedido(
+        enviado = teams_service.notificar_divergencia_pedido(
             numero_nota=numero_nota,
             fornecedor=fornecedor,
             pedido_compra=numero_pedido,
             linhas_divergentes=linhas_divergentes,
             link_conferencia=link,
+            sync=True,
         )
+        if enviado:
+            registro.teams_notificado = True
+            db.session.commit()
+        else:
+            current_app.logger.warning("Divergência da NF %s registrada, mas o aviso ao Teams falhou - será retentado na próxima consulta.", numero_nota)
     except Exception:
         current_app.logger.exception("Falha ao notificar divergência de pedido no Teams (NF %s)", numero_nota)
 

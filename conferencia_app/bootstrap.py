@@ -1050,6 +1050,11 @@ def initialize_database(app: Flask) -> None:
                 raise
 
         try:
+            _ensure_divergencia_pedido_aprovacao_columns()
+        except Exception:
+            pass
+
+        try:
             _ensure_usuario_email_column()
         except Exception:
             pass
@@ -1316,6 +1321,20 @@ def _seed_ciclos_troca_epi() -> None:
         novos += 1
     if novos:
         db.session.commit()
+
+
+def _ensure_divergencia_pedido_aprovacao_columns() -> None:
+    """Adiciona teams_notificado em instalacoes que criaram a tabela antes desse campo existir."""
+    from sqlalchemy import text, inspect as sa_inspect
+    insp = sa_inspect(db.engine)
+    if "divergencia_pedido_aprovacao" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("divergencia_pedido_aprovacao")}
+    if "teams_notificado" in cols:
+        return
+    with db.engine.connect() as conn:
+        conn.execute(text("ALTER TABLE divergencia_pedido_aprovacao ADD COLUMN teams_notificado BOOLEAN NOT NULL DEFAULT 0"))
+        conn.commit()
 
 
 def _ensure_usuario_email_column() -> None:
