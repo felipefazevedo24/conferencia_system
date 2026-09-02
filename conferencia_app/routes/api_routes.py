@@ -36,6 +36,7 @@ from ..models import (
     ActiveSession,
     AvisoAtualizacao,
     ConferenciaLock,
+    DivergenciaPedidoAprovacao,
     ExpedicaoConferencia,
     ExpedicaoConferenciaDecisao,
     ExpedicaoConferenciaItem,
@@ -81,6 +82,7 @@ from ..schemas.api_schemas import (
     ValidarSchema,
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
+from ..services import teams_service
 from ..services import processo_recebimento_log_service as processo_log_svc
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
 from ..services.classificacao_contabil_service import (
@@ -4895,6 +4897,95 @@ def _anexar_uso_historico_po(resultado: dict, numero_nota: str) -> None:
         current_app.logger.exception("Falha ao verificar uso historico de linha do pedido em outras NFs")
 
 
+def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido: str, fornecedor: str, resultado: dict) -> None:
+    """
+    Assim que uma divergência de quantidade/valor entre XML e pedido é
+    detectada (não só quando alguém tenta avançar mesmo assim), abre um pedido
+    de aprovação de Compras e avisa no Teams. Enquanto ficar "Pendente", a
+    rota /liberar bloqueia a NF. Idempotente: só cria/avisa 1x por NF (não
+    repete enquanto já houver um pedido Pendente ou Aprovado).
+    """
+    numero_nota = str(numero_nota or "").strip()
+    if not numero_nota or not isinstance(resultado, dict):
+        return
+    if not resultado.get("encontrado") or resultado.get("total_ok"):
+        return
+    try:
+        existente = (
+            DivergenciaPedidoAprovacao.query
+            .filter(DivergenciaPedidoAprovacao.numero_nota == numero_nota)
+            .filter(DivergenciaPedidoAprovacao.status.in_(("Pendente", "Aprovado")))
+            .first()
+        )
+        if existente:
+            return
+
+        linhas_divergentes = []
+        for par in resultado.get("pares") or []:
+            if par.get("ok"):
+                continue
+            po_linha = par.get("po_linha")
+            destino = f"Linha {po_linha} do pedido" if po_linha else "sem linha do pedido vinculada"
+            motivos = []
+            if not par.get("qtd_ok"):
+                motivos.append("quantidade diverge")
+            if not par.get("valor_ok"):
+                motivos.append("valor diverge")
+            linhas_divergentes.append(
+                f"Linha {par.get('linha')} do XML ({par.get('nf_codigo')}) -> {destino}: {', '.join(motivos) or 'divergente'}"
+            )
+        if not linhas_divergentes:
+            return
+
+        registro = DivergenciaPedidoAprovacao(
+            numero_nota=numero_nota,
+            pedido_compra=str(numero_pedido or "")[:200],
+            fornecedor=str(fornecedor or "")[:100],
+            detalhe="\n".join(linhas_divergentes)[:4000],
+            status="Pendente",
+        )
+        db.session.add(registro)
+        db.session.commit()
+
+        link = f"{_base_url_columbia()}/upload?stage=auditoria&nota={numero_nota}"
+        teams_service.notificar_divergencia_pedido(
+            numero_nota=numero_nota,
+            fornecedor=fornecedor,
+            pedido_compra=numero_pedido,
+            linhas_divergentes=linhas_divergentes,
+            link_conferencia=link,
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao notificar divergência de pedido no Teams (NF %s)", numero_nota)
+
+
+def _divergencia_callback_token_valido() -> bool:
+    esperado = str(os.environ.get("TEAMS_DIVERGENCIA_CALLBACK_TOKEN") or "").strip()
+    if not esperado:
+        return False  # fail-closed: endpoint sensível, exige token configurado
+    auth = str(request.headers.get("Authorization") or "").strip()
+    informado = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    return bool(informado and informado == esperado)
+
+
+def _aprovadores_divergencia_pedido() -> set[str]:
+    """Lista fixa (config) de e-mails autorizados a aprovar/rejeitar divergência pelo Teams."""
+    env_lista = str(os.environ.get("DIVERGENCIA_APROVADORES_EMAILS") or "").strip()
+    emails: list[str] = []
+    if env_lista:
+        emails = [e.strip() for e in env_lista.split(",") if e.strip()]
+    else:
+        try:
+            path = os.path.join(current_app.instance_path, "teams_config.json")
+            if os.path.isfile(path):
+                with open(path, encoding="utf-8") as fh:
+                    cfg = json.load(fh) or {}
+                emails = [str(e).strip() for e in (cfg.get("divergencia_aprovadores") or []) if str(e).strip()]
+        except Exception:
+            emails = []
+    return {e.lower() for e in emails}
+
+
 def _sincronizar_codigo_interno_por_pedido(
     numero_nota: str,
     numero_pedido: str,
@@ -5144,6 +5235,10 @@ def consultar_pedido_excel():
     # Verifica se alguma linha do pedido ja foi usada por OUTRA NF no sistema
     # (ajuda a explicar saldo insuficiente que nao vem de vinculo nesta NF).
     _anexar_uso_historico_po(resultado, numero_nota)
+
+    # Divergencia detectada -> abre aprovacao de Compras via Teams (bloqueia
+    # /liberar ate a resposta). Idempotente, so cria/avisa 1x por NF.
+    _notificar_divergencia_pedido_se_necessario(numero_nota, numero_pedido, fornecedor, resultado)
 
     # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
     if numero_nota and itens_nf:
@@ -5401,6 +5496,28 @@ def liberar_nota_via_xml_auditor():
             }
         ), 409
 
+    # Divergência XML x pedido pendente de aprovação de Compras (Teams) -
+    # bloqueia a liberação até a resposta (aprovado/rejeitado).
+    if not material_cliente and not remessa:
+        divergencia_pendente = (
+            DivergenciaPedidoAprovacao.query
+            .filter_by(numero_nota=numero_nota, status="Pendente")
+            .order_by(DivergenciaPedidoAprovacao.id.desc())
+            .first()
+        )
+        if divergencia_pendente:
+            return jsonify(
+                {
+                    "sucesso": False,
+                    "erro": "divergencia_pendente_aprovacao",
+                    "msg": (
+                        f"Divergência entre XML e pedido de compra aguardando aprovação de Compras via Teams "
+                        f"(solicitado em {divergencia_pendente.solicitado_em.strftime('%d/%m/%Y %H:%M')}). "
+                        "A NF só pode ser liberada após a aprovação."
+                    ),
+                }
+            ), 409
+
     # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
     if not material_cliente and not remessa and pedidos_nota:
         try:
@@ -5441,6 +5558,77 @@ def liberar_nota_via_xml_auditor():
     )
     db.session.commit()
     return jsonify({"sucesso": True, "msg": msg_liberacao})
+
+
+@api_bp.route("/api/xml_auditor/divergencia/status", methods=["GET"])
+@permission_required("PAGE_XML_AUDITOR")
+def divergencia_pedido_status():
+    """Consulta o estado da aprovação de Compras pra uma NF (usado pela tela pra mostrar o banner de bloqueio)."""
+    numero_nota = str(request.args.get("nota") or "").strip()
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+    registro = (
+        DivergenciaPedidoAprovacao.query
+        .filter_by(numero_nota=numero_nota)
+        .order_by(DivergenciaPedidoAprovacao.id.desc())
+        .first()
+    )
+    if not registro:
+        return jsonify({"sucesso": True, "existe": False})
+    return jsonify(
+        {
+            "sucesso": True,
+            "existe": True,
+            "status": registro.status,
+            "detalhe": registro.detalhe,
+            "solicitado_em": registro.solicitado_em.isoformat() if registro.solicitado_em else None,
+            "respondido_por": registro.respondido_por,
+            "respondido_em": registro.respondido_em.isoformat() if registro.respondido_em else None,
+            "motivo_resposta": registro.motivo_resposta,
+        }
+    )
+
+
+@api_bp.route("/api/xml_auditor/divergencia/webhook-decisao", methods=["POST"])
+def divergencia_pedido_webhook_decisao():
+    """
+    Callback chamado pelo Power Automate (fluxo "Post adaptive card and wait
+    for a response" no Teams) com a decisão de Compras sobre uma divergência
+    XML x pedido. Protegido por token fixo (NAO usa sessão/login - quem chama
+    é o Power Automate, nao um usuario logado no navegador).
+    """
+    if not _divergencia_callback_token_valido():
+        return jsonify({"sucesso": False, "msg": "Token de integração inválido ou não configurado."}), 403
+
+    data = request.get_json() or {}
+    numero_nota = str(data.get("numero_nota") or "").strip()
+    decisao = str(data.get("decisao") or "").strip().lower()
+    aprovador_email = str(data.get("aprovador_email") or "").strip().lower()
+    motivo = str(data.get("motivo") or "").strip()[:500]
+
+    if not numero_nota or decisao not in ("aprovado", "rejeitado"):
+        return jsonify({"sucesso": False, "msg": "Campos obrigatórios: numero_nota, decisao (aprovado|rejeitado)."}), 400
+
+    aprovadores = _aprovadores_divergencia_pedido()
+    if not aprovadores or aprovador_email not in aprovadores:
+        return jsonify({"sucesso": False, "msg": "E-mail não autorizado a aprovar/rejeitar divergências de pedido."}), 403
+
+    registro = (
+        DivergenciaPedidoAprovacao.query
+        .filter_by(numero_nota=numero_nota, status="Pendente")
+        .order_by(DivergenciaPedidoAprovacao.id.desc())
+        .first()
+    )
+    if not registro:
+        return jsonify({"sucesso": False, "msg": "Nenhuma divergência pendente encontrada para esta NF."}), 404
+
+    registro.status = "Aprovado" if decisao == "aprovado" else "Rejeitado"
+    registro.respondido_por = aprovador_email
+    registro.respondido_em = datetime.now()
+    registro.motivo_resposta = motivo or None
+    db.session.commit()
+
+    return jsonify({"sucesso": True, "msg": f"Divergência da NF {numero_nota} marcada como {registro.status.lower()}."})
 
 
 @api_bp.route("/api/admin/liberar_nota_conferencia", methods=["POST"])
