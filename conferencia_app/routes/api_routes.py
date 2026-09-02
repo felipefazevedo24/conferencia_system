@@ -5603,6 +5603,17 @@ def liberar_nota_via_xml_auditor():
             .order_by(DivergenciaPedidoAprovacao.id.desc())
             .first()
         )
+        # Se ainda não há pendência (operador não confirmou a divergência antes),
+        # detecta agora na hora de liberar: se houver divergência real, cria a
+        # pendência + avisa o Teams e bloqueia. Se estiver tudo certo, não faz nada.
+        if not divergencia_pendente and pedidos_nota:
+            _detectar_e_notificar_divergencia_confirmada(numero_nota, pedidos_nota, cnpj_emitente, fornecedor)
+            divergencia_pendente = (
+                DivergenciaPedidoAprovacao.query
+                .filter_by(numero_nota=numero_nota, status="Pendente")
+                .order_by(DivergenciaPedidoAprovacao.id.desc())
+                .first()
+            )
         if divergencia_pendente:
             # Se o aviso ainda não saiu (1ª tentativa falhou ou registro antigo),
             # reenvia agora - assim clicar "Liberar" garante que Compras seja avisada.
