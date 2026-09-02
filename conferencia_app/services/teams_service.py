@@ -186,22 +186,43 @@ def notificar_divergencia_pedido(
     Notifica Compras (via Power Automate) de uma divergencia XML x Pedido que
     precisa de aprovacao antes da NF poder ser liberada para conferencia.
 
-    Diferente de enviar_card(), aqui o payload NAO e um Adaptive Card pronto -
-    e um JSON simples com os dados da divergencia. O fluxo do Power Automate
-    (acao "Post adaptive card and wait for a response") monta o card com os
-    botoes Aprovar/Rejeitar por conta propria a partir desses campos, e chama
-    de volta POST /api/xml_auditor/divergencia/webhook-decisao com a decisao.
+    O webhook "Enviar alertas de webhook" do Power Automate (mesmo tipo usado
+    em webhook_expedicao) EXIGE que a mensagem seja um Adaptive Card ou
+    Message Card - por isso o payload usa o mesmo envelope de enviar_card()
+    (senao o Power Automate ignora/rejeita a chamada). Os dados brutos da
+    divergencia (numero_nota, pedido_compra, linhas_divergentes, etc.) vao
+    JUNTO como campos extras no mesmo JSON, fora do card - servem pra quem
+    quiser configurar no flow um passo seguinte de "Post adaptive card and
+    wait for a response" (com Aprovar/Rejeitar) usando esses campos, que
+    depois chama de volta POST /api/xml_auditor/divergencia/webhook-decisao.
     """
     app = current_app._get_current_object()
     url = _webhook_url(env_var, config_key)
     if not url:
         app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
         return
-    payload = {
-        "numero_nota": str(numero_nota or ""),
-        "fornecedor": str(fornecedor or ""),
-        "pedido_compra": str(pedido_compra or ""),
-        "linhas_divergentes": [str(linha) for linha in (linhas_divergentes or [])],
-        "link_conferencia": str(link_conferencia or ""),
-    }
+
+    linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
+    partes_subinfo = []
+    if pedido_compra:
+        partes_subinfo.append(f"Pedido: {pedido_compra}")
+    partes_subinfo.extend(str(linha) for linha in (linhas_divergentes or []))
+    if link_conferencia:
+        partes_subinfo.append(f"Conferir: {link_conferencia}")
+    subinfo = "\n".join(partes_subinfo) or None
+
+    payload = _card_payload(
+        "⚠️ Divergência XML x Pedido — aprovação de Compras necessária",
+        linha_principal,
+        subinfo,
+        mencionar_canal=True,
+    )
+    # Campos extras (fora do envelope do card), para automações adicionais no flow.
+    payload["numero_nota"] = str(numero_nota or "")
+    payload["fornecedor"] = str(fornecedor or "")
+    payload["pedido_compra"] = str(pedido_compra or "")
+    payload["linhas_divergentes"] = [str(linha) for linha in (linhas_divergentes or [])]
+    payload["link_conferencia"] = str(link_conferencia or "")
+
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+
