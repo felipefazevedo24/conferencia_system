@@ -1168,12 +1168,16 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
         qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
         qtd_ok_grupo = po_qtd is not None and qtd_diff < 0.0001
+        # Guarda quais linhas do XML (numero + quantidade) compoem a soma desta
+        # linha do pedido, pra dar pra conferir de onde vem o total (diagnostico).
+        linhas_grupo = [{"linha": i + 1, "nf_qtd": round(mets[i]["nf_qtd"], 6)} for i in indices]
         for i in indices:
             mets[i]["qtd_ok"] = qtd_ok_grupo
             mets[i]["qtd_diff"] = qtd_diff
             mets[i]["ok"] = qtd_ok_grupo and mets[i]["valor_ok"]
             mets[i]["rateio_po"] = True
             mets[i]["rateio_soma_nf_qtd"] = soma_nf_qtd
+            mets[i]["grupo_linhas_xml"] = linhas_grupo
 
     # Saldo restante por linha do PO nesta NF: soma o que já foi atribuído a cada
     # linha (considerando a conversão aplicada) e calcula o que ainda sobra, de
@@ -1227,6 +1231,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "ok": met["ok"],
                 "rateio_po": bool(met.get("rateio_po")),
                 "rateio_soma_nf_qtd": met.get("rateio_soma_nf_qtd"),
+                "grupo_linhas_xml": met.get("grupo_linhas_xml"),
                 "po_saldo_antes": met.get("po_saldo_antes"),
                 "po_saldo_depois": met.get("po_saldo_depois"),
             }
