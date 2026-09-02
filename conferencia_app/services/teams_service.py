@@ -179,9 +179,10 @@ def notificar_divergencia_pedido(
     linhas_divergentes: list,
     link_conferencia: str | None = None,
     *,
+    sync: bool = False,
     env_var: str = "TEAMS_WEBHOOK_DIVERGENCIA_URL",
     config_key: str = "webhook_divergencia_pedido",
-) -> None:
+) -> bool | None:
     """
     Notifica Compras (via Power Automate) de uma divergencia XML x Pedido que
     precisa de aprovacao antes da NF poder ser liberada para conferencia.
@@ -195,12 +196,17 @@ def notificar_divergencia_pedido(
     quiser configurar no flow um passo seguinte de "Post adaptive card and
     wait for a response" (com Aprovar/Rejeitar) usando esses campos, que
     depois chama de volta POST /api/xml_auditor/divergencia/webhook-decisao.
+
+    sync=True: envia SINCRONO (bloqueia ate a resposta) e retorna True/False
+    conforme o envio deu certo - usado quando o chamador precisa SABER se
+    realmente notificou (ex.: pra decidir se tenta de novo depois), em vez do
+    fire-and-forget padrao (sync=False, retorna None, nunca informa falha).
     """
     app = current_app._get_current_object()
     url = _webhook_url(env_var, config_key)
     if not url:
         app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
-        return
+        return False if sync else None
 
     linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
     partes_subinfo = []
@@ -223,6 +229,18 @@ def notificar_divergencia_pedido(
     payload["pedido_compra"] = str(pedido_compra or "")
     payload["linhas_divergentes"] = [str(linha) for linha in (linhas_divergentes or [])]
     payload["link_conferencia"] = str(link_conferencia or "")
+
+    if sync:
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            app.logger.warning("Falha ao enviar aviso de divergência ao Teams (NF %s): %s", numero_nota, exc)
+            return False
+
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+    return None
 
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
 

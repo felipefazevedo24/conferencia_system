@@ -3132,3 +3132,6 @@ class DivergenciaPedidoAprovacao(db.Model):
     respondido_por = db.Column(db.String(160))
     respondido_em = db.Column(db.DateTime)
     motivo_resposta = db.Column(db.String(500))
+    # Confirma que o aviso REALMENTE saiu pro Teams (envio sincrono). Se False,
+    # a proxima consulta tenta reenviar em vez de desistir pra sempre.
+    teams_notificado = db.Column(db.Boolean, nullable=False, default=False)
