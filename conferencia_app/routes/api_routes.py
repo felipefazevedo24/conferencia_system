@@ -4910,13 +4910,13 @@ def _sincronizar_codigo_interno_por_pedido(
             item.pedido_compra = po_pedido[:50]
             atualizou = True
 
+        # item.codigo/item.descricao são o CÓDIGO E A DESCRIÇÃO DO XML da NF e
+        # nunca devem ser sobrescritos aqui - o código interno (ERP) resolvido
+        # pelo pedido vai em codigo_grv (mesmo padrão usado em erp_lancamento_service
+        # e classificacao_contabil_service: item.codigo_grv or item.codigo).
         codigo_material = str(par.get("po_codigo_material") or "").strip()
-        descricao_material = str(par.get("po_descricao_material") or "").strip()
-        if codigo_material and item.codigo != codigo_material:
-            item.codigo = codigo_material
-            atualizou = True
-        if descricao_material and item.descricao != descricao_material:
-            item.descricao = descricao_material
+        if codigo_material and item.codigo_grv != codigo_material:
+            item.codigo_grv = codigo_material[:80]
             atualizou = True
 
     if atualizou:
@@ -5251,12 +5251,12 @@ def vincular_linha_po():
             # pedido: é o rateio/divisão de saldo (ex.: fornecedor detalha em
             # várias linhas de chapa o que no pedido é uma única linha).
 
+            # item.codigo/item.descricao SEMPRE refletem o XML da NF - o código
+            # interno (ERP) resolvido pelo pedido vai em codigo_grv, sem sobrescrever
+            # o que veio do XML (padrão já usado no resto do app: codigo_grv or codigo).
             codigo_material = str(linhas_po[linha_po].get("codigo_material") or "").strip()
-            descricao_material = str(linhas_po[linha_po].get("descricao_material") or "").strip()
             if codigo_material:
-                item.codigo = codigo_material
-            if descricao_material:
-                item.descricao = descricao_material
+                item.codigo_grv = codigo_material[:80]
 
     item.linha_po_vinculada = linha_po
     db.session.commit()
