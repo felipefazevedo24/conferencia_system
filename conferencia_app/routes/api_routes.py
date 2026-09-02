@@ -5004,6 +5004,51 @@ def _reenviar_divergencia_teams(registro) -> bool:
         return False
 
 
+def _detectar_e_notificar_divergencia_confirmada(numero_nota: str, numero_pedido: str, cnpj_emitente: str, fornecedor: str) -> None:
+    """
+    Roda a comparacao ATUAL (com os vinculos ja salvos) e, se ainda houver
+    divergencia, cria o pedido de aprovacao + avisa Compras no Teams. Chamado
+    quando o operador CONFIRMA seguir com divergencia (marcador na observacao),
+    nao na deteccao - assim ele pode ajustar os vinculos antes sem disparar o aviso.
+    """
+    numero_pedido = str(numero_pedido or "").strip()
+    if not numero_pedido:
+        return
+    try:
+        query = ItemNota.query.filter_by(numero_nota=numero_nota)
+        if cnpj_emitente:
+            query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+        elif fornecedor:
+            query = query.filter(ItemNota.fornecedor == fornecedor)
+        itens_db = query.order_by(ItemNota.id.asc()).all()
+        itens_nf = []
+        for i in itens_db:
+            qtd_original = float(i.qtd_real or 0)
+            valor_total_linha = float(i.valor_produto or 0)
+            valor_unit = round(valor_total_linha / qtd_original, 10) if qtd_original > 0 else 0.0
+            itens_nf.append(
+                {
+                    "item_id": i.id,
+                    "codigo": i.codigo or "---",
+                    "descricao": i.descricao or "---",
+                    "qtd": qtd_original,
+                    "qtd_original": qtd_original,
+                    "unidade_comercial": i.unidade_comercial or "UN",
+                    "conversao_fator": 1.0,
+                    "conversao_unidade": i.unidade_comercial or "UN",
+                    "conversao_manual": False,
+                    "linha_po_vinculada": i.linha_po_vinculada,
+                    "valor_unit": valor_unit,
+                    "valor_total_linha": valor_total_linha,
+                }
+            )
+        resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
+    except Exception:
+        current_app.logger.exception("Falha ao comparar pedido para notificar divergência confirmada (NF %s)", numero_nota)
+        return
+    _notificar_divergencia_pedido_se_necessario(numero_nota, numero_pedido, fornecedor or "", resultado)
+
+
 def _divergencia_callback_token_valido() -> bool:
     esperado = str(os.environ.get("TEAMS_DIVERGENCIA_CALLBACK_TOKEN") or "").strip()
     if not esperado:
@@ -5184,6 +5229,13 @@ def vincular_pedido_xml_auditor():
                 db.session.commit()
         except Exception:
             db.session.rollback()
+
+    # Operador confirmou seguir com divergencia (marcador na observacao) -> este
+    # e o "OK" que dispara o aviso a Compras no Teams (antes disso ele ainda podia
+    # ajustar os vinculos e resolver). So dispara se ainda houver divergencia real.
+    if not material_cliente and not remessa and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
+        _detectar_e_notificar_divergencia_confirmada(numero_nota, pedido_compra, cnpj_emitente, fornecedor)
+
     return jsonify(
         {
             "sucesso": True,
@@ -5281,9 +5333,10 @@ def consultar_pedido_excel():
     # (ajuda a explicar saldo insuficiente que nao vem de vinculo nesta NF).
     _anexar_uso_historico_po(resultado, numero_nota)
 
-    # Divergencia detectada -> abre aprovacao de Compras via Teams (bloqueia
-    # /liberar ate a resposta). Idempotente, so cria/avisa 1x por NF.
-    _notificar_divergencia_pedido_se_necessario(numero_nota, numero_pedido, fornecedor, resultado)
+    # NAO notifica o Teams aqui (na deteccao): o operador ainda pode ajustar os
+    # vinculos XML x pedido e resolver a divergencia. O aviso a Compras sai
+    # quando o operador CONFIRMA seguir com divergencia (vincular_pedido com o
+    # marcador) e, como rede de seguranca, ao clicar "Liberar" (se ainda nao saiu).
 
     # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
     if numero_nota and itens_nf:
