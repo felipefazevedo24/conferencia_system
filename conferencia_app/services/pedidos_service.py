@@ -901,6 +901,16 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         if bool(nf_item.get("conversao_manual")):
             return [fator_manual]
 
+        # Unidade de PESO (T/KG/G): pedido de compra de chapa é sempre em KG, e o
+        # fator de conversão é FIXO pela unidade do XML (1T=1000KG) - NUNCA
+        # "adivinhado" tentando bater com o saldo do pedido. Do contrário o
+        # algoritmo inventa fatores sem sentido (tipo x5.922) só pra forçar a
+        # conta fechar, escondendo divergência real e mostrando quantidade absurda.
+        unidade_nf = str(nf_item.get("unidade_comercial") or "").strip().upper()
+        fator_peso = _FATOR_PESO_PARA_KG.get(unidade_nf)
+        if fator_peso is not None:
+            return [fator_peso]
+
         po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
         # Quando a linha do pedido não tem saldo/quantidade cadastrada (0 ou
         # ausente), o "melhor" candidato por menor diferença SEMPRE vira o menor
