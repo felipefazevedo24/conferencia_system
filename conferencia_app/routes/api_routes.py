@@ -4916,10 +4916,14 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
         existente = (
             DivergenciaPedidoAprovacao.query
             .filter(DivergenciaPedidoAprovacao.numero_nota == numero_nota)
-            .filter(DivergenciaPedidoAprovacao.status.in_(("Pendente", "Aprovado")))
+            .filter(DivergenciaPedidoAprovacao.status.in_(("Pendente", "Aprovado", "Rejeitado")))
             .order_by(DivergenciaPedidoAprovacao.id.desc())
             .first()
         )
+        # Compras ja decidiu (aprovou ou recusou) -> decisao e final, nao cria
+        # nova pendencia nem reavisa. Recusa e DEFINITIVA (a NF nao volta pra fila).
+        if existente and existente.status in ("Aprovado", "Rejeitado"):
+            return
         if existente and existente.teams_notificado:
             return
 
@@ -5594,52 +5598,72 @@ def liberar_nota_via_xml_auditor():
             }
         ), 409
 
-    # Divergência XML x pedido pendente de aprovação de Compras (Teams) -
-    # bloqueia a liberação até a resposta (aprovado/rejeitado).
+    # Divergência XML x pedido: Compras decide via Teams/tela de aprovação.
     if not material_cliente and not remessa:
-        divergencia_pendente = (
+        ultima_decisao = (
             DivergenciaPedidoAprovacao.query
-            .filter_by(numero_nota=numero_nota, status="Pendente")
+            .filter_by(numero_nota=numero_nota)
             .order_by(DivergenciaPedidoAprovacao.id.desc())
             .first()
         )
-        # Se ainda não há pendência (operador não confirmou a divergência antes),
-        # detecta agora na hora de liberar: se houver divergência real, cria a
-        # pendência + avisa o Teams e bloqueia. Se estiver tudo certo, não faz nada.
-        if not divergencia_pendente and pedidos_nota:
-            _detectar_e_notificar_divergencia_confirmada(numero_nota, pedidos_nota, cnpj_emitente, fornecedor)
-            divergencia_pendente = (
-                DivergenciaPedidoAprovacao.query
-                .filter_by(numero_nota=numero_nota, status="Pendente")
-                .order_by(DivergenciaPedidoAprovacao.id.desc())
-                .first()
-            )
-        if divergencia_pendente:
-            # Se o aviso ainda não saiu (1ª tentativa falhou ou registro antigo),
-            # reenvia agora - assim clicar "Liberar" garante que Compras seja avisada.
-            reenviado_agora = False
-            if not divergencia_pendente.teams_notificado:
-                reenviado_agora = _reenviar_divergencia_teams(divergencia_pendente)
-            aviso_extra = (
-                " O aviso foi enviado ao Teams agora."
-                if reenviado_agora
-                else (
-                    ""
-                    if divergencia_pendente.teams_notificado
-                    else " (Atenção: não foi possível enviar o aviso ao Teams - verifique a configuração do webhook.)"
-                )
-            )
+
+        # RECUSA DEFINITIVA: se Compras recusou, a NF não pode ser liberada por
+        # aqui - precisa ser excluída do Auditor ou tratada à parte com Compras.
+        if ultima_decisao and ultima_decisao.status == "Rejeitado":
+            quando = ultima_decisao.respondido_em.strftime("%d/%m/%Y %H:%M") if ultima_decisao.respondido_em else "—"
             return jsonify(
                 {
                     "sucesso": False,
-                    "erro": "divergencia_pendente_aprovacao",
+                    "erro": "divergencia_recusada",
                     "msg": (
-                        f"Divergência entre XML e pedido de compra aguardando aprovação de Compras via Teams "
-                        f"(solicitado em {divergencia_pendente.solicitado_em.strftime('%d/%m/%Y %H:%M')}). "
-                        f"A NF só pode ser liberada após a aprovação.{aviso_extra}"
+                        f"Compras RECUSOU a divergência desta NF (por {ultima_decisao.respondido_por or '—'} em {quando})"
+                        f"{': ' + ultima_decisao.motivo_resposta if ultima_decisao.motivo_resposta else ''}. "
+                        "A NF não pode ser liberada por aqui — exclua do Auditor XML ou trate com Compras."
                     ),
                 }
             ), 409
+
+        # APROVADO: Compras liberou -> segue o fluxo normal (não bloqueia).
+        # PENDENTE / SEM DECISÃO: bloqueia (e detecta/cria/avisa se ainda não existe).
+        if not (ultima_decisao and ultima_decisao.status == "Aprovado"):
+            divergencia_pendente = ultima_decisao if (ultima_decisao and ultima_decisao.status == "Pendente") else None
+            # Se ainda não há pendência (operador não confirmou a divergência antes),
+            # detecta agora na hora de liberar: se houver divergência real, cria a
+            # pendência + avisa o Teams e bloqueia. Se estiver tudo certo, não faz nada.
+            if not divergencia_pendente and pedidos_nota:
+                _detectar_e_notificar_divergencia_confirmada(numero_nota, pedidos_nota, cnpj_emitente, fornecedor)
+                divergencia_pendente = (
+                    DivergenciaPedidoAprovacao.query
+                    .filter_by(numero_nota=numero_nota, status="Pendente")
+                    .order_by(DivergenciaPedidoAprovacao.id.desc())
+                    .first()
+                )
+            if divergencia_pendente:
+                # Se o aviso ainda não saiu (1ª tentativa falhou ou registro antigo),
+                # reenvia agora - assim clicar "Liberar" garante que Compras seja avisada.
+                reenviado_agora = False
+                if not divergencia_pendente.teams_notificado:
+                    reenviado_agora = _reenviar_divergencia_teams(divergencia_pendente)
+                aviso_extra = (
+                    " O aviso foi enviado ao Teams agora."
+                    if reenviado_agora
+                    else (
+                        ""
+                        if divergencia_pendente.teams_notificado
+                        else " (Atenção: não foi possível enviar o aviso ao Teams - verifique a configuração do webhook.)"
+                    )
+                )
+                return jsonify(
+                    {
+                        "sucesso": False,
+                        "erro": "divergencia_pendente_aprovacao",
+                        "msg": (
+                            f"Divergência entre XML e pedido de compra aguardando aprovação de Compras via Teams "
+                            f"(solicitado em {divergencia_pendente.solicitado_em.strftime('%d/%m/%Y %H:%M')}). "
+                            f"A NF só pode ser liberada após a aprovação.{aviso_extra}"
+                        ),
+                    }
+                ), 409
 
     # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
     if not material_cliente and not remessa and pedidos_nota:

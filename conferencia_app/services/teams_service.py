@@ -209,7 +209,7 @@ def notificar_divergencia_pedido(
         return False if sync else None
 
     # === Texto do cartao do Teams (edite aqui para mudar a mensagem) ==========
-    titulo_card = "🚨 Divergência de recebimento — Compras precisa decidir"
+    titulo_card = "🚨 Divergência identificada"
     linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
     partes_subinfo = []
     if pedido_compra:
@@ -218,7 +218,7 @@ def notificar_divergencia_pedido(
         partes_subinfo.append("O que divergiu entre a nota e o pedido:")
         partes_subinfo.extend(f"• {linha}" for linha in linhas_divergentes)
     partes_subinfo.append("")
-    partes_subinfo.append("👉 Abra o link abaixo, faça login com seu usuário do Sync e aprove ou recuse. Na tela você vê a ordem de compra, a nota (XML) e pode baixar o PDF da NF-e.")
+    partes_subinfo.append("👉 Clique no botão abaixo para abrir a tela de aprovação.")
     subinfo = "\n".join(partes_subinfo) or None
     # =========================================================================
 
