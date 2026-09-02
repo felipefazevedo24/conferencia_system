@@ -71,7 +71,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="eui-scope vt-wrap">
+<div class="eui-scope vt-wrap" data-current-user-role="{{ user_role or '' }}">
     <header class="eui-page-header">
         <div>
             <div class="eui-page-header__eyebrow">LOGÍSTICA • TRANSPORTES</div>
@@ -345,7 +345,7 @@
 
 {% block extra_js %}
 <script>
-const CURRENT_USER_ROLE = {{ (user_role or '')|tojson }};
+const CURRENT_USER_ROLE = String(document.querySelector('.vt-wrap')?.dataset.currentUserRole || '');
 const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin');
 
 [
