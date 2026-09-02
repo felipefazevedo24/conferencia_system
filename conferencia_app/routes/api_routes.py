@@ -245,7 +245,12 @@ from ..services.expedicao_photo_storage import (
     using_drive,
 )
 from ..services.xml_service import process_xml_and_store
-from ..services.pedidos_service import PedidoERPIndisponivelError, buscar_linhas_pedido, comparar_pedido_com_nf
+from ..services.pedidos_service import (
+    PedidoERPIndisponivelError,
+    buscar_linhas_pedido,
+    comparar_pedido_com_nf,
+    qtd_em_kg_por_unidade,
+)
 from ..services.qualidade_service import disparar_qualidade_se_necessario, sincronizar_qualidade_por_pedido
 
 
@@ -4845,6 +4850,55 @@ def retirar_nota_da_fila_auditor_xml():
     return jsonify({"sucesso": True, "msg": "NF removida do sistema pelo Auditor XML. Para processar novamente, importe o XML outra vez."})
 
 
+def _anexar_uso_historico_po(pares: list, numero_nota: str) -> None:
+    """
+    Verifica, pra cada linha do pedido vinculada, se ela já foi usada por
+    OUTRA(S) NF(s) no sistema (pedido_compra + codigo_grv batendo) - isso ajuda
+    a explicar um saldo aparentemente insuficiente que não vem de nenhum
+    vínculo dentro da NF atual. Mutação in-place, best-effort (nunca quebra).
+    """
+    if not pares:
+        return
+    numero_nota = str(numero_nota or "").strip()
+
+    chaves: dict[tuple[str, str], list[dict]] = {}
+    for par in pares:
+        pedido = str(par.get("po_pedido") or "").strip()
+        codigo = str(par.get("po_codigo_material") or "").strip()
+        if not pedido or not codigo:
+            continue
+        chaves.setdefault((pedido, codigo), []).append(par)
+
+    if not chaves:
+        return
+
+    try:
+        for (pedido, codigo), lista_pares in chaves.items():
+            itens_outras_nfs = (
+                ItemNota.query
+                .filter(ItemNota.numero_nota != numero_nota)
+                .filter(ItemNota.pedido_compra.ilike(f"%{pedido}%"))
+                .filter(ItemNota.codigo_grv == codigo)
+                .all()
+            )
+            uso_por_nf: dict[str, float] = {}
+            for item in itens_outras_nfs:
+                qtd_kg = qtd_em_kg_por_unidade(item.qtd_real, item.unidade_comercial)
+                qtd_usada = qtd_kg if qtd_kg is not None else float(item.qtd_real or 0)
+                uso_por_nf[item.numero_nota] = uso_por_nf.get(item.numero_nota, 0.0) + qtd_usada
+            lista_uso = [
+                {"numero_nota": nf, "qtd": round(qtd, 6)}
+                for nf, qtd in sorted(uso_por_nf.items())
+                if abs(qtd) > 0.0001
+            ]
+            total_uso = round(sum(u["qtd"] for u in lista_uso), 6)
+            for par in lista_pares:
+                par["po_uso_outras_nfs"] = lista_uso
+                par["po_uso_outras_nfs_total"] = total_uso
+    except Exception:
+        current_app.logger.exception("Falha ao verificar uso historico de linha do pedido em outras NFs")
+
+
 def _sincronizar_codigo_interno_por_pedido(
     numero_nota: str,
     numero_pedido: str,
@@ -5090,6 +5144,10 @@ def consultar_pedido_excel():
         return jsonify({"sucesso": False, "msg": str(exc)}), 404
     except Exception as exc:
         return jsonify({"sucesso": False, "msg": f"Erro ao ler planilha: {exc}"}), 500
+
+    # Verifica se alguma linha do pedido ja foi usada por OUTRA NF no sistema
+    # (ajuda a explicar saldo insuficiente que nao vem de vinculo nesta NF).
+    _anexar_uso_historico_po(resultado.get("pares") or [], numero_nota)
 
     # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
     if numero_nota and itens_nf:

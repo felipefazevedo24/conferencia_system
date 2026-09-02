@@ -82,9 +82,9 @@
     .vinculacao-linha-xml-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #0f172a; }
     .vinculacao-linha-xml-dados div { display: flex; justify-content: space-between; }
     .vinculacao-linha-xml-dados strong { font-weight: 700; color: #2563eb; }
-    .vinculacao-select-wrap { margin: 12px 0; }
-    .vinculacao-select-label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px; text-transform: uppercase; }
-    .vinculacao-select { width: 100%; padding: 11px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; cursor: pointer; transition: all 0.2s; }
+    .vinculacao-select-wrap { margin: 12px 0; padding: 14px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; }
+    .vinculacao-select-label { display: block; font-size: 13px; font-weight: 800; color: #6d28d9; margin-bottom: 10px; text-transform: uppercase; }
+    .vinculacao-select { width: 100%; padding: 14px 16px; border: 2px solid #a78bfa; border-radius: 8px; font-size: 15px; font-weight: 700; font-family: inherit; background: #fff; color: #1f2937; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12); }
     .vinculacao-select:hover { border-color: #2563eb; }
     .vinculacao-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
     .vinculacao-select:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; border-color: #cbd5e1; }
@@ -129,6 +129,7 @@
     .vinc-saldo-info { margin-top: 8px; padding: 8px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; font-size: 11px; color: #0c4a6e; }
     .vinc-saldo-info.negativo { background: #fef2f2; border-color: #fecaca; color: #991b1b; font-weight: 700; }
     .vinc-grupo-info { margin-top: 6px; padding: 6px 10px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; font-size: 11px; color: #475569; }
+    .vinc-uso-outras-nfs { margin-top: 6px; padding: 6px 10px; background: #fffbeb; border: 1px dashed #fcd34d; border-radius: 8px; font-size: 11px; color: #92400e; }
     .vinc-saldo-info strong { color: #0369a1; }
     .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
 
@@ -306,6 +307,8 @@
     [data-theme="escuro"] .conversao-select { background: var(--rec-surface); color: var(--rec-ink-900); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinculacao-auto-hint { color: #86efac; }
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinculacao-select-wrap { background: rgba(167,139,250,.10); border-color: var(--rec-border); }
+    [data-theme="escuro"] .vinculacao-select-label { color: #c4b5fd; }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
@@ -315,6 +318,7 @@
     [data-theme="escuro"] .vinc-saldo-info { background: rgba(59,147,245,.10); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-saldo-info.negativo { background: rgba(239,68,68,.14); border-color: #7f1d1d; color: #fca5a5; }
     [data-theme="escuro"] .vinc-grupo-info { background: var(--rec-surface-alt); border-color: var(--rec-border); color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-uso-outras-nfs { background: rgba(252,211,77,.10); border-color: #92400e; color: #fcd34d; }
     [data-theme="escuro"] .vinc-saldo-info strong { color: #7dc4ff; }
     [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
@@ -1956,6 +1960,12 @@
             const grupoLinhasHtml = (Array.isArray(p.grupo_linhas_xml) && p.grupo_linhas_xml.length > 1)
                 ? `<div class="vinc-grupo-info"><i class="fas fa-list-ol"></i> Linhas do XML somadas nesta linha do pedido: ${p.grupo_linhas_xml.map((g) => `Linha ${g.linha} (${Number(g.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ')}</div>`
                 : '';
+            // Diagnostico: se essa linha do pedido ja foi usada por OUTRA NF no
+            // sistema, mostra explicitamente (explica saldo insuficiente mesmo
+            // sem nenhum vinculo duplicado dentro desta NF).
+            const usoOutrasNfsHtml = (Array.isArray(p.po_uso_outras_nfs) && p.po_uso_outras_nfs.length)
+                ? `<div class="vinc-uso-outras-nfs"><i class="fas fa-clock-rotate-left"></i> Esta linha do pedido já foi usada por outra(s) NF(s) neste sistema: ${p.po_uso_outras_nfs.map((u) => `NF ${u.numero_nota} (${Number(u.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ')} = ${Number(p.po_uso_outras_nfs_total || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} já contabilizado(s)</div>`
+                : '';
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1991,6 +2001,7 @@
                         ${statusHtml}
                         ${saldoInfoHtml}
                         ${grupoLinhasHtml}
+                        ${usoOutrasNfsHtml}
                         ${detalheVinculoAuto}
                         ${editBtn}
                     </div>
