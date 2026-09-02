@@ -650,6 +650,8 @@
                 </div>
             </div>
 
+            <div id="divergenciaDecisaoBanner" style="display:none; margin-top:12px; padding:12px 14px; border-radius:10px; font-size:13px; font-weight:600;"></div>
+
             <div class="rec-stack-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px;">
                 <div class="box">
                     <label>Pedido(s) de Compra (Vínculo ERP)</label>
@@ -1710,6 +1712,49 @@
                 </tr>`).join('');
         } catch (e) {
             toast(e.message, 'err');
+        }
+        atualizarBannerDivergencia(auditorNotaSelecionada.numero);
+    }
+
+    async function atualizarBannerDivergencia(numeroNota) {
+        const banner = document.getElementById('divergenciaDecisaoBanner');
+        if (!banner) return;
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        if (!numeroNota) return;
+        try {
+            const r = await fetchJson(`/api/xml_auditor/divergencia/status?nota=${encodeURIComponent(numeroNota)}`);
+            const status = r && r.status ? String(r.status) : '';
+            if (!status) return;
+            const fmtData = (iso) => {
+                if (!iso) return '—';
+                const dt = new Date(iso);
+                return isNaN(dt) ? String(iso) : dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            };
+            const quem = r.respondido_por || '—';
+            const quando = fmtData(r.respondido_em);
+            const motivo = r.motivo_resposta ? ` — Motivo: ${r.motivo_resposta}` : '';
+            let cor = '#334155', fundo = '#f1f5f9', borda = '#cbd5e1', icone = 'fa-circle-info', texto = '';
+            if (status === 'Pendente') {
+                cor = '#92400e'; fundo = '#fffbeb'; borda = '#fcd34d'; icone = 'fa-clock';
+                const enviado = r.solicitado_em ? ` (solicitado em ${fmtData(r.solicitado_em)})` : '';
+                texto = `Divergência XML × pedido <b>aguardando aprovação de Compras</b> via Teams${enviado}. A NF só pode ser liberada após a decisão.`;
+            } else if (status === 'Aprovado') {
+                cor = '#166534'; fundo = '#f0fdf4'; borda = '#86efac'; icone = 'fa-circle-check';
+                texto = `Divergência <b>APROVADA por Compras</b> (${quem} em ${quando})${motivo}. A NF já pode ser liberada.`;
+            } else if (status === 'Rejeitado') {
+                cor = '#991b1b'; fundo = '#fff1f2'; borda = '#fca5a5'; icone = 'fa-circle-xmark';
+                texto = `Divergência <b>RECUSADA por Compras</b> (${quem} em ${quando})${motivo}. A NF <b>não pode ser liberada</b> por aqui — exclua do Auditor XML ou trate com Compras.`;
+            } else {
+                return;
+            }
+            banner.style.color = cor;
+            banner.style.background = fundo;
+            banner.style.border = `1px solid ${borda}`;
+            banner.innerHTML = `<i class="fas ${icone}" style="margin-right:6px;"></i>${texto}`;
+            banner.style.display = '';
+        } catch (e) {
+            // Sem registro de divergência para esta NF -> banner permanece oculto.
         }
     }
 
