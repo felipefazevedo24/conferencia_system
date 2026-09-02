@@ -91,6 +91,7 @@
     .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
     .vinc-status.ok { color: #166534; }
     .vinc-status.err { color: #991b1b; }
+    .vinc-status.warn { color: #7c3aed; }
     .vinc-edit-btn { margin-top: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .vinc-edit-btn:hover { border-color: #2563eb; color: #1d4ed8; }
 
@@ -1837,16 +1838,19 @@
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
                 ? '<div class="vinc-status ok"><i class="fas fa-check-circle"></i> Verde: quantidade e valor batem</div>'
-                : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>';
+                : (p.rateio_po
+                    ? `<div class="vinc-status warn"><i class="fas fa-scale-balanced"></i> Rateio de saldo: soma das linhas vinculadas a esta linha do pedido = ${Number(p.rateio_soma_nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} de ${Number(p.po_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} do pedido${p.qtd_ok ? ' - fechou!' : ''}</div>`
+                    : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>');
             const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
                 ? `<div class="vinculacao-auto-hint">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
+            const badgeRateio = p.rateio_po ? '<span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;">Rateio de saldo do pedido</span>' : '';
             return `
                 <div class="vinculacao-card ${cardClasse}">
                     <div class="vinculacao-linha-xml">
-                        <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}</div>
+                        <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}${badgeRateio}</div>
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
@@ -1906,7 +1910,8 @@
             alteracoes.push({ itemId: parseInt(itemIdRaw, 10), linhaPoAtual, linhaPoDesejada });
         }
         const desejadas = alteracoes.filter((a) => Number.isInteger(a.linhaPoDesejada) && a.linhaPoDesejada >= 0).map((a) => a.linhaPoDesejada);
-        if (new Set(desejadas).size !== desejadas.length) { toast('A mesma linha do pedido foi selecionada para mais de um item da NF.', 'err'); return; }
+        // Nota: a MESMA linha do pedido pode ser selecionada para mais de um item da NF -
+        // é o rateio de saldo (fornecedor detalha em várias linhas o que no pedido é 1 linha só).
         try {
             for (const a of alteracoes) {
                 if (!Number.isInteger(a.linhaPoAtual) || a.linhaPoAtual < 0) continue;

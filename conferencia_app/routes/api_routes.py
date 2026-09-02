@@ -5247,23 +5247,9 @@ def vincular_linha_po():
             if linha_po >= len(linhas_po):
                 return jsonify({"sucesso": False, "msg": "linha_po fora do intervalo do pedido."}), 400
 
-            # Evita duplicidade: uma linha PO só pode ficar vinculada a um item da mesma NF.
-            conflito = (
-                ItemNota.query
-                .filter(
-                    ItemNota.numero_nota == item.numero_nota,
-                    ItemNota.id != item.id,
-                    ItemNota.linha_po_vinculada == linha_po,
-                )
-                .first()
-            )
-            if conflito:
-                return jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": f"A linha {linha_po + 1} do pedido já está vinculada a outro item desta NF.",
-                    }
-                ), 409
+            # Mais de um item da mesma NF pode apontar para a mesma linha do
+            # pedido: é o rateio/divisão de saldo (ex.: fornecedor detalha em
+            # várias linhas de chapa o que no pedido é uma única linha).
 
             codigo_material = str(linhas_po[linha_po].get("codigo_material") or "").strip()
             descricao_material = str(linhas_po[linha_po].get("descricao_material") or "").strip()
