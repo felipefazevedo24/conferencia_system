@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="escuro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Aprovação de divergência · Compras</title>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg: #0b1119; --panel: #141d28; --panel-2: #172230; --border: #263447;
+      --border-strong: #33475f; --text: #e8eef6; --text-soft: #b8c6d6; --muted: #9fb0c4;
+      --primary: #1c86f2; --primary-hover: #0f62c9; --primary-soft: #7dc4ff;
+      --green: #11a36c; --green-hover: #0d8a5b; --red: #e05a54; --red-hover: #c9463f;
+      --amber: #f4b340;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: radial-gradient(circle at top right, rgba(28,134,242,.10), transparent 30%),
+                  linear-gradient(180deg, #0b1119 0%, #0d141d 100%);
+      color: var(--text); font-family: "IBM Plex Sans", "Segoe UI", Tahoma, sans-serif;
+      font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 60px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .brand-badge {
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #1c86f2, #7dc4ff); color: #05070b; font-size: 20px;
+      font-weight: 800; box-shadow: 0 8px 20px rgba(28,134,242,.28);
+    }
+    .brand h1 { font-size: 18px; margin: 0; font-weight: 800; letter-spacing: .01em; }
+    .brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+      padding: 22px; box-shadow: 0 16px 32px rgba(0,0,0,.32); margin-bottom: 18px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
+    .card .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 700; color: var(--text-soft);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+    input, textarea {
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-strong);
+      background: var(--panel-2); color: var(--text); font-size: 14px; font-family: inherit;
+    }
+    input:focus, textarea:focus { outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(28,134,242,.18); }
+    .field { margin-bottom: 14px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 18px; border-radius: 10px; border: 0; font-size: 14px; font-weight: 700;
+      cursor: pointer; transition: filter .15s ease, transform .05s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-green:hover { background: var(--green-hover); }
+    .btn-red { background: var(--red); color: #fff; }
+    .btn-red:hover { background: var(--red-hover); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border-strong); color: var(--text-soft); }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary-soft); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; display: none; }
+    .msg.err { display: block; background: rgba(224,90,84,.14); color: #ffb4af; border: 1px solid rgba(224,90,84,.4); }
+    .msg.ok { display: block; background: rgba(17,163,108,.14); color: #7ee6b8; border: 1px solid rgba(17,163,108,.4); }
+    .hidden { display: none !important; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 20px; }
+    .kv { display: flex; flex-direction: column; gap: 2px; }
+    .kv span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+    .kv strong { font-size: 15px; color: var(--text); font-weight: 700; }
+    .diverg-box {
+      background: rgba(244,179,64,.10); border: 1px solid rgba(244,179,64,.4); border-radius: 12px;
+      padding: 14px 16px; margin-top: 14px; white-space: pre-line; font-size: 13px; color: #ffe0a3;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.ok td { background: rgba(17,163,108,.06); }
+    tr.diverg td { background: rgba(224,90,84,.07); }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 800; }
+    .pill.ok { background: rgba(17,163,108,.18); color: #7ee6b8; }
+    .pill.no { background: rgba(224,90,84,.18); color: #ffb4af; }
+    .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+    .sec-title { font-size: 12px; font-weight: 800; color: var(--primary-soft); text-transform: uppercase;
+      letter-spacing: .04em; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
+    .actions-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+    .status-banner { padding: 14px 16px; border-radius: 12px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .status-banner.aprovado { background: rgba(17,163,108,.14); color: #7ee6b8; border: 1px solid rgba(17,163,108,.4); }
+    .status-banner.rejeitado { background: rgba(224,90,84,.14); color: #ffb4af; border: 1px solid rgba(224,90,84,.4); }
+    .loading { text-align: center; color: var(--muted); padding: 30px; }
+    .foot { text-align: center; color: var(--muted); font-size: 11px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-badge">S</div>
+      <div>
+        <h1>Aprovação de divergência de recebimento</h1>
+        <p>Columbia Machine Brasil · Compras</p>
+      </div>
+    </div>
+
+    {% if invalido %}
+      <div class="card">
+        <h2><i class="fas fa-triangle-exclamation" style="color:var(--amber)"></i> Link inválido ou expirado</h2>
+        <p class="sub">Este link de aprovação não existe mais. Peça um novo pelo Auditor XML.</p>
+      </div>
+    {% else %}
+
+    <!-- LOGIN -->
+    <div class="card" id="login-card">
+      <h2><i class="fas fa-lock"></i> Faça login para ver e decidir</h2>
+      <p class="sub">Use seu usuário e senha do Sync. Somente Compras (ou administradores) podem aprovar.</p>
+      <div class="field">
+        <label for="username">Usuário</label>
+        <input id="username" autocomplete="username" placeholder="Seu usuário" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Sua senha">
+      </div>
+      <button class="btn btn-primary" id="btn-login"><i class="fas fa-right-to-bracket"></i> Entrar</button>
+      <div class="msg" id="login-msg"></div>
+    </div>
+
+    <!-- CONTEUDO (apos login) -->
+    <div id="conteudo" class="hidden">
+      <div class="loading" id="loading"><i class="fas fa-spinner fa-spin"></i> Carregando dados da nota...</div>
+
+      <div id="detalhe" class="hidden">
+        <div id="status-banner"></div>
+
+        <div class="card">
+          <h2><i class="fas fa-file-invoice"></i> Nota fiscal <span id="h-nf"></span></h2>
+          <p class="sub" id="h-solicitado"></p>
+          <div class="grid2">
+            <div class="kv"><span>Fornecedor</span><strong id="v-fornecedor">—</strong></div>
+            <div class="kv"><span>CNPJ emitente</span><strong id="v-cnpj">—</strong></div>
+            <div class="kv"><span>Pedido de compra</span><strong id="v-pedido">—</strong></div>
+            <div class="kv"><span>Emissão</span><strong id="v-emissao">—</strong></div>
+            <div class="kv"><span>Valor da NF</span><strong id="v-valor">—</strong></div>
+          </div>
+          <div class="diverg-box" id="v-detalhe"></div>
+          <div style="margin-top:14px">
+            <button class="btn btn-ghost" id="btn-pdf" onclick="abrirPdf()"><i class="fas fa-file-pdf"></i> Baixar PDF da NF-e (DANFE)</button>
+          </div>
+        </div>
+
+        <div class="sec-title"><i class="fas fa-scale-balanced"></i> Pedido de compra x Nota fiscal (linha a linha)</div>
+        <div class="table-scroll" id="cmp-wrap">
+          <table id="cmp-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Código (XML)</th><th>Descrição (XML)</th>
+                <th class="num">Qtd XML</th><th class="num">Qtd pedido</th>
+                <th class="num">R$ un. XML</th><th class="num">R$ un. pedido</th>
+                <th>Situação</th>
+              </tr>
+            </thead>
+            <tbody id="cmp-body"></tbody>
+          </table>
+        </div>
+        <div class="msg" id="cmp-erro"></div>
+
+        <div class="sec-title"><i class="fas fa-list"></i> Itens da nota (XML)</div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Código</th><th>Descrição</th><th class="num">Qtd</th><th>Un.</th><th class="num">Valor total</th><th>CFOP</th><th>NCM</th></tr>
+            </thead>
+            <tbody id="xml-body"></tbody>
+          </table>
+        </div>
+
+        <!-- DECISAO -->
+        <div class="card" id="decisao-card" style="margin-top:20px">
+          <h2><i class="fas fa-gavel"></i> Sua decisão</h2>
+          <p class="sub">Aprovar libera a NF para seguir a conferência. Recusar mantém a NF bloqueada.</p>
+          <div class="field">
+            <label for="motivo">Observação / motivo <span style="text-transform:none;color:var(--muted)">(obrigatório para recusar)</span></label>
+            <textarea id="motivo" rows="3" placeholder="Ex.: divergência autorizada pelo comprador fulano / preço renegociado..."></textarea>
+          </div>
+          <div class="actions-row">
+            <button class="btn btn-green" id="btn-aprovar" onclick="decidir('aprovado')"><i class="fas fa-check"></i> Aprovar divergência</button>
+            <button class="btn btn-red" id="btn-recusar" onclick="decidir('rejeitado')"><i class="fas fa-xmark"></i> Recusar</button>
+          </div>
+          <div class="msg" id="decisao-msg"></div>
+        </div>
+      </div>
+    </div>
+
+    {% endif %}
+
+    <div class="foot">Acesso protegido por link exclusivo + login. Não compartilhe este endereço.</div>
+  </div>
+
+  <script>
+    const TOKEN = {{ token|tojson }};
+    const BASE = `/aprovar-divergencia/${TOKEN}`;
+    let jaLogado = false;
+
+    function money(v) {
+      return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function num(v, d = 2) {
+      return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: d });
+    }
+    function showMsg(id, texto, tipo) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = texto;
+      el.className = 'msg ' + (tipo === 'ok' ? 'ok' : 'err');
+    }
+
+    async function fazerLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      if (!username || !password) { showMsg('login-msg', 'Informe usuário e senha.', 'err'); return; }
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true;
+      try {
+        const r = await fetch(`${BASE}/login`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.sucesso) { showMsg('login-msg', data.msg || 'Falha no login.', 'err'); btn.disabled = false; return; }
+        jaLogado = true;
+        document.getElementById('login-card').classList.add('hidden');
+        document.getElementById('conteudo').classList.remove('hidden');
+        carregarDados();
+      } catch (e) {
+        showMsg('login-msg', 'Erro de conexão. Tente de novo.', 'err');
+        btn.disabled = false;
+      }
+    }
+
+    async function carregarDados() {
+      try {
+        const r = await fetch(`${BASE}/dados`);
+        const data = await r.json();
+        if (!r.ok || !data.sucesso) {
+          document.getElementById('loading').textContent = data.msg || 'Não foi possível carregar.';
+          return;
+        }
+        renderizar(data);
+      } catch (e) {
+        document.getElementById('loading').textContent = 'Erro de conexão ao carregar os dados.';
+      }
+    }
+
+    function renderizar(data) {
+      const reg = data.registro || {};
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('detalhe').classList.remove('hidden');
+
+      document.getElementById('h-nf').textContent = reg.numero_nota || '';
+      document.getElementById('h-solicitado').textContent = reg.solicitado_em ? ('Solicitado em ' + reg.solicitado_em) : '';
+      document.getElementById('v-fornecedor').textContent = reg.fornecedor || '—';
+      document.getElementById('v-cnpj').textContent = reg.cnpj_emitente || '—';
+      document.getElementById('v-pedido').textContent = reg.pedido_compra || '—';
+      document.getElementById('v-emissao').textContent = reg.data_emissao || '—';
+      document.getElementById('v-valor').textContent = reg.nf_valor_total ? money(reg.nf_valor_total) : '—';
+      document.getElementById('v-detalhe').textContent = reg.detalhe || 'Divergência entre a nota e o pedido de compra.';
+
+      if (!data.tem_pdf) document.getElementById('btn-pdf').classList.add('hidden');
+
+      // Banner de status + trava se ja decidido
+      const banner = document.getElementById('status-banner');
+      if (reg.status && reg.status !== 'Pendente') {
+        const cls = reg.status === 'Aprovado' ? 'aprovado' : 'rejeitado';
+        const ico = reg.status === 'Aprovado' ? 'fa-circle-check' : 'fa-circle-xmark';
+        banner.className = 'status-banner ' + cls;
+        banner.innerHTML = `<i class="fas ${ico}"></i> Já ${reg.status.toLowerCase()} por ${reg.respondido_por || '—'} em ${reg.respondido_em || '—'}${reg.motivo_resposta ? ' · ' + reg.motivo_resposta : ''}`;
+        const dcard = document.getElementById('decisao-card');
+        if (dcard) dcard.classList.add('hidden');
+      }
+
+      // Comparacao OC x XML
+      const cmpBody = document.getElementById('cmp-body');
+      const cmp = data.comparacao;
+      if (cmp && Array.isArray(cmp.pares) && cmp.pares.length) {
+        cmpBody.innerHTML = cmp.pares.map(p => {
+          const ok = !!p.ok;
+          const situ = ok
+            ? '<span class="pill ok"><i class="fas fa-check"></i> Bate</span>'
+            : `<span class="pill no"><i class="fas fa-xmark"></i> ${!p.qtd_ok && !p.valor_ok ? 'Qtd e valor' : (!p.qtd_ok ? 'Quantidade' : 'Valor')}</span>`;
+          return `<tr class="${ok ? 'ok' : 'diverg'}">
+            <td>${p.linha ?? ''}</td>
+            <td>${p.nf_codigo ?? '—'}</td>
+            <td>${p.nf_descricao ?? '—'}</td>
+            <td class="num">${num(p.nf_qtd)}</td>
+            <td class="num">${p.po_qtd == null ? '—' : num(p.po_qtd)}</td>
+            <td class="num">${money(p.nf_valor_unit)}</td>
+            <td class="num">${p.po_valor_unit == null ? '—' : money(p.po_valor_unit)}</td>
+            <td>${situ}</td>
+          </tr>`;
+        }).join('');
+      } else {
+        document.getElementById('cmp-wrap').classList.add('hidden');
+        if (data.erro_comparacao) showMsg('cmp-erro', data.erro_comparacao, 'err');
+        else showMsg('cmp-erro', 'Sem comparação disponível para este pedido.', 'err');
+      }
+
+      // Itens XML
+      document.getElementById('xml-body').innerHTML = (data.itens_xml || []).map(i => `
+        <tr>
+          <td>${i.codigo ?? '—'}</td>
+          <td>${i.descricao ?? '—'}</td>
+          <td class="num">${num(i.qtd)}</td>
+          <td>${i.unidade ?? ''}</td>
+          <td class="num">${money(i.valor_total)}</td>
+          <td>${i.cfop ?? ''}</td>
+          <td>${i.ncm ?? ''}</td>
+        </tr>`).join('');
+    }
+
+    function abrirPdf() {
+      window.open(`${BASE}/danfe`, '_blank');
+    }
+
+    async function decidir(decisao) {
+      const motivo = document.getElementById('motivo').value.trim();
+      if (decisao === 'rejeitado' && !motivo) { showMsg('decisao-msg', 'Informe o motivo da recusa.', 'err'); return; }
+      const texto = decisao === 'aprovado' ? 'APROVAR esta divergência e liberar a NF?' : 'RECUSAR esta divergência? A NF continuará bloqueada.';
+      if (!confirm(texto)) return;
+      document.getElementById('btn-aprovar').disabled = true;
+      document.getElementById('btn-recusar').disabled = true;
+      try {
+        const r = await fetch(`${BASE}/decidir`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decisao, motivo }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.sucesso) {
+          showMsg('decisao-msg', data.msg || 'Não foi possível registrar a decisão.', 'err');
+          document.getElementById('btn-aprovar').disabled = false;
+          document.getElementById('btn-recusar').disabled = false;
+          return;
+        }
+        showMsg('decisao-msg', data.msg, 'ok');
+        setTimeout(() => carregarDados(), 800);
+      } catch (e) {
+        showMsg('decisao-msg', 'Erro de conexão ao registrar.', 'err');
+        document.getElementById('btn-aprovar').disabled = false;
+        document.getElementById('btn-recusar').disabled = false;
+      }
+    }
+
+    document.getElementById('btn-login')?.addEventListener('click', fazerLogin);
+    document.getElementById('password')?.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+  </script>
+</body>
+</html>

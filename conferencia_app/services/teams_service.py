@@ -208,21 +208,35 @@ def notificar_divergencia_pedido(
         app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
         return False if sync else None
 
+    # === Texto do cartao do Teams (edite aqui para mudar a mensagem) ==========
+    titulo_card = "🚨 Divergência de recebimento — Compras precisa decidir"
     linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
     partes_subinfo = []
     if pedido_compra:
-        partes_subinfo.append(f"Pedido: {pedido_compra}")
-    partes_subinfo.extend(str(linha) for linha in (linhas_divergentes or []))
-    if link_conferencia:
-        partes_subinfo.append(f"Conferir: {link_conferencia}")
+        partes_subinfo.append(f"📄 Pedido de compra: {pedido_compra}")
+    if linhas_divergentes:
+        partes_subinfo.append("O que divergiu entre a nota e o pedido:")
+        partes_subinfo.extend(f"• {linha}" for linha in linhas_divergentes)
+    partes_subinfo.append("")
+    partes_subinfo.append("👉 Abra o link abaixo, faça login com seu usuário do Sync e aprove ou recuse. Na tela você vê a ordem de compra, a nota (XML) e pode baixar o PDF da NF-e.")
     subinfo = "\n".join(partes_subinfo) or None
+    # =========================================================================
 
     payload = _card_payload(
-        "⚠️ Divergência XML x Pedido — aprovação de Compras necessária",
+        titulo_card,
         linha_principal,
         subinfo,
         mencionar_canal=True,
     )
+    # Botao clicavel no proprio card (abre a tela de aprovacao no navegador).
+    if link_conferencia:
+        try:
+            card_content = payload["attachments"][0]["content"]
+            card_content["actions"] = [
+                {"type": "Action.OpenUrl", "title": "Abrir e decidir (Aprovar / Recusar)", "url": link_conferencia}
+            ]
+        except (KeyError, IndexError, TypeError):
+            pass
     # Campos extras (fora do envelope do card), para automações adicionais no flow.
     payload["numero_nota"] = str(numero_nota or "")
     payload["fornecedor"] = str(fornecedor or "")
