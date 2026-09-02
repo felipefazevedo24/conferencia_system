@@ -1227,6 +1227,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "conversao_unidade": nf.get("conversao_unidade") or (nf.get("unidade_comercial") or "UN"),
                 "po_qtd": met["po_qtd"],
                 "nf_valor_unit": met["nf_valor_unit"],
+                "nf_valor_unit_original": float(nf.get("valor_unit") or 0),
                 "po_valor_unit": met["po_valor_unit"],
                 "po_pedido": met["po_pedido"],
                 "nf_valor_total": met["nf_valor_total"],
