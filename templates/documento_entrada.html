@@ -1896,8 +1896,9 @@
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
-                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
                             <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                            ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span style="color:#64748b;">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
                         </div>
                         <div class="vinc-conversao-wrap">
                             <label class="vinc-conversao-label">Conversão da quantidade:</label>

@@ -882,9 +882,32 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             f = 1.0
         return f if f > 0 else 1.0
 
+    # Fator fixo unidade-de-peso -> KG. Pedidos de compra de chapa são sempre em
+    # KG; isso serve só de REFERÊNCIA pro conferente (independe do "melhor
+    # fator" adivinhado pelo matching), então nunca fica "escondido" atrás de
+    # uma conversão errada.
+    _FATOR_PESO_PARA_KG = {"T": 1000.0, "TON": 1000.0, "TONELADA": 1000.0, "KG": 1.0, "KGM": 1.0, "G": 0.001, "GR": 0.001, "GRAMA": 0.001}
+
+    def _qtd_em_kg(nf_item: dict):
+        unidade = str(nf_item.get("unidade_comercial") or "").strip().upper()
+        fator_peso = _FATOR_PESO_PARA_KG.get(unidade)
+        if fator_peso is None:
+            return None
+        qtd_original = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
+        return round(qtd_original * fator_peso, 6)
+
     def _fatores_candidatos(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> list[float]:
         fator_manual = _normalizar_fator(nf_item.get("conversao_fator"))
         if bool(nf_item.get("conversao_manual")):
+            return [fator_manual]
+
+        po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
+        # Quando a linha do pedido não tem saldo/quantidade cadastrada (0 ou
+        # ausente), o "melhor" candidato por menor diferença SEMPRE vira o menor
+        # fator disponível (aproxima de zero) - isso "encolhe" a quantidade real
+        # da NF pra um valor sem sentido. Sem uma quantidade real do PO pra mirar,
+        # não há como inferir fator por tentativa; mantém a quantidade original.
+        if po_qtd <= 0:
             return [fator_manual]
 
         candidatos = {
@@ -900,7 +923,6 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         }
 
         nf_qtd_base = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
-        po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
         # O candidato "ratio direto" (po_qtd / nf_qtd) força a linha da NF a bater
         # sozinha com o saldo TOTAL da linha do PO. Isso é indevido quando a linha
         # está em RATEIO (2+ linhas da NF vinculadas à mesma linha do pedido), pois
@@ -1178,6 +1200,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "nf_qtd": met["nf_qtd"],
                 "nf_qtd_original": float(nf.get("qtd_original") or met["nf_qtd"] or 0),
                 "nf_unidade": nf.get("unidade_comercial") or "UN",
+                "nf_qtd_kg": _qtd_em_kg(nf),
                 "conversao_fator": float(met.get("fator_aplicado") or nf.get("conversao_fator") or 1.0),
                 "conversao_unidade": nf.get("conversao_unidade") or (nf.get("unidade_comercial") or "UN"),
                 "po_qtd": met["po_qtd"],
