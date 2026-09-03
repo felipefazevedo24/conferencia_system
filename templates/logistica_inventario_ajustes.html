@@ -27,6 +27,21 @@
     .ia-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .ia-toast.error { border-left-color: var(--eui-danger); }
     .ia-toast.success { border-left-color: var(--eui-success); }
+
+    /* Modal "Confirmar divergência" - substitui prompt()/confirm() do
+       navegador so pra essa acao, porque precisa de um checkbox de verdade
+       (Analise de Causa Raiz), o que uma caixa de dialogo nativa nao tem. */
+    .ia-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .ia-modal-backdrop.open { display: flex; }
+    .ia-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 22px; }
+    .ia-modal h3 { margin: 0 0 14px; font-size: 16px; }
+    .ia-modal label { display: block; font-size: 12.5px; font-weight: 600; color: var(--eui-text); margin-bottom: 6px; }
+    .ia-modal textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; }
+    .ia-modal-check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 12px; background: var(--eui-surface-2, #f8fafc); border-radius: 8px; border: 1px solid var(--eui-border, #e5e7eb); }
+    .ia-modal-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
+    .ia-modal-check div strong { display: block; font-size: 13px; }
+    .ia-modal-check div small { color: var(--eui-muted); font-size: 12px; }
+    .ia-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 </style>
 {% endblock %}
 
@@ -90,6 +105,25 @@
 
 <div class="ia-actions-menu" id="ia-acoes-menu"></div>
 <div class="ia-toast" id="ia-toast"></div>
+
+<div class="ia-modal-backdrop" id="ia-confirmar-modal">
+    <div class="ia-modal">
+        <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
+        <label for="ia-confirmar-justificativa">Justificativa (opcional)</label>
+        <textarea id="ia-confirmar-justificativa" placeholder="Ex.: contagem conferida, avaria constatada..."></textarea>
+        <div class="ia-modal-check">
+            <input type="checkbox" id="ia-confirmar-causa-raiz">
+            <div>
+                <label for="ia-confirmar-causa-raiz" style="margin:0; cursor:pointer;"><strong>Precisa de Análise de Causa Raiz</strong></label>
+                <small>Envia esse item pra fila separada de Análise de Causa Raiz, pro operador/gestor investigarem o motivo detalhado depois. Não bloqueia o fluxo — Finance/Fiscal seguem normalmente.</small>
+            </div>
+        </div>
+        <div class="ia-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="ia-confirmar-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-confirmar-salvar"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -287,6 +321,37 @@
         if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
     });
 
+    // ── Modal "Confirmar divergência" (justificativa + checkbox de Análise
+    // de Causa Raiz) - as demais ações continuam com prompt()/confirm()
+    // simples, só essa precisava de um checkbox de verdade.
+    let confirmarAjusteId = null;
+    function abrirModalConfirmar(id) {
+        confirmarAjusteId = id;
+        $("ia-confirmar-justificativa").value = "";
+        $("ia-confirmar-causa-raiz").checked = false;
+        $("ia-confirmar-modal").classList.add("open");
+    }
+    function fecharModalConfirmar() {
+        $("ia-confirmar-modal").classList.remove("open");
+        confirmarAjusteId = null;
+    }
+    $("ia-confirmar-cancelar").addEventListener("click", fecharModalConfirmar);
+    $("ia-confirmar-modal").addEventListener("click", (e) => { if (e.target.id === "ia-confirmar-modal") fecharModalConfirmar(); });
+    $("ia-confirmar-salvar").addEventListener("click", async () => {
+        const id = confirmarAjusteId;
+        if (!id) return;
+        const justificativa = $("ia-confirmar-justificativa").value.trim();
+        const solicitar_analise_causa = $("ia-confirmar-causa-raiz").checked;
+        try {
+            await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
+            fecharModalConfirmar();
+            toast("Atualizado!", "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
     acoesMenuEl().addEventListener("click", async (e) => {
         const btn = e.target.closest("button[data-act]");
         if (!btn) return;
@@ -295,9 +360,8 @@
         fecharMenuAcoes();
         try {
             if (act === "confirmar") {
-                const justificativa = prompt("Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:") || "";
-                const solicitar_analise_causa = confirm("Este item precisa de Análise de Causa Raiz detalhada? OK = sim, enviar pra fila de Análise de Causa Raiz (não bloqueia o fluxo Finance/Fiscal). Cancelar = não precisa.");
-                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
+                abrirModalConfirmar(id);
+                return;
             } else if (act === "descartar") {
                 const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
                 if (!motivo.trim()) return;
