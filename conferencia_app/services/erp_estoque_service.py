@@ -326,6 +326,31 @@ def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[st
         return vazio
 
 
+def diagnosticar_chapa_lote(saida_numero: str, codigo: str, empresa: int = 1) -> dict[str, Any]:
+    """Chama o diagnostico da bridge pra descobrir, no GRV real, a tabela que
+    amarra a SAIDA ao LOTE e as reservas por OS. So leitura de metadados."""
+    try:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            return {"sucesso": False, "erro": "bridge_nao_configurada"}
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/chapa-diag",
+            headers=_headers(cfg),
+            json={
+                "saida_numero": str(saida_numero or "").strip(),
+                "codigo": str(codigo or "").strip(),
+                "empresa": empresa,
+            },
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        current_app.logger.warning("Falha no diagnostico de chapa por lote.", exc_info=True)
+        return {"sucesso": False, "erro": str(exc)}
+
+
+
 class LocalizacaoEstoqueNaoEncontrada(Exception):
     """codigo_interno nao encontrado na tabela tproduto do ERP (HTTP 404)."""
 
