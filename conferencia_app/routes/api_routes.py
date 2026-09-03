@@ -6979,7 +6979,7 @@ def buscar_itens(nota):
         [
             {
                 "id": item.id,
-                "codigo": item.codigo,
+                "codigo": item.codigo_grv or item.codigo,
                 "descricao": item.descricao,
                 "qtd_esperada": item.qtd_real,
                 "unidade": item.unidade_comercial or "UN",
@@ -8821,7 +8821,7 @@ def api_conferencia_visualizacao_nota(nota):
             "itens": [
                 {
                     "id": item.id,
-                    "codigo": item.codigo,
+                    "codigo": item.codigo_grv or item.codigo,
                     "descricao": item.descricao,
                     "qtd_esperada": item.qtd_real,
                     "unidade": item.unidade_comercial or "UN",

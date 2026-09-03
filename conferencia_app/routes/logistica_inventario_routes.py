@@ -17,7 +17,14 @@ import requests
 
 from ..auth import has_permission, permission_required, permission_required_any, roles_required
 from ..extensions import db
-from ..models import LogisticaInventarioAjuste, LogisticaInventarioAnaliseCausa, LogisticaInventarioInicial
+from ..models import (
+    ChapaCalculo,
+    ChapaCalculoLog,
+    ItemNota,
+    LogisticaInventarioAjuste,
+    LogisticaInventarioAnaliseCausa,
+    LogisticaInventarioInicial,
+)
 from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
@@ -989,3 +996,242 @@ def api_preencher_analise_causa(analise_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Análise de causa raiz registrada.", "analise": _fmt_analise_causa(analise)})
+
+
+# ===================================================================
+# Controle de Chapas
+# ===================================================================
+_FATOR_PESO_KG = {
+    "KG": 1.0, "KGM": 1.0,
+    "T": 1000.0, "TO": 1000.0, "TON": 1000.0, "TONELADA": 1000.0, "TONELADAS": 1000.0,
+}
+
+# Densidades (g/cm3) - mesmas famílias da calculadora Vimetal.
+CHAPA_DENSIDADES = {
+    "aco_carbono": 7.85, "inox": 8.00, "aluminio": 2.71,
+    "cobre": 8.96, "latao": 8.53, "bronze": 8.80,
+}
+
+
+def _chapa_kg_do_item(item) -> float:
+    """Peso da NF em KG (a NF de chapa vem em KG ou T; T converte para KG)."""
+    unidade = re.sub(r"[^A-Z]", "", str(item.unidade_comercial or "").upper())
+    return float(item.qtd_real or 0) * _FATOR_PESO_KG.get(unidade, 1.0)
+
+
+def _chapa_lotes_por_item(itens) -> dict[int, str]:
+    """Best-effort: mapa item_id -> lote (do GRV). Fallback fica com a AR."""
+    try:
+        from ..services.erp_lancamento_service import buscar_entradas_chapa_lote
+    except Exception:
+        return {}
+    try:
+        entradas = buscar_entradas_chapa_lote(itens) or []
+    except Exception:
+        return {}
+    # Indexa lote por (numero_nota, codigo/descricao normalizados).
+    por_chave: dict[tuple[str, str], str] = {}
+    for entrada in entradas:
+        nota = str(entrada.get("numero_nota") or "").strip()
+        for it in entrada.get("itens") or []:
+            lote = str(it.get("lote") or "").strip()
+            if not lote:
+                continue
+            for campo in (it.get("cod_interno"), it.get("descricao")):
+                chave = _normalizar_busca(campo)
+                if chave:
+                    por_chave[(nota, chave)] = lote
+    saida: dict[int, str] = {}
+    for item in itens:
+        nota = str(item.numero_nota or "").strip()
+        for campo in (item.codigo_grv, item.codigo, item.descricao):
+            lote = por_chave.get((nota, _normalizar_busca(campo)))
+            if lote:
+                saida[item.id] = lote
+                break
+    return saida
+
+
+def _chapa_serializar_calculo(calc: ChapaCalculo | None) -> dict:
+    if not calc:
+        return {"material": "", "formato": "", "dimensoes": None, "peso_por_peca": None, "calculo_id": None,
+                "atualizado_por": "", "atualizado_em": None}
+    try:
+        dimensoes = json.loads(calc.dimensoes) if calc.dimensoes else None
+    except Exception:
+        dimensoes = None
+    return {
+        "material": calc.material or "",
+        "formato": calc.formato or "",
+        "dimensoes": dimensoes,
+        "peso_por_peca": calc.peso_por_peca,
+        "calculo_id": calc.id,
+        "atualizado_por": calc.atualizado_por or calc.criado_por or "",
+        "atualizado_em": calc.atualizado_em.isoformat() if calc.atualizado_em else None,
+    }
+
+
+@logistica_inventario_bp.route("/logistica/estoque/chapas")
+@permission_required(PERMISSION)
+def estoque_chapas_page():
+    return render_template(
+        "logistica_estoque_chapas.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+    )
+
+
+@logistica_inventario_bp.route("/api/logistica/chapas", methods=["GET"])
+@permission_required(PERMISSION)
+def api_chapas_listar():
+    termo = _normalizar_busca(request.args.get("q"))
+    # Chapas = itens que passaram pela conferência cega marcados como chapa
+    # (o conferente selecionou "é chapa" e informou a UND -> qtd_chapas_und).
+    itens = (
+        ItemNota.query
+        .filter(ItemNota.qtd_chapas_und.isnot(None))
+        .filter(ItemNota.qtd_chapas_und > 0)
+        .order_by(ItemNota.id.desc())
+        .all()
+    )
+    calc_por_item = {c.item_nota_id: c for c in ChapaCalculo.query.all() if c.item_nota_id is not None}
+    lote_por_item = _chapa_lotes_por_item(itens)
+
+    linhas = []
+    for i in itens:
+        kg_nf = _chapa_kg_do_item(i)
+        und = float(i.qtd_chapas_und or 0)
+        calc = calc_por_item.get(i.id)
+        calc_dict = _chapa_serializar_calculo(calc)
+        peso_calc_total = None
+        pct_diff = None
+        if calc and calc.peso_por_peca and und > 0:
+            peso_calc_total = float(calc.peso_por_peca) * und
+            if kg_nf > 0:
+                pct_diff = (peso_calc_total - kg_nf) / kg_nf * 100.0
+        linha = {
+            "item_id": i.id,
+            "numero_nota": i.numero_nota,
+            "codigo": i.codigo_grv or i.codigo,
+            "descricao": i.descricao,
+            "fornecedor": i.fornecedor or "",
+            "ar": i.numero_lancamento or "",
+            "lote": lote_por_item.get(i.id) or i.numero_lancamento or "",
+            "conferente": i.usuario_conferencia or "",
+            "unidade_nf": i.unidade_comercial or "",
+            "kg_nf": kg_nf,
+            "und": und,
+            "peso_calculado_total": peso_calc_total,
+            "pct_diferenca": pct_diff,
+            **calc_dict,
+        }
+        if termo:
+            alvo = _normalizar_busca(" ".join(str(v) for v in [
+                linha["codigo"], linha["descricao"], linha["lote"],
+                linha["numero_nota"], linha["ar"], linha["fornecedor"], linha["conferente"],
+            ]))
+            if termo not in alvo:
+                continue
+        linhas.append(linha)
+
+    resumo = {
+        "chapas": len(linhas),
+        "total_kg": round(sum(l["kg_nf"] for l in linhas), 2),
+        "total_und": round(sum(l["und"] for l in linhas), 2),
+        "com_divergencia": sum(1 for l in linhas if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
+    }
+    return jsonify({"resumo": resumo, "densidades": CHAPA_DENSIDADES, "itens": linhas})
+
+
+@logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])
+@permission_required(PERMISSION)
+def api_chapas_salvar_calculo():
+    data = request.get_json(silent=True) or {}
+    try:
+        item_id = int(data.get("item_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Item inválido."}), 400
+
+    item = ItemNota.query.get(item_id)
+    if not item:
+        return jsonify({"error": "Item não encontrado."}), 404
+
+    material = str(data.get("material") or "").strip()[:40]
+    formato = str(data.get("formato") or "").strip()[:40]
+    dimensoes = data.get("dimensoes") if isinstance(data.get("dimensoes"), dict) else {}
+    try:
+        peso_por_peca = float(data.get("peso_por_peca"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Peso por peça inválido."}), 400
+    if peso_por_peca <= 0:
+        return jsonify({"error": "Peso por peça deve ser maior que zero."}), 400
+
+    usuario = session.get("username", "desconhecido")
+    dimensoes_json = json.dumps(dimensoes, ensure_ascii=False)
+
+    calc = ChapaCalculo.query.filter_by(numero_nota=item.numero_nota, item_nota_id=item.id).first()
+    estado_anterior = _chapa_serializar_calculo(calc) if calc else None
+    if not calc:
+        calc = ChapaCalculo(
+            numero_nota=item.numero_nota,
+            item_nota_id=item.id,
+            codigo=item.codigo_grv or item.codigo,
+            criado_por=usuario,
+        )
+        db.session.add(calc)
+    calc.material = material
+    calc.formato = formato
+    calc.dimensoes = dimensoes_json
+    calc.peso_por_peca = peso_por_peca
+    calc.atualizado_por = usuario
+    calc.atualizado_em = datetime.now()
+    db.session.flush()
+
+    db.session.add(ChapaCalculoLog(
+        chapa_calculo_id=calc.id,
+        alterado_por=usuario,
+        dados_anteriores=json.dumps(estado_anterior, ensure_ascii=False) if estado_anterior else "",
+        dados_novos=json.dumps(_chapa_serializar_calculo(calc), ensure_ascii=False),
+    ))
+    db.session.commit()
+
+    kg_nf = _chapa_kg_do_item(item)
+    und = float(item.qtd_chapas_und or 0)
+    peso_total = peso_por_peca * und if und > 0 else None
+    pct = ((peso_total - kg_nf) / kg_nf * 100.0) if (peso_total is not None and kg_nf > 0) else None
+    return jsonify({
+        "message": "Cálculo salvo.",
+        "calculo_id": calc.id,
+        "peso_calculado_total": peso_total,
+        "pct_diferenca": pct,
+    })
+
+
+@logistica_inventario_bp.route("/api/logistica/chapas/calculo/<int:calculo_id>/logs", methods=["GET"])
+@permission_required(PERMISSION)
+def api_chapas_calculo_logs(calculo_id):
+    calc = ChapaCalculo.query.get(calculo_id)
+    if not calc:
+        return jsonify({"logs": []})
+    logs = (
+        ChapaCalculoLog.query
+        .filter_by(chapa_calculo_id=calculo_id)
+        .order_by(ChapaCalculoLog.alterado_em.desc(), ChapaCalculoLog.id.desc())
+        .all()
+    )
+    def _parse(txt):
+        try:
+            return json.loads(txt) if txt else None
+        except Exception:
+            return None
+    return jsonify({
+        "logs": [
+            {
+                "alterado_por": lg.alterado_por or "",
+                "alterado_em": lg.alterado_em.strftime("%d/%m/%Y %H:%M") if lg.alterado_em else "",
+                "antes": _parse(lg.dados_anteriores),
+                "depois": _parse(lg.dados_novos),
+            }
+            for lg in logs
+        ]
+    })

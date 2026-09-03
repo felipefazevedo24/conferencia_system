@@ -3172,3 +3172,51 @@ class DivergenciaPedidoAprovacao(db.Model):
     # Token da URL publica de aprovacao (o link enviado no Teams). Quem tem o
     # link ve a NF; alem disso a tela exige login+senha do Sync pra aprovar.
     token = db.Column(db.String(64), unique=True, index=True)
+
+
+class ChapaCalculo(db.Model):
+    """Cálculo de peso de uma chapa (por lote/NF) no Controle de Chapas.
+
+    Só existe para itens que passaram pela conferência cega marcados como chapa
+    (ItemNota.qtd_chapas_und). Guarda os parâmetros do cálculo estilo Vimetal
+    (tipo de aço + formato + dimensões) e o peso por peça resultante, para
+    comparar o peso calculado (peso/peça × UND) com o peso da NF (KG)."""
+
+    __tablename__ = "chapa_calculo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    item_nota_id = db.Column(db.Integer, index=True)
+    codigo = db.Column(db.String(120), index=True)
+    material = db.Column(db.String(40))          # aco_carbono | inox | aluminio | cobre | latao | bronze
+    formato = db.Column(db.String(40))           # chapa | bobina | barra_redonda | ...
+    dimensoes = db.Column(db.Text)               # JSON {espessura, largura, comprimento, diametro, ...}
+    peso_por_peca = db.Column(db.Float)          # kg por peça (saída da calculadora)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        db.UniqueConstraint("numero_nota", "item_nota_id", name="ux_chapa_calculo_item"),
+    )
+
+    logs = db.relationship(
+        "ChapaCalculoLog",
+        backref="calculo",
+        cascade="all, delete-orphan",
+        order_by="ChapaCalculoLog.alterado_em.desc()",
+    )
+
+
+class ChapaCalculoLog(db.Model):
+    """Histórico de alterações dos parâmetros de cálculo de uma chapa."""
+
+    __tablename__ = "chapa_calculo_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    chapa_calculo_id = db.Column(db.Integer, db.ForeignKey("chapa_calculo.id"), nullable=False, index=True)
+    alterado_por = db.Column(db.String(100))
+    alterado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    dados_anteriores = db.Column(db.Text)  # JSON do estado anterior (vazio na criação)
+    dados_novos = db.Column(db.Text)       # JSON do estado novo

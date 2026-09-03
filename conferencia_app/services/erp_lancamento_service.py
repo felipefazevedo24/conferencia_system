@@ -449,6 +449,19 @@ def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) 
     return _consultar_entradas_grv_payload_via_api(cfg, entradas_payload)
 
 
+def buscar_entradas_chapa_lote(itens: list[ItemNota]) -> list[dict[str, Any]]:
+    """Best-effort: entradas de chapa (com lote por item) do GRV para uma lista
+    de ItemNota. Retorna [] se a bridge não responder (nunca lança)."""
+    try:
+        cfg = _resolver_config()
+        if not cfg.get("api_url"):
+            return []
+        return _consultar_entradas_grv_via_api(cfg, itens)
+    except Exception:
+        logger.exception("Falha ao buscar lotes de chapa no GRV")
+        return []
+
+
 def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
     if not cfg.get("host") or not cfg.get("database") or not cfg.get("user"):
         return None
