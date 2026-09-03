@@ -2402,66 +2402,36 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    # ---- SAIDA por lote (descoberta) ----
-                    saida_cols = _cols(cur, "tsaidaax")
-                    lote_expr = None
-                    join_lote = ""
-                    if saida_cols:
-                        col_direta = next((c for c in ("lote", "cod_lote", "lote_serie", "loteserie", "num_lote") if c in saida_cols), None)
-                        if col_direta:
-                            lote_expr = f"trim(i.{_safe_ident(col_direta)}::text)"
-                            fontes["saida_lote"] = f"tsaidaax.{col_direta}"
-                        elif "guid_linha" in saida_cols:
-                            for tab in ("tsaida_aux_loteserie", "tsaidaax_loteserie", "tsaida_loteserie", "tsaida_e_loteserie", "tsaidae_loteserie", "tsaidaaux_loteserie"):
-                                lcols = _cols(cur, tab)
-                                if lcols and "guid_pai" in lcols:
-                                    lote_col = next((c for c in ("descricao", "lote", "num_lote", "lote_serie") if c in lcols), None)
-                                    if lote_col:
-                                        join_lote = f"join public.{_safe_ident(tab)} ls on ls.cod_empresa = i.cod_empresa and ls.guid_pai = i.guid_linha"
-                                        lote_expr = f"trim(ls.{_safe_ident(lote_col)}::text)"
-                                        fontes["saida_lote"] = f"{tab}.{lote_col}"
-                                        break
-                    if lote_expr:
-                        try:
-                            cur.execute(
-                                f"""
-                                select {cod_norm} as codigo, {lote_expr} as lote,
-                                       sum(coalesce(i.qtde, 0))::double precision as kg_saida
-                                from public.tsaidaax i
-                                join public.tsaida_e h on h.cod_empresa = i.cod_empresa and h.codigo = i.cod_rel
-                                join public.tproduto p on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
-                                {join_lote}
-                                where i.cod_empresa = %s and {cod_norm} = any(%s::text[]) and {lote_expr} <> ''
-                                group by 1, 2
-                                """,
-                                (empresa, codigos),
-                            )
-                            for cod, lote, kg in cur.fetchall():
-                                cod = str(cod or "").strip()
-                                lote = str(lote or "").strip()
-                                kg = float(kg or 0)
-                                por_lote.setdefault((cod, lote), {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
-                                por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
-                        except Exception:
-                            app.logger.exception("Falha na saida por lote de chapa; segue com fallback por codigo")
-
-                    # ---- Saida TOTAL por codigo (fallback confiavel) ----
+                    # ---- BAIXA (saida) por lote: tsaida_loteserie.qtde_movimentada ----
+                    # A saida amarra o lote na tsaida_loteserie: descricao = lote,
+                    # qtde_movimentada = kg que saiu de fato (qtde = total do lote,
+                    # nao serve). guid_pai liga no item da saida (tsaidaax.guid_linha)
+                    # e tsaidaax.cod_produto -> tproduto.codigo_interno.
                     try:
                         cur.execute(
                             f"""
-                            select {cod_norm} as codigo, sum(coalesce(i.qtde, 0))::double precision as kg_saida
-                            from public.tsaidaax i
+                            select {cod_norm} as codigo, trim(ls.descricao::text) as lote,
+                                   sum(coalesce(ls.qtde_movimentada, 0))::double precision as kg_saida
+                            from public.tsaida_loteserie ls
+                            join public.tsaidaax i on i.cod_empresa = ls.cod_empresa and i.guid_linha = ls.guid_pai
                             join public.tproduto p on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
-                            where i.cod_empresa = %s and {cod_norm} = any(%s::text[])
-                            group by 1
+                            where ls.cod_empresa = %s and {cod_norm} = any(%s::text[])
+                              and trim(coalesce(ls.descricao, '')) <> ''
+                            group by 1, 2
                             """,
                             (empresa, codigos),
                         )
-                        for cod, kg in cur.fetchall():
+                        for cod, lote, kg in cur.fetchall():
                             cod = str(cod or "").strip()
-                            por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["saida_total_codigo"] = float(kg or 0)
+                            lote = str(lote or "").strip()
+                            kg = float(kg or 0)
+                            if kg <= 0:
+                                continue
+                            por_lote.setdefault((cod, lote), {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
+                            por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
+                        fontes["saida_lote"] = "tsaida_loteserie.qtde_movimentada"
                     except Exception:
-                        app.logger.exception("Falha na saida total por codigo de chapa")
+                        app.logger.exception("Falha na baixa por lote (tsaida_loteserie)")
 
                     # ---- Reservado: tabela saldo-por-lote (descoberta) senao por codigo ----
                     reservado_lote_ok = False
