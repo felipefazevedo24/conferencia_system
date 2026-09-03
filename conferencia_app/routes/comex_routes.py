@@ -100,6 +100,7 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "po_ocs_vinculadas": _ocs_vinculadas_lista(p),
         "po_processo_principal_id": p.po_processo_principal_id,
         "po_processo_principal_id_op": _processo_principal_id_op(p),
+        "processo_concluido_em": p.processo_concluido_em.strftime("%d/%m/%Y %H:%M") if p.processo_concluido_em else None,
     }
 
 

@@ -90,6 +90,7 @@
         <div class="eui-stat is-clickable" data-filter="Desembaraco"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-stamp"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Desembaraço</span><span class="eui-stat__value" id="cx-m-desembaraco">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Transporte"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-truck"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Transporte</span><span class="eui-stat__value" id="cx-m-transporte">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="NFCambio"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">NF/Câmbio</span><span class="eui-stat__value" id="cx-m-nf_cambio">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="cx-m-concluido">0</span></div></div>
     </div>
 
     <div class="eui-card">
@@ -692,6 +693,7 @@
         $("cx-m-desembaraco").textContent = m.desembaraco || 0;
         $("cx-m-transporte").textContent = m.transporte || 0;
         $("cx-m-nf_cambio").textContent = m.nf_cambio || 0;
+        $("cx-m-concluido").textContent = m.concluido || 0;
     }
 
     function escapeHtml(s) {
@@ -706,6 +708,7 @@
             oc: "#b45309", po: "#7c3aed", cotacao: "#0369a1", instrucao: "#0369a1",
             coleta: "#b45309", em_transito: "#0369a1", desembarque: "#0369a1",
             desembaraco: "#b45309", transporte: "#b45309", nf_cambio: "#15803d",
+            concluido: "#15803d",
         };
         const cor = cores[p.status_slug] || "#475569";
         const label = p.cotacao_substatus ? `${p.status_modulo} · ${p.cotacao_substatus}` : p.status_modulo;
@@ -791,6 +794,9 @@
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
+        } else if (p.status_modulo === "Concluido") {
+            itens += it("ver", "fa-eye", "Detalhes");
+            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else {
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);

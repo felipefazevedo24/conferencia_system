@@ -5751,3 +5751,48 @@ def test_comex_anexar_documento_guarda_no_banco_sem_drive(tmp_path):
 
     resp_download_apagado = client.get(documento["url"])
     assert resp_download_apagado.status_code == 404
+
+
+def test_comex_avancar_de_nf_cambio_conclui_processo(tmp_path):
+    """O workflow do Comex tinha um "buraco" no final: NF/Cambio era o
+    ultimo modulo modelado, mas nao existia um estagio Concluido de
+    verdade (so o slug ja existia em STATUS_SLUGS, sem estar na sequencia)
+    - avancar de NF/Cambio nao levava a lugar nenhum. Agora Concluido fecha
+    a sequencia, marca processo_concluido_em, e estornar desfaz isso."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import ComexProcesso
+
+        processo = ComexProcesso(
+            id_op="IM-0002", cod_ordem_compra=54321, fornecedor="Fornecedor X",
+            status_modulo="NFCambio", status_slug="nf_cambio", criado_por="ADMIN",
+        )
+        db.session.add(processo)
+        db.session.commit()
+        pid = processo.id
+
+    resp = client.post(f"/api/comex/processos/{pid}/avancar", json={})
+    assert resp.status_code == 200
+    processo_payload = resp.get_json()["processo"]
+    assert processo_payload["status_modulo"] == "Concluido"
+    assert processo_payload["processo_concluido_em"] is not None
+
+    # Nao ha pra onde avancar depois de Concluido.
+    resp_fim = client.post(f"/api/comex/processos/{pid}/avancar", json={})
+    assert resp_fim.status_code == 400
+    assert "Concluído" in resp_fim.get_json()["error"]
+
+    # Aparece na contagem por status (usada nos cards da tela).
+    resp_lista = client.get("/api/comex/processos")
+    metricas = resp_lista.get_json()["metricas"]
+    assert metricas.get("concluido") == 1
+
+    # Estornar desfaz - volta pra NF/Cambio e limpa processo_concluido_em.
+    resp_estorno = client.post(f"/api/comex/processos/{pid}/estornar", json={})
+    assert resp_estorno.status_code == 200
+    estornado = resp_estorno.get_json()["processo"]
+    assert estornado["status_modulo"] == "NFCambio"
+    assert estornado["processo_concluido_em"] is None

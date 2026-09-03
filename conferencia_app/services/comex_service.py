@@ -42,6 +42,7 @@ MODULOS_SEQUENCIA = [
     "Desembaraco",
     "Transporte",
     "NFCambio",
+    "Concluido",
 ]
 
 STATUS_SLUGS = {
@@ -746,6 +747,9 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
             vinculada.po_processo_principal_id = None
         processo.po_ocs_vinculadas = None
 
+    if processo.status_modulo == "Concluido":
+        processo.processo_concluido_em = None
+
     processo.status_modulo = anterior
     processo.status_slug = status_slug(anterior)
     db.session.commit()
@@ -762,11 +766,13 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     de embarque sem precisar repetir cada acao do fluxo normal."""
     proximo = _proximo_modulo(processo.status_modulo)
     if proximo is None:
-        raise ValueError("Este processo já está no último módulo do workflow (NF/Câmbio) - não há como avançar mais.")
+        raise ValueError("Este processo já está Concluído - não há como avançar mais.")
     processo.status_modulo = proximo
     processo.status_slug = status_slug(proximo)
     processo.atualizado_em = datetime.now()
     processo.atualizado_por = usuario
+    if proximo == "Concluido":
+        processo.processo_concluido_em = datetime.now()
     db.session.commit()
     return processo
 
@@ -790,7 +796,7 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     preenchidos - ver `_CAMPOS_OBRIGATORIOS_EM_TRANSITO`)."""
     proximo = _proximo_modulo(processo.status_modulo)
     if proximo is None:
-        raise ValueError("Este processo já está no último módulo do workflow (NF/Câmbio) - não há como avançar mais.")
+        raise ValueError("Este processo já está Concluído - não há como avançar mais.")
 
     if processo.status_modulo == "Coleta" and proximo == "EmTransito":
         faltando = [
@@ -806,6 +812,8 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     processo.status_slug = status_slug(proximo)
     processo.atualizado_em = datetime.now()
     processo.atualizado_por = usuario
+    if proximo == "Concluido":
+        processo.processo_concluido_em = datetime.now()
     db.session.commit()
     return processo
 
