@@ -96,6 +96,7 @@
         <div class="eui-card__head" style="justify-content:flex-end;">
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cx-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <button class="eui-btn eui-btn--subtle" id="cx-btn-processo-manual"><i class="fas fa-pen"></i> Criar Processo Manual</button>
                 <button class="eui-btn eui-btn--primary" id="cx-btn-importar-oc"><i class="fas fa-cloud-arrow-down"></i> Importar OC</button>
             </div>
         </div>
@@ -125,6 +126,31 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Criar Processo Manual (sem OC) -->
+<div class="cx-modal" id="cx-modal-processo-manual">
+    <div class="cx-modal__box">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-pen"></i> Criar Processo Manual</h3>
+            <button class="cx-modal__close" id="cx-fechar-processo-manual"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <p style="font-size:12.5px; color:var(--eui-muted); margin:0;">
+                Pra embarques que são só acompanhamento de processo, sem OC no ERP por trás
+                (ex.: amostra, reposição em garantia). O processo nasce sem OC vinculada — os
+                itens da PO são preenchidos manualmente mais adiante, já que não tem OC no ERP
+                pra puxar.
+            </p>
+            <div class="cx-field"><label>Fornecedor *</label><input type="text" id="cx-pm-fornecedor" class="eui-input" placeholder="Nome do fornecedor"></div>
+            <div class="cx-field"><label>Referência/Motivo (opcional)</label><input type="text" id="cx-pm-referencia" class="eui-input" placeholder="Ex.: amostra, reposição em garantia…"></div>
+            <div class="cx-modal__err" id="cx-pm-erro" style="display:none; color:var(--eui-danger); font-size:12.5px;"></div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-processo-manual-2">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="cx-pm-btn-criar"><i class="fas fa-check"></i> Criar Processo</button>
         </div>
     </div>
 </div>
@@ -885,6 +911,42 @@
     $("cx-busca").addEventListener("input", () => {
         clearTimeout(buscaTimer);
         buscaTimer = setTimeout(carregar, 300);
+    });
+
+    // ── MODAL: Criar Processo Manual (sem OC) ──────────────────────────
+    $("cx-btn-processo-manual").addEventListener("click", () => {
+        $("cx-pm-fornecedor").value = "";
+        $("cx-pm-referencia").value = "";
+        $("cx-pm-erro").style.display = "none";
+        $("cx-modal-processo-manual").classList.add("open");
+    });
+    function fecharModalProcessoManual() { $("cx-modal-processo-manual").classList.remove("open"); }
+    $("cx-fechar-processo-manual").addEventListener("click", fecharModalProcessoManual);
+    $("cx-fechar-processo-manual-2").addEventListener("click", fecharModalProcessoManual);
+    $("cx-pm-btn-criar").addEventListener("click", async () => {
+        const fornecedor = $("cx-pm-fornecedor").value.trim();
+        const erroEl = $("cx-pm-erro");
+        if (!fornecedor) {
+            erroEl.textContent = "Informe o fornecedor.";
+            erroEl.style.display = "block";
+            return;
+        }
+        const btn = $("cx-pm-btn-criar");
+        btn.disabled = true;
+        try {
+            const resp = await api("/api/comex/processo-manual", {
+                method: "POST",
+                body: JSON.stringify({ fornecedor, referencia: $("cx-pm-referencia").value.trim() }),
+            });
+            toast(`Processo manual criado como ${resp.processo.id_op}!`, "success");
+            fecharModalProcessoManual();
+            carregar();
+        } catch (err) {
+            erroEl.textContent = err.message;
+            erroEl.style.display = "block";
+        } finally {
+            btn.disabled = false;
+        }
     });
 
     // ── MODAL: Importar OC ─────────────────────────────────────────────

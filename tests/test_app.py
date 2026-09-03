@@ -4483,6 +4483,55 @@ def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_
     assert resp_fim.status_code == 400
 
 
+def test_comex_criar_processo_manual_sem_oc_segue_fluxo_normal(tmp_path):
+    """Processo Comex totalmente manual (sem OC do ERP, so acompanhamento)
+    - nasce no Modulo 1 (OC) igual a um importado, so sem cod_ordem_compra,
+    com a referencia/motivo virando o primeiro comentario do processo, e
+    segue o MESMO fluxo dai em diante (aparece na lista, avanca pra PO com
+    itens preenchidos a mao, sem "null" solto em po_ocs_vinculadas)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp_sem_fornecedor = client.post("/api/comex/processo-manual", json={"fornecedor": "", "referencia": ""})
+    assert resp_sem_fornecedor.status_code == 400
+
+    resp = client.post("/api/comex/processo-manual", json={
+        "fornecedor": "ACME Ltda", "referencia": "Amostra p/ teste de qualidade",
+    })
+    assert resp.status_code == 200
+    processo = resp.get_json()["processo"]
+    assert processo["status_modulo"] == "OC"
+    assert processo["cod_ordem_compra"] is None
+    pid = processo["id"]
+
+    with app.app_context():
+        from conferencia_app.models import ComexComentario, ComexProcesso
+
+        p = db.session.get(ComexProcesso, pid)
+        assert p.cod_ordem_compra is None
+        assert p.fornecedor == "ACME Ltda"
+        comentarios = ComexComentario.query.filter_by(processo_id=pid).all()
+        assert len(comentarios) == 1
+        assert "Amostra p/ teste de qualidade" in comentarios[0].texto
+
+    ids_op = [p["id_op"] for p in client.get("/api/comex/processos").get_json()["processos"]]
+    assert processo["id_op"] in ids_op
+
+    resp_po = client.post(f"/api/comex/processos/{pid}/po", json={
+        "pagador_frete": "Columbia", "direcao_operacao": "IMPO", "modal_transporte": "Aéreo",
+        "ocs_vinculadas_ids": [],
+    })
+    assert resp_po.status_code == 200
+    assert resp_po.get_json()["processo"]["po_ocs_vinculadas"] == []
+
+    resp_itens = client.post(f"/api/comex/processos/{pid}/po/itens", json={"itens": [
+        {"codigo": "X1", "descricao": "Peça de reposição", "ncm": "1234.56.78", "pn": "PN-1",
+         "quantidade": 2, "valor_unitario": 50.0, "valor_total": 100.0},
+    ]})
+    assert resp_itens.status_code == 200
+
+
 def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
     """A Torre de Controle (/api/painel/comex) resume os 10 status
     granulares do Comex em 3 baskets (Preparação/Trânsito/Entregue), com

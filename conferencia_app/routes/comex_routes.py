@@ -220,6 +220,23 @@ def api_importar_oc():
     return jsonify({"message": "OC importada com sucesso.", "processo": _processo_payload(processo)})
 
 
+@comex_bp.route("/api/comex/processo-manual", methods=["POST"])
+@permission_required(PERMISSION)
+def api_criar_processo_manual():
+    """Cria um processo Comex totalmente manual, sem OC vinculada do ERP -
+    pra embarques que sao so acompanhamento (ex.: amostra, reposição em
+    garantia), sem compra por trás. Ver comex_service.criar_processo_manual."""
+    payload = request.get_json(silent=True) or {}
+    fornecedor = payload.get("fornecedor") or ""
+    referencia = payload.get("referencia") or ""
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.criar_processo_manual(fornecedor, referencia, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Processo manual criado com sucesso.", "processo": _processo_payload(processo)})
+
+
 @comex_bp.route("/api/comex/processos/<int:processo_id>/oc", methods=["POST"])
 @permission_required(PERMISSION)
 def api_editar_oc(processo_id):

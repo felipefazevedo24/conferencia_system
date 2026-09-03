@@ -390,6 +390,43 @@ def importar_oc(oc_header: dict, usuario: str) -> ComexProcesso:
     return processo
 
 
+def criar_processo_manual(fornecedor: str, referencia: str, usuario: str) -> ComexProcesso:
+    """Cria um ComexProcesso (Modulo 1) totalmente manual, sem OC vinculada
+    do ERP - pra embarques que sao so acompanhamento de processo (ex.:
+    amostra, reposicao em garantia), sem compra por tras. Segue o MESMO
+    workflow de um processo importado por OC dai em diante (Criar PO,
+    Cotacao, Instrucao, ...) - so nasce sem cod_ordem_compra/dados de OC, e
+    os itens da PO sao preenchidos a mao (nao tem OC no ERP pra puxar).
+
+    `cod_ordem_compra is None` e' o proprio sinal de "processo manual" -
+    `importar_oc` sempre exige uma OC, entao nenhum processo vindo de la
+    fica sem ela; nao precisa de uma coluna nova so pra marcar isso."""
+    fornecedor = str(fornecedor or "").strip()
+    if not fornecedor:
+        raise ValueError("Informe o fornecedor.")
+
+    agora = datetime.now()
+    processo = ComexProcesso(
+        id_op=gerar_id_op("IM"),
+        tipo_operacao="IM",
+        direcao_operacao="IMPO",
+        modal_transporte="Marítimo",
+        status_modulo="OC",
+        status_slug=status_slug("OC"),
+        criado_por=usuario,
+        atualizado_por=usuario,
+        fornecedor=fornecedor,
+    )
+    db.session.add(processo)
+    db.session.commit()
+
+    referencia = str(referencia or "").strip()
+    if referencia:
+        adicionar_comentario(processo, f"Referência/motivo: {referencia}", usuario)
+
+    return processo
+
+
 # Campos da OC (Modulo 1) que o operador pode corrigir manualmente depois da
 # importacao - os dados vem do ERP, mas o requisito pede edicao total antes
 # de virar PO.
@@ -535,8 +572,11 @@ def salvar_po(
     processo.modal_transporte = modal_transporte
     processo.pagador_frete = pagador_frete
     processo.frete_aplicavel = pagador_frete == "Columbia"
+    # Filtra None: processo manual (sem OC, ver criar_processo_manual) nao
+    # tem cod_ordem_compra - sem isso a lista ficava com um "null" solto.
     processo.po_ocs_vinculadas = json.dumps(
-        [processo.cod_ordem_compra, *[o.cod_ordem_compra for o in outros]], default=str
+        [c for c in [processo.cod_ordem_compra, *[o.cod_ordem_compra for o in outros]] if c],
+        default=str,
     )
     # Marca as OCs combinadas como vinculadas a este processo (a dona da
     # PO/itens) - assim elas param de aparecer soltas com status "OC"
