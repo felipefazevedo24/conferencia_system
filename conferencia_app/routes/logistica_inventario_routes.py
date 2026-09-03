@@ -1157,6 +1157,17 @@ def api_chapas_listar():
     })
 
 
+@logistica_inventario_bp.route("/api/logistica/chapas/diagnostico", methods=["GET"])
+@permission_required(PERMISSION)
+def api_chapas_diagnostico():
+    """Diagnóstico saída->lote / reservas-OS no GRV. Abrir logado, ex.:
+    /api/logistica/chapas/diagnostico?saida=54087&codigo=19-01-00564"""
+    saida = (request.args.get("saida") or "").strip()
+    codigo = (request.args.get("codigo") or "").strip()
+    from ..services.erp_estoque_service import diagnosticar_chapa_lote
+    return jsonify(diagnosticar_chapa_lote(saida, codigo))
+
+
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])
 @permission_required(PERMISSION)
 def api_chapas_salvar_calculo():
