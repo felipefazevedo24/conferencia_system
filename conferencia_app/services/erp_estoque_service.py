@@ -297,7 +297,7 @@ def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[st
         if chave and chave not in vistos:
             vistos.add(chave)
             codigos_norm.append(chave)
-    vazio = {"por_lote": [], "por_codigo": {}, "fontes": {}}
+    vazio = {"por_lote": [], "por_codigo": {}, "saldo_codigo": {}, "reservas_os": {}, "fontes": {}}
     if not codigos_norm:
         return vazio
     try:
@@ -317,6 +317,8 @@ def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[st
         return {
             "por_lote": data.get("por_lote") or [],
             "por_codigo": data.get("por_codigo") or {},
+            "saldo_codigo": data.get("saldo_codigo") or {},
+            "reservas_os": data.get("reservas_os") or {},
             "fontes": data.get("fontes") or {},
         }
     except Exception:
