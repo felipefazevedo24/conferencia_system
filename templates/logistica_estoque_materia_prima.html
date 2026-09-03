@@ -28,6 +28,8 @@
     .mp-badge.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .mp-badge.sem_consumo { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
     .mp-badge.sem_estoque { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .mp-nivel-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+    .mp-oc-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 800; background: var(--eui-info-soft); color: var(--eui-info-soft-text); white-space: nowrap; }
     .mp-reservas { display: grid; gap: 8px; margin-top: 8px; min-width: 220px; }
     .mp-reserva-resumo { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 10px; border-radius: 6px; background: var(--eui-primary-soft); color: var(--eui-text-soft); font-size: 12px; }
     .mp-reserva-resumo strong { color: var(--eui-primary); }
@@ -96,6 +98,7 @@
                     </select>
                     <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
                     <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
+                    <span class="mp-muted" id="mp-updated" title="A cobertura é recalculada a cada atualização"></span>
                     <button class="eui-btn eui-btn--ghost" id="mp-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>
@@ -148,6 +151,16 @@
         return `<span class="mp-badge ${nivel}"><i class="fas ${icon}"></i>${item.nivel_label || '-'}</span>`;
     }
 
+    function ocInline(item) {
+        const ordens = item.ordens_compra_abertas || [];
+        if (!ordens.length) return '';
+        const nums = ordens.map((o) => esc(o.ordem_compra || '')).filter(Boolean);
+        if (!nums.length) return '';
+        const label = nums.length === 1 ? `OC ${nums[0]}` : `OC ${nums[0]} +${nums.length - 1}`;
+        const title = nums.map((n) => `OC ${n}`).join(', ') + ' · reposição em andamento';
+        return `<span class="mp-oc-chip" title="${title}"><i class="fas fa-cart-shopping"></i> ${label}</span>`;
+    }
+
     function cobertura(item) {
         if (!item.consumo_diario) return '<span class="mp-muted">Sem consumo no período</span>';
         const dias = Number(item.cobertura_dias || 0);
@@ -190,8 +203,9 @@
     }
 
     function ordensCompraHtml(item) {
-        if (!['materia_prima', 'revenda'].includes(visaoAtual) || item.nivel !== 'critico') return '';
+        if (!['materia_prima', 'revenda'].includes(visaoAtual)) return '';
         const ordens = item.ordens_compra_abertas || [];
+        if (item.nivel !== 'critico' && !ordens.length) return '';
         if (!ordens.length) {
             return `<div class="mp-oc-status mp-oc-status--none"><strong><i class="fas fa-triangle-exclamation"></i> Sem OC em aberto</strong><br>Este material crítico ainda não possui reposição registrada.</div>`;
         }
@@ -234,7 +248,7 @@
                 </td>
                 <td><span class="mp-num">${fmt(item.saldo_disponivel)} ${esc(item.unidade || '')}</span></td>
                 <td>${cobertura(item)}</td>
-                <td>${badge(item)}</td>
+                <td><div class="mp-nivel-cell">${badge(item)}${ocInline(item)}</div></td>
                 ${expandCell(item)}
             </tr>
             ${detailRow(item)}
@@ -258,9 +272,11 @@
         });
     }
 
-    async function carregar(refresh = false) {
-        $('mp-state').style.display = 'block';
-        $('mp-state').textContent = 'Carregando estoque...';
+    async function carregar(refresh = false, silencioso = false) {
+        if (!silencioso) {
+            $('mp-state').style.display = 'block';
+            $('mp-state').textContent = 'Carregando estoque...';
+        }
         const params = new URLSearchParams();
         params.set('visao', visaoAtual);
         const q = $('mp-busca').value.trim();
@@ -275,7 +291,11 @@
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(data.error || data.msg || 'Falha ao carregar estoque.');
             render(data);
+            $('mp-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
         } catch (err) {
+            // Falha em atualizacao silenciosa (em segundo plano) mantem os dados
+            // ja exibidos, sem apagar a tabela com uma mensagem de erro.
+            if (silencioso) return;
             $('mp-table').style.display = 'none';
             $('mp-state').style.display = 'block';
             $('mp-state').textContent = err.message || 'Falha ao carregar estoque.';
@@ -299,6 +319,10 @@
             carregar(false);
         });
     });
+    // Recalcula a cobertura automaticamente: a cada 5 min com a aba visivel e
+    // ao voltar pra aba (cobre a tela deixada aberta por dias com numero congelado).
+    setInterval(() => { if (!document.hidden) carregar(false, true); }, 300000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar(false, true); });
     carregar(false);
 })();
 </script>

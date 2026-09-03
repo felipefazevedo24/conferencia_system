@@ -361,12 +361,12 @@ def estoque_materia_prima_api():
         ]
 
     if visao in {"materia_prima", "revenda"}:
-        codigos_criticos = [row["codigo"] for row in rows if row["nivel"] == "critico"]
-        if codigos_criticos:
+        codigos_reposicao = [row["codigo"] for row in rows if row["nivel"] in ("critico", "atencao")]
+        if codigos_reposicao:
             try:
-                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_criticos)
+                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao)
             except Exception:
-                current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque critico.", exc_info=True)
+                current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque em reposicao.", exc_info=True)
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
         row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
