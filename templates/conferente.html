@@ -427,6 +427,7 @@
         .chapa-switch input { width: 18px; height: 18px; accent-color: #4f46e5; cursor: pointer; }
         .chapa-modal-num { flex: 1; padding: 12px 14px; border: 2px solid #c7d2fe; border-radius: 10px; text-align: center; font-family: monospace; font-weight: 800; font-size: 22px; color: #3730a3; background: #fff; }
         .chapa-modal-num:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
+        .chapa-visu { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #ecfdf5; color: #15803d; border: 1px solid #86efac; }
         .chapa-fields { display: flex; align-items: center; gap: 8px; }
         .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
         .chapa-input {
@@ -1712,8 +1713,10 @@
                         <input type="hidden" class="chapa-input" data-id="${i.id}" value="">
                     </div>` : '';
             const rowClass = (somenteLeitura && valorContagem) ? 'contado' : '';
+            const chapaVisu = (somenteLeitura && Number(i.qtd_chapas_und) > 0)
+                ? `<div class="chapa-visu"><i class="fas fa-layer-group"></i> Chapa: ${Number(i.qtd_chapas_und).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} UND</div>` : '';
             const detalheVisual = somenteLeitura
-                ? `<div class="item-alerta ${String(i.status_ultima || '').toUpperCase() === 'DIVERGÊNCIA' ? 'error' : ''}" data-id="${i.id}">${_rcEscape(i.motivo_ultima || i.status_ultima || '')}</div>`
+                ? `<div class="item-alerta ${String(i.status_ultima || '').toUpperCase() === 'DIVERGÊNCIA' ? 'error' : ''}" data-id="${i.id}">${_rcEscape(i.motivo_ultima || i.status_ultima || '')}</div>${chapaVisu}`
                 : `<div class="item-alerta" data-id="${i.id}"></div>${blocoChapa}`;
             return `
             <tr class="${rowClass}">
