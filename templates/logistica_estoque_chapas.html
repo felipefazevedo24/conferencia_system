@@ -22,6 +22,15 @@
     .ch-diff.bad { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .ch-diff.none { background: var(--eui-surface-2); color: var(--eui-muted); }
 
+    .ch-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
+    .ch-tab { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 14px; border-radius: 7px; cursor: pointer; }
+    .ch-tab.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .ch-group { border: 1px solid var(--eui-border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+    .ch-group__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border); }
+    .ch-group__kpis { display: flex; gap: 16px; font-size: 12px; color: var(--eui-text-soft); flex-wrap: wrap; }
+    .ch-group__kpis b { color: var(--eui-text); font-size: 14px; }
+    .ch-group .erp-table { margin: 0; }
+
     .ch-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(2px); display: none; align-items: flex-start; justify-content: center; z-index: 4000; padding: 30px 14px; overflow-y: auto; }
     .ch-overlay.open { display: flex; }
     .ch-modal { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; width: 100%; max-width: 620px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
@@ -66,15 +75,19 @@
     </header>
 
     <div class="eui-stats" id="ch-kpis">
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Chapas</span><span class="eui-stat__value" id="ch-k-chapas">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-weight-hanging"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total KG (NF)</span><span class="eui-stat__value" id="ch-k-kg">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hashtag"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total UND</span><span class="eui-stat__value" id="ch-k-und">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Chapas em estoque</span><span class="eui-stat__value" id="ch-k-chapas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-weight-hanging"></i></div><div class="eui-stat__body"><span class="eui-stat__label">KG em estoque</span><span class="eui-stat__value" id="ch-k-kg">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Disponíveis</span><span class="eui-stat__value" id="ch-k-disp">0</span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Divergência &gt; 2%</span><span class="eui-stat__value" id="ch-k-div">0</span></div></div>
     </div>
 
     <div class="eui-card">
         <div class="eui-card__head">
             <div class="ch-toolbar">
+                <div class="ch-tabs" role="group" aria-label="Situação das chapas">
+                    <button class="ch-tab active" type="button" data-tab="estoque">Em estoque</button>
+                    <button class="ch-tab" type="button" data-tab="historico">Histórico (zerados)</button>
+                </div>
                 <div class="ch-search">
                     <i class="fas fa-magnifying-glass"></i>
                     <input class="eui-input" id="ch-busca" type="search" placeholder="Buscar por código, descrição, lote, NF, AR, fornecedor ou conferente...">
@@ -87,27 +100,7 @@
         </div>
         <div class="eui-card__body eui-card__body--tight">
             <div class="ch-state" id="ch-state">Carregando chapas...</div>
-            <div class="ch-table-wrap">
-                <table class="erp-table" id="ch-table" style="display:none;">
-                    <thead>
-                        <tr>
-                            <th>Código</th>
-                            <th>Descrição</th>
-                            <th>NF</th>
-                            <th>Fornecedor</th>
-                            <th>AR</th>
-                            <th>Lote</th>
-                            <th>Conferente</th>
-                            <th style="text-align:right;">KG (NF)</th>
-                            <th style="text-align:right;">UND</th>
-                            <th style="text-align:right;">Peso calc.</th>
-                            <th style="text-align:center;">% dif.</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="ch-body"></tbody>
-                </table>
-            </div>
+            <div id="ch-groups"></div>
         </div>
     </div>
 </div>
@@ -215,38 +208,71 @@
         el.innerHTML = `<i class="fas ${bad ? 'fa-triangle-exclamation' : 'fa-check'}"></i> ${sinal}${fmt(pct, 1)}%`;
     }
 
-    function render(data) {
-        const r = data.resumo || {};
-        $('ch-k-chapas').textContent = r.chapas || 0;
-        $('ch-k-kg').textContent = fmt(r.total_kg, 1);
-        $('ch-k-und').textContent = fmt(r.total_und, 0);
-        $('ch-k-div').textContent = r.com_divergencia || 0;
-        const itens = data.itens || [];
+    let abaAtual = 'estoque';
+
+    function rowHtml(i) {
+        const rec = `${fmt(i.und, 0)} und · ${fmt(i.kg_nf, 0)} kg`;
+        const val = (v) => (v == null ? '<span class="ch-muted">—</span>' : fmt(v, 1));
+        return `<tr>
+            <td><b>${esc(i.lote || '-')}</b></td>
+            <td>${esc(i.ar || '-')}</td>
+            <td>${esc(i.numero_nota || '-')}</td>
+            <td>${esc(i.conferente || '-')}</td>
+            <td style="text-align:right;">${rec}</td>
+            <td style="text-align:right;">${val(i.chapas_baixadas)}</td>
+            <td style="text-align:right;"><b>${val(i.chapas_em_estoque)}</b></td>
+            <td style="text-align:right;">${val(i.chapas_reservadas)}</td>
+            <td style="text-align:right;"><b>${val(i.chapas_disponiveis)}</b></td>
+            <td style="text-align:right;">${i.peso_por_peca != null ? fmt(i.peso_por_peca, 1) + ' kg' : '<span class="ch-muted">—</span>'}</td>
+            <td style="text-align:center;">${diffHtml(i.pct_diferenca)}</td>
+            <td style="text-align:right;"><button class="eui-btn eui-btn--primary eui-btn--sm" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar' : 'Calcular'}</button></td>
+        </tr>`;
+    }
+
+    function render() {
+        const ativos = cache.filter((i) => !i.historico);
+        $('ch-k-chapas').textContent = fmt(ativos.reduce((a, i) => a + (i.chapas_em_estoque || 0), 0), 0);
+        $('ch-k-kg').textContent = fmt(ativos.reduce((a, i) => a + (i.kg_saldo || 0), 0), 1);
+        $('ch-k-disp').textContent = fmt(ativos.reduce((a, i) => a + (i.chapas_disponiveis || 0), 0), 0);
+        $('ch-k-div').textContent = cache.filter((i) => i.pct_diferenca != null && Math.abs(i.pct_diferenca) > 2).length;
+
+        const itens = cache.filter((i) => (abaAtual === 'historico' ? i.historico : !i.historico));
         if (!itens.length) {
-            $('ch-table').style.display = 'none';
+            $('ch-groups').innerHTML = '';
             $('ch-state').style.display = 'block';
-            $('ch-state').textContent = 'Nenhuma chapa encontrada.';
+            $('ch-state').textContent = abaAtual === 'historico' ? 'Nenhum lote zerado (histórico vazio).' : 'Nenhuma chapa em estoque.';
             return;
         }
         $('ch-state').style.display = 'none';
-        $('ch-table').style.display = 'table';
-        $('ch-body').innerHTML = itens.map((i, idx) => `
-            <tr>
-                <td><span class="ch-code">${esc(i.codigo || '-')}</span></td>
-                <td><span class="ch-desc">${esc(i.descricao || '-')}</span></td>
-                <td>${esc(i.numero_nota || '-')}</td>
-                <td><span class="ch-muted">${esc(i.fornecedor || '-')}</span></td>
-                <td>${esc(i.ar || '-')}</td>
-                <td>${esc(i.lote || '-')}</td>
-                <td>${esc(i.conferente || '-')}</td>
-                <td style="text-align:right;"><span class="ch-num">${fmt(i.kg_nf, 2)}</span></td>
-                <td style="text-align:right;"><span class="ch-num">${fmt(i.und, 0)}</span></td>
-                <td style="text-align:right;">${i.peso_calculado_total != null ? `<span class="ch-num">${fmt(i.peso_calculado_total, 2)}</span>` : '<span class="ch-muted">—</span>'}</td>
-                <td style="text-align:center;">${diffHtml(i.pct_diferenca)}</td>
-                <td style="text-align:right;"><button class="eui-btn eui-btn--primary eui-btn--sm" data-idx="${idx}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar' : 'Calcular'}</button></td>
-            </tr>`).join('');
-        document.querySelectorAll('#ch-body button[data-idx]').forEach((btn) => {
-            btn.addEventListener('click', () => abrirCalc(itens[Number(btn.dataset.idx)]));
+        const grupos = {};
+        itens.forEach((i) => { (grupos[i.codigo] = grupos[i.codigo] || { desc: i.descricao, rows: [] }).rows.push(i); });
+        $('ch-groups').innerHTML = Object.entries(grupos).map(([cod, g]) => {
+            const estoque = g.rows.reduce((a, i) => a + (i.chapas_em_estoque || 0), 0);
+            const res = g.rows.reduce((a, i) => a + (i.chapas_reservadas || 0), 0);
+            const disp = g.rows.reduce((a, i) => a + (i.chapas_disponiveis || 0), 0);
+            return `<div class="ch-group">
+                <div class="ch-group__head">
+                    <div><span class="ch-code">${esc(cod)}</span> &nbsp;<span class="ch-desc">${esc(g.desc || '')}</span></div>
+                    <div class="ch-group__kpis">
+                        <span>Em estoque: <b>${fmt(estoque, 0)}</b></span>
+                        <span>Reservadas: <b>${fmt(res, 0)}</b></span>
+                        <span>Disponíveis: <b>${fmt(disp, 0)}</b></span>
+                    </div>
+                </div>
+                <div class="ch-table-wrap"><table class="erp-table"><thead><tr>
+                    <th>Lote</th><th>AR</th><th>NF</th><th>Conferente</th>
+                    <th style="text-align:right;">Recebido</th><th style="text-align:right;">Baixadas</th>
+                    <th style="text-align:right;">Em estoque</th><th style="text-align:right;">Reservadas</th>
+                    <th style="text-align:right;">Disponíveis</th><th style="text-align:right;">Peso/peça</th>
+                    <th style="text-align:center;">% vs NF</th><th></th>
+                </tr></thead><tbody>${g.rows.map(rowHtml).join('')}</tbody></table></div>
+            </div>`;
+        }).join('');
+        document.querySelectorAll('#ch-groups button[data-item]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
+                if (linha) abrirCalc(linha);
+            });
         });
     }
 
@@ -262,7 +288,7 @@
             if (!resp.ok) throw new Error(data.error || 'Falha ao carregar chapas.');
             densidades = data.densidades || {};
             cache = data.itens || [];
-            render(data);
+            render();
             $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
         } catch (e) {
             $('ch-table').style.display = 'none';
@@ -403,6 +429,12 @@
 
     $('ch-busca').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(carregar, 300); });
     $('ch-refresh').addEventListener('click', carregar);
+    document.querySelectorAll('.ch-tab').forEach((btn) => btn.addEventListener('click', () => {
+        document.querySelectorAll('.ch-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        abaAtual = btn.dataset.tab || 'estoque';
+        render();
+    }));
     $('ch-calc-overlay').addEventListener('click', (e) => { if (e.target === $('ch-calc-overlay')) fecharCalc(); });
     carregar();
 })();

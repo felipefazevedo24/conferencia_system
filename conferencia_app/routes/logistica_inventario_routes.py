@@ -1084,6 +1084,8 @@ def estoque_chapas_page():
 @logistica_inventario_bp.route("/api/logistica/chapas", methods=["GET"])
 @permission_required(PERMISSION)
 def api_chapas_listar():
+    from collections import defaultdict
+
     termo = _normalizar_busca(request.args.get("q"))
     # Chapas = itens que passaram pela conferência cega marcados como chapa
     # (o conferente selecionou "é chapa" e informou a UND -> qtd_chapas_und).
@@ -1097,50 +1099,117 @@ def api_chapas_listar():
     calc_por_item = {c.item_nota_id: c for c in ChapaCalculo.query.all() if c.item_nota_id is not None}
     lote_por_item = _chapa_lotes_por_item(itens)
 
+    # Saldo/saída/reservado por LOTE (best-effort do GRV; vazio se a bridge não responder).
+    try:
+        from ..services.erp_estoque_service import buscar_saldo_chapa_por_lote
+        saldo_info = buscar_saldo_chapa_por_lote([(i.codigo_grv or i.codigo) for i in itens])
+    except Exception:
+        saldo_info = {"por_lote": [], "por_codigo": {}, "fontes": {}}
+
+    def _codnorm(c):
+        return re.sub(r"[^A-Z0-9]", "", str(c or "").upper())
+
+    por_lote = {}
+    for r in saldo_info.get("por_lote") or []:
+        chave = (_codnorm(r.get("codigo")), str(r.get("lote") or "").strip())
+        por_lote[chave] = {"kg_saida": float(r.get("kg_saida") or 0), "kg_reservado": float(r.get("kg_reservado") or 0)}
+    por_codigo = saldo_info.get("por_codigo") or {}
+
     linhas = []
     for i in itens:
-        kg_nf = _chapa_kg_do_item(i)
-        und = float(i.qtd_chapas_und or 0)
+        codigo = i.codigo_grv or i.codigo
         calc = calc_por_item.get(i.id)
         calc_dict = _chapa_serializar_calculo(calc)
-        peso_calc_total = None
-        pct_diff = None
-        if calc and calc.peso_por_peca and und > 0:
-            peso_calc_total = float(calc.peso_por_peca) * und
-            if kg_nf > 0:
-                pct_diff = (peso_calc_total - kg_nf) / kg_nf * 100.0
-        linha = {
-            "item_id": i.id,
-            "numero_nota": i.numero_nota,
-            "codigo": i.codigo_grv or i.codigo,
-            "descricao": i.descricao,
-            "fornecedor": i.fornecedor or "",
-            "ar": i.numero_lancamento or "",
+        linhas.append({
+            "item_id": i.id, "numero_nota": i.numero_nota, "codigo": codigo,
+            "codigo_norm": _codnorm(codigo), "descricao": i.descricao,
+            "fornecedor": i.fornecedor or "", "ar": i.numero_lancamento or "",
             "lote": lote_por_item.get(i.id) or i.numero_lancamento or "",
-            "conferente": i.usuario_conferencia or "",
-            "unidade_nf": i.unidade_comercial or "",
-            "kg_nf": kg_nf,
-            "und": und,
-            "peso_calculado_total": peso_calc_total,
-            "pct_diferenca": pct_diff,
+            "conferente": i.usuario_conferencia or "", "unidade_nf": i.unidade_comercial or "",
+            "kg_nf": _chapa_kg_do_item(i), "und": float(i.qtd_chapas_und or 0),
+            "peso": float(calc.peso_por_peca) if (calc and calc.peso_por_peca) else None,
+            "data_ord": i.data_importacao or i.fim_conferencia or datetime.min,
             **calc_dict,
+        })
+
+    # Atribui saída/reservado por lote (exato) OU distribui FIFO (mais antigo
+    # primeiro) o total do código, quando o GRV não amarrou por lote.
+    grupos = defaultdict(list)
+    for l in linhas:
+        grupos[l["codigo_norm"]].append(l)
+    for cod, rows in grupos.items():
+        rows.sort(key=lambda r: r["data_ord"])
+        if any((cod, r["lote"]) in por_lote for r in rows):
+            for r in rows:
+                info = por_lote.get((cod, r["lote"]), {})
+                r["kg_saida"] = info.get("kg_saida", 0.0)
+                r["kg_reservado"] = info.get("kg_reservado", 0.0)
+        else:
+            total_saida = float((por_codigo.get(cod) or {}).get("kg_saida") or 0)
+            total_res = float((por_codigo.get(cod) or {}).get("kg_reservado") or 0)
+            for r in rows:
+                usa = min(r["kg_nf"], total_saida)
+                total_saida -= usa
+                r["kg_saida"] = usa
+            for r in rows:
+                saldo_r = max(r["kg_nf"] - r["kg_saida"], 0.0)
+                usa = min(saldo_r, total_res)
+                total_res -= usa
+                r["kg_reservado"] = usa
+
+    itens_out = []
+    for l in linhas:
+        kg_nf = l["kg_nf"]; und = l["und"]; peso = l["peso"]
+        kg_saida = float(l.get("kg_saida") or 0)
+        kg_res = float(l.get("kg_reservado") or 0)
+        kg_saldo = max(kg_nf - kg_saida, 0.0)
+        kg_disp = max(kg_saldo - kg_res, 0.0)
+        peso_calc_total = (peso * und) if (peso and und > 0) else None
+        pct_diff = ((peso_calc_total - kg_nf) / kg_nf * 100.0) if (peso_calc_total is not None and kg_nf > 0) else None
+        # nº de chapas = UND informada menos as baixadas (kg que saiu ÷ peso da peça).
+        chapas_baixadas = (kg_saida / peso) if peso else None
+        chapas_estoque = max(und - chapas_baixadas, 0.0) if chapas_baixadas is not None else None
+        chapas_reservadas = (kg_res / peso) if peso else None
+        chapas_disp = max(chapas_estoque - chapas_reservadas, 0.0) if (chapas_estoque is not None and chapas_reservadas is not None) else None
+        out = {
+            "item_id": l["item_id"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
+            "descricao": l["descricao"], "fornecedor": l["fornecedor"], "ar": l["ar"],
+            "lote": l["lote"], "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
+            "kg_nf": kg_nf, "und": und,
+            "kg_saida": round(kg_saida, 2), "kg_saldo": round(kg_saldo, 2),
+            "kg_reservado": round(kg_res, 2), "kg_disponivel": round(kg_disp, 2),
+            "chapas_em_estoque": chapas_estoque,
+            "chapas_baixadas": chapas_baixadas,
+            "chapas_reservadas": chapas_reservadas,
+            "chapas_disponiveis": chapas_disp,
+            "peso_calculado_total": peso_calc_total, "pct_diferenca": pct_diff,
+            "historico": kg_saldo <= 0.0001 and kg_saida > 0,
+            "material": l.get("material", ""), "formato": l.get("formato", ""),
+            "dimensoes": l.get("dimensoes"), "peso_por_peca": l.get("peso_por_peca"),
+            "calculo_id": l.get("calculo_id"), "atualizado_por": l.get("atualizado_por", ""),
+            "atualizado_em": l.get("atualizado_em"),
         }
         if termo:
             alvo = _normalizar_busca(" ".join(str(v) for v in [
-                linha["codigo"], linha["descricao"], linha["lote"],
-                linha["numero_nota"], linha["ar"], linha["fornecedor"], linha["conferente"],
+                out["codigo"], out["descricao"], out["lote"],
+                out["numero_nota"], out["ar"], out["fornecedor"], out["conferente"],
             ]))
             if termo not in alvo:
                 continue
-        linhas.append(linha)
+        itens_out.append(out)
 
+    ativos = [l for l in itens_out if not l["historico"]]
     resumo = {
-        "chapas": len(linhas),
-        "total_kg": round(sum(l["kg_nf"] for l in linhas), 2),
-        "total_und": round(sum(l["und"] for l in linhas), 2),
-        "com_divergencia": sum(1 for l in linhas if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
+        "chapas": len(ativos),
+        "total_kg": round(sum(l["kg_saldo"] for l in ativos), 2),
+        "reservadas": round(sum((l["chapas_reservadas"] or 0) for l in ativos), 1),
+        "disponiveis": round(sum((l["chapas_disponiveis"] or 0) for l in ativos), 1),
+        "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
     }
-    return jsonify({"resumo": resumo, "densidades": CHAPA_DENSIDADES, "itens": linhas})
+    return jsonify({
+        "resumo": resumo, "densidades": CHAPA_DENSIDADES,
+        "itens": itens_out, "fontes": saldo_info.get("fontes") or {},
+    })
 
 
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])
