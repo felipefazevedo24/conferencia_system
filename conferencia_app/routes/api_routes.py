@@ -4704,7 +4704,6 @@ def detalhe_nota_xml_auditor(numero_nota):
             "material_cliente": bool(itens[0].material_cliente),
             "remessa": bool(itens[0].remessa),
             "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
-            "servico": bool(itens[0].servico),
             "auditor_observacao": itens[0].auditor_observacao or "",
             "auditado_por": itens[0].auditor_usuario or "---",
             "auditado_em": itens[0].auditor_data.strftime("%d/%m/%Y %H:%M") if itens[0].auditor_data else "---",
@@ -5212,7 +5211,6 @@ def vincular_pedido_xml_auditor():
     material_cliente = bool(data.get("material_cliente", False))
     remessa = bool(data.get("remessa", False))
     sem_conferencia_logistica = bool(data.get("sem_conferencia_logistica", False))
-    servico = bool(data.get("servico", False))
     observacao = str(data.get("observacao") or "").strip()
 
     if not numero_nota:
@@ -5233,7 +5231,6 @@ def vincular_pedido_xml_auditor():
         item.material_cliente = material_cliente
         item.remessa = remessa
         item.sem_conferencia_logistica = sem_conferencia_logistica
-        item.servico = servico
         item.pedido_compra = None if (material_cliente or remessa) else novo_pedido
         item.auditor_observacao = observacao[:500] if observacao else None
 
@@ -5264,8 +5261,10 @@ def vincular_pedido_xml_auditor():
     # Operador confirmou seguir com divergencia (marcador na observacao) -> este
     # e o "OK" que dispara o aviso a Compras no Teams (antes disso ele ainda podia
     # ajustar os vinculos e resolver). So dispara se ainda houver divergencia real.
-    # Servico NAO passa por essa aprovacao de Compras.
-    if not material_cliente and not remessa and not servico and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
+    # NFS-e (servico) NAO passa por essa aprovacao de Compras - detectado pelo
+    # tipo do documento escolhido na importacao (NF-e x NFS-e).
+    eh_servico = str(itens[0].tipo_documento or "NFE").upper() == "NFSE"
+    if not material_cliente and not remessa and not eh_servico and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
         _detectar_e_notificar_divergencia_confirmada(numero_nota, pedido_compra, cnpj_emitente, fornecedor)
 
     return jsonify(
@@ -5571,14 +5570,12 @@ def liberar_nota_via_xml_auditor():
     material_cliente_in_payload = "material_cliente" in data
     remessa_in_payload = "remessa" in data
     sem_conf_logistica_in_payload = "sem_conferencia_logistica" in data
-    servico_in_payload = "servico" in data
     pedido_compra_in_payload = "pedido_compra" in data
     observacao_in_payload = "observacao" in data
-    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or servico_in_payload or pedido_compra_in_payload or observacao_in_payload:
+    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or pedido_compra_in_payload or observacao_in_payload:
         material_cliente_payload = bool(data.get("material_cliente", False))
         remessa_payload = bool(data.get("remessa", False))
         sem_conf_logistica_payload = bool(data.get("sem_conferencia_logistica", False))
-        servico_payload = bool(data.get("servico", False))
         pedido_compra_payload = str(data.get("pedido_compra") or "").strip()
         observacao_payload = str(data.get("observacao") or "").strip()
 
@@ -5590,8 +5587,6 @@ def liberar_nota_via_xml_auditor():
                 item.remessa = remessa_payload
             if sem_conf_logistica_in_payload:
                 item.sem_conferencia_logistica = sem_conf_logistica_payload
-            if servico_in_payload:
-                item.servico = servico_payload
 
             if item.material_cliente or bool(item.remessa):
                 item.pedido_compra = None
@@ -5622,7 +5617,8 @@ def liberar_nota_via_xml_auditor():
     material_cliente = bool(itens[0].material_cliente)
     remessa = bool(itens[0].remessa)
     sem_conferencia_logistica = bool(itens[0].sem_conferencia_logistica)
-    servico = bool(itens[0].servico)
+    # NFS-e (servico) e detectada pelo tipo do documento da importacao.
+    servico = str(itens[0].tipo_documento or "NFE").upper() == "NFSE"
     if not material_cliente and not remessa and not pedidos_nota:
         return jsonify(
             {
@@ -5632,7 +5628,7 @@ def liberar_nota_via_xml_auditor():
         ), 409
 
     # Divergência XML x pedido: Compras decide via Teams/tela de aprovação.
-    # Serviço NÃO passa por essa aprovação (o operador marca a NF como serviço).
+    # NFS-e (serviço) NÃO passa por essa aprovação de Compras.
     if not material_cliente and not remessa and not servico:
         ultima_decisao = (
             DivergenciaPedidoAprovacao.query
