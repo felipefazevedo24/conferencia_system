@@ -25,11 +25,35 @@
     .ch-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
     .ch-tab { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 14px; border-radius: 7px; cursor: pointer; }
     .ch-tab.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
-    .ch-group { border: 1px solid var(--eui-border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
-    .ch-group__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border); }
-    .ch-group__kpis { display: flex; gap: 16px; font-size: 12px; color: var(--eui-text-soft); flex-wrap: wrap; }
-    .ch-group__kpis b { color: var(--eui-text); font-size: 14px; }
-    .ch-group .erp-table { margin: 0; }
+    .ch-group { border: 1px solid var(--eui-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+    .ch-group.open { box-shadow: var(--eui-shadow-sm); }
+    .ch-group__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; width: 100%; padding: 14px 16px; background: var(--eui-surface-2); border: 0; cursor: pointer; text-align: left; }
+    .ch-group__head:hover { filter: brightness(0.98); }
+    .ch-group__id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ch-group__chev { color: var(--eui-muted); width: 14px; text-align: center; }
+    .ch-group__count { font-size: 11px; font-weight: 800; color: var(--eui-muted); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 2px 8px; }
+    .ch-group__kpis { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ch-chip { font-size: 11.5px; color: var(--eui-text-soft); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+    .ch-chip b { color: var(--eui-text); }
+    .ch-chip--on { border-color: color-mix(in srgb, var(--eui-primary) 45%, var(--eui-border)); background: color-mix(in srgb, var(--eui-primary) 8%, var(--eui-surface)); }
+    .ch-group__count--warn { color: var(--eui-warning, #b45309); background: color-mix(in srgb, var(--eui-warning, #f59e0b) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+    .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: color-mix(in srgb, var(--eui-primary) 5%, var(--eui-surface)); border-bottom: 1px solid var(--eui-border); }
+    .ch-os__t { font-size: 12px; font-weight: 600; color: var(--eui-text); margin-right: 4px; }
+    .ch-os__i { font-size: 11.5px; color: var(--eui-text-soft); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 3px 9px; }
+    .ch-os__i b { color: var(--eui-text); }
+    .ch-group__body { padding: 12px; display: grid; gap: 10px; background: var(--eui-surface); border-top: 1px solid var(--eui-border); }
+    .ch-lote { border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; }
+    .ch-lote__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--eui-surface-2); }
+    .ch-lote__id { display: grid; gap: 2px; }
+    .ch-lote__lote { font-weight: 800; color: var(--eui-text); font-size: 13px; }
+    .ch-lote__meta { font-size: 11px; color: var(--eui-muted); }
+    .ch-lote__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ch-lote__peso { font-size: 11px; font-weight: 700; color: var(--eui-text-soft); }
+    .ch-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--eui-border); }
+    .ch-metric { background: var(--eui-surface); padding: 10px 12px; font-size: 13px; color: var(--eui-text-soft); }
+    .ch-metric span { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-bottom: 3px; }
+    .ch-metric b { color: var(--eui-text); }
+    .ch-metric--on { background: var(--eui-primary-soft); }
 
     .ch-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(2px); display: none; align-items: flex-start; justify-content: center; z-index: 4000; padding: 30px 14px; overflow-y: auto; }
     .ch-overlay.open { display: flex; }
@@ -158,6 +182,8 @@
     let timer = null;
     let cache = [];
     let densidades = {};
+    let saldoCod = {};
+    let reservasOs = {};
     let linhaAtual = null;
 
     const MATERIAIS = {
@@ -209,71 +235,114 @@
     }
 
     let abaAtual = 'estoque';
+    const expandido = new Set();
 
-    function rowHtml(i) {
-        const rec = `${fmt(i.und, 0)} und · ${fmt(i.kg_nf, 0)} kg`;
-        const val = (v) => (v == null ? '<span class="ch-muted">—</span>' : fmt(v, 1));
-        return `<tr>
-            <td><b>${esc(i.lote || '-')}</b></td>
-            <td>${esc(i.ar || '-')}</td>
-            <td>${esc(i.numero_nota || '-')}</td>
-            <td>${esc(i.conferente || '-')}</td>
-            <td style="text-align:right;">${rec}</td>
-            <td style="text-align:right;">${val(i.chapas_baixadas)}</td>
-            <td style="text-align:right;"><b>${val(i.chapas_em_estoque)}</b></td>
-            <td style="text-align:right;">${val(i.chapas_reservadas)}</td>
-            <td style="text-align:right;"><b>${val(i.chapas_disponiveis)}</b></td>
-            <td style="text-align:right;">${i.peso_por_peca != null ? fmt(i.peso_por_peca, 1) + ' kg' : '<span class="ch-muted">—</span>'}</td>
-            <td style="text-align:center;">${diffHtml(i.pct_diferenca)}</td>
-            <td style="text-align:right;"><button class="eui-btn eui-btn--primary eui-btn--sm" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar' : 'Calcular'}</button></td>
-        </tr>`;
+    function loteCard(i) {
+        const par = (und, kg) => `<b>${und == null ? '—' : fmt(und, 1)}</b> und · <b>${kg == null ? '—' : fmt(kg, 1)}</b> kg`;
+        // Só o que o Sync sabe de verdade deste lote: o que chegou nesta NF.
+        // O saldo/baixa/reservado REAL é do GRV e aparece no total do item
+        // (cabeçalho). Baixa/reservado por lote só quando o GRV amarrar o lote.
+        const extras = (i.kg_saida > 0 || i.kg_reservado > 0)
+            ? `<div class="ch-metric"><span>Baixado (GRV)</span>${par(i.chapas_baixadas, i.kg_saida)}</div>
+               <div class="ch-metric"><span>Reservado (GRV)</span>${par(i.chapas_reservadas, i.kg_reservado)}</div>`
+            : '';
+        return `<div class="ch-lote">
+            <div class="ch-lote__head">
+                <div class="ch-lote__id">
+                    <span class="ch-lote__lote"><i class="fas fa-hashtag"></i> ${esc(i.lote || '-')}</span>
+                    <span class="ch-lote__meta">AR ${esc(i.ar || '-')} · NF ${esc(i.numero_nota || '-')} · Conf.: ${esc(i.conferente || '-')}</span>
+                </div>
+                <div class="ch-lote__right">
+                    ${diffHtml(i.pct_diferenca)}
+                    <span class="ch-lote__peso">${i.peso_por_peca != null ? fmt(i.peso_por_peca, 1) + ' kg/peça' : 'sem cálculo'}</span>
+                    <button class="eui-btn eui-btn--primary eui-btn--sm" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar cálculo' : 'Calcular'}</button>
+                </div>
+            </div>
+            <div class="ch-metrics">
+                <div class="ch-metric ch-metric--on"><span>Recebido nesta NF</span>${par(i.und, i.kg_nf)}</div>
+                ${extras}
+            </div>
+        </div>`;
+    }
+
+    // peso/peça mais recente de cada código (pra converter kg <-> und)
+    function pesoDoCodigo(cod) {
+        const r = cache.find((i) => i.codigo === cod && i.peso_por_peca);
+        return r ? Number(r.peso_por_peca) : null;
     }
 
     function render() {
-        const ativos = cache.filter((i) => !i.historico);
-        $('ch-k-chapas').textContent = fmt(ativos.reduce((a, i) => a + (i.chapas_em_estoque || 0), 0), 0);
-        $('ch-k-kg').textContent = fmt(ativos.reduce((a, i) => a + (i.kg_saldo || 0), 0), 1);
-        $('ch-k-disp').textContent = fmt(ativos.reduce((a, i) => a + (i.chapas_disponiveis || 0), 0), 0);
+        // Saldo REAL vem do GRV por código (saldoCod). É a informação básica:
+        // em estoque / reservado / disponível de verdade (a baixa já entra aí).
+        const codsAtivos = [...new Set(cache.filter((i) => !i.historico).map((i) => i.codigo))];
+        let kgEstoque = 0, undEstoque = 0, undDisp = 0;
+        codsAtivos.forEach((cod) => {
+            const s = saldoCod[cod];
+            const kgE = s ? s.em_estoque_kg : cache.filter((i) => i.codigo === cod && !i.historico).reduce((a, i) => a + (i.kg_nf || 0), 0);
+            const kgD = s ? s.disponivel_kg : kgE;
+            kgEstoque += kgE;
+            const p = pesoDoCodigo(cod);
+            if (p) { undEstoque += kgE / p; undDisp += kgD / p; }
+        });
+        $('ch-k-chapas').textContent = fmt(undEstoque, 0);
+        $('ch-k-kg').textContent = fmt(kgEstoque, 1);
+        $('ch-k-disp').textContent = fmt(undDisp, 0);
         $('ch-k-div').textContent = cache.filter((i) => i.pct_diferenca != null && Math.abs(i.pct_diferenca) > 2).length;
 
         const itens = cache.filter((i) => (abaAtual === 'historico' ? i.historico : !i.historico));
         if (!itens.length) {
             $('ch-groups').innerHTML = '';
             $('ch-state').style.display = 'block';
-            $('ch-state').textContent = abaAtual === 'historico' ? 'Nenhum lote zerado (histórico vazio).' : 'Nenhuma chapa em estoque.';
+            $('ch-state').textContent = abaAtual === 'historico' ? 'Nenhum item zerado (histórico vazio).' : 'Nenhuma chapa em estoque.';
             return;
         }
         $('ch-state').style.display = 'none';
         const grupos = {};
         itens.forEach((i) => { (grupos[i.codigo] = grupos[i.codigo] || { desc: i.descricao, rows: [] }).rows.push(i); });
+        const chipKU = (label, kg, cod, on) => {
+            const p = pesoDoCodigo(cod);
+            const u = p ? kg / p : null;
+            return `<span class="ch-chip${on ? ' ch-chip--on' : ''}">${label}: <b>${u == null ? '—' : fmt(u, 0)}</b> und · <b>${fmt(kg, 0)}</b> kg</span>`;
+        };
         $('ch-groups').innerHTML = Object.entries(grupos).map(([cod, g]) => {
-            const estoque = g.rows.reduce((a, i) => a + (i.chapas_em_estoque || 0), 0);
-            const res = g.rows.reduce((a, i) => a + (i.chapas_reservadas || 0), 0);
-            const disp = g.rows.reduce((a, i) => a + (i.chapas_disponiveis || 0), 0);
-            return `<div class="ch-group">
-                <div class="ch-group__head">
-                    <div><span class="ch-code">${esc(cod)}</span> &nbsp;<span class="ch-desc">${esc(g.desc || '')}</span></div>
-                    <div class="ch-group__kpis">
-                        <span>Em estoque: <b>${fmt(estoque, 0)}</b></span>
-                        <span>Reservadas: <b>${fmt(res, 0)}</b></span>
-                        <span>Disponíveis: <b>${fmt(disp, 0)}</b></span>
+            const s = saldoCod[cod];
+            const recebidoKg = g.rows.reduce((a, i) => a + (i.kg_nf || 0), 0);
+            const emEstoqueKg = s ? s.em_estoque_kg : recebidoKg;
+            const reservadoKg = s ? s.reservado_kg : 0;
+            const dispKg = s ? s.disponivel_kg : recebidoKg;
+            const aberto = expandido.has(cod);
+            const os = reservasOs[cod] || [];
+            const osHtml = os.length
+                ? `<div class="ch-os"><span class="ch-os__t"><i class="fas fa-clipboard-list"></i> Reservado por OS</span>${os.map((o) => `<span class="ch-os__i">OS ${esc(o.os || o.documento || '-')} · <b>${fmt(o.kg || o.qtde || 0, 0)}</b> kg</span>`).join('')}</div>`
+                : '';
+            return `<div class="ch-group ${aberto ? 'open' : ''}">
+                <button type="button" class="ch-group__head" data-cod="${esc(cod)}">
+                    <div class="ch-group__id">
+                        <i class="fas fa-chevron-${aberto ? 'down' : 'right'} ch-group__chev"></i>
+                        <span class="ch-code">${esc(cod)}</span>
+                        <span class="ch-desc">${esc(g.desc || '')}</span>
+                        <span class="ch-group__count">${g.rows.length} lote(s)</span>
+                        ${s ? '' : '<span class="ch-group__count ch-group__count--warn">saldo GRV indisponível</span>'}
                     </div>
-                </div>
-                <div class="ch-table-wrap"><table class="erp-table"><thead><tr>
-                    <th>Lote</th><th>AR</th><th>NF</th><th>Conferente</th>
-                    <th style="text-align:right;">Recebido</th><th style="text-align:right;">Baixadas</th>
-                    <th style="text-align:right;">Em estoque</th><th style="text-align:right;">Reservadas</th>
-                    <th style="text-align:right;">Disponíveis</th><th style="text-align:right;">Peso/peça</th>
-                    <th style="text-align:center;">% vs NF</th><th></th>
-                </tr></thead><tbody>${g.rows.map(rowHtml).join('')}</tbody></table></div>
+                    <div class="ch-group__kpis">
+                        ${chipKU('Em estoque', emEstoqueKg, cod, true)}
+                        ${chipKU('Reservadas', reservadoKg, cod)}
+                        ${chipKU('Disponíveis', dispKg, cod, true)}
+                    </div>
+                </button>
+                <div class="ch-group__body" ${aberto ? '' : 'style="display:none;"'}>${osHtml}${g.rows.map(loteCard).join('')}</div>
             </div>`;
         }).join('');
-        document.querySelectorAll('#ch-groups button[data-item]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
-                if (linha) abrirCalc(linha);
-            });
-        });
+        document.querySelectorAll('.ch-group__head').forEach((h) => h.addEventListener('click', () => {
+            const cod = h.dataset.cod;
+            if (expandido.has(cod)) expandido.delete(cod); else expandido.add(cod);
+            render();
+        }));
+        document.querySelectorAll('#ch-groups button[data-item]').forEach((btn) => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
+            if (linha) abrirCalc(linha);
+        }));
     }
 
     async function carregar() {
@@ -288,6 +357,8 @@
             if (!resp.ok) throw new Error(data.error || 'Falha ao carregar chapas.');
             densidades = data.densidades || {};
             cache = data.itens || [];
+            saldoCod = data.saldo_codigo || {};
+            reservasOs = data.reservas_os || {};
             render();
             $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
         } catch (e) {

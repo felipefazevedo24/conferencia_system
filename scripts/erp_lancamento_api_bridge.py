@@ -2486,7 +2486,9 @@ def create_app() -> Flask:
             cod_norm = "regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g')"
             por_lote: dict[tuple[str, str], dict[str, float]] = {}
             por_codigo: dict[str, dict[str, float]] = {c: {"kg_saida": 0.0, "kg_reservado": 0.0} for c in codigos}
-            fontes = {"saida_lote": None, "reservado_lote": None}
+            saldo_codigo: dict[str, dict[str, float]] = {}
+            reservas_os: dict[str, list] = {}
+            fontes = {"saida_lote": None, "reservado_lote": None, "saldo_codigo": None, "reservas_os": None}
 
             def _cols(cur, tabela):
                 cur.execute(
@@ -2610,6 +2612,39 @@ def create_app() -> Flask:
                         except Exception:
                             app.logger.exception("Falha no reservado por codigo")
 
+                    # ---- Saldo REAL por codigo (deposito principal) ----
+                    # Informacao basica: quanto o GRV tem HOJE em estoque /
+                    # reservado / disponivel por codigo. Como o GRV ja mantem
+                    # esse saldo, toda baixa (saida) ja esta refletida aqui -
+                    # nao precisa recalcular nada por fora. Mesma fonte provada
+                    # do estoque normal (tproduto_deposito, cod_deposito=1).
+                    try:
+                        cur.execute(
+                            f"""
+                            select {cod_norm} as codigo,
+                                   sum(coalesce(d.qtde_total, 0))::double precision as qtde_total,
+                                   sum(coalesce(d.qtde_reservada, 0))::double precision as qtde_reservada,
+                                   sum(coalesce(d.qtde_disponivel, 0))::double precision as qtde_disponivel,
+                                   max(coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'KG')) as unidade
+                            from public.tproduto_deposito d
+                            join public.tproduto p on p.cod_empresa = d.cod_empresa and p.codigo = d.cod_produto
+                            where d.cod_empresa = %s and d.cod_deposito = 1 and {cod_norm} = any(%s::text[])
+                            group by 1
+                            """,
+                            (empresa, codigos),
+                        )
+                        for cod, qt, qr, qd, un in cur.fetchall():
+                            saldo_codigo[str(cod or "").strip()] = {
+                                "qtde_total": round(float(qt or 0), 4),
+                                "qtde_reservada": round(float(qr or 0), 4),
+                                "qtde_disponivel": round(float(qd or 0), 4),
+                                "unidade": str(un or "KG").strip().upper(),
+                            }
+                        if saldo_codigo:
+                            fontes["saldo_codigo"] = "tproduto_deposito (cod_deposito=1)"
+                    except Exception:
+                        app.logger.exception("Falha no saldo real por codigo de chapa")
+
             saida_por_lote = [
                 {
                     "codigo": cod,
@@ -2626,10 +2661,117 @@ def create_app() -> Flask:
                     "kg_saida": round(v.get("saida_total_codigo", v.get("kg_saida", 0.0)), 4),
                     "kg_reservado": round(v.get("kg_reservado", 0.0), 4),
                 } for c, v in por_codigo.items()},
+                "saldo_codigo": saldo_codigo,
+                "reservas_os": reservas_os,
                 "fontes": fontes,
             })
         except Exception as exc:
             app.logger.exception("Falha ao consultar saldo de chapa por lote no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/chapa-diag")
+    def diagnostico_chapa_lote():
+        """Diagnostico SO-LEITURA pra descobrir, no GRV real, (1) em que tabela
+        e coluna a SAIDA guarda o numero/lote e (2) onde ficam as reservas por
+        OS. Rodar uma vez com um numero de saida real e o codigo; devolve os
+        metadados (tabelas/colunas candidatas) e onde o numero da saida aparece.
+        Nao altera nada.
+
+        Entrada: {"saida_numero": "54085", "codigo": "19-01-00564", "empresa": 1}
+        """
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        payload = request.get_json(silent=True) or {}
+        saida_numero = str(payload.get("saida_numero") or "").strip()
+        codigo = re.sub(r"[^A-Z0-9]", "", str(payload.get("codigo") or "").strip().upper())
+        empresa = int(payload.get("empresa") or 1)
+        out = {
+            "sucesso": True, "saida_numero": saida_numero, "codigo": codigo,
+            "tabelas": [], "colunas_lote_candidatas": {},
+            "achados_numero_saida": [], "saldo_deposito": None,
+        }
+        try:
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        select table_name from information_schema.tables
+                        where table_schema = 'public' and (
+                            table_name ilike '%saida%' or table_name ilike '%reserv%'
+                            or table_name ilike '%requis%' or table_name ilike '%ordem%'
+                            or table_name ilike '%loteserie%' or table_name ilike '%producao%'
+                            or table_name ilike '%apontament%' or table_name ilike '%movto%'
+                            or table_name ilike '%movim%'
+                        )
+                        order by table_name
+                        """
+                    )
+                    nomes = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+                    for n in nomes:
+                        cur.execute(
+                            "select column_name from information_schema.columns "
+                            "where table_schema='public' and table_name=%s order by ordinal_position",
+                            (n,),
+                        )
+                        cols = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+                        out["tabelas"].append({"tabela": n, "colunas": cols})
+                        loteish = [c for c in cols if any(k in c.lower() for k in ("lote", "serie", "os", "ordem", "requis"))]
+                        if loteish:
+                            out["colunas_lote_candidatas"][n] = loteish
+                    # Onde o numero da saida aparece? (acha a tabela header da saida)
+                    if saida_numero:
+                        for n in nomes:
+                            cur.execute(
+                                "select column_name from information_schema.columns "
+                                "where table_schema='public' and table_name=%s",
+                                (n,),
+                            )
+                            numcols = [
+                                str(r[0]) for r in cur.fetchall()
+                                if r and r[0] and any(k in str(r[0]).lower() for k in ("numero", "num_", "documento", "doc", "codigo"))
+                            ]
+                            for cc in numcols:
+                                try:
+                                    cur.execute(
+                                        f"select count(*) from public.{_safe_ident(n)} "
+                                        f"where {_safe_ident(cc)}::text = %s",
+                                        (saida_numero,),
+                                    )
+                                    qt = int((cur.fetchone() or [0])[0] or 0)
+                                    if qt > 0:
+                                        out["achados_numero_saida"].append({"tabela": n, "coluna": cc, "linhas": qt})
+                                except Exception:
+                                    pass
+                    # Saldo do deposito pro codigo (confirma a base do saldo real)
+                    if codigo:
+                        try:
+                            cur.execute(
+                                """
+                                select d.cod_deposito,
+                                       sum(coalesce(d.qtde_total, 0))::double precision,
+                                       sum(coalesce(d.qtde_reservada, 0))::double precision,
+                                       sum(coalesce(d.qtde_disponivel, 0))::double precision
+                                from public.tproduto_deposito d
+                                join public.tproduto p on p.cod_empresa = d.cod_empresa and p.codigo = d.cod_produto
+                                where d.cod_empresa = %s
+                                  and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %s
+                                group by d.cod_deposito order by d.cod_deposito
+                                """,
+                                (empresa, codigo),
+                            )
+                            out["saldo_deposito"] = [
+                                {"cod_deposito": int(dep or 0), "qtde_total": round(float(qt or 0), 3),
+                                 "qtde_reservada": round(float(qr or 0), 3), "qtde_disponivel": round(float(qd or 0), 3)}
+                                for dep, qt, qr, qd in cur.fetchall()
+                            ]
+                        except Exception:
+                            app.logger.exception("Falha no saldo_deposito do diagnostico")
+            return jsonify(out)
+        except Exception as exc:
+            app.logger.exception("Falha no diagnostico de chapa")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/entrada-chapa-desde")
