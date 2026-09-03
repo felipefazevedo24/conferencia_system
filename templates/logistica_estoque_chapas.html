@@ -512,6 +512,15 @@
         render();
     }));
     $('ch-calc-overlay').addEventListener('click', (e) => { if (e.target === $('ch-calc-overlay')) fecharCalc(); });
+
+    // Atualiza sozinho: quando você volta pra aba (ex.: acabou de dar baixa no
+    // ERP) e a cada 60s. Pula se a calculadora estiver aberta, pra não atrapalhar.
+    function autoAtualizar() {
+        if ($('ch-calc-overlay').classList.contains('open')) return;
+        carregar();
+    }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) autoAtualizar(); });
+    setInterval(autoAtualizar, 60000);
     carregar();
 })();
 </script>
