@@ -567,6 +567,11 @@
   const SHOW_FROTA = {{ (show_frota|default(true))|tojson }};
   const SHOW_PLANEJAMENTO = {{ (show_planejamento|default(true))|tojson }};
   const SHOW_COMEX = {{ (show_comex|default(true))|tojson }};
+  // Quando setado (ex.: /painel/comex), o carrossel fica travado nesse
+  // unico slide - as outras secoes continuam existindo no DOM (poll() e
+  // afins seguem funcionando normalmente, so nunca ficam visiveis/ativas),
+  // evita duplicar toda a pagina so pra mostrar 1 slide.
+  const ONLY_SLIDE = {{ (only_slide or "")|tojson }};
 
   const POLL_MS = 5000;
   const ICONS = { chegada: "fa-box", conferencia: "fa-magnifying-glass", lancamento: "fa-circle-check", expedicao: "fa-truck-fast" };
@@ -983,7 +988,8 @@
   }
 
   // ----- Carrossel de slides + rotacao das visoes de expedicao -----
-  const SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
+  const TODOS_SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
+  const SLIDES = ONLY_SLIDE && TODOS_SLIDES.includes(ONLY_SLIDE) ? [ONLY_SLIDE] : TODOS_SLIDES;
   const SLIDE_META = {
     recebimento: { label: "Recebimento", icon: "fa-box-open" },
     expedicao: { label: "Expedição", icon: "fa-truck-fast" },
@@ -1297,7 +1303,15 @@
 
   updateClock();
   setInterval(updateClock, 1000 * 15);
-  renderSlideDots();
+  if (ONLY_SLIDE) {
+    // Ativa o slide unico manualmente - por padrao so o HTML estatico
+    // marca "recebimento" como is-active, entao sem isso a pagina abriria
+    // em branco quando o carrossel esta travado em outro slide.
+    $("slides-nav").style.display = "none";
+    showSlide(0);
+  } else {
+    renderSlideDots();
+  }
   poll();
   if (SHOW_COMPRAS) pollCompras();
   if (SHOW_FROTA) pollFrota();

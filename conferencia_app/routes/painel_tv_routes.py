@@ -617,6 +617,20 @@ def painel_tv_rec_exp_page():
     )
 
 
+@painel_tv_bp.route("/painel/comex")
+def painel_tv_comex_page():
+    """Mesma Torre de Controle, mas o carrossel fica travado so no slide do
+    Comex - pra quem so precisa acompanhar esse painel (ex.: TV dedicada do
+    setor), sem passar pelas outras secoes. As demais secoes (frota,
+    planejamento, compras) ficam desligadas pra nao gastar polling/mapa a
+    toa com uma tela que nunca vai aparecer."""
+    return render_template(
+        "painel_tv.html",
+        show_compras=False, show_frota=False, show_planejamento=False,
+        only_slide="comex",
+    )
+
+
 @painel_tv_bp.route("/api/painel/indicadores")
 def painel_tv_indicadores():
     try:

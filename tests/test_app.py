@@ -4587,6 +4587,30 @@ def test_painel_tv_comex_ultima_interacao_ignora_estorno_e_considera_comentario(
     assert por_id["IM-2026-00002"]["ultima_interacao"] == coment_dt.strftime("%d/%m %H:%M")
 
 
+def test_painel_tv_comex_url_dedicada_trava_carrossel_no_slide_comex(tmp_path):
+    """/painel/comex e' a mesma Torre de Controle, so com o carrossel
+    travado no slide do Comex (ONLY_SLIDE) - as demais secoes (frota,
+    planejamento) nem renderizam, e recebimento/expedicao continuam no DOM
+    (poll() delas nao pode quebrar), so nunca ficam ativas. As URLs
+    existentes (/painel e /painel/recebimento-expedicao) continuam com o
+    comportamento original (ONLY_SLIDE vazio)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    resp = client.get("/painel/comex")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert 'ONLY_SLIDE = "comex"' in html
+    assert "slide-comex" in html
+    assert "slide-frota" not in html
+    assert "slide-plan" not in html
+    assert "slide-rec" in html  # continua no DOM, so nao ativo por padrao
+
+    for path in ("/painel", "/painel/recebimento-expedicao"):
+        html_original = client.get(path).get_data(as_text=True)
+        assert 'ONLY_SLIDE = ""' in html_original, path
+
+
 def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
     """Regressao: sincronizar_ordens() apagava e recriava os itens a cada
     ciclo (o poll automatico roda a cada poucos minutos), trocando o id de
