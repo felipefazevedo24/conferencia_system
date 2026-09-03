@@ -37,6 +37,15 @@
     .ch-chip b { color: var(--eui-text); }
     .ch-chip--on { border-color: color-mix(in srgb, var(--eui-primary) 45%, var(--eui-border)); background: color-mix(in srgb, var(--eui-primary) 8%, var(--eui-surface)); }
     .ch-group__count--warn { color: var(--eui-warning, #b45309); background: color-mix(in srgb, var(--eui-warning, #f59e0b) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+    .ch-group__title { display: grid; gap: 1px; }
+    .ch-group__tiles { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ch-gstat { min-width: 120px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--eui-border); background: var(--eui-surface); display: grid; gap: 1px; }
+    .ch-gstat__lbl { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
+    .ch-gstat__kg { font-size: 16px; font-weight: 800; color: var(--eui-text); line-height: 1.15; }
+    .ch-gstat__und { font-size: 11.5px; font-weight: 700; color: var(--eui-text-soft); }
+    .ch-gstat--stock { border-color: color-mix(in srgb, var(--eui-primary) 42%, var(--eui-border)); background: color-mix(in srgb, var(--eui-primary) 8%, var(--eui-surface)); }
+    .ch-gstat--res { border-color: color-mix(in srgb, #f59e0b 42%, var(--eui-border)); background: color-mix(in srgb, #f59e0b 9%, var(--eui-surface)); }
+    .ch-gstat--disp { border-color: color-mix(in srgb, #16a34a 42%, var(--eui-border)); background: color-mix(in srgb, #16a34a 9%, var(--eui-surface)); }
     .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: color-mix(in srgb, var(--eui-primary) 5%, var(--eui-surface)); border-bottom: 1px solid var(--eui-border); }
     .ch-os__t { font-size: 12px; font-weight: 600; color: var(--eui-text); margin-right: 4px; }
     .ch-os__i { font-size: 11.5px; color: var(--eui-text-soft); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 3px 9px; }
@@ -239,13 +248,6 @@
 
     function loteCard(i) {
         const par = (und, kg) => `<b>${und == null ? '—' : fmt(und, 1)}</b> und · <b>${kg == null ? '—' : fmt(kg, 1)}</b> kg`;
-        // Só o que o Sync sabe de verdade deste lote: o que chegou nesta NF.
-        // O saldo/baixa/reservado REAL é do GRV e aparece no total do item
-        // (cabeçalho). Baixa/reservado por lote só quando o GRV amarrar o lote.
-        const extras = (i.kg_saida > 0 || i.kg_reservado > 0)
-            ? `<div class="ch-metric"><span>Baixado (GRV)</span>${par(i.chapas_baixadas, i.kg_saida)}</div>
-               <div class="ch-metric"><span>Reservado (GRV)</span>${par(i.chapas_reservadas, i.kg_reservado)}</div>`
-            : '';
         return `<div class="ch-lote">
             <div class="ch-lote__head">
                 <div class="ch-lote__id">
@@ -259,8 +261,11 @@
                 </div>
             </div>
             <div class="ch-metrics">
-                <div class="ch-metric ch-metric--on"><span>Recebido nesta NF</span>${par(i.und, i.kg_nf)}</div>
-                ${extras}
+                <div class="ch-metric"><span>Recebido (NF)</span>${par(i.und, i.kg_nf)}</div>
+                <div class="ch-metric"><span>Baixadas</span>${par(i.chapas_baixadas, i.kg_saida)}</div>
+                <div class="ch-metric ch-metric--on"><span>Em estoque</span>${par(i.chapas_em_estoque, i.kg_saldo)}</div>
+                <div class="ch-metric"><span>Reservadas</span>${par(i.chapas_reservadas, i.kg_reservado)}</div>
+                <div class="ch-metric ch-metric--on"><span>Disponíveis</span>${par(i.chapas_disponiveis, i.kg_disponivel)}</div>
             </div>
         </div>`;
     }
@@ -299,10 +304,14 @@
         $('ch-state').style.display = 'none';
         const grupos = {};
         itens.forEach((i) => { (grupos[i.codigo] = grupos[i.codigo] || { desc: i.descricao, rows: [] }).rows.push(i); });
-        const chipKU = (label, kg, cod, on) => {
+        const tile = (cls, label, kg, cod) => {
             const p = pesoDoCodigo(cod);
             const u = p ? kg / p : null;
-            return `<span class="ch-chip${on ? ' ch-chip--on' : ''}">${label}: <b>${u == null ? '—' : fmt(u, 0)}</b> und · <b>${fmt(kg, 0)}</b> kg</span>`;
+            return `<div class="ch-gstat ${cls}">
+                <span class="ch-gstat__lbl">${label}</span>
+                <b class="ch-gstat__kg">${fmt(kg, 0)} kg</b>
+                <span class="ch-gstat__und">${u == null ? '— und' : fmt(u, 0) + ' und'}</span>
+            </div>`;
         };
         $('ch-groups').innerHTML = Object.entries(grupos).map(([cod, g]) => {
             const s = saldoCod[cod];
@@ -319,15 +328,17 @@
                 <button type="button" class="ch-group__head" data-cod="${esc(cod)}">
                     <div class="ch-group__id">
                         <i class="fas fa-chevron-${aberto ? 'down' : 'right'} ch-group__chev"></i>
-                        <span class="ch-code">${esc(cod)}</span>
-                        <span class="ch-desc">${esc(g.desc || '')}</span>
+                        <div class="ch-group__title">
+                            <span class="ch-code">${esc(cod)}</span>
+                            <span class="ch-desc">${esc(g.desc || '')}</span>
+                        </div>
                         <span class="ch-group__count">${g.rows.length} lote(s)</span>
                         ${s ? '' : '<span class="ch-group__count ch-group__count--warn">saldo GRV indisponível</span>'}
                     </div>
-                    <div class="ch-group__kpis">
-                        ${chipKU('Em estoque', emEstoqueKg, cod, true)}
-                        ${chipKU('Reservadas', reservadoKg, cod)}
-                        ${chipKU('Disponíveis', dispKg, cod, true)}
+                    <div class="ch-group__tiles">
+                        ${tile('ch-gstat--stock', 'Em estoque', emEstoqueKg, cod)}
+                        ${tile('ch-gstat--res', 'Reservado', reservadoKg, cod)}
+                        ${tile('ch-gstat--disp', 'Disponível', dispKg, cod)}
                     </div>
                 </button>
                 <div class="ch-group__body" ${aberto ? '' : 'style="display:none;"'}>${osHtml}${g.rows.map(loteCard).join('')}</div>
