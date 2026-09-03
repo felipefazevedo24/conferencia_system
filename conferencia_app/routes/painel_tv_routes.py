@@ -547,11 +547,12 @@ def _coletar_comex() -> dict:
     """Resumo do modulo Comex pro painel de TV, nos 3 baskets acima. Cada
     card mostra a OC (numero da Ordem de Compra - cai pro ID OP quando o
     processo e' manual, sem OC vinculada, ver comex_service.
-    criar_processo_manual), fornecedor, o status detalhado (dentro da
-    basket) e a ultima interacao (comentario OU mudanca de processo -
-    estornos nao contam, ver comex_service.estornar). `processo_id` vai
-    junto pra buscar os itens da PO ao clicar no card (ver
-    painel_tv_comex_itens)."""
+    criar_processo_manual), fornecedor, pagador do frete, o status
+    detalhado (dentro da basket) e a ultima interacao (comentario OU
+    mudanca de processo - estornos nao contam, ver comex_service.
+    estornar) - `ultima_interacao_atrasada` marca quando ja fazem mais de
+    3 dias, pro front destacar em vermelho. `processo_id` vai junto pra
+    buscar os itens da PO ao clicar no card (ver painel_tv_comex_itens)."""
     from ..models import ComexComentario, ComexProcesso
 
     # OCs combinadas na PO de outro processo somem da lista principal -
@@ -595,7 +596,12 @@ def _coletar_comex() -> dict:
                 "oc": str(p.cod_ordem_compra) if p.cod_ordem_compra else p.id_op,
                 "fornecedor": p.fornecedor or "",
                 "status_detalhado": _COMEX_STATUS_LABEL.get(p.status_modulo, p.status_modulo),
+                "pagador_frete": p.pagador_frete or "",
                 "ultima_interacao": ultima_interacao.strftime("%d/%m %H:%M") if ultima_interacao else "",
+                # Mais de 3 dias sem interacao (comentario/mudanca real) -
+                # sinaliza processo parado direto na tela, sem precisar
+                # calcular data no front.
+                "ultima_interacao_atrasada": bool(ultima_interacao and (datetime.now() - ultima_interacao).days > 3),
             }
         )
 

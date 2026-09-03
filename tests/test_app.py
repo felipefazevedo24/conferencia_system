@@ -4655,6 +4655,36 @@ def test_painel_tv_comex_card_mostra_oc_e_popup_lista_itens_da_po(tmp_path):
     assert itens == [{"codigo": "X1", "descricao": "Peça A", "quantidade": 10.0}]
 
 
+def test_painel_tv_comex_mostra_pagador_frete_e_marca_interacao_atrasada(tmp_path):
+    """Card mostra o pagador do frete, e 'ultima_interacao_atrasada' fica
+    True quando ja fazem mais de 3 dias (nao 3 dias exatos) desde a ultima
+    interacao - o front usa essa flag pra pintar so a data de vermelho."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import ComexProcesso
+
+        casos = [
+            ("F1", timedelta(days=2), False),
+            ("F2", timedelta(days=3, hours=1), False),  # .days ainda e' 3, nao > 3
+            ("F3", timedelta(days=4), True),
+        ]
+        for fornecedor, delta, _ in casos:
+            db.session.add(ComexProcesso(
+                id_op=f"IM-2026-{fornecedor}", status_modulo="PO", status_slug="po",
+                criado_por="ADMIN", fornecedor=fornecedor, pagador_frete="Columbia",
+                atualizado_em=datetime.now() - delta,
+            ))
+        db.session.commit()
+
+    data = client.get("/api/painel/comex").get_json()
+    cards = {c["fornecedor"]: c for col in data["colunas"] for c in col["cards"]}
+    for fornecedor, _, esperado in casos:
+        assert cards[fornecedor]["pagador_frete"] == "Columbia"
+        assert cards[fornecedor]["ultima_interacao_atrasada"] == esperado, fornecedor
+
+
 def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
     """A Torre de Controle (/api/painel/comex) resume os 10 status
     granulares do Comex em 3 baskets (Preparação/Trânsito/Entregue), com
