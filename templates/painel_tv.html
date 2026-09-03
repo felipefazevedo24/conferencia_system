@@ -214,6 +214,41 @@
      classes .plan-board/.plan-kcol/.plan-klist/.plan-task - so a cor muda) --- */
   .comex .icon { background: rgba(45,212,191,.16); color: var(--comex); }
   .comex .accent { color: var(--comex); }
+  .cx-task { cursor: pointer; transition: transform .15s, background .15s; }
+  .cx-task:hover { background: rgba(255,255,255,.08); transform: translateY(-1px); }
+
+  /* ---------- Popup de itens da PO (Comex) ---------- */
+  .cx-itens-overlay {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(3,10,20,.72); backdrop-filter: blur(2px);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .cx-itens-overlay.show { display: flex; }
+  .cx-itens-box {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+  .cx-itens-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .cx-itens-head strong { font-size: clamp(15px, 1.9vh, 20px); }
+  .cx-itens-head button {
+    border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
+    width: 32px; height: 32px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  }
+  .cx-itens-head button:hover { background: rgba(255,255,255,.13); color: var(--text); }
+  .cx-itens-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 20px 20px; }
+  .cx-itens-body .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 14px; }
+  .cx-itens-table { width: 100%; border-collapse: collapse; font-size: clamp(12px, 1.5vh, 15px); }
+  .cx-itens-table th {
+    text-align: left; color: var(--muted); font-weight: 800; text-transform: uppercase;
+    font-size: clamp(10px, 1.1vh, 12px); letter-spacing: .04em; padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cx-itens-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  .cx-itens-table tr:last-child td { border-bottom: none; }
 
   /* ---------- Painel operacional (Recebimento + Compras) ---------- */
   .flow::before { color: var(--recebimento); }
@@ -560,6 +595,16 @@
   </main>
 
   <div id="toasts"></div>
+
+  <div class="cx-itens-overlay" id="cx-itens-overlay">
+    <div class="cx-itens-box">
+      <div class="cx-itens-head">
+        <strong id="cx-itens-titulo">Itens da PO</strong>
+        <button type="button" id="cx-itens-fechar" title="Fechar"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="cx-itens-body" id="cx-itens-body"></div>
+    </div>
+  </div>
 
 <script>
 (function () {
@@ -1286,9 +1331,39 @@
     if (p.status_detalhado) chips.push('<span class="pt-chip"><i class="fas fa-signal"></i>' + esc(p.status_detalhado) + "</span>");
     if (p.ultima_interacao) chips.push('<span class="pt-chip"><i class="fas fa-clock"></i>' + esc(p.ultima_interacao) + "</span>");
     const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
-    return '<div class="plan-task" style="border-left-color:' + color + '">' +
-      '<div class="pt-title">' + esc(p.id_op) + "</div>" + meta + "</div>";
+    return '<div class="plan-task cx-task" style="border-left-color:' + color + '" data-processo-id="' + p.processo_id + '" data-oc="' + esc(p.oc) + '">' +
+      '<div class="pt-title">' + esc(p.oc) + "</div>" + meta + "</div>";
   }
+
+  // ── Popup de itens da PO ao clicar num card do Comex ───────────────
+  $("comex-board").addEventListener("click", (e) => {
+    const card = e.target.closest(".cx-task");
+    if (!card) return;
+    abrirItensComex(card.dataset.processoId, card.dataset.oc);
+  });
+
+  async function abrirItensComex(processoId, oc) {
+    $("cx-itens-titulo").textContent = "Itens da PO — OC " + oc;
+    $("cx-itens-body").innerHTML = '<div class="empty">Carregando…</div>';
+    $("cx-itens-overlay").classList.add("show");
+    try {
+      const r = await fetch("/api/painel/comex/" + encodeURIComponent(processoId) + "/itens", { cache: "no-store" });
+      const d = await r.json();
+      const itens = d.itens || [];
+      $("cx-itens-body").innerHTML = itens.length
+        ? '<table class="cx-itens-table"><thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th></tr></thead><tbody>' +
+          itens.map((it) => '<tr><td>' + esc(it.codigo || "—") + '</td><td>' + esc(it.descricao || "—") + '</td><td>' + esc(it.quantidade != null ? it.quantidade : "—") + '</td></tr>').join("") +
+          '</tbody></table>'
+        : '<div class="empty">Sem itens cadastrados nessa PO.</div>';
+    } catch (e) {
+      $("cx-itens-body").innerHTML = '<div class="empty">Falha ao carregar os itens.</div>';
+    }
+  }
+  function fecharItensComex() { $("cx-itens-overlay").classList.remove("show"); }
+  $("cx-itens-fechar").addEventListener("click", fecharItensComex);
+  $("cx-itens-overlay").addEventListener("click", (e) => {
+    if (e.target === $("cx-itens-overlay")) fecharItensComex();
+  });
 
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });

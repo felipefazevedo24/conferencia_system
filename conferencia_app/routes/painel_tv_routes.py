@@ -545,9 +545,13 @@ _COMEX_STATUS_PARA_BASKET = {
 
 def _coletar_comex() -> dict:
     """Resumo do modulo Comex pro painel de TV, nos 3 baskets acima. Cada
-    card mostra id do processo (ID OP), fornecedor, o status detalhado
-    (dentro da basket) e a ultima interacao (comentario OU mudanca de
-    processo - estornos nao contam, ver comex_service.estornar)."""
+    card mostra a OC (numero da Ordem de Compra - cai pro ID OP quando o
+    processo e' manual, sem OC vinculada, ver comex_service.
+    criar_processo_manual), fornecedor, o status detalhado (dentro da
+    basket) e a ultima interacao (comentario OU mudanca de processo -
+    estornos nao contam, ver comex_service.estornar). `processo_id` vai
+    junto pra buscar os itens da PO ao clicar no card (ver
+    painel_tv_comex_itens)."""
     from ..models import ComexComentario, ComexProcesso
 
     # OCs combinadas na PO de outro processo somem da lista principal -
@@ -586,7 +590,9 @@ def _coletar_comex() -> dict:
             continue  # status fora do fluxo modelado (ex.: legado/futuro) - nao exibido na torre
         colunas_cards[idx].append(
             {
+                "processo_id": p.id,
                 "id_op": p.id_op,
+                "oc": str(p.cod_ordem_compra) if p.cod_ordem_compra else p.id_op,
                 "fornecedor": p.fornecedor or "",
                 "status_detalhado": _COMEX_STATUS_LABEL.get(p.status_modulo, p.status_modulo),
                 "ultima_interacao": ultima_interacao.strftime("%d/%m %H:%M") if ultima_interacao else "",
@@ -659,6 +665,31 @@ def painel_tv_comex():
         db.session.rollback()
         raise
     return jsonify(dados)
+
+
+@painel_tv_bp.route("/api/painel/comex/<int:processo_id>/itens")
+def painel_tv_comex_itens(processo_id):
+    """Itens da PO de um processo Comex, pro popup que abre ao clicar num
+    card na Torre de Controle - so codigo/descricao/quantidade (sem valor,
+    de proposito: e' um painel publico sem login, nao expoe dado
+    comercial)."""
+    from ..models import ComexPoItem
+
+    try:
+        itens = (
+            ComexPoItem.query
+            .filter_by(processo_id=processo_id)
+            .order_by(ComexPoItem.order_index)
+            .all()
+        )
+        dados = [
+            {"codigo": it.codigo or "", "descricao": it.descricao or "", "quantidade": it.quantidade}
+            for it in itens
+        ]
+    except Exception:
+        db.session.rollback()
+        raise
+    return jsonify({"itens": dados})
 
 
 @painel_tv_bp.route("/api/painel/frota")

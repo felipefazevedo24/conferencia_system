@@ -4614,6 +4614,47 @@ def test_comex_editar_cotacao_pendente_troca_fcl_por_lcl(tmp_path):
     assert resp_bloqueado.status_code == 400
 
 
+def test_painel_tv_comex_card_mostra_oc_e_popup_lista_itens_da_po(tmp_path):
+    """O card da Torre de Controle mostra a OC (numero da Ordem de Compra),
+    caindo pro ID OP quando o processo e' manual (sem OC vinculada). Ao
+    clicar num card, o popup busca os itens da PO num endpoint publico
+    dedicado - so codigo/descricao/quantidade, sem valor (painel sem
+    login, nao expoe dado comercial)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import ComexPoItem, ComexProcesso
+
+        com_oc = ComexProcesso(
+            id_op="IM-2026-00001", status_modulo="PO", status_slug="po",
+            criado_por="ADMIN", fornecedor="F1", cod_ordem_compra=12302,
+        )
+        manual = ComexProcesso(
+            id_op="IM-2026-00002", status_modulo="PO", status_slug="po",
+            criado_por="ADMIN", fornecedor="F2",
+        )
+        db.session.add_all([com_oc, manual])
+        db.session.commit()
+        db.session.add(ComexPoItem(
+            processo_id=com_oc.id, order_index=1, codigo="X1", descricao="Peça A",
+            quantidade=10, valor_unitario=5.0, valor_total=50.0,
+        ))
+        db.session.commit()
+        com_oc_id = com_oc.id
+
+    data = client.get("/api/painel/comex").get_json()
+    cards = {c["fornecedor"]: c for col in data["colunas"] for c in col["cards"]}
+    assert cards["F1"]["oc"] == "12302"
+    assert cards["F1"]["processo_id"] == com_oc_id
+    assert cards["F2"]["oc"] == "IM-2026-00002"  # manual: cai pro ID OP
+
+    resp = client.get(f"/api/painel/comex/{com_oc_id}/itens")
+    assert resp.status_code == 200
+    itens = resp.get_json()["itens"]
+    assert itens == [{"codigo": "X1", "descricao": "Peça A", "quantidade": 10.0}]
+
+
 def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
     """A Torre de Controle (/api/painel/comex) resume os 10 status
     granulares do Comex em 3 baskets (Preparação/Trânsito/Entregue), com
