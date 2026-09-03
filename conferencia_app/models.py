@@ -1,5 +1,6 @@
 
 from datetime import datetime
+from sqlalchemy.dialects.mysql import LONGBLOB
 from .extensions import db
 
 class ActiveSession(db.Model):
@@ -3117,8 +3118,14 @@ class ComexDocumento(db.Model):
     """Documento anexado ao processo em QUALQUER modulo do workflow (nota
     fiscal, BL/AWB, invoice, packing list, comprovante etc.) - requisito
     geral do Comex: todo modulo precisa ter uma funcao de anexar documento.
-    Mesmo padrao de storage das fotos de expedicao (Google Drive ou disco
-    local, conforme EXPEDICAO_FOTOS_STORAGE - ver expedicao_photo_storage.py)."""
+
+    Guardado direto no banco (coluna `dados`, BLOB) - decisao deliberada pra
+    nao depender de credencial/quota de Google Drive nem de disco persistente
+    no servidor (ver conversa de 03/09: service account sem cota propria
+    quebrava o upload). `file_path`/`file_name` continuam existindo so pra
+    documentos antigos, anexados antes dessa mudanca, que ainda apontam pro
+    Google Drive ou disco local (ver expedicao_photo_storage.py) - por isso
+    `file_path` fica "" (nao NULL) nos anexados via banco."""
 
     __tablename__ = "comex_documento"
 
@@ -3127,7 +3134,9 @@ class ComexDocumento(db.Model):
     modulo = db.Column(db.String(20), nullable=False, index=True)  # OC | PO | Cotacao | ... (ver MODULOS_SEQUENCIA)
     titulo = db.Column(db.String(200))  # descricao livre opcional (ex.: "Invoice assinada")
     file_name = db.Column(db.String(260), nullable=False)
-    file_path = db.Column(db.String(500), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)  # "" para documentos guardados em `dados`
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))  # conteudo do arquivo, direto no banco
+    mimetype = db.Column(db.String(120))
     uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     uploaded_by = db.Column(db.String(100))
 

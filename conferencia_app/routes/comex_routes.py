@@ -698,6 +698,17 @@ def api_baixar_documento(processo_id, documento_id):
     documento = ComexDocumento.query.filter_by(id=documento_id, processo_id=processo_id).first()
     if not documento:
         return jsonify({"error": "Documento não encontrado."}), 404
+
+    # Documentos anexados a partir de 03/09 vao direto pro banco (coluna
+    # `dados`) - sem Google Drive nem disco do servidor no meio. Documentos
+    # mais antigos ainda tem file_path apontando pro Drive/disco local.
+    if documento.dados:
+        return send_file(
+            BytesIO(documento.dados),
+            download_name=documento.file_name,
+            mimetype=documento.mimetype or "application/octet-stream",
+        )
+
     pasta = current_app.config.get("COMEX_DOCUMENTOS_DIR", "") or None
     caminho = _resolver_foto_expedicao(pasta, documento.file_name, documento.file_path)
     if not caminho:

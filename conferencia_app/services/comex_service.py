@@ -844,8 +844,14 @@ def metricas_por_modulo() -> dict:
 
 
 # ── Anexo de documentos (requisito geral: todo modulo precisa ter uma ─────
-# funcao de anexar documento) - mesmo padrao de storage das fotos de
-# expedicao (Drive ou disco local, conforme EXPEDICAO_FOTOS_STORAGE).
+# funcao de anexar documento) - guardado direto no banco (coluna `dados`),
+# sem depender de Google Drive nem de disco persistente no servidor (ver
+# conversa de 03/09: service account sem cota propria quebrava o upload
+# pro Drive). `_documentos_dir()`/storage local so seguem existindo pra
+# reabrir documentos antigos, anexados antes dessa mudanca.
+TAMANHO_MAXIMO_DOCUMENTO = 25 * 1024 * 1024  # 25 MB
+
+
 def _documentos_dir() -> str:
     return current_app.config.get("COMEX_DOCUMENTOS_DIR", "") or os.path.join(
         current_app.instance_path, "comex_documentos"
@@ -863,31 +869,29 @@ def anexar_documento(
     mimetype: str | None = None,
 ) -> ComexDocumento:
     """Anexa um documento ao processo, em qualquer modulo do workflow (nota
-    fiscal, BL/AWB, invoice, packing list, comprovante etc.)."""
+    fiscal, BL/AWB, invoice, packing list, comprovante etc.) - o conteudo
+    vai direto pra coluna `dados` do banco, sem passar por Google Drive ou
+    disco do servidor."""
     if modulo not in MODULOS_SEQUENCIA:
         raise ValueError("Módulo inválido para anexar documento.")
     if not dados:
         raise ValueError("Arquivo vazio.")
     if not file_name:
         raise ValueError("Nome de arquivo inválido.")
-
-    nome_no_storage = f"{processo.id_op}_{modulo}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{file_name}"
-    if storage.using_drive():
-        enviado = storage.upload_bytes_to_drive(dados, nome_no_storage, mimetype)
-        caminho = enviado.file_path
-    else:
-        pasta = _documentos_dir()
-        os.makedirs(pasta, exist_ok=True)
-        caminho = os.path.join(pasta, nome_no_storage)
-        with open(caminho, "wb") as f:
-            f.write(dados)
+    if len(dados) > TAMANHO_MAXIMO_DOCUMENTO:
+        raise ValueError(
+            f"Arquivo muito grande ({len(dados) / 1024 / 1024:.1f} MB) - o limite é "
+            f"{TAMANHO_MAXIMO_DOCUMENTO // 1024 // 1024} MB."
+        )
 
     documento = ComexDocumento(
         processo_id=processo.id,
         modulo=modulo,
         titulo=(titulo or "").strip() or None,
         file_name=file_name,
-        file_path=caminho,
+        file_path="",
+        dados=dados,
+        mimetype=(mimetype or "").strip() or "application/octet-stream",
         uploaded_by=usuario,
     )
     db.session.add(documento)

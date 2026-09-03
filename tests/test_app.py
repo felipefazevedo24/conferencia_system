@@ -5682,3 +5682,72 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     # Tela dedicada carrega normalmente.
     resp_page = client.get("/logistica/inventario/analise-causa")
     assert resp_page.status_code == 200
+
+
+def test_comex_anexar_documento_guarda_no_banco_sem_drive(tmp_path):
+    """Anexar documento no Comex (HBL, invoice, packing list etc.) grava o
+    conteudo direto na coluna `dados` do banco - nao depende de Google Drive
+    nem de disco do servidor (ver conversa de 03/09: service account sem
+    cota propria quebrava upload pro Drive). O download devolve os bytes
+    exatamente como foram enviados, e apagar remove so a linha do banco."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import ComexProcesso
+
+        processo = ComexProcesso(
+            id_op="IM-0001", cod_ordem_compra=12345, fornecedor="ACME Ltda",
+            status_modulo="Instrucao", status_slug="instrucao", criado_por="ADMIN",
+        )
+        db.session.add(processo)
+        db.session.commit()
+        pid = processo.id
+
+    conteudo = b"%PDF-1.4 conteudo fake de invoice para teste\n" + b"X" * 500
+
+    resp = client.post(
+        f"/api/comex/processos/{pid}/documentos",
+        data={
+            "arquivo": (io.BytesIO(conteudo), "invoice.pdf"),
+            "modulo": "Instrucao",
+            "titulo": "Invoice assinada",
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    documento = resp.get_json()["documento"]
+    assert documento["titulo"] == "Invoice assinada"
+    assert documento["file_name"] == "invoice.pdf"
+    doc_id = documento["id"]
+
+    with app.app_context():
+        from conferencia_app.models import ComexDocumento
+
+        registro = db.session.get(ComexDocumento, doc_id)
+        assert registro.dados == conteudo  # gravado direto no banco
+        assert registro.file_path == ""    # nao usa Drive nem disco
+
+    resp_listar = client.get(f"/api/comex/processos/{pid}/documentos?modulo=Instrucao")
+    assert len(resp_listar.get_json()["documentos"]) == 1
+
+    resp_download = client.get(documento["url"])
+    assert resp_download.status_code == 200
+    assert resp_download.data == conteudo
+
+    resp_vazio = client.post(
+        f"/api/comex/processos/{pid}/documentos",
+        data={"arquivo": (io.BytesIO(b""), "vazio.pdf"), "modulo": "Instrucao"},
+        content_type="multipart/form-data",
+    )
+    assert resp_vazio.status_code == 400
+
+    resp_apagar = client.delete(f"/api/comex/processos/{pid}/documentos/{doc_id}")
+    assert resp_apagar.status_code == 200
+    with app.app_context():
+        from conferencia_app.models import ComexDocumento
+        assert db.session.get(ComexDocumento, doc_id) is None
+
+    resp_download_apagado = client.get(documento["url"])
+    assert resp_download_apagado.status_code == 404
