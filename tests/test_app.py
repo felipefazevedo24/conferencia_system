@@ -3476,9 +3476,10 @@ def test_validar_mantem_divergencia_fora_da_tolerancia_de_kg(tmp_path):
         db.session.commit()
         item_id = item.id
 
+    # 12 = 20% de diferença: acima do limite de 10%, ainda bloqueia (divergência).
     response = client.post(
         "/validar",
-        json={"nota": "324", "contagens": {str(item_id): "10.21"}},
+        json={"nota": "324", "contagens": {str(item_id): "12"}},
     )
 
     assert response.status_code == 200
@@ -3486,6 +3487,39 @@ def test_validar_mantem_divergencia_fora_da_tolerancia_de_kg(tmp_path):
     assert data["sucesso"] is False
     assert data["resumo"]["ok"] == 0
     assert data["resumo"]["divergencias"] == 1
+
+
+def test_validar_aceita_kg_ate_10_porcento_sem_bloquear(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="3241",
+            fornecedor="Fornecedor KG Tolerado",
+            codigo="KG3",
+            descricao="Item pesado com diferenca tolerada",
+            qtd_real=1000.0,
+            unidade_comercial="KG",
+            status="Pendente",
+        )
+        db.session.add(item)
+        db.session.commit()
+        item_id = item.id
+
+    # 1080 = 8% de diferença: fora dos 2%, mas dentro do limite de 10% ->
+    # aceita sem bloquear a conferência (não sinaliza nada para o conferente).
+    response = client.post(
+        "/validar",
+        json={"nota": "3241", "contagens": {str(item_id): "1080"}},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+    assert data["resumo"]["ok"] == 1
+    assert data["resumo"]["divergencias"] == 0
 
 
 def test_validar_bloqueia_conclusao_sem_motivo_de_divergencia(tmp_path):

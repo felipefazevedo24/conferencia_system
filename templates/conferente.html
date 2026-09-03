@@ -423,6 +423,10 @@
         .chapa-btn:hover { border-color: #94a3b8; color: #475569; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(15,23,42,0.10); }
         .chapa-btn.preenchido { background: #ecfdf5; color: #15803d; border: 1.5px solid #86efac; }
         .chapa-btn.faltando { background: #fff7ed; color: #c2410c; border: 1.5px solid #fdba74; }
+        .chapa-switch { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+        .chapa-switch input { width: 18px; height: 18px; accent-color: #4f46e5; cursor: pointer; }
+        .chapa-modal-num { flex: 1; padding: 12px 14px; border: 2px solid #c7d2fe; border-radius: 10px; text-align: center; font-family: monospace; font-weight: 800; font-size: 22px; color: #3730a3; background: #fff; }
+        .chapa-modal-num:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
         .chapa-fields { display: flex; align-items: center; gap: 8px; }
         .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
         .chapa-input {
@@ -1174,6 +1178,32 @@
     </div>
 </div>
 
+<div id="modal-chapa" class="modal-overlay" style="z-index: 3660;">
+    <div class="modal-sap" style="max-width: 440px;">
+        <div class="modal-head"><span><i class="fas fa-layer-group"></i> QUANTIDADE DE CHAPAS</span></div>
+        <div class="modal-body">
+            <div id="chapa-modal-item" style="font-size:13px; font-weight:700; color:#334155; margin-bottom:16px;"></div>
+            <label class="chapa-switch">
+                <input type="checkbox" id="chapa-modal-switch" onchange="atualizarModalChapaEstado()">
+                <span>Este item é chapa — informar quantidade em UND</span>
+            </label>
+            <div id="chapa-modal-input-wrap" style="margin-top:16px; display:none;">
+                <label class="form-label" style="display:block; margin-bottom:6px;">Quantidade de chapas (UND)</label>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <input type="number" id="chapa-modal-input" class="chapa-modal-num" min="0" step="1" placeholder="0" oninput="document.getElementById('chapa-modal-msg').textContent='';">
+                    <span style="font-size:14px; font-weight:800; color:#64748b; letter-spacing:.04em;">UND</span>
+                </div>
+                <div style="font-size:11px; color:#64748b; margin-top:8px; line-height:1.5;">A NF vem em KG; a quantidade de chapas (UND) que você informar aqui é a que vai no e-mail de entrada de chapas.</div>
+            </div>
+            <div id="chapa-modal-msg" style="color:var(--danger-erp); font-weight:700; font-size:12px; margin-top:12px;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap" onclick="fecharModalChapa()">Cancelar</button>
+            <button class="btn-sap btn-primary" id="btn-salvar-chapa" onclick="salvarModalChapa()"><i class="fas fa-check"></i> Salvar</button>
+        </div>
+    </div>
+</div>
+
 <div id="modal-instrucao-pendencia" class="modal-overlay" style="z-index: 3700;">
     <div class="modal-sap" style="max-width: 700px;">
         <div class="modal-head"><span>INSTRUÇÕES DE PENDÊNCIA</span></div>
@@ -1257,27 +1287,60 @@
         return u === 'KG' || u === 'T' || u === 'TO' || u === 'TON' || u === 'TONELADA' || u === 'TONELADAS';
     }
 
-    function toggleChapa(id) {
+    let chapaModalId = null;
+
+    function abrirModalChapa(id) {
+        chapaModalId = id;
+        const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
         const btn = document.getElementById(`chapa-btn-${id}`);
-        const bloco = document.getElementById(`chapa-fields-${id}`);
-        const wrap = document.querySelector(`.chapa-wrap[data-id="${id}"]`);
-        if (!btn || !bloco) return;
-        const ativo = btn.dataset.ativo === '1';
-        if (ativo) {
-            // Desmarcar chapa: limpa e volta ao estado neutro (nao cobra UND).
+        const row = btn?.closest('tr');
+        const cod = row?.querySelector('td:nth-child(2)')?.textContent?.trim() || '';
+        const desc = row?.querySelector('td:nth-child(3)')?.textContent?.trim() || '';
+        document.getElementById('chapa-modal-item').textContent = cod ? `${cod} — ${desc}` : desc;
+        const ehChapa = btn?.dataset.ativo === '1';
+        document.getElementById('chapa-modal-switch').checked = ehChapa;
+        document.getElementById('chapa-modal-input').value = ehChapa ? (input?.value || '') : '';
+        document.getElementById('chapa-modal-msg').textContent = '';
+        atualizarModalChapaEstado();
+        document.getElementById('modal-chapa').style.display = 'flex';
+        setTimeout(() => {
+            if (document.getElementById('chapa-modal-switch').checked) document.getElementById('chapa-modal-input').focus();
+        }, 60);
+    }
+
+    function atualizarModalChapaEstado() {
+        const on = document.getElementById('chapa-modal-switch').checked;
+        document.getElementById('chapa-modal-input-wrap').style.display = on ? '' : 'none';
+        if (on) setTimeout(() => document.getElementById('chapa-modal-input').focus(), 30);
+    }
+
+    function salvarModalChapa() {
+        if (!chapaModalId) return;
+        const on = document.getElementById('chapa-modal-switch').checked;
+        const val = document.getElementById('chapa-modal-input').value;
+        const input = document.querySelector(`.chapa-input[data-id="${chapaModalId}"]`);
+        const btn = document.getElementById(`chapa-btn-${chapaModalId}`);
+        if (!input || !btn) { fecharModalChapa(); return; }
+        if (!on) {
+            // Não é chapa: limpa e volta ao neutro (não cobra UND).
             btn.dataset.ativo = '0';
-            bloco.style.display = 'none';
-            wrap?.classList.remove('aberto');
-            const input = bloco.querySelector('.chapa-input');
-            if (input) input.value = '';
-            atualizarChapa(id);
+            input.value = '';
         } else {
+            const num = Number(String(val || '').replace(',', '.'));
+            if (!Number.isFinite(num) || num <= 0) {
+                document.getElementById('chapa-modal-msg').textContent = 'Informe a quantidade de chapas (UND).';
+                return;
+            }
             btn.dataset.ativo = '1';
-            bloco.style.display = 'flex';
-            wrap?.classList.add('aberto');
-            atualizarChapa(id);
-            setTimeout(() => bloco.querySelector('.chapa-input')?.focus(), 50);
+            input.value = (num === Math.trunc(num)) ? String(Math.trunc(num)) : String(num);
         }
+        atualizarChapa(chapaModalId);
+        fecharModalChapa();
+    }
+
+    function fecharModalChapa() {
+        document.getElementById('modal-chapa').style.display = 'none';
+        chapaModalId = null;
     }
 
     function atualizarChapa(id) {
@@ -1288,7 +1351,7 @@
             // Nao marcado como chapa: botao neutro, sem cobranca.
             input.classList.remove('faltando');
             btn.classList.remove('preenchido', 'faltando');
-            btn.innerHTML = `<i class="fas fa-layer-group"></i> É chapa?`;
+            btn.innerHTML = `<i class="fas fa-layer-group"></i> Informar chapas (UND)`;
             return;
         }
         const valor = Number(String(input.value || '').replace(',', '.'));
@@ -1336,6 +1399,13 @@
 
     function obterEstadoContagem(qtdDigitada, qtdEsperada, unidade, fator) {
         const valorInformado = Number(String(qtdDigitada || '').replace(',', '.'));
+        // KG/MM: conferência silenciosa. Sempre há variação de peso; o Sync
+        // aceita a diferença e NÃO sinaliza nada (nem cor, nem mensagem) para o
+        // conferente, em nenhum momento. A análise de diferença fica só no
+        // histórico, visível apenas para o admin.
+        if (unidadeTemTolerancia(unidade)) {
+            return { tipo: 'neutro', mensagem: '' };
+        }
         const valorEsperado = Number(qtdEsperada || 0);
         const fatorConversao = Number(String(fator || '1').replace(',', '.')) || 1;
         if (!Number.isFinite(valorInformado)) {
@@ -1343,23 +1413,7 @@
         }
         const valorConvertido = valorInformado * fatorConversao;
         const diferenca = Math.abs(valorConvertido - valorEsperado);
-        if (!unidadeTemTolerancia(unidade)) {
-            return diferenca <= 0.0001 ? { tipo: 'ok', mensagem: '' } : { tipo: 'erro', mensagem: '' };
-        }
-
-        const margem = Math.abs(valorEsperado) * 0.02;
-        if (diferenca <= 0.0001) {
-            // Peso batendo exatamente com a NF e estranho para material pesado;
-            // sinaliza para o conferente confirmar se pesou de verdade.
-            if (unidadeEhChapa(unidade)) {
-                return { tipo: 'warning', mensagem: 'Peso idêntico à NF. Confira se o material foi realmente pesado.' };
-            }
-            return { tipo: 'ok', mensagem: '' };
-        }
-        if (diferenca <= Math.max(margem, 0.0001)) {
-            return { tipo: 'warning', mensagem: 'Quantidade diferente da NF.' };
-        }
-        return { tipo: 'erro', mensagem: 'Quantidade diferente da NF.' };
+        return diferenca <= 0.0001 ? { tipo: 'ok', mensagem: '' } : { tipo: 'erro', mensagem: '' };
     }
 
     function mostrarMensagemOperacional(msg, isErro = false) {
@@ -1592,7 +1646,7 @@
             const ref = n.remessa ? 'NF de remessa'
                 : (n.material_cliente ? 'Material do cliente'
                 : (n.pedido_compra ? ('Pedido: ' + _rcEsc(n.pedido_compra)) : '—'));
-            const divTag = (n.tem_divergencia && n.status_slug !== 'divergencia')
+            const divTag = (isAdminReceb && n.tem_divergencia && n.status_slug !== 'divergencia')
                 ? ` <span class="eui-badge eui-badge--danger" style="margin-left:4px;"><span class="eui-badge__dot"></span>Diverg.</span>` : '';
             const lanc = n.status_slug === 'lancado' && n.numero_lancamento
                 ? `<div style="font-size:11px; color:#64748b; margin-top:2px;">Lanç.: ${_rcEsc(n.numero_lancamento)}</div>` : '';
@@ -1652,14 +1706,10 @@
                 : unidadeItem;
             const blocoChapa = (!somenteLeitura && ehChapa) ? `
                     <div class="chapa-wrap" data-id="${i.id}">
-                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="toggleChapa('${i.id}')">
-                            <i class="fas fa-layer-group"></i> É chapa?
+                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="abrirModalChapa('${i.id}')">
+                            <i class="fas fa-layer-group"></i> Informar chapas (UND)
                         </button>
-                        <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
-                            <label>Qtd.</label>
-                            <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
-                            <span class="chapa-suffix">UND</span>
-                        </div>
+                        <input type="hidden" class="chapa-input" data-id="${i.id}" value="">
                     </div>` : '';
             const rowClass = (somenteLeitura && valorContagem) ? 'contado' : '';
             const detalheVisual = somenteLeitura
@@ -1695,13 +1745,9 @@
             if (!Number.isFinite(v) || v <= 0) return;
             const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
             const btn = document.getElementById(`chapa-btn-${i.id}`);
-            const bloco = document.getElementById(`chapa-fields-${i.id}`);
-            const wrap = document.querySelector(`.chapa-wrap[data-id="${i.id}"]`);
-            if (!input || !btn || !bloco) return;
+            if (!input || !btn) return;
             input.value = (v === Math.trunc(v)) ? String(Math.trunc(v)) : String(v);
             btn.dataset.ativo = '1';
-            bloco.style.display = 'flex';
-            wrap?.classList.add('aberto');
             atualizarChapa(i.id);
         });
 
