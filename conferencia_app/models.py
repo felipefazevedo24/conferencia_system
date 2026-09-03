@@ -3112,3 +3112,29 @@ class ComexComentario(db.Model):
     texto = db.Column(db.Text, nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     criado_por = db.Column(db.String(100))
+
+
+class DivergenciaPedidoAprovacao(db.Model):
+    """Aprovacao de Compras (via Teams) para NF com divergencia de
+    quantidade/valor entre XML e pedido de compra. Enquanto status=='Pendente'
+    a NF fica bloqueada em /api/xml_auditor/liberar. Resposta chega via
+    webhook do Power Automate (POST /api/xml_auditor/divergencia/webhook-decisao)."""
+
+    __tablename__ = "divergencia_pedido_aprovacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    pedido_compra = db.Column(db.String(200))
+    fornecedor = db.Column(db.String(100))
+    detalhe = db.Column(db.Text)  # resumo textual das linhas divergentes, para o card do Teams
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente | Aprovado | Rejeitado
+    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    respondido_por = db.Column(db.String(160))
+    respondido_em = db.Column(db.DateTime)
+    motivo_resposta = db.Column(db.String(500))
+    # Confirma que o aviso REALMENTE saiu pro Teams (envio sincrono). Se False,
+    # a proxima consulta tenta reenviar em vez de desistir pra sempre.
+    teams_notificado = db.Column(db.Boolean, nullable=False, default=False)
+    # Token da URL publica de aprovacao (o link enviado no Teams). Quem tem o
+    # link ve a NF; alem disso a tela exige login+senha do Sync pra aprovar.
+    token = db.Column(db.String(64), unique=True, index=True)

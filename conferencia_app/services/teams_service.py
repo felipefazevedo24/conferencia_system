@@ -170,3 +170,91 @@ def notificar_solicitacao_nf(
         env_var=env_var,
         config_key=config_key,
     )
+
+
+def notificar_divergencia_pedido(
+    numero_nota: str,
+    fornecedor: str,
+    pedido_compra: str,
+    linhas_divergentes: list,
+    link_conferencia: str | None = None,
+    *,
+    sync: bool = False,
+    env_var: str = "TEAMS_WEBHOOK_DIVERGENCIA_URL",
+    config_key: str = "webhook_divergencia_pedido",
+) -> bool | None:
+    """
+    Notifica Compras (via Power Automate) de uma divergencia XML x Pedido que
+    precisa de aprovacao antes da NF poder ser liberada para conferencia.
+
+    O webhook "Enviar alertas de webhook" do Power Automate (mesmo tipo usado
+    em webhook_expedicao) EXIGE que a mensagem seja um Adaptive Card ou
+    Message Card - por isso o payload usa o mesmo envelope de enviar_card()
+    (senao o Power Automate ignora/rejeita a chamada). Os dados brutos da
+    divergencia (numero_nota, pedido_compra, linhas_divergentes, etc.) vao
+    JUNTO como campos extras no mesmo JSON, fora do card - servem pra quem
+    quiser configurar no flow um passo seguinte de "Post adaptive card and
+    wait for a response" (com Aprovar/Rejeitar) usando esses campos, que
+    depois chama de volta POST /api/xml_auditor/divergencia/webhook-decisao.
+
+    sync=True: envia SINCRONO (bloqueia ate a resposta) e retorna True/False
+    conforme o envio deu certo - usado quando o chamador precisa SABER se
+    realmente notificou (ex.: pra decidir se tenta de novo depois), em vez do
+    fire-and-forget padrao (sync=False, retorna None, nunca informa falha).
+    """
+    app = current_app._get_current_object()
+    url = _webhook_url(env_var, config_key)
+    if not url:
+        app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
+        return False if sync else None
+
+    # === Texto do cartao do Teams (edite aqui para mudar a mensagem) ==========
+    titulo_card = "🚨 Divergência identificada"
+    linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
+    partes_subinfo = []
+    if pedido_compra:
+        partes_subinfo.append(f"📄 Pedido de compra: {pedido_compra}")
+    if linhas_divergentes:
+        partes_subinfo.append("O que divergiu entre a nota e o pedido:")
+        partes_subinfo.extend(f"• {linha}" for linha in linhas_divergentes)
+    partes_subinfo.append("")
+    partes_subinfo.append("👉 Clique no botão abaixo para abrir a tela de aprovação.")
+    subinfo = "\n".join(partes_subinfo) or None
+    # =========================================================================
+
+    payload = _card_payload(
+        titulo_card,
+        linha_principal,
+        subinfo,
+        mencionar_canal=True,
+    )
+    # Botao clicavel no proprio card (abre a tela de aprovacao no navegador).
+    if link_conferencia:
+        try:
+            card_content = payload["attachments"][0]["content"]
+            card_content["actions"] = [
+                {"type": "Action.OpenUrl", "title": "Abrir e decidir (Aprovar / Recusar)", "url": link_conferencia}
+            ]
+        except (KeyError, IndexError, TypeError):
+            pass
+    # Campos extras (fora do envelope do card), para automações adicionais no flow.
+    payload["numero_nota"] = str(numero_nota or "")
+    payload["fornecedor"] = str(fornecedor or "")
+    payload["pedido_compra"] = str(pedido_compra or "")
+    payload["linhas_divergentes"] = [str(linha) for linha in (linhas_divergentes or [])]
+    payload["link_conferencia"] = str(link_conferencia or "")
+
+    if sync:
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            app.logger.warning("Falha ao enviar aviso de divergência ao Teams (NF %s): %s", numero_nota, exc)
+            return False
+
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+    return None
+
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+

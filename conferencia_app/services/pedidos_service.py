@@ -838,6 +838,25 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
         ) from exc
 
 
+# Fator fixo unidade-de-peso -> KG. Pedidos de compra de chapa são sempre em
+# KG; serve de REFERÊNCIA (independe do "melhor fator" adivinhado pelo
+# matching) e também é reaproveitado fora do matching (ex.: para somar o uso
+# histórico de uma linha do pedido em outras NFs já lançadas no sistema).
+_FATOR_PESO_PARA_KG = {"T": 1000.0, "TON": 1000.0, "TONELADA": 1000.0, "KG": 1.0, "KGM": 1.0, "G": 0.001, "GR": 0.001, "GRAMA": 0.001}
+
+
+def qtd_em_kg_por_unidade(qtd, unidade):
+    """Converte uma quantidade para KG quando a unidade é reconhecida como peso (T/KG/G). Retorna None se a unidade não for de peso."""
+    fator_peso = _FATOR_PESO_PARA_KG.get(str(unidade or "").strip().upper())
+    if fator_peso is None:
+        return None
+    try:
+        qtd_float = float(qtd or 0)
+    except (TypeError, ValueError):
+        qtd_float = 0.0
+    return round(qtd_float * fator_peso, 6)
+
+
 def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     """
     Compara as linhas do pedido no ERP com as linhas da NF, uma a uma
@@ -882,19 +901,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             f = 1.0
         return f if f > 0 else 1.0
 
-    # Fator fixo unidade-de-peso -> KG. Pedidos de compra de chapa são sempre em
-    # KG; isso serve só de REFERÊNCIA pro conferente (independe do "melhor
-    # fator" adivinhado pelo matching), então nunca fica "escondido" atrás de
-    # uma conversão errada.
-    _FATOR_PESO_PARA_KG = {"T": 1000.0, "TON": 1000.0, "TONELADA": 1000.0, "KG": 1.0, "KGM": 1.0, "G": 0.001, "GR": 0.001, "GRAMA": 0.001}
-
     def _qtd_em_kg(nf_item: dict):
-        unidade = str(nf_item.get("unidade_comercial") or "").strip().upper()
-        fator_peso = _FATOR_PESO_PARA_KG.get(unidade)
-        if fator_peso is None:
-            return None
-        qtd_original = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
-        return round(qtd_original * fator_peso, 6)
+        return qtd_em_kg_por_unidade(nf_item.get("qtd_original") or nf_item.get("qtd") or 0, nf_item.get("unidade_comercial"))
 
     def _fatores_candidatos(nf_item: dict, po_item: dict, permitir_ratio_direto: bool = True) -> list[float]:
         fator_manual = _normalizar_fator(nf_item.get("conversao_fator"))
@@ -1168,12 +1176,16 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
         qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
         qtd_ok_grupo = po_qtd is not None and qtd_diff < 0.0001
+        # Guarda quais linhas do XML (numero + quantidade) compoem a soma desta
+        # linha do pedido, pra dar pra conferir de onde vem o total (diagnostico).
+        linhas_grupo = [{"linha": i + 1, "nf_qtd": round(mets[i]["nf_qtd"], 6)} for i in indices]
         for i in indices:
             mets[i]["qtd_ok"] = qtd_ok_grupo
             mets[i]["qtd_diff"] = qtd_diff
             mets[i]["ok"] = qtd_ok_grupo and mets[i]["valor_ok"]
             mets[i]["rateio_po"] = True
             mets[i]["rateio_soma_nf_qtd"] = soma_nf_qtd
+            mets[i]["grupo_linhas_xml"] = linhas_grupo
 
     # Saldo restante por linha do PO nesta NF: soma o que já foi atribuído a cada
     # linha (considerando a conversão aplicada) e calcula o que ainda sobra, de
@@ -1215,6 +1227,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "conversao_unidade": nf.get("conversao_unidade") or (nf.get("unidade_comercial") or "UN"),
                 "po_qtd": met["po_qtd"],
                 "nf_valor_unit": met["nf_valor_unit"],
+                "nf_valor_unit_original": float(nf.get("valor_unit") or 0),
                 "po_valor_unit": met["po_valor_unit"],
                 "po_pedido": met["po_pedido"],
                 "nf_valor_total": met["nf_valor_total"],
@@ -1227,6 +1240,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "ok": met["ok"],
                 "rateio_po": bool(met.get("rateio_po")),
                 "rateio_soma_nf_qtd": met.get("rateio_soma_nf_qtd"),
+                "grupo_linhas_xml": met.get("grupo_linhas_xml"),
                 "po_saldo_antes": met.get("po_saldo_antes"),
                 "po_saldo_depois": met.get("po_saldo_depois"),
             }

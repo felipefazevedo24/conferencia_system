@@ -88,6 +88,13 @@
     .vinculacao-select:hover { border-color: #2563eb; }
     .vinculacao-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
     .vinculacao-select:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; border-color: #cbd5e1; }
+    .vinc-po-resumo { margin: 10px 0 14px; padding: 14px 16px; background: #f5f3ff; border: 1px solid #ddd6fe; border-left: 5px solid #7c3aed; border-radius: 8px; }
+    .vinc-po-resumo-titulo { font-size: 11px; font-weight: 800; color: #6d28d9; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .vinc-po-resumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px; color: #1f2937; }
+    .vinc-po-resumo-grid div { display: flex; justify-content: space-between; gap: 8px; }
+    .vinc-po-resumo-grid strong { font-weight: 800; color: #5b21b6; text-align: right; }
+    .vinc-po-resumo-vazio { font-size: 12px; color: #64748b; font-style: italic; }
+    .vinc-po-resumo-nota { margin-top: 10px; padding: 8px 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
     .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
     .vinc-status.ok { color: #166534; }
     .vinc-status.err { color: #991b1b; }
@@ -128,6 +135,8 @@
     .vinc-link-arrow::before, .vinc-link-arrow::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
     .vinc-saldo-info { margin-top: 8px; padding: 8px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; font-size: 11px; color: #0c4a6e; }
     .vinc-saldo-info.negativo { background: #fef2f2; border-color: #fecaca; color: #991b1b; font-weight: 700; }
+    .vinc-grupo-info { margin-top: 6px; padding: 6px 10px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; font-size: 11px; color: #475569; }
+    .vinc-uso-outras-nfs { margin-top: 6px; padding: 6px 10px; background: #fffbeb; border: 1px dashed #fcd34d; border-radius: 8px; font-size: 11px; color: #92400e; }
     .vinc-saldo-info strong { color: #0369a1; }
     .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
 
@@ -305,6 +314,12 @@
     [data-theme="escuro"] .conversao-select { background: var(--rec-surface); color: var(--rec-ink-900); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinculacao-auto-hint { color: #86efac; }
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinc-po-resumo { background: rgba(124,58,237,.10); border-color: var(--rec-border); border-left-color: #a78bfa; }
+    [data-theme="escuro"] .vinc-po-resumo-titulo { color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-po-resumo-grid { color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinc-po-resumo-grid strong { color: #c4b5fd; }
+    [data-theme="escuro"] .vinc-po-resumo-vazio { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-po-resumo-nota { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.35); color: #fcd34d; }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-section-tag.tag-xml { background: rgba(59,147,245,.16); color: #7dc4ff; }
@@ -313,6 +328,8 @@
     [data-theme="escuro"] .vinc-link-arrow::before, [data-theme="escuro"] .vinc-link-arrow::after { background: var(--rec-border); }
     [data-theme="escuro"] .vinc-saldo-info { background: rgba(59,147,245,.10); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .vinc-saldo-info.negativo { background: rgba(239,68,68,.14); border-color: #7f1d1d; color: #fca5a5; }
+    [data-theme="escuro"] .vinc-grupo-info { background: var(--rec-surface-alt); border-color: var(--rec-border); color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinc-uso-outras-nfs { background: rgba(252,211,77,.10); border-color: #92400e; color: #fcd34d; }
     [data-theme="escuro"] .vinc-saldo-info strong { color: #7dc4ff; }
     [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
@@ -634,6 +651,8 @@
                     <span class="box" style="padding:8px 12px;"><label>CNPJ destinatário</label><span id="dCnpjDestinatario">---</span></span>
                 </div>
             </div>
+
+            <div id="divergenciaDecisaoBanner" style="display:none; margin-top:12px; padding:12px 14px; border-radius:10px; font-size:13px; font-weight:600;"></div>
 
             <div class="rec-stack-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px;">
                 <div class="box">
@@ -1696,6 +1715,49 @@
         } catch (e) {
             toast(e.message, 'err');
         }
+        atualizarBannerDivergencia(auditorNotaSelecionada.numero);
+    }
+
+    async function atualizarBannerDivergencia(numeroNota) {
+        const banner = document.getElementById('divergenciaDecisaoBanner');
+        if (!banner) return;
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        if (!numeroNota) return;
+        try {
+            const r = await fetchJson(`/api/xml_auditor/divergencia/status?nota=${encodeURIComponent(numeroNota)}`);
+            const status = r && r.status ? String(r.status) : '';
+            if (!status) return;
+            const fmtData = (iso) => {
+                if (!iso) return '—';
+                const dt = new Date(iso);
+                return isNaN(dt) ? String(iso) : dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            };
+            const quem = r.respondido_por || '—';
+            const quando = fmtData(r.respondido_em);
+            const motivo = r.motivo_resposta ? ` — Motivo: ${r.motivo_resposta}` : '';
+            let cor = '#334155', fundo = '#f1f5f9', borda = '#cbd5e1', icone = 'fa-circle-info', texto = '';
+            if (status === 'Pendente') {
+                cor = '#92400e'; fundo = '#fffbeb'; borda = '#fcd34d'; icone = 'fa-clock';
+                const enviado = r.solicitado_em ? ` (solicitado em ${fmtData(r.solicitado_em)})` : '';
+                texto = `Divergência XML × pedido <b>aguardando aprovação de Compras</b> via Teams${enviado}. A NF só pode ser liberada após a decisão.`;
+            } else if (status === 'Aprovado') {
+                cor = '#166534'; fundo = '#f0fdf4'; borda = '#86efac'; icone = 'fa-circle-check';
+                texto = `Divergência <b>APROVADA por Compras</b> (${quem} em ${quando})${motivo}. A NF já pode ser liberada.`;
+            } else if (status === 'Rejeitado') {
+                cor = '#991b1b'; fundo = '#fff1f2'; borda = '#fca5a5'; icone = 'fa-circle-xmark';
+                texto = `Divergência <b>RECUSADA por Compras</b> (${quem} em ${quando})${motivo}. A NF <b>não pode ser liberada</b> por aqui — exclua do Auditor XML ou trate com Compras.`;
+            } else {
+                return;
+            }
+            banner.style.color = cor;
+            banner.style.background = fundo;
+            banner.style.border = `1px solid ${borda}`;
+            banner.innerHTML = `<i class="fas ${icone}" style="margin-right:6px;"></i>${texto}`;
+            banner.style.display = '';
+        } catch (e) {
+            // Sem registro de divergência para esta NF -> banner permanece oculto.
+        }
     }
 
     async function registrarDecisaoFiscal(autorizado) {
@@ -1868,6 +1930,31 @@
         return { negativo, html };
     }
 
+    function montarPoResumoTexto(po) {
+        if (!po) return '<div class="vinc-po-resumo-vazio">Nenhuma linha do pedido selecionada ainda.</div>';
+        const saldo = po.saldo_restante !== undefined && po.saldo_restante !== null ? po.saldo_restante : po.qtd;
+        const semSaldo = Number(saldo || 0) <= 0.0001;
+        const notaSaldo = semSaldo
+            ? `<div class="vinc-po-resumo-nota"><i class="fas fa-circle-info"></i> O saldo vem do ERP (quantidade pedida − já recebida no ERP). Se esta OC já foi recebida/lançada no ERP, apagar a NF aqui no Sync <strong>não</strong> devolve o saldo — verifique a quantidade entregue da OC direto no ERP/GRV.</div>`
+            : '';
+        return `<div class="vinc-po-resumo-titulo"><i class="fas fa-file-contract"></i> Dados desta linha do pedido</div>
+            <div class="vinc-po-resumo-grid">
+                <div><span style="color:#64748b;">Código:</span> <strong>${po.codigo_material || '-'}</strong></div>
+                <div><span style="color:#64748b;">Descrição:</span> <strong>${po.descricao_material || '-'}</strong></div>
+                <div><span style="color:#64748b;">Quantidade do pedido:</span> <strong>${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span style="color:#64748b;">Saldo disponível:</span> <strong>${Number(saldo || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span style="color:#64748b;">Valor unit.:</span> <strong>R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+            </div>${notaSaldo}`;
+    }
+
+    function montarUsoOutrasNfsTexto(po) {
+        const uso = po && Array.isArray(po.uso_outras_nfs) ? po.uso_outras_nfs : [];
+        if (!uso.length) return '';
+        const partes = uso.map((u) => `NF ${u.numero_nota} (${Number(u.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ');
+        const total = Number(po.uso_outras_nfs_total || 0).toLocaleString('pt-BR', {maximumFractionDigits:2});
+        return `<div class="vinc-uso-outras-nfs"><i class="fas fa-clock-rotate-left"></i> Esta linha do pedido já foi usada por outra(s) NF(s) neste sistema: ${partes} = ${total} já contabilizado(s)</div>`;
+    }
+
     function atualizarSaldoLive(idx) {
         const pares = window.paresVinculacao || [];
         const linhasPo = window.linhasPoVinculacao || [];
@@ -1875,17 +1962,23 @@
         const select = document.getElementById(`select_${idx}`);
         const saldoEl = document.getElementById(`saldo-info-${idx}`);
         const hintEl = document.getElementById(`auto-hint-${idx}`);
+        const usoEl = document.getElementById(`uso-outras-nfs-${idx}`);
+        const resumoEl = document.getElementById(`po-resumo-${idx}`);
         if (!p || !select || !saldoEl) return;
         if (hintEl) hintEl.innerHTML = '';
         const valorSel = String(select.value || '').trim();
         if (valorSel === '') {
             saldoEl.className = 'vinc-saldo-info';
             saldoEl.innerHTML = '';
+            if (usoEl) usoEl.innerHTML = '';
+            if (resumoEl) resumoEl.innerHTML = montarPoResumoTexto(null);
             return;
         }
         const novoPoIndex = parseInt(valorSel, 10);
         const po = linhasPo[novoPoIndex];
         if (!po) return;
+        if (usoEl) usoEl.innerHTML = montarUsoOutrasNfsTexto(po);
+        if (resumoEl) resumoEl.innerHTML = montarPoResumoTexto(po);
         const minhaQtd = Number(p.nf_qtd_kg ?? p.nf_qtd ?? 0);
         // Soma o que as OUTRAS linhas do XML (pelo ultimo estado conhecido do
         // servidor) ja apontam pra essa mesma linha do pedido - previa best-effort
@@ -1901,14 +1994,17 @@
         saldoEl.innerHTML = info.html;
     }
 
+
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
-        // Linhas do pedido com saldo zerado (ou negativo, se algo divergir) somem
-        // das opções de OUTRAS linhas do XML - só continuam visíveis pra quem já
-        // está vinculado a elas, senão o usuário fica escolhendo saldo que não existe.
+        // Esconde SO as linhas do pedido sem NENHUMA quantidade cadastrada no ERP
+        // (po.qtd <= 0 - fonte oficial, nao calculada por nos). NAO usa mais
+        // saldo_restante aqui: esse valor e calculado DENTRO desta NF (pode ficar
+        // negativo por engano de vinculo) e escondia linhas que na verdade tinham
+        // saldo de verdade no pedido.
         const linhasEsgotadas = new Set(
-            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].saldo_restante) <= 0.0001)
+            linhasPo.map((po, idxPoOriginal) => idxPoOriginal).filter((idxPoOriginal) => Number(linhasPo[idxPoOriginal].qtd) <= 0.0001)
         );
         const container = document.getElementById('vinculacoesContainer');
         container.innerHTML = pares.map((p, idx) => {
@@ -1948,6 +2044,17 @@
                 saldoConteudo = info.html;
             }
             const saldoInfoHtml = `<div class="${saldoClasse}" id="saldo-info-${idx}">${saldoConteudo}</div>`;
+            // Diagnostico: mostra explicitamente quais linhas do XML estao somadas
+            // nesta mesma linha do pedido, pra conferir de onde vem o total.
+            const grupoLinhasHtml = (Array.isArray(p.grupo_linhas_xml) && p.grupo_linhas_xml.length > 1)
+                ? `<div class="vinc-grupo-info"><i class="fas fa-list-ol"></i> Linhas do XML somadas nesta linha do pedido: ${p.grupo_linhas_xml.map((g) => `Linha ${g.linha} (${Number(g.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})})`).join(', ')}</div>`
+                : '';
+            // Diagnostico: se essa linha do pedido ja foi usada por OUTRA NF no
+            // sistema, mostra explicitamente (explica saldo insuficiente mesmo
+            // sem nenhum vinculo duplicado dentro desta NF). Le direto da linha
+            // do PEDIDO (linhasPo[poIndex]), nao do par, pra dar pra atualizar ao
+            // vivo quando o usuario troca a linha no select.
+            const usoOutrasNfsHtml = `<div id="uso-outras-nfs-${idx}">${montarUsoOutrasNfsTexto(poVinculada)}</div>`;
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1960,8 +2067,8 @@
                         <div class="vinculacao-linha-xml-dados">
                             <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
                             <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
-                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
-                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd_original ?? p.nf_qtd ?? 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
+                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit_original ?? p.nf_valor_unit ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
                             ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span style="color:#64748b;">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
                         </div>
                         <div class="vinc-conversao-wrap">
@@ -1974,6 +2081,7 @@
                     </div>
                     <div class="vinc-link-arrow"><i class="fas fa-arrow-down"></i>&nbsp;vincular com&nbsp;<i class="fas fa-arrow-down"></i></div>
                     <span class="vinc-section-tag tag-po"><i class="fas fa-file-contract"></i> Pedido de Compra (OC)</span>
+                    <div class="vinc-po-resumo" id="po-resumo-${idx}">${montarPoResumoTexto(poVinculada)}</div>
                     <div class="vinculacao-select-wrap">
                         <label class="vinculacao-select-label">Selecione a linha do pedido correspondente a esta linha do XML</label>
                         <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarSaldoLive(${idx})" ${selectDisabled}>
@@ -1982,12 +2090,24 @@
                         </select>
                         ${statusHtml}
                         ${saldoInfoHtml}
+                        ${grupoLinhasHtml}
+                        ${usoOutrasNfsHtml}
                         ${detalheVinculoAuto}
                         ${editBtn}
                     </div>
                 </div>`;
         }).join('');
         document.getElementById('vinculacaoOverlay').classList.add('active');
+        // Validacao explicita: se alguma linha do pedido ficou com saldo negativo
+        // (foi vinculada acima do que ela tem disponivel), AVISA aqui na hora, em
+        // vez de deixar so o numero vermelho escondido dentro do card.
+        const linhasNegativas = pares.filter((p) => Number(p.po_saldo_depois) < -0.0001);
+        if (linhasNegativas.length) {
+            const detalhe = linhasNegativas
+                .map((p) => `Linha ${p.linha} do XML \u2192 Linha ${(p.po_index ?? p.linha_po_vinculada) + 1} do pedido (saldo ficaria em ${Number(p.po_saldo_depois).toLocaleString('pt-BR', {maximumFractionDigits:2})})`)
+                .join('\n');
+            vincAviso(`Atenção: com os vínculos atuais, ${linhasNegativas.length} linha(s) do pedido ficariam com saldo NEGATIVO (vinculado mais do que o pedido tem disponível):\n${detalhe}\nConfira se são as linhas certas antes de salvar.`, 'err');
+        }
     }
 
     function habilitarEdicaoVinculo(idx) {
