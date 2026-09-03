@@ -240,6 +240,9 @@ def _ensure_item_nota_columns() -> None:
         if "sem_conferencia_logistica" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN sem_conferencia_logistica BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
+        if "servico" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN servico BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
         if "auditor_status" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_status VARCHAR(30) DEFAULT 'NaoAuditado'"))
             conn.commit()
