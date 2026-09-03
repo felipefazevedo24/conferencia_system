@@ -642,6 +642,7 @@
 
     let romaneiosCacheLista = [];
     const expandidos = new Set();
+    const nfAddEmAndamento = new Set();
 
     function renderTabela(romaneios) {
         romaneiosCacheLista = romaneios;
@@ -885,6 +886,8 @@
         const select = $(`rom-nf-select-inline-${id}`);
         const numeroNf = select.value;
         if (!numeroNf) { toast("Selecione uma NF faturada", "error"); return; }
+        if (nfAddEmAndamento.has(`sel:${id}`)) return;
+        nfAddEmAndamento.add(`sel:${id}`);
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/nf`, {
                 method: "POST",
@@ -895,6 +898,8 @@
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
+        } finally {
+            nfAddEmAndamento.delete(`sel:${id}`);
         }
     }
 
@@ -902,6 +907,8 @@
         const input = $(`rom-nf-manual-inline-${id}`);
         const numeroNf = input.value.trim();
         if (!numeroNf) { toast("Digite o número da NF.", "error"); return; }
+        if (nfAddEmAndamento.has(`man:${id}`)) return;
+        nfAddEmAndamento.add(`man:${id}`);
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/nf`, {
                 method: "POST",
@@ -913,6 +920,8 @@
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
+        } finally {
+            nfAddEmAndamento.delete(`man:${id}`);
         }
     }
 
