@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}Controle de Chapas{% endblock %}
+{% block shell_title %}Controle de Chapas{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ch-wrap { display: grid; gap: 16px; }
+    .ch-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+    .ch-search { flex: 1; min-width: 280px; position: relative; }
+    .ch-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); }
+    .ch-search input { padding-left: 36px; width: 100%; }
+    .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ch-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
+    .ch-table-wrap { overflow-x: auto; }
+    .ch-code { font-weight: 800; color: var(--eui-text); }
+    .ch-desc { font-size: 12px; color: var(--eui-text-soft); max-width: 320px; }
+    .ch-muted { color: var(--eui-muted); font-size: 12px; }
+    .ch-num { font-weight: 800; color: var(--eui-text); white-space: nowrap; }
+    .ch-diff { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+    .ch-diff.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .ch-diff.bad { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .ch-diff.none { background: var(--eui-surface-2); color: var(--eui-muted); }
+
+    .ch-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(2px); display: none; align-items: flex-start; justify-content: center; z-index: 4000; padding: 30px 14px; overflow-y: auto; }
+    .ch-overlay.open { display: flex; }
+    .ch-modal { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; width: 100%; max-width: 620px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .ch-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--eui-border); }
+    .ch-modal__title { font-size: 15px; font-weight: 800; color: var(--eui-text); display: flex; align-items: center; gap: 8px; }
+    .ch-modal__close { border: 0; background: transparent; color: var(--eui-muted); font-size: 18px; cursor: pointer; }
+    .ch-modal__body { padding: 18px 20px; display: grid; gap: 16px; }
+    .ch-modal__foot { padding: 14px 20px; border-top: 1px solid var(--eui-border); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+    .ch-iteminfo { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 16px; padding: 12px 14px; background: var(--eui-surface-2); border-radius: 10px; font-size: 12px; }
+    .ch-iteminfo b { display: block; color: var(--eui-text); font-size: 13px; }
+    .ch-iteminfo span { color: var(--eui-muted); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+
+    .ch-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .ch-field label { display: block; font-size: 11px; font-weight: 800; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
+    .ch-field input, .ch-field select { width: 100%; }
+    .ch-dims { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+
+    .ch-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px; border-radius: 10px; background: var(--eui-primary-soft); }
+    .ch-result > div { text-align: center; }
+    .ch-result span { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
+    .ch-result b { display: block; font-size: 20px; font-weight: 800; color: var(--eui-text); margin-top: 2px; }
+    .ch-result .ch-diff { font-size: 15px; margin-top: 4px; }
+
+    .ch-conv { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--eui-text-soft); flex-wrap: wrap; }
+    .ch-conv input { width: 90px; }
+    .ch-logs { margin-top: 4px; font-size: 12px; color: var(--eui-text-soft); display: grid; gap: 8px; }
+    .ch-log { border-left: 3px solid var(--eui-border); padding: 6px 10px; background: var(--eui-surface-2); border-radius: 6px; }
+    .ch-log b { color: var(--eui-text); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eui-scope ch-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">LOGÍSTICA · ESTOQUE</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-layer-group"></i> Controle de Chapas</h1>
+            <p class="eui-page-header__sub">Chapas recebidas na conferência (marcadas como chapa), com AR, lote, conferente, KG da NF, UND e o peso calculado.</p>
+        </div>
+        <a class="eui-btn eui-btn--ghost" href="/logistica/estoque"><i class="fas fa-arrow-left"></i> Voltar ao Estoque</a>
+    </header>
+
+    <div class="eui-stats" id="ch-kpis">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Chapas</span><span class="eui-stat__value" id="ch-k-chapas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-weight-hanging"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total KG (NF)</span><span class="eui-stat__value" id="ch-k-kg">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hashtag"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total UND</span><span class="eui-stat__value" id="ch-k-und">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Divergência &gt; 2%</span><span class="eui-stat__value" id="ch-k-div">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div class="ch-toolbar">
+                <div class="ch-search">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input class="eui-input" id="ch-busca" type="search" placeholder="Buscar por código, descrição, lote, NF, AR, fornecedor ou conferente...">
+                </div>
+                <div class="ch-actions">
+                    <span class="ch-muted" id="ch-updated"></span>
+                    <button class="eui-btn eui-btn--ghost" id="ch-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
+                </div>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="ch-state" id="ch-state">Carregando chapas...</div>
+            <div class="ch-table-wrap">
+                <table class="erp-table" id="ch-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Descrição</th>
+                            <th>NF</th>
+                            <th>Fornecedor</th>
+                            <th>AR</th>
+                            <th>Lote</th>
+                            <th>Conferente</th>
+                            <th style="text-align:right;">KG (NF)</th>
+                            <th style="text-align:right;">UND</th>
+                            <th style="text-align:right;">Peso calc.</th>
+                            <th style="text-align:center;">% dif.</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ch-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal calculadora -->
+<div class="ch-overlay" id="ch-calc-overlay">
+    <div class="ch-modal">
+        <div class="ch-modal__head">
+            <div class="ch-modal__title"><i class="fas fa-calculator"></i> Calcular peso da chapa</div>
+            <button type="button" class="ch-modal__close" onclick="fecharCalc()">&times;</button>
+        </div>
+        <div class="ch-modal__body">
+            <div class="ch-iteminfo" id="ch-calc-item"></div>
+            <div class="ch-grid2">
+                <div class="ch-field">
+                    <label>Tipo de material</label>
+                    <select class="eui-select" id="ch-material" onchange="recalcular()"></select>
+                </div>
+                <div class="ch-field">
+                    <label>Formato</label>
+                    <select class="eui-select" id="ch-formato" onchange="montarCamposFormato(); recalcular();"></select>
+                </div>
+            </div>
+            <div class="ch-dims" id="ch-dims"></div>
+            <div class="ch-result">
+                <div><span>Peso por peça</span><b id="ch-res-peca">—</b></div>
+                <div><span>Peso total (× UND)</span><b id="ch-res-total">—</b></div>
+                <div><span>Diferença vs NF</span><div id="ch-res-diff" class="ch-diff none">—</div></div>
+            </div>
+            <div class="ch-conv">
+                <i class="fas fa-ruler-combined"></i> Conversor:
+                <input class="eui-input" id="ch-conv-pol" type="number" step="0.0001" placeholder="pol." oninput="converterPolMm('pol')">
+                <span>pol =</span>
+                <input class="eui-input" id="ch-conv-mm" type="number" step="0.01" placeholder="mm" oninput="converterPolMm('mm')">
+                <span>mm</span>
+            </div>
+            <div>
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ch-btn-logs" onclick="alternarLogs()"><i class="fas fa-clock-rotate-left"></i> Ver histórico de alterações</button>
+                <div class="ch-logs" id="ch-logs" style="display:none;"></div>
+            </div>
+            <div class="ch-muted" id="ch-calc-msg" style="color:var(--eui-danger);"></div>
+        </div>
+        <div class="ch-modal__foot">
+            <button type="button" class="eui-btn eui-btn--ghost" onclick="fecharCalc()">Cancelar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="ch-btn-salvar" onclick="salvarCalc()"><i class="fas fa-check"></i> Salvar cálculo</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    let timer = null;
+    let cache = [];
+    let densidades = {};
+    let linhaAtual = null;
+
+    const MATERIAIS = {
+        aco_carbono: { label: 'Aço Carbono', densidade: 7.85 },
+        inox: { label: 'Aço Inox', densidade: 8.00 },
+        aluminio: { label: 'Alumínio', densidade: 2.71 },
+        cobre: { label: 'Cobre', densidade: 8.96 },
+        latao: { label: 'Latão', densidade: 8.53 },
+        bronze: { label: 'Bronze', densidade: 8.80 },
+    };
+    const CAMPO_LABEL = {
+        espessura: 'Espessura (mm)', largura: 'Largura (mm)', comprimento: 'Comprimento (mm)',
+        lado: 'Lado (mm)', diametro: 'Diâmetro (mm)', bitola: 'Bitola / entre faces (mm)',
+        parede: 'Parede (mm)', altura: 'Altura (mm)', aba: 'Aba (mm)',
+    };
+    const FORMATOS = {
+        chapa: { label: 'Chapa', campos: ['espessura', 'largura', 'comprimento'], area: d => d.espessura * d.largura },
+        bobina: { label: 'Bobina', campos: ['espessura', 'largura', 'comprimento'], area: d => d.espessura * d.largura },
+        barra_quadrada: { label: 'Barra Quadrada', campos: ['lado', 'comprimento'], area: d => d.lado * d.lado },
+        barra_retangular: { label: 'Barra Retangular / Chata', campos: ['espessura', 'largura', 'comprimento'], area: d => d.espessura * d.largura },
+        barra_redonda: { label: 'Barra Redonda', campos: ['diametro', 'comprimento'], area: d => Math.PI / 4 * d.diametro * d.diametro },
+        barra_sextavada: { label: 'Barra Sextavada', campos: ['bitola', 'comprimento'], area: d => 0.8660254 * d.bitola * d.bitola },
+        tubo_redondo: { label: 'Tubo Redondo', campos: ['diametro', 'parede', 'comprimento'], area: d => Math.PI / 4 * (d.diametro * d.diametro - Math.pow(Math.max(d.diametro - 2 * d.parede, 0), 2)) },
+        tubo_quadrado: { label: 'Tubo Quadrado', campos: ['lado', 'parede', 'comprimento'], area: d => d.lado * d.lado - Math.pow(Math.max(d.lado - 2 * d.parede, 0), 2) },
+        tubo_retangular: { label: 'Tubo Retangular', campos: ['altura', 'largura', 'parede', 'comprimento'], area: d => d.altura * d.largura - Math.max(d.altura - 2 * d.parede, 0) * Math.max(d.largura - 2 * d.parede, 0) },
+        perfil_l: { label: 'Perfil L (Cantoneira)', campos: ['aba', 'espessura', 'comprimento'], area: d => d.espessura * (2 * d.aba - d.espessura) },
+        perfil_t: { label: 'Perfil T', campos: ['aba', 'espessura', 'comprimento'], area: d => d.espessura * (2 * d.aba - d.espessura) },
+        perfil_u: { label: 'Perfil U', campos: ['altura', 'aba', 'espessura', 'comprimento'], area: d => d.espessura * (d.altura + 2 * d.aba - 2 * d.espessura) },
+    };
+
+    function fmt(v, casas = 2) { return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas }); }
+    function esc(v) { return String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    function diffHtml(pct) {
+        if (pct === null || pct === undefined) return '<span class="ch-diff none">—</span>';
+        const cls = Math.abs(pct) > 2 ? 'bad' : 'ok';
+        const sinal = pct > 0 ? '+' : '';
+        const ic = Math.abs(pct) > 2 ? 'fa-triangle-exclamation' : 'fa-check';
+        return `<span class="ch-diff ${cls}"><i class="fas ${ic}"></i> ${sinal}${fmt(pct, 1)}%</span>`;
+    }
+
+    function setDiffEl(el, pct) {
+        if (!el) return;
+        if (pct === null || pct === undefined) { el.className = 'ch-diff none'; el.textContent = '—'; return; }
+        const bad = Math.abs(pct) > 2;
+        el.className = 'ch-diff ' + (bad ? 'bad' : 'ok');
+        const sinal = pct > 0 ? '+' : '';
+        el.innerHTML = `<i class="fas ${bad ? 'fa-triangle-exclamation' : 'fa-check'}"></i> ${sinal}${fmt(pct, 1)}%`;
+    }
+
+    function render(data) {
+        const r = data.resumo || {};
+        $('ch-k-chapas').textContent = r.chapas || 0;
+        $('ch-k-kg').textContent = fmt(r.total_kg, 1);
+        $('ch-k-und').textContent = fmt(r.total_und, 0);
+        $('ch-k-div').textContent = r.com_divergencia || 0;
+        const itens = data.itens || [];
+        if (!itens.length) {
+            $('ch-table').style.display = 'none';
+            $('ch-state').style.display = 'block';
+            $('ch-state').textContent = 'Nenhuma chapa encontrada.';
+            return;
+        }
+        $('ch-state').style.display = 'none';
+        $('ch-table').style.display = 'table';
+        $('ch-body').innerHTML = itens.map((i, idx) => `
+            <tr>
+                <td><span class="ch-code">${esc(i.codigo || '-')}</span></td>
+                <td><span class="ch-desc">${esc(i.descricao || '-')}</span></td>
+                <td>${esc(i.numero_nota || '-')}</td>
+                <td><span class="ch-muted">${esc(i.fornecedor || '-')}</span></td>
+                <td>${esc(i.ar || '-')}</td>
+                <td>${esc(i.lote || '-')}</td>
+                <td>${esc(i.conferente || '-')}</td>
+                <td style="text-align:right;"><span class="ch-num">${fmt(i.kg_nf, 2)}</span></td>
+                <td style="text-align:right;"><span class="ch-num">${fmt(i.und, 0)}</span></td>
+                <td style="text-align:right;">${i.peso_calculado_total != null ? `<span class="ch-num">${fmt(i.peso_calculado_total, 2)}</span>` : '<span class="ch-muted">—</span>'}</td>
+                <td style="text-align:center;">${diffHtml(i.pct_diferenca)}</td>
+                <td style="text-align:right;"><button class="eui-btn eui-btn--primary eui-btn--sm" data-idx="${idx}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar' : 'Calcular'}</button></td>
+            </tr>`).join('');
+        document.querySelectorAll('#ch-body button[data-idx]').forEach((btn) => {
+            btn.addEventListener('click', () => abrirCalc(itens[Number(btn.dataset.idx)]));
+        });
+    }
+
+    async function carregar() {
+        $('ch-state').style.display = 'block';
+        $('ch-state').textContent = 'Carregando chapas...';
+        const params = new URLSearchParams();
+        const q = $('ch-busca').value.trim();
+        if (q) params.set('q', q);
+        try {
+            const resp = await fetch('/api/logistica/chapas?' + params.toString());
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar chapas.');
+            densidades = data.densidades || {};
+            cache = data.itens || [];
+            render(data);
+            $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+        } catch (e) {
+            $('ch-table').style.display = 'none';
+            $('ch-state').style.display = 'block';
+            $('ch-state').textContent = e.message || 'Falha ao carregar chapas.';
+        }
+    }
+
+    // ---- Calculadora ----
+    function abrirCalc(linha) {
+        linhaAtual = linha;
+        $('ch-calc-msg').textContent = '';
+        $('ch-logs').style.display = 'none';
+        $('ch-calc-item').innerHTML = `
+            <div><span>Código</span><b>${esc(linha.codigo || '-')}</b></div>
+            <div><span>NF</span><b>${esc(linha.numero_nota || '-')}</b></div>
+            <div><span>Lote</span><b>${esc(linha.lote || '-')}</b></div>
+            <div><span>KG (NF)</span><b>${fmt(linha.kg_nf, 2)}</b></div>
+            <div><span>UND</span><b>${fmt(linha.und, 0)}</b></div>`;
+        // selects
+        $('ch-material').innerHTML = Object.entries(MATERIAIS).map(([k, v]) => `<option value="${k}">${v.label} (${v.densidade} g/cm³)</option>`).join('');
+        $('ch-formato').innerHTML = Object.entries(FORMATOS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+        $('ch-material').value = linha.material && MATERIAIS[linha.material] ? linha.material : 'aco_carbono';
+        $('ch-formato').value = linha.formato && FORMATOS[linha.formato] ? linha.formato : 'chapa';
+        montarCamposFormato(linha.dimensoes || {});
+        recalcular();
+        $('ch-calc-overlay').classList.add('open');
+    }
+
+    function montarCamposFormato(valores) {
+        const fmtCfg = FORMATOS[$('ch-formato').value];
+        const dims = valores || coletarDims();
+        $('ch-dims').innerHTML = (fmtCfg?.campos || []).map((campo) => `
+            <div class="ch-field">
+                <label>${CAMPO_LABEL[campo] || campo}</label>
+                <input class="eui-input ch-dim" data-campo="${campo}" type="number" step="0.01" min="0" value="${dims && dims[campo] != null ? dims[campo] : ''}" oninput="recalcular()">
+            </div>`).join('');
+    }
+
+    function coletarDims() {
+        const dims = {};
+        document.querySelectorAll('#ch-dims .ch-dim').forEach((inp) => {
+            dims[inp.dataset.campo] = Number(String(inp.value || '').replace(',', '.')) || 0;
+        });
+        return dims;
+    }
+
+    function pesoPorPeca(material, formato, dims) {
+        const mat = MATERIAIS[material]; const fmtc = FORMATOS[formato];
+        if (!mat || !fmtc) return null;
+        const comprimento = Number(dims.comprimento || 0);
+        let area = 0;
+        try { area = fmtc.area(dims); } catch (e) { area = 0; }
+        if (!(area > 0) || !(comprimento > 0)) return null;
+        return area * comprimento * mat.densidade / 1e6; // kg
+    }
+
+    function recalcular() {
+        const dims = coletarDims();
+        const peca = pesoPorPeca($('ch-material').value, $('ch-formato').value, dims);
+        const und = Number(linhaAtual?.und || 0);
+        $('ch-res-peca').textContent = peca != null ? fmt(peca, 3) + ' kg' : '—';
+        const total = (peca != null && und > 0) ? peca * und : null;
+        $('ch-res-total').textContent = total != null ? fmt(total, 2) + ' kg' : '—';
+        const kg = Number(linhaAtual?.kg_nf || 0);
+        const pct = (total != null && kg > 0) ? (total - kg) / kg * 100 : null;
+        setDiffEl($('ch-res-diff'), pct);
+    }
+
+    async function salvarCalc() {
+        if (!linhaAtual) return;
+        const dims = coletarDims();
+        const peca = pesoPorPeca($('ch-material').value, $('ch-formato').value, dims);
+        if (peca == null) { $('ch-calc-msg').textContent = 'Preencha as dimensões para calcular o peso.'; return; }
+        const btn = $('ch-btn-salvar'); btn.disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/chapas/calculo', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: linhaAtual.item_id,
+                    material: $('ch-material').value,
+                    formato: $('ch-formato').value,
+                    dimensoes: dims,
+                    peso_por_peca: peca,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Falha ao salvar.');
+            fecharCalc();
+            carregar();
+        } catch (e) {
+            $('ch-calc-msg').textContent = e.message || 'Falha ao salvar.';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function alternarLogs() {
+        const box = $('ch-logs');
+        if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+        box.style.display = 'grid';
+        box.innerHTML = '<span class="ch-muted">Carregando histórico...</span>';
+        if (!linhaAtual?.calculo_id) { box.innerHTML = '<span class="ch-muted">Sem alterações ainda (cálculo novo).</span>'; return; }
+        try {
+            const resp = await fetch('/api/logistica/chapas/calculo/' + linhaAtual.calculo_id + '/logs');
+            const data = await resp.json();
+            const logs = data.logs || [];
+            if (!logs.length) { box.innerHTML = '<span class="ch-muted">Sem alterações registradas.</span>'; return; }
+            box.innerHTML = logs.map((lg) => {
+                const d = lg.depois || {};
+                const dims = d.dimensoes ? Object.entries(d.dimensoes).map(([k, v]) => `${k}: ${v}`).join(', ') : '';
+                return `<div class="ch-log"><b>${esc(lg.alterado_por)}</b> em ${esc(lg.alterado_em)}<br>${esc((MATERIAIS[d.material]||{}).label || d.material || '')} · ${esc((FORMATOS[d.formato]||{}).label || d.formato || '')} · ${esc(dims)} · ${d.peso_por_peca != null ? fmt(d.peso_por_peca, 3) + ' kg/peça' : ''}</div>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<span class="ch-muted">Não foi possível carregar o histórico.</span>';
+        }
+    }
+
+    function converterPolMm(origem) {
+        if (origem === 'pol') {
+            const p = Number(String($('ch-conv-pol').value || '').replace(',', '.'));
+            $('ch-conv-mm').value = Number.isFinite(p) ? (p * 25.4).toFixed(2) : '';
+        } else {
+            const m = Number(String($('ch-conv-mm').value || '').replace(',', '.'));
+            $('ch-conv-pol').value = Number.isFinite(m) ? (m / 25.4).toFixed(4) : '';
+        }
+    }
+
+    function fecharCalc() { $('ch-calc-overlay').classList.remove('open'); linhaAtual = null; }
+
+    // expõe funções usadas em onclick/oninput inline
+    window.recalcular = recalcular;
+    window.montarCamposFormato = montarCamposFormato;
+    window.salvarCalc = salvarCalc;
+    window.fecharCalc = fecharCalc;
+    window.alternarLogs = alternarLogs;
+    window.converterPolMm = converterPolMm;
+
+    $('ch-busca').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(carregar, 300); });
+    $('ch-refresh').addEventListener('click', carregar);
+    $('ch-calc-overlay').addEventListener('click', (e) => { if (e.target === $('ch-calc-overlay')) fecharCalc(); });
+    carregar();
+})();
+</script>
+{% endblock %}
