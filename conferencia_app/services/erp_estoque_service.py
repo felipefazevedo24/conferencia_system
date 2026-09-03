@@ -287,6 +287,43 @@ def buscar_ordens_compra_abertas_grv(
     return por_codigo
 
 
+def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[str, Any]:
+    """Saldo/saida/reservado por LOTE (e fallback por codigo) das chapas.
+    Best-effort: retorna estrutura vazia se a bridge nao responder."""
+    codigos_norm = []
+    vistos: set[str] = set()
+    for c in codigos or []:
+        chave = re.sub(r"[^A-Z0-9]", "", str(c or "").strip().upper())
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            codigos_norm.append(chave)
+    vazio = {"por_lote": [], "por_codigo": {}, "fontes": {}}
+    if not codigos_norm:
+        return vazio
+    try:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            return vazio
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/estoque-chapa-lote-saldo",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "codigos": codigos_norm},
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            return vazio
+        return {
+            "por_lote": data.get("por_lote") or [],
+            "por_codigo": data.get("por_codigo") or {},
+            "fontes": data.get("fontes") or {},
+        }
+    except Exception:
+        current_app.logger.warning("Nao foi possivel consultar saldo de chapa por lote.", exc_info=True)
+        return vazio
+
+
 class LocalizacaoEstoqueNaoEncontrada(Exception):
     """codigo_interno nao encontrado na tabela tproduto do ERP (HTTP 404)."""
 

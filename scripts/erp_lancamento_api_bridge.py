@@ -2352,6 +2352,189 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar entradas de chapa em lote no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/estoque-chapa-lote-saldo")
+    def consultar_estoque_chapa_lote_saldo():
+        """Saldo/saida/reservado por LOTE para as chapas do Controle de Chapas.
+
+        Auto-descobre como o GRV amarra o lote na saida (coluna direta em
+        tsaidaax OU tabela lote-serie via guid_linha) e no saldo/reserva
+        (tabela de saldo por lote). Best-effort: campos que nao forem
+        descobertos voltam vazios e o app usa o fallback por codigo.
+
+        Entrada: {"codigos": ["19-01-00603", ...], "empresa": 1}
+        Saida: {
+          "por_lote": [{"codigo","lote","kg_saida","kg_reservado","kg_saldo"}],
+          "por_codigo": {codigo: {"kg_saida","kg_reservado"}},
+          "fontes": {"saida_lote": "...", "reservado_lote": "..."}
+        }
+        """
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            empresa = int(payload.get("empresa") or 1)
+            codigos = []
+            vistos = set()
+            for c in payload.get("codigos") or []:
+                chave = re.sub(r"[^A-Z0-9]", "", str(c or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "por_lote": [], "por_codigo": {}, "fontes": {}})
+
+            cod_norm = "regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g')"
+            por_lote: dict[tuple[str, str], dict[str, float]] = {}
+            por_codigo: dict[str, dict[str, float]] = {c: {"kg_saida": 0.0, "kg_reservado": 0.0} for c in codigos}
+            fontes = {"saida_lote": None, "reservado_lote": None}
+
+            def _cols(cur, tabela):
+                cur.execute(
+                    "select column_name from information_schema.columns where table_schema='public' and table_name=%s",
+                    (tabela,),
+                )
+                return {str(r[0]).strip().lower() for r in cur.fetchall() if r and r[0]}
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    # ---- SAIDA por lote (descoberta) ----
+                    saida_cols = _cols(cur, "tsaidaax")
+                    lote_expr = None
+                    join_lote = ""
+                    if saida_cols:
+                        col_direta = next((c for c in ("lote", "cod_lote", "lote_serie", "loteserie", "num_lote") if c in saida_cols), None)
+                        if col_direta:
+                            lote_expr = f"trim(i.{_safe_ident(col_direta)}::text)"
+                            fontes["saida_lote"] = f"tsaidaax.{col_direta}"
+                        elif "guid_linha" in saida_cols:
+                            for tab in ("tsaida_aux_loteserie", "tsaidaax_loteserie", "tsaida_loteserie", "tsaida_e_loteserie", "tsaidae_loteserie", "tsaidaaux_loteserie"):
+                                lcols = _cols(cur, tab)
+                                if lcols and "guid_pai" in lcols:
+                                    lote_col = next((c for c in ("descricao", "lote", "num_lote", "lote_serie") if c in lcols), None)
+                                    if lote_col:
+                                        join_lote = f"join public.{_safe_ident(tab)} ls on ls.cod_empresa = i.cod_empresa and ls.guid_pai = i.guid_linha"
+                                        lote_expr = f"trim(ls.{_safe_ident(lote_col)}::text)"
+                                        fontes["saida_lote"] = f"{tab}.{lote_col}"
+                                        break
+                    if lote_expr:
+                        try:
+                            cur.execute(
+                                f"""
+                                select {cod_norm} as codigo, {lote_expr} as lote,
+                                       sum(coalesce(i.qtde, 0))::double precision as kg_saida
+                                from public.tsaidaax i
+                                join public.tsaida_e h on h.cod_empresa = i.cod_empresa and h.codigo = i.cod_rel
+                                join public.tproduto p on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
+                                {join_lote}
+                                where i.cod_empresa = %s and {cod_norm} = any(%s::text[]) and {lote_expr} <> ''
+                                group by 1, 2
+                                """,
+                                (empresa, codigos),
+                            )
+                            for cod, lote, kg in cur.fetchall():
+                                cod = str(cod or "").strip()
+                                lote = str(lote or "").strip()
+                                kg = float(kg or 0)
+                                por_lote.setdefault((cod, lote), {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
+                                por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_saida"] += kg
+                        except Exception:
+                            app.logger.exception("Falha na saida por lote de chapa; segue com fallback por codigo")
+
+                    # ---- Saida TOTAL por codigo (fallback confiavel) ----
+                    try:
+                        cur.execute(
+                            f"""
+                            select {cod_norm} as codigo, sum(coalesce(i.qtde, 0))::double precision as kg_saida
+                            from public.tsaidaax i
+                            join public.tproduto p on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
+                            where i.cod_empresa = %s and {cod_norm} = any(%s::text[])
+                            group by 1
+                            """,
+                            (empresa, codigos),
+                        )
+                        for cod, kg in cur.fetchall():
+                            cod = str(cod or "").strip()
+                            por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["saida_total_codigo"] = float(kg or 0)
+                    except Exception:
+                        app.logger.exception("Falha na saida total por codigo de chapa")
+
+                    # ---- Reservado: tabela saldo-por-lote (descoberta) senao por codigo ----
+                    reservado_lote_ok = False
+                    for tab in ("tproduto_lote", "testoque_lote", "tsaldo_lote", "tproduto_deposito_lote", "tprodutolote", "tsaldo_produto_lote"):
+                        lcols = _cols(cur, tab)
+                        if not lcols:
+                            continue
+                        res_col = next((c for c in ("qtde_reservada", "reservada", "qtd_reservada") if c in lcols), None)
+                        lote_col = next((c for c in ("lote", "descricao", "num_lote", "lote_serie") if c in lcols), None)
+                        prod_col = next((c for c in ("cod_produto", "codigo_produto") if c in lcols), None)
+                        if res_col and lote_col and prod_col:
+                            try:
+                                cur.execute(
+                                    f"""
+                                    select {cod_norm} as codigo, trim(l.{_safe_ident(lote_col)}::text) as lote,
+                                           sum(coalesce(l.{_safe_ident(res_col)}, 0))::double precision as kg_res
+                                    from public.{_safe_ident(tab)} l
+                                    join public.tproduto p on p.cod_empresa = l.cod_empresa and p.codigo = l.{_safe_ident(prod_col)}
+                                    where l.cod_empresa = %s and {cod_norm} = any(%s::text[])
+                                    group by 1, 2
+                                    """,
+                                    (empresa, codigos),
+                                )
+                                for cod, lote, kg in cur.fetchall():
+                                    cod = str(cod or "").strip()
+                                    lote = str(lote or "").strip()
+                                    kg = float(kg or 0)
+                                    por_lote.setdefault((cod, lote), {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_reservado"] += kg
+                                    por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_reservado"] += kg
+                                fontes["reservado_lote"] = f"{tab}.{res_col}"
+                                reservado_lote_ok = True
+                                break
+                            except Exception:
+                                app.logger.exception("Falha no reservado por lote (%s)", tab)
+                    if not reservado_lote_ok:
+                        try:
+                            cur.execute(
+                                f"""
+                                select {cod_norm} as codigo, sum(coalesce(d.qtde_reservada, 0))::double precision as kg_res
+                                from public.tproduto_deposito d
+                                join public.tproduto p on p.cod_empresa = d.cod_empresa and p.codigo = d.cod_produto
+                                where d.cod_empresa = %s and d.cod_deposito = 1 and {cod_norm} = any(%s::text[])
+                                group by 1
+                                """,
+                                (empresa, codigos),
+                            )
+                            for cod, kg in cur.fetchall():
+                                cod = str(cod or "").strip()
+                                por_codigo.setdefault(cod, {"kg_saida": 0.0, "kg_reservado": 0.0})["kg_reservado"] = float(kg or 0)
+                            fontes["reservado_lote"] = "tproduto_deposito.qtde_reservada (por codigo)"
+                        except Exception:
+                            app.logger.exception("Falha no reservado por codigo")
+
+            saida_por_lote = [
+                {
+                    "codigo": cod,
+                    "lote": lote,
+                    "kg_saida": round(v.get("kg_saida", 0.0), 4),
+                    "kg_reservado": round(v.get("kg_reservado", 0.0), 4),
+                }
+                for (cod, lote), v in por_lote.items()
+            ]
+            return jsonify({
+                "sucesso": True,
+                "por_lote": saida_por_lote,
+                "por_codigo": {c: {
+                    "kg_saida": round(v.get("saida_total_codigo", v.get("kg_saida", 0.0)), 4),
+                    "kg_reservado": round(v.get("kg_reservado", 0.0), 4),
+                } for c, v in por_codigo.items()},
+                "fontes": fontes,
+            })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar saldo de chapa por lote no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/entrada-chapa-desde")
     def consultar_entradas_chapa_desde():
         cfg = _config()
