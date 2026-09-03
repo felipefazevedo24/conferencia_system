@@ -514,15 +514,17 @@ def _coletar_planejamento() -> dict:
     }
 
 
-# Resumo do modulo Comex pro painel de TV: os 10 status granulares do
+# Resumo do modulo Comex pro painel de TV: os 11 status granulares do
 # workflow (ver comex_service.MODULOS_SEQUENCIA) agrupados em 3 "baskets"
 # resumidos - mesmo modelo em colunas tipo kanban do Planejamento de
 # Tarefas acima, so que a fonte dos cards e o ComexProcesso em vez do
-# PlannerBoard.
+# PlannerBoard. Concluido entra junto de Transporte/NF-Cambio na basket
+# "Entregue" - continua aparecendo na torre (nao e' removido do
+# acompanhamento so por ter fechado o processo).
 _COMEX_BASKETS = [
     {"titulo": "Preparação", "color": "#fbbf24", "status": ("OC", "PO", "Cotacao", "Instrucao")},
     {"titulo": "Trânsito", "color": "#3da5f4", "status": ("Coleta", "EmTransito", "Desembarque", "Desembaraco")},
-    {"titulo": "Entregue", "color": "#34d399", "status": ("Transporte", "NFCambio")},
+    {"titulo": "Entregue", "color": "#34d399", "status": ("Transporte", "NFCambio", "Concluido")},
 ]
 _COMEX_STATUS_LABEL = {
     "OC": "OC",
@@ -535,6 +537,7 @@ _COMEX_STATUS_LABEL = {
     "Desembaraco": "Desembaraço",
     "Transporte": "Transporte",
     "NFCambio": "NF/Câmbio",
+    "Concluido": "Concluído",
 }
 _COMEX_STATUS_PARA_BASKET = {
     status: idx

@@ -4760,6 +4760,7 @@ def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
             ("IM-2026-00008", "Desembaraco", "Fornecedor H"),
             ("IM-2026-00009", "Transporte", "Fornecedor I"),
             ("IM-2026-00010", "NFCambio", "Fornecedor J"),
+            ("IM-2026-00013", "Concluido", "Fornecedor L"),
         ]
         for id_op, status, fornecedor in dados:
             db.session.add(ComexProcesso(
@@ -4781,10 +4782,13 @@ def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
 
     data = client.get("/api/painel/comex").get_json()
 
-    assert data["kpis"]["total"] == 11  # 10 originais + o principal; a combinada nao conta
+    assert data["kpis"]["total"] == 12  # 11 originais (com o Concluido) + o principal; a combinada nao conta
     titulos = [c["titulo"] for c in data["colunas"]]
     assert titulos == ["Preparação", "Trânsito", "Entregue"]
-    assert [c["total"] for c in data["colunas"]] == [5, 4, 2]
+    assert [c["total"] for c in data["colunas"]] == [5, 4, 3]  # Entregue = Transporte + NF/Cambio + Concluido
+
+    entregue_labels = {card["status_detalhado"] for card in data["colunas"][2]["cards"]}
+    assert entregue_labels == {"Transporte", "NF/Câmbio", "Concluído"}
 
     todos_ids = {card["id_op"] for col in data["colunas"] for card in col["cards"]}
     assert "IM-2026-00012" not in todos_ids
