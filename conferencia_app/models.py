@@ -203,6 +203,9 @@ class ItemNota(db.Model):
     material_cliente = db.Column(db.Boolean, nullable=False, default=False, index=True)
     remessa = db.Column(db.Boolean, nullable=False, default=False, index=True)
     sem_conferencia_logistica = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    # NF de serviço marcada manualmente no Auditor: pula a aprovação de Compras
+    # na divergência XML x pedido (serviço não passa por essa aprovação).
+    servico = db.Column(db.Boolean, nullable=False, default=False, index=True)
     auditor_status = db.Column(db.String(30), default="NaoAuditado", index=True)
     auditor_decisao = db.Column(db.String(20), default="PendenteDecisao", index=True)
     auditor_diagnostico = db.Column(db.String(4000))

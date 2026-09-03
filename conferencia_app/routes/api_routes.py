@@ -628,6 +628,30 @@ def _quantidade_divergente_mas_tolerada(item: ItemNota, quantidade_convertida: f
     return 0.0001 < diferenca <= _get_tolerancia_quantidade(item)
 
 
+def _get_limite_divergencia_kg_mm(item: ItemNota) -> float:
+    """Limite (em quantidade) ACIMA do qual a diferença de KG/MM vira uma
+    divergência que bloqueia a conferência (pede justificativa). Entre a
+    tolerância (2%) e este limite, a diferença é ACEITA sem bloquear e fica
+    registrada apenas no log de tentativas (visível só para o admin)."""
+    quantidade_esperada = float(item.qtd_real or 0)
+    try:
+        limite_pct = float(current_app.config.get("CONFERENCIA_KG_MM_LIMITE_DIVERGENCIA_PCT", 0.10))
+    except (TypeError, ValueError):
+        limite_pct = 0.10
+    return max(abs(quantidade_esperada) * limite_pct, 0.0001)
+
+
+def _quantidade_kg_mm_aceita_sem_bloqueio(item: ItemNota, quantidade_convertida: float) -> bool:
+    """True quando a unidade é KG/MM e a diferença está dentro do limite maior
+    (aceita sem bloquear a conferência), mesmo fora dos 2% de tolerância."""
+    unidade = _normalize_unidade_medida(item.unidade_comercial)
+    if unidade not in {"KG", "MM"}:
+        return False
+    quantidade_esperada = float(item.qtd_real or 0)
+    diferenca = abs(quantidade_convertida - quantidade_esperada)
+    return diferenca <= _get_limite_divergencia_kg_mm(item)
+
+
 def _unidade_eh_chapa(unidade: str) -> bool:
     """Material recebido em peso (chapa), identificado pela unidade de medida."""
     return _normalize_unidade_medida(unidade) in {"KG", "T", "TO", "TON", "TONELADA", "TONELADAS"}
@@ -4680,6 +4704,7 @@ def detalhe_nota_xml_auditor(numero_nota):
             "material_cliente": bool(itens[0].material_cliente),
             "remessa": bool(itens[0].remessa),
             "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+            "servico": bool(itens[0].servico),
             "auditor_observacao": itens[0].auditor_observacao or "",
             "auditado_por": itens[0].auditor_usuario or "---",
             "auditado_em": itens[0].auditor_data.strftime("%d/%m/%Y %H:%M") if itens[0].auditor_data else "---",
@@ -5187,6 +5212,7 @@ def vincular_pedido_xml_auditor():
     material_cliente = bool(data.get("material_cliente", False))
     remessa = bool(data.get("remessa", False))
     sem_conferencia_logistica = bool(data.get("sem_conferencia_logistica", False))
+    servico = bool(data.get("servico", False))
     observacao = str(data.get("observacao") or "").strip()
 
     if not numero_nota:
@@ -5207,6 +5233,7 @@ def vincular_pedido_xml_auditor():
         item.material_cliente = material_cliente
         item.remessa = remessa
         item.sem_conferencia_logistica = sem_conferencia_logistica
+        item.servico = servico
         item.pedido_compra = None if (material_cliente or remessa) else novo_pedido
         item.auditor_observacao = observacao[:500] if observacao else None
 
@@ -5237,7 +5264,8 @@ def vincular_pedido_xml_auditor():
     # Operador confirmou seguir com divergencia (marcador na observacao) -> este
     # e o "OK" que dispara o aviso a Compras no Teams (antes disso ele ainda podia
     # ajustar os vinculos e resolver). So dispara se ainda houver divergencia real.
-    if not material_cliente and not remessa and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
+    # Servico NAO passa por essa aprovacao de Compras.
+    if not material_cliente and not remessa and not servico and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
         _detectar_e_notificar_divergencia_confirmada(numero_nota, pedido_compra, cnpj_emitente, fornecedor)
 
     return jsonify(
@@ -5543,12 +5571,14 @@ def liberar_nota_via_xml_auditor():
     material_cliente_in_payload = "material_cliente" in data
     remessa_in_payload = "remessa" in data
     sem_conf_logistica_in_payload = "sem_conferencia_logistica" in data
+    servico_in_payload = "servico" in data
     pedido_compra_in_payload = "pedido_compra" in data
     observacao_in_payload = "observacao" in data
-    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or pedido_compra_in_payload or observacao_in_payload:
+    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or servico_in_payload or pedido_compra_in_payload or observacao_in_payload:
         material_cliente_payload = bool(data.get("material_cliente", False))
         remessa_payload = bool(data.get("remessa", False))
         sem_conf_logistica_payload = bool(data.get("sem_conferencia_logistica", False))
+        servico_payload = bool(data.get("servico", False))
         pedido_compra_payload = str(data.get("pedido_compra") or "").strip()
         observacao_payload = str(data.get("observacao") or "").strip()
 
@@ -5560,6 +5590,8 @@ def liberar_nota_via_xml_auditor():
                 item.remessa = remessa_payload
             if sem_conf_logistica_in_payload:
                 item.sem_conferencia_logistica = sem_conf_logistica_payload
+            if servico_in_payload:
+                item.servico = servico_payload
 
             if item.material_cliente or bool(item.remessa):
                 item.pedido_compra = None
@@ -5590,6 +5622,7 @@ def liberar_nota_via_xml_auditor():
     material_cliente = bool(itens[0].material_cliente)
     remessa = bool(itens[0].remessa)
     sem_conferencia_logistica = bool(itens[0].sem_conferencia_logistica)
+    servico = bool(itens[0].servico)
     if not material_cliente and not remessa and not pedidos_nota:
         return jsonify(
             {
@@ -5599,7 +5632,8 @@ def liberar_nota_via_xml_auditor():
         ), 409
 
     # Divergência XML x pedido: Compras decide via Teams/tela de aprovação.
-    if not material_cliente and not remessa:
+    # Serviço NÃO passa por essa aprovação (o operador marca a NF como serviço).
+    if not material_cliente and not remessa and not servico:
         ultima_decisao = (
             DivergenciaPedidoAprovacao.query
             .filter_by(numero_nota=numero_nota)
@@ -7212,7 +7246,13 @@ def validar():
 
             quantidade_convertida = quantidade * fator
 
-            if not _quantidade_esta_dentro_da_tolerancia(item, quantidade_convertida):
+            dentro_tolerancia = _quantidade_esta_dentro_da_tolerancia(item, quantidade_convertida)
+            # KG/MM: diferença acima dos 2% mas dentro do limite maior (10%) é
+            # ACEITA sem bloquear a conferência. Só registra no log de tentativas
+            # (visível para o admin), nunca sinaliza nada para o conferente.
+            kg_mm_tolerado = (not dentro_tolerancia) and _quantidade_kg_mm_aceita_sem_bloqueio(item, quantidade_convertida)
+
+            if not dentro_tolerancia and not kg_mm_tolerado:
                 msg_erro = _compose_motivo_pendencia(item.id, motivos_itens, motivos_tipos, motivos_observacoes) or "Divergência"
                 msg_resultado = "Quantidade diferente da NF."
                 chapas_registro = _formatar_chapas(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
@@ -7257,14 +7297,17 @@ def validar():
                     }
                 )
             else:
-                divergencia_tolerada = _quantidade_divergente_mas_tolerada(item, quantidade_convertida)
-                peso_identico = _peso_identico_ao_nf(item, quantidade_convertida)
-                if peso_identico:
-                    msg_ok = "Peso idêntico ao da NF. Confira se o material foi realmente pesado."
-                elif divergencia_tolerada:
-                    msg_ok = "Quantidade diferente da NF."
+                # Log de tentativa para o admin: quando é KG/MM tolerado, deixa
+                # explícita a diferença (só o admin vê no histórico). Para o
+                # conferente a mensagem é sempre neutra, sem sinal de peso.
+                if kg_mm_tolerado:
+                    esperada = float(item.qtd_real or 0)
+                    diff = quantidade_convertida - esperada
+                    pct = (abs(diff) / abs(esperada) * 100) if esperada else 0.0
+                    msg_log = f"Peso divergente tolerado: contado {quantidade_convertida:g} vs NF {esperada:g} (Δ {pct:.1f}%)"
                 else:
-                    msg_ok = "Conferido."
+                    msg_log = "Conferido."
+                msg_ok = "Conferido."
                 chapas_registro = _formatar_chapas(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
                 if chapas_registro:
                     msg_ok = f"{msg_ok} {chapas_registro}"
@@ -7277,13 +7320,12 @@ def validar():
                     unidade_informada,
                     fator,
                     "OK",
-                    msg_ok,
+                    msg_log if kg_mm_tolerado else msg_ok,
                     user,
                 )
-                item_result = {"id": item.id, "descricao": item.descricao, "status": "OK", "msg": msg_ok}
-                if peso_identico:
-                    item_result["alerta"] = "peso_identico"
-                resultado_itens.append(item_result)
+                resultado_itens.append(
+                    {"id": item.id, "descricao": item.descricao, "status": "OK", "msg": msg_ok}
+                )
         except Exception:
             erros.append(item.descricao)
             divergencias_ids.append(str(item.id))
