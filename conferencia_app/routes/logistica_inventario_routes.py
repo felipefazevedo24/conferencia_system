@@ -1118,6 +1118,12 @@ def api_chapas_listar():
         chave = (_codnorm(r.get("codigo")), str(r.get("lote") or "").strip())
         por_lote[chave] = {"kg_saida": float(r.get("kg_saida") or 0), "kg_reservado": float(r.get("kg_reservado") or 0)}
 
+    # Saldo REAL por código (GRV, depósito principal). É a informação básica:
+    # em estoque / reservado / disponível de verdade. A baixa já vem refletida
+    # aqui (o GRV decrementa o saldo), então não recalculamos nada por fora.
+    saldo_cod = {_codnorm(c): v for c, v in (saldo_info.get("saldo_codigo") or {}).items()}
+    reservas_os_map = {_codnorm(c): (lst or []) for c, lst in (saldo_info.get("reservas_os") or {}).items()}
+
     linhas = []
     for i in itens:
         codigo = i.codigo_grv or i.codigo
@@ -1140,6 +1146,7 @@ def api_chapas_listar():
     itens_out = []
     for l in linhas:
         kg_nf = l["kg_nf"]; und = l["und"]; peso = l["peso"]
+        real_cod = saldo_cod.get(l["codigo_norm"])
         kg_saida = float(l.get("kg_saida") or 0)
         kg_res = float(l.get("kg_reservado") or 0)
         kg_saldo = max(kg_nf - kg_saida, 0.0)
@@ -1151,6 +1158,9 @@ def api_chapas_listar():
         chapas_estoque = max(und - chapas_baixadas, 0.0) if chapas_baixadas is not None else None
         chapas_reservadas = (kg_res / peso) if peso else None
         chapas_disp = max(chapas_estoque - chapas_reservadas, 0.0) if (chapas_estoque is not None and chapas_reservadas is not None) else None
+        # Histórico = o código não tem mais saldo real no GRV (tudo consumido).
+        # Sem dado do GRV (bridge fora), mantém em estoque (nunca falso-histórico).
+        historico = bool(real_cod is not None and float(real_cod.get("qtde_total") or 0) <= 0.0001)
         out = {
             "item_id": l["item_id"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
             "descricao": l["descricao"], "fornecedor": l["fornecedor"], "ar": l["ar"],
@@ -1163,7 +1173,7 @@ def api_chapas_listar():
             "chapas_reservadas": chapas_reservadas,
             "chapas_disponiveis": chapas_disp,
             "peso_calculado_total": peso_calc_total, "pct_diferenca": pct_diff,
-            "historico": kg_saldo <= 0.0001 and kg_saida > 0,
+            "historico": historico,
             "material": l.get("material", ""), "formato": l.get("formato", ""),
             "dimensoes": l.get("dimensoes"), "peso_por_peca": l.get("peso_por_peca"),
             "calculo_id": l.get("calculo_id"), "atualizado_por": l.get("atualizado_por", ""),
@@ -1178,17 +1188,45 @@ def api_chapas_listar():
                 continue
         itens_out.append(out)
 
+    # Saldo real e reservas por OS agrupados por código (pro cabeçalho do item).
+    saldo_codigo_out = {}
+    reservas_os_out = {}
+    for l in itens_out:
+        cn = _codnorm(l["codigo"])
+        r = saldo_cod.get(cn)
+        if r is not None and l["codigo"] not in saldo_codigo_out:
+            saldo_codigo_out[l["codigo"]] = {
+                "em_estoque_kg": round(float(r.get("qtde_total") or 0), 2),
+                "reservado_kg": round(float(r.get("qtde_reservada") or 0), 2),
+                "disponivel_kg": round(float(r.get("qtde_disponivel") or 0), 2),
+                "unidade": r.get("unidade") or "KG",
+            }
+        ros = reservas_os_map.get(cn)
+        if ros and l["codigo"] not in reservas_os_out:
+            reservas_os_out[l["codigo"]] = ros
+
     ativos = [l for l in itens_out if not l["historico"]]
+    codigos_ativos = {l["codigo"] for l in ativos}
+    if saldo_codigo_out:
+        total_estoque_kg = round(sum(saldo_codigo_out.get(c, {}).get("em_estoque_kg", 0.0) for c in codigos_ativos), 2)
+        total_reservado_kg = round(sum(saldo_codigo_out.get(c, {}).get("reservado_kg", 0.0) for c in codigos_ativos), 2)
+        total_disponivel_kg = round(sum(saldo_codigo_out.get(c, {}).get("disponivel_kg", 0.0) for c in codigos_ativos), 2)
+    else:
+        total_estoque_kg = round(sum(l["kg_saldo"] for l in ativos), 2)
+        total_reservado_kg = round(sum(l["kg_reservado"] for l in ativos), 2)
+        total_disponivel_kg = round(sum(l["kg_disponivel"] for l in ativos), 2)
     resumo = {
         "chapas": len(ativos),
-        "total_kg": round(sum(l["kg_saldo"] for l in ativos), 2),
-        "reservadas": round(sum((l["chapas_reservadas"] or 0) for l in ativos), 1),
-        "disponiveis": round(sum((l["chapas_disponiveis"] or 0) for l in ativos), 1),
+        "codigos": len(codigos_ativos),
+        "total_kg": total_estoque_kg,
+        "reservado_kg": total_reservado_kg,
+        "disponivel_kg": total_disponivel_kg,
         "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
     }
     return jsonify({
         "resumo": resumo, "densidades": CHAPA_DENSIDADES,
-        "itens": itens_out, "fontes": saldo_info.get("fontes") or {},
+        "itens": itens_out, "saldo_codigo": saldo_codigo_out,
+        "reservas_os": reservas_os_out, "fontes": saldo_info.get("fontes") or {},
     })
 
 
