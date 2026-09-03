@@ -543,6 +543,23 @@ _COMEX_STATUS_PARA_BASKET = {
 }
 
 
+def _dias_uteis_desde(momento: datetime, agora: datetime) -> int:
+    """Conta dias uteis (seg-sex, sem feriados - so pula sabado/domingo)
+    inteiros decorridos entre `momento` e `agora`, por data corrida (nao
+    por bloco de 24h) - se `momento` foi sexta e hoje e' segunda, conta 1
+    dia util (o fim de semana nao conta), nao 3 dias corridos."""
+    if agora <= momento:
+        return 0
+    dia = momento.date()
+    fim = agora.date()
+    dias_uteis = 0
+    while dia < fim:
+        dia += timedelta(days=1)
+        if dia.weekday() < 5:  # 0=segunda ... 4=sexta
+            dias_uteis += 1
+    return dias_uteis
+
+
 def _coletar_comex() -> dict:
     """Resumo do modulo Comex pro painel de TV, nos 3 baskets acima. Cada
     card mostra a OC (numero da Ordem de Compra - cai pro ID OP quando o
@@ -551,8 +568,9 @@ def _coletar_comex() -> dict:
     detalhado (dentro da basket) e a ultima interacao (comentario OU
     mudanca de processo - estornos nao contam, ver comex_service.
     estornar) - `ultima_interacao_atrasada` marca quando ja fazem mais de
-    3 dias, pro front destacar em vermelho. `processo_id` vai junto pra
-    buscar os itens da PO ao clicar no card (ver painel_tv_comex_itens)."""
+    3 dias UTEIS (fim de semana nao conta, ver _dias_uteis_desde), pro
+    front destacar em vermelho. `processo_id` vai junto pra buscar os
+    itens da PO ao clicar no card (ver painel_tv_comex_itens)."""
     from ..models import ComexComentario, ComexProcesso
 
     # OCs combinadas na PO de outro processo somem da lista principal -
@@ -584,6 +602,7 @@ def _coletar_comex() -> dict:
     processos_com_interacao = [(p, _ultima_interacao(p)) for p in processos]
     processos_com_interacao.sort(key=lambda item: item[1] or datetime.min, reverse=True)
 
+    agora = datetime.now()
     colunas_cards: list[list[dict]] = [[] for _ in _COMEX_BASKETS]
     for p, ultima_interacao in processos_com_interacao:
         idx = _COMEX_STATUS_PARA_BASKET.get(p.status_modulo)
@@ -598,10 +617,10 @@ def _coletar_comex() -> dict:
                 "status_detalhado": _COMEX_STATUS_LABEL.get(p.status_modulo, p.status_modulo),
                 "pagador_frete": p.pagador_frete or "",
                 "ultima_interacao": ultima_interacao.strftime("%d/%m %H:%M") if ultima_interacao else "",
-                # Mais de 3 dias sem interacao (comentario/mudanca real) -
-                # sinaliza processo parado direto na tela, sem precisar
-                # calcular data no front.
-                "ultima_interacao_atrasada": bool(ultima_interacao and (datetime.now() - ultima_interacao).days > 3),
+                # Mais de 3 dias UTEIS sem interacao (comentario/mudanca
+                # real) - fim de semana nao conta, sinaliza processo parado
+                # direto na tela, sem precisar calcular data no front.
+                "ultima_interacao_atrasada": bool(ultima_interacao and _dias_uteis_desde(ultima_interacao, agora) > 3),
             }
         )
 

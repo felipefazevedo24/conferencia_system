@@ -4689,10 +4689,30 @@ def test_painel_tv_comex_card_mostra_oc_e_popup_lista_itens_da_po(tmp_path):
     assert itens == [{"codigo": "X1", "descricao": "Peça A", "quantidade": 10.0}]
 
 
+def test_dias_uteis_desde_pula_fim_de_semana():
+    """_dias_uteis_desde conta dias uteis (seg-sex) decorridos, sem contar
+    sabado/domingo - sexta pra segunda e' 1 dia util, nao 3 dias corridos."""
+    from conferencia_app.routes.painel_tv_routes import _dias_uteis_desde
+
+    sexta = datetime(2026, 9, 4, 10, 0)  # sexta-feira
+    assert _dias_uteis_desde(sexta, datetime(2026, 9, 7, 10, 0)) == 1  # segunda
+    assert _dias_uteis_desde(sexta, datetime(2026, 9, 8, 10, 0)) == 2  # terça
+    assert _dias_uteis_desde(sexta, datetime(2026, 9, 9, 10, 0)) == 3  # quarta
+    assert _dias_uteis_desde(sexta, datetime(2026, 9, 10, 10, 0)) == 4  # quinta
+
+    segunda = datetime(2026, 9, 7, 8, 0)
+    assert _dias_uteis_desde(segunda, datetime(2026, 9, 10, 8, 0)) == 3  # quinta, mesma semana
+    assert _dias_uteis_desde(segunda, datetime(2026, 9, 11, 8, 0)) == 4  # sexta, mesma semana
+
+
 def test_painel_tv_comex_mostra_pagador_frete_e_marca_interacao_atrasada(tmp_path):
     """Card mostra o pagador do frete, e 'ultima_interacao_atrasada' fica
-    True quando ja fazem mais de 3 dias (nao 3 dias exatos) desde a ultima
-    interacao - o front usa essa flag pra pintar so a data de vermelho."""
+    True quando ja fazem mais de 3 dias UTEIS desde a ultima interacao -
+    usa deltas de calendario que sao inequivocos em qualquer dia da semana
+    em que o teste rodar (1 dia corrido nunca passa de 3 dias uteis; 10
+    dias corridos sempre passam, mesmo cruzando 2 fins de semana no pior
+    caso) - o limite exato de 3 dias uteis e' coberto por
+    test_dias_uteis_desde_pula_fim_de_semana, sem depender de "hoje"."""
     app = build_test_app(tmp_path)
     client = app.test_client()
 
@@ -4700,9 +4720,8 @@ def test_painel_tv_comex_mostra_pagador_frete_e_marca_interacao_atrasada(tmp_pat
         from conferencia_app.models import ComexProcesso
 
         casos = [
-            ("F1", timedelta(days=2), False),
-            ("F2", timedelta(days=3, hours=1), False),  # .days ainda e' 3, nao > 3
-            ("F3", timedelta(days=4), True),
+            ("F1", timedelta(days=1), False),
+            ("F2", timedelta(days=10), True),
         ]
         for fornecedor, delta, _ in casos:
             db.session.add(ComexProcesso(
