@@ -407,8 +407,8 @@
             <div class="cx-field" id="cx-cot-substatus-wrap">
                 <span class="eui-badge" id="cx-cot-substatus-badge"></span>
             </div>
-            <div class="cx-section-title">Gerar novo link de cotação</div>
-            <small style="color:var(--eui-muted); margin-top:-8px;">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
+            <div class="cx-section-title" id="cx-cot-secao-titulo">Gerar novo link de cotação</div>
+            <small style="color:var(--eui-muted); margin-top:-8px;" id="cx-cot-secao-sub">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
             <div class="cx-field">
                 <label>Tipo de frete</label>
                 <select id="cx-cot-tipo-frete" class="eui-select">
@@ -416,11 +416,11 @@
                     <option value="LCL_AEREO">LCL / Aéreo (volumes soltos)</option>
                 </select>
             </div>
-            <div class="cx-field">
+            <div class="cx-field" id="cx-cot-forwarders-wrap">
                 <label>Freight Forwarders cadastrados <small style="font-weight:400; color:var(--eui-muted);">— marque um ou mais pra enviar o link em lote</small></label>
                 <div class="cx-checklist" id="cx-cot-forwarders"><span class="cx-empty-mini">Carregando…</span></div>
             </div>
-            <div class="cx-field">
+            <div class="cx-field" id="cx-cot-email-wrap">
                 <label>Outro e-mail (opcional — além dos marcados acima)</label>
                 <input type="email" id="cx-cot-email" class="eui-input" placeholder="frete@transportadora.com">
             </div>
@@ -454,7 +454,8 @@
                 <label>Valor da mercadoria (USD) <small style="font-weight:400; color:var(--eui-muted);">— essencial pro prestador calcular o seguro</small></label>
                 <input type="text" inputmode="decimal" id="cx-cot-valor-mercadoria" class="eui-input">
             </div>
-            <div style="display:flex; justify-content:flex-end;">
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm hidden" id="cx-cot-btn-cancelar-edicao">Cancelar edição</button>
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="cx-cot-btn-gerar"><i class="fas fa-link"></i> Gerar link</button>
             </div>
             <div class="cx-field hidden" id="cx-cot-link-wrap">
@@ -1269,6 +1270,13 @@
         return Array.from($("cx-po-outras-ocs").querySelectorAll("input[type=checkbox]:checked")).map((c) => parseInt(c.value, 10));
     }
 
+    // Mesmo mapeamento de comex_service._derivar_tipo_operacao - so pra
+    // decidir se vale avisar que o ID OP/numero da PO vao mudar.
+    function _tipoOperacaoDe(direcao, modal) {
+        const mapa = { "IMPO|Marítimo": "IM", "IMPO|Aéreo": "IA", "EXPO|Marítimo": "EM", "EXPO|Aéreo": "EA" };
+        return mapa[`${direcao}|${modal}`] || "IM";
+    }
+
     async function salvarPo(finalizar, opts) {
         opts = opts || {};
         if (!processoPoAtual) return false;
@@ -1278,6 +1286,19 @@
         if (!modal) { toast("Selecione o modal (Aéreo ou Marítimo).", "error"); return false; }
         const pagador = $("cx-po-pagador-frete").value;
         if (!pagador) { toast("Selecione o pagador do frete.", "error"); return false; }
+        // PO ja finalizada + mudou direcao/modal -> o ID OP e o numero da PO
+        // vao ser regenerados (estrategia inicial alterada de verdade,
+        // requisito de 03/09) - confirma antes, ja que documentos/e-mails
+        // enviados com o numero antigo nao sao atualizados retroativamente.
+        if (!opts.silencioso && processoPoAtual.po_status === "Finalizada"
+            && _tipoOperacaoDe(direcao, modal) !== processoPoAtual.tipo_operacao) {
+            const ok = confirm(
+                "Você está mudando a direção/modal de uma PO já finalizada. " +
+                "Isso vai gerar um novo ID OP e número de PO - documentos/e-mails já enviados " +
+                "com o número antigo não são atualizados automaticamente. Confirma a mudança?"
+            );
+            if (!ok) return false;
+        }
         try {
             await api(`/api/comex/processos/${processoPoAtual.id}/po`, {
                 method: "POST",
@@ -1370,6 +1391,13 @@
 
     async function abrirModalCotacao(p) {
         processoCotacaoAtual = p;
+        cotacaoEditandoId = null;
+        $("cx-cot-secao-titulo").textContent = "Gerar novo link de cotação";
+        $("cx-cot-secao-sub").textContent = "Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.";
+        $("cx-cot-forwarders-wrap").classList.remove("hidden");
+        $("cx-cot-email-wrap").classList.remove("hidden");
+        $("cx-cot-btn-gerar").innerHTML = '<i class="fas fa-link"></i> Gerar link';
+        $("cx-cot-btn-cancelar-edicao").classList.add("hidden");
         $("cx-cot-id-op").textContent = p.id_op;
         const substatusEl = $("cx-cot-substatus-badge");
         if (p.cotacao_substatus) {
@@ -1450,6 +1478,34 @@
         baselineDadosEmbarque = _snapshotDadosEmbarqueForm();
     }
 
+    // ── Editar cotação Pendente (corrige FCL/LCL e demais dados sem gerar
+    // link novo - mesmo link/token ja enviado continua valendo) ──────────
+    let cotacaoEditandoId = null;
+    function iniciarEdicaoCotacao(c) {
+        cotacaoEditandoId = c.id;
+        preencherFormularioCotacao(processoCotacaoAtual, c);
+        $("cx-cot-secao-titulo").textContent = `Editando cotação${c.fornecedor_frete ? " — " + c.fornecedor_frete : ""}`;
+        $("cx-cot-secao-sub").textContent = "Corrige os dados que a Columbia pré-preencheu (ex.: tipo de frete) - o mesmo link já enviado continua valendo, sem precisar gerar outro.";
+        $("cx-cot-forwarders-wrap").classList.add("hidden");
+        $("cx-cot-email-wrap").classList.add("hidden");
+        $("cx-cot-link-wrap").classList.add("hidden");
+        $("cx-cot-btn-gerar").innerHTML = '<i class="fas fa-check"></i> Salvar alterações';
+        $("cx-cot-btn-cancelar-edicao").classList.remove("hidden");
+        window.scrollTo?.({ top: 0 });
+        $("cx-modal-cotacao").scrollTop = 0;
+    }
+    function cancelarEdicaoCotacao() {
+        cotacaoEditandoId = null;
+        $("cx-cot-secao-titulo").textContent = "Gerar novo link de cotação";
+        $("cx-cot-secao-sub").textContent = "Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.";
+        $("cx-cot-forwarders-wrap").classList.remove("hidden");
+        $("cx-cot-email-wrap").classList.remove("hidden");
+        $("cx-cot-btn-gerar").innerHTML = '<i class="fas fa-link"></i> Gerar link';
+        $("cx-cot-btn-cancelar-edicao").classList.add("hidden");
+        if (processoCotacaoAtual) preencherFormularioCotacao(processoCotacaoAtual, cotacoesExistentesAtual[0] || null);
+    }
+    $("cx-cot-btn-cancelar-edicao").addEventListener("click", cancelarEdicaoCotacao);
+
     function atualizarCamposTipoFreteCotacao() {
         const isFcl = $("cx-cot-tipo-frete").value === "FCL";
         $("cx-cot-equipamento-wrap").classList.toggle("hidden", !isFcl);
@@ -1514,6 +1570,11 @@
                 acao = '<span class="eui-badge eui-badge--success">Escolhida</span>';
             } else if (c.status === "Recebida") {
                 acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-escolher-cotacao="${c.id}" data-sugerida="${c.is_sugerida_pelo_sistema ? "1" : "0"}">Escolher</button>`;
+            } else if (!c.expirado) {
+                // Pendente (aguardando o prestador responder) e ainda dentro
+                // da validade - da pra corrigir o que foi pre-preenchido
+                // (ex.: tipo de frete FCL/LCL) sem precisar gerar um link novo.
+                acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-editar-cotacao="${c.id}"><i class="fas fa-pen"></i> Editar</button>`;
             }
             if (c.proximas_saidas) {
                 acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-ver-saidas="${c.id}" title="Próximas saídas informadas pelo prestador"><i class="fas fa-calendar-days"></i></button> ${acao}`;
@@ -1563,6 +1624,37 @@
 
     $("cx-cot-btn-gerar").addEventListener("click", async () => {
         if (!processoCotacaoAtual) return;
+
+        if (cotacaoEditandoId) {
+            const btnEdit = $("cx-cot-btn-gerar");
+            btnEdit.disabled = true;
+            try {
+                await api(`/api/comex/cotacoes/${cotacaoEditandoId}/editar`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        tipo_frete: $("cx-cot-tipo-frete").value,
+                        origem: $("cx-cot-origem").value.trim(),
+                        destino: $("cx-cot-destino").value.trim(),
+                        incoterm: $("cx-cot-incoterm").value.trim(),
+                        qtd_40hc: $("cx-cot-qtd-40hc").value || null,
+                        qtd_20dry: $("cx-cot-qtd-20dry").value || null,
+                        imo_classe: $("cx-cot-imo").value.trim(),
+                        un_numero: $("cx-cot-un").value.trim(),
+                        valor_mercadoria_usd: _parseNumeroPt($("cx-cot-valor-mercadoria").value),
+                        volumes: volumesCotacaoAtual,
+                    }),
+                });
+                toast("Cotação atualizada!", "success");
+                cancelarEdicaoCotacao();
+                carregarCotacoes(processoCotacaoAtual.id);
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                btnEdit.disabled = false;
+            }
+            return;
+        }
+
         const dadosMudaram = baselineDadosEmbarque !== null && _snapshotDadosEmbarqueForm() !== baselineDadosEmbarque;
         const temCotacaoEmAndamento = cotacoesExistentesAtual.some((c) => c.status === "Pendente" || c.status === "Recebida");
         if (dadosMudaram && temCotacaoEmAndamento) {
@@ -1646,6 +1738,13 @@
         if (btnVer) {
             const c = cotacoesExistentesAtual.find((x) => String(x.id) === btnVer.dataset.verSaidas);
             alert("Próximas saídas informadas pelo prestador:\n\n" + (c ? c.proximas_saidas : "—"));
+            return;
+        }
+
+        const btnEditar = e.target.closest("[data-editar-cotacao]");
+        if (btnEditar) {
+            const c = cotacoesExistentesAtual.find((x) => String(x.id) === btnEditar.dataset.editarCotacao);
+            if (c) iniciarEdicaoCotacao(c);
             return;
         }
 

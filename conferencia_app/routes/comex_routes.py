@@ -897,6 +897,28 @@ def api_criar_link_cotacao(processo_id):
     })
 
 
+@comex_bp.route("/api/comex/cotacoes/<int:cotacao_id>/editar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_editar_cotacao(cotacao_id):
+    """Edita uma cotacao ainda Pendente (fornecedor de frete ainda nao
+    respondeu) - mesmo link/token, so corrige os dados pre-preenchidos
+    (tipo de frete, embarque, etc.). Ver comex_service.editar_cotacao_pendente."""
+    cotacao = ComexCotacao.query.get(cotacao_id)
+    if not cotacao:
+        return jsonify({"error": "Cotação não encontrada."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    tipo_frete = str(payload.get("tipo_frete") or "").strip().upper()
+    usuario = session.get("username", "desconhecido")
+
+    try:
+        cotacao = svc.editar_cotacao_pendente(cotacao, tipo_frete=tipo_frete, dados=payload, usuario=usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"message": "Cotação atualizada.", "cotacao": _cotacao_payload(cotacao)})
+
+
 @comex_bp.route("/api/comex/cotacoes/<int:cotacao_id>/escolher", methods=["POST"])
 @permission_required(PERMISSION)
 def api_escolher_cotacao(cotacao_id):

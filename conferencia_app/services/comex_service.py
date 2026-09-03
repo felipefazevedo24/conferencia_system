@@ -539,9 +539,12 @@ def salvar_po(
     (Aereo/Maritimo) sao obrigatorios aqui - e o momento em que essa escolha
     precisa acontecer (nao na importacao da OC). Juntos eles derivam o tipo
     de operacao de 2 letras (IM/IA/EM/EA - ver `_derivar_tipo_operacao`) que
-    define o prefixo do ID OP. Enquanto a PO ainda esta em Rascunho, trocar
-    direcao ou modal regenera o ID OP (e o numero da PO, que deriva dele)
-    para refletir o prefixo correto; depois de Finalizada o ID OP fica fixo.
+    define o prefixo do ID OP. Trocar direcao ou modal regenera o ID OP (e
+    o numero da PO, que deriva dele) pra refletir o prefixo correto -
+    inclusive depois de Finalizada, porque a estrategia inicial as vezes
+    muda de verdade mais adiante (ex.: era Maritimo, precisou virar Aereo).
+    Documentos/e-mails ja enviados com o numero antigo nao sao atualizados
+    retroativamente.
 
     `dados_operacionais` traz os demais campos gerais do processo (Data PO,
     Ref Despachante, BL/AWB, Invoice, ETD, ETA, Previsao Entrega, Entrega
@@ -563,10 +566,18 @@ def salvar_po(
 
     agora = datetime.now()
     ainda_editavel = processo.po_status != "Finalizada"
-    if ainda_editavel and tipo_operacao != processo.tipo_operacao:
+    estrategia_mudou = tipo_operacao != processo.tipo_operacao
+    if estrategia_mudou:
+        # Direcao/modal mudaram - regenera ID OP e numero da PO mesmo com a
+        # PO ja Finalizada: a estrategia inicial (ex.: Maritimo) as vezes
+        # muda de verdade mais adiante (ex.: precisou virar Aereo) e o ID OP
+        # tem que refletir isso, nao ficar preso ao prefixo antigo. PDFs/
+        # e-mails ja enviados com o numero antigo nao sao atualizados
+        # retroativamente - e' um numero novo a partir daqui.
         processo.tipo_operacao = tipo_operacao
         processo.id_op = gerar_id_op(tipo_operacao)
-    if ainda_editavel or not processo.po_numero:
+        processo.po_numero = f"PO-{processo.id_op}"
+    elif ainda_editavel or not processo.po_numero:
         processo.po_numero = f"PO-{processo.id_op}"
     processo.direcao_operacao = direcao_operacao
     processo.modal_transporte = modal_transporte
@@ -591,7 +602,11 @@ def salvar_po(
         outro.po_processo_principal_id = processo.id
         outro.atualizado_em = agora
         outro.atualizado_por = usuario
-    processo.po_status = "Finalizada" if finalizar else "Rascunho"
+    # Uma vez Finalizada, so uma acao explicita de reverter (apagar_po,
+    # estornar) volta pra Rascunho - salvar de novo sem marcar "Finalizar"
+    # (ex.: so pra corrigir modal/direcao, ver requisito de 03/09) NAO pode
+    # derrubar a PO de volta pra Rascunho silenciosamente.
+    processo.po_status = "Finalizada" if (finalizar or processo.po_status == "Finalizada") else "Rascunho"
     if finalizar:
         processo.po_finalizada_sem_envio = True
         avancar_modulo_apos_po_finalizada(processo)
@@ -1033,6 +1048,49 @@ def criar_link_cotacao(
 
     db.session.commit()
     return cotacao, token
+
+
+def editar_cotacao_pendente(cotacao: ComexCotacao, *, tipo_frete: str, dados: dict, usuario: str) -> ComexCotacao:
+    """Edita uma cotacao que ainda esta Pendente (o prestador de frete
+    ainda nao respondeu) - reaproveita o MESMO link/token ja gerado
+    (eventualmente ja enviado por e-mail), so corrige os dados que a
+    Columbia pre-preencheu (tipo de frete FCL/LCL, origem/destino,
+    equipamento ou volumes, IMO/UN, valor da mercadoria) antes do prestador
+    abrir o formulario publico. Cobre a situacao de a estrategia inicial
+    mudar (ex.: pensava em FCL, saldo nao fechou container e virou LCL).
+
+    Depois que o prestador ja respondeu (status != 'Pendente'), os numeros
+    submetidos ja dependem do tipo original que foi pedido - nao da mais
+    pra editar essa cotacao, so gerar um link novo (ver criar_link_cotacao)."""
+    if cotacao.status != "Pendente":
+        raise ValueError("Só é possível editar uma cotação que ainda está aguardando resposta do prestador.")
+    if tipo_frete not in TIPOS_FRETE:
+        raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
+
+    dados = dados or {}
+    cotacao.tipo_frete = tipo_frete
+    for campo, tamanho in _CAMPOS_COTACAO_PRE_PREENCHIDO.items():
+        valor = str(dados.get(campo) or "").strip()
+        setattr(cotacao, campo, valor[:tamanho] or None)
+
+    # Limpa equipamento/volumes do tipo anterior antes de aplicar os do
+    # tipo novo - senao trocar FCL -> LCL deixava qtd_40hc/20dry velhos
+    # pendurados (e vice-versa, volumes orfaos de uma troca LCL -> FCL).
+    ComexCotacaoVolume.query.filter_by(cotacao_id=cotacao.id).delete()
+    if tipo_frete == "FCL":
+        cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))
+        cotacao.qtd_20dry = _to_int(dados.get("qtd_20dry"))
+    else:
+        cotacao.qtd_40hc = None
+        cotacao.qtd_20dry = None
+        _adicionar_volumes(cotacao, dados.get("volumes"))
+
+    valor_mercadoria = _to_float(dados.get("valor_mercadoria_usd"))
+    if valor_mercadoria is not None:
+        cotacao.valor_mercadoria_usd = valor_mercadoria
+
+    db.session.commit()
+    return cotacao
 
 
 def obter_cotacao_por_token(token: str) -> ComexCotacao | None:

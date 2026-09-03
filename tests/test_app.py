@@ -4532,6 +4532,88 @@ def test_comex_criar_processo_manual_sem_oc_segue_fluxo_normal(tmp_path):
     assert resp_itens.status_code == 200
 
 
+def test_comex_mudar_modal_apos_po_finalizada_regenera_id_op_e_mantem_finalizada(tmp_path):
+    """Trocar direção/modal (estratégia inicial alterada, ex.: Marítimo ->
+    Aéreo) regenera o ID OP e o número da PO - inclusive com a PO já
+    Finalizada, e sem reverter po_status pra Rascunho so por nao marcar
+    'finalizar' de novo nessa chamada (regressao: salvar_po derrubava a PO
+    de Finalizada pra Rascunho silenciosamente em qualquer save simples)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp = client.post("/api/comex/processo-manual", json={"fornecedor": "ACME", "referencia": ""})
+    pid = resp.get_json()["processo"]["id"]
+
+    resp = client.post(f"/api/comex/processos/{pid}/po", json={
+        "pagador_frete": "Columbia", "direcao_operacao": "IMPO", "modal_transporte": "Marítimo",
+        "ocs_vinculadas_ids": [], "finalizar": True,
+    })
+    proc = resp.get_json()["processo"]
+    assert proc["po_status"] == "Finalizada"
+    id_op_antes = proc["id_op"]
+    assert id_op_antes.startswith("IM-")
+
+    resp = client.post(f"/api/comex/processos/{pid}/po", json={
+        "pagador_frete": "Columbia", "direcao_operacao": "IMPO", "modal_transporte": "Aéreo",
+        "ocs_vinculadas_ids": [],
+    })
+    proc2 = resp.get_json()["processo"]
+    assert proc2["tipo_operacao"] == "IA"
+    assert proc2["id_op"].startswith("IA-")
+    assert proc2["id_op"] != id_op_antes
+    assert proc2["po_numero"] == f"PO-{proc2['id_op']}"
+    assert proc2["po_status"] == "Finalizada"
+
+
+def test_comex_editar_cotacao_pendente_troca_fcl_por_lcl(tmp_path):
+    """Uma cotação ainda Pendente (prestador de frete ainda não respondeu)
+    pode ser editada no lugar (mesmo link/token) - inclusive trocando o
+    tipo de frete (FCL <-> LCL_AEREO), limpando os campos do tipo anterior.
+    Depois que o prestador responde (status != Pendente), não dá mais pra
+    editar."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp = client.post("/api/comex/processo-manual", json={"fornecedor": "ACME", "referencia": ""})
+    pid = resp.get_json()["processo"]["id"]
+    client.post(f"/api/comex/processos/{pid}/po", json={
+        "pagador_frete": "Columbia", "direcao_operacao": "IMPO", "modal_transporte": "Marítimo",
+        "ocs_vinculadas_ids": [], "finalizar": True,
+    })
+
+    resp = client.post(f"/api/comex/processos/{pid}/cotacoes", json={
+        "tipo_frete": "FCL", "origem": "Santos", "destino": "Xangai",
+        "qtd_40hc": 1, "qtd_20dry": 0, "imo_classe": "NA", "un_numero": "NA",
+        "valor_mercadoria_usd": 1000,
+    })
+    assert resp.status_code == 200, resp.get_json()
+    cotacao_id = resp.get_json()["cotacao"]["id"]
+
+    resp = client.post(f"/api/comex/cotacoes/{cotacao_id}/editar", json={
+        "tipo_frete": "LCL_AEREO", "origem": "Santos", "destino": "Xangai", "incoterm": "FOB",
+        "imo_classe": "NA", "un_numero": "NA", "valor_mercadoria_usd": 1000,
+        "volumes": [{"comprimento": 100, "largura": 50, "altura": 40, "peso": 20}],
+    })
+    assert resp.status_code == 200, resp.get_json()
+    cotacao = resp.get_json()["cotacao"]
+    assert cotacao["tipo_frete"] == "LCL_AEREO"
+    assert cotacao["qtd_40hc"] is None
+    assert cotacao["qtd_20dry"] is None
+    assert len(cotacao["volumes"]) == 1
+
+    with app.app_context():
+        from conferencia_app.models import ComexCotacao
+
+        c = db.session.get(ComexCotacao, cotacao_id)
+        c.status = "Recebida"
+        db.session.commit()
+
+    resp_bloqueado = client.post(f"/api/comex/cotacoes/{cotacao_id}/editar", json={"tipo_frete": "FCL"})
+    assert resp_bloqueado.status_code == 400
+
+
 def test_painel_tv_comex_agrupa_status_em_3_baskets(tmp_path):
     """A Torre de Controle (/api/painel/comex) resume os 10 status
     granulares do Comex em 3 baskets (Preparação/Trânsito/Entregue), com
