@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, session, current_app
+from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..models import (
     ExpedicaoRomaneio,
@@ -990,7 +991,13 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
             romaneio.cliente = cliente
 
     romaneio.atualizado_em = datetime.now()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Duplo clique/race: outra requisição já inseriu a mesma NF. O índice
+        # único do banco barra a duplicata aqui — trata como "já adicionada".
+        db.session.rollback()
+        return None, f"NF {numero_nf} já foi adicionada a este romaneio."
 
     # Fluxo progressivo: a ordem (FAT ou ST — o numero_nf so existe em uma
     # delas) cuja NF entrou no romaneio sai da etapa "Faturado" e passa para

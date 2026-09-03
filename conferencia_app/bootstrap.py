@@ -987,6 +987,62 @@ def _ensure_expedicao_romaneio_nf_columns() -> None:
         conn.close()
 
 
+def _tem_unique_romaneio_nf() -> bool:
+    """True se já existe índice/constraint UNIQUE cobrindo (romaneio_id, numero_nf)."""
+    insp = inspect(db.engine)
+    alvo = {"romaneio_id", "numero_nf"}
+    for idx in insp.get_indexes("expedicao_romaneio_nf"):
+        if idx.get("unique") and set(idx.get("column_names") or []) == alvo:
+            return True
+    try:
+        for uc in insp.get_unique_constraints("expedicao_romaneio_nf"):
+            if set(uc.get("column_names") or []) == alvo:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _ensure_expedicao_romaneio_nf_unique() -> None:
+    """Garante que uma NF não possa aparecer duas vezes no mesmo romaneio.
+
+    Tabelas criadas antes do UniqueConstraint do modelo ficaram SEM ele (o
+    create_all não altera tabela existente), deixando só a checagem em
+    aplicação — que é furada por duplo clique (race). Aqui removemos linhas
+    duplicadas (mantendo a mais antiga) e criamos o índice único no banco.
+    """
+    if not _has_table("expedicao_romaneio_nf"):
+        return
+    if _tem_unique_romaneio_nf():
+        return
+    conn = db.engine.connect()
+    try:
+        removidas = conn.execute(db.text(
+            """
+            DELETE FROM expedicao_romaneio_nf
+            WHERE id NOT IN (
+                SELECT keep_id FROM (
+                    SELECT MIN(id) AS keep_id
+                    FROM expedicao_romaneio_nf
+                    GROUP BY romaneio_id, numero_nf
+                ) t
+            )
+            """
+        )).rowcount
+        conn.commit()
+        if removidas:
+            print(f"[bootstrap] Removidas {removidas} linha(s) de NF duplicada(s) em romaneios.")
+        conn.execute(db.text(
+            "CREATE UNIQUE INDEX ux_romaneio_nf_unique "
+            "ON expedicao_romaneio_nf (romaneio_id, numero_nf)"
+        ))
+        conn.commit()
+    except Exception as exc:
+        print(f"[bootstrap] Não foi possível criar índice único de NF do romaneio: {exc}")
+    finally:
+        conn.close()
+
+
 def _ensure_cadastro_atualizacao_publica_columns() -> None:
     """Garante as colunas de ICMS/beneficios fiscais na cadastro_atualizacao_publica."""
     if not _has_table("cadastro_atualizacao_publica"):
@@ -1116,6 +1172,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_expedicao_romaneio_nf_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_romaneio_nf_unique()
         except Exception:
             pass
 
