@@ -666,7 +666,6 @@
                     <div style="margin-top:12px; display:grid; gap:8px;">
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
-                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="servico"> Serviço (não passa por aprovação de Compras)</label>
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
                     </div>
                     <p class="rec-muted" style="margin:8px 0 0; font-size:11px;">Quando marcado, após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
@@ -1680,8 +1679,6 @@
             document.getElementById('pedidoCompra').value = d.pedido_compra || '';
             document.getElementById('materialCliente').checked = !!d.material_cliente;
             document.getElementById('remessa').checked = !!d.remessa;
-            const servicoChk = document.getElementById('servico');
-            if (servicoChk) servicoChk.checked = !!d.servico;
             document.getElementById('semConferenciaLogistica').checked = !!d.sem_conferencia_logistica;
             alternarMaterialCliente();
             document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
@@ -1911,7 +1908,6 @@
         const material_cliente = !!document.getElementById('materialCliente')?.checked;
         const remessa = !!document.getElementById('remessa')?.checked;
         const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
-        const servico = !!document.getElementById('servico')?.checked;
         const observacaoAtual = String(obsEl?.value || '').trim();
         const marcador = '[CONFIRMADO_DIVERGENCIA_VALOR]';
         if (observacaoAtual.includes(marcador)) return;
@@ -1921,7 +1917,7 @@
         if (obsEl) obsEl.value = novaObservacao;
         await fetchJson('/api/xml_auditor/vincular_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra: pedido, material_cliente, remessa, sem_conferencia_logistica, servico, observacao: novaObservacao }),
+            body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra: pedido, material_cliente, remessa, sem_conferencia_logistica, observacao: novaObservacao }),
         });
     }
 
@@ -2253,14 +2249,13 @@
         const material_cliente = document.getElementById('materialCliente').checked;
         const remessa = document.getElementById('remessa').checked;
         const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
-        const servico = !!document.getElementById('servico')?.checked;
         const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
         if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
         const observacao = (document.getElementById('obsFiscal').value || '').trim();
         try {
             const r = await fetchJson('/api/xml_auditor/vincular_pedido', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, servico, observacao }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
             });
             toast(r.msg || 'Pedido vinculado com sucesso.', 'ok');
             await recarregarTudo();
@@ -2301,7 +2296,6 @@
         const material_cliente = document.getElementById('materialCliente').checked;
         const remessa = document.getElementById('remessa').checked;
         const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
-        const servico = !!document.getElementById('servico')?.checked;
         const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
         if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
         const textoConfirmacao = sem_conferencia_logistica
@@ -2313,7 +2307,7 @@
             const observacao = (document.getElementById('obsFiscal').value || '').trim();
             const r = await fetchJson('/api/xml_auditor/liberar', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, servico, observacao }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
             });
             toast(r.msg || 'NF liberada para conferência.', 'ok');
             auditorNotaSelecionada = null;
