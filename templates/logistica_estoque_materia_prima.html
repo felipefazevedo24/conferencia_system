@@ -14,6 +14,8 @@
     .mp-views { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
     .mp-view-btn { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 12px; border-radius: 7px; cursor: pointer; }
     .mp-view-btn.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .mp-view-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+    .mp-view-link:hover { color: var(--eui-primary); }
     .mp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--eui-text-soft); }
     .mp-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
     .mp-item-main { display: grid; gap: 3px; }
@@ -83,6 +85,7 @@
                     <button class="mp-view-btn active" type="button" data-visao="materia_prima">Matéria-prima</button>
                     <button class="mp-view-btn" type="button" data-visao="revenda">Material para revenda</button>
                     <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
+                    <a class="mp-view-btn mp-view-link" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>
                 </div>
                 <div class="mp-search">
                     <i class="fas fa-magnifying-glass"></i>
@@ -99,7 +102,6 @@
                     <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
                     <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
                     <span class="mp-muted" id="mp-updated" title="A cobertura é recalculada a cada atualização"></span>
-                    <a class="eui-btn eui-btn--subtle" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Controle de chapas</a>
                     <button class="eui-btn eui-btn--ghost" id="mp-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>

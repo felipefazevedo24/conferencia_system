@@ -1011,15 +1011,17 @@ def estoque_chapas_page():
 @logistica_inventario_bp.route("/api/logistica/chapas", methods=["GET"])
 @permission_required(PERMISSION)
 def api_chapas_listar():
-    from collections import defaultdict
-
     termo = _normalizar_busca(request.args.get("q"))
     # Chapas = itens que passaram pela conferência cega marcados como chapa
-    # (o conferente selecionou "é chapa" e informou a UND -> qtd_chapas_und).
+    # (o conferente selecionou "é chapa" e informou a UND -> qtd_chapas_und) E
+    # que estão LANÇADOS no Sync. Ao estornar o lançamento/conferência, o item
+    # sai daqui automaticamente (deixa de estar "Lançado") e só volta ao ser
+    # lançado de novo.
     itens = (
         ItemNota.query
         .filter(ItemNota.qtd_chapas_und.isnot(None))
         .filter(ItemNota.qtd_chapas_und > 0)
+        .filter(ItemNota.status == "Lançado")
         .order_by(ItemNota.id.desc())
         .all()
     )
@@ -1036,53 +1038,31 @@ def api_chapas_listar():
     def _codnorm(c):
         return re.sub(r"[^A-Z0-9]", "", str(c or "").upper())
 
+    # Saída/reservado SÓ por lote exato. Nada de distribuir o total do código
+    # (isso somava o histórico inteiro do GRV num lote novo e zerava ele).
     por_lote = {}
     for r in saldo_info.get("por_lote") or []:
         chave = (_codnorm(r.get("codigo")), str(r.get("lote") or "").strip())
         por_lote[chave] = {"kg_saida": float(r.get("kg_saida") or 0), "kg_reservado": float(r.get("kg_reservado") or 0)}
-    por_codigo = saldo_info.get("por_codigo") or {}
 
     linhas = []
     for i in itens:
         codigo = i.codigo_grv or i.codigo
         calc = calc_por_item.get(i.id)
         calc_dict = _chapa_serializar_calculo(calc)
+        lote = lote_por_item.get(i.id) or i.numero_lancamento or ""
+        info = por_lote.get((_codnorm(codigo), str(lote).strip()), {})
         linhas.append({
             "item_id": i.id, "numero_nota": i.numero_nota, "codigo": codigo,
             "codigo_norm": _codnorm(codigo), "descricao": i.descricao,
             "fornecedor": i.fornecedor or "", "ar": i.numero_lancamento or "",
-            "lote": lote_por_item.get(i.id) or i.numero_lancamento or "",
+            "lote": lote,
             "conferente": i.usuario_conferencia or "", "unidade_nf": i.unidade_comercial or "",
             "kg_nf": _chapa_kg_do_item(i), "und": float(i.qtd_chapas_und or 0),
             "peso": float(calc.peso_por_peca) if (calc and calc.peso_por_peca) else None,
-            "data_ord": i.data_importacao or i.fim_conferencia or datetime.min,
+            "kg_saida": info.get("kg_saida", 0.0), "kg_reservado": info.get("kg_reservado", 0.0),
             **calc_dict,
         })
-
-    # Atribui saída/reservado por lote (exato) OU distribui FIFO (mais antigo
-    # primeiro) o total do código, quando o GRV não amarrou por lote.
-    grupos = defaultdict(list)
-    for l in linhas:
-        grupos[l["codigo_norm"]].append(l)
-    for cod, rows in grupos.items():
-        rows.sort(key=lambda r: r["data_ord"])
-        if any((cod, r["lote"]) in por_lote for r in rows):
-            for r in rows:
-                info = por_lote.get((cod, r["lote"]), {})
-                r["kg_saida"] = info.get("kg_saida", 0.0)
-                r["kg_reservado"] = info.get("kg_reservado", 0.0)
-        else:
-            total_saida = float((por_codigo.get(cod) or {}).get("kg_saida") or 0)
-            total_res = float((por_codigo.get(cod) or {}).get("kg_reservado") or 0)
-            for r in rows:
-                usa = min(r["kg_nf"], total_saida)
-                total_saida -= usa
-                r["kg_saida"] = usa
-            for r in rows:
-                saldo_r = max(r["kg_nf"] - r["kg_saida"], 0.0)
-                usa = min(saldo_r, total_res)
-                total_res -= usa
-                r["kg_reservado"] = usa
 
     itens_out = []
     for l in linhas:
