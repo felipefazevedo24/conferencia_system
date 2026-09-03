@@ -17,7 +17,7 @@ import requests
 
 from ..auth import has_permission, permission_required, permission_required_any, roles_required
 from ..extensions import db
-from ..models import LogisticaInventarioAjuste, LogisticaInventarioInicial
+from ..models import LogisticaInventarioAjuste, LogisticaInventarioAnaliseCausa, LogisticaInventarioInicial
 from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
@@ -682,6 +682,31 @@ def _fmt_ajuste(a) -> dict:
         "fiscal_nf_numero": a.fiscal_nf_numero,
         "fiscal_concluido_em": a.fiscal_concluido_em.strftime("%d/%m/%Y %H:%M") if a.fiscal_concluido_em else None,
         "fiscal_concluido_por": a.fiscal_concluido_por,
+        # So indica se tem analise de causa raiz pendente/concluida - a
+        # tela de Ajuste de Estoque mostra so um badge, os detalhes ficam
+        # na tela dedicada de Analise de Causa Raiz.
+        "analise_causa_status": a.analise_causa.status if a.analise_causa else None,
+    }
+
+
+def _fmt_analise_causa(a: LogisticaInventarioAnaliseCausa) -> dict:
+    ajuste = a.ajuste
+    return {
+        "id": a.id,
+        "ajuste_id": a.ajuste_id,
+        "status": a.status,
+        "motivo_causa_raiz": a.motivo_causa_raiz,
+        "solicitado_por": a.solicitado_por,
+        "solicitado_em": a.solicitado_em.strftime("%d/%m/%Y %H:%M") if a.solicitado_em else None,
+        "analisado_por": a.analisado_por,
+        "analisado_em": a.analisado_em.strftime("%d/%m/%Y %H:%M") if a.analisado_em else None,
+        "codigo_produto": ajuste.codigo_produto if ajuste else None,
+        "local_codigo": ajuste.local_codigo if ajuste else None,
+        "unidade_medida": ajuste.unidade_medida if ajuste else None,
+        "qtde_contada": ajuste.qtde_contada if ajuste else None,
+        "qtde_estoque_no_momento": ajuste.qtde_estoque_no_momento if ajuste else None,
+        "diferenca": ajuste.diferenca if ajuste else None,
+        "ajuste_status_modulo": ajuste.status_modulo if ajuste else None,
     }
 
 
@@ -815,10 +840,18 @@ def api_confirmar_ajuste(ajuste_id):
         return jsonify({"error": "Ajuste não encontrado."}), 404
     payload = request.get_json(silent=True) or {}
     try:
-        ajuste = ajuste_svc.confirmar_divergencia(ajuste, session.get("username", "desconhecido"), payload.get("justificativa"))
+        ajuste = ajuste_svc.confirmar_divergencia(
+            ajuste,
+            session.get("username", "desconhecido"),
+            payload.get("justificativa"),
+            solicitar_analise_causa=bool(payload.get("solicitar_analise_causa")),
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"message": "Divergência confirmada e enviada pro Finance.", "ajuste": _fmt_ajuste(ajuste)})
+    mensagem = "Divergência confirmada e enviada pro Finance."
+    if payload.get("solicitar_analise_causa"):
+        mensagem += " Análise de causa raiz solicitada."
+    return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/descartar", methods=["POST"])
@@ -923,3 +956,36 @@ def api_pular_etapa_ajuste(ajuste_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": f"Etapa avançada para {ajuste.status_modulo}.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+# ── Analise de Causa Raiz (fila separada, nao bloqueia Finance/Fiscal) ────
+@logistica_inventario_bp.route("/logistica/inventario/analise-causa")
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def inventario_analise_causa_page():
+    return render_template(
+        "logistica_inventario_analise_causa.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+    )
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-analise-causa", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_listar_analise_causa():
+    status = request.args.get("status") or None
+    analises = ajuste_svc.listar_analises_causa(status=status)
+    return jsonify({"analises": [_fmt_analise_causa(a) for a in analises]})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-analise-causa/<int:analise_id>/preencher", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_preencher_analise_causa(analise_id):
+    analise = db.session.get(LogisticaInventarioAnaliseCausa, analise_id)
+    if not analise:
+        return jsonify({"error": "Análise não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        analise = ajuste_svc.preencher_analise_causa(analise, payload.get("motivo"), session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Análise de causa raiz registrada.", "analise": _fmt_analise_causa(analise)})

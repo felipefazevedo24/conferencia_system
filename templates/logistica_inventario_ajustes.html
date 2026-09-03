@@ -195,6 +195,14 @@
         return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
     }
 
+    function analiseCausaBadgeHtml(a) {
+        if (!a.analise_causa_status) return "";
+        const pendente = a.analise_causa_status === "Pendente";
+        const cor = pendente ? "#b45309" : "#15803d";
+        const label = pendente ? "Causa raiz: pendente" : "Causa raiz: analisada";
+        return `<a href="/logistica/inventario/analise-causa" title="Ver na fila de Análise de Causa Raiz" style="text-decoration:none;"><span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40; margin-top:4px; display:inline-block;"><i class="fas fa-magnifying-glass-chart"></i> ${label}</span></a>`;
+    }
+
     function renderTabela(lista) {
         const tb = $("ia-tbody");
         if (!lista.length) {
@@ -215,7 +223,7 @@
                 <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
                 <td>${temCusto ? fmtMoeda(a.custo_medio) : "—"}</td>
                 <td class="${valorClasse}">${valorTexto}</td>
-                <td>${badgeStatus(a)}${historicoHtml(a)}</td>
+                <td>${badgeStatus(a)}${a.analise_causa_status ? "<br>" + analiseCausaBadgeHtml(a) : ""}${historicoHtml(a)}</td>
                 <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
         `;
@@ -288,7 +296,8 @@
         try {
             if (act === "confirmar") {
                 const justificativa = prompt("Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:") || "";
-                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa }) });
+                const solicitar_analise_causa = confirm("Este item precisa de Análise de Causa Raiz detalhada? OK = sim, enviar pra fila de Análise de Causa Raiz (não bloqueia o fluxo Finance/Fiscal). Cancelar = não precisa.");
+                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
             } else if (act === "descartar") {
                 const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
                 if (!motivo.trim()) return;

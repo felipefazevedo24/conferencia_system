@@ -5586,3 +5586,99 @@ def test_etiqueta_red_molds_bloqueia_sem_nf_e_gera_pdf_com_dados_e_volumes(tmp_p
     assert b"PEPSICO DO BRASIL" in corpo
     assert b"VOL: 01/02" in corpo
     assert b"VOL: 02/02" in corpo
+
+
+def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
+    """Ao confirmar uma divergencia (Modulo 02), o gestor pode marcar
+    `solicitar_analise_causa` - isso cria uma entrada na fila separada de
+    Analise de Causa Raiz (status Pendente), mas o ajuste segue seu fluxo
+    normal pro Finance igual, sem bloquear em nada. A tela dedicada lista
+    a fila e permite preencher a analise detalhada, independente do
+    andamento de Finance/Fiscal/Concluido."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="SKU-CR1", local_codigo="A01-01", unidade_medida="UN",
+            qtde_contada=10, qtde_estoque_no_momento=6, diferenca=4,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    # Confirma a divergencia solicitando analise de causa raiz.
+    resp = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/confirmar",
+        json={"justificativa": "avaria aparente", "solicitar_analise_causa": True},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ajuste"]["status_modulo"] == "Finance"  # fluxo normal seguiu
+    assert body["ajuste"]["analise_causa_status"] == "Pendente"
+    assert "Análise de causa raiz solicitada" in body["message"]
+
+    # Aparece na fila dedicada, com status Pendente.
+    resp_lista = client.get("/api/logistica/inventario-analise-causa")
+    assert resp_lista.status_code == 200
+    analises = resp_lista.get_json()["analises"]
+    assert len(analises) == 1
+    analise = analises[0]
+    assert analise["status"] == "Pendente"
+    assert analise["codigo_produto"] == "SKU-CR1"
+    assert analise["local_codigo"] == "A01-01"
+    assert analise["diferenca"] == 4
+    analise_id = analise["id"]
+
+    # Confirmar de novo (em outro ajuste sem marcar a flag) NAO gera entrada na fila.
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        outro = LogisticaInventarioAjuste(
+            codigo_produto="SKU-CR2", local_codigo="A01-02", unidade_medida="UN",
+            qtde_contada=5, qtde_estoque_no_momento=5, diferenca=0,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add(outro)
+        db.session.commit()
+        outro_id = outro.id
+    client.post(f"/api/logistica/inventario-ajustes/{outro_id}/confirmar", json={})
+    resp_lista2 = client.get("/api/logistica/inventario-analise-causa")
+    assert len(resp_lista2.get_json()["analises"]) == 1  # continua só a primeira
+
+    # Finance/Fiscal avancam independente da analise ainda estar pendente.
+    resp_finance = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/finance-concluir", json={})
+    assert resp_finance.status_code == 200
+    assert resp_finance.get_json()["ajuste"]["status_modulo"] == "Fiscal"
+
+    # Preenche a analise detalhada - vira Concluida, sem mexer no ajuste.
+    resp_vazio = client.post(f"/api/logistica/inventario-analise-causa/{analise_id}/preencher", json={"motivo": "   "})
+    assert resp_vazio.status_code == 400
+
+    resp_preencher = client.post(
+        f"/api/logistica/inventario-analise-causa/{analise_id}/preencher",
+        json={"motivo": "Contagem em local errado - produto estava no A01-02, nao no A01-01."},
+    )
+    assert resp_preencher.status_code == 200
+    analise_preenchida = resp_preencher.get_json()["analise"]
+    assert analise_preenchida["status"] == "Concluida"
+    assert analise_preenchida["analisado_por"]
+    assert "Contagem em local errado" in analise_preenchida["motivo_causa_raiz"]
+
+    resp_ajuste_depois = client.get("/api/logistica/inventario-ajustes")
+    ajuste_depois = next(a for a in resp_ajuste_depois.get_json()["ajustes"] if a["id"] == ajuste_id)
+    assert ajuste_depois["status_modulo"] == "Fiscal"  # nao foi afetado pela analise
+
+    # Filtro por status na fila.
+    resp_pendentes = client.get("/api/logistica/inventario-analise-causa?status=Pendente")
+    assert resp_pendentes.get_json()["analises"] == []
+    resp_concluidas = client.get("/api/logistica/inventario-analise-causa?status=Concluida")
+    assert len(resp_concluidas.get_json()["analises"]) == 1
+
+    # Tela dedicada carrega normalmente.
+    resp_page = client.get("/logistica/inventario/analise-causa")
+    assert resp_page.status_code == 200

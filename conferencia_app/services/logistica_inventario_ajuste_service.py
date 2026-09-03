@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..extensions import db
-from ..models import LogisticaInventarioAjuste, LogisticaInventarioInicial
+from ..models import LogisticaInventarioAjuste, LogisticaInventarioAnaliseCausa, LogisticaInventarioInicial
 
 STATUS_SLUGS = {
     "Validacao": "validacao",
@@ -115,9 +115,22 @@ def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[Lo
     return query.order_by(LogisticaInventarioAjuste.criado_em.desc()).all()
 
 
-def confirmar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, justificativa: str | None = None) -> LogisticaInventarioAjuste:
+def confirmar_divergencia(
+    ajuste: LogisticaInventarioAjuste,
+    usuario: str,
+    justificativa: str | None = None,
+    solicitar_analise_causa: bool = False,
+) -> LogisticaInventarioAjuste:
     """Modulo 02 -> Modulo 03. Gestor confirma que a diferenca e' real e
-    precisa de ajuste - dispara pro Finance."""
+    precisa de ajuste - dispara pro Finance.
+
+    `solicitar_analise_causa`: o gestor pode marcar, no mesmo passo, que
+    esse item precisa de uma investigacao mais profunda do motivo (causa
+    raiz). Isso NAO muda o fluxo normal do ajuste - ele segue pro Finance
+    igual - so cria (ou reaproveita, se ja existir) uma entrada na fila
+    separada de Analise de Causa Raiz, pro operador/gestor preencherem a
+    analise detalhada depois, na propria tela, no ritmo deles, sem
+    competir com Finance/Fiscal."""
     if ajuste.status_modulo != "Validacao":
         raise ValueError("Este ajuste não está aguardando validação do gestor.")
     ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
@@ -125,6 +138,14 @@ def confirmar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, justi
     ajuste.gestor_confirmado_por = usuario
     ajuste.status_modulo = "Finance"
     ajuste.status_slug = status_slug("Finance")
+
+    if solicitar_analise_causa and not ajuste.analise_causa:
+        db.session.add(LogisticaInventarioAnaliseCausa(
+            ajuste_id=ajuste.id,
+            status="Pendente",
+            solicitado_por=usuario,
+        ))
+
     db.session.commit()
     return ajuste
 
@@ -228,3 +249,29 @@ def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInv
     ajuste.status_slug = status_slug(proximo)
     db.session.commit()
     return ajuste
+
+
+# ── Analise de Causa Raiz (fila separada, ver LogisticaInventarioAnaliseCausa) ──
+def listar_analises_causa(status: str | None = None) -> list[LogisticaInventarioAnaliseCausa]:
+    query = LogisticaInventarioAnaliseCausa.query
+    if status:
+        query = query.filter_by(status=status)
+    return query.order_by(LogisticaInventarioAnaliseCausa.solicitado_em.desc()).all()
+
+
+def preencher_analise_causa(
+    analise: LogisticaInventarioAnaliseCausa, motivo: str, usuario: str
+) -> LogisticaInventarioAnaliseCausa:
+    """Operador ou gestor registra a analise detalhada do motivo e marca a
+    entrada como Concluida - nao afeta o status_modulo do ajuste (Finance/
+    Fiscal/Concluido continuam seguindo seu proprio ritmo, independente
+    dessa analise)."""
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ValueError("Informe a análise detalhada do motivo.")
+    analise.motivo_causa_raiz = motivo
+    analise.status = "Concluida"
+    analise.analisado_por = usuario
+    analise.analisado_em = datetime.now()
+    db.session.commit()
+    return analise

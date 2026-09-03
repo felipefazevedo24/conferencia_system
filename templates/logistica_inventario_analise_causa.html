@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Analise de Causa Raiz{% endblock %}
+{% block shell_title %}Logística — Análise de Causa Raiz{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ac-wrap { display: grid; gap: 18px; }
+    .ac-table-wrap { overflow-x: auto; }
+    .ac-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    .ac-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .ac-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .ac-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .ac-actions-menu.open { display: flex; }
+    .ac-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
+    .ac-actions-menu button:hover { background: #f3f4f6; }
+    .ac-actions-menu .ac-empty-mini { display: block; padding: 9px 10px; font-size: 12.5px; color: var(--eui-muted); }
+
+    .ia-dif-pos { color: var(--eui-success, #15803d); font-weight: 700; }
+    .ia-dif-neg { color: var(--eui-danger, #b91c1c); font-weight: 700; }
+    .ac-motivo { font-size: 12px; color: var(--eui-muted); margin-top: 4px; line-height: 1.5; max-width: 320px; white-space: pre-wrap; }
+    .ac-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .ac-toast.error { border-left-color: var(--eui-danger); }
+    .ac-toast.success { border-left-color: var(--eui-success); }
+
+    .ac-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .ac-modal-backdrop.open { display: flex; }
+    .ac-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 520px; padding: 22px; }
+    .ac-modal h3 { margin: 0 0 6px; font-size: 16px; }
+    .ac-modal p { margin: 0 0 14px; font-size: 12.5px; color: var(--eui-muted); }
+    .ac-modal textarea { width: 100%; min-height: 140px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; }
+    .ac-modal .ac-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ac-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</h1>
+            <p class="eui-page-header__sub">Fila separada dos itens que o gestor marcou, ao confirmar a divergência, como precisando de investigação mais detalhada do motivo. Não bloqueia o fluxo normal de Finance/Fiscal/Concluído.</p>
+        </div>
+    </header>
+
+    <div class="eui-stats" id="ac-metrics">
+        <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ac-m-todos">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Pendente"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Pendente</span><span class="eui-stat__value" id="ac-m-pendente">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Concluida"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluída</span><span class="eui-stat__value" id="ac-m-concluida">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head" style="justify-content:flex-end;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ac-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <button class="eui-btn eui-btn--primary" id="ac-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="ac-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local ou código do produto…" style="width:100%; padding-left:34px;">
+                </div>
+            </div>
+            <div class="ac-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Solicitado em</th>
+                            <th>Solicitado por</th>
+                            <th>Local</th>
+                            <th>Cód. Produto</th>
+                            <th>Qtd Contada</th>
+                            <th>Diferença</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ac-tbody"><tr><td colspan="8" class="ac-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="ac-actions-menu" id="ac-acoes-menu"></div>
+<div class="ac-toast" id="ac-toast"></div>
+
+<div class="ac-modal-backdrop" id="ac-modal-backdrop">
+    <div class="ac-modal">
+        <h3><i class="fas fa-pen"></i> Registrar análise de causa raiz</h3>
+        <p>Descreva detalhadamente o motivo da divergência apurado pra este item.</p>
+        <textarea id="ac-modal-textarea" placeholder="Ex.: contagem em local errado, produto sem baixa de consumo, avaria não lançada..."></textarea>
+        <div class="ac-modal-foot">
+            <button class="eui-btn eui-btn--subtle" id="ac-modal-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ac-modal-salvar"><i class="fas fa-check"></i> Salvar análise</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, tipo) {
+        const el = $("ac-toast");
+        el.textContent = msg;
+        el.className = "ac-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4200);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function fmtQtd(v) {
+        return Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+    }
+
+    let analisesCache = [];
+    let filtroAtual = "";
+
+    async function carregar() {
+        try {
+            const params = new URLSearchParams();
+            if (filtroAtual) params.set("status", filtroAtual);
+            const data = await api("/api/logistica/inventario-analise-causa?" + params.toString());
+            analisesCache = data.analises || [];
+            renderMetricas(analisesCache);
+            renderTabela(filtrarPorBusca(analisesCache));
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    function filtrarPorBusca(lista) {
+        const termo = $("ac-busca").value.trim().toLowerCase();
+        if (!termo) return lista;
+        return lista.filter((a) =>
+            (a.local_codigo || "").toLowerCase().includes(termo) ||
+            (a.codigo_produto || "").toLowerCase().includes(termo)
+        );
+    }
+
+    function renderMetricas(lista) {
+        const cont = { Pendente: 0, Concluida: 0 };
+        lista.forEach((a) => { cont[a.status] = (cont[a.status] || 0) + 1; });
+        $("ac-m-todos").textContent = lista.length;
+        $("ac-m-pendente").textContent = cont.Pendente;
+        $("ac-m-concluida").textContent = cont.Concluida;
+    }
+
+    const CORES_STATUS = { Pendente: "#b45309", Concluida: "#15803d" };
+    const LABEL_STATUS = { Pendente: "Pendente", Concluida: "Concluída" };
+    function badgeStatus(a) {
+        const cor = CORES_STATUS[a.status] || "#475569";
+        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[a.status] || a.status)}</span>`;
+    }
+
+    function motivoHtml(a) {
+        if (!a.motivo_causa_raiz) return "";
+        const rodape = a.analisado_em ? `<br><em>${escapeHtml(a.analisado_por)} em ${escapeHtml(a.analisado_em)}</em>` : "";
+        return `<div class="ac-motivo">${escapeHtml(a.motivo_causa_raiz)}${rodape}</div>`;
+    }
+
+    function renderTabela(lista) {
+        const tb = $("ac-tbody");
+        if (!lista.length) {
+            tb.innerHTML = '<tr><td colspan="8" class="ac-empty">Nenhuma análise encontrada</td></tr>';
+            return;
+        }
+        tb.innerHTML = lista.map((a) => `
+            <tr>
+                <td>${escapeHtml(a.solicitado_em)}</td>
+                <td>${escapeHtml(a.solicitado_por)}</td>
+                <td>${escapeHtml(a.local_codigo)}</td>
+                <td>${escapeHtml(a.codigo_produto)}</td>
+                <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
+                <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+                <td>${badgeStatus(a)}${motivoHtml(a)}</td>
+                <td style="text-align:right;"><button class="ac-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
+            </tr>
+        `).join("");
+    }
+
+    function analisePorId(id) {
+        return analisesCache.find((a) => String(a.id) === String(id));
+    }
+
+    function montarAcoes(a) {
+        if (a.status === "Pendente") {
+            return `<button data-act="preencher" data-id="${a.id}"><i class="fas fa-pen"></i> Registrar análise</button>`;
+        }
+        return `<button data-act="preencher" data-id="${a.id}"><i class="fas fa-pen"></i> Editar análise</button>`;
+    }
+
+    function acoesMenuEl() { return $("ac-acoes-menu"); }
+    function toggleMenuAcoes(btnEl, id) {
+        const menu = acoesMenuEl();
+        const jaAberto = menu.classList.contains("open") && menu.dataset.id === String(id);
+        fecharMenuAcoes();
+        if (jaAberto) return;
+        const a = analisePorId(id);
+        if (!a) return;
+        menu.innerHTML = montarAcoes(a);
+        menu.dataset.id = String(id);
+        const rect = btnEl.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = "auto";
+        menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.classList.add("open");
+    }
+    function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+
+    document.addEventListener("click", (e) => {
+        const kebabBtn = e.target.closest("[data-kebab]");
+        if (kebabBtn) { toggleMenuAcoes(kebabBtn, kebabBtn.dataset.kebab); return; }
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    });
+
+    let analiseEmEdicaoId = null;
+    function abrirModal(id) {
+        const a = analisePorId(id);
+        if (!a) return;
+        analiseEmEdicaoId = id;
+        $("ac-modal-textarea").value = a.motivo_causa_raiz || "";
+        $("ac-modal-backdrop").classList.add("open");
+        $("ac-modal-textarea").focus();
+    }
+    function fecharModal() {
+        $("ac-modal-backdrop").classList.remove("open");
+        analiseEmEdicaoId = null;
+    }
+    $("ac-modal-cancelar").addEventListener("click", fecharModal);
+    $("ac-modal-backdrop").addEventListener("click", (e) => { if (e.target === $("ac-modal-backdrop")) fecharModal(); });
+    $("ac-modal-salvar").addEventListener("click", async () => {
+        const motivo = $("ac-modal-textarea").value.trim();
+        if (!motivo) { toast("Descreva o motivo da causa raiz antes de salvar.", "error"); return; }
+        try {
+            await api(`/api/logistica/inventario-analise-causa/${analiseEmEdicaoId}/preencher`, { method: "POST", body: JSON.stringify({ motivo }) });
+            toast("Análise registrada!", "success");
+            fecharModal();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
+    acoesMenuEl().addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn) return;
+        fecharMenuAcoes();
+        if (btn.dataset.act === "preencher") abrirModal(btn.dataset.id);
+    });
+
+    $("ac-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        filtroAtual = card.dataset.filter;
+        $("ac-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        $("ac-btn-limpar-filtro").classList.toggle("hidden", !filtroAtual);
+        carregar();
+    });
+    $("ac-btn-limpar-filtro").addEventListener("click", () => {
+        filtroAtual = "";
+        $("ac-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("ac-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
+        $("ac-btn-limpar-filtro").classList.add("hidden");
+        carregar();
+    });
+    $("ac-btn-atualizar").addEventListener("click", carregar);
+    $("ac-busca").addEventListener("input", () => renderTabela(filtrarPorBusca(analisesCache)));
+
+    carregar();
+})();
+</script>
+{% endblock %}

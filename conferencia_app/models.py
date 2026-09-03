@@ -1693,6 +1693,40 @@ class LogisticaInventarioAjuste(db.Model):
     fiscal_nf_numero = db.Column(db.String(60))
 
 
+class LogisticaInventarioAnaliseCausa(db.Model):
+    """Fila de Analise de Causa Raiz do Inventario - quando o gestor marca,
+    ao confirmar uma divergencia (Modulo 02), que aquele item precisa de
+    investigacao mais profunda do motivo. NAO bloqueia o fluxo normal do
+    ajuste - Finance/Fiscal/Concluido seguem em paralelo, no seu proprio
+    ritmo (ver logistica_inventario_ajuste_service.confirmar_divergencia).
+    E' so' uma fila separada, numa tela propria, pro operador ou o gestor
+    registrarem a analise detalhada depois, sem competir com a tela
+    principal de Ajuste de Estoque."""
+
+    __tablename__ = "logistica_inventario_analise_causa"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ajuste_id = db.Column(
+        db.Integer, db.ForeignKey("logistica_inventario_ajuste.id"),
+        nullable=False, unique=True, index=True,
+    )
+
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente | Concluida
+
+    motivo_causa_raiz = db.Column(db.Text)
+
+    solicitado_por = db.Column(db.String(100), nullable=False)
+    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    analisado_por = db.Column(db.String(100))
+    analisado_em = db.Column(db.DateTime)
+
+    ajuste = db.relationship(
+        "LogisticaInventarioAjuste",
+        backref=db.backref("analise_causa", uselist=False),
+    )
+
+
 class WMSPedidoSeparacao(db.Model):
     """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""
     __tablename__ = "wms_pedido_separacao"
