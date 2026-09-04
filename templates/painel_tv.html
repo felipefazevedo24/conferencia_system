@@ -1330,7 +1330,6 @@
 
   function buildComexCard(p, color) {
     const chips = [];
-    if (p.fornecedor) chips.push('<span class="pt-chip"><i class="fas fa-industry"></i>' + esc(p.fornecedor) + "</span>");
     if (p.pagador_frete) chips.push('<span class="pt-chip"><i class="fas fa-money-bill-wave"></i>' + esc(p.pagador_frete) + "</span>");
     if (p.status_detalhado) chips.push('<span class="pt-chip"><i class="fas fa-signal"></i>' + esc(p.status_detalhado) + "</span>");
     if (p.ultima_interacao) {
@@ -1340,8 +1339,11 @@
       chips.push('<span class="pt-chip' + (p.ultima_interacao_atrasada ? " cx-chip-atrasada" : "") + '"><i class="fas fa-clock"></i>' + esc(p.ultima_interacao) + "</span>");
     }
     const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
+    // Nome do cliente/fornecedor na frente da OC, mesmo tamanho de fonte
+    // (mesma div .pt-title) - "Fornecedor X - OC 12345".
+    const titulo = (p.fornecedor ? esc(p.fornecedor) + " - " : "") + esc(p.oc);
     return '<div class="plan-task cx-task" style="border-left-color:' + color + '" data-processo-id="' + p.processo_id + '" data-oc="' + esc(p.oc) + '">' +
-      '<div class="pt-title">' + esc(p.oc) + "</div>" + meta + "</div>";
+      '<div class="pt-title">' + titulo + "</div>" + meta + "</div>";
   }
 
   // ── Popup de itens da PO ao clicar num card do Comex ───────────────
