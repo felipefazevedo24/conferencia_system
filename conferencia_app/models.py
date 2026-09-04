@@ -1691,6 +1691,15 @@ class LogisticaInventarioAjuste(db.Model):
     gestor_confirmado_em = db.Column(db.DateTime)
     gestor_confirmado_por = db.Column(db.String(100))
 
+    # Imagem de apoio da justificativa (ex.: foto do material, da avaria,
+    # da prateleira vazia) - guardada direto no banco, mesmo padrao do
+    # ComexDocumento (sem Google Drive nem disco do servidor). Uma so' por
+    # ajuste; anexada/trocada enquanto o item ainda esta em Validacao ou
+    # Relatorio (ver logistica_inventario_ajuste_service).
+    justificativa_imagem = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    justificativa_imagem_mimetype = db.Column(db.String(120))
+    justificativa_imagem_nome = db.Column(db.String(260))
+
     finance_concluido_em = db.Column(db.DateTime)
     finance_concluido_por = db.Column(db.String(100))
     finance_observacao = db.Column(db.String(500))

@@ -168,6 +168,53 @@ def confirmar_divergencia(
     return ajuste
 
 
+# ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
+# Guardada direto no banco (coluna `justificativa_imagem`), mesmo padrao do
+# ComexDocumento - sem Google Drive nem disco do servidor. Uma so' por
+# ajuste; anexavel enquanto o item ainda esta sendo tratado pelo gestor
+# (Validacao ou Relatorio - depois de ir pro Finance, fica so leitura).
+TAMANHO_MAXIMO_IMAGEM_JUSTIFICATIVA = 8 * 1024 * 1024  # 8 MB
+_ETAPAS_PERMITEM_IMAGEM_JUSTIFICATIVA = ("Validacao", "Relatorio")
+
+
+def anexar_imagem_justificativa(
+    ajuste: LogisticaInventarioAjuste, dados: bytes, file_name: str, mimetype: str | None = None
+) -> LogisticaInventarioAjuste:
+    """Anexa (ou substitui) a foto de apoio da justificativa desse ajuste -
+    disponivel enquanto o gestor ainda esta com o item em maos (Validacao
+    ou Relatorio, antes de ir pro Finance)."""
+    if ajuste.status_modulo not in _ETAPAS_PERMITEM_IMAGEM_JUSTIFICATIVA:
+        raise ValueError(
+            "Só dá pra anexar imagem enquanto o item está aguardando gestor ou aguardando relatório."
+        )
+    if not dados:
+        raise ValueError("Arquivo vazio.")
+    if not file_name:
+        raise ValueError("Nome de arquivo inválido.")
+    if len(dados) > TAMANHO_MAXIMO_IMAGEM_JUSTIFICATIVA:
+        raise ValueError(
+            f"Imagem muito grande ({len(dados) / 1024 / 1024:.1f} MB) - o limite é "
+            f"{TAMANHO_MAXIMO_IMAGEM_JUSTIFICATIVA // 1024 // 1024} MB."
+        )
+    mimetype = (mimetype or "").strip().lower()
+    if not mimetype.startswith("image/"):
+        raise ValueError("Só é permitido anexar imagens (JPG, PNG, etc.).")
+
+    ajuste.justificativa_imagem = dados
+    ajuste.justificativa_imagem_mimetype = mimetype
+    ajuste.justificativa_imagem_nome = file_name[:260]
+    db.session.commit()
+    return ajuste
+
+
+def remover_imagem_justificativa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjuste:
+    ajuste.justificativa_imagem = None
+    ajuste.justificativa_imagem_mimetype = None
+    ajuste.justificativa_imagem_nome = None
+    db.session.commit()
+    return ajuste
+
+
 def _proximo_numero_documento(mes: int, ano: int) -> tuple[int, str]:
     """Sequencial do FORM-08.52 reinicia a cada mes/ano - ex.: "09/2026-001",
     "09/2026-002", ..., depois "10/2026-001" no mes seguinte."""

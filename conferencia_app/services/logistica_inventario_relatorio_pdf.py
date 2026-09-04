@@ -73,6 +73,23 @@ def _obter_caminho_logo() -> str | None:
     return None
 
 
+def _imagem_flowable(dados: bytes, max_width: float, max_height: float) -> Image | None:
+    """Foto de apoio da justificativa (ver LogisticaInventarioAjuste.
+    justificativa_imagem) redimensionada mantendo proporcao, sem passar de
+    `max_width`/`max_height`. Retorna None se os bytes nao forem uma imagem
+    valida (defensivo - nao quebra a geracao do PDF inteiro por causa de
+    um arquivo corrompido)."""
+    try:
+        leitor = ImageReader(BytesIO(dados))
+        iw, ih = leitor.getSize()
+        if not iw or not ih:
+            return None
+        escala = min(max_width / float(iw), max_height / float(ih), 1.0)
+        return Image(BytesIO(dados), width=iw * escala, height=ih * escala)
+    except Exception:
+        return None
+
+
 def _lista_opcoes(opcoes: list[str], selecionada: str, largura: float) -> Table:
     """Lista de opcoes fixas com a escolhida marcada com "( X )" - mesmo
     estilo de caixinha de selecao do formulario original em Excel."""
@@ -236,12 +253,19 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         _p("Vlr. Total", size=7.5, bold=True, color=colors.white, align=TA_RIGHT),
     ]
     linhas = [cabecalho_itens]
-    span_comandos = []  # linhas de justificativa ocupam as 9 colunas (SPAN)
+    # Cada item ocupa um numero VARIAVEL de linhas (dados + justificativa +
+    # opcionalmente a foto de apoio) - por isso monta o fundo alternado
+    # manualmente (BACKGROUND por item) em vez de ROWBACKGROUNDS ciclico,
+    # que so funciona certo com contagem fixa de linhas por item.
+    span_comandos = []  # linhas de justificativa/imagem ocupam as 9 colunas (SPAN)
+    bg_comandos = []
     valor_total_geral = 0.0
+    largura_max_imagem = largura * 0.35
     for idx, a in enumerate(ajustes, start=1):
         valor_total_item = (a.diferenca or 0) * a.custo_medio if a.custo_medio is not None else None
         if valor_total_item is not None:
             valor_total_geral += valor_total_item
+        linha_inicio = len(linhas)
         linhas.append([
             _p(str(idx), size=8, align=TA_CENTER),
             _p(a.codigo_produto, size=8),
@@ -260,6 +284,19 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         linhas.append([_p(f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}", size=7.5)] + [""] * 8)
         span_comandos.append(("SPAN", (0, linha_justificativa), (-1, linha_justificativa)))
 
+        # Foto de apoio (opcional) - anexada enquanto o item ainda estava
+        # em Validacao/Relatorio (ver justificativa_imagem no model).
+        if a.justificativa_imagem:
+            flow_imagem = _imagem_flowable(a.justificativa_imagem, largura_max_imagem, 60 * mm)
+            if flow_imagem:
+                linha_imagem = len(linhas)
+                linhas.append([flow_imagem] + [""] * 8)
+                span_comandos.append(("SPAN", (0, linha_imagem), (-1, linha_imagem)))
+                span_comandos.append(("ALIGN", (0, linha_imagem), (-1, linha_imagem), "LEFT"))
+
+        cor_item = colors.white if idx % 2 == 1 else COR_CINZA_CLARO
+        bg_comandos.append(("BACKGROUND", (0, linha_inicio), (-1, len(linhas) - 1), cor_item))
+
     # Colunas fixas (item/codigo/un/qtds/valores) - Descricao ocupa o resto
     # da largura da pagina, pra caber nome de produto grande sem estourar.
     # Ordem das colunas: Item, Codigo, Descricao, UN, Qtd Contabil,
@@ -277,7 +314,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         ("BACKGROUND", (0, 0), (-1, 0), COR_AZUL_TABELA),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COR_CINZA_CLARO]),
+        *bg_comandos,
         *span_comandos,
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),

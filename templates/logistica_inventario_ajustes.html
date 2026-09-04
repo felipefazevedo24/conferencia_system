@@ -57,9 +57,16 @@
     .ia-field textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
     .ia-field.span-2 { grid-column: span 2; }
     .ia-modal-section-title { font-size: 12.5px; font-weight: 700; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .03em; margin: 16px 0 8px; }
-    .ia-relatorio-itens { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; max-height: 160px; overflow-y: auto; font-size: 12.5px; }
+    .ia-relatorio-itens { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; max-height: 260px; overflow-y: auto; font-size: 12.5px; }
     .ia-relatorio-itens table { width: 100%; border-collapse: collapse; }
-    .ia-relatorio-itens th, .ia-relatorio-itens td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--eui-border, #f1f5f9); }
+    .ia-relatorio-itens th, .ia-relatorio-itens td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--eui-border, #f1f5f9); vertical-align: top; }
+    .ia-rel-item-imagem-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .ia-rel-item-imagem-cell img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--eui-border, #d1d5db); cursor: pointer; }
+    .ia-rel-item-imagem-cell .ia-rel-img-btns { display: flex; gap: 6px; }
+    .ia-rel-item-imagem-cell button { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 11px; color: var(--eui-text, #374151); }
+    .ia-rel-item-imagem-cell button:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .ia-rel-item-imagem-cell button.is-danger { color: #dc2626; }
+    .ia-rel-item-imagem-cell input[type="file"] { display: none; }
 </style>
 {% endblock %}
 
@@ -173,7 +180,7 @@
 
         <div class="ia-relatorio-itens">
             <table>
-                <thead><tr><th>Código</th><th>Local</th><th>Qtd Física</th><th>Diferença</th><th style="min-width:220px;">Justificativa (motivo) *</th></tr></thead>
+                <thead><tr><th>Código</th><th>Local</th><th>Qtd Física</th><th>Diferença</th><th style="min-width:220px;">Justificativa (motivo) *</th><th style="min-width:110px;">Imagem</th></tr></thead>
                 <tbody id="ia-relatorio-itens-tbody"></tbody>
             </table>
         </div>
@@ -568,6 +575,83 @@
         select.innerHTML = opcoes.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
     }
 
+    // ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
+    // Upload/remocao acontecem NA HORA (nao esperam o "Gerar Relatório") -
+    // fica anexada no ajuste, disponivel enquanto ele estiver em Validacao
+    // ou Relatorio (ver logistica_inventario_ajuste_service).
+    function imagemJustificativaCellHtml(a) {
+        if (a.justificativa_imagem_url) {
+            return `
+                <div class="ia-rel-item-imagem-cell">
+                    <img src="${a.justificativa_imagem_url}" data-view-img="${a.justificativa_imagem_url}" title="${escapeHtml(a.justificativa_imagem_nome || "")}">
+                    <div class="ia-rel-img-btns">
+                        <button type="button" data-trocar-img="${a.id}" title="Trocar imagem"><i class="fas fa-rotate"></i></button>
+                        <button type="button" class="is-danger" data-remover-img="${a.id}" title="Remover imagem"><i class="fas fa-trash"></i></button>
+                    </div>
+                    <input type="file" accept="image/*" data-input-img="${a.id}">
+                </div>`;
+        }
+        return `
+            <div class="ia-rel-item-imagem-cell">
+                <button type="button" data-anexar-img="${a.id}" title="Anexar imagem" style="width:auto; padding:0 8px; height:28px;"><i class="fas fa-camera"></i> Anexar</button>
+                <input type="file" accept="image/*" data-input-img="${a.id}">
+            </div>`;
+    }
+
+    async function uploadImagemJustificativa(ajusteId, arquivo) {
+        const fd = new FormData();
+        fd.append("arquivo", arquivo);
+        const resp = await fetch(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "POST", body: fd });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data.ajuste;
+    }
+
+    function atualizarLinhaImagem(ajusteId, ajusteAtualizado) {
+        // Atualiza o cache local (pra sobreviver se reabrir o modal) e
+        // rerenderiza so' a celula de imagem dessa linha, sem perder o
+        // que o gestor ja tinha digitado nas outras textareas.
+        const idx = ajustesCache.findIndex((x) => x.id === ajusteAtualizado.id);
+        if (idx >= 0) ajustesCache[idx] = Object.assign({}, ajustesCache[idx], ajusteAtualizado);
+        const linha = $("ia-relatorio-itens-tbody").querySelector(`tr[data-ajuste-id="${ajusteId}"]`);
+        if (linha) linha.lastElementChild.innerHTML = imagemJustificativaCellHtml(ajusteAtualizado);
+    }
+
+    $("ia-relatorio-itens-tbody").addEventListener("click", (e) => {
+        const verBtn = e.target.closest("[data-view-img]");
+        if (verBtn) { window.open(verBtn.dataset.viewImg, "_blank"); return; }
+        const anexarBtn = e.target.closest("[data-anexar-img], [data-trocar-img]");
+        if (anexarBtn) {
+            const ajusteId = anexarBtn.dataset.anexarImg || anexarBtn.dataset.trocarImg;
+            const input = anexarBtn.closest(".ia-rel-item-imagem-cell").querySelector(`[data-input-img="${ajusteId}"]`);
+            if (input) input.click();
+            return;
+        }
+        const removerBtn = e.target.closest("[data-remover-img]");
+        if (removerBtn) {
+            const ajusteId = removerBtn.dataset.removerImg;
+            if (!confirm("Remover a imagem anexada a essa justificativa?")) return;
+            api(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "DELETE" })
+                .then((data) => atualizarLinhaImagem(ajusteId, data.ajuste))
+                .catch((err) => toast(err.message, "error"));
+        }
+    });
+
+    $("ia-relatorio-itens-tbody").addEventListener("change", async (e) => {
+        const input = e.target.closest("[data-input-img]");
+        if (!input || !input.files[0]) return;
+        const ajusteId = input.dataset.inputImg;
+        try {
+            const ajusteAtualizado = await uploadImagemJustificativa(ajusteId, input.files[0]);
+            atualizarLinhaImagem(ajusteId, ajusteAtualizado);
+            toast("Imagem anexada!", "success");
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            input.value = "";
+        }
+    });
+
     async function garantirOpcoesRelatorio() {
         if (opcoesRelatorio) return opcoesRelatorio;
         opcoesRelatorio = await api("/api/logistica/inventario-ajustes/relatorio/opcoes");
@@ -595,12 +679,13 @@
         // (gestor_justificativa) - atrelada a esse item, nao um texto
         // generico compartilhado por todo o lote (ver textarea por linha).
         $("ia-relatorio-itens-tbody").innerHTML = itens.map((a) => `
-            <tr>
+            <tr data-ajuste-id="${a.id}">
                 <td>${escapeHtml(a.codigo_produto)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
                 <td><textarea class="ia-rel-item-justificativa" data-ajuste-id="${a.id}" rows="2" style="width:100%; min-width:200px; font-size:12.5px; font-family:inherit; border:1px solid var(--eui-border,#d1d5db); border-radius:6px; padding:5px 7px;">${escapeHtml(a.gestor_justificativa || "")}</textarea></td>
+                <td>${imagemJustificativaCellHtml(a)}</td>
             </tr>
         `).join("");
         $("ia-rel-tipo-ajuste").value = opcoesRelatorio.tipos_ajuste[0] || "";

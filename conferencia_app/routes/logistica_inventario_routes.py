@@ -702,6 +702,8 @@ def _fmt_ajuste(a) -> dict:
         "analise_causa_status": a.analise_causa.status if a.analise_causa else None,
         "relatorio_id": a.relatorio_id,
         "relatorio_numero_documento": a.relatorio.numero_documento if a.relatorio else None,
+        "justificativa_imagem_nome": a.justificativa_imagem_nome,
+        "justificativa_imagem_url": f"/api/logistica/inventario-ajustes/{a.id}/justificativa-imagem" if a.justificativa_imagem else None,
     }
 
 
@@ -868,6 +870,53 @@ def api_confirmar_ajuste(ajuste_id):
     if payload.get("solicitar_analise_causa"):
         mensagem += " Análise de causa raiz solicitada."
     return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
+
+
+# ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
+# disponivel enquanto o item ainda esta em Validacao ou Relatorio.
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_anexar_imagem_justificativa(ajuste_id):
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"error": "Nenhum arquivo recebido."}), 400
+    try:
+        ajuste = ajuste_svc.anexar_imagem_justificativa(
+            ajuste, arquivo.read(), arquivo.filename, mimetype=arquivo.mimetype,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Imagem anexada.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_baixar_imagem_justificativa(ajuste_id):
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste or not ajuste.justificativa_imagem:
+        return jsonify({"error": "Imagem não encontrada."}), 404
+    return send_file(
+        BytesIO(ajuste.justificativa_imagem),
+        mimetype=ajuste.justificativa_imagem_mimetype or "application/octet-stream",
+        download_name=ajuste.justificativa_imagem_nome or "justificativa.jpg",
+    )
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["DELETE"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_remover_imagem_justificativa(ajuste_id):
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    ajuste = ajuste_svc.remover_imagem_justificativa(ajuste)
+    return jsonify({"message": "Imagem removida.", "ajuste": _fmt_ajuste(ajuste)})
 
 
 # ── Relatorio de Ajuste (FORM-08.52 "Ajuste para Faturamento") - gera o ───

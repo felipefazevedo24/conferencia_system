@@ -5963,3 +5963,82 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         json={**payload_base, "ajuste_ids": ids_extras},
     )
     assert resp_muitos.status_code == 400
+
+
+def test_inventario_imagem_justificativa_anexar_baixar_remover(tmp_path):
+    """Imagem de apoio da justificativa (foto do material/avaria/prateleira)
+    - guardada direto no banco (coluna justificativa_imagem), disponivel
+    enquanto o ajuste ainda esta em Validacao ou Relatorio; some do PDF do
+    FORM-08.52 quando presente, atrelada aquele item especifico."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="SKU-IMG", local_codigo="A01-01", unidade_medida="UN",
+            qtde_contada=5, qtde_estoque_no_momento=3, diferenca=2,
+            status_modulo="Relatorio", status_slug="relatorio",
+            gestor_justificativa="Material encontrado atrás da pallet, foto anexa.",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    conteudo_img = b"\x89PNG\r\n\x1a\n" + b"X" * 300  # nao precisa ser um PNG de verdade pro teste de armazenamento
+
+    # Recusa arquivo que nao e' imagem (mimetype).
+    resp_nao_imagem = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem",
+        data={"arquivo": (io.BytesIO(b"conteudo texto"), "nota.txt", "text/plain")},
+        content_type="multipart/form-data",
+    )
+    assert resp_nao_imagem.status_code == 400
+
+    # Anexa a imagem de verdade.
+    resp = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem",
+        data={"arquivo": (io.BytesIO(conteudo_img), "prateleira.png", "image/png")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    ajuste_payload = resp.get_json()["ajuste"]
+    assert ajuste_payload["justificativa_imagem_nome"] == "prateleira.png"
+    assert ajuste_payload["justificativa_imagem_url"] == f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem"
+
+    # Baixa a imagem - bytes batem com o que foi enviado.
+    resp_download = client.get(f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem")
+    assert resp_download.status_code == 200
+    assert resp_download.data == conteudo_img
+    assert resp_download.headers.get("Content-Type") == "image/png"
+
+    # Aparece no PDF do relatorio gerado a partir desse item.
+    resp_relatorio = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Geral",
+        "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+    })
+    assert resp_relatorio.status_code == 200
+    relatorio_id = resp_relatorio.get_json()["relatorio_id"]
+    resp_pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf")
+    assert resp_pdf.status_code == 200
+    assert resp_pdf.headers.get("Content-Type") == "application/pdf"
+
+    # Remove a imagem.
+    resp_remover = client.delete(f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem")
+    assert resp_remover.status_code == 200
+    assert resp_remover.get_json()["ajuste"]["justificativa_imagem_url"] is None
+
+    resp_download_removida = client.get(f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem")
+    assert resp_download_removida.status_code == 404
+
+    # Depois de ir pro Finance, nao deixa mais anexar (fora de Validacao/Relatorio).
+    resp_anexar_apos_finance = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/justificativa-imagem",
+        data={"arquivo": (io.BytesIO(conteudo_img), "tarde.png", "image/png")},
+        content_type="multipart/form-data",
+    )
+    assert resp_anexar_apos_finance.status_code == 400
