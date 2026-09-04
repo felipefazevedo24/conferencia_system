@@ -77,6 +77,11 @@ def create_app(test_config=None) -> Flask:
     if test_config:
         app.config.update(test_config)
 
+    # PythonAnywhere é IPv4-only; se a bridge for um Tailscale Funnel (.ts.net),
+    # força IPv4 pra não tentar o IPv6 (inalcançável) do resolver interno.
+    from .net_ipv4_bridge import forcar_ipv4_bridge
+    forcar_ipv4_bridge()
+
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
