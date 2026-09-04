@@ -171,21 +171,51 @@ _MODFRETE_LABEL = {
 _FRETE_GRUPO_LABEL = {
     "CIF": "CIF",
     "FOB": "FOB",
+    "PROP_REM": "Transporte próprio do remetente",
+    "PROP_DEST": "Transporte próprio do destinatário",
     "TERCEIROS": "Terceiros",
     "SEM_FRETE": "Sem frete",
 }
 
+# Modalidades que o operador escolhe no romaneio. CIF/FOB = frete contratado;
+# PROP_REM/PROP_DEST = transporte próprio (veículo da empresa/remetente ou do
+# próprio destinatário) — não contratam transportadora, mas seguem na família
+# CIF/FOB para o fluxo fiscal. Incoterms: PROP_REM ~ CIF (DAP), PROP_DEST ~ FOB (EXW).
+_TIPOS_FRETE_VALIDOS = ("FOB", "CIF", "PROP_REM", "PROP_DEST")
+
+_TIPO_FRETE_LABEL = {
+    "CIF": "CIF - Frete por conta do remetente",
+    "FOB": "FOB - Frete por conta do destinatário",
+    "PROP_REM": "Transporte próprio do remetente (CIF)",
+    "PROP_DEST": "Transporte próprio do destinatário (FOB)",
+}
+
+
+def _familia_frete(tipo_frete) -> str:
+    """Família (quem custeia) da modalidade: CIF (remetente) ou FOB (destinatário)."""
+    return "CIF" if str(tipo_frete or "").strip().upper() in ("CIF", "PROP_REM") else "FOB"
+
+
+def _tipo_frete_label(tipo_frete) -> str:
+    t = str(tipo_frete or "").strip().upper()
+    return _TIPO_FRETE_LABEL.get(t, t or "FOB")
+
 
 def _modfrete_grupo(codigo) -> str:
-    """Converte o código modFrete da NF-e no grupo CIF/FOB/TERCEIROS/SEM_FRETE.
+    """Converte o código modFrete da NF-e na modalidade específica do romaneio:
+    CIF (0), FOB (1), PROP_REM (3), PROP_DEST (4), TERCEIROS (2), SEM_FRETE (9).
     Retorna "" quando o código é desconhecido/ausente."""
     c = str(codigo or "").strip()
-    if c in ("0", "3"):
+    if c == "0":
         return "CIF"
-    if c in ("1", "4"):
+    if c == "1":
         return "FOB"
     if c == "2":
         return "TERCEIROS"
+    if c == "3":
+        return "PROP_REM"
+    if c == "4":
+        return "PROP_DEST"
     if c == "9":
         return "SEM_FRETE"
     return ""
@@ -440,7 +470,7 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
 
-    if romaneio.tipo_frete != "FOB":
+    if romaneio.tipo_frete == "CIF":
         return jsonify({"error": "Este romaneio e CIF - anexe o comprovante por NF."}), 400
     if romaneio.status != "Expedido":
         return jsonify({"error": "O romaneio precisa estar Expedido para anexar o comprovante."}), 400
@@ -748,8 +778,8 @@ def atualizar_romaneio(romaneio_id):
             romaneio.cliente = str(payload["cliente"]).strip()
         if "tipo_frete" in payload:
             frete = str(payload["tipo_frete"]).strip().upper()
-            if frete not in ("FOB", "CIF"):
-                return jsonify({"error": "Tipo de frete deve ser FOB ou CIF."}), 400
+            if frete not in _TIPOS_FRETE_VALIDOS:
+                return jsonify({"error": "Tipo de frete inválido."}), 400
             disparar_aviso_fob = (frete == "FOB")
             romaneio.tipo_frete = frete
     if "transportadora" in payload:
@@ -1299,8 +1329,8 @@ def editar_romaneio_campos(romaneio, alteracoes, autor):
         romaneio.motorista_documento = str(alteracoes["motorista_documento"] or "").strip()
     if "tipo_frete" in alteracoes:
         frete = str(alteracoes["tipo_frete"] or "").strip().upper()
-        if frete not in ("FOB", "CIF"):
-            return False, "Tipo de frete deve ser FOB ou CIF."
+        if frete not in _TIPOS_FRETE_VALIDOS:
+            return False, "Tipo de frete inválido."
         disparar_aviso_fob = (frete == "FOB")
         romaneio.tipo_frete = frete
 
@@ -1659,6 +1689,8 @@ def visualizar_romaneio(romaneio_id):
         transportadora=_transportadora_card(romaneio),
         grupos=_consolidado_romaneio(romaneio),
         fotos_carregamento=_fotos_carregamento_payload(romaneio),
+        frete_familia=_familia_frete(romaneio.tipo_frete),
+        tipo_frete_label=_tipo_frete_label(romaneio.tipo_frete),
     )
 
 
