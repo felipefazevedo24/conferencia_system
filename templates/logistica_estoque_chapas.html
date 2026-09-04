@@ -37,6 +37,7 @@
     .ch-chip b { color: var(--eui-text); }
     .ch-chip--on { border-color: color-mix(in srgb, var(--eui-primary) 45%, var(--eui-border)); background: color-mix(in srgb, var(--eui-primary) 8%, var(--eui-surface)); }
     .ch-group__count--warn { color: var(--eui-warning, #b45309); background: color-mix(in srgb, var(--eui-warning, #f59e0b) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+    .ch-tag-cli { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #7c3aed; background: color-mix(in srgb, #7c3aed 12%, transparent); border: 1px solid color-mix(in srgb, #7c3aed 35%, var(--eui-border)); border-radius: 999px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 4px; }
     .ch-group__title { display: grid; gap: 1px; }
     .ch-group__tiles { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
     .ch-gstat { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
@@ -327,6 +328,7 @@
                             <span class="ch-desc">${esc(g.desc || '')}</span>
                         </div>
                         <span class="ch-group__count">${g.rows.length} lote(s)</span>
+                        ${s && s.terceiro ? '<span class="ch-tag-cli"><i class="fas fa-user-tag"></i> cliente</span>' : ''}
                         ${s ? '' : '<span class="ch-group__count ch-group__count--warn">saldo GRV indisponível</span>'}
                     </div>
                     <div class="ch-group__tiles">
