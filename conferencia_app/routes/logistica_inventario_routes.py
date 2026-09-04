@@ -1128,6 +1128,7 @@ def api_chapas_listar():
                 "disponivel_kg": round(float(r.get("qtde_disponivel") or 0), 2),
                 "unidade": r.get("unidade") or "KG",
                 "terceiro": bool(r.get("terceiro")),
+                "cliente": r.get("cliente") or "",
             }
         ros = reservas_os_map.get(cn)
         if ros and l["codigo"] not in reservas_os_out:
