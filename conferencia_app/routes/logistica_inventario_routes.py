@@ -906,6 +906,7 @@ def api_gerar_relatorio_ajuste():
             tipo_ajuste_detalhe=payload.get("tipo_ajuste_detalhe"),
             motivo_ajuste=payload.get("motivo_ajuste"),
             motivo_ajuste_detalhe=payload.get("motivo_ajuste_detalhe"),
+            justificativas=payload.get("justificativas") or {},
             deposito_tipo=payload.get("deposito_tipo"),
             deposito_local=payload.get("deposito_local"),
             responsavel=payload.get("responsavel"),

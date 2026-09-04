@@ -166,12 +166,14 @@
         <h3><i class="fas fa-file-invoice"></i> Gerar Relatório de Ajuste (FORM-08.52)</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
             Preenche o formulário uma vez pro lote inteiro — os <strong id="ia-relatorio-qtd">0</strong> itens
-            selecionados vão juntos, com o mesmo número de documento, direto pro Finance.
+            selecionados vão juntos, com o mesmo número de documento, direto pro Finance. A justificativa
+            (motivo) é <strong>por item</strong>, não genérica — vem pré-carregada da confirmação da divergência,
+            mas pode editar aqui antes de gerar.
         </p>
 
         <div class="ia-relatorio-itens">
             <table>
-                <thead><tr><th>Código</th><th>Local</th><th>Qtd Física</th><th>Diferença</th></tr></thead>
+                <thead><tr><th>Código</th><th>Local</th><th>Qtd Física</th><th>Diferença</th><th style="min-width:220px;">Justificativa (motivo) *</th></tr></thead>
                 <tbody id="ia-relatorio-itens-tbody"></tbody>
             </table>
         </div>
@@ -193,10 +195,6 @@
             <div class="ia-field">
                 <label for="ia-rel-deposito-tipo">Depósito/Local *</label>
                 <select id="ia-rel-deposito-tipo"></select>
-            </div>
-            <div class="ia-field span-2">
-                <label for="ia-rel-motivo-detalhe">Detalhe do Motivo *</label>
-                <textarea id="ia-rel-motivo-detalhe" placeholder="Descreva o motivo detalhadamente..."></textarea>
             </div>
             <div class="ia-field span-2">
                 <label for="ia-rel-deposito-local">Local (opcional)</label>
@@ -593,19 +591,22 @@
         }
         const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
         $("ia-relatorio-qtd").textContent = itens.length;
+        // Justificativa vem pre-carregada da confirmacao da divergencia
+        // (gestor_justificativa) - atrelada a esse item, nao um texto
+        // generico compartilhado por todo o lote (ver textarea por linha).
         $("ia-relatorio-itens-tbody").innerHTML = itens.map((a) => `
             <tr>
                 <td>${escapeHtml(a.codigo_produto)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+                <td><textarea class="ia-rel-item-justificativa" data-ajuste-id="${a.id}" rows="2" style="width:100%; min-width:200px; font-size:12.5px; font-family:inherit; border:1px solid var(--eui-border,#d1d5db); border-radius:6px; padding:5px 7px;">${escapeHtml(a.gestor_justificativa || "")}</textarea></td>
             </tr>
         `).join("");
         $("ia-rel-tipo-ajuste").value = opcoesRelatorio.tipos_ajuste[0] || "";
         $("ia-rel-tipo-detalhe").value = "";
         $("ia-rel-tipo-detalhe-wrap").style.display = "none";
         $("ia-rel-motivo").value = opcoesRelatorio.motivos_ajuste[0] || "";
-        $("ia-rel-motivo-detalhe").value = "";
         $("ia-rel-deposito-tipo").value = opcoesRelatorio.deposito_tipos[0] || "";
         $("ia-rel-deposito-local").value = "";
         $("ia-rel-responsavel").value = "";
@@ -622,9 +623,21 @@
     $("ia-relatorio-modal").addEventListener("click", (e) => { if (e.target.id === "ia-relatorio-modal") fecharModalRelatorio(); });
 
     $("ia-relatorio-salvar").addEventListener("click", async () => {
-        const motivoDetalhe = $("ia-rel-motivo-detalhe").value.trim();
-        if (!motivoDetalhe) {
-            toast("Detalhe o Motivo do Ajuste antes de gerar o relatório.", "error");
+        // Justificativa e' por item, nao generica - cada textarea da
+        // tabela de itens precisa estar preenchida (veio pre-carregada da
+        // confirmacao, mas o gestor pode ter apagado).
+        const justificativas = {};
+        const faltando = [];
+        Array.from($("ia-relatorio-itens-tbody").querySelectorAll(".ia-rel-item-justificativa")).forEach((ta) => {
+            const texto = ta.value.trim();
+            justificativas[ta.dataset.ajusteId] = texto;
+            if (!texto) {
+                const linha = ta.closest("tr");
+                faltando.push(linha ? linha.children[0].textContent : ta.dataset.ajusteId);
+            }
+        });
+        if (faltando.length) {
+            toast(`Preencha a justificativa de cada item antes de gerar o relatório - faltando: ${faltando.join(", ")}.`, "error");
             return;
         }
         const payload = {
@@ -632,7 +645,7 @@
             tipo_ajuste: $("ia-rel-tipo-ajuste").value,
             tipo_ajuste_detalhe: $("ia-rel-tipo-detalhe").value.trim(),
             motivo_ajuste: $("ia-rel-motivo").value,
-            motivo_ajuste_detalhe: motivoDetalhe,
+            justificativas: justificativas,
             deposito_tipo: $("ia-rel-deposito-tipo").value,
             deposito_local: $("ia-rel-deposito-local").value.trim(),
             responsavel: $("ia-rel-responsavel").value.trim(),

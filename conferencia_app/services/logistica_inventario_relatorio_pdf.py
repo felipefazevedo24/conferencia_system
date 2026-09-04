@@ -190,12 +190,15 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     el.append(Spacer(1, 10))
 
     # ---- Bloco: Motivo do Ajuste (esquerda) + Depósito/Local (direita) ----
+    # O motivo detalhado de verdade e' por ITEM (ver tabela de itens
+    # abaixo, logo apos cada linha) - aqui so a classificacao geral do
+    # lote (mesma caixinha do formulario em papel).
     motivo_bloco = [
         _p("Motivo do Ajuste:", size=8, bold=True, color=COR_MUTED),
         _lista_opcoes(RELATORIO_AJUSTE_MOTIVOS, relatorio.motivo_ajuste, largura_esq),
-        Spacer(1, 3),
-        _p(f"<i>Detalhe:</i> {relatorio.motivo_ajuste_detalhe}", size=8),
     ]
+    if relatorio.motivo_ajuste_detalhe:
+        motivo_bloco += [Spacer(1, 3), _p(f"<i>Observação geral:</i> {relatorio.motivo_ajuste_detalhe}", size=8)]
     deposito_bloco = [
         _p("Depósito/Local:", size=8, bold=True, color=COR_MUTED),
         _lista_opcoes(RELATORIO_AJUSTE_DEPOSITO_TIPOS, relatorio.deposito_tipo, largura_dir),
@@ -233,6 +236,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         _p("Vlr. Total", size=7.5, bold=True, color=colors.white, align=TA_RIGHT),
     ]
     linhas = [cabecalho_itens]
+    span_comandos = []  # linhas de justificativa ocupam as 9 colunas (SPAN)
     valor_total_geral = 0.0
     for idx, a in enumerate(ajustes, start=1):
         valor_total_item = (a.diferenca or 0) * a.custo_medio if a.custo_medio is not None else None
@@ -249,6 +253,12 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
             _p(_fmt_valor(a.custo_medio), size=8, align=TA_RIGHT),
             _p(_fmt_valor(valor_total_item), size=8, align=TA_RIGHT),
         ])
+        # Justificativa ATRELADA a esse item (nao um texto generico do
+        # lote inteiro) - pre-carregada da aprovacao (Modulo 02) e
+        # editavel na hora de gerar o relatorio (ver gerar_relatorio_ajuste).
+        linha_justificativa = len(linhas)
+        linhas.append([_p(f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}", size=7.5)] + [""] * 8)
+        span_comandos.append(("SPAN", (0, linha_justificativa), (-1, linha_justificativa)))
 
     # Colunas fixas (item/codigo/un/qtds/valores) - Descricao ocupa o resto
     # da largura da pagina, pra caber nome de produto grande sem estourar.
@@ -268,6 +278,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COR_CINZA_CLARO]),
+        *span_comandos,
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("TOPPADDING", (0, 0), (-1, -1), 3),

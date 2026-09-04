@@ -5818,9 +5818,11 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
     coberto em test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo),
     ele seleciona varios ajustes JA CONFIRMADOS de uma vez (fixtures abaixo
     ja nascem em "Relatorio", pulando a etapa de confirmacao pra isolar o
-    teste), preenche o formulario uma unica vez pro lote inteiro, e todos
-    vao pro Finance juntos com o mesmo numero de documento. Numero de
-    documento segue mes/ano + sequencial (reinicia a cada mes)."""
+    teste), e todos vao pro Finance juntos com o mesmo numero de documento.
+    A justificativa (motivo) e' POR ITEM, nao generica pro lote - pre-carrega
+    do gestor_justificativa dado na aprovacao, e pode ser sobrescrita no
+    payload. Numero de documento segue mes/ano + sequencial (reinicia a
+    cada mes)."""
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -5832,16 +5834,19 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
             codigo_produto="19-01-00233", local_codigo="A01-01", unidade_medida="KG",
             qtde_contada=2707, qtde_estoque_no_momento=0, diferenca=2707, custo_medio=12.5,
             status_modulo="Relatorio", status_slug="relatorio",
+            gestor_justificativa="Estoque zerado no sistema, material físico ainda na prateleira.",
         )
         a2 = LogisticaInventarioAjuste(
             codigo_produto="23-01-02090", local_codigo="B02-03", unidade_medida="UN",
             qtde_contada=10, qtde_estoque_no_momento=15, diferenca=-5, custo_medio=None,
             status_modulo="Relatorio", status_slug="relatorio",
+            # sem gestor_justificativa - precisa vir no payload (justificativas).
         )
         outro = LogisticaInventarioAjuste(
             codigo_produto="99-00-00001", local_codigo="C03-01", unidade_medida="UN",
             qtde_contada=1, qtde_estoque_no_momento=1, diferenca=0,
             status_modulo="Relatorio", status_slug="relatorio",
+            gestor_justificativa="Contagem batendo, sem divergência real.",
         )
         db.session.add_all([a1, a2, outro])
         db.session.commit()
@@ -5859,7 +5864,6 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         "ajuste_ids": [a1_id, a2_id],
         "tipo_ajuste": "Inventário Geral",
         "motivo_ajuste": "Erro de contagem",
-        "motivo_ajuste_detalhe": "Estoque zerado, mas tinha material físico.",
         "deposito_tipo": "Depósito - Principal",
         "deposito_local": "CD Hortolândia",
         "responsavel": "Paulo Ricardo",
@@ -5867,14 +5871,18 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         "depto": "Logística",
     }
 
-    # Motivo sem detalhe -> bloqueia.
-    resp_sem_detalhe = client.post(
-        "/api/logistica/inventario-ajustes/relatorio",
-        json={**payload_base, "motivo_ajuste_detalhe": "  "},
-    )
-    assert resp_sem_detalhe.status_code == 400
+    # a2 nao tem gestor_justificativa e nao veio no payload -> bloqueia
+    # (motivo nao pode ficar generico/vazio pra nenhum item selecionado).
+    resp_sem_justificativa = client.post("/api/logistica/inventario-ajustes/relatorio", json=payload_base)
+    assert resp_sem_justificativa.status_code == 400
+    assert "23-01-02090" in resp_sem_justificativa.get_json()["error"]
 
-    resp = client.post("/api/logistica/inventario-ajustes/relatorio", json=payload_base)
+    # Agora manda a justificativa de a2 no payload (edicao/preenchimento na
+    # hora do relatorio) - a1 usa a que ja veio da aprovacao (pre-carregada).
+    resp = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        **payload_base,
+        "justificativas": {str(a2_id): "5 unidades com avaria, descartadas sem baixa no ERP."},
+    })
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["numero_documento"].endswith("-001")
@@ -5892,9 +5900,14 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         assert a1_depois.relatorio_id == relatorio_id
         assert a2_depois.relatorio_id == relatorio_id
         assert a1_depois.gestor_confirmado_por == "ADMIN"
+        # a1 manteve a justificativa pre-carregada (nao mandou nada novo pra ela).
+        assert a1_depois.gestor_justificativa == "Estoque zerado no sistema, material físico ainda na prateleira."
+        # a2 gravou a que veio agora no payload.
+        assert a2_depois.gestor_justificativa == "5 unidades com avaria, descartadas sem baixa no ERP."
         assert outro_depois.status_modulo == "Relatorio"  # nao selecionado, nao mexeu
 
-    # Segundo relatorio no mesmo mes -> sequencial incrementa.
+    # Segundo relatorio no mesmo mes -> sequencial incrementa (outro ja tem
+    # gestor_justificativa propria, nao precisa mandar no payload).
     resp2 = client.post(
         "/api/logistica/inventario-ajustes/relatorio",
         json={**payload_base, "ajuste_ids": [outro_id]},
@@ -5910,13 +5923,19 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
     )
     assert resp_repetido.status_code == 400
 
-    # PDF do primeiro relatorio - contem o numero do documento e os dois codigos.
+    # PDF do primeiro relatorio - contem o numero do documento, os dois
+    # codigos E a justificativa de cada item, atrelada ao item (nao um
+    # texto unico generico do documento inteiro).
     resp_pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf")
     assert resp_pdf.status_code == 200
     assert resp_pdf.headers.get("Content-Type") == "application/pdf"
     assert body["numero_documento"].split("/")[0].encode() in resp_pdf.data  # mes, ex.: b"09"
     assert b"19-01-00233" in resp_pdf.data
     assert b"23-01-02090" in resp_pdf.data
+    # Substrings sem acento (ReportLab escapa caracteres acentuados como
+    # octal no content stream - nao aparecem como bytes latin-1 crus).
+    assert b"ainda na prateleira" in resp_pdf.data
+    assert b"avaria, descartadas sem baixa" in resp_pdf.data
 
     # A lista de ajustes agora mostra o numero do relatorio vinculado.
     resp_lista = client.get("/api/logistica/inventario-ajustes")
@@ -5933,6 +5952,7 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
                 codigo_produto=f"EXTRA-{i}", local_codigo="D01-01", unidade_medida="UN",
                 qtde_contada=1, qtde_estoque_no_momento=2, diferenca=-1,
                 status_modulo="Relatorio", status_slug="relatorio",
+                gestor_justificativa="Justificativa generica de teste.",
             )
             db.session.add(item)
             db.session.flush()

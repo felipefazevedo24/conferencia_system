@@ -186,9 +186,10 @@ def gerar_relatorio_ajuste(
     *,
     tipo_ajuste: str,
     motivo_ajuste: str,
-    motivo_ajuste_detalhe: str,
     deposito_tipo: str,
+    justificativas: dict | None = None,
     tipo_ajuste_detalhe: str | None = None,
+    motivo_ajuste_detalhe: str | None = None,
     deposito_local: str | None = None,
     responsavel: str | None = None,
     solicitante: str | None = None,
@@ -203,6 +204,17 @@ def gerar_relatorio_ajuste(
     (checkbox), preenche esse formulario uma unica vez pro lote inteiro, e
     so' ENTAO todos vao pro Finance juntos, com o mesmo numero de
     documento (ver _proximo_numero_documento).
+
+    O motivo detalhado NAO e' generico pro lote inteiro - e' atrelado a
+    CADA item (`justificativas`: dict ajuste_id -> texto). Pre-carrega da
+    justificativa dada na aprovacao (Modulo 02 - ver confirmar_divergencia,
+    campo `gestor_justificativa`) quando o gestor nao mandar um texto novo
+    pra aquele item; se o gestor editar aqui, o `gestor_justificativa` do
+    ajuste e' atualizado com o texto final. Cada item selecionado PRECISA
+    terminar com uma justificativa preenchida (existente ou nova) - e' isso
+    que aparece atrelado ao item no PDF, nao mais um texto unico e generico
+    pro documento inteiro. `motivo_ajuste_detalhe` (se informado) vira so'
+    uma observacao geral/opcional do lote.
 
     `solicitar_analise_causa` se aplica a TODOS os ajustes do lote (mesma
     ideia de confirmar_divergencia, so que em lote - util quando o gestor
@@ -231,6 +243,25 @@ def gerar_relatorio_ajuste(
             "ou estão em outra etapa)."
         )
 
+    # Justificativa por item: usa a que o gestor mandar agora (edicao no
+    # relatorio) ou, se nao mandar, a que ja tinha sido dada na aprovacao
+    # (Modulo 02). Nunca fica generica - cada item precisa da sua.
+    justificativas = justificativas or {}
+    justificativas_finais: dict[int, str] = {}
+    sem_justificativa = []
+    for ajuste in ajustes:
+        texto = str(justificativas.get(str(ajuste.id), justificativas.get(ajuste.id, "")) or "").strip()
+        if not texto:
+            texto = (ajuste.gestor_justificativa or "").strip()
+        if not texto:
+            sem_justificativa.append(f"{ajuste.codigo_produto} ({ajuste.local_codigo})")
+        justificativas_finais[ajuste.id] = texto
+    if sem_justificativa:
+        raise ValueError(
+            "Preencha a justificativa (motivo) de cada item antes de gerar o relatório - faltando: "
+            + ", ".join(sem_justificativa) + "."
+        )
+
     tipo_ajuste = (tipo_ajuste or "").strip()
     if tipo_ajuste not in RELATORIO_AJUSTE_TIPOS:
         raise ValueError("Selecione um Tipo de Ajuste válido.")
@@ -241,8 +272,6 @@ def gerar_relatorio_ajuste(
     if motivo_ajuste not in RELATORIO_AJUSTE_MOTIVOS:
         raise ValueError("Selecione um Motivo do Ajuste válido.")
     motivo_ajuste_detalhe = (motivo_ajuste_detalhe or "").strip()
-    if not motivo_ajuste_detalhe:
-        raise ValueError("Detalhe o Motivo do Ajuste.")
 
     deposito_tipo = (deposito_tipo or "").strip()
     if deposito_tipo not in RELATORIO_AJUSTE_DEPOSITO_TIPOS:
@@ -274,6 +303,10 @@ def gerar_relatorio_ajuste(
 
     for ajuste in ajustes:
         ajuste.relatorio_id = relatorio.id
+        # Justificativa final (atrelada a ESSE item, ver bloco acima) -
+        # atualiza gestor_justificativa com o texto que efetivamente vai
+        # pro PDF, seja o original da aprovacao ou uma edicao feita agora.
+        ajuste.gestor_justificativa = justificativas_finais[ajuste.id][:500]
         # gestor_confirmado_em/por ja foram gravados quando o item entrou
         # em "Relatorio" (ver confirmar_divergencia) - so preenche aqui se
         # por algum motivo ainda estiver em branco (ex.: chegou via Pular

@@ -1736,12 +1736,17 @@ RELATORIO_AJUSTE_MAX_ITENS = 13  # tabela do formulario tem 13 linhas fixas
 
 class LogisticaInventarioRelatorioAjuste(db.Model):
     """Formulario FORM-08.52 ("Ajuste para Faturamento" / Formulario para
-    Ajuste de Inventario) - documento formal gerado em PDF antes de mandar
-    um lote de divergencias pro Finance (substitui o "Confirmar
-    divergencia" item a item: o gestor seleciona varios ajustes de uma vez,
-    preenche esse formulario uma unica vez pro lote inteiro, e todos os
-    ajustes selecionados vao pro Finance juntos - ver
+    Ajuste de Inventario) - documento formal gerado em PDF pra um LOTE de
+    itens ja confirmados como divergencia real (Modulo 03 - Relatorio), no
+    fluxo antes do Finance (ver
     logistica_inventario_ajuste_service.gerar_relatorio_ajuste).
+
+    Tipo de Ajuste/Motivo do Ajuste/Deposito sao classificacoes do LOTE
+    inteiro (mesmas caixinhas do formulario em papel). O MOTIVO DETALHADO
+    (justificativa) e' por ITEM, nao generico - fica em
+    LogisticaInventarioAjuste.gestor_justificativa de cada ajuste
+    vinculado, pre-carregado da justificativa dada na aprovacao (Modulo
+    02) e editavel na hora de gerar o relatorio.
 
     numero_documento segue mes+ano+sequencial (ex.: "09/2026-001") -
     sequencial reinicia a cada mes/ano (ver _proximo_numero_documento)."""
@@ -1759,7 +1764,9 @@ class LogisticaInventarioRelatorioAjuste(db.Model):
     tipo_ajuste_detalhe = db.Column(db.String(300))  # obrigatorio quando tipo_ajuste == "Outros"
 
     motivo_ajuste = db.Column(db.String(60), nullable=False)
-    motivo_ajuste_detalhe = db.Column(db.Text, nullable=False)
+    # Observacao GERAL/opcional do lote - o motivo de verdade fica por item
+    # (ver LogisticaInventarioAjuste.gestor_justificativa), nao aqui.
+    motivo_ajuste_detalhe = db.Column(db.Text, nullable=False, default="")
 
     deposito_tipo = db.Column(db.String(80), nullable=False)
     deposito_local = db.Column(db.String(200))
