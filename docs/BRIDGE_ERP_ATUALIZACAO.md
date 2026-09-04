@@ -25,6 +25,67 @@ Produção (PythonAnywhere)  --HTTPS-->  ngrok  --localhost:8088-->  Bridge (Fla
   dentro da própria VM) — mostra toda requisição que chega, com status code e
   corpo da resposta. É a ferramenta nº 1 pra diagnosticar problema aqui.
 
+## Migrar do ngrok para o Tailscale Funnel (URL fixa, grátis, sem limite)
+
+O ngrok free tem limite de requisições (quando estoura, tem que trocar de
+conta). O **Tailscale Funnel** resolve: URL pública **fixa** (`.ts.net`),
+grátis, sem esse limite, sem precisar de domínio, e roda como serviço do
+Windows (sobe no boot, sem sessão logada). A bridge Flask em si não muda.
+
+### Passo a passo (uma vez, na VM da bridge)
+
+1. **Instalar o Tailscale**: https://tailscale.com/download/windows
+   (o instalador já registra o serviço `Tailscale` no Windows).
+2. **Logar / entrar na tailnet**: abra o Tailscale e faça login numa conta da
+   empresa (ou `tailscale up`).
+3. **Habilitar HTTPS**: admin em https://login.tailscale.com → **DNS** → ligue
+   **MagicDNS** e **HTTPS Certificates**.
+4. **Habilitar Funnel**: a primeira vez que rodar `tailscale funnel 8088` ele
+   mostra um link pra ativar o Funnel pra essa máquina — é só seguir/aprovar.
+5. **Segredos locais**: copie `deploy\windows\erp_bridge_secrets.example.bat`
+   para `instance\erp_bridge_secrets.bat` e preencha `ERP_BRIDGE_TOKEN` e
+   `ERP_LANCAMENTO_PG_PASSWORD` (os mesmos valores do `.bat` antigo do ngrok).
+6. **Subir**: rode `start_erp_bridge_tailscale.bat`. Ele sobe a bridge na
+   :8088 e publica no Funnel, e no fim imprime a URL pública `.ts.net`.
+7. **Pegar a URL**: `tailscale funnel status` mostra algo como
+   `https://<maquina>.<seu-tailnet>.ts.net`. **Essa URL é fixa** (não muda em
+   reboot).
+
+### Trocar o app (PythonAnywhere) pra nova URL
+
+Nos WSGI de produção e homolog (`deploy/pythonanywhere_wsgi.py` e
+`deploy/pythonanywhere_wsgi_homolog.py`), troque:
+
+```python
+os.environ["ERP_LANCAMENTO_API_URL"] = "https://pouncing-saucy-bless.ngrok-free.dev"
+```
+
+por (exemplo, com a sua URL do Funnel):
+
+```python
+os.environ["ERP_LANCAMENTO_API_URL"] = "https://<maquina>.<seu-tailnet>.ts.net"
+```
+
+Depois **Reload** no web app. Dá pra rodar ngrok e Funnel **em paralelo** na
+transição — só aponte o app pra um de cada vez (rollback fácil).
+
+### Rodar sozinho no boot (sem sessão logada)
+
+- O serviço `Tailscale` já sobe no boot, e o Funnel fica **persistido** (o
+  `--bg` grava a config no tailscaled, que reaplica após reboot).
+- Falta só a **bridge Flask** subir no boot. Simples: **Agendador de Tarefas**
+  → nova tarefa → gatilho **Ao iniciar o computador** → ação apontando pro
+  `.venv\Scripts\python.exe` com argumento `scripts\erp_lancamento_api_bridge.py`
+  (e "Iniciar em" na pasta do repo) → marque **Executar estando o usuário
+  conectado ou não**. Garanta que as variáveis de ambiente (token/senha/PG)
+  estejam disponíveis pra tarefa.
+
+### Comandos úteis
+
+- Ver status/URL: `tailscale funnel status`
+- Desligar o Funnel: `tailscale funnel --bg off`
+- (Re)publicar a porta: `tailscale funnel --bg 8088`
+
 ## Quando precisa atualizar a bridge
 
 Sempre que alguma mudança tocar em:
