@@ -74,7 +74,7 @@ os.environ["TEAMS_WEBHOOK_EXPEDICAO_ST_URL"] = ""
 os.environ["PORTAL_CLIENTE_BASE_URL"] = "https://homolog.suaempresa.com.br"  # <<< TROCAR pelo seu domínio
 
 # --- ERP / bridge REAL (leituras: materiais, NF-e emitida) -----------------
-os.environ["ERP_LANCAMENTO_API_URL"] = "https://pouncing-saucy-bless.ngrok-free.dev"
+os.environ["ERP_LANCAMENTO_API_URL"] = "https://wk-dev.tail2061cd.ts.net"
 os.environ["ERP_LANCAMENTO_API_TOKEN"] = "troque-token-bridge"
 
 from wsgi import application  # noqa: E402

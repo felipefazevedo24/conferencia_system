@@ -2596,10 +2596,13 @@ def create_app() -> Flask:
                                    sum(coalesce(d.qtde_reservada, 0))::double precision as qtde_reservada,
                                    sum(coalesce(d.qtde_disponivel, 0))::double precision as qtde_disponivel,
                                    max(coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'KG')) as unidade,
-                                   bool_or(upper(coalesce(f.nome, '')) like '%%TERCEIRO%%') as terceiro
+                                   bool_or(upper(coalesce(f.nome, '')) like '%%TERCEIRO%%') as terceiro,
+                                   (array_agg(dep.nome_pn order by d.qtde_total desc nulls last)
+                                      filter (where coalesce(btrim(dep.nome_pn), '') <> ''))[1] as cliente
                             from public.tproduto_deposito d
                             join public.tproduto p on p.cod_empresa = d.cod_empresa and p.codigo = d.cod_produto
                             left join public.tfamilia f on f.cod_empresa = p.cod_empresa and f.codigo = p.cod_familia
+                            left join public.tdeposito dep on dep.cod_empresa = d.cod_empresa and dep.codigo = d.cod_deposito
                             where d.cod_empresa = %s and {cod_norm} = any(%s::text[])
                               and (
                                 d.cod_deposito = 1
@@ -2609,13 +2612,14 @@ def create_app() -> Flask:
                             """,
                             (empresa, codigos),
                         )
-                        for cod, qt, qr, qd, un, terceiro in cur.fetchall():
+                        for cod, qt, qr, qd, un, terceiro, cliente in cur.fetchall():
                             saldo_codigo[str(cod or "").strip()] = {
                                 "qtde_total": round(float(qt or 0), 4),
                                 "qtde_reservada": round(float(qr or 0), 4),
                                 "qtde_disponivel": round(float(qd or 0), 4),
                                 "unidade": str(un or "KG").strip().upper(),
                                 "terceiro": bool(terceiro),
+                                "cliente": (str(cliente).strip() if cliente else ""),
                             }
                         if saldo_codigo:
                             fontes["saldo_codigo"] = "tproduto_deposito (dep.1 + todos p/ terceiro)"
