@@ -1,15 +1,16 @@
-# Bridge ERP (ngrok) — como atualizar e diagnosticar
+# Bridge ERP (Tailscale Funnel) — como atualizar e diagnosticar
 
 A "bridge" é um processo Flask separado (`scripts/erp_lancamento_api_bridge.py`)
 que roda numa **VM Windows à parte** (não é o servidor de produção do
 PythonAnywhere, nem a sua máquina de dev). Ela fica com acesso direto ao
-Postgres do ERP e expõe algumas consultas via HTTP, liberadas através de um
-túnel ngrok fixo — é assim que a produção (PythonAnywhere) consegue rodar
-consultas no ERP sem ter acesso direto ao banco dele.
+Postgres do ERP e expõe algumas consultas via HTTP, publicadas na internet
+pelo **Tailscale Funnel** (URL fixa `.ts.net`) — é assim que a produção
+(PythonAnywhere) consegue rodar consultas no ERP sem ter acesso direto ao
+banco dele.
 
 ```
-Produção (PythonAnywhere)  --HTTPS-->  ngrok  --localhost:8088-->  Bridge (Flask)  --psycopg2-->  Postgres do ERP
-                            https://pouncing-saucy-bless.ngrok-free.dev
+Produção (PythonAnywhere)  --HTTPS-->  Tailscale Funnel  --localhost:8088-->  Bridge (Flask)  --psycopg2-->  Postgres do ERP
+                            https://wk-dev.tail2061cd.ts.net
 ```
 
 ## Onde roda
@@ -17,20 +18,20 @@ Produção (PythonAnywhere)  --HTTPS-->  ngrok  --localhost:8088-->  Bridge (Fla
 - **Máquina**: VM Windows, pasta `C:\Users\cmb-dev\Desktop\conferencia_system`
   (um clone do repo — mas **desatualizado e com muita coisa fora do controle
   de versão**; nunca dar `git pull` completo nela, ver seção abaixo).
-- **Como sobe**: arquivo `start_erp_bridge_ngrok.bat` (na raiz do repo) — abre
-  duas janelas de terminal separadas, uma para a bridge (Flask, porta 8088) e
-  outra para o ngrok (túnel fixo). As credenciais do Postgres do ERP e o
-  token da bridge já estão dentro desse `.bat`.
-- **Inspetor local do ngrok**: `http://127.0.0.1:4040` (só acessível de
-  dentro da própria VM) — mostra toda requisição que chega, com status code e
-  corpo da resposta. É a ferramenta nº 1 pra diagnosticar problema aqui.
+- **Como sobe**: arquivo `start_erp_bridge_tailscale.bat` (na raiz do repo) —
+  sobe a bridge (Flask, porta 8088). O Tailscale Funnel fica ligado sozinho
+  pelo serviço do Tailscale (`tailscale funnel --bg 8088`, persistente,
+  sobe no boot). Os segredos (senha do Postgres e token) ficam em
+  `instance/erp_bridge_secrets.bat` (fora do git).
+- **Status do Funnel**: `tailscale funnel status` mostra a URL pública e pra
+  onde ela aponta (127.0.0.1:8088). Pra testar a bridge: abrir
+  `https://wk-dev.tail2061cd.ts.net/health` de uma rede fora do escritório.
 
-## Migrar do ngrok para o Tailscale Funnel (URL fixa, grátis, sem limite)
+## Setup do Tailscale Funnel (URL fixa, grátis, sem limite)
 
-O ngrok free tem limite de requisições (quando estoura, tem que trocar de
-conta). O **Tailscale Funnel** resolve: URL pública **fixa** (`.ts.net`),
-grátis, sem esse limite, sem precisar de domínio, e roda como serviço do
-Windows (sobe no boot, sem sessão logada). A bridge Flask em si não muda.
+A bridge é publicada na internet pelo **Tailscale Funnel**: URL pública
+**fixa** (`.ts.net`), grátis, sem limite de requisições, sem precisar de
+domínio, e roda como serviço do Windows (sobe no boot, sem sessão logada).
 
 ### Passo a passo (uma vez, na VM da bridge)
 
