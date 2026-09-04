@@ -57,6 +57,7 @@
     .rom-badge--pronto { background: #dbeafe; color: #1e40af; }
     .rom-badge--fob { background: #e0e7ff; color: #4338ca; }
     .rom-badge--cif { background: #fce7f3; color: #a21caf; }
+    .rom-badge--proprio { background: #cffafe; color: #0e7490; }
     .rom-badge--cce { background: #fef3c7; color: #b45309; }
     .rom-badge--expedido { background: #dcfce7; color: #15803d; }
     .rom-badge--pendente { background: #fee2e2; color: #991b1b; }
@@ -339,8 +340,8 @@
                         <select id="rom-tipo-frete" class="rom-input">
                             <option value="FOB">FOB - Frete por conta do destinatário</option>
                             <option value="CIF">CIF - Frete por conta do remetente</option>
-                            <option value="PROP_REM">Transporte próprio do remetente (CIF)</option>
-                            <option value="PROP_DEST">Transporte próprio do destinatário (FOB)</option>
+                            <option value="PROP_REM">Transporte próprio do remetente</option>
+                            <option value="PROP_DEST">Transporte próprio do destinatário</option>
                         </select>
                     </div>
                     <div class="rom-form-group">
@@ -647,18 +648,19 @@
     const nfAddEmAndamento = new Set();
 
     // Modalidades de frete do romaneio (4): CIF/FOB (contratado) e transporte
-    // próprio do remetente (~CIF) ou do destinatário (~FOB).
+    // próprio do remetente ou do destinatário (modalidades distintas de CIF/FOB).
     function freteLabel(t) {
         switch (t) {
             case "CIF": return "CIF";
             case "FOB": return "FOB";
-            case "PROP_REM": return "Próprio · CIF";
-            case "PROP_DEST": return "Próprio · FOB";
+            case "PROP_REM": return "Próprio rem.";
+            case "PROP_DEST": return "Próprio dest.";
             default: return t || "FOB";
         }
     }
     function freteBadgeClass(t) {
-        return (t === "CIF" || t === "PROP_REM") ? "rom-badge--cif" : "rom-badge--fob";
+        if (t === "PROP_REM" || t === "PROP_DEST") return "rom-badge--proprio";
+        return t === "CIF" ? "rom-badge--cif" : "rom-badge--fob";
     }
 
     function renderTabela(romaneios) {
@@ -830,8 +832,8 @@
                         <select class="rom-select" id="rom-frete-inline-${r.id}" ${editavel ? "" : "disabled"} onchange="alterarFreteInline(${r.id}, this.value)">
                             <option value="FOB" ${r.tipo_frete === "FOB" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
                             <option value="CIF" ${r.tipo_frete === "CIF" ? "selected" : ""}>CIF - Frete por conta do remetente</option>
-                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>Transporte próprio do remetente (CIF)</option>
-                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>Transporte próprio do destinatário (FOB)</option>
+                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>Transporte próprio do remetente</option>
+                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>Transporte próprio do destinatário</option>
                         </select>
                         ${editavel ? "" : `<small style="color:#9ca3af;">Somente romaneios em Rascunho podem ser alterados.</small>`}
                     </div>
