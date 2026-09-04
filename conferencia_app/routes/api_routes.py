@@ -1683,18 +1683,6 @@ def _build_notas_liberadas_records(search_nota=None):
         for numero, ultima_data in rows:
             reversao_por_nota[str(numero or "").strip()] = ultima_data
 
-    tentativas_por_nota: dict[str, list] = {}
-    for chunk in _chunks(numeros_raw):
-        tentativas = (
-            LogTentativaConferencia.query.filter(LogTentativaConferencia.numero_nota.in_(chunk))
-            .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
-            .all()
-        )
-        for t in tentativas:
-            chave = str(t.numero_nota or "").strip()
-            if chave:
-                tentativas_por_nota.setdefault(chave, []).append(t)
-
     for numero_nota, itens in itens_por_nota.items():
         if not itens:
             continue
@@ -1741,14 +1729,9 @@ def _build_notas_liberadas_records(search_nota=None):
         total_itens = len(itens)
         total_quantidade = sum(float(item.qtd_real or 0) for item in itens)
         liberacoes = max(1, estorno_info["total"] if estorno_info else 0)
-        tentativas_nota = tentativas_por_nota.get(numero_nota, [])
-        descricao_por_id = {int(item.id): item.descricao for item in itens}
-        resumo_divergencia = _summarize_divergencia_core(tentativas_nota, descricao_por_id)
-        motivo_liberacao = (
-            resumo_divergencia["detalhe_divergencia"]
-            if resumo_divergencia["divergencia"] == "Sim" and resumo_divergencia["detalhe_divergencia"]
-            else "Conferência concluída e liberada para o fluxo fiscal."
-        )
+        # A lista não exibe o motivo detalhado (o detalhe recalcula sob demanda),
+        # então não carregamos tentativas nem resumo de divergência aqui.
+        motivo_liberacao = "Conferência concluída e liberada para o fluxo fiscal."
 
         registros.append(
             {
