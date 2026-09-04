@@ -15,8 +15,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import func
+
 from ..extensions import db
-from ..models import LogisticaInventarioAjuste, LogisticaInventarioAnaliseCausa, LogisticaInventarioInicial
+from ..models import (
+    LogisticaInventarioAjuste,
+    LogisticaInventarioAnaliseCausa,
+    LogisticaInventarioInicial,
+    LogisticaInventarioRelatorioAjuste,
+    RELATORIO_AJUSTE_DEPOSITO_TIPOS,
+    RELATORIO_AJUSTE_MAX_ITENS,
+    RELATORIO_AJUSTE_MOTIVOS,
+    RELATORIO_AJUSTE_TIPOS,
+)
 
 STATUS_SLUGS = {
     "Validacao": "validacao",
@@ -148,6 +159,128 @@ def confirmar_divergencia(
 
     db.session.commit()
     return ajuste
+
+
+def _proximo_numero_documento(mes: int, ano: int) -> tuple[int, str]:
+    """Sequencial do FORM-08.52 reinicia a cada mes/ano - ex.: "09/2026-001",
+    "09/2026-002", ..., depois "10/2026-001" no mes seguinte."""
+    ultimo = (
+        db.session.query(func.max(LogisticaInventarioRelatorioAjuste.sequencial))
+        .filter_by(mes_referencia=mes, ano_referencia=ano)
+        .scalar()
+    )
+    sequencial = (ultimo or 0) + 1
+    return sequencial, f"{mes:02d}/{ano}-{sequencial:03d}"
+
+
+def gerar_relatorio_ajuste(
+    ajuste_ids: list[int],
+    usuario: str,
+    *,
+    tipo_ajuste: str,
+    motivo_ajuste: str,
+    motivo_ajuste_detalhe: str,
+    deposito_tipo: str,
+    tipo_ajuste_detalhe: str | None = None,
+    deposito_local: str | None = None,
+    responsavel: str | None = None,
+    solicitante: str | None = None,
+    depto: str | None = None,
+    observacoes_ajuste: str | None = None,
+    observacoes_itens: str | None = None,
+    solicitar_analise_causa: bool = False,
+) -> LogisticaInventarioRelatorioAjuste:
+    """Gera o FORM-08.52 (Ajuste para Faturamento) pra um LOTE de
+    divergencias de uma vez - SUBSTITUI confirmar_divergencia() no fluxo
+    normal: em vez de confirmar item a item, o gestor seleciona varios
+    ajustes, preenche esse formulario uma unica vez pro lote inteiro, e
+    todos vao pro Finance juntos, com o mesmo numero de documento (ver
+    _proximo_numero_documento).
+
+    `solicitar_analise_causa` se aplica a TODOS os ajustes do lote (mesma
+    ideia de confirmar_divergencia, so que em lote)."""
+    if not ajuste_ids:
+        raise ValueError("Selecione ao menos um item pra gerar o relatório.")
+    if len(ajuste_ids) > RELATORIO_AJUSTE_MAX_ITENS:
+        raise ValueError(
+            f"O formulário FORM-08.52 comporta no máximo {RELATORIO_AJUSTE_MAX_ITENS} itens por "
+            f"documento - selecione até {RELATORIO_AJUSTE_MAX_ITENS} itens por vez."
+        )
+
+    ajustes = (
+        LogisticaInventarioAjuste.query
+        .filter(LogisticaInventarioAjuste.id.in_(ajuste_ids))
+        .all()
+    )
+    if len(ajustes) != len(set(ajuste_ids)):
+        raise ValueError("Um ou mais itens selecionados não foram encontrados.")
+    fora_de_validacao = [a for a in ajustes if a.status_modulo != "Validacao"]
+    if fora_de_validacao:
+        raise ValueError(
+            "Um ou mais itens selecionados não estão mais aguardando validação "
+            "(já foram confirmados, descartados ou estão em outra etapa)."
+        )
+
+    tipo_ajuste = (tipo_ajuste or "").strip()
+    if tipo_ajuste not in RELATORIO_AJUSTE_TIPOS:
+        raise ValueError("Selecione um Tipo de Ajuste válido.")
+    if tipo_ajuste == "Outros" and not (tipo_ajuste_detalhe or "").strip():
+        raise ValueError("Detalhe o Tipo de Ajuste quando selecionar 'Outros'.")
+
+    motivo_ajuste = (motivo_ajuste or "").strip()
+    if motivo_ajuste not in RELATORIO_AJUSTE_MOTIVOS:
+        raise ValueError("Selecione um Motivo do Ajuste válido.")
+    motivo_ajuste_detalhe = (motivo_ajuste_detalhe or "").strip()
+    if not motivo_ajuste_detalhe:
+        raise ValueError("Detalhe o Motivo do Ajuste.")
+
+    deposito_tipo = (deposito_tipo or "").strip()
+    if deposito_tipo not in RELATORIO_AJUSTE_DEPOSITO_TIPOS:
+        raise ValueError("Selecione um tipo de Depósito/Local válido.")
+
+    agora = datetime.now()
+    sequencial, numero_documento = _proximo_numero_documento(agora.month, agora.year)
+
+    relatorio = LogisticaInventarioRelatorioAjuste(
+        mes_referencia=agora.month,
+        ano_referencia=agora.year,
+        sequencial=sequencial,
+        numero_documento=numero_documento,
+        tipo_ajuste=tipo_ajuste,
+        tipo_ajuste_detalhe=(tipo_ajuste_detalhe or "").strip()[:300] or None,
+        motivo_ajuste=motivo_ajuste,
+        motivo_ajuste_detalhe=motivo_ajuste_detalhe,
+        deposito_tipo=deposito_tipo,
+        deposito_local=(deposito_local or "").strip()[:200] or None,
+        responsavel=(responsavel or "").strip()[:100] or None,
+        solicitante=(solicitante or "").strip()[:100] or None,
+        depto=(depto or "").strip()[:100] or None,
+        observacoes_ajuste=(observacoes_ajuste or "").strip() or None,
+        observacoes_itens=(observacoes_itens or "").strip() or None,
+        criado_por=usuario,
+    )
+    db.session.add(relatorio)
+    db.session.flush()  # ganha relatorio.id antes de linkar os ajustes
+
+    for ajuste in ajustes:
+        ajuste.relatorio_id = relatorio.id
+        ajuste.gestor_confirmado_em = agora
+        ajuste.gestor_confirmado_por = usuario
+        ajuste.status_modulo = "Finance"
+        ajuste.status_slug = status_slug("Finance")
+        if solicitar_analise_causa and not ajuste.analise_causa:
+            db.session.add(LogisticaInventarioAnaliseCausa(
+                ajuste_id=ajuste.id,
+                status="Pendente",
+                solicitado_por=usuario,
+            ))
+
+    db.session.commit()
+    return relatorio
+
+
+def buscar_relatorio_ajuste(relatorio_id: int) -> LogisticaInventarioRelatorioAjuste | None:
+    return db.session.get(LogisticaInventarioRelatorioAjuste, relatorio_id)
 
 
 def descartar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, motivo: str) -> LogisticaInventarioAjuste:

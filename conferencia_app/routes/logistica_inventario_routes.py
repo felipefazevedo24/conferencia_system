@@ -24,7 +24,13 @@ from ..models import (
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
     LogisticaInventarioInicial,
+    LogisticaInventarioRelatorioAjuste,
+    RELATORIO_AJUSTE_DEPOSITO_TIPOS,
+    RELATORIO_AJUSTE_MAX_ITENS,
+    RELATORIO_AJUSTE_MOTIVOS,
+    RELATORIO_AJUSTE_TIPOS,
 )
+from ..services.logistica_inventario_relatorio_pdf import gerar_relatorio_ajuste_pdf
 from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
@@ -693,6 +699,8 @@ def _fmt_ajuste(a) -> dict:
         # tela de Ajuste de Estoque mostra so um badge, os detalhes ficam
         # na tela dedicada de Analise de Causa Raiz.
         "analise_causa_status": a.analise_causa.status if a.analise_causa else None,
+        "relatorio_id": a.relatorio_id,
+        "relatorio_numero_documento": a.relatorio.numero_documento if a.relatorio else None,
     }
 
 
@@ -859,6 +867,82 @@ def api_confirmar_ajuste(ajuste_id):
     if payload.get("solicitar_analise_causa"):
         mensagem += " Análise de causa raiz solicitada."
     return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
+
+
+# ── Relatorio de Ajuste (FORM-08.52 "Ajuste para Faturamento") - gera o ───
+# formulario formal em PDF pra um LOTE de divergencias de uma vez, e ja
+# confirma todas pro Finance juntas (substitui o "Confirmar divergencia"
+# item a item quando o gestor precisa mandar varias juntas com o mesmo
+# documento).
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio/opcoes", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_relatorio_ajuste_opcoes():
+    return jsonify({
+        "tipos_ajuste": RELATORIO_AJUSTE_TIPOS,
+        "motivos_ajuste": RELATORIO_AJUSTE_MOTIVOS,
+        "deposito_tipos": RELATORIO_AJUSTE_DEPOSITO_TIPOS,
+        "max_itens": RELATORIO_AJUSTE_MAX_ITENS,
+    })
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_gerar_relatorio_ajuste():
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    payload = request.get_json(silent=True) or {}
+    ajuste_ids = payload.get("ajuste_ids") or []
+    try:
+        ajuste_ids = [int(i) for i in ajuste_ids]
+    except (TypeError, ValueError):
+        return jsonify({"error": "Lista de itens inválida."}), 400
+
+    try:
+        relatorio = ajuste_svc.gerar_relatorio_ajuste(
+            ajuste_ids,
+            session.get("username", "desconhecido"),
+            tipo_ajuste=payload.get("tipo_ajuste"),
+            tipo_ajuste_detalhe=payload.get("tipo_ajuste_detalhe"),
+            motivo_ajuste=payload.get("motivo_ajuste"),
+            motivo_ajuste_detalhe=payload.get("motivo_ajuste_detalhe"),
+            deposito_tipo=payload.get("deposito_tipo"),
+            deposito_local=payload.get("deposito_local"),
+            responsavel=payload.get("responsavel"),
+            solicitante=payload.get("solicitante"),
+            depto=payload.get("depto"),
+            observacoes_ajuste=payload.get("observacoes_ajuste"),
+            observacoes_itens=payload.get("observacoes_itens"),
+            solicitar_analise_causa=bool(payload.get("solicitar_analise_causa")),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({
+        "message": f"Relatório {relatorio.numero_documento} gerado - {len(ajuste_ids)} item(ns) enviado(s) pro Finance.",
+        "relatorio_id": relatorio.id,
+        "numero_documento": relatorio.numero_documento,
+        "pdf_url": f"/api/logistica/inventario-ajustes/relatorio/{relatorio.id}.pdf",
+    })
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio/<int:relatorio_id>.pdf", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_relatorio_ajuste_pdf(relatorio_id):
+    relatorio = ajuste_svc.buscar_relatorio_ajuste(relatorio_id)
+    if not relatorio:
+        return jsonify({"error": "Relatório não encontrado."}), 404
+    try:
+        pdf_bytes = gerar_relatorio_ajuste_pdf(relatorio, relatorio.ajustes)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao gerar PDF do relatório de ajuste %s", relatorio_id)
+        return jsonify({"error": f"Falha ao gerar PDF: {exc}"}), 502
+    nome_arquivo = f"FORM-08.52_{relatorio.numero_documento.replace('/', '-')}.pdf"
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=nome_arquivo,
+    )
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/descartar", methods=["POST"])

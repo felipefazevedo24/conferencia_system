@@ -42,6 +42,23 @@
     .ia-modal-check div strong { display: block; font-size: 13px; }
     .ia-modal-check div small { color: var(--eui-muted); font-size: 12px; }
     .ia-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+    /* Selecao em lote + relatorio FORM-08.52 */
+    .ia-select-col { width: 34px; text-align: center; }
+    .ia-bulkbar { display: none; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--eui-primary-soft, #eef2ff); border: 1px solid var(--eui-primary, #4f46e5); border-radius: 10px; padding: 10px 16px; margin: -4px 0 12px; }
+    .ia-bulkbar.show { display: flex; }
+    .ia-bulkbar strong { font-size: 13px; }
+    .ia-modal.is-wide { max-width: 720px; }
+    .ia-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .ia-form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .ia-field label { display: block; font-size: 12px; font-weight: 600; color: var(--eui-text); margin-bottom: 4px; }
+    .ia-field select, .ia-field input[type="text"] { width: 100%; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+    .ia-field textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+    .ia-field.span-2 { grid-column: span 2; }
+    .ia-modal-section-title { font-size: 12.5px; font-weight: 700; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .03em; margin: 16px 0 8px; }
+    .ia-relatorio-itens { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; max-height: 160px; overflow-y: auto; font-size: 12.5px; }
+    .ia-relatorio-itens table { width: 100%; border-collapse: collapse; }
+    .ia-relatorio-itens th, .ia-relatorio-itens td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--eui-border, #f1f5f9); }
 </style>
 {% endblock %}
 
@@ -74,16 +91,24 @@
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
-            <div class="eui-toolbar" style="padding: 12px 16px;">
+            <div class="eui-toolbar" style="padding: 12px 16px; flex-direction:column; align-items:stretch; gap:10px;">
                 <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
                     <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
                     <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local ou código do produto…" style="width:100%; padding-left:34px;">
+                </div>
+                <div class="ia-bulkbar" id="ia-bulkbar">
+                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — aguardando gestor</strong>
+                    <div style="display:flex; gap:8px;">
+                        <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
+                        <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar pro Finance</button>
+                    </div>
                 </div>
             </div>
             <div class="ia-table-wrap">
                 <table class="erp-table">
                     <thead>
                         <tr>
+                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens aguardando gestor"></th>
                             <th>Detectado em</th>
                             <th>Local</th>
                             <th>Cód. Produto</th>
@@ -96,7 +121,7 @@
                             <th style="text-align:right;">Ação</th>
                         </tr>
                     </thead>
-                    <tbody id="ia-tbody"><tr><td colspan="10" class="ia-empty">Carregando…</td></tr></tbody>
+                    <tbody id="ia-tbody"><tr><td colspan="11" class="ia-empty">Carregando…</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -106,21 +131,75 @@
 <div class="ia-actions-menu" id="ia-acoes-menu"></div>
 <div class="ia-toast" id="ia-toast"></div>
 
-<div class="ia-modal-backdrop" id="ia-confirmar-modal">
-    <div class="ia-modal">
-        <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
-        <label for="ia-confirmar-justificativa">Justificativa (opcional)</label>
-        <textarea id="ia-confirmar-justificativa" placeholder="Ex.: contagem conferida, avaria constatada..."></textarea>
-        <div class="ia-modal-check">
-            <input type="checkbox" id="ia-confirmar-causa-raiz">
-            <div>
-                <label for="ia-confirmar-causa-raiz" style="margin:0; cursor:pointer;"><strong>Precisa de Análise de Causa Raiz</strong></label>
-                <small>Envia esse item pra fila separada de Análise de Causa Raiz, pro operador/gestor investigarem o motivo detalhado depois. Não bloqueia o fluxo — Finance/Fiscal seguem normalmente.</small>
+<!-- Modal do FORM-08.52 (Ajuste para Faturamento) - gera o relatorio em PDF
+     pro lote selecionado e ja manda todos pro Finance juntos. -->
+<div class="ia-modal-backdrop" id="ia-relatorio-modal">
+    <div class="ia-modal is-wide">
+        <h3><i class="fas fa-file-invoice"></i> Gerar Relatório de Ajuste (FORM-08.52)</h3>
+        <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
+            Preenche o formulário uma vez pro lote inteiro — os <strong id="ia-relatorio-qtd">0</strong> itens
+            selecionados vão juntos, com o mesmo número de documento, direto pro Finance.
+        </p>
+
+        <div class="ia-relatorio-itens">
+            <table>
+                <thead><tr><th>Código</th><th>Local</th><th>Qtd Física</th><th>Diferença</th></tr></thead>
+                <tbody id="ia-relatorio-itens-tbody"></tbody>
+            </table>
+        </div>
+
+        <div class="ia-modal-section-title">Tipo e Motivo do Ajuste</div>
+        <div class="ia-form-grid">
+            <div class="ia-field">
+                <label for="ia-rel-tipo-ajuste">Tipo de Ajuste *</label>
+                <select id="ia-rel-tipo-ajuste"></select>
+            </div>
+            <div class="ia-field" id="ia-rel-tipo-detalhe-wrap" style="display:none;">
+                <label for="ia-rel-tipo-detalhe">Detalhe do Tipo (Outros)</label>
+                <input type="text" id="ia-rel-tipo-detalhe" placeholder="Especifique...">
+            </div>
+            <div class="ia-field">
+                <label for="ia-rel-motivo">Motivo do Ajuste *</label>
+                <select id="ia-rel-motivo"></select>
+            </div>
+            <div class="ia-field">
+                <label for="ia-rel-deposito-tipo">Depósito/Local *</label>
+                <select id="ia-rel-deposito-tipo"></select>
+            </div>
+            <div class="ia-field span-2">
+                <label for="ia-rel-motivo-detalhe">Detalhe do Motivo *</label>
+                <textarea id="ia-rel-motivo-detalhe" placeholder="Descreva o motivo detalhadamente..."></textarea>
+            </div>
+            <div class="ia-field span-2">
+                <label for="ia-rel-deposito-local">Local (opcional)</label>
+                <input type="text" id="ia-rel-deposito-local" placeholder="Ex.: CD Hortolândia">
             </div>
         </div>
+
+        <div class="ia-modal-section-title">Responsáveis</div>
+        <div class="ia-form-grid cols-3">
+            <div class="ia-field"><label for="ia-rel-responsavel">Responsável</label><input type="text" id="ia-rel-responsavel"></div>
+            <div class="ia-field"><label for="ia-rel-solicitante">Solicitante</label><input type="text" id="ia-rel-solicitante"></div>
+            <div class="ia-field"><label for="ia-rel-depto">Depto</label><input type="text" id="ia-rel-depto"></div>
+        </div>
+
+        <div class="ia-modal-section-title">Observações</div>
+        <div class="ia-form-grid">
+            <div class="ia-field"><label for="ia-rel-obs-ajuste">Observações do Ajuste</label><textarea id="ia-rel-obs-ajuste"></textarea></div>
+            <div class="ia-field"><label for="ia-rel-obs-itens">OBS dos Itens</label><textarea id="ia-rel-obs-itens"></textarea></div>
+        </div>
+
+        <div class="ia-modal-check">
+            <input type="checkbox" id="ia-rel-causa-raiz">
+            <div>
+                <label for="ia-rel-causa-raiz" style="margin:0; cursor:pointer;"><strong>Todos esses itens precisam de Análise de Causa Raiz</strong></label>
+                <small>Envia todo o lote pra fila separada de Análise de Causa Raiz. Não bloqueia o fluxo — Finance/Fiscal seguem normalmente.</small>
+            </div>
+        </div>
+
         <div class="ia-modal-foot">
-            <button class="eui-btn eui-btn--ghost" id="ia-confirmar-cancelar">Cancelar</button>
-            <button class="eui-btn eui-btn--primary" id="ia-confirmar-salvar"><i class="fas fa-check"></i> Confirmar</button>
+            <button class="eui-btn eui-btn--ghost" id="ia-relatorio-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-relatorio-salvar"><i class="fas fa-file-invoice"></i> Gerar Relatório e Enviar pro Finance</button>
         </div>
     </div>
 </div>
@@ -164,6 +243,9 @@
 
     let ajustesCache = [];
     let filtroAtual = "";
+    let selecionados = new Set();
+    let opcoesRelatorio = null;
+    const RELATORIO_MAX_ITENS = 13;
 
     function atualizarLinkExportar() {
         const params = new URLSearchParams();
@@ -239,16 +321,28 @@
 
     function renderTabela(lista) {
         const tb = $("ia-tbody");
+        // Selecao so sobrevive pros itens que ainda estao na lista (evita
+        // manter marcado um item que sumiu do filtro/recarregou mudado).
+        const idsVisiveis = new Set(lista.map((a) => a.id));
+        selecionados.forEach((id) => { if (!idsVisiveis.has(id)) selecionados.delete(id); });
+
         if (!lista.length) {
-            tb.innerHTML = '<tr><td colspan="10" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="11" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
+            atualizarBulkbar();
             return;
         }
         tb.innerHTML = lista.map((a) => {
             const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
             const valorClasse = temCusto ? (a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg") : "";
             const valorTexto = temCusto ? `${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}` : "—";
+            const podeSelecionar = PODE_VALIDAR && a.status_modulo === "Validacao";
+            const marcado = selecionados.has(a.id);
+            const checkboxHtml = podeSelecionar
+                ? `<input type="checkbox" class="ia-select-item" data-id="${a.id}"${marcado ? " checked" : ""}>`
+                : "";
             return `
             <tr>
+                <td class="ia-select-col">${checkboxHtml}</td>
                 <td>${escapeHtml(a.criado_em)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
                 <td>${escapeHtml(a.codigo_produto)}</td>
@@ -257,12 +351,59 @@
                 <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
                 <td>${temCusto ? fmtMoeda(a.custo_medio) : "—"}</td>
                 <td class="${valorClasse}">${valorTexto}</td>
-                <td>${badgeStatus(a)}${a.analise_causa_status ? "<br>" + analiseCausaBadgeHtml(a) : ""}${historicoHtml(a)}</td>
+                <td>${badgeStatus(a)}${a.relatorio_numero_documento ? `<div class="ia-hist">Relatório: ${escapeHtml(a.relatorio_numero_documento)}</div>` : ""}${a.analise_causa_status ? "<br>" + analiseCausaBadgeHtml(a) : ""}${historicoHtml(a)}</td>
                 <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
         `;
         }).join("");
+        atualizarBulkbar();
     }
+
+    // ── Selecao em lote pro Relatorio FORM-08.52 ────────────────────────
+    function atualizarBulkbar() {
+        $("ia-bulk-count").textContent = selecionados.size;
+        $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
+        const todasVisiveisSelecionaveis = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
+        $("ia-select-all").checked = todasVisiveisSelecionaveis.length > 0 && todasVisiveisSelecionaveis.every((cb) => cb.checked);
+    }
+
+    $("ia-tbody").addEventListener("change", (e) => {
+        const cb = e.target.closest(".ia-select-item");
+        if (!cb) return;
+        const id = Number(cb.dataset.id);
+        if (cb.checked) {
+            if (selecionados.size >= RELATORIO_MAX_ITENS) {
+                cb.checked = false;
+                toast(`O formulário FORM-08.52 comporta no máximo ${RELATORIO_MAX_ITENS} itens por documento.`, "error");
+                return;
+            }
+            selecionados.add(id);
+        } else {
+            selecionados.delete(id);
+        }
+        atualizarBulkbar();
+    });
+
+    $("ia-select-all").addEventListener("change", (e) => {
+        const marcar = e.target.checked;
+        const checkboxes = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
+        if (marcar && checkboxes.length > RELATORIO_MAX_ITENS) {
+            e.target.checked = false;
+            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando gestor - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
+            return;
+        }
+        checkboxes.forEach((cb) => {
+            cb.checked = marcar;
+            const id = Number(cb.dataset.id);
+            if (marcar) selecionados.add(id); else selecionados.delete(id);
+        });
+        atualizarBulkbar();
+    });
+
+    $("ia-bulk-limpar").addEventListener("click", () => {
+        selecionados.clear();
+        renderTabela(filtrarPorBusca(ajustesCache));
+    });
 
     function ajustePorId(id) {
         return ajustesCache.find((a) => String(a.id) === String(id));
@@ -281,7 +422,7 @@
         const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Dif. Improcedente", true);
+            itens += it("descartar", "fa-ban", "Dif. Improcedente", true);
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
             itens += it("finance", "fa-coins", "Confirmar ajuste executado");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
@@ -321,37 +462,6 @@
         if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
     });
 
-    // ── Modal "Confirmar divergência" (justificativa + checkbox de Análise
-    // de Causa Raiz) - as demais ações continuam com prompt()/confirm()
-    // simples, só essa precisava de um checkbox de verdade.
-    let confirmarAjusteId = null;
-    function abrirModalConfirmar(id) {
-        confirmarAjusteId = id;
-        $("ia-confirmar-justificativa").value = "";
-        $("ia-confirmar-causa-raiz").checked = false;
-        $("ia-confirmar-modal").classList.add("open");
-    }
-    function fecharModalConfirmar() {
-        $("ia-confirmar-modal").classList.remove("open");
-        confirmarAjusteId = null;
-    }
-    $("ia-confirmar-cancelar").addEventListener("click", fecharModalConfirmar);
-    $("ia-confirmar-modal").addEventListener("click", (e) => { if (e.target.id === "ia-confirmar-modal") fecharModalConfirmar(); });
-    $("ia-confirmar-salvar").addEventListener("click", async () => {
-        const id = confirmarAjusteId;
-        if (!id) return;
-        const justificativa = $("ia-confirmar-justificativa").value.trim();
-        const solicitar_analise_causa = $("ia-confirmar-causa-raiz").checked;
-        try {
-            await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
-            fecharModalConfirmar();
-            toast("Atualizado!", "success");
-            carregar();
-        } catch (err) {
-            toast(err.message, "error");
-        }
-    });
-
     acoesMenuEl().addEventListener("click", async (e) => {
         const btn = e.target.closest("button[data-act]");
         if (!btn) return;
@@ -359,10 +469,7 @@
         const act = btn.dataset.act;
         fecharMenuAcoes();
         try {
-            if (act === "confirmar") {
-                abrirModalConfirmar(id);
-                return;
-            } else if (act === "descartar") {
+            if (act === "descartar") {
                 const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
                 if (!motivo.trim()) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
@@ -388,6 +495,103 @@
             carregar();
         } catch (err) {
             toast(err.message, "error");
+        }
+    });
+
+    // ── Modal do Relatório de Ajuste (FORM-08.52) ───────────────────────
+    // Substitui o "Confirmar divergência" item a item: seleciona varios
+    // (checkbox na tabela), preenche esse formulario uma unica vez, gera o
+    // PDF e ja manda todos pro Finance juntos, com o mesmo numero de
+    // documento (ver logistica_inventario_ajuste_service.gerar_relatorio_ajuste).
+    function preencherSelect(select, opcoes, comOutros) {
+        select.innerHTML = opcoes.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+    }
+
+    async function garantirOpcoesRelatorio() {
+        if (opcoesRelatorio) return opcoesRelatorio;
+        opcoesRelatorio = await api("/api/logistica/inventario-ajustes/relatorio/opcoes");
+        preencherSelect($("ia-rel-tipo-ajuste"), opcoesRelatorio.tipos_ajuste);
+        preencherSelect($("ia-rel-motivo"), opcoesRelatorio.motivos_ajuste);
+        preencherSelect($("ia-rel-deposito-tipo"), opcoesRelatorio.deposito_tipos);
+        return opcoesRelatorio;
+    }
+
+    $("ia-rel-tipo-ajuste").addEventListener("change", () => {
+        $("ia-rel-tipo-detalhe-wrap").style.display = $("ia-rel-tipo-ajuste").value === "Outros" ? "" : "none";
+    });
+
+    $("ia-bulk-gerar").addEventListener("click", async () => {
+        if (!selecionados.size) return;
+        try {
+            await garantirOpcoesRelatorio();
+        } catch (err) {
+            toast(err.message, "error");
+            return;
+        }
+        const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
+        $("ia-relatorio-qtd").textContent = itens.length;
+        $("ia-relatorio-itens-tbody").innerHTML = itens.map((a) => `
+            <tr>
+                <td>${escapeHtml(a.codigo_produto)}</td>
+                <td>${escapeHtml(a.local_codigo)}</td>
+                <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
+                <td>${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+            </tr>
+        `).join("");
+        $("ia-rel-tipo-ajuste").value = opcoesRelatorio.tipos_ajuste[0] || "";
+        $("ia-rel-tipo-detalhe").value = "";
+        $("ia-rel-tipo-detalhe-wrap").style.display = "none";
+        $("ia-rel-motivo").value = opcoesRelatorio.motivos_ajuste[0] || "";
+        $("ia-rel-motivo-detalhe").value = "";
+        $("ia-rel-deposito-tipo").value = opcoesRelatorio.deposito_tipos[0] || "";
+        $("ia-rel-deposito-local").value = "";
+        $("ia-rel-responsavel").value = "";
+        $("ia-rel-solicitante").value = "";
+        $("ia-rel-depto").value = "";
+        $("ia-rel-obs-ajuste").value = "";
+        $("ia-rel-obs-itens").value = "";
+        $("ia-rel-causa-raiz").checked = false;
+        $("ia-relatorio-modal").classList.add("open");
+    });
+
+    function fecharModalRelatorio() { $("ia-relatorio-modal").classList.remove("open"); }
+    $("ia-relatorio-cancelar").addEventListener("click", fecharModalRelatorio);
+    $("ia-relatorio-modal").addEventListener("click", (e) => { if (e.target.id === "ia-relatorio-modal") fecharModalRelatorio(); });
+
+    $("ia-relatorio-salvar").addEventListener("click", async () => {
+        const motivoDetalhe = $("ia-rel-motivo-detalhe").value.trim();
+        if (!motivoDetalhe) {
+            toast("Detalhe o Motivo do Ajuste antes de gerar o relatório.", "error");
+            return;
+        }
+        const payload = {
+            ajuste_ids: Array.from(selecionados),
+            tipo_ajuste: $("ia-rel-tipo-ajuste").value,
+            tipo_ajuste_detalhe: $("ia-rel-tipo-detalhe").value.trim(),
+            motivo_ajuste: $("ia-rel-motivo").value,
+            motivo_ajuste_detalhe: motivoDetalhe,
+            deposito_tipo: $("ia-rel-deposito-tipo").value,
+            deposito_local: $("ia-rel-deposito-local").value.trim(),
+            responsavel: $("ia-rel-responsavel").value.trim(),
+            solicitante: $("ia-rel-solicitante").value.trim(),
+            depto: $("ia-rel-depto").value.trim(),
+            observacoes_ajuste: $("ia-rel-obs-ajuste").value.trim(),
+            observacoes_itens: $("ia-rel-obs-itens").value.trim(),
+            solicitar_analise_causa: $("ia-rel-causa-raiz").checked,
+        };
+        const btn = $("ia-relatorio-salvar");
+        btn.disabled = true;
+        try {
+            const resp = await api("/api/logistica/inventario-ajustes/relatorio", { method: "POST", body: JSON.stringify(payload) });
+            fecharModalRelatorio();
+            selecionados.clear();
+            toast(resp.message, "success");
+            window.open(resp.pdf_url, "_blank");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
         }
     });
 

@@ -1693,6 +1693,83 @@ class LogisticaInventarioAjuste(db.Model):
     fiscal_concluido_por = db.Column(db.String(100))
     fiscal_nf_numero = db.Column(db.String(60))
 
+    relatorio_id = db.Column(
+        db.Integer, db.ForeignKey("logistica_inventario_relatorio_ajuste.id"),
+        nullable=True, index=True,
+    )
+
+
+# Opcoes fixas do formulario FORM-08.52 (Ajuste para Faturamento / Ajuste de
+# Inventario) - mesmo texto/ordem do modelo em Excel usado ate hoje em
+# papel (DOC_INVENT_2025_Rev_00), pra o PDF gerado bater com o documento
+# que a empresa ja usa.
+RELATORIO_AJUSTE_TIPOS = [
+    "Inventário Cíclico",
+    "Inventário Geral",
+    "Item sem Saldo",
+    "Transferência de Código",
+    "Outros",
+]
+RELATORIO_AJUSTE_MOTIVOS = [
+    "Perda por quebra/avaria",
+    "Vencimento de produtos",
+    "Erro de contagem",
+    "Furto/Extravio",
+    "Devolução não Registrada",
+    "Outros",
+]
+RELATORIO_AJUSTE_DEPOSITO_TIPOS = [
+    "Depósito - Principal",
+    "Depósito - Em Poder de Terceiros (Fornecedor)",
+    "Depósito - Em Produção (Produto)",
+    "Depósito - Em Produção (Mão de Obra)",
+    "Depósito - De Terceiros em Meu Poder (Cliente)",
+]
+RELATORIO_AJUSTE_MAX_ITENS = 13  # tabela do formulario tem 13 linhas fixas
+
+
+class LogisticaInventarioRelatorioAjuste(db.Model):
+    """Formulario FORM-08.52 ("Ajuste para Faturamento" / Formulario para
+    Ajuste de Inventario) - documento formal gerado em PDF antes de mandar
+    um lote de divergencias pro Finance (substitui o "Confirmar
+    divergencia" item a item: o gestor seleciona varios ajustes de uma vez,
+    preenche esse formulario uma unica vez pro lote inteiro, e todos os
+    ajustes selecionados vao pro Finance juntos - ver
+    logistica_inventario_ajuste_service.gerar_relatorio_ajuste).
+
+    numero_documento segue mes+ano+sequencial (ex.: "09/2026-001") -
+    sequencial reinicia a cada mes/ano (ver _proximo_numero_documento)."""
+
+    __tablename__ = "logistica_inventario_relatorio_ajuste"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    mes_referencia = db.Column(db.Integer, nullable=False)
+    ano_referencia = db.Column(db.Integer, nullable=False)
+    sequencial = db.Column(db.Integer, nullable=False)
+    numero_documento = db.Column(db.String(20), nullable=False, unique=True, index=True)
+
+    tipo_ajuste = db.Column(db.String(60), nullable=False)
+    tipo_ajuste_detalhe = db.Column(db.String(300))  # obrigatorio quando tipo_ajuste == "Outros"
+
+    motivo_ajuste = db.Column(db.String(60), nullable=False)
+    motivo_ajuste_detalhe = db.Column(db.Text, nullable=False)
+
+    deposito_tipo = db.Column(db.String(80), nullable=False)
+    deposito_local = db.Column(db.String(200))
+
+    responsavel = db.Column(db.String(100))
+    solicitante = db.Column(db.String(100))
+    depto = db.Column(db.String(100))
+
+    observacoes_ajuste = db.Column(db.Text)
+    observacoes_itens = db.Column(db.Text)
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)  # "Solicitado por" no rodape do PDF
+
+    ajustes = db.relationship("LogisticaInventarioAjuste", backref="relatorio", order_by="LogisticaInventarioAjuste.id")
+
 
 class LogisticaInventarioAnaliseCausa(db.Model):
     """Fila de Analise de Causa Raiz do Inventario - quando o gestor marca,

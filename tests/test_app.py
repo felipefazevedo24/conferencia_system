@@ -5800,3 +5800,133 @@ def test_comex_avancar_de_nf_cambio_conclui_processo(tmp_path):
     estornado = resp_estorno.get_json()["processo"]
     assert estornado["status_modulo"] == "NFCambio"
     assert estornado["processo_concluido_em"] is None
+
+
+def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_path):
+    """FORM-08.52 (Ajuste para Faturamento): o gestor seleciona varios
+    ajustes de uma vez, preenche o formulario uma unica vez pro lote
+    inteiro, e todos vao pro Finance juntos com o mesmo numero de
+    documento - substitui confirmar_divergencia() item a item. Numero de
+    documento segue mes/ano + sequencial (reinicia a cada mes)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        a1 = LogisticaInventarioAjuste(
+            codigo_produto="19-01-00233", local_codigo="A01-01", unidade_medida="KG",
+            qtde_contada=2707, qtde_estoque_no_momento=0, diferenca=2707, custo_medio=12.5,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        a2 = LogisticaInventarioAjuste(
+            codigo_produto="23-01-02090", local_codigo="B02-03", unidade_medida="UN",
+            qtde_contada=10, qtde_estoque_no_momento=15, diferenca=-5, custo_medio=None,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        outro = LogisticaInventarioAjuste(
+            codigo_produto="99-00-00001", local_codigo="C03-01", unidade_medida="UN",
+            qtde_contada=1, qtde_estoque_no_momento=1, diferenca=0,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add_all([a1, a2, outro])
+        db.session.commit()
+        a1_id, a2_id, outro_id = a1.id, a2.id, outro.id
+
+    # As opcoes fixas do formulario ficam disponiveis pro front montar os selects.
+    resp_opcoes = client.get("/api/logistica/inventario-ajustes/relatorio/opcoes")
+    assert resp_opcoes.status_code == 200
+    opcoes = resp_opcoes.get_json()
+    assert "Inventário Geral" in opcoes["tipos_ajuste"]
+    assert "Erro de contagem" in opcoes["motivos_ajuste"]
+    assert opcoes["max_itens"] == 13
+
+    payload_base = {
+        "ajuste_ids": [a1_id, a2_id],
+        "tipo_ajuste": "Inventário Geral",
+        "motivo_ajuste": "Erro de contagem",
+        "motivo_ajuste_detalhe": "Estoque zerado, mas tinha material físico.",
+        "deposito_tipo": "Depósito - Principal",
+        "deposito_local": "CD Hortolândia",
+        "responsavel": "Paulo Ricardo",
+        "solicitante": "Filipe Oliveira",
+        "depto": "Logística",
+    }
+
+    # Motivo sem detalhe -> bloqueia.
+    resp_sem_detalhe = client.post(
+        "/api/logistica/inventario-ajustes/relatorio",
+        json={**payload_base, "motivo_ajuste_detalhe": "  "},
+    )
+    assert resp_sem_detalhe.status_code == 400
+
+    resp = client.post("/api/logistica/inventario-ajustes/relatorio", json=payload_base)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["numero_documento"].endswith("-001")
+    assert body["pdf_url"] == f"/api/logistica/inventario-ajustes/relatorio/{body['relatorio_id']}.pdf"
+    relatorio_id = body["relatorio_id"]
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        a1_depois = db.session.get(LogisticaInventarioAjuste, a1_id)
+        a2_depois = db.session.get(LogisticaInventarioAjuste, a2_id)
+        outro_depois = db.session.get(LogisticaInventarioAjuste, outro_id)
+        assert a1_depois.status_modulo == "Finance"
+        assert a2_depois.status_modulo == "Finance"
+        assert a1_depois.relatorio_id == relatorio_id
+        assert a2_depois.relatorio_id == relatorio_id
+        assert a1_depois.gestor_confirmado_por == "ADMIN"
+        assert outro_depois.status_modulo == "Validacao"  # nao selecionado, nao mexeu
+
+    # Segundo relatorio no mesmo mes -> sequencial incrementa.
+    resp2 = client.post(
+        "/api/logistica/inventario-ajustes/relatorio",
+        json={**payload_base, "ajuste_ids": [outro_id]},
+    )
+    assert resp2.status_code == 200
+    assert resp2.get_json()["numero_documento"].endswith("-002")
+    assert resp2.get_json()["numero_documento"][:7] == body["numero_documento"][:7]  # mesmo mes/ano
+
+    # Reenviar um item que ja foi confirmado -> bloqueia (nao esta mais em Validacao).
+    resp_repetido = client.post(
+        "/api/logistica/inventario-ajustes/relatorio",
+        json={**payload_base, "ajuste_ids": [a1_id]},
+    )
+    assert resp_repetido.status_code == 400
+
+    # PDF do primeiro relatorio - contem o numero do documento e os dois codigos.
+    resp_pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf")
+    assert resp_pdf.status_code == 200
+    assert resp_pdf.headers.get("Content-Type") == "application/pdf"
+    assert body["numero_documento"].split("/")[0].encode() in resp_pdf.data  # mes, ex.: b"09"
+    assert b"19-01-00233" in resp_pdf.data
+    assert b"23-01-02090" in resp_pdf.data
+
+    # A lista de ajustes agora mostra o numero do relatorio vinculado.
+    resp_lista = client.get("/api/logistica/inventario-ajustes")
+    ajuste_a1 = next(a for a in resp_lista.get_json()["ajustes"] if a["id"] == a1_id)
+    assert ajuste_a1["relatorio_numero_documento"] == body["numero_documento"]
+
+    # Mais de 13 itens de uma vez -> bloqueia (tamanho fixo do formulario).
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        ids_extras = []
+        for i in range(14):
+            item = LogisticaInventarioAjuste(
+                codigo_produto=f"EXTRA-{i}", local_codigo="D01-01", unidade_medida="UN",
+                qtde_contada=1, qtde_estoque_no_momento=2, diferenca=-1,
+                status_modulo="Validacao", status_slug="validacao",
+            )
+            db.session.add(item)
+            db.session.flush()
+            ids_extras.append(item.id)
+        db.session.commit()
+    resp_muitos = client.post(
+        "/api/logistica/inventario-ajustes/relatorio",
+        json={**payload_base, "ajuste_ids": ids_extras},
+    )
+    assert resp_muitos.status_code == 400
