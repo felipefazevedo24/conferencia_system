@@ -7,10 +7,6 @@
     .eui-scope { --sap-blue: var(--eui-primary); }
     .nl-wrap { display: grid; gap: 16px; }
 
-    .nl-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 12px 14px; }
-    .nl-search { position: relative; flex: 1; min-width: 260px; }
-    .nl-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); }
-    .nl-search input { padding-left: 34px; width: 100%; }
     #filtro-status { max-width: 220px; }
     .nl-upd { font-size: 14px !important; }
 
@@ -18,10 +14,9 @@
     @media (max-width: 1180px) { .nl-layout { grid-template-columns: 1fr; } }
 
     .nl-list-card { overflow: hidden; }
-    .nl-table-wrap { max-height: calc(100vh - 320px); overflow: auto; }
-    .nl-table { width: 100%; border-collapse: collapse; min-width: 720px; }
-    .nl-table thead th { position: sticky; top: 0; z-index: 1; background: var(--eui-surface-2); color: var(--eui-muted); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; text-align: left; padding: 12px; border-bottom: 1px solid var(--eui-border); }
-    .nl-table tbody td { padding: 11px 12px; border-bottom: 1px solid var(--eui-border); font-size: 12.5px; color: var(--eui-text); vertical-align: middle; }
+    .nl-table-wrap { max-height: calc(100vh - 340px); overflow: auto; }
+    .nl-list-card .erp-table { min-width: 720px; }
+    .nl-list-card .erp-table thead th { position: sticky; top: 0; z-index: 1; }
     .filterable-th { cursor: pointer; user-select: none; white-space: nowrap; }
     .filterable-th .ficon { font-size: 9px; color: var(--eui-muted); margin-left: 4px; }
 
@@ -40,10 +35,6 @@
 
     .nf-fornecedor { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .fornecedor-avatar { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--eui-primary), color-mix(in srgb, var(--eui-primary) 60%, #1e40af)); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; text-transform: uppercase; margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
-
-    .badge-status { padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid transparent; white-space: nowrap; }
-    .status-conferido { background: var(--eui-success-soft, #ecfdf5); color: var(--eui-success-soft-text, #065f46); border-color: #a7f3d0; }
-    .status-lancado { background: color-mix(in srgb, var(--eui-primary) 12%, transparent); color: var(--eui-primary); border-color: color-mix(in srgb, var(--eui-primary) 35%, var(--eui-border)); }
 
     .tempo-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px; }
     .tempo-badge.verde { background: #dcfce7; color: #166534; }
@@ -106,36 +97,41 @@
             <h1 class="eui-page-header__title"><i class="fas fa-file-check"></i> NF-e liberadas para lançamento</h1>
             <p class="eui-page-header__sub">Notas conferidas e liberadas para o fluxo fiscal — itens, documentos e auditoria.</p>
         </div>
-        <button class="eui-btn eui-btn--primary" onclick="carregarNotasLiberadas()"><i class="fas fa-rotate"></i> Sincronizar</button>
     </header>
 
-    <div class="eui-stats">
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Documentos liberados</span><span class="eui-stat__value" id="metric-notas">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--primary"><i class="fas fa-cubes"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total de itens</span><span class="eui-stat__value" id="metric-itens">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-double"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Conferidos</span><span class="eui-stat__value" id="metric-conferidos">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clipboard-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Lançados</span><span class="eui-stat__value" id="metric-lancados">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Última atualização</span><span class="eui-stat__value nl-upd" id="ultima-atualizacao">—</span></div></div>
+    <div class="eui-toolbar" style="justify-content:space-between; gap:12px;">
+        <div class="eui-toolbar__search">
+            <i class="fas fa-magnifying-glass"></i>
+            <input class="eui-input" id="filtro-geral" type="search" placeholder="Buscar por nº da nota ou fornecedor..." oninput="aplicarFiltroLocal()">
+        </div>
+        <select class="eui-select" id="filtro-status" onchange="aplicarFiltroLocal()">
+            <option value="">Todos os status</option>
+            <option value="Conferido">Conferido</option>
+            <option value="Lançado">Lançado</option>
+        </select>
+        <button class="eui-btn eui-btn--ghost" onclick="carregarNotasLiberadas()"><i class="fas fa-rotate"></i> Atualizar</button>
     </div>
 
-    <div class="eui-card">
-        <div class="nl-toolbar">
-            <div class="nl-search">
-                <i class="fas fa-magnifying-glass"></i>
-                <input class="eui-input" id="filtro-geral" type="search" placeholder="Buscar por nº da nota ou fornecedor..." oninput="aplicarFiltroLocal()">
-            </div>
-            <select class="eui-select" id="filtro-status" onchange="aplicarFiltroLocal()">
-                <option value="">Todos os status</option>
-                <option value="Conferido">Conferido</option>
-                <option value="Lançado">Lançado</option>
-            </select>
-        </div>
+    <div class="eui-stats">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Documentos liberados</span><span class="eui-stat__value" id="metric-notas">0</span><span class="eui-stat__hint">NF-e no fluxo fiscal</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--primary"><i class="fas fa-cubes"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total de itens</span><span class="eui-stat__value" id="metric-itens">0</span><span class="eui-stat__hint">Produtos nas notas</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-double"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Conferidos</span><span class="eui-stat__value" id="metric-conferidos">0</span><span class="eui-stat__hint">Aguardando lançamento</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clipboard-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Lançados</span><span class="eui-stat__value" id="metric-lancados">0</span><span class="eui-stat__hint">Finalizados no ERP</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Última atualização</span><span class="eui-stat__value nl-upd" id="ultima-atualizacao">—</span><span class="eui-stat__hint">Sincronização</span></div></div>
     </div>
 
     <div class="nl-layout">
         <section class="eui-card nl-list-card">
-            <div class="nl-table-wrap">
-                <table class="nl-table">
-                    <thead>
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-list-check"></i> Notas liberadas</h2>
+                    <p class="eui-card__sub">Fila de NF-e liberadas para o fluxo fiscal.</p>
+                </div>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="nl-table-wrap">
+                    <table class="erp-table nl-table">
+                        <thead>
                         <tr>
                             <th class="filterable-th" onclick="abrirFiltroColunaNotas(event, 'numero')">NF <span class="ficon">▾</span></th>
                             <th class="filterable-th" onclick="abrirFiltroColunaNotas(event, 'identificacao')">ID <span class="ficon">▾</span></th>
@@ -148,6 +144,7 @@
                     </thead>
                     <tbody id="nf-table-body"></tbody>
                 </table>
+                </div>
             </div>
         </section>
 
@@ -176,7 +173,7 @@
                         <h2 id="detail-numero" class="nl-detail-title">NF —</h2>
                         <div id="detail-fornecedor" class="nl-detail-sub">—</div>
                     </div>
-                    <span id="detail-status" class="badge-status">—</span>
+                    <span id="detail-status" class="eui-badge eui-badge--neutral">—</span>
                 </div>
 
                 <div class="nl-detail-actions">
@@ -232,9 +229,9 @@
 
     function getStatusClass(status) {
         const s = normalizarStatus(status);
-        if(s === 'Conferido') return 'status-conferido';
-        if(s === 'Lançado') return 'status-lancado';
-        return '';
+        if(s === 'Conferido') return 'eui-badge--info';
+        if(s === 'Lançado') return 'eui-badge--success';
+        return 'eui-badge--neutral';
     }
 
     // Função para parsear data "DD/MM/YYYY HH:MM" para objeto Date do JS
@@ -716,7 +713,7 @@
                     <span class="fornecedor-avatar">${iniciais}</span>
                     ${escapeHtml(nota.fornecedor || '---')}
                 </td>
-                <td><span class="badge-status ${getStatusClass(nota.status_atual)}">${escapeHtml(nota.status_atual)}</span></td>
+                <td><span class="eui-badge ${getStatusClass(nota.status_atual)}"><span class="eui-badge__dot"></span>${escapeHtml(nota.status_atual)}</span></td>
                 <td>
                     ${escapeHtml(nota.data_liberacao || '---')}
                     <div style="margin-top: 4px;"><span class="tempo-badge ${tempoClass}"><i class="fas fa-clock"></i> ${tempoLabel}</span></div>
@@ -825,8 +822,8 @@
         document.getElementById('detail-fornecedor').innerText = detalhe.fornecedor;
         
         const statusEl = document.getElementById('detail-status');
-        statusEl.className = `badge-status ${getStatusClass(statusNormalizado)}`;
-        statusEl.innerText = statusNormalizado;
+        statusEl.className = `eui-badge ${getStatusClass(statusNormalizado)}`;
+        statusEl.innerHTML = `<span class="eui-badge__dot"></span>${escapeHtml(statusNormalizado)}`;
         
         document.getElementById('detail-valor').innerText = detalhe.valor_total;
         document.getElementById('detail-impostos').innerText = detalhe.impostos;
