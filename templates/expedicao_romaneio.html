@@ -339,6 +339,8 @@
                         <select id="rom-tipo-frete" class="rom-input">
                             <option value="FOB">FOB - Frete por conta do destinatário</option>
                             <option value="CIF">CIF - Frete por conta do remetente</option>
+                            <option value="PROP_REM">Transporte próprio do remetente (CIF)</option>
+                            <option value="PROP_DEST">Transporte próprio do destinatário (FOB)</option>
                         </select>
                     </div>
                     <div class="rom-form-group">
@@ -644,6 +646,21 @@
     const expandidos = new Set();
     const nfAddEmAndamento = new Set();
 
+    // Modalidades de frete do romaneio (4): CIF/FOB (contratado) e transporte
+    // próprio do remetente (~CIF) ou do destinatário (~FOB).
+    function freteLabel(t) {
+        switch (t) {
+            case "CIF": return "CIF";
+            case "FOB": return "FOB";
+            case "PROP_REM": return "Próprio · CIF";
+            case "PROP_DEST": return "Próprio · FOB";
+            default: return t || "FOB";
+        }
+    }
+    function freteBadgeClass(t) {
+        return (t === "CIF" || t === "PROP_REM") ? "rom-badge--cif" : "rom-badge--fob";
+    }
+
     function renderTabela(romaneios) {
         romaneiosCacheLista = romaneios;
         const tb = $("rom-tbody");
@@ -660,7 +677,7 @@
         const statusClass = r.status === "Rascunho" ? "rom-badge--rascunho"
                           : r.status === "Pronto" ? "rom-badge--pronto"
                           : "rom-badge--expedido";
-        const freteClass = r.tipo_frete === "CIF" ? "rom-badge--cif" : "rom-badge--fob";
+        const freteClass = freteBadgeClass(r.tipo_frete);
         const aberto = expandidos.has(r.id);
 
         const clientes = (r.clientes && r.clientes.length) ? r.clientes : (r.cliente ? [r.cliente] : []);
@@ -675,7 +692,7 @@
             <td>${clientesHtml}</td>
             <td style="text-align: center;">${r.qtde_nfs}</td>
             <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
-            <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
+            <td><span class="rom-badge ${freteClass}">${escapeHtml(freteLabel(r.tipo_frete))}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
             <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span>${r.tem_pendencia_comprovante ? ' <span class="rom-badge rom-badge--pendente">Sem comprovante</span>' : ""}</td>
             <td style="text-align: right;"><button class="rom-actions-btn" onclick="toggleMenuAcoesRomaneio(event, ${r.id})" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>`;
@@ -811,8 +828,10 @@
                     <div class="rom-detail-field">
                         <label>Tipo de Frete</label>
                         <select class="rom-select" id="rom-frete-inline-${r.id}" ${editavel ? "" : "disabled"} onchange="alterarFreteInline(${r.id}, this.value)">
-                            <option value="FOB" ${r.tipo_frete !== "CIF" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
+                            <option value="FOB" ${r.tipo_frete === "FOB" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
                             <option value="CIF" ${r.tipo_frete === "CIF" ? "selected" : ""}>CIF - Frete por conta do remetente</option>
+                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>Transporte próprio do remetente (CIF)</option>
+                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>Transporte próprio do destinatário (FOB)</option>
                         </select>
                         ${editavel ? "" : `<small style="color:#9ca3af;">Somente romaneios em Rascunho podem ser alterados.</small>`}
                     </div>
@@ -875,7 +894,7 @@
                 method: "PUT",
                 body: JSON.stringify({ tipo_frete: novoFrete }),
             });
-            toast(`Frete alterado para ${novoFrete}!`);
+            toast(`Frete alterado para ${freteLabel(novoFrete)}!`);
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -1036,12 +1055,12 @@
         if (divergentes.length) {
             html += `<p style="margin:0 0 10px;font-weight:700;color:#b45309">`
                 + `A modalidade de frete declarada em algumas notas nao confere com o `
-                + `romaneio (<strong>${escapeHtml(info.tipo_frete_romaneio || "")}</strong>):</p>`;
+                + `romaneio (<strong>${escapeHtml(freteLabel(info.tipo_frete_romaneio))}</strong>):</p>`;
             html += `<ul style="margin:0 0 14px;padding-left:18px">`;
             divergentes.forEach((d) => {
                 html += `<li style="margin-bottom:6px">`
                     + `<strong>NF ${escapeHtml(d.numero_nf)}</strong>: `
-                    + `romaneio <strong>${escapeHtml(d.frete_romaneio)}</strong> `
+                    + `romaneio <strong>${escapeHtml(freteLabel(d.frete_romaneio))}</strong> `
                     + `&times; nota <strong>${escapeHtml(d.frete_nf_label)}</strong></li>`;
             });
             html += `</ul>`;
