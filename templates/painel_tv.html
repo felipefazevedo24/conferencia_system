@@ -1339,9 +1339,9 @@
       chips.push('<span class="pt-chip' + (p.ultima_interacao_atrasada ? " cx-chip-atrasada" : "") + '"><i class="fas fa-clock"></i>' + esc(p.ultima_interacao) + "</span>");
     }
     const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
-    // Nome do cliente/fornecedor na frente da OC, mesmo tamanho de fonte
-    // (mesma div .pt-title) - "Fornecedor X - OC 12345".
-    const titulo = (p.fornecedor ? esc(p.fornecedor) + " - " : "") + esc(p.oc);
+    // OC na frente do nome do cliente/fornecedor, mesmo tamanho de fonte
+    // (mesma div .pt-title) - "12345 - Fornecedor X".
+    const titulo = esc(p.oc) + (p.fornecedor ? " - " + esc(p.fornecedor) : "");
     return '<div class="plan-task cx-task" style="border-left-color:' + color + '" data-processo-id="' + p.processo_id + '" data-oc="' + esc(p.oc) + '">' +
       '<div class="pt-title">' + titulo + "</div>" + meta + "</div>";
   }
