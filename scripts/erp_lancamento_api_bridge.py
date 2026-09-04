@@ -2582,12 +2582,12 @@ def create_app() -> Flask:
                         except Exception:
                             app.logger.exception("Falha no reservado por codigo")
 
-                    # ---- Saldo REAL por codigo (deposito principal) ----
-                    # Informacao basica: quanto o GRV tem HOJE em estoque /
-                    # reservado / disponivel por codigo. Como o GRV ja mantem
-                    # esse saldo, toda baixa (saida) ja esta refletida aqui -
-                    # nao precisa recalcular nada por fora. Mesma fonte provada
-                    # do estoque normal (tproduto_deposito, cod_deposito=1).
+                    # ---- Saldo REAL por codigo ----
+                    # Materia-prima fica no deposito 1. Material de TERCEIRO
+                    # (cliente, familia N-37) fica espalhado nos depositos de
+                    # cada cliente -> pra esses, soma TODOS os depositos. A
+                    # familia (nome com "TERCEIRO") marca isso; terceiro=flag
+                    # pra UI mostrar que e' material de cliente.
                     try:
                         cur.execute(
                             f"""
@@ -2595,23 +2595,30 @@ def create_app() -> Flask:
                                    sum(coalesce(d.qtde_total, 0))::double precision as qtde_total,
                                    sum(coalesce(d.qtde_reservada, 0))::double precision as qtde_reservada,
                                    sum(coalesce(d.qtde_disponivel, 0))::double precision as qtde_disponivel,
-                                   max(coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'KG')) as unidade
+                                   max(coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'KG')) as unidade,
+                                   bool_or(upper(coalesce(f.nome, '')) like '%%TERCEIRO%%') as terceiro
                             from public.tproduto_deposito d
                             join public.tproduto p on p.cod_empresa = d.cod_empresa and p.codigo = d.cod_produto
-                            where d.cod_empresa = %s and d.cod_deposito = 1 and {cod_norm} = any(%s::text[])
+                            left join public.tfamilia f on f.cod_empresa = p.cod_empresa and f.codigo = p.cod_familia
+                            where d.cod_empresa = %s and {cod_norm} = any(%s::text[])
+                              and (
+                                d.cod_deposito = 1
+                                or upper(coalesce(f.nome, '')) like '%%TERCEIRO%%'
+                              )
                             group by 1
                             """,
                             (empresa, codigos),
                         )
-                        for cod, qt, qr, qd, un in cur.fetchall():
+                        for cod, qt, qr, qd, un, terceiro in cur.fetchall():
                             saldo_codigo[str(cod or "").strip()] = {
                                 "qtde_total": round(float(qt or 0), 4),
                                 "qtde_reservada": round(float(qr or 0), 4),
                                 "qtde_disponivel": round(float(qd or 0), 4),
                                 "unidade": str(un or "KG").strip().upper(),
+                                "terceiro": bool(terceiro),
                             }
                         if saldo_codigo:
-                            fontes["saldo_codigo"] = "tproduto_deposito (cod_deposito=1)"
+                            fontes["saldo_codigo"] = "tproduto_deposito (dep.1 + todos p/ terceiro)"
                     except Exception:
                         app.logger.exception("Falha no saldo real por codigo de chapa")
 
