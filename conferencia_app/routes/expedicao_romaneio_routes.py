@@ -162,8 +162,8 @@ _MODFRETE_LABEL = {
     "0": "Emitente (CIF)",
     "1": "Destinatário (FOB)",
     "2": "Terceiros",
-    "3": "Próprio/Remetente (CIF)",
-    "4": "Próprio/Destinatário (FOB)",
+    "3": "Próprio/Remetente",
+    "4": "Próprio/Destinatário",
     "9": "Sem frete",
 }
 
@@ -177,17 +177,18 @@ _FRETE_GRUPO_LABEL = {
     "SEM_FRETE": "Sem frete",
 }
 
-# Modalidades que o operador escolhe no romaneio. CIF/FOB = frete contratado;
-# PROP_REM/PROP_DEST = transporte próprio (veículo da empresa/remetente ou do
-# próprio destinatário) — não contratam transportadora, mas seguem na família
-# CIF/FOB para o fluxo fiscal. Incoterms: PROP_REM ~ CIF (DAP), PROP_DEST ~ FOB (EXW).
+# Modalidades que o operador escolhe no romaneio. CIF/FOB = frete contratado
+# (quem paga a transportadora); PROP_REM/PROP_DEST = transporte próprio (veículo
+# da empresa/remetente ou do próprio destinatário) — modalidades distintas de
+# CIF/FOB, não contratam transportadora. modFrete NF-e: CIF=0, FOB=1, PROP_REM=3,
+# PROP_DEST=4.
 _TIPOS_FRETE_VALIDOS = ("FOB", "CIF", "PROP_REM", "PROP_DEST")
 
 _TIPO_FRETE_LABEL = {
     "CIF": "CIF - Frete por conta do remetente",
     "FOB": "FOB - Frete por conta do destinatário",
-    "PROP_REM": "Transporte próprio do remetente (CIF)",
-    "PROP_DEST": "Transporte próprio do destinatário (FOB)",
+    "PROP_REM": "Transporte próprio do remetente",
+    "PROP_DEST": "Transporte próprio do destinatário",
 }
 
 
