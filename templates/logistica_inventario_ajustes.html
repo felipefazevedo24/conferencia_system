@@ -28,9 +28,10 @@
     .ia-toast.error { border-left-color: var(--eui-danger); }
     .ia-toast.success { border-left-color: var(--eui-success); }
 
-    /* Modal "Confirmar divergência" - substitui prompt()/confirm() do
-       navegador so pra essa acao, porque precisa de um checkbox de verdade
-       (Analise de Causa Raiz), o que uma caixa de dialogo nativa nao tem. */
+    /* Modais "Confirmar divergência" (Validacao) e "Relatório FORM-08.52"
+       (Relatorio) - substituem prompt()/confirm() do navegador nessas
+       acoes, porque precisam de campos de verdade (checkbox de Analise de
+       Causa Raiz, selects, etc.) que uma caixa de dialogo nativa nao tem. */
     .ia-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
     .ia-modal-backdrop.open { display: flex; }
     .ia-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 22px; }
@@ -75,6 +76,7 @@
     <div class="eui-stats" id="ia-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ia-m-todos">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Validacao"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-user-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando gestor</span><span class="eui-stat__value" id="ia-m-validacao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Relatorio"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando relatório</span><span class="eui-stat__value" id="ia-m-relatorio">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Finance</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Fiscal</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="ia-m-concluido">0</span></div></div>
@@ -97,7 +99,7 @@
                     <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local ou código do produto…" style="width:100%; padding-left:34px;">
                 </div>
                 <div class="ia-bulkbar" id="ia-bulkbar">
-                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — aguardando gestor</strong>
+                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — aguardando relatório</strong>
                     <div style="display:flex; gap:8px;">
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar pro Finance</button>
@@ -108,7 +110,7 @@
                 <table class="erp-table">
                     <thead>
                         <tr>
-                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens aguardando gestor"></th>
+                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens aguardando relatório"></th>
                             <th>Detectado em</th>
                             <th>Local</th>
                             <th>Cód. Produto</th>
@@ -130,6 +132,32 @@
 
 <div class="ia-actions-menu" id="ia-acoes-menu"></div>
 <div class="ia-toast" id="ia-toast"></div>
+
+<!-- Modal "Confirmar divergência" (Validacao -> Relatorio) - so' confirma
+     que a diferenca e' de verdade; NAO gera o FORM-08.52 ainda (isso
+     acontece depois, em lote, no modal de Relatorio abaixo). -->
+<div class="ia-modal-backdrop" id="ia-confirmar-modal">
+    <div class="ia-modal">
+        <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
+        <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
+            Confirma que essa diferença é real. O item vai pra fila de "Aguardando relatório" —
+            depois você seleciona vários de uma vez (checkbox) pra gerar o FORM-08.52 e mandar pro Finance.
+        </p>
+        <label for="ia-confirmar-justificativa">Justificativa (opcional)</label>
+        <textarea id="ia-confirmar-justificativa" placeholder="Ex.: contagem conferida, avaria constatada..."></textarea>
+        <div class="ia-modal-check">
+            <input type="checkbox" id="ia-confirmar-causa-raiz">
+            <div>
+                <label for="ia-confirmar-causa-raiz" style="margin:0; cursor:pointer;"><strong>Precisa de Análise de Causa Raiz</strong></label>
+                <small>Envia esse item pra fila separada de Análise de Causa Raiz, pro operador/gestor investigarem o motivo detalhado depois. Não bloqueia o fluxo.</small>
+            </div>
+        </div>
+        <div class="ia-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="ia-confirmar-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-confirmar-salvar"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal do FORM-08.52 (Ajuste para Faturamento) - gera o relatorio em PDF
      pro lote selecionado e ja manda todos pro Finance juntos. -->
@@ -280,10 +308,11 @@
     }
 
     function renderMetricas(lista) {
-        const cont = { Validacao: 0, Finance: 0, Fiscal: 0, Concluido: 0, Descartado: 0 };
+        const cont = { Validacao: 0, Relatorio: 0, Finance: 0, Fiscal: 0, Concluido: 0, Descartado: 0 };
         lista.forEach((a) => { cont[a.status_modulo] = (cont[a.status_modulo] || 0) + 1; });
         $("ia-m-todos").textContent = lista.length;
         $("ia-m-validacao").textContent = cont.Validacao;
+        $("ia-m-relatorio").textContent = cont.Relatorio;
         $("ia-m-finance").textContent = cont.Finance;
         $("ia-m-fiscal").textContent = cont.Fiscal;
         $("ia-m-concluido").textContent = cont.Concluido;
@@ -291,11 +320,11 @@
     }
 
     const CORES_STATUS = {
-        Validacao: "#b45309", Finance: "#0369a1", Fiscal: "#7c3aed",
+        Validacao: "#b45309", Relatorio: "#7c3aed", Finance: "#0369a1", Fiscal: "#7c3aed",
         Concluido: "#15803d", Descartado: "#64748b",
     };
     const LABEL_STATUS = {
-        Validacao: "Aguardando gestor", Finance: "Aguardando Finance",
+        Validacao: "Aguardando gestor", Relatorio: "Aguardando relatório", Finance: "Aguardando Finance",
         Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Dif. Improcedente",
     };
     function badgeStatus(a) {
@@ -335,7 +364,7 @@
             const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
             const valorClasse = temCusto ? (a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg") : "";
             const valorTexto = temCusto ? `${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}` : "—";
-            const podeSelecionar = PODE_VALIDAR && a.status_modulo === "Validacao";
+            const podeSelecionar = PODE_VALIDAR && a.status_modulo === "Relatorio";
             const marcado = selecionados.has(a.id);
             const checkboxHtml = podeSelecionar
                 ? `<input type="checkbox" class="ia-select-item" data-id="${a.id}"${marcado ? " checked" : ""}>`
@@ -389,7 +418,7 @@
         const checkboxes = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
         if (marcar && checkboxes.length > RELATORIO_MAX_ITENS) {
             e.target.checked = false;
-            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando gestor - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
+            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando relatório - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
             return;
         }
         checkboxes.forEach((cb) => {
@@ -422,7 +451,7 @@
         const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            itens += it("descartar", "fa-ban", "Dif. Improcedente", true);
+            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Dif. Improcedente", true);
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
             itens += it("finance", "fa-coins", "Confirmar ajuste executado");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
@@ -462,6 +491,37 @@
         if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
     });
 
+    // ── Modal "Confirmar divergência" (Validacao -> Relatorio) - so' marca
+    // a diferenca como real; o FORM-08.52/envio pro Finance acontece
+    // depois, em lote, no modal de Relatorio (ver mais abaixo).
+    let confirmarAjusteId = null;
+    function abrirModalConfirmar(id) {
+        confirmarAjusteId = id;
+        $("ia-confirmar-justificativa").value = "";
+        $("ia-confirmar-causa-raiz").checked = false;
+        $("ia-confirmar-modal").classList.add("open");
+    }
+    function fecharModalConfirmar() {
+        $("ia-confirmar-modal").classList.remove("open");
+        confirmarAjusteId = null;
+    }
+    $("ia-confirmar-cancelar").addEventListener("click", fecharModalConfirmar);
+    $("ia-confirmar-modal").addEventListener("click", (e) => { if (e.target.id === "ia-confirmar-modal") fecharModalConfirmar(); });
+    $("ia-confirmar-salvar").addEventListener("click", async () => {
+        const id = confirmarAjusteId;
+        if (!id) return;
+        const justificativa = $("ia-confirmar-justificativa").value.trim();
+        const solicitar_analise_causa = $("ia-confirmar-causa-raiz").checked;
+        try {
+            await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
+            fecharModalConfirmar();
+            toast("Atualizado!", "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
     acoesMenuEl().addEventListener("click", async (e) => {
         const btn = e.target.closest("button[data-act]");
         if (!btn) return;
@@ -469,7 +529,10 @@
         const act = btn.dataset.act;
         fecharMenuAcoes();
         try {
-            if (act === "descartar") {
+            if (act === "confirmar") {
+                abrirModalConfirmar(id);
+                return;
+            } else if (act === "descartar") {
                 const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
                 if (!motivo.trim()) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });

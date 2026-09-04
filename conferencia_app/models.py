@@ -1640,16 +1640,22 @@ class LogisticaInventarioInicial(db.Model):
 
 class LogisticaInventarioAjuste(db.Model):
     """Fluxo de ajuste de estoque pra itens divergentes do Inventario
-    (mesma ideia de workflow por status_modulo do modulo Comex, so que
-    reduzido a 4 etapas):
+    (mesma ideia de workflow por status_modulo do modulo Comex):
 
     Modulo 01 (Contagem inicial) - LogisticaInventarioInicial, ja existente.
     Modulo 02 (Validacao) - criado AQUI automaticamente quando uma contagem
-        e' comparada com o GRV e da divergente; o gestor confirma a
-        diferenca (ou nao) antes de mandar pro Finance.
-    Modulo 03 (Finance) - so tracking de status: confirma que o ajuste de
+        e' comparada com o GRV e da divergente; o gestor confirma que a
+        diferenca e' de verdade (ou descarta, se nao for) - so' isso, ainda
+        NAO gera o relatorio formal.
+    Modulo 03 (Relatorio) - itens ja confirmados como divergencia real,
+        aguardando entrar num FORM-08.52 (Ajuste para Faturamento): o
+        gestor seleciona varios de uma vez (checkbox), preenche o
+        formulario uma unica vez pro lote inteiro e gera o PDF - so' ai'
+        os itens vao pro Finance juntos (ver
+        logistica_inventario_ajuste_service.gerar_relatorio_ajuste).
+    Modulo 04 (Finance) - so tracking de status: confirma que o ajuste de
         estoque foi executado FORA do sync (direto no ERP) e libera pro Fiscal.
-    Modulo 04 (Fiscal) - so tracking de status: confirma que a NF de ajuste
+    Modulo 05 (Fiscal) - so tracking de status: confirma que a NF de ajuste
         foi emitida FORA do sync.
 
     qtde_contada/qtde_estoque_no_momento/diferenca/custo_medio sao um
@@ -1676,7 +1682,7 @@ class LogisticaInventarioAjuste(db.Model):
     # (nao armazenado, pra nao duplicar dado derivado).
     custo_medio = db.Column(db.Float)
 
-    status_modulo = db.Column(db.String(20), nullable=False, default="Validacao", index=True)  # Validacao|Finance|Fiscal|Concluido
+    status_modulo = db.Column(db.String(20), nullable=False, default="Validacao", index=True)  # Validacao|Relatorio|Finance|Fiscal|Concluido
     status_slug = db.Column(db.String(20), nullable=False, default="validacao", index=True)
 
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

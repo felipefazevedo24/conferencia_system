@@ -659,6 +659,7 @@ PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
 # mostrar o nome interno do status_modulo pro usuario final.
 LABEL_STATUS_AJUSTE = {
     "Validacao": "Aguardando gestor",
+    "Relatorio": "Aguardando relatório",
     "Finance": "Aguardando Finance",
     "Fiscal": "Aguardando Fiscal",
     "Concluido": "Concluído",
@@ -863,7 +864,7 @@ def api_confirmar_ajuste(ajuste_id):
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    mensagem = "Divergência confirmada e enviada pro Finance."
+    mensagem = "Divergência confirmada - aguardando entrar no relatório (FORM-08.52) pro Finance."
     if payload.get("solicitar_analise_causa"):
         mensagem += " Análise de causa raiz solicitada."
     return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})

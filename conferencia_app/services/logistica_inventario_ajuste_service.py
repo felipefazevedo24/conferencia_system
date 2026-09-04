@@ -1,12 +1,17 @@
 """Fluxo de ajuste de estoque do Inventario (Logistica) - mesma ideia de
-workflow por status_modulo do modulo Comex, reduzido a 4 etapas:
+workflow por status_modulo do modulo Comex:
 
     Modulo 01 (Contagem inicial) -> ja existe (LogisticaInventarioInicial).
-    Modulo 02 (Validacao) -> gestor confirma a divergencia detectada
-        automaticamente contra o GRV, antes de pedir o ajuste.
-    Modulo 03 (Finance) -> so tracking de status: ajuste de estoque
+    Modulo 02 (Validacao) -> gestor confirma que a divergencia detectada
+        automaticamente contra o GRV e' de verdade (ou descarta, se nao
+        for) - ainda NAO gera o relatorio formal.
+    Modulo 03 (Relatorio) -> itens ja confirmados como divergencia real,
+        aguardando entrar num FORM-08.52 (Ajuste para Faturamento): o
+        gestor seleciona varios de uma vez (checkbox) e gera o PDF - so'
+        ai' vao pro Finance juntos (ver gerar_relatorio_ajuste).
+    Modulo 04 (Finance) -> so tracking de status: ajuste de estoque
         acontece FORA do sync (direto no ERP); aqui so confirma execucao.
-    Modulo 04 (Fiscal) -> so tracking de status: emissao de NF de ajuste
+    Modulo 05 (Fiscal) -> so tracking de status: emissao de NF de ajuste
         acontece FORA do sync; aqui so confirma emissao.
 
 Ver COMEX_ESPECIFICACAO.md pro workflow que serviu de modelo.
@@ -31,6 +36,7 @@ from ..models import (
 
 STATUS_SLUGS = {
     "Validacao": "validacao",
+    "Relatorio": "relatorio",
     "Finance": "finance",
     "Fiscal": "fiscal",
     "Concluido": "concluido",
@@ -41,7 +47,7 @@ STATUS_SLUGS = {
 # ideia do "Pular Status" do Comex). "Descartado" fica de fora: e' um ramo
 # terminal que so sai de "Validacao" via descartar_divergencia, nao faz
 # parte do avanco normal.
-MODULOS_SEQUENCIA = ["Validacao", "Finance", "Fiscal", "Concluido"]
+MODULOS_SEQUENCIA = ["Validacao", "Relatorio", "Finance", "Fiscal", "Concluido"]
 
 TOLERANCIA_DIVERGENCIA = 0.001
 
@@ -132,23 +138,24 @@ def confirmar_divergencia(
     justificativa: str | None = None,
     solicitar_analise_causa: bool = False,
 ) -> LogisticaInventarioAjuste:
-    """Modulo 02 -> Modulo 03. Gestor confirma que a diferenca e' real e
-    precisa de ajuste - dispara pro Finance.
+    """Modulo 02 -> Modulo 03. Gestor confirma que a diferenca e' real -
+    NAO manda direto pro Finance: entra na fila de "Relatorio", aguardando
+    ser agrupada num FORM-08.52 (ver gerar_relatorio_ajuste) antes de
+    seguir pro Finance de verdade.
 
     `solicitar_analise_causa`: o gestor pode marcar, no mesmo passo, que
     esse item precisa de uma investigacao mais profunda do motivo (causa
-    raiz). Isso NAO muda o fluxo normal do ajuste - ele segue pro Finance
-    igual - so cria (ou reaproveita, se ja existir) uma entrada na fila
-    separada de Analise de Causa Raiz, pro operador/gestor preencherem a
-    analise detalhada depois, na propria tela, no ritmo deles, sem
-    competir com Finance/Fiscal."""
+    raiz). Isso NAO muda o fluxo normal do ajuste - so cria (ou reaproveita,
+    se ja existir) uma entrada na fila separada de Analise de Causa Raiz,
+    pro operador/gestor preencherem a analise detalhada depois, na propria
+    tela, no ritmo deles, sem competir com Relatorio/Finance/Fiscal."""
     if ajuste.status_modulo != "Validacao":
         raise ValueError("Este ajuste não está aguardando validação do gestor.")
     ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
     ajuste.gestor_confirmado_em = datetime.now()
     ajuste.gestor_confirmado_por = usuario
-    ajuste.status_modulo = "Finance"
-    ajuste.status_slug = status_slug("Finance")
+    ajuste.status_modulo = "Relatorio"
+    ajuste.status_slug = status_slug("Relatorio")
 
     if solicitar_analise_causa and not ajuste.analise_causa:
         db.session.add(LogisticaInventarioAnaliseCausa(
@@ -190,15 +197,17 @@ def gerar_relatorio_ajuste(
     observacoes_itens: str | None = None,
     solicitar_analise_causa: bool = False,
 ) -> LogisticaInventarioRelatorioAjuste:
-    """Gera o FORM-08.52 (Ajuste para Faturamento) pra um LOTE de
-    divergencias de uma vez - SUBSTITUI confirmar_divergencia() no fluxo
-    normal: em vez de confirmar item a item, o gestor seleciona varios
-    ajustes, preenche esse formulario uma unica vez pro lote inteiro, e
-    todos vao pro Finance juntos, com o mesmo numero de documento (ver
-    _proximo_numero_documento).
+    """Gera o FORM-08.52 (Ajuste para Faturamento) pra um LOTE de itens JA
+    CONFIRMADOS como divergencia real (Modulo 03 - Relatorio, ver
+    confirmar_divergencia) - o gestor seleciona varios de uma vez
+    (checkbox), preenche esse formulario uma unica vez pro lote inteiro, e
+    so' ENTAO todos vao pro Finance juntos, com o mesmo numero de
+    documento (ver _proximo_numero_documento).
 
     `solicitar_analise_causa` se aplica a TODOS os ajustes do lote (mesma
-    ideia de confirmar_divergencia, so que em lote)."""
+    ideia de confirmar_divergencia, so que em lote - util quando o gestor
+    so' percebe que precisa de investigacao mais profunda na hora de
+    agrupar o relatorio, nao antes)."""
     if not ajuste_ids:
         raise ValueError("Selecione ao menos um item pra gerar o relatório.")
     if len(ajuste_ids) > RELATORIO_AJUSTE_MAX_ITENS:
@@ -214,11 +223,12 @@ def gerar_relatorio_ajuste(
     )
     if len(ajustes) != len(set(ajuste_ids)):
         raise ValueError("Um ou mais itens selecionados não foram encontrados.")
-    fora_de_validacao = [a for a in ajustes if a.status_modulo != "Validacao"]
-    if fora_de_validacao:
+    fora_do_relatorio = [a for a in ajustes if a.status_modulo != "Relatorio"]
+    if fora_do_relatorio:
         raise ValueError(
-            "Um ou mais itens selecionados não estão mais aguardando validação "
-            "(já foram confirmados, descartados ou estão em outra etapa)."
+            "Um ou mais itens selecionados não estão mais aguardando o relatório "
+            "(ainda não foram confirmados pelo gestor, já entraram em outro relatório, "
+            "ou estão em outra etapa)."
         )
 
     tipo_ajuste = (tipo_ajuste or "").strip()
@@ -264,8 +274,12 @@ def gerar_relatorio_ajuste(
 
     for ajuste in ajustes:
         ajuste.relatorio_id = relatorio.id
-        ajuste.gestor_confirmado_em = agora
-        ajuste.gestor_confirmado_por = usuario
+        # gestor_confirmado_em/por ja foram gravados quando o item entrou
+        # em "Relatorio" (ver confirmar_divergencia) - so preenche aqui se
+        # por algum motivo ainda estiver em branco (ex.: chegou via Pular
+        # Etapa, que ignora essa validacao).
+        ajuste.gestor_confirmado_em = ajuste.gestor_confirmado_em or agora
+        ajuste.gestor_confirmado_por = ajuste.gestor_confirmado_por or usuario
         ajuste.status_modulo = "Finance"
         ajuste.status_slug = status_slug("Finance")
         if solicitar_analise_causa and not ajuste.analise_causa:
@@ -349,13 +363,14 @@ def estornar_para_validacao(ajuste: LogisticaInventarioAjuste) -> LogisticaInven
 def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInventarioAjuste:
     """Funcao "Pular Etapa" (requisito geral do Inventario, espelho do
     "Pular Status" do Comex): avanca o ajuste manualmente pra proxima etapa
-    do workflow (Validacao -> Finance -> Fiscal -> Concluido), IGNORANDO as
-    validacoes normais de cada modulo (justificativa do gestor, observacao
-    do Finance, numero da NF do Fiscal) - reservada pra ajustes
-    excepcionais (ex.: decisao tomada fora do sistema, correcao rapida de
-    fluxo) e exige permissao extra de gerencia
-    (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA), alem do acesso normal ao
-    modulo. Nao pula pra fora do fluxo (nao reabre um "Descartado")."""
+    do workflow (Validacao -> Relatorio -> Finance -> Fiscal -> Concluido),
+    IGNORANDO as validacoes normais de cada modulo (justificativa do
+    gestor, preenchimento do FORM-08.52, observacao do Finance, numero da
+    NF do Fiscal) - reservada pra ajustes excepcionais (ex.: decisao
+    tomada fora do sistema, correcao rapida de fluxo) e exige permissao
+    extra de gerencia (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA), alem do
+    acesso normal ao modulo. Nao pula pra fora do fluxo (nao reabre um
+    "Descartado")."""
     if ajuste.status_modulo == "Descartado":
         raise ValueError("Essa diferença foi marcada como improcedente - não há como avançar.")
     proximo = _proximo_modulo(ajuste.status_modulo)
@@ -368,7 +383,7 @@ def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInv
     # nao deixar a auditoria com "quem/quando" em branco pra uma etapa que
     # o registro diz ter passado - mesma logica de nao perder historico que
     # o restante do fluxo normal já segue.
-    if proximo == "Finance":
+    if proximo == "Relatorio" or proximo == "Finance":
         ajuste.gestor_confirmado_em = ajuste.gestor_confirmado_em or agora
         ajuste.gestor_confirmado_por = ajuste.gestor_confirmado_por or usuario
     elif proximo == "Fiscal":

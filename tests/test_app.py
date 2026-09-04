@@ -4506,9 +4506,9 @@ def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_
         assert LogisticaInventarioAjuste.query.get(ajuste_id).status_modulo == "Validacao"
 
     # Admin tem a permissao extra por padrao (catalogo inteiro) - avanca uma
-    # etapa por chamada: Validacao -> Finance -> Fiscal -> Concluido.
+    # etapa por chamada: Validacao -> Relatorio -> Finance -> Fiscal -> Concluido.
     login_admin(client)
-    for esperado in ("Finance", "Fiscal", "Concluido"):
+    for esperado in ("Relatorio", "Finance", "Fiscal", "Concluido"):
         resp = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/pular-etapa")
         assert resp.status_code == 200, resp.get_json()
         assert resp.get_json()["ajuste"]["status_modulo"] == esperado
@@ -5596,9 +5596,9 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     """Ao confirmar uma divergencia (Modulo 02), o gestor pode marcar
     `solicitar_analise_causa` - isso cria uma entrada na fila separada de
     Analise de Causa Raiz (status Pendente), mas o ajuste segue seu fluxo
-    normal pro Finance igual, sem bloquear em nada. A tela dedicada lista
-    a fila e permite preencher a analise detalhada, independente do
-    andamento de Finance/Fiscal/Concluido."""
+    normal (Relatorio -> Finance) igual, sem bloquear em nada. A tela
+    dedicada lista a fila e permite preencher a analise detalhada,
+    independente do andamento de Relatorio/Finance/Fiscal/Concluido."""
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -5622,7 +5622,7 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     )
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["ajuste"]["status_modulo"] == "Finance"  # fluxo normal seguiu
+    assert body["ajuste"]["status_modulo"] == "Relatorio"  # fluxo normal seguiu (Validacao -> Relatorio)
     assert body["ajuste"]["analise_causa_status"] == "Pendente"
     assert "Análise de causa raiz solicitada" in body["message"]
 
@@ -5653,6 +5653,16 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     client.post(f"/api/logistica/inventario-ajustes/{outro_id}/confirmar", json={})
     resp_lista2 = client.get("/api/logistica/inventario-analise-causa")
     assert len(resp_lista2.get_json()["analises"]) == 1  # continua só a primeira
+
+    # Gera o relatorio (FORM-08.52) - so' isso manda o ajuste pro Finance de verdade.
+    resp_relatorio = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Geral",
+        "motivo_ajuste": "Erro de contagem",
+        "motivo_ajuste_detalhe": "Avaria constatada na conferencia.",
+        "deposito_tipo": "Depósito - Principal",
+    })
+    assert resp_relatorio.status_code == 200
 
     # Finance/Fiscal avancam independente da analise ainda estar pendente.
     resp_finance = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/finance-concluir", json={})
@@ -5803,10 +5813,13 @@ def test_comex_avancar_de_nf_cambio_conclui_processo(tmp_path):
 
 
 def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_path):
-    """FORM-08.52 (Ajuste para Faturamento): o gestor seleciona varios
-    ajustes de uma vez, preenche o formulario uma unica vez pro lote
-    inteiro, e todos vao pro Finance juntos com o mesmo numero de
-    documento - substitui confirmar_divergencia() item a item. Numero de
+    """FORM-08.52 (Ajuste para Faturamento): apos o gestor confirmar que a
+    diferenca e' real (Validacao -> Relatorio, ver confirmar_divergencia -
+    coberto em test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo),
+    ele seleciona varios ajustes JA CONFIRMADOS de uma vez (fixtures abaixo
+    ja nascem em "Relatorio", pulando a etapa de confirmacao pra isolar o
+    teste), preenche o formulario uma unica vez pro lote inteiro, e todos
+    vao pro Finance juntos com o mesmo numero de documento. Numero de
     documento segue mes/ano + sequencial (reinicia a cada mes)."""
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -5818,17 +5831,17 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         a1 = LogisticaInventarioAjuste(
             codigo_produto="19-01-00233", local_codigo="A01-01", unidade_medida="KG",
             qtde_contada=2707, qtde_estoque_no_momento=0, diferenca=2707, custo_medio=12.5,
-            status_modulo="Validacao", status_slug="validacao",
+            status_modulo="Relatorio", status_slug="relatorio",
         )
         a2 = LogisticaInventarioAjuste(
             codigo_produto="23-01-02090", local_codigo="B02-03", unidade_medida="UN",
             qtde_contada=10, qtde_estoque_no_momento=15, diferenca=-5, custo_medio=None,
-            status_modulo="Validacao", status_slug="validacao",
+            status_modulo="Relatorio", status_slug="relatorio",
         )
         outro = LogisticaInventarioAjuste(
             codigo_produto="99-00-00001", local_codigo="C03-01", unidade_medida="UN",
             qtde_contada=1, qtde_estoque_no_momento=1, diferenca=0,
-            status_modulo="Validacao", status_slug="validacao",
+            status_modulo="Relatorio", status_slug="relatorio",
         )
         db.session.add_all([a1, a2, outro])
         db.session.commit()
@@ -5879,7 +5892,7 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
         assert a1_depois.relatorio_id == relatorio_id
         assert a2_depois.relatorio_id == relatorio_id
         assert a1_depois.gestor_confirmado_por == "ADMIN"
-        assert outro_depois.status_modulo == "Validacao"  # nao selecionado, nao mexeu
+        assert outro_depois.status_modulo == "Relatorio"  # nao selecionado, nao mexeu
 
     # Segundo relatorio no mesmo mes -> sequencial incrementa.
     resp2 = client.post(
@@ -5890,7 +5903,7 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
     assert resp2.get_json()["numero_documento"].endswith("-002")
     assert resp2.get_json()["numero_documento"][:7] == body["numero_documento"][:7]  # mesmo mes/ano
 
-    # Reenviar um item que ja foi confirmado -> bloqueia (nao esta mais em Validacao).
+    # Reenviar um item que ja foi confirmado -> bloqueia (nao esta mais em Relatorio).
     resp_repetido = client.post(
         "/api/logistica/inventario-ajustes/relatorio",
         json={**payload_base, "ajuste_ids": [a1_id]},
@@ -5919,7 +5932,7 @@ def test_inventario_relatorio_ajuste_gera_lote_e_confirma_todos_pro_finance(tmp_
             item = LogisticaInventarioAjuste(
                 codigo_produto=f"EXTRA-{i}", local_codigo="D01-01", unidade_medida="UN",
                 qtde_contada=1, qtde_estoque_no_momento=2, diferenca=-1,
-                status_modulo="Validacao", status_slug="validacao",
+                status_modulo="Relatorio", status_slug="relatorio",
             )
             db.session.add(item)
             db.session.flush()
