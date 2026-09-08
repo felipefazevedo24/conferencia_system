@@ -1,10 +1,13 @@
 """Servico do modulo de Consumo de Chapa (Nesting) da Logistica.
 
-Workflow: Nesting (importado do relatorio da maquina de corte, chapas ja
-consumidas fisicamente) -> Concluido (confirmacao manual depois, ex.:
+Workflow: Nesting (recem importado - lista gerada pelo PCP, ainda NAO
+conferida pela logistica; nenhuma tratativa por peca disponivel, so' o
+"Confirmar Recebimento") -> Nesting Liberado (logistica confirmou o
+recebimento da lista de separacao - libera observacao/baixa/divergencia
+por peca e o Concluir) -> Concluido (confirmacao manual depois, ex.:
 baixa de estoque conferida). Ramo lateral "Erro": o gestor pode marcar
-uma divergencia (motivo obrigatorio) enquanto o Nesting ainda nao foi
-Concluido - TRAVA o "Concluir" ate' ser resolvida (volta pra Nesting).
+uma divergencia (motivo obrigatorio) a partir do Nesting Liberado -
+TRAVA o "Concluir" ate' ser resolvida (volta pra Nesting Liberado).
 Ver logistica_consumo_chapa_parser.py pra extracao dos dados do HTML."""
 from __future__ import annotations
 
@@ -14,7 +17,12 @@ from ..extensions import db
 from ..models import LogisticaConsumoChapaNesting, LogisticaConsumoChapaPeca
 from .logistica_consumo_chapa_parser import parse_relatorio_nesting_html
 
-STATUS_SLUGS = {"Nesting": "nesting", "Erro": "erro", "Concluido": "concluido"}
+STATUS_SLUGS = {
+    "Nesting": "nesting",
+    "Nesting Liberado": "nesting_liberado",
+    "Erro": "erro",
+    "Concluido": "concluido",
+}
 
 
 def status_slug(status: str) -> str:
@@ -105,10 +113,25 @@ def listar_nestings(status: str | None = None, busca: str = "") -> list[Logistic
     return query.order_by(LogisticaConsumoChapaNesting.criado_em.desc()).all()
 
 
+# ── Confirmacao de recebimento pela logistica (Nesting -> Nesting Liberado)
+# - enquanto estiver em "Nesting" (recem importado), NENHUMA acao por peca
+# fica disponivel, so' essa confirmacao.
+def confirmar_recebimento_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> LogisticaConsumoChapaNesting:
+    if nesting.status != "Nesting":
+        raise ValueError("O recebimento desse Nesting já foi confirmado.")
+    nesting.status = "Nesting Liberado"
+    nesting.confirmado_em = datetime.now()
+    nesting.confirmado_por = usuario
+    db.session.commit()
+    return nesting
+
+
 def concluir_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> LogisticaConsumoChapaNesting:
+    if nesting.status == "Nesting":
+        raise ValueError("Confirme o recebimento da lista de separação antes de concluir.")
     if nesting.status == "Erro":
         raise ValueError("Esse Nesting está marcado como erro - resolva a divergência antes de concluir.")
-    if nesting.status != "Nesting":
+    if nesting.status != "Nesting Liberado":
         raise ValueError("Esse Nesting já está concluído.")
     nesting.status = "Concluido"
     nesting.concluido_em = datetime.now()
@@ -120,7 +143,7 @@ def concluir_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> Log
 def estornar_nesting(nesting: LogisticaConsumoChapaNesting) -> LogisticaConsumoChapaNesting:
     if nesting.status != "Concluido":
         raise ValueError("Esse Nesting não está concluído.")
-    nesting.status = "Nesting"
+    nesting.status = "Nesting Liberado"
     nesting.concluido_em = None
     nesting.concluido_por = None
     db.session.commit()
@@ -131,6 +154,8 @@ def estornar_nesting(nesting: LogisticaConsumoChapaNesting) -> LogisticaConsumoC
 def marcar_erro_nesting(
     nesting: LogisticaConsumoChapaNesting, motivo: str, usuario: str
 ) -> LogisticaConsumoChapaNesting:
+    if nesting.status == "Nesting":
+        raise ValueError("Confirme o recebimento da lista de separação antes de marcar uma divergência.")
     if nesting.status == "Concluido":
         raise ValueError("Esse Nesting já está concluído - estorne antes de marcar uma divergência.")
     if nesting.status == "Erro":
@@ -149,7 +174,7 @@ def marcar_erro_nesting(
 def resolver_erro_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> LogisticaConsumoChapaNesting:
     if nesting.status != "Erro":
         raise ValueError("Esse Nesting não está marcado como erro.")
-    nesting.status = "Nesting"
+    nesting.status = "Nesting Liberado"
     nesting.erro_resolvido_em = datetime.now()
     nesting.erro_resolvido_por = usuario
     db.session.commit()
@@ -157,14 +182,23 @@ def resolver_erro_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -
 
 
 # ── Observacao e confirmacao de baixa POR PECA (independente da conclusao
-# do Nesting inteiro - ver concluir_nesting/estornar_nesting acima) ────────
+# do Nesting inteiro - ver concluir_nesting/estornar_nesting acima) - so'
+# ficam disponiveis depois que a logistica confirmar o recebimento (ver
+# confirmar_recebimento_nesting acima; nesting.status != "Nesting"). ──────
+def _garantir_tratativa_liberada(peca: LogisticaConsumoChapaPeca) -> None:
+    if peca.nesting.status == "Nesting":
+        raise ValueError("Confirme o recebimento da lista de separação antes de mexer nessa peça.")
+
+
 def salvar_observacao_peca(peca: LogisticaConsumoChapaPeca, observacao: str | None) -> LogisticaConsumoChapaPeca:
+    _garantir_tratativa_liberada(peca)
     peca.observacao = (observacao or "").strip()[:2000] or None
     db.session.commit()
     return peca
 
 
 def confirmar_baixa_peca(peca: LogisticaConsumoChapaPeca, usuario: str) -> LogisticaConsumoChapaPeca:
+    _garantir_tratativa_liberada(peca)
     if peca.baixado:
         raise ValueError("Essa peça já está com a baixa confirmada.")
     peca.baixado = True
@@ -175,6 +209,7 @@ def confirmar_baixa_peca(peca: LogisticaConsumoChapaPeca, usuario: str) -> Logis
 
 
 def estornar_baixa_peca(peca: LogisticaConsumoChapaPeca) -> LogisticaConsumoChapaPeca:
+    _garantir_tratativa_liberada(peca)
     if not peca.baixado:
         raise ValueError("Essa peça ainda não teve a baixa confirmada.")
     peca.baixado = False

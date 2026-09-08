@@ -1835,12 +1835,15 @@ class LogisticaConsumoChapaNesting(db.Model):
     ChapaNesting) - o operador faz upload manual do arquivo, ja que o Sync
     roda na nuvem e nao enxerga a rede local onde a maquina salva o export.
 
-    Workflow: Nesting (importado, chapas ja consumidas fisicamente pelo
-    corte) -> Concluido (confirmacao manual depois, ex.: baixa de estoque
-    conferida). Ramo lateral "Erro": o gestor pode marcar uma divergencia
-    (motivo obrigatorio) a qualquer momento em que o Nesting ainda nao
-    esteja Concluido - TRAVA o "Concluir" ate' resolver (voltar pra
-    Nesting)."""
+    Workflow: Nesting (recem importado - lista gerada pelo PCP, ainda NAO
+    conferida pela logistica; nenhuma acao por peca disponivel, so' o
+    "Confirmar Recebimento") -> Nesting Liberado (logistica confirmou que
+    recebeu a lista de separacao - libera a tratativa por peca:
+    observacao/baixa/divergencia, e o Concluir) -> Concluido (confirmacao
+    manual depois, ex.: baixa de estoque conferida). Ramo lateral "Erro":
+    o gestor pode marcar uma divergencia (motivo obrigatorio) a partir do
+    Nesting Liberado - TRAVA o "Concluir" ate' resolver (volta pra
+    Nesting Liberado)."""
 
     __tablename__ = "logistica_consumo_chapa_nesting"
 
@@ -1871,7 +1874,7 @@ class LogisticaConsumoChapaNesting(db.Model):
     retalho_pct = db.Column(db.Float)
     sucata_pct = db.Column(db.Float)
 
-    status = db.Column(db.String(20), nullable=False, default="Nesting", index=True)  # Nesting | Erro | Concluido
+    status = db.Column(db.String(20), nullable=False, default="Nesting", index=True)  # Nesting | Nesting Liberado | Erro | Concluido
 
     arquivo_origem = db.Column(db.String(260))
 
@@ -1879,6 +1882,11 @@ class LogisticaConsumoChapaNesting(db.Model):
     criado_por = db.Column(db.String(100))
     concluido_em = db.Column(db.DateTime)
     concluido_por = db.Column(db.String(100))
+
+    # Confirmacao de recebimento pela logistica (Nesting -> Nesting Liberado)
+    # - so' depois disso a tratativa por peca fica disponivel.
+    confirmado_em = db.Column(db.DateTime)
+    confirmado_por = db.Column(db.String(100))
 
     # Ramo lateral "Erro" (divergencia) - trava o Concluir ate' ser resolvido.
     motivo_erro = db.Column(db.Text)
