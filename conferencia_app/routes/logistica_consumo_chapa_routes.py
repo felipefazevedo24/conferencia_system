@@ -72,7 +72,24 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "qtd_pecas": len(n.pecas),
     }
     if com_pecas:
-        dados["pecas"] = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
+        pecas = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
+        dados["pecas"] = pecas
+
+        # Check: "Peso Peças Kg" que veio pronto do relatorio da maquina
+        # (n.peso_pecas_kg) deve bater com a SOMA do Peso Total (a baixar)
+        # calculado peca a peca - serve pra pegar erro de extracao do HTML
+        # ou peca faltando. Tolerancia de 1% (ou 1 kg, o que for maior) pra
+        # nao acusar diferenca so' por arredondamento do proprio relatorio.
+        soma_peso_baixa = sum(p["peso_total_baixa_kg"] or 0 for p in pecas)
+        dados["soma_peso_pecas_calculado_kg"] = round(soma_peso_baixa, 2)
+        if n.peso_pecas_kg is not None:
+            diferenca = n.peso_pecas_kg - soma_peso_baixa
+            tolerancia = max(1.0, n.peso_pecas_kg * 0.01)
+            dados["diferenca_peso_pecas_kg"] = round(diferenca, 2)
+            dados["peso_pecas_confere"] = abs(diferenca) <= tolerancia
+        else:
+            dados["diferenca_peso_pecas_kg"] = None
+            dados["peso_pecas_confere"] = None
     return dados
 
 

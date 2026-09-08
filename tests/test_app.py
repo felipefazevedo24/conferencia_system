@@ -6138,6 +6138,21 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert nesting_detalhe["pecas"][0]["qtd_arranjada"] == 6.0
     assert nesting_detalhe["pecas"][0]["peso_liquido_kg"] == 28.76
     assert nesting_detalhe["pecas"][0]["peso_total_baixa_kg"] == 6.0 * 28.76 * 24
+    # Check: soma do Peso Total calculado peca a peca bate com o "Peso
+    # Peças Kg" que veio pronto do relatorio da maquina (dentro da tolerancia).
+    assert nesting_detalhe["soma_peso_pecas_calculado_kg"] == round(6.0 * 28.76 * 24, 2)
+    assert nesting_detalhe["peso_pecas_confere"] is True
+    assert nesting_detalhe["diferenca_peso_pecas_kg"] is not None
+
+    # Forcando uma divergencia grande (fora da tolerancia) -> o check acusa.
+    with app.app_context():
+        from conferencia_app.models import LogisticaConsumoChapaNesting
+
+        nst = db.session.get(LogisticaConsumoChapaNesting, nesting_id)
+        nst.peso_pecas_kg = 999999.0
+        db.session.commit()
+    resp_detalhe_divergente = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe_divergente.get_json()["nesting"]["peso_pecas_confere"] is False
 
     # Reimportar o MESMO arquivo -> atualiza, nao duplica.
     resp_reimport = client.post(

@@ -339,11 +339,25 @@
                 `).join("")
                 : '<tr><td colspan="9" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
 
-            // Soma do Peso Total (o que precisa ser baixado do estoque) de todas as pecas.
-            const somaPesoTotal = pecas.reduce((acc, p) => acc + (p.peso_total_baixa_kg || 0), 0);
-            $("cc-detalhe-pecas-tfoot").innerHTML = pecas.length
-                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(somaPesoTotal)}</td></tr>`
+            // Soma do Peso Total (o que precisa ser baixado do estoque) de
+            // todas as pecas - calculada no backend (ver _fmt_nesting), pra
+            // bater exatamente com o check contra o "Peso Peças Kg" do relatorio.
+            let linhaTotal = pecas.length
+                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(n.soma_peso_pecas_calculado_kg)}</td></tr>`
                 : "";
+            if (pecas.length && n.peso_pecas_confere !== null && n.peso_pecas_confere !== undefined) {
+                const ok = n.peso_pecas_confere;
+                const cor = ok ? "#15803d" : "#dc2626";
+                const texto = ok
+                    ? 'Confere com o "Peso Peças" do relatório'
+                    : `Diverge do "Peso Peças" do relatório (${fmtKg(n.peso_pecas_kg)}) em ${fmtKg(Math.abs(n.diferenca_peso_pecas_kg))}`;
+                linhaTotal += `<tr><td colspan="9" style="text-align:right; padding-top:2px;">
+                    <span style="color:${cor}; font-size:12px; font-weight:600;">
+                        <i class="fas ${ok ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
+                    </span>
+                </td></tr>`;
+            }
+            $("cc-detalhe-pecas-tfoot").innerHTML = linhaTotal;
 
             $("cc-detalhe-modal").classList.add("open");
         } catch (err) {
