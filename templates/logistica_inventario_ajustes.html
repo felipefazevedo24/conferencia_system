@@ -289,6 +289,15 @@
         $("ia-btn-exportar").href = "/api/logistica/inventario-ajustes/exportar" + (qs ? "?" + qs : "");
     }
 
+    function atualizarLinkExportar() {
+        const params = new URLSearchParams();
+        if (filtroAtual) params.set("status", filtroAtual);
+        const busca = $("ia-busca").value.trim();
+        if (busca) params.set("busca", busca);
+        const qs = params.toString();
+        $("ia-btn-exportar").href = "/api/logistica/inventario-ajustes/exportar" + (qs ? "?" + qs : "");
+    }
+
     async function carregar() {
         atualizarLinkExportar();
         try {

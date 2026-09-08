@@ -718,8 +718,6 @@ def painel_tv_comex_itens(processo_id):
         db.session.rollback()
         raise
     return jsonify({"itens": dados})
-
-
 @painel_tv_bp.route("/api/painel/frota")
 def painel_tv_frota():
     # Mesma fonte de dados do Mapa da Frota / Rastreamento de Veiculos

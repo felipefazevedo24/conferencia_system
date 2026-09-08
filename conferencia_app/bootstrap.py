@@ -1091,6 +1091,56 @@ def _ensure_perfil_columns() -> None:
         conn.close()
 
 
+def _ensure_solicitacao_coleta_tabelas() -> None:
+    """Cria as tabelas de detalhes e anexos de solicitação de coleta se não existirem."""
+    conn = db.engine.connect()
+    try:
+        # Criar tabela solicitacao_coleta_detalhes
+        if not _has_table("solicitacao_coleta_detalhes"):
+            conn.execute(db.text("""
+                CREATE TABLE solicitacao_coleta_detalhes (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    solicitacao_id INT NOT NULL UNIQUE,
+                    data_liberacao DATETIME,
+                    status_liberacao VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                    observacao TEXT,
+                    criado_por VARCHAR(100) NOT NULL,
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_por VARCHAR(100),
+                    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (solicitacao_id) REFERENCES agendamento_solicitacao(id),
+                    INDEX idx_solicitacao_id (solicitacao_id),
+                    INDEX idx_status (status_liberacao),
+                    INDEX idx_criado_em (criado_em)
+                )
+            """))
+            conn.commit()
+        
+        # Criar tabela solicitacao_coleta_anexo
+        if not _has_table("solicitacao_coleta_anexo"):
+            conn.execute(db.text("""
+                CREATE TABLE solicitacao_coleta_anexo (
+                    id INT PRIMARY KEY AUTO_INCREMENT,
+                    solicitacao_coleta_id INT NOT NULL,
+                    arquivo_nome VARCHAR(255) NOT NULL,
+                    arquivo_path VARCHAR(500) NOT NULL,
+                    tipo_arquivo VARCHAR(50),
+                    tamanho_bytes INT,
+                    uploadado_por VARCHAR(100) NOT NULL,
+                    uploadado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (solicitacao_coleta_id) REFERENCES solicitacao_coleta_detalhes(id),
+                    INDEX idx_solicitacao_coleta_id (solicitacao_coleta_id),
+                    INDEX idx_uploadado_em (uploadado_em)
+                )
+            """))
+            conn.commit()
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            raise
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         try:
@@ -1192,6 +1242,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_facilities_seed()
+        except Exception:
+            pass
+
+        try:
+            _ensure_solicitacao_coleta_tabelas()
         except Exception:
             pass
 

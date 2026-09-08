@@ -48,6 +48,7 @@ from .routes.atualizacao_cadastral_routes import atualizacao_cadastral_bp
 from .routes.auth_routes import auth_bp
 from .routes.boleto_routes import boleto_bp
 from .routes.cadastro_workflow_routes import cadastro_workflow_bp
+from .routes.coleta_routes import coleta_bp
 from .routes.compras_routes import compras_bp
 from .routes.expedicao_avulso_routes import expedicao_avulso_bp
 from .routes.expedicao_fat_routes import expedicao_fat_bp
@@ -97,6 +98,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(agendamento_bp)
     app.register_blueprint(boleto_bp)
     app.register_blueprint(cadastro_workflow_bp)
+    app.register_blueprint(coleta_bp)
     app.register_blueprint(compras_bp)
     app.register_blueprint(expedicao_fat_bp)
     app.register_blueprint(expedicao_st_bp)
