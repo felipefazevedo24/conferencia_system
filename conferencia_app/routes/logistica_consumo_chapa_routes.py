@@ -17,7 +17,13 @@ logistica_consumo_chapa_bp = Blueprint("logistica_consumo_chapa", __name__)
 PERMISSION = "PAGE_LOGISTICA_CONSUMO_CHAPA"
 
 
-def _fmt_peca(p) -> dict:
+def _fmt_peca(p, qtde_chapas: int | None = None) -> dict:
+    # Peso total a ser baixado do estoque pra essa peca/OS: quanto ela pesa
+    # por chapa (qtd cortada x peso unitario) vezes o total de chapas que
+    # o Nesting inteiro consumiu - ver LogisticaConsumoChapaNesting.qtde_chapas.
+    peso_total_baixa_kg = None
+    if qtde_chapas and p.qtd_arranjada is not None and p.peso_liquido_kg is not None:
+        peso_total_baixa_kg = p.qtd_arranjada * p.peso_liquido_kg * qtde_chapas
     return {
         "id": p.id,
         "peca_numero": p.peca_numero,
@@ -29,6 +35,7 @@ def _fmt_peca(p) -> dict:
         "cliente": p.cliente,
         "os_orcamento": p.os_orcamento,
         "os_numero": p.os_numero,
+        "peso_total_baixa_kg": peso_total_baixa_kg,
     }
 
 
@@ -65,7 +72,7 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "qtd_pecas": len(n.pecas),
     }
     if com_pecas:
-        dados["pecas"] = [_fmt_peca(p) for p in n.pecas]
+        dados["pecas"] = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
     return dados
 
 

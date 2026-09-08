@@ -6133,6 +6133,11 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert len(nesting_detalhe["pecas"]) == 1
     assert nesting_detalhe["pecas"][0]["os_orcamento"] == "OS 9780 - 7083"
     assert nesting_detalhe["pecas"][0]["os_numero"] == "9780"
+    # Peso Total a baixar = qtd arranjada por chapa x peso unitario x qtde de chapas do Nesting.
+    assert nesting_detalhe["qtde_chapas"] == 24
+    assert nesting_detalhe["pecas"][0]["qtd_arranjada"] == 6.0
+    assert nesting_detalhe["pecas"][0]["peso_liquido_kg"] == 28.76
+    assert nesting_detalhe["pecas"][0]["peso_total_baixa_kg"] == 6.0 * 28.76 * 24
 
     # Reimportar o MESMO arquivo -> atualiza, nao duplica.
     resp_reimport = client.post(
