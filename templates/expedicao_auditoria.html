@@ -12,6 +12,39 @@
     .aud-search .eui-input-group .eui-input { width: 100%; padding-left: 34px; }
     .aud-hint { font-size: 12px; color: var(--eui-text-muted, #64748b); margin-top: 6px; }
     .aud-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .aud-header { display: flex; align-items: center; gap: 16px; }
+    .aud-header-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--eui-primary-soft, #eef2ff); color: var(--eui-primary); font-size: 21px; flex-shrink: 0; }
+    .aud-header h2 { margin: 0 0 5px; font-size: 23px; }
+    .aud-header p { margin: 0; color: var(--eui-text-muted); font-size: 13px; }
+    .aud-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .aud-metric { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); padding: 18px 20px; }
+    .aud-metric span { display: block; font-size: 12px; color: var(--eui-text-muted); }
+    .aud-metric strong { display: block; font-size: 28px; margin: 6px 0; color: var(--eui-text); }
+    .aud-metric small { color: var(--eui-text-muted); font-size: 11px; }
+    .aud-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+    .aud-filter { display: grid; gap: 6px; }
+    .aud-filter label { font-size: 12px; font-weight: 600; color: var(--eui-text-muted); }
+    .aud-filter--search { flex: 1; min-width: 240px; }
+    .aud-filter input, .aud-filter select { width: 100%; }
+    .aud-table-wrap { overflow-x: auto; }
+    .aud-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .aud-table th { text-align: left; color: var(--eui-text-muted); background: var(--eui-surface-2, #f8fafc); padding: 12px 16px; font-size: 11px; white-space: nowrap; }
+    .aud-table td { padding: 16px; border-top: 1px solid var(--eui-border); vertical-align: top; }
+    .aud-table tbody tr:hover { background: var(--eui-surface-2, #f8fafc); }
+    .aud-table small { display: block; margin-top: 5px; color: var(--eui-text-muted); }
+    .aud-table .aud-reason { min-width: 200px; max-width: 380px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+    .aud-table .aud-order { min-width: 145px; }
+    .aud-table button { white-space: nowrap; }
+    .aud-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px; border-top: 1px solid var(--eui-border); font-size: 12px; color: var(--eui-text-muted); }
+    .aud-pagination nav { display: flex; align-items: center; gap: 12px; }
+    .aud-dialog { width: min(850px, calc(100vw - 32px)); max-height: 85vh; border: 1px solid var(--eui-border); border-radius: 16px; padding: 0; color: var(--eui-text); background: var(--eui-surface); box-shadow: 0 24px 80px #0003; }
+    .aud-dialog::backdrop { background: #0f172a80; }
+    .aud-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--eui-border); }
+    .aud-dialog-head h3 { margin: 0; }
+    .aud-dialog-body { padding: 20px 22px; }
+    .aud-detail-fields { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 18px; }
+    .aud-search-section summary { cursor: pointer; font-weight: 600; }
+    @media (max-width: 640px) { .aud-metrics { gap: 8px; } .aud-metric { padding: 12px; } .aud-metric strong { font-size: 23px; } .aud-filter { flex: 1; min-width: 135px; } .aud-filter--search { flex-basis: 100%; } }
 
     .aud-resultado { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); overflow: hidden; }
     .aud-resultado + .aud-resultado { margin-top: 12px; }
@@ -48,11 +81,37 @@
 
 {% block content %}
 <div class="aud-wrap">
+    <header class="aud-header">
+        <div class="aud-header-icon"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i></div>
+        <div><h2>Auditoria de Expedição</h2><p>Ordens excluídas, responsáveis e motivos em um só lugar. Consulte o histórico de cada ordem.</p></div>
+    </header>
+    <div class="aud-metrics" aria-live="polite">
+        <div class="aud-metric"><span>Ordens excluídas</span><strong id="aud-total">—</strong><small>Nos filtros selecionados</small></div>
+        <div class="aud-metric"><span>Faturamento · FAT</span><strong id="aud-total-fat">—</strong><small>Ordens de faturamento</small></div>
+        <div class="aud-metric"><span>Serviço de terceiro · ST</span><strong id="aud-total-st">—</strong><small>Ordens de compra</small></div>
+    </div>
+    <section class="eui-card" aria-labelledby="aud-list-title">
+        <div class="eui-card__head"><div><h3 class="eui-card__title" id="aud-list-title">Ordens excluídas</h3><p class="eui-card__sub">Exclusões mais recentes primeiro. O motivo e o responsável ficam visíveis na lista.</p></div></div>
+        <div class="eui-card__body">
+            <form id="aud-filtros" class="aud-filters">
+                <div class="aud-filter aud-filter--search"><label for="aud-excluidas-busca">Buscar na lista</label><input class="eui-input" type="search" id="aud-excluidas-busca" placeholder="Ordem, cliente, NF, responsável ou motivo"></div>
+                <div class="aud-filter"><label for="aud-origem">Origem</label><select class="eui-select" id="aud-origem"><option value="">Todas</option value="fat">Faturamento · FAT</option><option value="st">Serviço de terceiro · ST</option></select></div>
+                <div class="aud-filter"><label for="aud-inicio">Excluídas de</label><input class="eui-input" type="date" id="aud-inicio"></div>
+                <div class="aud-filter"><label for="aud-fim">Até</label><input class="eui-input" type="date" id="aud-fim"></div>
+                <button class="eui-btn eui-btn--primary" type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+                <button class="eui-btn eui-btn--ghost" type="button" id="aud-limpar">Limpar</button>
+            </form>
+        </div>
+        <div id="aud-lista" aria-live="polite"></div>
+        <div class="aud-pagination"><span id="aud-contagem">Carregando exclusões…</span><nav aria-label="Páginas de ordens excluídas"><button type="button" id="aud-anterior" class="eui-btn eui-btn--ghost" disabled>Anterior</button><span id="aud-pagina">—</span><button type="button" id="aud-proxima" class="eui-btn eui-btn--ghost" disabled>Próxima</button></nav></div>
+    </section>
+    <details class="eui-card aud-search-section">
+        <summary class="eui-card__head">Consultar outras ordens e conferências</summary>
     <div class="eui-card">
         <div class="eui-card__head">
             <div>
-                <h2 class="eui-card__title"><i class="fas fa-magnifying-glass-chart"></i> Auditoria de Expedição</h2>
-                <p class="eui-card__sub">Ferramenta restrita a Admin. Localize qualquer ordem de faturamento (FAT) ou de serviço de terceiro (ST) e seu histórico completo de conferências, mesmo que ela tenha sumido da API de origem.</p>
+                <h3 class="eui-card__title"><i class="fas fa-magnifying-glass-chart"></i> Busca geral</h3>
+                <p class="eui-card__sub">Localize também ordens não excluídas pelo código, cliente, fornecedor ou número da ordem.</p>
             </div>
         </div>
         <div class="eui-card__body">
@@ -72,7 +131,12 @@
             <div id="aud-resultados"></div>
         </div>
     </div>
+    </details>
 </div>
+<dialog id="aud-detalhe" class="aud-dialog" aria-labelledby="aud-detalhe-title">
+    <div class="aud-dialog-head"><h3 id="aud-detalhe-title">Histórico da ordem</h3><button type="button" class="eui-btn eui-btn--ghost" id="aud-detalhe-fechar" aria-label="Fechar histórico"><i class="fas fa-xmark"></i></button></div>
+    <div id="aud-detalhe-body" class="aud-dialog-body" aria-live="polite"></div>
+</dialog>
 
 <script>
     function escapeHtml(str) {
@@ -85,6 +149,101 @@
         if (Number.isNaN(d.getTime())) return "—";
         return d.toLocaleString("pt-BR");
     }
+
+    let paginaExcluidas = 1;
+    let paginasExcluidas = 1;
+    let listaController;
+    let detalheController;
+    let filtrosAplicados = new URLSearchParams();
+
+    async function carregarExcluidas(pagina = 1) {
+        listaController?.abort();
+        const controller = new AbortController();
+        listaController = controller;
+        const params = new URLSearchParams(filtrosAplicados);
+        params.set('pagina', pagina);
+        const lista = document.getElementById('aud-lista');
+        lista.innerHTML = '<div class="aud-empty"><i class="fas fa-spinner fa-spin"></i> Carregando ordens excluídas…</div>';
+        document.getElementById('aud-anterior').disabled = true;
+        document.getElementById('aud-proxima').disabled = true;
+        document.getElementById('aud-contagem').textContent = 'Carregando exclusões…';
+        try {
+            const resp = await fetch('/api/expedicao/auditoria/excluidas?' + params, {signal: controller.signal});
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Não foi possível carregar as exclusões.');
+            paginaExcluidas = data.pagina;
+            paginasExcluidas = data.paginas;
+            document.getElementById('aud-total').textContent = data.total;
+            document.getElementById('aud-total-fat').textContent = data.totais.fat;
+            document.getElementById('aud-total-st').textContent = data.totais.st;
+            document.getElementById('aud-pagina').textContent = `Página ${data.pagina} de ${data.paginas}`;
+            const primeiro = data.total ? (data.pagina - 1) * data.por_pagina + 1 : 0;
+            document.getElementById('aud-contagem').textContent = `${primeiro}–${Math.min(data.pagina * data.por_pagina, data.total)} de ${data.total} ordens excluídas`;
+            document.getElementById('aud-anterior').disabled = data.pagina <= 1;
+            document.getElementById('aud-proxima').disabled = data.pagina >= data.paginas;
+            if (!data.resultados.length) {
+                lista.innerHTML = '<div class="aud-empty"><i class="fas fa-inbox"></i><p>Nenhuma ordem excluída encontrada.</p><span class="aud-hint">Se você aplicou filtros, ajuste o período ou clique em Limpar.</span></div>';
+                return;
+            }
+            lista.innerHTML = `<div class="aud-table-wrap"><table class="aud-table"><thead><tr><th scope="col">Ordem / origem</th><th scope="col">Cliente / fornecedor</th><th scope="col">Exclusão</th><th scope="col">Motivo</th><th scope="col">Histórico</th></tr></thead><tbody>${data.resultados.map(r => `<tr>
+                <td class="aud-order"><strong class="aud-cod">${escapeHtml(r.codigo_interno || r.cod_ordem)}</strong><small>${r.origem === 'fat' ? 'OF' : 'OC'} ${escapeHtml(r.cod_ordem)}</small><small><span class="aud-origem ${r.origem === 'st' ? 'is-st' : ''}">${r.origem === 'st' ? 'ST' : 'FAT'}</span></small></td>
+                <td><strong>${escapeHtml(r.cliente_fornecedor || 'Não informado')}</strong><small>NF ${escapeHtml(r.numero_nf || 'não informada')} · ${escapeHtml(r.status || 'Sem status')}</small></td>
+                <td>${escapeHtml(fmtDataHora(r.excluido_at))}<small><i class="fas fa-user"></i> ${escapeHtml(r.excluido_by || 'Não informado')}</small></td>
+                <td class="aud-reason">${escapeHtml(r.excluido_motivo || 'Motivo não registrado')}</td>
+                <td><button type="button" class="eui-btn eui-btn--ghost" data-origem="${escapeHtml(r.origem)}" data-id="${r.id}"><i class="fas fa-clock-rotate-left"></i> Ver histórico</button></td>
+            </tr>`).join('')}</tbody></table></div>`;
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            lista.innerHTML = `<div class="aud-empty">${escapeHtml(err.message)}<p><button type="button" class="eui-btn eui-btn--ghost" id="aud-tentar">Tentar novamente</button></p></div>`;
+            document.getElementById('aud-tentar').addEventListener('click', () => carregarExcluidas(pagina));
+            document.getElementById('aud-contagem').textContent = 'Consulta não concluída';
+            ['aud-total', 'aud-total-fat', 'aud-total-st', 'aud-pagina'].forEach(id => document.getElementById(id).textContent = '—');
+        }
+    }
+
+    async function abrirHistorico(origem, id) {
+        detalheController?.abort();
+        detalheController = new AbortController();
+        const dialog = document.getElementById('aud-detalhe');
+        const body = document.getElementById('aud-detalhe-body');
+        document.getElementById('aud-detalhe-title').textContent = 'Histórico da ordem';
+        body.innerHTML = '<div class="aud-empty">Carregando histórico…</div>';
+        if (!dialog.open) dialog.showModal();
+        try {
+            const resp = await fetch(`/api/expedicao/auditoria/ordem/${encodeURIComponent(origem)}/${encodeURIComponent(id)}`, {signal: detalheController.signal});
+            const r = await resp.json();
+            if (!resp.ok) throw new Error(r.error || 'Não foi possível carregar o histórico.');
+            document.getElementById('aud-detalhe-title').textContent = `Histórico · ${r.codigo_interno || r.cod_ordem}`;
+            body.innerHTML = `<div class="aud-detail-fields"><div class="aud-field"><span>${escapeHtml(r.origem_label)}</span><strong>${escapeHtml(r.cod_ordem)}</strong></div><div class="aud-field"><span>Cliente / fornecedor</span><strong>${escapeHtml(r.cliente_fornecedor || '—')}</strong></div><div class="aud-field"><span>Status na ordem</span><strong>${escapeHtml(r.status || '—')}</strong></div><div class="aud-field"><span>NF</span><strong>${escapeHtml(r.numero_nf || '—')}</strong></div></div>
+                ${r.excluido ? `<div class="aud-excluido">Excluída por ${escapeHtml(r.excluido_by || 'Não informado')} em ${escapeHtml(fmtDataHora(r.excluido_at))}<p>${escapeHtml(r.excluido_motivo || 'Motivo não registrado')}</p></div>` : ''}
+                <h4>Conferências e alterações</h4>${renderHistoricoResultado(r.historico)}`;
+        } catch (err) {
+            if (err.name !== 'AbortError') body.innerHTML = `<div class="aud-empty">${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    document.getElementById('aud-filtros').addEventListener('submit', e => {
+        e.preventDefault();
+        filtrosAplicados = new URLSearchParams();
+        [['q', 'aud-excluidas-busca'], ['origem', 'aud-origem'], ['inicio', 'aud-inicio'], ['fim', 'aud-fim']].forEach(([key, id]) => {
+            const value = document.getElementById(id).value.trim();
+            if (value) filtrosAplicados.set(key, value);
+        });
+        carregarExcluidas();
+    });
+    document.getElementById('aud-limpar').addEventListener('click', () => {
+        document.getElementById('aud-filtros').reset();
+        filtrosAplicados = new URLSearchParams();
+        carregarExcluidas();
+    });
+    document.getElementById('aud-anterior').addEventListener('click', () => carregarExcluidas(Math.max(1, paginaExcluidas - 1)));
+    document.getElementById('aud-proxima').addEventListener('click', () => carregarExcluidas(Math.min(paginasExcluidas, paginaExcluidas + 1)));
+    document.getElementById('aud-lista').addEventListener('click', e => {
+        const button = e.target.closest('button[data-origem]');
+        if (button) abrirHistorico(button.dataset.origem, button.dataset.id);
+    });
+    document.getElementById('aud-detalhe-fechar').addEventListener('click', () => document.getElementById('aud-detalhe').close());
+    document.getElementById('aud-detalhe').addEventListener('close', () => detalheController?.abort());
 
     function renderHistoricoResultado(historico) {
         const logs = Array.isArray(historico) ? historico : [];
@@ -181,5 +340,6 @@
         if (e.key === "Enter") buscar();
     });
     document.getElementById("aud-resultados").innerHTML = '<div class="aud-empty">Digite um código interno, cliente/fornecedor ou nº de ordem para buscar.</div>';
+    carregarExcluidas();
 </script>
 {% endblock %}
