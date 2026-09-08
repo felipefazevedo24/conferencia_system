@@ -46,7 +46,6 @@ def importar_relatorio(conteudo_html: str | bytes, nome_arquivo: str, usuario: s
             for campo, valor in pagina.items():
                 setattr(nesting, campo, valor)
             nesting.arquivo_origem = nome_arquivo
-            LogisticaConsumoChapaPeca.query.filter_by(nesting_id=nesting.id).delete()
         else:
             criados += 1
             nesting = LogisticaConsumoChapaNesting(
@@ -58,8 +57,27 @@ def importar_relatorio(conteudo_html: str | bytes, nome_arquivo: str, usuario: s
             db.session.add(nesting)
             db.session.flush()  # ganha nesting.id antes de linkar as pecas
 
+        # Upsert das pecas por (peca_numero, os_numero) - reimportar o
+        # mesmo arquivo (ex.: correcao) NAO pode apagar observacao/baixa ja
+        # confirmada pelo gestor numa peca que continua existindo no
+        # relatorio; so remove pecas que sumiram da nova versao.
+        existentes = {
+            (p.peca_numero, p.os_numero): p
+            for p in LogisticaConsumoChapaPeca.query.filter_by(nesting_id=nesting.id).all()
+        }
+        vistos = set()
         for peca_dados in pecas_dados:
-            db.session.add(LogisticaConsumoChapaPeca(nesting_id=nesting.id, **peca_dados))
+            chave = (peca_dados.get("peca_numero"), peca_dados.get("os_numero"))
+            vistos.add(chave)
+            peca_existente = existentes.get(chave)
+            if peca_existente:
+                for campo, valor in peca_dados.items():
+                    setattr(peca_existente, campo, valor)
+            else:
+                db.session.add(LogisticaConsumoChapaPeca(nesting_id=nesting.id, **peca_dados))
+        for chave, peca_existente in existentes.items():
+            if chave not in vistos:
+                db.session.delete(peca_existente)
 
         nestings.append(nesting)
 
@@ -102,3 +120,31 @@ def estornar_nesting(nesting: LogisticaConsumoChapaNesting) -> LogisticaConsumoC
     nesting.concluido_por = None
     db.session.commit()
     return nesting
+
+
+# ── Observacao e confirmacao de baixa POR PECA (independente da conclusao
+# do Nesting inteiro - ver concluir_nesting/estornar_nesting acima) ────────
+def salvar_observacao_peca(peca: LogisticaConsumoChapaPeca, observacao: str | None) -> LogisticaConsumoChapaPeca:
+    peca.observacao = (observacao or "").strip()[:2000] or None
+    db.session.commit()
+    return peca
+
+
+def confirmar_baixa_peca(peca: LogisticaConsumoChapaPeca, usuario: str) -> LogisticaConsumoChapaPeca:
+    if peca.baixado:
+        raise ValueError("Essa peça já está com a baixa confirmada.")
+    peca.baixado = True
+    peca.baixado_em = datetime.now()
+    peca.baixado_por = usuario
+    db.session.commit()
+    return peca
+
+
+def estornar_baixa_peca(peca: LogisticaConsumoChapaPeca) -> LogisticaConsumoChapaPeca:
+    if not peca.baixado:
+        raise ValueError("Essa peça ainda não teve a baixa confirmada.")
+    peca.baixado = False
+    peca.baixado_em = None
+    peca.baixado_por = None
+    db.session.commit()
+    return peca

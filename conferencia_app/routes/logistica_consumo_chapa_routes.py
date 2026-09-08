@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from ..auth import permission_required
 from ..extensions import db
-from ..models import LogisticaConsumoChapaNesting
+from ..models import LogisticaConsumoChapaNesting, LogisticaConsumoChapaPeca
 from ..services import logistica_consumo_chapa_service as svc
 
 logistica_consumo_chapa_bp = Blueprint("logistica_consumo_chapa", __name__)
@@ -36,6 +36,10 @@ def _fmt_peca(p, qtde_chapas: int | None = None) -> dict:
         "os_orcamento": p.os_orcamento,
         "os_numero": p.os_numero,
         "peso_total_baixa_kg": peso_total_baixa_kg,
+        "observacao": p.observacao,
+        "baixado": p.baixado,
+        "baixado_em": p.baixado_em.strftime("%d/%m/%Y %H:%M") if p.baixado_em else None,
+        "baixado_por": p.baixado_por,
     }
 
 
@@ -171,3 +175,42 @@ def api_estornar_consumo_chapa(nesting_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Nesting estornado para 'Nesting'.", "nesting": _fmt_nesting(nesting)})
+
+
+# ── Observacao e confirmacao de baixa POR PECA (linha) - independente da
+# conclusao do Nesting inteiro (acoes acima). ──────────────────────────────
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/pecas/<int:peca_id>/observacao", methods=["POST"])
+@permission_required(PERMISSION)
+def api_salvar_observacao_peca(peca_id):
+    peca = db.session.get(LogisticaConsumoChapaPeca, peca_id)
+    if not peca:
+        return jsonify({"error": "Peça não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    peca = svc.salvar_observacao_peca(peca, payload.get("observacao"))
+    return jsonify({"message": "Observação salva.", "peca": _fmt_peca(peca, qtde_chapas=peca.nesting.qtde_chapas)})
+
+
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/pecas/<int:peca_id>/confirmar-baixa", methods=["POST"])
+@permission_required(PERMISSION)
+def api_confirmar_baixa_peca(peca_id):
+    peca = db.session.get(LogisticaConsumoChapaPeca, peca_id)
+    if not peca:
+        return jsonify({"error": "Peça não encontrada."}), 404
+    try:
+        peca = svc.confirmar_baixa_peca(peca, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Baixa confirmada.", "peca": _fmt_peca(peca, qtde_chapas=peca.nesting.qtde_chapas)})
+
+
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/pecas/<int:peca_id>/estornar-baixa", methods=["POST"])
+@permission_required(PERMISSION)
+def api_estornar_baixa_peca(peca_id):
+    peca = db.session.get(LogisticaConsumoChapaPeca, peca_id)
+    if not peca:
+        return jsonify({"error": "Peça não encontrada."}), 404
+    try:
+        peca = svc.estornar_baixa_peca(peca)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Baixa estornada.", "peca": _fmt_peca(peca, qtde_chapas=peca.nesting.qtde_chapas)})

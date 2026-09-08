@@ -25,7 +25,7 @@
 
     .cc-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
     .cc-modal-backdrop.open { display: flex; }
-    .cc-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 900px; max-height: 88vh; overflow-y: auto; padding: 22px; }
+    .cc-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 1150px; max-height: 88vh; overflow-y: auto; padding: 22px; }
     .cc-modal h3 { margin: 0 0 6px; font-size: 17px; }
     .cc-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
     .cc-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
@@ -37,6 +37,18 @@
 
     .cc-upload-area { border: 2px dashed var(--eui-border, #d1d5db); border-radius: 10px; padding: 18px; text-align: center; }
     .cc-upload-area input[type="file"] { margin-top: 8px; }
+
+    /* Observacao/Baixa por peca (linha) - tabela de detalhe do Nesting */
+    .cc-obs-cell { display: flex; gap: 4px; align-items: flex-start; }
+    .cc-obs-cell textarea { flex: 1; min-width: 140px; min-height: 34px; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; resize: vertical; }
+    .cc-obs-salvar { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer; color: var(--eui-primary, #4f46e5); }
+    .cc-obs-salvar:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .cc-baixa-badge { display: block; font-size: 11px; font-weight: 700; color: #15803d; margin-bottom: 3px; }
+    .cc-baixa-badge small { display: block; font-weight: 500; color: var(--eui-muted); }
+    .cc-btn-baixa { border: 1px solid var(--eui-primary, #4f46e5); background: #fff; color: var(--eui-primary, #4f46e5); border-radius: 6px; padding: 5px 9px; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .cc-btn-baixa:hover { background: var(--eui-primary, #4f46e5); color: #fff; }
+    .cc-btn-estornar-baixa { border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .cc-btn-estornar-baixa:hover { background: var(--eui-danger, #dc2626); color: #fff; }
 </style>
 {% endblock %}
 
@@ -130,6 +142,8 @@
                         <th>Próx. Operação</th>
                         <th>Cliente</th>
                         <th>Peso Total</th>
+                        <th style="min-width:180px;">Observação</th>
+                        <th style="min-width:150px;">Baixa</th>
                     </tr>
                 </thead>
                 <tbody id="cc-detalhe-pecas-tbody"></tbody>
@@ -300,8 +314,10 @@
     });
 
     // ── Modal de detalhe (cabecalho + TODAS as pecas/OS) ────────────────
+    let nestingDetalheAtualId = null;
     async function abrirDetalhe(id) {
         try {
+            nestingDetalheAtualId = id;
             const data = await api(`/api/logistica/consumo-chapa/${id}`);
             const n = data.nesting;
             $("cc-detalhe-programa").textContent = n.numero_programa;
@@ -325,7 +341,7 @@
             const pecas = n.pecas || [];
             $("cc-detalhe-pecas-tbody").innerHTML = pecas.length
                 ? pecas.map((p) => `
-                    <tr>
+                    <tr data-peca-id="${p.id}">
                         <td>${escapeHtml(p.peca_numero)}</td>
                         <td>${escapeHtml(p.os_orcamento)}</td>
                         <td>${escapeHtml(p.nome_peca)}</td>
@@ -335,15 +351,27 @@
                         <td>${escapeHtml(p.prox_operacao)}</td>
                         <td>${escapeHtml(p.cliente)}</td>
                         <td>${fmtKg(p.peso_total_baixa_kg)}</td>
+                        <td>
+                            <div class="cc-obs-cell">
+                                <textarea data-obs-peca="${p.id}" rows="1" placeholder="Observação…">${escapeHtml(p.observacao || "")}</textarea>
+                                <button type="button" class="cc-obs-salvar" data-salvar-obs="${p.id}" title="Salvar observação"><i class="fas fa-floppy-disk"></i></button>
+                            </div>
+                        </td>
+                        <td>
+                            ${p.baixado
+                                ? `<span class="cc-baixa-badge"><i class="fas fa-circle-check"></i> Baixado<small>${escapeHtml(p.baixado_por || "")} em ${escapeHtml(p.baixado_em || "")}</small></span>
+                                   <button type="button" class="cc-btn-estornar-baixa" data-estornar-baixa="${p.id}">Estornar</button>`
+                                : `<button type="button" class="cc-btn-baixa" data-confirmar-baixa="${p.id}"><i class="fas fa-check"></i> Confirmar baixa</button>`}
+                        </td>
                     </tr>
                 `).join("")
-                : '<tr><td colspan="9" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
+                : '<tr><td colspan="11" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
 
             // Soma do Peso Total (o que precisa ser baixado do estoque) de
             // todas as pecas - calculada no backend (ver _fmt_nesting), pra
             // bater exatamente com o check contra o "Peso Peças Kg" do relatorio.
             let linhaTotal = pecas.length
-                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(n.soma_peso_pecas_calculado_kg)}</td></tr>`
+                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(n.soma_peso_pecas_calculado_kg)}</td><td colspan="2"></td></tr>`
                 : "";
             if (pecas.length && n.peso_pecas_confere !== null && n.peso_pecas_confere !== undefined) {
                 const ok = n.peso_pecas_confere;
@@ -351,7 +379,7 @@
                 const texto = ok
                     ? 'Confere com o "Peso Peças" do relatório'
                     : `Diverge do "Peso Peças" do relatório (${fmtKg(n.peso_pecas_kg)}) em ${fmtKg(Math.abs(n.diferenca_peso_pecas_kg))}`;
-                linhaTotal += `<tr><td colspan="9" style="text-align:right; padding-top:2px;">
+                linhaTotal += `<tr><td colspan="11" style="text-align:right; padding-top:2px;">
                     <span style="color:${cor}; font-size:12px; font-weight:600;">
                         <i class="fas ${ok ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
                     </span>
@@ -366,6 +394,38 @@
     }
     $("cc-detalhe-fechar").addEventListener("click", () => $("cc-detalhe-modal").classList.remove("open"));
     $("cc-detalhe-modal").addEventListener("click", (e) => { if (e.target.id === "cc-detalhe-modal") $("cc-detalhe-modal").classList.remove("open"); });
+
+    // ── Observação e confirmação de baixa POR PEÇA (linha) ──────────────
+    $("cc-detalhe-pecas-tbody").addEventListener("click", async (e) => {
+        const btnSalvarObs = e.target.closest("[data-salvar-obs]");
+        const btnConfirmarBaixa = e.target.closest("[data-confirmar-baixa]");
+        const btnEstornarBaixa = e.target.closest("[data-estornar-baixa]");
+        if (!btnSalvarObs && !btnConfirmarBaixa && !btnEstornarBaixa) return;
+
+        try {
+            if (btnSalvarObs) {
+                const pecaId = btnSalvarObs.dataset.salvarObs;
+                const textarea = $("cc-detalhe-pecas-tbody").querySelector(`[data-obs-peca="${pecaId}"]`);
+                await api(`/api/logistica/consumo-chapa/pecas/${pecaId}/observacao`, {
+                    method: "POST", body: JSON.stringify({ observacao: textarea.value }),
+                });
+                toast("Observação salva!", "success");
+                return; // nao precisa recarregar o modal inteiro, so' confirma o salvamento
+            } else if (btnConfirmarBaixa) {
+                const pecaId = btnConfirmarBaixa.dataset.confirmarBaixa;
+                if (!confirm("Confirmar a baixa de estoque dessa peça?")) return;
+                await api(`/api/logistica/consumo-chapa/pecas/${pecaId}/confirmar-baixa`, { method: "POST" });
+            } else if (btnEstornarBaixa) {
+                const pecaId = btnEstornarBaixa.dataset.estornarBaixa;
+                if (!confirm("Estornar a baixa dessa peça?")) return;
+                await api(`/api/logistica/consumo-chapa/pecas/${pecaId}/estornar-baixa`, { method: "POST" });
+            }
+            toast("Atualizado!", "success");
+            if (nestingDetalheAtualId) await abrirDetalhe(nestingDetalheAtualId);
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
 
     // ── Importar relatorio ───────────────────────────────────────────────
     $("cc-btn-importar").addEventListener("click", async () => {

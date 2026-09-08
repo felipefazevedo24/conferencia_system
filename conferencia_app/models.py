@@ -1907,6 +1907,16 @@ class LogisticaConsumoChapaPeca(db.Model):
     os_orcamento = db.Column(db.String(60))   # texto bruto, ex.: "OS 9776 - 7083"
     os_numero = db.Column(db.String(20), index=True)  # so o numero da OS, extraido de os_orcamento
 
+    observacao = db.Column(db.Text)
+
+    # Confirmacao de baixa POR PECA/OS - independente da conclusao do
+    # Nesting inteiro (ver LogisticaConsumoChapaNesting.status): o gestor
+    # pode confirmar a baixa de estoque de cada peca conforme vai
+    # conferindo, sem precisar esperar o Nesting inteiro ser concluido.
+    baixado = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    baixado_em = db.Column(db.DateTime)
+    baixado_por = db.Column(db.String(100))
+
 
 class WMSPedidoSeparacao(db.Model):
     """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""

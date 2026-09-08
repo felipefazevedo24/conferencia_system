@@ -6144,6 +6144,44 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert nesting_detalhe["peso_pecas_confere"] is True
     assert nesting_detalhe["diferenca_peso_pecas_kg"] is not None
 
+    # Observação e confirmação de baixa POR PEÇA (linha) - independente da
+    # conclusão do Nesting inteiro (ações de Concluir/Estornar abaixo).
+    peca_id = nesting_detalhe["pecas"][0]["id"]
+    assert nesting_detalhe["pecas"][0]["observacao"] is None
+    assert nesting_detalhe["pecas"][0]["baixado"] is False
+
+    resp_obs = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/observacao",
+        json={"observacao": "Conferido fisicamente, ok."},
+    )
+    assert resp_obs.status_code == 200
+    assert resp_obs.get_json()["peca"]["observacao"] == "Conferido fisicamente, ok."
+
+    resp_confirmar_baixa = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+    assert resp_confirmar_baixa.status_code == 200
+    peca_apos_baixa = resp_confirmar_baixa.get_json()["peca"]
+    assert peca_apos_baixa["baixado"] is True
+    assert peca_apos_baixa["baixado_por"] == "ADMIN"
+    assert peca_apos_baixa["baixado_em"] is not None
+
+    resp_confirmar_de_novo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+    assert resp_confirmar_de_novo.status_code == 400  # ja confirmada
+
+    resp_estornar_baixa = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/estornar-baixa", json={})
+    assert resp_estornar_baixa.status_code == 200
+    assert resp_estornar_baixa.get_json()["peca"]["baixado"] is False
+
+    resp_estornar_baixa_de_novo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/estornar-baixa", json={})
+    assert resp_estornar_baixa_de_novo.status_code == 400  # ja nao esta baixado
+
+    # Confirma de novo, pra testar que a baixa/observacao sobrevivem ao reimport.
+    client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+
+    # Peca inexistente -> 404 em todas as acoes.
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/observacao", json={}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/confirmar-baixa", json={}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/estornar-baixa", json={}).status_code == 404
+
     # Forcando uma divergencia grande (fora da tolerancia) -> o check acusa.
     with app.app_context():
         from conferencia_app.models import LogisticaConsumoChapaNesting
@@ -6166,6 +6204,14 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert body_reimport["atualizados"] == 1
     resp_lista2 = client.get("/api/logistica/consumo-chapa")
     assert len(resp_lista2.get_json()["nestings"]) == 1  # continua so' 1, nao duplicou
+
+    # Reimportar NAO apaga observacao/baixa ja confirmada numa peca que
+    # continua existindo no relatorio (upsert por peca_numero+os_numero).
+    resp_detalhe_pos_reimport = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    peca_pos_reimport = resp_detalhe_pos_reimport.get_json()["nesting"]["pecas"][0]
+    assert peca_pos_reimport["id"] == peca_id  # mesma linha, nao recriada
+    assert peca_pos_reimport["observacao"] == "Conferido fisicamente, ok."
+    assert peca_pos_reimport["baixado"] is True
 
     # Concluir -> estornar.
     resp_concluir = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
