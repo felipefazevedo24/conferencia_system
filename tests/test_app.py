@@ -6042,3 +6042,126 @@ def test_inventario_imagem_justificativa_anexar_baixar_remover(tmp_path):
         content_type="multipart/form-data",
     )
     assert resp_anexar_apos_finance.status_code == 400
+
+
+def test_parser_nesting_extrai_cabecalho_e_todas_as_pecas_de_relatorio_real(tmp_path):
+    """Parser do relatorio de Nesting (FastReport HTML da maquina de corte)
+    - fixture e' um arquivo REAL exportado pela maquina (nao reconstruido a
+    mao), pra pegar qualquer peculiaridade do formato de verdade. Precisa
+    extrair TODAS as linhas de OS/peca do Nesting, nao so a primeira."""
+    from conferencia_app.services.logistica_consumo_chapa_parser import parse_relatorio_nesting_html
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    html = caminho.read_text(encoding="utf-8", errors="replace")
+
+    nestings = parse_relatorio_nesting_html(html)
+    assert len(nestings) == 1
+    nst = nestings[0]
+
+    assert nst["numero_programa"] == "21690"
+    assert nst["pagina_atual"] == 1
+    assert nst["pagina_total"] == 1
+    assert nst["programador"] == "luis.custodio"
+    assert nst["maquina"] == "GloryStar_CypCut_3Kw"
+    assert nst["codigo_material"] == "19-01-00558"
+    assert nst["espessura_mm"] == 6.35
+    assert nst["qtde_chapas"] == 24
+    assert nst["peso_sucata_kg"] == 92.47
+    assert nst["peso_pecas_kg"] == 4140.75
+    assert nst["peso_retalho_kg"] == 1150.32
+    assert nst["peso_total_kg"] == 5383.53
+    assert nst["aproveitamento_pct"] == 97.82
+    assert nst["data_corte"] is not None
+
+    assert len(nst["pecas"]) == 1
+    peca = nst["pecas"][0]
+    assert peca["os_orcamento"] == "OS 9780 - 7083"
+    assert peca["os_numero"] == "9780"
+    assert "COMPONENTE" in peca["nome_peca"]
+    assert peca["qtd_arranjada"] == 6.0
+    assert peca["peso_liquido_kg"] == 28.76
+    assert peca["cliente"] == "WR ENGENHARIA"
+    assert peca["prox_operacao"] == "LASER"
+
+    # Arquivo vazio/sem tabela de Nesting -> lista vazia, sem estourar excecao.
+    assert parse_relatorio_nesting_html("<html><body>sem tabela nenhuma</body></html>") == []
+
+
+def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_path):
+    """Modulo de Consumo de Chapa: upload manual do relatorio de Nesting
+    (HTML da maquina de corte) - fixture e' um arquivo REAL. Cobre o
+    workflow Nesting -> Concluido -> estorno, e reimportar o mesmo arquivo
+    ATUALIZA (nao duplica)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp_page = client.get("/logistica/consumo-chapa")
+    assert resp_page.status_code == 200
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+
+    resp_sem_arquivo = client.post("/api/logistica/consumo-chapa/importar", data={}, content_type="multipart/form-data")
+    assert resp_sem_arquivo.status_code == 400
+
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["criados"] == 1
+    assert body["atualizados"] == 0
+    nesting_id = body["nestings"][0]["id"]
+    assert body["nestings"][0]["numero_programa"] == "21690"
+    assert body["nestings"][0]["status"] == "Nesting"
+    assert body["nestings"][0]["qtd_pecas"] == 1
+
+    # Aparece na listagem, com o filtro de status funcionando.
+    resp_lista = client.get("/api/logistica/consumo-chapa")
+    assert resp_lista.status_code == 200
+    assert len(resp_lista.get_json()["nestings"]) == 1
+    resp_lista_concluido = client.get("/api/logistica/consumo-chapa?status=Concluido")
+    assert resp_lista_concluido.get_json()["nestings"] == []
+
+    # Detalhe traz TODAS as pecas/OS.
+    resp_detalhe = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe.status_code == 200
+    nesting_detalhe = resp_detalhe.get_json()["nesting"]
+    assert len(nesting_detalhe["pecas"]) == 1
+    assert nesting_detalhe["pecas"][0]["os_orcamento"] == "OS 9780 - 7083"
+    assert nesting_detalhe["pecas"][0]["os_numero"] == "9780"
+
+    # Reimportar o MESMO arquivo -> atualiza, nao duplica.
+    resp_reimport = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    assert resp_reimport.status_code == 200
+    body_reimport = resp_reimport.get_json()
+    assert body_reimport["criados"] == 0
+    assert body_reimport["atualizados"] == 1
+    resp_lista2 = client.get("/api/logistica/consumo-chapa")
+    assert len(resp_lista2.get_json()["nestings"]) == 1  # continua so' 1, nao duplicou
+
+    # Concluir -> estornar.
+    resp_concluir = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir.status_code == 200
+    assert resp_concluir.get_json()["nesting"]["status"] == "Concluido"
+
+    resp_concluir_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_de_novo.status_code == 400  # ja esta concluido
+
+    resp_estornar = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/estornar", json={})
+    assert resp_estornar.status_code == 200
+    assert resp_estornar.get_json()["nesting"]["status"] == "Nesting"
+
+    resp_estornar_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/estornar", json={})
+    assert resp_estornar_de_novo.status_code == 400  # nao esta concluido
+
+    # Nesting inexistente -> 404 em todas as acoes.
+    assert client.get("/api/logistica/consumo-chapa/999999").status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/999999/concluir", json={}).status_code == 404

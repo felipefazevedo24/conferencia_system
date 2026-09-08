@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Consumo de Chapa{% endblock %}
+{% block shell_title %}Logística — Consumo de Chapa (Nesting){% endblock %}
+
+{% block extra_head %}
+<style>
+    .cc-wrap { display: grid; gap: 18px; }
+    .cc-table-wrap { overflow-x: auto; }
+    .cc-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    .cc-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .cc-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .cc-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 200px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .cc-actions-menu.open { display: flex; }
+    .cc-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
+    .cc-actions-menu button:hover { background: #f3f4f6; }
+    .cc-actions-menu button.is-danger { color: #dc2626; }
+
+    .cc-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
+    .cc-toast.error { border-left-color: var(--eui-danger); }
+    .cc-toast.success { border-left-color: var(--eui-success); }
+
+    .cc-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .cc-modal-backdrop.open { display: flex; }
+    .cc-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 900px; max-height: 88vh; overflow-y: auto; padding: 22px; }
+    .cc-modal h3 { margin: 0 0 6px; font-size: 17px; }
+    .cc-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .cc-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
+    .cc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 18px; }
+    .cc-kpi { background: var(--eui-surface-2, #f8fafc); border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; padding: 10px 12px; }
+    .cc-kpi span { display: block; }
+    .cc-kpi .cc-kpi-label { font-size: 11px; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .03em; }
+    .cc-kpi .cc-kpi-value { font-size: 15px; font-weight: 700; margin-top: 2px; }
+
+    .cc-upload-area { border: 2px dashed var(--eui-border, #d1d5db); border-radius: 10px; padding: 18px; text-align: center; }
+    .cc-upload-area input[type="file"] { margin-top: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cc-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</h1>
+            <p class="eui-page-header__sub">Importa o relatório de Nesting exportado pela máquina de corte (HTML) e acompanha o consumo de chapas até a conclusão.</p>
+        </div>
+    </header>
+
+    <div class="eui-card">
+        <div class="eui-card__body">
+            <div class="cc-upload-area">
+                <div style="font-weight:600; margin-bottom:4px;"><i class="fas fa-file-arrow-up"></i> Importar Relatório de Nesting</div>
+                <div style="font-size:12.5px; color:var(--eui-muted);">Selecione o arquivo <code>.HTML</code> exportado pela máquina de corte (pode ter vários Nestings dentro).</div>
+                <input type="file" id="cc-arquivo-input" accept=".html,.htm,text/html">
+                <div style="margin-top:10px;">
+                    <button class="eui-btn eui-btn--primary" id="cc-btn-importar"><i class="fas fa-upload"></i> Importar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="eui-stats" id="cc-metrics">
+        <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="cc-m-todos">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Nesting"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scissors"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Nesting</span><span class="eui-stat__value" id="cc-m-nesting">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="cc-m-concluido">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head" style="justify-content:flex-end;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cc-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <button class="eui-btn eui-btn--primary" id="cc-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="cc-busca" class="eui-input" autocomplete="off" placeholder="Buscar por Programa, código do material ou tarefa…" style="width:100%; padding-left:34px;">
+                </div>
+            </div>
+            <div class="cc-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Programa</th>
+                            <th>Data</th>
+                            <th>Material</th>
+                            <th>Espessura</th>
+                            <th>Qtd Chapas</th>
+                            <th>Peso Total</th>
+                            <th>Aproveitamento</th>
+                            <th>Peças</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cc-tbody"><tr><td colspan="10" class="cc-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="cc-actions-menu" id="cc-acoes-menu"></div>
+<div class="cc-toast" id="cc-toast"></div>
+
+<!-- Modal de detalhe: cabecalho do Nesting + TODAS as pecas/OS cortadas. -->
+<div class="cc-modal-backdrop" id="cc-detalhe-modal">
+    <div class="cc-modal">
+        <h3><i class="fas fa-layer-group"></i> Nesting <span id="cc-detalhe-programa"></span></h3>
+        <p class="cc-modal-sub" id="cc-detalhe-sub"></p>
+
+        <div class="cc-kpis" id="cc-detalhe-kpis"></div>
+
+        <div class="cc-table-wrap">
+            <table class="erp-table">
+                <thead>
+                    <tr>
+                        <th>Peça Nº</th>
+                        <th>OS</th>
+                        <th>Nome Peça</th>
+                        <th>Qtd Req.</th>
+                        <th>Qtd Arr.</th>
+                        <th>Peso Líq.</th>
+                        <th>Próx. Operação</th>
+                        <th>Cliente</th>
+                    </tr>
+                </thead>
+                <tbody id="cc-detalhe-pecas-tbody"></tbody>
+            </table>
+        </div>
+
+        <div class="cc-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="cc-detalhe-fechar">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, tipo) {
+        const el = $("cc-toast");
+        el.textContent = msg;
+        el.className = "cc-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4500);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function fmtNum(v, casas) {
+        if (v === null || v === undefined) return "—";
+        return Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas == null ? 2 : casas, maximumFractionDigits: casas == null ? 2 : casas });
+    }
+    function fmtKg(v) { return v === null || v === undefined ? "—" : `${fmtNum(v)} Kg`; }
+    function fmtPct(v) { return v === null || v === undefined ? "—" : `${fmtNum(v)} %`; }
+
+    let nestingsCache = [];
+    let filtroAtual = "";
+
+    async function carregar() {
+        try {
+            const params = new URLSearchParams();
+            if (filtroAtual) params.set("status", filtroAtual);
+            const busca = $("cc-busca").value.trim();
+            if (busca) params.set("busca", busca);
+            const data = await api("/api/logistica/consumo-chapa?" + params.toString());
+            nestingsCache = data.nestings || [];
+            renderMetricas(nestingsCache);
+            renderTabela(nestingsCache);
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    function renderMetricas(lista) {
+        const cont = { Nesting: 0, Concluido: 0 };
+        lista.forEach((n) => { cont[n.status] = (cont[n.status] || 0) + 1; });
+        $("cc-m-todos").textContent = lista.length;
+        $("cc-m-nesting").textContent = cont.Nesting;
+        $("cc-m-concluido").textContent = cont.Concluido;
+    }
+
+    const CORES_STATUS = { Nesting: "#b45309", Concluido: "#15803d" };
+    const LABEL_STATUS = { Nesting: "Nesting", Concluido: "Concluído" };
+    function badgeStatus(n) {
+        const cor = CORES_STATUS[n.status] || "#475569";
+        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[n.status] || n.status)}</span>`;
+    }
+
+    function renderTabela(lista) {
+        const tb = $("cc-tbody");
+        if (!lista.length) {
+            tb.innerHTML = '<tr><td colspan="10" class="cc-empty">Nenhum Nesting encontrado</td></tr>';
+            return;
+        }
+        tb.innerHTML = lista.map((n) => `
+            <tr>
+                <td><a href="#" data-ver-detalhe="${n.id}"><b>${escapeHtml(n.numero_programa)}</b></a>${n.pagina_total > 1 ? `<div style="font-size:11px; color:var(--eui-muted);">pág. ${n.pagina_atual} de ${n.pagina_total}</div>` : ""}</td>
+                <td>${escapeHtml(n.data_corte ? n.data_corte.split("-").reverse().join("/") : "—")}</td>
+                <td>${escapeHtml(n.codigo_material || n.material || "—")}</td>
+                <td>${escapeHtml(n.espessura_mm != null ? fmtNum(n.espessura_mm) + " mm" : "—")}</td>
+                <td>${escapeHtml(n.qtde_chapas != null ? n.qtde_chapas : "—")}</td>
+                <td>${fmtKg(n.peso_total_kg)}</td>
+                <td>${fmtPct(n.aproveitamento_pct)}</td>
+                <td>${n.qtd_pecas}</td>
+                <td>${badgeStatus(n)}</td>
+                <td style="text-align:right;"><button class="cc-actions-btn" data-kebab="${n.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
+            </tr>
+        `).join("");
+    }
+
+    function nestingPorId(id) {
+        return nestingsCache.find((n) => String(n.id) === String(id));
+    }
+
+    function montarAcoes(n) {
+        const it = (act, icon, label, danger) =>
+            `<button data-act="${act}" data-id="${n.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+        let itens = it("ver", "fa-eye", "Ver detalhes (peças/OS)");
+        if (n.status === "Nesting") {
+            itens += it("concluir", "fa-circle-check", "Concluir");
+        } else if (n.status === "Concluido") {
+            itens += it("estornar", "fa-rotate-left", "Estornar p/ Nesting", true);
+        }
+        return itens;
+    }
+
+    function acoesMenuEl() { return $("cc-acoes-menu"); }
+    function toggleMenuAcoes(btnEl, id) {
+        const menu = acoesMenuEl();
+        const jaAberto = menu.classList.contains("open") && menu.dataset.id === String(id);
+        fecharMenuAcoes();
+        if (jaAberto) return;
+        const n = nestingPorId(id);
+        if (!n) return;
+        menu.innerHTML = montarAcoes(n);
+        menu.dataset.id = String(id);
+        const rect = btnEl.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = "auto";
+        menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.classList.add("open");
+    }
+    function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+
+    document.addEventListener("click", (e) => {
+        const kebabBtn = e.target.closest("[data-kebab]");
+        if (kebabBtn) { toggleMenuAcoes(kebabBtn, kebabBtn.dataset.kebab); return; }
+        const verLink = e.target.closest("[data-ver-detalhe]");
+        if (verLink) { e.preventDefault(); abrirDetalhe(verLink.dataset.verDetalhe); return; }
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    });
+
+    acoesMenuEl().addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn) return;
+        const id = btn.dataset.id;
+        const act = btn.dataset.act;
+        fecharMenuAcoes();
+        try {
+            if (act === "ver") {
+                abrirDetalhe(id);
+                return;
+            } else if (act === "concluir") {
+                if (!confirm("Marcar esse Nesting como Concluído?")) return;
+                await api(`/api/logistica/consumo-chapa/${id}/concluir`, { method: "POST" });
+            } else if (act === "estornar") {
+                if (!confirm("Estornar esse Nesting de volta pra 'Nesting'?")) return;
+                await api(`/api/logistica/consumo-chapa/${id}/estornar`, { method: "POST" });
+            } else {
+                return;
+            }
+            toast("Atualizado!", "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
+    // ── Modal de detalhe (cabecalho + TODAS as pecas/OS) ────────────────
+    async function abrirDetalhe(id) {
+        try {
+            const data = await api(`/api/logistica/consumo-chapa/${id}`);
+            const n = data.nesting;
+            $("cc-detalhe-programa").textContent = n.numero_programa;
+            $("cc-detalhe-sub").textContent =
+                `${n.material || "—"} · Espessura ${n.espessura_mm != null ? fmtNum(n.espessura_mm) + " mm" : "—"}` +
+                (n.pagina_total > 1 ? ` · página ${n.pagina_atual} de ${n.pagina_total}` : "") +
+                (n.nome_tarefa ? ` · Tarefa ${n.nome_tarefa}` : "");
+            $("cc-detalhe-kpis").innerHTML = [
+                ["Qtd Chapas", n.qtde_chapas != null ? n.qtde_chapas : "—"],
+                ["Peso Sucata", fmtKg(n.peso_sucata_kg)],
+                ["Peso Peças", fmtKg(n.peso_pecas_kg)],
+                ["Peso Retalho", fmtKg(n.peso_retalho_kg)],
+                ["Peso Total", fmtKg(n.peso_total_kg)],
+                ["Aproveitamento", fmtPct(n.aproveitamento_pct)],
+                ["Retalho", fmtPct(n.retalho_pct)],
+                ["Sucata", fmtPct(n.sucata_pct)],
+            ].map(([label, valor]) => `
+                <div class="cc-kpi"><span class="cc-kpi-label">${escapeHtml(label)}</span><span class="cc-kpi-value">${escapeHtml(valor)}</span></div>
+            `).join("");
+
+            const pecas = n.pecas || [];
+            $("cc-detalhe-pecas-tbody").innerHTML = pecas.length
+                ? pecas.map((p) => `
+                    <tr>
+                        <td>${escapeHtml(p.peca_numero)}</td>
+                        <td>${escapeHtml(p.os_orcamento)}</td>
+                        <td>${escapeHtml(p.nome_peca)}</td>
+                        <td>${fmtNum(p.qtd_requerida, 0)}</td>
+                        <td>${fmtNum(p.qtd_arranjada, 0)}</td>
+                        <td>${fmtKg(p.peso_liquido_kg)}</td>
+                        <td>${escapeHtml(p.prox_operacao)}</td>
+                        <td>${escapeHtml(p.cliente)}</td>
+                    </tr>
+                `).join("")
+                : '<tr><td colspan="8" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
+
+            $("cc-detalhe-modal").classList.add("open");
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+    $("cc-detalhe-fechar").addEventListener("click", () => $("cc-detalhe-modal").classList.remove("open"));
+    $("cc-detalhe-modal").addEventListener("click", (e) => { if (e.target.id === "cc-detalhe-modal") $("cc-detalhe-modal").classList.remove("open"); });
+
+    // ── Importar relatorio ───────────────────────────────────────────────
+    $("cc-btn-importar").addEventListener("click", async () => {
+        const input = $("cc-arquivo-input");
+        const arquivo = input.files[0];
+        if (!arquivo) { toast("Escolha o arquivo .HTML do relatório de Nesting.", "error"); return; }
+        const fd = new FormData();
+        fd.append("arquivo", arquivo);
+        const btn = $("cc-btn-importar");
+        btn.disabled = true;
+        try {
+            const resp = await fetch("/api/logistica/consumo-chapa/importar", { method: "POST", body: fd });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+            input.value = "";
+            toast(data.message, "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── Filtro pelos cards de status ───────────────────────────────────
+    $("cc-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        filtroAtual = card.dataset.filter;
+        $("cc-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        $("cc-btn-limpar-filtro").classList.toggle("hidden", !filtroAtual);
+        carregar();
+    });
+    $("cc-btn-limpar-filtro").addEventListener("click", () => {
+        filtroAtual = "";
+        $("cc-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("cc-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
+        $("cc-btn-limpar-filtro").classList.add("hidden");
+        carregar();
+    });
+    $("cc-btn-atualizar").addEventListener("click", carregar);
+    $("cc-busca").addEventListener("input", () => carregar());
+
+    carregar();
+})();
+</script>
+{% endblock %}
