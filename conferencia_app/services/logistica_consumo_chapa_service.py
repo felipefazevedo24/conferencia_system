@@ -25,6 +25,41 @@ STATUS_SLUGS = {
 }
 
 
+def buscar_erp_materiais_por_os(os_numeros: set[str] | list[str]) -> tuple[dict, bool]:
+    """Busca no ERP (tabela tlis_mat, via o modulo Compras - que ja fala
+    com o Postgres do ERP pela bridge/Tailscale, com fallback pra conexao
+    direta) a Qtde planejada (tlis_mat.qtde) e a Qtde ja utilizada
+    (tlis_mat.qtde_utilizada) de materia-prima por OS, casando pelo
+    codigo interno do produto (mesmo codigo que ja usamos como
+    codigo_material do Nesting - ver _descricao_material nas rotas).
+
+    Devolve (index, erp_indisponivel):
+    - index: {(n_os, cod_interno): {"qtde_necessaria", "qtde_utilizada", "unidade"}}
+    - erp_indisponivel: True se a bridge/Postgres do ERP falhou (tela de
+      detalhe do Nesting continua funcionando normalmente sem esse dado -
+      NUNCA deixa essa consulta estourar excecao pro resto da tela).
+    """
+    numeros = {str(n).strip() for n in (os_numeros or []) if str(n or "").strip()}
+    if not numeros:
+        return {}, False
+    try:
+        from ..compras.services import compras_service
+
+        linhas = compras_service.listar_materiais_por_os(n_os=",".join(sorted(numeros)))
+    except Exception:
+        return {}, True
+
+    index: dict = {}
+    for linha in linhas or []:
+        chave = (str(linha.get("n_os") or "").strip(), str(linha.get("cod_interno") or "").strip())
+        index[chave] = {
+            "qtde_necessaria": linha.get("qtde_necessaria"),
+            "qtde_utilizada": linha.get("qtde_utilizada"),
+            "unidade": linha.get("unidade"),
+        }
+    return index, False
+
+
 def status_slug(status: str) -> str:
     return STATUS_SLUGS.get(status, "nesting")
 
