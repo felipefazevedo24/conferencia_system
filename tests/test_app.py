@@ -6323,3 +6323,61 @@ def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path):
         f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "tarde demais"}
     )
     assert resp_marcar_apos_concluido.status_code == 400
+
+
+def test_consumo_chapa_marcar_erro_no_nivel_de_peca_e_atalho_pro_erro_do_nesting(tmp_path):
+    """Bota de "Marcar Divergencia" tambem disponivel dentro do Nesting, no
+    nivel de LINHA (peca) - e' so' um atalho: continua marcando o NESTING
+    INTEIRO como Erro (mesmo status/trava de sempre), mas identifica no
+    motivo qual peca disparou a divergencia."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    body = resp.get_json()
+    nesting_id = body["nestings"][0]["id"]
+    resp_detalhe = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    peca_id = resp_detalhe.get_json()["nesting"]["pecas"][0]["id"]
+
+    # Peca inexistente -> 404.
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/marcar-erro", json={"motivo": "x"}).status_code == 404
+
+    # Motivo vazio -> 400, nao marca nada.
+    resp_sem_motivo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro", json={})
+    assert resp_sem_motivo.status_code == 400
+    resp_detalhe_ainda_ok = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe_ainda_ok.get_json()["nesting"]["status"] == "Nesting"
+
+    # Marca a divergencia pela peca -> Nesting INTEIRO vira Erro, motivo
+    # traz a identificacao da peca/OS que disparou.
+    resp_marcar = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro",
+        json={"motivo": "peso não bate com a balança física."},
+    )
+    assert resp_marcar.status_code == 200
+    nesting_erro = resp_marcar.get_json()["nesting"]
+    assert nesting_erro["status"] == "Erro"
+    assert "OS 9780" in nesting_erro["motivo_erro"]
+    assert "peso não bate com a balança física." in nesting_erro["motivo_erro"]
+    assert nesting_erro["erro_marcado_por"] == "ADMIN"
+
+    # Concluir continua travado (mesma trava de sempre, so' que disparada
+    # pela peca).
+    resp_concluir_bloqueado = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_bloqueado.status_code == 400
+
+    # Resolvendo o erro do Nesting, tenta marcar de novo pela peca noutra
+    # peca (mesmo caso de so' ter 1 peca aqui) -> volta a funcionar.
+    client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    resp_marcar_de_novo = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro", json={"motivo": "outra divergencia"}
+    )
+    assert resp_marcar_de_novo.status_code == 200
+    assert resp_marcar_de_novo.get_json()["nesting"]["status"] == "Erro"

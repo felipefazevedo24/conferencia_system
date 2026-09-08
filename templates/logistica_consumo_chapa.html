@@ -49,6 +49,8 @@
     .cc-btn-baixa:hover { background: var(--eui-primary, #4f46e5); color: #fff; }
     .cc-btn-estornar-baixa { border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .cc-btn-estornar-baixa:hover { background: var(--eui-danger, #dc2626); color: #fff; }
+    .cc-btn-divergencia-peca { border: 1px solid #b45309; background: #fff; color: #b45309; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .cc-btn-divergencia-peca:hover { background: #b45309; color: #fff; }
 
     /* Ramo lateral "Erro" (divergencia) */
     .cc-erro-banner { display: flex; gap: 10px; align-items: flex-start; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; }
@@ -406,10 +408,15 @@
                             </div>
                         </td>
                         <td>
-                            ${p.baixado
-                                ? `<span class="cc-baixa-badge"><i class="fas fa-circle-check"></i> Baixado<small>${escapeHtml(p.baixado_por || "")} em ${escapeHtml(p.baixado_em || "")}</small></span>
-                                   <button type="button" class="cc-btn-estornar-baixa" data-estornar-baixa="${p.id}">Estornar</button>`
-                                : `<button type="button" class="cc-btn-baixa" data-confirmar-baixa="${p.id}"><i class="fas fa-check"></i> Confirmar baixa</button>`}
+                            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-start;">
+                                ${p.baixado
+                                    ? `<span class="cc-baixa-badge"><i class="fas fa-circle-check"></i> Baixado<small>${escapeHtml(p.baixado_por || "")} em ${escapeHtml(p.baixado_em || "")}</small></span>
+                                       <button type="button" class="cc-btn-estornar-baixa" data-estornar-baixa="${p.id}">Estornar</button>`
+                                    : `<button type="button" class="cc-btn-baixa" data-confirmar-baixa="${p.id}"><i class="fas fa-check"></i> Confirmar baixa</button>`}
+                                ${n.status === "Nesting"
+                                    ? `<button type="button" class="cc-btn-divergencia-peca" data-marcar-erro-peca="${p.id}" title="Marca o Nesting inteiro como Erro, identificando essa peça no motivo"><i class="fas fa-triangle-exclamation"></i> Divergência</button>`
+                                    : ""}
+                            </div>
                         </td>
                     </tr>
                 `).join("")
@@ -448,10 +455,21 @@
         const btnSalvarObs = e.target.closest("[data-salvar-obs]");
         const btnConfirmarBaixa = e.target.closest("[data-confirmar-baixa]");
         const btnEstornarBaixa = e.target.closest("[data-estornar-baixa]");
-        if (!btnSalvarObs && !btnConfirmarBaixa && !btnEstornarBaixa) return;
+        const btnMarcarErroPeca = e.target.closest("[data-marcar-erro-peca]");
+        if (!btnSalvarObs && !btnConfirmarBaixa && !btnEstornarBaixa && !btnMarcarErroPeca) return;
 
         try {
-            if (btnSalvarObs) {
+            if (btnMarcarErroPeca) {
+                const pecaId = btnMarcarErroPeca.dataset.marcarErroPeca;
+                const motivo = prompt("Descreva o motivo da divergência dessa peça (obrigatório):");
+                if (motivo === null) return;
+                if (!motivo.trim()) { toast("Informe o motivo da divergência.", "error"); return; }
+                await api(`/api/logistica/consumo-chapa/pecas/${pecaId}/marcar-erro`, { method: "POST", body: JSON.stringify({ motivo }) });
+                toast("Divergência registrada — o Nesting inteiro foi marcado como Erro.", "success");
+                if (nestingDetalheAtualId) await abrirDetalhe(nestingDetalheAtualId);
+                carregar();
+                return;
+            } else if (btnSalvarObs) {
                 const pecaId = btnSalvarObs.dataset.salvarObs;
                 const textarea = $("cc-detalhe-pecas-tbody").querySelector(`[data-obs-peca="${pecaId}"]`);
                 await api(`/api/logistica/consumo-chapa/pecas/${pecaId}/observacao`, {

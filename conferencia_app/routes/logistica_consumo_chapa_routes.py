@@ -222,6 +222,28 @@ def api_resolver_erro_consumo_chapa(nesting_id):
     return jsonify({"message": "Divergência resolvida - Nesting voltou pra 'Nesting'.", "nesting": _fmt_nesting(nesting)})
 
 
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/pecas/<int:peca_id>/marcar-erro", methods=["POST"])
+@permission_required(PERMISSION)
+def api_marcar_erro_peca(peca_id):
+    # Atalho de nivel de linha (peca) pro erro do Nesting: o status de erro
+    # continua sendo do NESTING INTEIRO (ver marcar_erro_nesting) - aqui so'
+    # identifica, no proprio motivo, qual peca disparou a divergencia.
+    peca = db.session.get(LogisticaConsumoChapaPeca, peca_id)
+    if not peca:
+        return jsonify({"error": "Peça não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    motivo = (payload.get("motivo") or "").strip()
+    if motivo:
+        identificacao = peca.nome_peca or peca.peca_numero or f"peça #{peca.id}"
+        os_ref = peca.os_orcamento or peca.os_numero or "—"
+        motivo = f"[Peça {identificacao} - OS {os_ref}] {motivo}"
+    try:
+        nesting = svc.marcar_erro_nesting(peca.nesting, motivo, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Divergência registrada.", "nesting": _fmt_nesting(nesting, com_pecas=True)})
+
+
 # ── Observacao e confirmacao de baixa POR PECA (linha) - independente da
 # conclusao do Nesting inteiro (acoes acima). ──────────────────────────────
 @logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/pecas/<int:peca_id>/observacao", methods=["POST"])
