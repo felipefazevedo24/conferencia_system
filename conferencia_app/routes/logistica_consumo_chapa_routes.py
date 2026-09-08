@@ -92,6 +92,8 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "erro_marcado_por": n.erro_marcado_por,
         "erro_resolvido_em": n.erro_resolvido_em.strftime("%d/%m/%Y %H:%M") if n.erro_resolvido_em else None,
         "erro_resolvido_por": n.erro_resolvido_por,
+        "confirmado_em": n.confirmado_em.strftime("%d/%m/%Y %H:%M") if n.confirmado_em else None,
+        "confirmado_por": n.confirmado_por,
     }
     if com_pecas:
         pecas = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
@@ -167,6 +169,19 @@ def api_importar_consumo_chapa():
         "atualizados": resumo["atualizados"],
         "nestings": [_fmt_nesting(n) for n in resumo["nestings"]],
     })
+
+
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/<int:nesting_id>/confirmar-recebimento", methods=["POST"])
+@permission_required(PERMISSION)
+def api_confirmar_recebimento_consumo_chapa(nesting_id):
+    nesting = db.session.get(LogisticaConsumoChapaNesting, nesting_id)
+    if not nesting:
+        return jsonify({"error": "Nesting não encontrado."}), 404
+    try:
+        nesting = svc.confirmar_recebimento_nesting(nesting, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Recebimento confirmado - tratativa por peça liberada.", "nesting": _fmt_nesting(nesting)})
 
 
 @logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/<int:nesting_id>/concluir", methods=["POST"])
@@ -253,7 +268,10 @@ def api_salvar_observacao_peca(peca_id):
     if not peca:
         return jsonify({"error": "Peça não encontrada."}), 404
     payload = request.get_json(silent=True) or {}
-    peca = svc.salvar_observacao_peca(peca, payload.get("observacao"))
+    try:
+        peca = svc.salvar_observacao_peca(peca, payload.get("observacao"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Observação salva.", "peca": _fmt_peca(peca, qtde_chapas=peca.nesting.qtde_chapas)})
 
 

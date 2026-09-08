@@ -86,6 +86,7 @@
     <div class="eui-stats" id="cc-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="cc-m-todos">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Nesting"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scissors"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Nesting</span><span class="eui-stat__value" id="cc-m-nesting">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Nesting Liberado"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-lock-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Nesting Liberado</span><span class="eui-stat__value" id="cc-m-nesting-liberado">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Erro"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Erro</span><span class="eui-stat__value" id="cc-m-erro">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="cc-m-concluido">0</span></div></div>
     </div>
@@ -220,16 +221,17 @@
     }
 
     function renderMetricas(lista) {
-        const cont = { Nesting: 0, Erro: 0, Concluido: 0 };
+        const cont = { Nesting: 0, "Nesting Liberado": 0, Erro: 0, Concluido: 0 };
         lista.forEach((n) => { cont[n.status] = (cont[n.status] || 0) + 1; });
         $("cc-m-todos").textContent = lista.length;
         $("cc-m-nesting").textContent = cont.Nesting;
+        $("cc-m-nesting-liberado").textContent = cont["Nesting Liberado"];
         $("cc-m-erro").textContent = cont.Erro;
         $("cc-m-concluido").textContent = cont.Concluido;
     }
 
-    const CORES_STATUS = { Nesting: "#b45309", Erro: "#dc2626", Concluido: "#15803d" };
-    const LABEL_STATUS = { Nesting: "Nesting", Erro: "Erro", Concluido: "Concluído" };
+    const CORES_STATUS = { Nesting: "#64748b", "Nesting Liberado": "#b45309", Erro: "#dc2626", Concluido: "#15803d" };
+    const LABEL_STATUS = { Nesting: "Nesting", "Nesting Liberado": "Nesting Liberado", Erro: "Erro", Concluido: "Concluído" };
     function badgeStatus(n) {
         const cor = CORES_STATUS[n.status] || "#475569";
         return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[n.status] || n.status)}</span>`;
@@ -267,12 +269,14 @@
             `<button data-act="${act}" data-id="${n.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
         let itens = it("ver", "fa-eye", "Ver detalhes (peças/OS)");
         if (n.status === "Nesting") {
+            itens += it("confirmar-recebimento", "fa-clipboard-check", "Confirmar Recebimento (Logística)");
+        } else if (n.status === "Nesting Liberado") {
             itens += it("concluir", "fa-circle-check", "Concluir");
             itens += it("marcar-erro", "fa-triangle-exclamation", "Marcar Divergência", true);
         } else if (n.status === "Erro") {
             itens += it("resolver-erro", "fa-rotate-left", "Resolver Divergência");
         } else if (n.status === "Concluido") {
-            itens += it("estornar", "fa-rotate-left", "Estornar p/ Nesting", true);
+            itens += it("estornar", "fa-rotate-left", "Estornar p/ Nesting Liberado", true);
         }
         return itens;
     }
@@ -314,11 +318,14 @@
             if (act === "ver") {
                 abrirDetalhe(id);
                 return;
+            } else if (act === "confirmar-recebimento") {
+                if (!confirm("Confirmar que a logística recebeu a lista de separação desse Nesting? Isso libera a tratativa por peça.")) return;
+                await api(`/api/logistica/consumo-chapa/${id}/confirmar-recebimento`, { method: "POST" });
             } else if (act === "concluir") {
                 if (!confirm("Marcar esse Nesting como Concluído?")) return;
                 await api(`/api/logistica/consumo-chapa/${id}/concluir`, { method: "POST" });
             } else if (act === "estornar") {
-                if (!confirm("Estornar esse Nesting de volta pra 'Nesting'?")) return;
+                if (!confirm("Estornar esse Nesting de volta pra 'Nesting Liberado'?")) return;
                 await api(`/api/logistica/consumo-chapa/${id}/estornar`, { method: "POST" });
             } else if (act === "marcar-erro") {
                 const motivo = prompt("Descreva o motivo da divergência (obrigatório):");
@@ -351,7 +358,19 @@
                 (n.pagina_total > 1 ? ` · página ${n.pagina_atual} de ${n.pagina_total}` : "") +
                 (n.nome_tarefa ? ` · Tarefa ${n.nome_tarefa}` : "");
 
-            if (n.status === "Erro") {
+            if (n.status === "Nesting") {
+                $("cc-detalhe-erro-banner").innerHTML = `
+                    <div class="cc-erro-banner" style="background:#eff6ff; border-color:#bfdbfe; color:#1e40af;">
+                        <i class="fas fa-clipboard-check"></i>
+                        <div>
+                            <b>Aguardando confirmação da logística</b>
+                            Essa lista veio do PCP e ainda não foi conferida — confirme o recebimento pra liberar observação, baixa e divergência peça a peça.
+                            <div style="margin-top:8px;">
+                                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="cc-detalhe-confirmar-recebimento"><i class="fas fa-clipboard-check"></i> Confirmar Recebimento</button>
+                            </div>
+                        </div>
+                    </div>`;
+            } else if (n.status === "Erro") {
                 $("cc-detalhe-erro-banner").innerHTML = `
                     <div class="cc-erro-banner">
                         <i class="fas fa-triangle-exclamation"></i>
@@ -373,6 +392,20 @@
                     </div>`;
             } else {
                 $("cc-detalhe-erro-banner").innerHTML = "";
+            }
+            const btnConfirmarRecebimentoModal = $("cc-detalhe-confirmar-recebimento");
+            if (btnConfirmarRecebimentoModal) {
+                btnConfirmarRecebimentoModal.addEventListener("click", async () => {
+                    if (!confirm("Confirmar que a logística recebeu a lista de separação desse Nesting? Isso libera a tratativa por peça.")) return;
+                    try {
+                        await api(`/api/logistica/consumo-chapa/${id}/confirmar-recebimento`, { method: "POST" });
+                        toast("Recebimento confirmado!", "success");
+                        await abrirDetalhe(id);
+                        carregar();
+                    } catch (err) {
+                        toast(err.message, "error");
+                    }
+                });
             }
 
             $("cc-detalhe-kpis").innerHTML = [
@@ -402,21 +435,25 @@
                         <td>${escapeHtml(p.cliente)}</td>
                         <td>${fmtKg(p.peso_total_baixa_kg)}</td>
                         <td>
-                            <div class="cc-obs-cell">
-                                <textarea data-obs-peca="${p.id}" rows="1" placeholder="Observação…">${escapeHtml(p.observacao || "")}</textarea>
-                                <button type="button" class="cc-obs-salvar" data-salvar-obs="${p.id}" title="Salvar observação"><i class="fas fa-floppy-disk"></i></button>
-                            </div>
+                            ${n.status === "Nesting"
+                                ? `<span style="font-size:11.5px; color:var(--eui-muted);">${escapeHtml(p.observacao || "Aguardando confirmação")}</span>`
+                                : `<div class="cc-obs-cell">
+                                       <textarea data-obs-peca="${p.id}" rows="1" placeholder="Observação…">${escapeHtml(p.observacao || "")}</textarea>
+                                       <button type="button" class="cc-obs-salvar" data-salvar-obs="${p.id}" title="Salvar observação"><i class="fas fa-floppy-disk"></i></button>
+                                   </div>`}
                         </td>
                         <td>
-                            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-start;">
-                                ${p.baixado
-                                    ? `<span class="cc-baixa-badge"><i class="fas fa-circle-check"></i> Baixado<small>${escapeHtml(p.baixado_por || "")} em ${escapeHtml(p.baixado_em || "")}</small></span>
-                                       <button type="button" class="cc-btn-estornar-baixa" data-estornar-baixa="${p.id}">Estornar</button>`
-                                    : `<button type="button" class="cc-btn-baixa" data-confirmar-baixa="${p.id}"><i class="fas fa-check"></i> Confirmar baixa</button>`}
-                                ${n.status === "Nesting"
-                                    ? `<button type="button" class="cc-btn-divergencia-peca" data-marcar-erro-peca="${p.id}" title="Marca o Nesting inteiro como Erro, identificando essa peça no motivo"><i class="fas fa-triangle-exclamation"></i> Divergência</button>`
-                                    : ""}
-                            </div>
+                            ${n.status === "Nesting"
+                                ? `<span style="font-size:11.5px; color:var(--eui-muted);"><i class="fas fa-lock"></i> Aguardando confirmação</span>`
+                                : `<div style="display:flex; flex-direction:column; gap:5px; align-items:flex-start;">
+                                       ${p.baixado
+                                           ? `<span class="cc-baixa-badge"><i class="fas fa-circle-check"></i> Baixado<small>${escapeHtml(p.baixado_por || "")} em ${escapeHtml(p.baixado_em || "")}</small></span>
+                                              <button type="button" class="cc-btn-estornar-baixa" data-estornar-baixa="${p.id}">Estornar</button>`
+                                           : `<button type="button" class="cc-btn-baixa" data-confirmar-baixa="${p.id}"><i class="fas fa-check"></i> Confirmar baixa</button>`}
+                                       ${n.status === "Nesting Liberado"
+                                           ? `<button type="button" class="cc-btn-divergencia-peca" data-marcar-erro-peca="${p.id}" title="Marca o Nesting inteiro como Erro, identificando essa peça no motivo"><i class="fas fa-triangle-exclamation"></i> Divergência</button>`
+                                           : ""}
+                                   </div>`}
                         </td>
                     </tr>
                 `).join("")
