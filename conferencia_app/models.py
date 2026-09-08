@@ -2841,6 +2841,8 @@ class ComexProcesso(db.Model):
     nf_data_emissao = db.Column(db.Date)
     cambio_valor_final = db.Column(db.Float)
     documento_consolidado_file_name = db.Column(db.String(260))
+    documento_consolidado_file_path = db.Column(db.String(500))
+    processo_concluido_em = db.Column(db.DateTime)
     extra_texto_14 = db.Column(db.String(255))
     extra_texto_15 = db.Column(db.String(255))
     extra_texto_16 = db.Column(db.String(255))
