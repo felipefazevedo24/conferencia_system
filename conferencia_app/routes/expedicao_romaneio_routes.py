@@ -17,7 +17,8 @@ from ..models import (
     ExpedicaoOrdemST,
     ExpedicaoConferenciaSimples,
 )
-from ..auth import permission_required, roles_required
+from ..auth import permission_required, permission_required_any, roles_required, has_permission, login_required
+from functools import wraps
 from ..services import expedicao_fat_service as fat_svc
 from ..services import expedicao_st_service as st_svc
 from ..services import cadastro_workflow_service as cad_svc
@@ -31,6 +32,18 @@ from ..services.nfe_email_service import enviar_aviso_coleta_fob
 expedicao_romaneio_bp = Blueprint("expedicao_romaneio", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
+MANAGE_PERMISSION = "MANAGE_EXPEDICAO_ROMANEIO"
+
+
+def romaneio_operator(fn):
+    @wraps(fn)
+    @login_required
+    def view(*args, **kwargs):
+        if has_permission(MANAGE_PERMISSION):
+            return fn(*args, **kwargs)
+        return roles_required(*ROLES)(fn)(*args, **kwargs)
+    return view
+
 ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 ROLES_NAO_ADMIN = ("Conferente", "Fiscal", "Logística", "Comex")
 
@@ -461,7 +474,7 @@ def _info_comprovantes_romaneio(romaneio) -> tuple[dict, bool]:
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/comprovante-entrega", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def salvar_comprovante_entrega_romaneio(romaneio_id):
     """Comprovante de entrega unico para romaneios FOB: uma unica foto
     finaliza de uma vez o Registro de Expedicao de todas as NFs do romaneio
@@ -533,14 +546,14 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/expedicao/romaneio")
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def lista_romaneios():
     """Página principal de gerenciamento de romaneios."""
     return render_template(
         "expedicao_romaneio.html",
         user=session["username"],
         user_role=session.get("role", ""),
-        is_admin=session.get("role") == "Admin",
+        can_manage_romaneio=has_permission(MANAGE_PERMISSION),
     )
 
 
@@ -559,7 +572,7 @@ def _exclusao_pendente_dict(romaneio_id: int) -> dict | None:
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def listar_romaneios():
     """Lista todos os romaneios com filtros opcionais."""
     # Puxa automaticamente os canhotos ja tirados pelos motoristas no app para
@@ -651,11 +664,20 @@ def listar_romaneios():
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def criar_romaneio():
-    """Cria um novo romaneio em branco."""
+    """Cria o romaneio com suas NFs em uma unica transacao."""
     payload = request.get_json(silent=True) or {}
     
+    nfs = payload.get("nfs", [])
+    if not isinstance(nfs, list) or not nfs:
+        return jsonify({"error": "Adicione ao menos uma NF."}), 400
+    if any(not isinstance(nf, dict) or not str(nf.get("numero_nf") or "").strip() for nf in nfs):
+        return jsonify({"error": "Número da NF é obrigatório."}), 400
+    frete = str(payload.get("tipo_frete") or "FOB").strip().upper()
+    if frete not in _TIPOS_FRETE_VALIDOS:
+        return jsonify({"error": "Tipo de frete inválido."}), 400
+
     # Gera número único para o romaneio (p.ex: ROM-2026-0001). Usa o MAIOR
     # sufixo numérico já existente no ano (não a contagem de linhas) — contar
     # linhas gera número duplicado sempre que um romaneio anterior é excluído
@@ -682,9 +704,33 @@ def criar_romaneio():
         criado_por=session["username"],
     )
     
-    db.session.add(romaneio)
-    db.session.commit()
-    
+    romaneio.status = "Rascunho"
+    romaneio.tipo_frete = frete
+    for campo in ("orcamento", "cliente", "transportadora", "placa", "motorista",
+                  "motorista_documento", "observacao_1", "observacao_2", "observacao_3"):
+        if campo in payload:
+            setattr(romaneio, campo, str(payload[campo] or "").strip())
+    doc = cad_svc.normalizar_documento(str(payload.get("transportadora_documento") or ""))
+    romaneio.transportadora_documento = cad_svc.formatar_cnpj(doc) if doc else ""
+    dados = payload.get("transportadora_dados")
+    if isinstance(dados, dict) and dados:
+        romaneio.transportadora_dados_json = json.dumps(dados, ensure_ascii=False)
+        romaneio.transportadora = str(dados.get("razao_social") or romaneio.transportadora or "").strip()
+    try:
+        db.session.add(romaneio)
+        db.session.flush()
+        for item in nfs:
+            _, erro = incluir_nf_no_romaneio(romaneio, item["numero_nf"], session["username"], item, commit=False)
+            if erro:
+                db.session.rollback()
+                return jsonify({"error": erro}), 400
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Conflito ao montar romaneio. Atualize a tela e tente novamente."}), 409
+
+    _avisar_coleta_romaneio_fob(romaneio)
+
     return jsonify({
         "id": romaneio.id,
         "numero_romaneio": romaneio.numero_romaneio,
@@ -693,7 +739,7 @@ def criar_romaneio():
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def obter_romaneio(romaneio_id):
     """Obtém detalhes de um romaneio específico."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
@@ -754,7 +800,7 @@ def obter_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>", methods=["PUT"])
-@roles_required(*ROLES)
+@romaneio_operator
 def atualizar_romaneio(romaneio_id):
     """Atualiza informações do romaneio."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
@@ -817,33 +863,31 @@ def atualizar_romaneio(romaneio_id):
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
 
-    # Ao montar/atualizar romaneio com frete FOB, dispara aviso de coleta para
-    # cada NF usando o mesmo resolvedor de e-mails do envio da NF-e.
-    if disparar_aviso_fob and (romaneio.nfs or []):
-        usuario = session.get("username", "sistema")
-        for nf in romaneio.nfs:
-            try:
-                enviar_aviso_coleta_fob(
-                    numero_nf=nf.numero_nf,
-                    nome_cliente=nf.cliente or romaneio.cliente or "",
-                    qtde_volumes=int(nf.qtde_volumes or 0),
-                    peso=float(nf.peso_bruto or 0),
-                    disparado_por=usuario,
-                    origem="RomaneioFOB",
-                    envio_assincrono=True,
-                )
-            except Exception:
-                current_app.logger.exception(
-                    "Falha ao disparar aviso FOB para NF %s (romaneio %s).",
-                    nf.numero_nf,
-                    romaneio.numero_romaneio,
-                )
-    
+    if disparar_aviso_fob:
+        _avisar_coleta_romaneio_fob(romaneio)
     return jsonify({"message": "Romaneio atualizado com sucesso."})
 
 
+def _avisar_coleta_romaneio_fob(romaneio):
+    if romaneio.tipo_frete != "FOB":
+        return
+    for nf in romaneio.nfs or []:
+        try:
+            enviar_aviso_coleta_fob(
+                numero_nf=nf.numero_nf,
+                nome_cliente=nf.cliente or romaneio.cliente or "",
+                qtde_volumes=int(nf.qtde_volumes or 0),
+                peso=float(nf.peso_bruto or 0),
+                disparado_por=session.get("username", "sistema"),
+                origem="RomaneioFOB",
+                envio_assincrono=True,
+            )
+        except Exception:
+            current_app.logger.exception("Falha ao disparar aviso FOB para NF %s (romaneio %s).", nf.numero_nf, romaneio.numero_romaneio)
+
+
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/nf", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def adicionar_nf_ao_romaneio(romaneio_id):
     """Adiciona uma NF ao romaneio."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
@@ -870,7 +914,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     }), 201
 
 
-def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
+def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None, *, commit=True):
     """Núcleo reutilizável de inclusão de NF em um romaneio (usado pela rota
     HTTP e pela Bia). Retorna (nf, None) em sucesso ou (None, mensagem_erro).
     Só opera em romaneios em Rascunho."""
@@ -1009,7 +1053,7 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
         adicionado_por=autor,
     )
 
-    db.session.add(nf)
+    romaneio.nfs.append(nf)
 
     # Atualiza totais sempre pela lista real de NFs, sem duplicar a NF recém-adicionada.
     _recalcular_totais_romaneio(romaneio)
@@ -1023,7 +1067,10 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
 
     romaneio.atualizado_em = datetime.now()
     try:
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
     except IntegrityError:
         # Duplo clique/race: outra requisição já inseriu a mesma NF. O índice
         # único do banco barra a duplicata aqui — trata como "já adicionada".
@@ -1033,14 +1080,14 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
     # Fluxo progressivo: a ordem (FAT ou ST — o numero_nf so existe em uma
     # delas) cuja NF entrou no romaneio sai da etapa "Faturado" e passa para
     # "Em Romaneio".
-    fat_svc.marcar_em_romaneio_por_nf(numero_nf)
-    st_svc.marcar_em_romaneio_por_nf(numero_nf)
+    fat_svc.marcar_em_romaneio_por_nf(numero_nf, commit=commit)
+    st_svc.marcar_em_romaneio_por_nf(numero_nf, commit=commit)
 
     return nf, None
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/nf/<int:nf_id>", methods=["DELETE"])
-@roles_required(*ROLES)
+@romaneio_operator
 def remover_nf_do_romaneio(romaneio_id, nf_id):
     """Remove uma NF do romaneio."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
@@ -1094,7 +1141,7 @@ def remover_nf_core(romaneio, nf):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/finalizar", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def finalizar_romaneio(romaneio_id):
     """Finaliza o romaneio (muda status de Rascunho para Pronto).
 
@@ -1169,7 +1216,7 @@ def finalizar_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/expedir", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def expedir_romaneio(romaneio_id):
     """Marca o romaneio como expedido."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
@@ -1210,7 +1257,7 @@ def expedir_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/estornar-finalizacao", methods=["POST"])
-@roles_required("Admin")
+@permission_required(MANAGE_PERMISSION)
 def estornar_finalizacao_romaneio(romaneio_id):
     """Estorna a finalização do romaneio (Pronto -> Rascunho). As ordens
     associadas permanecem em "Em Romaneio" (nao ha mudanca de etapa das
@@ -1240,7 +1287,7 @@ def estornar_finalizacao_core(romaneio, autor):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/estornar-expedicao", methods=["POST"])
-@roles_required("Admin")
+@permission_required(MANAGE_PERMISSION)
 def estornar_expedicao_romaneio(romaneio_id):
     """Estorna a expedição do romaneio (Expedido -> Pronto). Cada ordem
     associada volta de "Expedido" para "Em Romaneio" — unica forma de
@@ -1385,9 +1432,9 @@ def _excluir_romaneio(romaneio: ExpedicaoRomaneio) -> None:
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/deletar", methods=["DELETE"])
-@roles_required("Admin")
+@permission_required(MANAGE_PERMISSION)
 def deletar_romaneio(romaneio_id):
-    """Deleta um romaneio (apenas Admin, apenas Rascunho)."""
+    """Deleta um romaneio em Rascunho com permissao de gestao."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
@@ -1434,13 +1481,13 @@ def solicitar_exclusao_romaneio(romaneio_id):
     )
     db.session.add(exclusao)
     db.session.commit()
-    return jsonify({"message": "Solicitação de exclusão enviada. Aguarde aprovação de um Admin."}), 201
+    return jsonify({"message": "Solicitação de exclusão enviada. Aguarde aprovação de um responsável autorizado."}), 201
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/exclusao/<int:exclusao_id>/<acao>", methods=["POST"])
-@roles_required("Admin")
+@permission_required(MANAGE_PERMISSION)
 def decidir_exclusao_romaneio(exclusao_id, acao):
-    """Admin aprova (exclui de fato) ou rejeita uma solicitação de exclusão."""
+    """Responsavel autorizado aprova ou rejeita uma solicitacao de exclusao."""
     if acao not in ("aprovar", "rejeitar"):
         return jsonify({"error": "Ação inválida."}), 400
 
@@ -1659,7 +1706,7 @@ def _consolidado_romaneio(romaneio) -> list:
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/consultar-cnpj", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def consultar_cnpj_transportadora():
     """Consulta o cartao CNPJ (BrasilAPI) da transportadora para o frete FOB."""
     payload = request.get_json(silent=True) or {}
@@ -1674,7 +1721,7 @@ def consultar_cnpj_transportadora():
 
 
 @expedicao_romaneio_bp.route("/expedicao/romaneio/<int:romaneio_id>/visualizar")
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def visualizar_romaneio(romaneio_id):
     """Visualiza/imprime o romaneio: um unico documento com todas as NFs.
     CIF mostra so o remetente (centralizado); FOB mostra remetente +
@@ -1696,7 +1743,7 @@ def visualizar_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/assinatura/<tipo>", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def salvar_assinatura_romaneio(romaneio_id, tipo):
     """Salva a assinatura digital (PNG em base64) do conferente ou do
     transportador, capturada num canvas (ex.: tablet do motorista)."""
@@ -1759,7 +1806,7 @@ def salvar_assinatura_romaneio(romaneio_id, tipo):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/assinatura/<tipo>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def obter_assinatura_romaneio(romaneio_id, tipo):
     if tipo not in ("conferente", "transportador"):
         return jsonify({"error": "Tipo de assinatura inválido."}), 400
@@ -1832,7 +1879,7 @@ def _fotos_carregamento_payload(romaneio) -> list:
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["POST"])
-@roles_required(*ROLES)
+@romaneio_operator
 def salvar_foto_carregamento_romaneio(romaneio_id):
     """Salva uma foto do carregamento (câmera ou galeria do celular/tablet),
     tirada com o romaneio já Pronto para expedir. Cada chamada adiciona uma
@@ -1892,7 +1939,7 @@ def salvar_foto_carregamento_romaneio(romaneio_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/fotos-carregamento", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def listar_fotos_carregamento_romaneio(romaneio_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
@@ -1903,7 +1950,7 @@ def listar_fotos_carregamento_romaneio(romaneio_id):
 @expedicao_romaneio_bp.route(
     "/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento/<int:foto_id>", methods=["GET"]
 )
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def obter_foto_carregamento_individual_romaneio(romaneio_id, foto_id):
     foto = ExpedicaoRomaneioFotoCarregamento.query.filter_by(id=foto_id, romaneio_id=romaneio_id).first()
     if not foto:
@@ -1921,7 +1968,7 @@ def obter_foto_carregamento_individual_romaneio(romaneio_id, foto_id):
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, MANAGE_PERMISSION)
 def obter_foto_carregamento_romaneio(romaneio_id):
     """Mantido para compatibilidade com a foto unica legada (tirada antes de
     este romaneio suportar multiplas fotos de carregamento)."""
