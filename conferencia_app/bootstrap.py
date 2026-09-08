@@ -593,6 +593,12 @@ def _ensure_qualidade_certificado_columns() -> None:
         if not cols:
             return
 
+        if "os_referencia" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN os_referencia VARCHAR(120) NOT NULL DEFAULT ''"))
+            conn.commit()
+        conn.execute(db.text("UPDATE qualidade_certificado SET os_referencia = COALESCE(NULLIF(os_referencia, ''), COALESCE(os, ''))"))
+        conn.commit()
+
         if "grid_os" not in cols:
             conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN grid_os VARCHAR(120)"))
             conn.commit()
@@ -605,6 +611,23 @@ def _ensure_qualidade_certificado_columns() -> None:
         if "sapatas_numero_certificado" not in cols:
             conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN sapatas_numero_certificado VARCHAR(120)"))
             conn.commit()
+
+        idxs = _get_index_names("qualidade_certificado")
+        dialect = db.engine.dialect.name
+        if "ux_qualidade_certificado_nota" in idxs and "ux_qualidade_certificado_nota_os" not in idxs:
+            if dialect == "mysql":
+                conn.execute(db.text("ALTER TABLE qualidade_certificado DROP INDEX ux_qualidade_certificado_nota"))
+                conn.commit()
+            elif dialect == "postgresql":
+                conn.execute(db.text("DROP INDEX IF EXISTS ux_qualidade_certificado_nota"))
+                conn.commit()
+        if "ux_qualidade_certificado_nota_os" not in _get_index_names("qualidade_certificado"):
+            _create_index_if_missing(
+                conn,
+                "qualidade_certificado",
+                "ux_qualidade_certificado_nota_os",
+                "CREATE UNIQUE INDEX ux_qualidade_certificado_nota_os ON qualidade_certificado (numero_nota, os_referencia)",
+            )
     finally:
         conn.close()
 
@@ -1095,6 +1118,37 @@ def _ensure_solicitacao_coleta_tabelas() -> None:
     """Cria as tabelas de detalhes e anexos de solicitação de coleta se não existirem."""
     conn = db.engine.connect()
     try:
+        if db.engine.dialect.name == "sqlite":
+            conn.execute(db.text("""
+                CREATE TABLE IF NOT EXISTS solicitacao_coleta_detalhes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    solicitacao_id INTEGER NOT NULL UNIQUE,
+                    data_liberacao DATETIME,
+                    status_liberacao VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                    observacao TEXT,
+                    criado_por VARCHAR(100) NOT NULL,
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_por VARCHAR(100),
+                    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (solicitacao_id) REFERENCES agendamento_solicitacao(id)
+                )
+            """))
+            conn.execute(db.text("""
+                CREATE TABLE IF NOT EXISTS solicitacao_coleta_anexo (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    solicitacao_coleta_id INTEGER NOT NULL,
+                    arquivo_nome VARCHAR(255) NOT NULL,
+                    arquivo_path VARCHAR(500) NOT NULL,
+                    tipo_arquivo VARCHAR(50),
+                    tamanho_bytes INTEGER,
+                    uploadado_por VARCHAR(100) NOT NULL,
+                    uploadado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (solicitacao_coleta_id) REFERENCES solicitacao_coleta_detalhes(id)
+                )
+            """))
+            conn.commit()
+            return
+
         # Criar tabela solicitacao_coleta_detalhes
         if not _has_table("solicitacao_coleta_detalhes"):
             conn.execute(db.text("""
