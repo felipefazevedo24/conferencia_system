@@ -92,7 +92,7 @@
             <div class="eui-toolbar" style="padding: 12px 16px;">
                 <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
                     <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
-                    <input type="search" id="cc-busca" class="eui-input" autocomplete="off" placeholder="Buscar por Programa, código do material ou tarefa…" style="width:100%; padding-left:34px;">
+                    <input type="search" id="cc-busca" class="eui-input" autocomplete="off" placeholder="Buscar por Programa, descrição/código do material ou tarefa…" style="width:100%; padding-left:34px;">
                 </div>
             </div>
             <div class="cc-table-wrap">
@@ -101,7 +101,8 @@
                         <tr>
                             <th>Programa</th>
                             <th>Data</th>
-                            <th>Material</th>
+                            <th>Descrição</th>
+                            <th>Código</th>
                             <th>Espessura</th>
                             <th>Peso Total</th>
                             <th>Qtd Chapas</th>
@@ -111,7 +112,7 @@
                             <th style="text-align:right;">Ação</th>
                         </tr>
                     </thead>
-                    <tbody id="cc-tbody"><tr><td colspan="10" class="cc-empty">Carregando…</td></tr></tbody>
+                    <tbody id="cc-tbody"><tr><td colspan="11" class="cc-empty">Carregando…</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -225,14 +226,15 @@
     function renderTabela(lista) {
         const tb = $("cc-tbody");
         if (!lista.length) {
-            tb.innerHTML = '<tr><td colspan="10" class="cc-empty">Nenhum Nesting encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="11" class="cc-empty">Nenhum Nesting encontrado</td></tr>';
             return;
         }
         tb.innerHTML = lista.map((n) => `
             <tr>
                 <td><a href="#" data-ver-detalhe="${n.id}"><b>${escapeHtml(n.numero_programa)}</b></a>${n.pagina_total > 1 ? `<div style="font-size:11px; color:var(--eui-muted);">pág. ${n.pagina_atual} de ${n.pagina_total}</div>` : ""}</td>
                 <td>${escapeHtml(n.data_corte ? n.data_corte.split("-").reverse().join("/") : "—")}</td>
-                <td>${escapeHtml(n.codigo_material || n.material || "—")}</td>
+                <td>${escapeHtml(n.descricao_material || "—")}</td>
+                <td>${escapeHtml(n.codigo_material || "—")}</td>
                 <td>${escapeHtml(n.espessura_mm != null ? fmtNum(n.espessura_mm) + " mm" : "—")}</td>
                 <td>${fmtKg(n.peso_total_kg)}</td>
                 <td>${escapeHtml(n.qtde_chapas != null ? n.qtde_chapas : "—")}</td>

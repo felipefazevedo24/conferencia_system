@@ -43,6 +43,18 @@ def _fmt_peca(p, qtde_chapas: int | None = None) -> dict:
     }
 
 
+def _descricao_material(n) -> str | None:
+    # material bruto vem do relatorio como "DESCRICAO/ CODIGO" (ex.:
+    # "ASTM_A36/ 19-01-00549") - codigo_material ja extrai o CODIGO (depois
+    # da "/"); aqui extrai a DESCRICAO (antes da "/"), sem precisar de
+    # coluna nova no banco - o dado ja estava todo em `material`.
+    if not n.material:
+        return None
+    if "/" in n.material:
+        return n.material.rsplit("/", 1)[0].strip() or None
+    return n.material
+
+
 def _fmt_nesting(n, com_pecas: bool = False) -> dict:
     dados = {
         "id": n.id,
@@ -55,6 +67,7 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "hora_corte": n.hora_corte,
         "tempo_corte": n.tempo_corte,
         "material": n.material,
+        "descricao_material": _descricao_material(n),
         "codigo_material": n.codigo_material,
         "espessura_mm": n.espessura_mm,
         "nome_tarefa": n.nome_tarefa,

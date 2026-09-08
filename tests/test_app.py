@@ -6118,6 +6118,10 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert body["nestings"][0]["numero_programa"] == "21690"
     assert body["nestings"][0]["status"] == "Nesting"
     assert body["nestings"][0]["qtd_pecas"] == 1
+    # Descricao e codigo do material separados (material bruto vem
+    # "DESCRICAO/ CODIGO" do relatorio - ver _descricao_material).
+    assert body["nestings"][0]["codigo_material"] == "19-01-00558"
+    assert body["nestings"][0]["descricao_material"] == "ASTM_A36"
 
     # Aparece na listagem, com o filtro de status funcionando.
     resp_lista = client.get("/api/logistica/consumo-chapa")

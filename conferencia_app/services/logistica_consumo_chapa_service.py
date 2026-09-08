@@ -96,6 +96,7 @@ def listar_nestings(status: str | None = None, busca: str = "") -> list[Logistic
             db.or_(
                 LogisticaConsumoChapaNesting.numero_programa.ilike(termo),
                 LogisticaConsumoChapaNesting.codigo_material.ilike(termo),
+                LogisticaConsumoChapaNesting.material.ilike(termo),
                 LogisticaConsumoChapaNesting.nome_tarefa.ilike(termo),
             )
         )
