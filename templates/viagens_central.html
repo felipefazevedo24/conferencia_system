@@ -215,6 +215,16 @@
         <input type="file" id="oc-anexo" class="eui-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
         <div class="vt-mini">Se informado, o documento fica anexado à solicitação e pode ser aberto/imresso pelo gestor.</div>
             </div>
+            <div style="display:grid; grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr); gap:12px;">
+        <div class="eui-field">
+          <label class="eui-field__label">Coleta liberada a partir de <b>*</b></label>
+          <input type="datetime-local" id="oc-data-liberacao" class="eui-input" required>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Observação da coleta</label>
+          <textarea id="oc-observacao" class="eui-input" rows="2" placeholder="Ex.: aguardar separação, doca ou condição especial."></textarea>
+        </div>
+            </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
             </div>
@@ -2018,9 +2028,18 @@ async function confirmarImportacaoOc() {
     showToast('Informe o número da OC.', 'error');
     return;
   }
+  const dataLiberacao = document.getElementById('oc-data-liberacao').value;
+  if (!dataLiberacao) {
+    showToast('Informe a data/hora em que a coleta estará liberada.', 'error');
+    document.getElementById('oc-data-liberacao').focus();
+    return;
+  }
+  const observacao = (document.getElementById('oc-observacao').value || '').trim();
   const anexo = document.getElementById('oc-anexo').files?.[0] || null;
   const body = new FormData();
   body.append('numero_oc', numeroOc);
+  body.append('data_liberacao', dataLiberacao);
+  body.append('observacao', observacao);
   if (anexo) body.append('anexo', anexo);
   const r = await fetch('/api/logistica/central-viagens/oc/criar', {
     method: 'POST',
@@ -2036,6 +2055,8 @@ async function confirmarImportacaoOc() {
     window.location.href = d.pdf_url;
   }
   document.getElementById('oc-anexo').value = '';
+  document.getElementById('oc-data-liberacao').value = '';
+  document.getElementById('oc-observacao').value = '';
   closeModal('modalImportar');
   loadDashboard();
 }

@@ -9,7 +9,7 @@ from ..extensions import db
 def criar_ou_atualizar_detalhes_coleta(solicitacao_id, data_liberacao=None, observacao=None, usuario=None):
     """Cria ou atualiza os detalhes de uma solicitação de coleta."""
     try:
-        query = "SELECT id FROM solicitacao_coleta_detalhes WHERE solicitacao_id = %s"
+        query = "SELECT id FROM solicitacao_coleta_detalhes WHERE solicitacao_id = :solicitacao_id"
         result = db.session.execute(text(query), {"solicitacao_id": solicitacao_id}).first()
         
         agora = datetime.now()
@@ -18,9 +18,9 @@ def criar_ou_atualizar_detalhes_coleta(solicitacao_id, data_liberacao=None, obse
             # Atualizar
             update_query = """
                 UPDATE solicitacao_coleta_detalhes 
-                SET data_liberacao = %s, observacao = %s, 
-                    atualizado_por = %s, atualizado_em = %s
-                WHERE solicitacao_id = %s
+                SET data_liberacao = :data_liberacao, observacao = :observacao,
+                    atualizado_por = :atualizado_por, atualizado_em = :atualizado_em
+                WHERE solicitacao_id = :solicitacao_id
             """
             db.session.execute(text(update_query), {
                 "data_liberacao": data_liberacao,
@@ -34,13 +34,13 @@ def criar_ou_atualizar_detalhes_coleta(solicitacao_id, data_liberacao=None, obse
             insert_query = """
                 INSERT INTO solicitacao_coleta_detalhes 
                 (solicitacao_id, data_liberacao, status_liberacao, observacao, criado_por, criado_em, atualizado_em)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (:solicitacao_id, :data_liberacao, :status_liberacao, :observacao, :criado_por, :criado_em, :atualizado_em)
             """
             status = "Liberada" if data_liberacao and data_liberacao <= agora else "Pendente"
             db.session.execute(text(insert_query), {
                 "solicitacao_id": solicitacao_id,
                 "data_liberacao": data_liberacao,
-                "status": status,
+                "status_liberacao": status,
                 "observacao": observacao,
                 "criado_por": usuario,
                 "criado_em": agora,
@@ -61,15 +61,21 @@ def obter_detalhes_coleta(solicitacao_id):
         query = """
             SELECT id, solicitacao_id, data_liberacao, status_liberacao, observacao, criado_por, criado_em
             FROM solicitacao_coleta_detalhes 
-            WHERE solicitacao_id = %s
+            WHERE solicitacao_id = :solicitacao_id
         """
         result = db.session.execute(text(query), {"solicitacao_id": solicitacao_id}).first()
         
         if result:
+            data_liberacao = result[2]
+            if isinstance(data_liberacao, str):
+                try:
+                    data_liberacao = datetime.fromisoformat(data_liberacao)
+                except ValueError:
+                    data_liberacao = None
             return {
                 "id": result[0],
                 "solicitacao_id": result[1],
-                "data_liberacao": result[2],
+                "data_liberacao": data_liberacao,
                 "status_liberacao": result[3],
                 "observacao": result[4],
                 "criado_por": result[5],

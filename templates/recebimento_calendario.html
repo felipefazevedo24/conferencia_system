@@ -62,6 +62,13 @@
 
     .rcv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .rcv-empty { text-align: center; color: var(--eui-muted); padding: 20px; font-weight: 600; }
+    .rcv-dialog { width: min(520px, calc(100vw - 32px)); border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); padding: 0; box-shadow: 0 24px 70px rgba(15,23,42,.22); }
+    .rcv-dialog::backdrop { background: rgba(15,23,42,.38); }
+    .rcv-dialog__head, .rcv-dialog__body, .rcv-dialog__foot { padding: 16px 20px; }
+    .rcv-dialog__head { border-bottom: 1px solid var(--eui-border); }
+    .rcv-dialog__head h2 { margin: 0; font-size: 16px; }
+    .rcv-dialog__body { display: grid; gap: 12px; }
+    .rcv-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--eui-border); }
 
     @media (max-width: 1120px) {
         .rcv-grid { grid-template-columns: 1fr; }
@@ -158,6 +165,16 @@
         </section>
     </div>
 </div>
+<dialog id="programar-coleta-dialog" class="rcv-dialog">
+    <form method="dialog" id="programar-coleta-form">
+        <div class="rcv-dialog__head"><h2><i class="fas fa-route"></i> Gerar coleta por OC <span id="programar-coleta-oc"></span></h2></div>
+        <div class="rcv-dialog__body">
+            <label class="eui-field"><span class="eui-field__label">Coleta liberada a partir de <b>*</b></span><input id="programar-coleta-data" class="eui-input" type="datetime-local" required></label>
+            <label class="eui-field"><span class="eui-field__label">Observação</span><textarea id="programar-coleta-observacao" class="eui-input" rows="3" placeholder="Ex.: aguardar separação, material frágil, doca específica..."></textarea></label>
+        </div>
+        <div class="rcv-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="programar-coleta-cancelar">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="programar-coleta-confirmar"><i class="fas fa-check"></i> Gerar coleta</button></div>
+    </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -180,6 +197,12 @@
     const periodLabel = document.getElementById('period-label');
     const btnExportarDia = document.getElementById('btn-exportar-dia');
     const dayFootnote = document.getElementById('day-footnote');
+    const programarDialog = document.getElementById('programar-coleta-dialog');
+    const programarForm = document.getElementById('programar-coleta-form');
+    const programarData = document.getElementById('programar-coleta-data');
+    const programarObservacao = document.getElementById('programar-coleta-observacao');
+    const programarOc = document.getElementById('programar-coleta-oc');
+    let numeroOcProgramar = '';
 
     function esc(v) {
         return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -217,6 +240,16 @@
         document.getElementById('m-dias').textContent = Number(resumo.dias_com_recebimento || 0);
         document.getElementById('m-sem-viagem').textContent = Number(resumo.coletas_sem_viagem || 0);
         document.getElementById('m-entregas').textContent = Number(resumo.entregas || 0);
+    }
+
+    function abrirDialogoProgramarColeta(numeroOc) {
+        numeroOcProgramar = numeroOc;
+        programarOc.textContent = `OC ${numeroOc}`;
+        const dataPadrao = state.selectedDate ? `${state.selectedDate}T08:00` : '';
+        programarData.value = dataPadrao;
+        programarObservacao.value = '';
+        programarDialog.showModal();
+        programarData.focus();
     }
 
     function updatePeriodLabel() {
@@ -329,35 +362,34 @@
         dayBody.querySelectorAll('[data-programar]').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const numeroOc = btn.dataset.programar;
-                btn.disabled = true;
-                try {
-                    const resp = await fetch('/api/logistica/recebimento/calendario/programar-coleta', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ numero_oc: numeroOc }),
-                    });
-                    const dataJson = await resp.json().catch(() => ({}));
-                    if (!resp.ok || !dataJson.sucesso) {
-                        throw new Error(dataJson.error || 'Falha ao programar coleta.');
-                    }
-                    if (window.EUI && window.EUI.toast) {
-                        window.EUI.toast(dataJson.mensagem || 'Coleta programada com sucesso.', 'success');
-                    }
-                    if (dataJson.central_url) {
-                        window.location.href = dataJson.central_url;
-                        return;
-                    }
-                    await load();
-                } catch (err) {
-                    if (window.EUI && window.EUI.toast) {
-                        window.EUI.toast(String(err.message || err), 'error');
-                    }
-                } finally {
-                    btn.disabled = false;
-                }
+                abrirDialogoProgramarColeta(numeroOc);
             });
         });
     }
+
+    document.getElementById('programar-coleta-cancelar').addEventListener('click', () => programarDialog.close());
+    programarForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const confirmar = document.getElementById('programar-coleta-confirmar');
+        confirmar.disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/recebimento/calendario/programar-coleta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ numero_oc: numeroOcProgramar, data_liberacao: programarData.value, observacao: programarObservacao.value.trim() }),
+            });
+            const dataJson = await resp.json().catch(() => ({}));
+            if (!resp.ok || !dataJson.sucesso) throw new Error(dataJson.error || 'Falha ao programar coleta.');
+            programarDialog.close();
+            if (window.EUI && window.EUI.toast) window.EUI.toast(dataJson.mensagem || 'Coleta programada com sucesso.', 'success');
+            if (dataJson.central_url) { window.location.href = dataJson.central_url; return; }
+            await load();
+        } catch (err) {
+            if (window.EUI && window.EUI.toast) window.EUI.toast(String(err.message || err), 'error');
+        } finally {
+            confirmar.disabled = false;
+        }
+    });
 
     async function carregarRiscoEstoqueDia(rows) {
         const ocs = [...new Set((rows || [])

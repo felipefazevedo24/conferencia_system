@@ -56,6 +56,7 @@ from ..services.agendamento_service import (
     status_label_agendamento,
 )
 from ..services.agendamento_ordem_coleta_pdf import gerar_ordem_coleta_pdf
+from ..services.solicitacao_coleta_service import criar_ou_atualizar_detalhes_coleta, obter_detalhes_coleta
 
 try:
     from openpyxl import load_workbook
@@ -1021,6 +1022,11 @@ def recebimento_calendario_programar_coleta():
         "observacoes": str(consulta.get("warning") or "").strip(),
     }
 
+    try:
+        data_liberacao = _parse_datetime(payload.get("data_liberacao"), "a data de liberação")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    observacao_coleta = str(payload.get("observacao") or "").strip()
     usuario = session.get("username", "sistema")
     agora = datetime.now()
     fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
@@ -1037,7 +1043,7 @@ def recebimento_calendario_programar_coleta():
         documento_numero=numero_oc,
         numero_oc=numero_oc,
         origem_documento="ORDEM_DE_COMPRA",
-        observacoes_solicitante="Coleta gerada automaticamente pelo calendário de recebimento.",
+        observacoes_solicitante=observacao_coleta or "Coleta gerada automaticamente pelo calendário de recebimento.",
         observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
         payload_origem=_json_text(
             {
@@ -1079,7 +1085,17 @@ def recebimento_calendario_programar_coleta():
         detalhe=f"Solicitação criada a partir da OC {numero_oc} via calendário de recebimento.",
         payload={"numero_oc": numero_oc, "fonte": fonte},
     )
-    db.session.commit()
+    if data_liberacao or observacao_coleta:
+        detalhes_salvos = criar_ou_atualizar_detalhes_coleta(
+            solicitacao_id=sol.id,
+            data_liberacao=data_liberacao,
+            observacao=observacao_coleta,
+            usuario=usuario,
+        )
+        if not detalhes_salvos:
+            return jsonify({"error": "A coleta foi criada, mas não foi possível salvar os detalhes de liberação."}), 500
+    else:
+        db.session.commit()
     return jsonify(
         {
             "sucesso": True,
@@ -1330,6 +1346,7 @@ def _serializar_solicitacao(
             payload_origem = {}
     anexo = _extrair_anexo_payload(payload_origem)
     tipo = str(registro.tipo or "").strip()
+    detalhes_coleta = obter_detalhes_coleta(registro.id) if tipo == "COLETA" else None
     responsavel_origem = str(registro.solicitante or "").strip()
     responsavel_origem_label = "Coleta inserida por" if tipo == "COLETA" else "Solicitacao inserida por"
     if tipo == "ENTREGA":
@@ -1390,6 +1407,16 @@ def _serializar_solicitacao(
         "endereco": endereco,
         "endereco_formatado": formatar_endereco_logistico(endereco),
         "observacoes_solicitante": str(registro.observacoes_solicitante or "").strip(),
+        "observacao_coleta": str((detalhes_coleta or {}).get("observacao") or "").strip(),
+        "data_liberacao": (
+            detalhes_coleta["data_liberacao"].isoformat(timespec="minutes")
+            if detalhes_coleta and detalhes_coleta.get("data_liberacao") else ""
+        ),
+        "data_liberacao_label": (
+            detalhes_coleta["data_liberacao"].strftime("%d/%m/%Y %H:%M")
+            if detalhes_coleta and detalhes_coleta.get("data_liberacao") else ""
+        ),
+        "status_liberacao": str((detalhes_coleta or {}).get("status_liberacao") or "").strip(),
         "observacoes_logistica": str(registro.observacoes_logistica or "").strip(),
         "motivo_cancelamento": str(registro.motivo_cancelamento or "").strip(),
         "data_desejada": registro.data_desejada.isoformat(timespec="minutes") if registro.data_desejada else "",
@@ -1724,10 +1751,18 @@ def central_viagens_criar_coleta_por_oc():
     form = request.form if request.form else {}
     numero_oc = str((form.get("numero_oc") if form else None) or payload.get("numero_oc") or "").strip()
     prioridade = str((form.get("prioridade") if form else None) or payload.get("prioridade") or "Media").strip()
+    data_liberacao_raw = str((form.get("data_liberacao") if form else None) or payload.get("data_liberacao") or "").strip()
+    observacao_coleta = str((form.get("observacao") if form else None) or payload.get("observacao") or "").strip()
     if prioridade not in PRIORIDADES_SOLICITACAO:
         prioridade = "Media"
     if not numero_oc:
         return jsonify({"error": "Informe o número da OC."}), 400
+    try:
+        data_liberacao = _parse_datetime(data_liberacao_raw, "a data de liberação")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not data_liberacao:
+        return jsonify({"error": "Informe a data/hora em que a coleta estará liberada."}), 400
 
     existente = (
         _query_solicitacoes_visiveis()
@@ -1780,7 +1815,7 @@ def central_viagens_criar_coleta_por_oc():
         documento_numero=numero_oc,
         numero_oc=numero_oc,
         origem_documento="ORDEM_DE_COMPRA",
-        observacoes_solicitante="Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
+        observacoes_solicitante=observacao_coleta or "Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
         observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
         payload_origem=_json_text(
             {
@@ -1827,7 +1862,14 @@ def central_viagens_criar_coleta_por_oc():
         detalhe=f"Solicitação criada a partir da OC {numero_oc} via bridge.",
         payload={"numero_oc": numero_oc, "fonte": fonte},
     )
-    db.session.commit()
+    detalhes_salvos = criar_ou_atualizar_detalhes_coleta(
+        solicitacao_id=sol.id,
+        data_liberacao=data_liberacao,
+        observacao=observacao_coleta,
+        usuario=usuario,
+    )
+    if not detalhes_salvos:
+        return jsonify({"error": "A coleta foi criada, mas não foi possível salvar a data de liberação e a observação."}), 500
 
     veiculo = AgendamentoVeiculo.query.get(sol.veiculo_id) if sol.veiculo_id else None
     return jsonify(
@@ -2674,6 +2716,10 @@ def criar_solicitacao_agendamento():
         return jsonify({"error": str(exc)}), 400
 
     observacoes_solicitante = str(payload.get("observacoes_solicitante") or "").strip()
+    try:
+        data_liberacao = _parse_datetime(payload.get("data_liberacao"), "a data de liberação")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     if tipo == "AVULSA":
         extras_avulsa = []
         for label, value in [
@@ -2791,7 +2837,18 @@ def criar_solicitacao_agendamento():
         detalhe=f"Solicitação criada via {row.documento_tipo} {row.documento_numero}.",
         payload=payload,
     )
-    db.session.commit()
+    observacao_coleta = str(payload.get("observacao_coleta") or observacoes_solicitante).strip()
+    if tipo == "COLETA" and (data_liberacao or observacao_coleta):
+        detalhes_salvos = criar_ou_atualizar_detalhes_coleta(
+            solicitacao_id=row.id,
+            data_liberacao=data_liberacao,
+            observacao=observacao_coleta,
+            usuario=usuario,
+        )
+        if not detalhes_salvos:
+            return jsonify({"error": "A solicitação foi criada, mas não foi possível salvar os detalhes de coleta."}), 500
+    else:
+        db.session.commit()
     _notificar_solicitante_agendamento(row, "Solicitacao de transporte criada", "Sua solicitacao foi enviada para a logistica.")
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row)}), 201
 

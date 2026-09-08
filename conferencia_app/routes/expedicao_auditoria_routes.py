@@ -9,7 +9,10 @@ faturamento. Funciona mesmo que a ordem tenha sumido da API de origem, pois
 consulta apenas o banco local (a sincronizacao so cria/atualiza, nunca
 apaga ordens ja existentes)."""
 
+from datetime import datetime, timedelta
+
 from flask import Blueprint, jsonify, render_template, request, session
+from sqlalchemy import String, cast, func, literal, or_, select, union_all
 
 from ..auth import roles_required
 from ..extensions import db
@@ -95,6 +98,74 @@ def _resultado_log_orfao(log: ExpedicaoConferenciaLog) -> dict:
 @roles_required("Admin")
 def auditoria_page():
     return render_template("expedicao_auditoria.html", user=session["username"])
+
+
+@expedicao_auditoria_bp.route("/api/expedicao/auditoria/excluidas")
+@roles_required("Admin")
+def listar_excluidas():
+    """Lista FAT e ST excluidas sem exigir numero de ordem, com paginacao global."""
+    origem = (request.args.get("origem") or "").strip().lower()
+    if origem not in ("", "fat", "st"):
+        return jsonify({"error": "Origem inválida."}), 400
+    try:
+        pagina = max(1, int(request.args.get("pagina", 1)))
+        por_pagina = min(100, max(1, int(request.args.get("por_pagina", 20))))
+        inicio = datetime.strptime(request.args["inicio"], "%Y-%m-%d") if request.args.get("inicio") else None
+        fim = datetime.strptime(request.args["fim"], "%Y-%m-%d") if request.args.get("fim") else None
+        if inicio and fim and inicio > fim:
+            raise ValueError
+        fim_exclusivo = fim + timedelta(days=1) if fim else None
+    except (ValueError, OverflowError):
+        return jsonify({"error": "Informe um período e uma paginação válidos."}), 400
+
+    consultas = []
+    for model, tipo, codigo, parte in (
+        (ExpedicaoOrdemFat, "fat", ExpedicaoOrdemFat.cod_ordem_fat, ExpedicaoOrdemFat.cliente),
+        (ExpedicaoOrdemST, "st", ExpedicaoOrdemST.cod_ordem_compra, ExpedicaoOrdemST.fornecedor),
+    ):
+        consultas.append(select(
+            literal(tipo).label("origem"), model.id.label("id"), model.codigo_interno,
+            cast(codigo, String).label("cod_ordem"), parte.label("cliente_fornecedor"),
+            model.status, model.numero_nf, model.excluido_at, model.excluido_by, model.excluido_motivo,
+        ).where(model.excluido.is_(True)))
+    ordens = union_all(*consultas).subquery()
+    filtros = []
+    if origem:
+        filtros.append(ordens.c.origem == origem)
+    if inicio:
+        filtros.append(ordens.c.excluido_at >= inicio)
+    if fim_exclusivo:
+        filtros.append(ordens.c.excluido_at < fim_exclusivo)
+    q = (request.args.get("q") or "").strip()
+    if q:
+        termo = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        filtros.append(or_(*(ordens.c[campo].ilike(termo, escape="\\") for campo in (
+            "codigo_interno", "cod_ordem", "cliente_fornecedor", "numero_nf", "excluido_by", "excluido_motivo",
+        ))))
+    contagens = dict(db.session.execute(select(ordens.c.origem, func.count()).where(*filtros).group_by(ordens.c.origem)).all())
+    total = sum(contagens.values())
+    paginas = max(1, (total + por_pagina - 1) // por_pagina)
+    pagina = min(pagina, paginas)
+    registros = db.session.execute(select(ordens).where(*filtros).order_by(
+        ordens.c.excluido_at.desc().nullslast(), ordens.c.origem, ordens.c.id.desc(),
+    ).offset((pagina - 1) * por_pagina).limit(por_pagina)).mappings().all()
+    resultados = []
+    for registro in registros:
+        item = dict(registro)
+        item["excluido_at"] = _iso(item["excluido_at"])
+        resultados.append(item)
+    return jsonify(resultados=resultados, total=total, pagina=pagina, paginas=paginas,
+                   por_pagina=por_pagina, totais={"fat": contagens.get("fat", 0), "st": contagens.get("st", 0)})
+
+
+@expedicao_auditoria_bp.route("/api/expedicao/auditoria/ordem/<origem>/<int:ordem_id>")
+@roles_required("Admin")
+def detalhar_ordem(origem, ordem_id):
+    model = {"fat": ExpedicaoOrdemFat, "st": ExpedicaoOrdemST}.get(origem)
+    ordem = db.session.get(model, ordem_id) if model else None
+    if not ordem:
+        return jsonify({"error": "Ordem não encontrada."}), 404
+    return jsonify(_resultado_fat(ordem) if origem == "fat" else _resultado_st(ordem))
 
 
 @expedicao_auditoria_bp.route("/api/expedicao/auditoria/buscar", methods=["GET"])
