@@ -282,7 +282,7 @@ def _nfs_da_string(numero_nf) -> list:
     return [n.strip() for n in bruto.split(",") if n.strip()]
 
 
-def marcar_em_romaneio_por_nf(numero_nf) -> int:
+def marcar_em_romaneio_por_nf(numero_nf, *, commit=True) -> int:
     """Move a(s) ordem(ns) de Faturado para 'Em Romaneio' quando a NF entra em
     um romaneio de expedicao. Fluxo progressivo e exclusivo: a ordem sai da
     etapa "Faturado" assim que passa a compor um romaneio."""
@@ -298,7 +298,7 @@ def marcar_em_romaneio_por_nf(numero_nf) -> int:
             ordem.status = STATUS_EM_ROMANEIO
             ordem.updated_at = agora
             afetadas += 1
-    if afetadas:
+    if afetadas and commit:
         db.session.commit()
     return afetadas
 
