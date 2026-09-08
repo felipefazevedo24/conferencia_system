@@ -1835,9 +1835,12 @@ class LogisticaConsumoChapaNesting(db.Model):
     ChapaNesting) - o operador faz upload manual do arquivo, ja que o Sync
     roda na nuvem e nao enxerga a rede local onde a maquina salva o export.
 
-    Workflow simples: Nesting (importado, chapas ja consumidas fisicamente
-    pelo corte) -> Concluido (confirmacao manual depois, ex.: baixa de
-    estoque conferida)."""
+    Workflow: Nesting (importado, chapas ja consumidas fisicamente pelo
+    corte) -> Concluido (confirmacao manual depois, ex.: baixa de estoque
+    conferida). Ramo lateral "Erro": o gestor pode marcar uma divergencia
+    (motivo obrigatorio) a qualquer momento em que o Nesting ainda nao
+    esteja Concluido - TRAVA o "Concluir" ate' resolver (voltar pra
+    Nesting)."""
 
     __tablename__ = "logistica_consumo_chapa_nesting"
 
@@ -1868,7 +1871,7 @@ class LogisticaConsumoChapaNesting(db.Model):
     retalho_pct = db.Column(db.Float)
     sucata_pct = db.Column(db.Float)
 
-    status = db.Column(db.String(20), nullable=False, default="Nesting", index=True)  # Nesting | Concluido
+    status = db.Column(db.String(20), nullable=False, default="Nesting", index=True)  # Nesting | Erro | Concluido
 
     arquivo_origem = db.Column(db.String(260))
 
@@ -1876,6 +1879,13 @@ class LogisticaConsumoChapaNesting(db.Model):
     criado_por = db.Column(db.String(100))
     concluido_em = db.Column(db.DateTime)
     concluido_por = db.Column(db.String(100))
+
+    # Ramo lateral "Erro" (divergencia) - trava o Concluir ate' ser resolvido.
+    motivo_erro = db.Column(db.Text)
+    erro_marcado_em = db.Column(db.DateTime)
+    erro_marcado_por = db.Column(db.String(100))
+    erro_resolvido_em = db.Column(db.DateTime)
+    erro_resolvido_por = db.Column(db.String(100))
 
     pecas = db.relationship(
         "LogisticaConsumoChapaPeca",

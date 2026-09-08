@@ -6235,3 +6235,91 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     # Nesting inexistente -> 404 em todas as acoes.
     assert client.get("/api/logistica/consumo-chapa/999999").status_code == 404
     assert client.post("/api/logistica/consumo-chapa/999999/concluir", json={}).status_code == 404
+
+
+def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path):
+    """Ramo lateral "Erro" (divergencia) do Consumo de Chapa: gestor marca
+    uma divergencia com motivo obrigatorio -> Nesting vai pro status Erro e
+    NAO pode ser Concluido ate' a divergencia ser resolvida (volta pra
+    Nesting)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    nesting_id = resp.get_json()["nestings"][0]["id"]
+
+    # Nesting inexistente -> 404.
+    assert client.post("/api/logistica/consumo-chapa/999999/marcar-erro", json={"motivo": "x"}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/999999/resolver-erro", json={}).status_code == 404
+
+    # Motivo vazio/ausente -> 400, nao marca erro.
+    resp_sem_motivo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={})
+    assert resp_sem_motivo.status_code == 400
+    resp_motivo_espacos = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "   "})
+    assert resp_motivo_espacos.status_code == 400
+
+    # Resolver sem estar em erro -> 400.
+    resp_resolver_sem_erro = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver_sem_erro.status_code == 400
+
+    # Marca a divergencia com motivo valido.
+    resp_marcar = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro",
+        json={"motivo": "Peso divergente do que veio fisicamente na chapa."},
+    )
+    assert resp_marcar.status_code == 200
+    nesting_erro = resp_marcar.get_json()["nesting"]
+    assert nesting_erro["status"] == "Erro"
+    assert nesting_erro["motivo_erro"] == "Peso divergente do que veio fisicamente na chapa."
+    assert nesting_erro["erro_marcado_por"] == "ADMIN"
+    assert nesting_erro["erro_marcado_em"] is not None
+    assert nesting_erro["erro_resolvido_em"] is None
+
+    # Marcar de novo enquanto ja esta em erro -> 400.
+    resp_marcar_de_novo = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "outro motivo"}
+    )
+    assert resp_marcar_de_novo.status_code == 400
+
+    # Concluir TRAVADO enquanto estiver em Erro.
+    resp_concluir_bloqueado = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_bloqueado.status_code == 400
+    assert "divergência" in resp_concluir_bloqueado.get_json()["error"].lower()
+
+    # Aparece filtrando por status=Erro.
+    resp_lista_erro = client.get("/api/logistica/consumo-chapa?status=Erro")
+    assert len(resp_lista_erro.get_json()["nestings"]) == 1
+    resp_lista_nesting = client.get("/api/logistica/consumo-chapa?status=Nesting")
+    assert resp_lista_nesting.get_json()["nestings"] == []
+
+    # Resolve a divergencia -> volta pra 'Nesting', motivo/marcacao ficam
+    # gravados como historico, ganha timestamp/usuario de resolucao.
+    resp_resolver = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver.status_code == 200
+    nesting_resolvido = resp_resolver.get_json()["nesting"]
+    assert nesting_resolvido["status"] == "Nesting"
+    assert nesting_resolvido["motivo_erro"] == "Peso divergente do que veio fisicamente na chapa."
+    assert nesting_resolvido["erro_resolvido_por"] == "ADMIN"
+    assert nesting_resolvido["erro_resolvido_em"] is not None
+
+    # Resolver de novo (nao esta mais em erro) -> 400.
+    resp_resolver_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver_de_novo.status_code == 400
+
+    # Agora Concluir funciona normalmente.
+    resp_concluir = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir.status_code == 200
+    assert resp_concluir.get_json()["nesting"]["status"] == "Concluido"
+
+    # Marcar erro num Nesting ja Concluido -> 400 (precisa estornar antes).
+    resp_marcar_apos_concluido = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "tarde demais"}
+    )
+    assert resp_marcar_apos_concluido.status_code == 400

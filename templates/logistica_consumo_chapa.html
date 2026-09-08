@@ -49,6 +49,12 @@
     .cc-btn-baixa:hover { background: var(--eui-primary, #4f46e5); color: #fff; }
     .cc-btn-estornar-baixa { border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .cc-btn-estornar-baixa:hover { background: var(--eui-danger, #dc2626); color: #fff; }
+
+    /* Ramo lateral "Erro" (divergencia) */
+    .cc-erro-banner { display: flex; gap: 10px; align-items: flex-start; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; }
+    .cc-erro-banner i { margin-top: 2px; }
+    .cc-erro-banner b { display: block; margin-bottom: 2px; }
+    .cc-erro-banner small { display: block; color: #b91c1c; margin-top: 4px; }
 </style>
 {% endblock %}
 
@@ -78,6 +84,7 @@
     <div class="eui-stats" id="cc-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="cc-m-todos">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Nesting"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scissors"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Nesting</span><span class="eui-stat__value" id="cc-m-nesting">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Erro"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Erro</span><span class="eui-stat__value" id="cc-m-erro">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="cc-m-concluido">0</span></div></div>
     </div>
 
@@ -127,6 +134,8 @@
     <div class="cc-modal">
         <h3><i class="fas fa-layer-group"></i> Nesting <span id="cc-detalhe-programa"></span></h3>
         <p class="cc-modal-sub" id="cc-detalhe-sub"></p>
+
+        <div id="cc-detalhe-erro-banner"></div>
 
         <div class="cc-kpis" id="cc-detalhe-kpis"></div>
 
@@ -209,15 +218,16 @@
     }
 
     function renderMetricas(lista) {
-        const cont = { Nesting: 0, Concluido: 0 };
+        const cont = { Nesting: 0, Erro: 0, Concluido: 0 };
         lista.forEach((n) => { cont[n.status] = (cont[n.status] || 0) + 1; });
         $("cc-m-todos").textContent = lista.length;
         $("cc-m-nesting").textContent = cont.Nesting;
+        $("cc-m-erro").textContent = cont.Erro;
         $("cc-m-concluido").textContent = cont.Concluido;
     }
 
-    const CORES_STATUS = { Nesting: "#b45309", Concluido: "#15803d" };
-    const LABEL_STATUS = { Nesting: "Nesting", Concluido: "Concluído" };
+    const CORES_STATUS = { Nesting: "#b45309", Erro: "#dc2626", Concluido: "#15803d" };
+    const LABEL_STATUS = { Nesting: "Nesting", Erro: "Erro", Concluido: "Concluído" };
     function badgeStatus(n) {
         const cor = CORES_STATUS[n.status] || "#475569";
         return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[n.status] || n.status)}</span>`;
@@ -256,6 +266,9 @@
         let itens = it("ver", "fa-eye", "Ver detalhes (peças/OS)");
         if (n.status === "Nesting") {
             itens += it("concluir", "fa-circle-check", "Concluir");
+            itens += it("marcar-erro", "fa-triangle-exclamation", "Marcar Divergência", true);
+        } else if (n.status === "Erro") {
+            itens += it("resolver-erro", "fa-rotate-left", "Resolver Divergência");
         } else if (n.status === "Concluido") {
             itens += it("estornar", "fa-rotate-left", "Estornar p/ Nesting", true);
         }
@@ -305,6 +318,14 @@
             } else if (act === "estornar") {
                 if (!confirm("Estornar esse Nesting de volta pra 'Nesting'?")) return;
                 await api(`/api/logistica/consumo-chapa/${id}/estornar`, { method: "POST" });
+            } else if (act === "marcar-erro") {
+                const motivo = prompt("Descreva o motivo da divergência (obrigatório):");
+                if (motivo === null) return;
+                if (!motivo.trim()) { toast("Informe o motivo da divergência.", "error"); return; }
+                await api(`/api/logistica/consumo-chapa/${id}/marcar-erro`, { method: "POST", body: JSON.stringify({ motivo }) });
+            } else if (act === "resolver-erro") {
+                if (!confirm("Resolver a divergência e voltar esse Nesting pra 'Nesting'?")) return;
+                await api(`/api/logistica/consumo-chapa/${id}/resolver-erro`, { method: "POST" });
             } else {
                 return;
             }
@@ -327,6 +348,31 @@
                 `${n.material || "—"} · Espessura ${n.espessura_mm != null ? fmtNum(n.espessura_mm) + " mm" : "—"}` +
                 (n.pagina_total > 1 ? ` · página ${n.pagina_atual} de ${n.pagina_total}` : "") +
                 (n.nome_tarefa ? ` · Tarefa ${n.nome_tarefa}` : "");
+
+            if (n.status === "Erro") {
+                $("cc-detalhe-erro-banner").innerHTML = `
+                    <div class="cc-erro-banner">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <div>
+                            <b>Divergência registrada</b>
+                            ${escapeHtml(n.motivo_erro || "")}
+                            <small>Marcado por ${escapeHtml(n.erro_marcado_por || "—")} em ${escapeHtml(n.erro_marcado_em || "—")}</small>
+                        </div>
+                    </div>`;
+            } else if (n.motivo_erro) {
+                $("cc-detalhe-erro-banner").innerHTML = `
+                    <div class="cc-erro-banner" style="background:#f8fafc; border-color:#e2e8f0; color:#475569;">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <div>
+                            <b>Divergência já resolvida</b>
+                            ${escapeHtml(n.motivo_erro || "")}
+                            <small>Marcado por ${escapeHtml(n.erro_marcado_por || "—")} em ${escapeHtml(n.erro_marcado_em || "—")} · Resolvido por ${escapeHtml(n.erro_resolvido_por || "—")} em ${escapeHtml(n.erro_resolvido_em || "—")}</small>
+                        </div>
+                    </div>`;
+            } else {
+                $("cc-detalhe-erro-banner").innerHTML = "";
+            }
+
             $("cc-detalhe-kpis").innerHTML = [
                 ["Qtd Chapas", n.qtde_chapas != null ? n.qtde_chapas : "—"],
                 ["Peso Sucata", fmtKg(n.peso_sucata_kg)],

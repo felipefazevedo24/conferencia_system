@@ -87,6 +87,11 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "concluido_em": n.concluido_em.strftime("%d/%m/%Y %H:%M") if n.concluido_em else None,
         "concluido_por": n.concluido_por,
         "qtd_pecas": len(n.pecas),
+        "motivo_erro": n.motivo_erro,
+        "erro_marcado_em": n.erro_marcado_em.strftime("%d/%m/%Y %H:%M") if n.erro_marcado_em else None,
+        "erro_marcado_por": n.erro_marcado_por,
+        "erro_resolvido_em": n.erro_resolvido_em.strftime("%d/%m/%Y %H:%M") if n.erro_resolvido_em else None,
+        "erro_resolvido_por": n.erro_resolvido_por,
     }
     if com_pecas:
         pecas = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
@@ -188,6 +193,33 @@ def api_estornar_consumo_chapa(nesting_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Nesting estornado para 'Nesting'.", "nesting": _fmt_nesting(nesting)})
+
+
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/<int:nesting_id>/marcar-erro", methods=["POST"])
+@permission_required(PERMISSION)
+def api_marcar_erro_consumo_chapa(nesting_id):
+    nesting = db.session.get(LogisticaConsumoChapaNesting, nesting_id)
+    if not nesting:
+        return jsonify({"error": "Nesting não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        nesting = svc.marcar_erro_nesting(nesting, payload.get("motivo"), session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Divergência registrada.", "nesting": _fmt_nesting(nesting)})
+
+
+@logistica_consumo_chapa_bp.route("/api/logistica/consumo-chapa/<int:nesting_id>/resolver-erro", methods=["POST"])
+@permission_required(PERMISSION)
+def api_resolver_erro_consumo_chapa(nesting_id):
+    nesting = db.session.get(LogisticaConsumoChapaNesting, nesting_id)
+    if not nesting:
+        return jsonify({"error": "Nesting não encontrado."}), 404
+    try:
+        nesting = svc.resolver_erro_nesting(nesting, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Divergência resolvida - Nesting voltou pra 'Nesting'.", "nesting": _fmt_nesting(nesting)})
 
 
 # ── Observacao e confirmacao de baixa POR PECA (linha) - independente da

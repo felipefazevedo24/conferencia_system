@@ -1,9 +1,11 @@
 """Servico do modulo de Consumo de Chapa (Nesting) da Logistica.
 
-Workflow simples: Nesting (importado do relatorio da maquina de corte,
-chapas ja consumidas fisicamente) -> Concluido (confirmacao manual
-depois, ex.: baixa de estoque conferida). Ver logistica_consumo_chapa_
-parser.py pra extracao dos dados do HTML."""
+Workflow: Nesting (importado do relatorio da maquina de corte, chapas ja
+consumidas fisicamente) -> Concluido (confirmacao manual depois, ex.:
+baixa de estoque conferida). Ramo lateral "Erro": o gestor pode marcar
+uma divergencia (motivo obrigatorio) enquanto o Nesting ainda nao foi
+Concluido - TRAVA o "Concluir" ate' ser resolvida (volta pra Nesting).
+Ver logistica_consumo_chapa_parser.py pra extracao dos dados do HTML."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,7 +14,7 @@ from ..extensions import db
 from ..models import LogisticaConsumoChapaNesting, LogisticaConsumoChapaPeca
 from .logistica_consumo_chapa_parser import parse_relatorio_nesting_html
 
-STATUS_SLUGS = {"Nesting": "nesting", "Concluido": "concluido"}
+STATUS_SLUGS = {"Nesting": "nesting", "Erro": "erro", "Concluido": "concluido"}
 
 
 def status_slug(status: str) -> str:
@@ -104,6 +106,8 @@ def listar_nestings(status: str | None = None, busca: str = "") -> list[Logistic
 
 
 def concluir_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> LogisticaConsumoChapaNesting:
+    if nesting.status == "Erro":
+        raise ValueError("Esse Nesting está marcado como erro - resolva a divergência antes de concluir.")
     if nesting.status != "Nesting":
         raise ValueError("Esse Nesting já está concluído.")
     nesting.status = "Concluido"
@@ -119,6 +123,35 @@ def estornar_nesting(nesting: LogisticaConsumoChapaNesting) -> LogisticaConsumoC
     nesting.status = "Nesting"
     nesting.concluido_em = None
     nesting.concluido_por = None
+    db.session.commit()
+    return nesting
+
+
+# ── Ramo lateral "Erro" (divergencia) - trava o Concluir ate' ser resolvido.
+def marcar_erro_nesting(
+    nesting: LogisticaConsumoChapaNesting, motivo: str, usuario: str
+) -> LogisticaConsumoChapaNesting:
+    if nesting.status == "Concluido":
+        raise ValueError("Esse Nesting já está concluído - estorne antes de marcar uma divergência.")
+    if nesting.status == "Erro":
+        raise ValueError("Esse Nesting já está marcado como erro.")
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ValueError("Informe o motivo da divergência.")
+    nesting.status = "Erro"
+    nesting.motivo_erro = motivo[:1000]
+    nesting.erro_marcado_em = datetime.now()
+    nesting.erro_marcado_por = usuario
+    db.session.commit()
+    return nesting
+
+
+def resolver_erro_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> LogisticaConsumoChapaNesting:
+    if nesting.status != "Erro":
+        raise ValueError("Esse Nesting não está marcado como erro.")
+    nesting.status = "Nesting"
+    nesting.erro_resolvido_em = datetime.now()
+    nesting.erro_resolvido_por = usuario
     db.session.commit()
     return nesting
 
