@@ -34,6 +34,7 @@ PERMISSION_CATALOG = {
     "PAGE_FINANCEIRO_RELATORIO_CUSTOS": "Controladoria > Contabilidade > Relatorio de custos",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_CONF_CEGA": "Expedicao > Conferencia de Expedicao (cega)",
+    "MANAGE_EXPEDICAO_ROMANEIO": "Expedicao > Gerenciar romaneios (editar, estornar e excluir)",
     "PAGE_EXPEDICAO_ROMANEIO": "Expedicao > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
     "PAGE_ADMIN_ATUALIZACOES": "Administração > Avisos de atualizações",

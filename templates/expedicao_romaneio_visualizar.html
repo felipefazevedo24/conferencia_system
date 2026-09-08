@@ -241,7 +241,7 @@
         </div>
 
         <!-- REMETENTE (+ TRANSPORTADORA no FOB) -->
-        <div class="rom-parties-grid{% if romaneio.tipo_frete == 'CIF' %} rom-parties-single{% endif %}">
+        <div class="rom-parties-grid{% if frete_familia == 'CIF' %} rom-parties-single{% endif %}">
             <div class="rom-party-card">
                 <div class="rom-party-title">Remetente</div>
                 <div class="rom-party-name">{{ remetente.razao_social }}</div>
@@ -252,12 +252,12 @@
                 {% if remetente.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ remetente.telefone }}</div>{% endif %}
                 <div class="rom-party-line"><strong>Logística:</strong> {{ remetente.email_logistica }}</div>
                 <div class="rom-party-line"><strong>Fiscal:</strong> {{ remetente.email_fiscal }}</div>
-                {% if romaneio.tipo_frete == 'CIF' %}
+                {% if frete_familia == 'CIF' %}
                 <div class="rom-party-line"><strong>Orçamento / OC:</strong> {{ ref_display }}</div>
-                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete }}</div>
+                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ tipo_frete_label }}</div>
                 {% endif %}
             </div>
-            {% if romaneio.tipo_frete != 'CIF' %}
+            {% if frete_familia != 'CIF' %}
             <div class="rom-party-card">
                 <div class="rom-party-title">Transportadora</div>
                 <div class="rom-party-name">{{ transportadora.razao_social }}</div>
@@ -267,7 +267,7 @@
                 {% if transportadora.municipio %}<div class="rom-party-line">{{ transportadora.municipio }}{% if transportadora.uf %} - {{ transportadora.uf }}{% endif %}{% if transportadora.cep %} &middot; CEP {{ transportadora.cep }}{% endif %}</div>{% endif %}
                 {% if transportadora.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ transportadora.telefone }}</div>{% endif %}
                 <div class="rom-party-line"><strong>Orçamento / OC:</strong> {{ ref_display }}</div>
-                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete or 'FOB' }}</div>
+                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ tipo_frete_label }}</div>
             </div>
             {% endif %}
         </div>

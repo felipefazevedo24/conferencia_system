@@ -57,6 +57,7 @@
     .rom-badge--pronto { background: #dbeafe; color: #1e40af; }
     .rom-badge--fob { background: #e0e7ff; color: #4338ca; }
     .rom-badge--cif { background: #fce7f3; color: #a21caf; }
+    .rom-badge--proprio { background: #cffafe; color: #0e7490; }
     .rom-badge--cce { background: #fef3c7; color: #b45309; }
     .rom-badge--expedido { background: #dcfce7; color: #15803d; }
     .rom-badge--pendente { background: #fee2e2; color: #991b1b; }
@@ -271,7 +272,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="rom-container eui-card" id="rom-root" data-is-admin="{{ 'true' if is_admin else 'false' }}">
+<div class="rom-container eui-card" id="rom-root" data-can-manage-romaneio="{{ 'true' if can_manage_romaneio else 'false' }}">
     <!-- TOOLBAR -->
     <div class="rom-toolbar" style="padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
         <div style="display: flex; gap: 8px; flex: 1;">
@@ -339,6 +340,8 @@
                         <select id="rom-tipo-frete" class="rom-input">
                             <option value="FOB">FOB - Frete por conta do destinatário</option>
                             <option value="CIF">CIF - Frete por conta do remetente</option>
+                            <option value="PROP_REM">Transporte próprio do remetente</option>
+                            <option value="PROP_DEST">Transporte próprio do destinatário</option>
                         </select>
                     </div>
                     <div class="rom-form-group">
@@ -418,7 +421,7 @@
 
         <div class="rom-modal__footer">
             <button type="button" class="eui-btn eui-btn--ghost" id="rom-modal-cancel">Cancelar</button>
-            <button type="button" class="eui-btn eui-btn--primary" id="rom-modal-save"><i class="fas fa-check"></i> Salvar Romaneio</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="rom-modal-save"><i class="fas fa-check"></i> Montar Romaneio</button>
         </div>
     </div>
 </div>
@@ -481,7 +484,7 @@
 
 <script>
     const $ = (id) => document.getElementById(id);
-    const IS_ADMIN = $("rom-root")?.dataset.isAdmin === "true";
+    const CAN_MANAGE_ROMANEIO = $("rom-root")?.dataset.canManageRomaneio === "true";
     let romaneioAtual = null;
     let nfsAtual = [];
     let romTransportadoraDados = null;
@@ -644,6 +647,22 @@
     const expandidos = new Set();
     const nfAddEmAndamento = new Set();
 
+    // Modalidades de frete do romaneio (4): CIF/FOB (contratado) e transporte
+    // próprio do remetente ou do destinatário (modalidades distintas de CIF/FOB).
+    function freteLabel(t) {
+        switch (t) {
+            case "CIF": return "CIF";
+            case "FOB": return "FOB";
+            case "PROP_REM": return "Próprio rem.";
+            case "PROP_DEST": return "Próprio dest.";
+            default: return t || "FOB";
+        }
+    }
+    function freteBadgeClass(t) {
+        if (t === "PROP_REM" || t === "PROP_DEST") return "rom-badge--proprio";
+        return t === "CIF" ? "rom-badge--cif" : "rom-badge--fob";
+    }
+
     function renderTabela(romaneios) {
         romaneiosCacheLista = romaneios;
         const tb = $("rom-tbody");
@@ -660,7 +679,7 @@
         const statusClass = r.status === "Rascunho" ? "rom-badge--rascunho"
                           : r.status === "Pronto" ? "rom-badge--pronto"
                           : "rom-badge--expedido";
-        const freteClass = r.tipo_frete === "CIF" ? "rom-badge--cif" : "rom-badge--fob";
+        const freteClass = freteBadgeClass(r.tipo_frete);
         const aberto = expandidos.has(r.id);
 
         const clientes = (r.clientes && r.clientes.length) ? r.clientes : (r.cliente ? [r.cliente] : []);
@@ -675,7 +694,7 @@
             <td>${clientesHtml}</td>
             <td style="text-align: center;">${r.qtde_nfs}</td>
             <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
-            <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
+            <td><span class="rom-badge ${freteClass}">${escapeHtml(freteLabel(r.tipo_frete))}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
             <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span>${r.tem_pendencia_comprovante ? ' <span class="rom-badge rom-badge--pendente">Sem comprovante</span>' : ""}</td>
             <td style="text-align: right;"><button class="rom-actions-btn" onclick="toggleMenuAcoesRomaneio(event, ${r.id})" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>`;
@@ -693,7 +712,7 @@
         let itens = `<button onclick="fecharMenuAcoesRomaneio(); abrirRomaneio(${r.id})"><i class="fas fa-pen"></i> Editar</button>`;
         if (r.status === "Rascunho") {
             itens += `<button onclick="fecharMenuAcoesRomaneio(); finalizarRomaneio(${r.id})"><i class="fas fa-check"></i> Finalizar</button>`;
-            if (IS_ADMIN) {
+            if (CAN_MANAGE_ROMANEIO) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); excluirRomaneioDireto(${r.id})"><i class="fas fa-trash"></i> Excluir</button>`;
             } else if (!r.exclusao_pendente) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); solicitarExclusaoRomaneio(${r.id})"><i class="fas fa-trash"></i> Solicitar exclusão</button>`;
@@ -701,7 +720,7 @@
         } else if (r.status === "Pronto") {
             itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Foto de carregamento</button>`;
             itens += `<button onclick="fecharMenuAcoesRomaneio(); expedirRomaneio(${r.id})"><i class="fas fa-truck"></i> Expedir</button>`;
-            if (IS_ADMIN) {
+            if (CAN_MANAGE_ROMANEIO) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarFinalizacao(${r.id})" title="Voltar para Rascunho"><i class="fas fa-rotate-left"></i> Estornar finalização</button>`;
             }
         } else if (r.status === "Expedido") {
@@ -714,7 +733,7 @@
                 }
             }
             itens += `<button onclick="fecharMenuAcoesRomaneio(); irParaRegistroExpedicao(${r.id})"><i class="fas fa-clipboard-list"></i> Registro de expedição</button>`;
-            if (IS_ADMIN) {
+            if (CAN_MANAGE_ROMANEIO) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarExpedicao(${r.id})" title="Voltar para Pronto"><i class="fas fa-rotate-left"></i> Estornar expedição</button>`;
             }
         }
@@ -797,11 +816,11 @@
                 <div style="font-size:13px;color:#92400e;">
                     <strong><i class="fas fa-triangle-exclamation"></i> Exclusão solicitada por ${escapeHtml(r.exclusao_pendente.solicitante)}:</strong> ${escapeHtml(r.exclusao_pendente.motivo)}
                 </div>
-                ${IS_ADMIN ? `
+                ${CAN_MANAGE_ROMANEIO ? `
                 <div style="display:flex;gap:8px;">
                     <button type="button" class="eui-btn eui-btn--success eui-btn--sm" onclick="decidirExclusaoRomaneio(${r.exclusao_pendente.id}, 'aprovar')"><i class="fas fa-check"></i> Aprovar</button>
                     <button type="button" class="eui-btn eui-btn--danger eui-btn--sm" onclick="decidirExclusaoRomaneio(${r.exclusao_pendente.id}, 'rejeitar')"><i class="fas fa-xmark"></i> Rejeitar</button>
-                </div>` : `<span style="font-size:12px;color:#92400e;">Aguardando decisão de um Admin.</span>`}
+                </div>` : `<span style="font-size:12px;color:#92400e;">Aguardando decisão de um responsável autorizado.</span>`}
             </div>` : "";
 
         return `
@@ -811,8 +830,10 @@
                     <div class="rom-detail-field">
                         <label>Tipo de Frete</label>
                         <select class="rom-select" id="rom-frete-inline-${r.id}" ${editavel ? "" : "disabled"} onchange="alterarFreteInline(${r.id}, this.value)">
-                            <option value="FOB" ${r.tipo_frete !== "CIF" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
+                            <option value="FOB" ${r.tipo_frete === "FOB" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
                             <option value="CIF" ${r.tipo_frete === "CIF" ? "selected" : ""}>CIF - Frete por conta do remetente</option>
+                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>Transporte próprio do remetente</option>
+                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>Transporte próprio do destinatário</option>
                         </select>
                         ${editavel ? "" : `<small style="color:#9ca3af;">Somente romaneios em Rascunho podem ser alterados.</small>`}
                     </div>
@@ -875,7 +896,7 @@
                 method: "PUT",
                 body: JSON.stringify({ tipo_frete: novoFrete }),
             });
-            toast(`Frete alterado para ${novoFrete}!`);
+            toast(`Frete alterado para ${freteLabel(novoFrete)}!`);
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -941,10 +962,11 @@
         try {
             const r = await api("/api/expedicao/romaneio-fat/" + id);
             romaneioAtual = r;
+            $("rom-modal-save").textContent = "Salvar Romaneio";
             nfsAtual = r.nfs || [];
 
             $("rom-modal-title").textContent = "Editar Romaneio #" + r.numero_romaneio;
-            $("rom-numero").value = r.numero_romaneio;
+            $("rom-numero").value = r.numero_romaneio || "Gerado ao montar";
             $("rom-data").value = r.data_romaneio;
             $("rom-tipo-frete").value = r.tipo_frete || "FOB";
             $("rom-orcamento").value = r.orcamento || "";
@@ -1001,9 +1023,21 @@
         $("rom-volumes-total").textContent = volumesTotal;
     }
 
-    function removerNF(id) {
+    let proximoIdLocal = -1;
+    function adicionarNfLocal(numero, dados = {}) {
+        if (nfsAtual.some(n => n.numero_nf === numero)) return;
+        nfsAtual.push({ ...dados, numero_nf: numero, id: proximoIdLocal-- });
+    }
+
+    window.removerNF = async function(id) {
+        if (romaneioAtual?.id) {
+            try {
+                await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf/${id}`, { method: "DELETE" });
+            } catch (e) { toast(e.message, "error"); return; }
+        }
         nfsAtual = nfsAtual.filter(n => n.id !== id);
         renderNFsList();
+        await atualizarSelectModal();
     }
 
     async function finalizarRomaneio(id) {
@@ -1036,12 +1070,12 @@
         if (divergentes.length) {
             html += `<p style="margin:0 0 10px;font-weight:700;color:#b45309">`
                 + `A modalidade de frete declarada em algumas notas nao confere com o `
-                + `romaneio (<strong>${escapeHtml(info.tipo_frete_romaneio || "")}</strong>):</p>`;
+                + `romaneio (<strong>${escapeHtml(freteLabel(info.tipo_frete_romaneio))}</strong>):</p>`;
             html += `<ul style="margin:0 0 14px;padding-left:18px">`;
             divergentes.forEach((d) => {
                 html += `<li style="margin-bottom:6px">`
                     + `<strong>NF ${escapeHtml(d.numero_nf)}</strong>: `
-                    + `romaneio <strong>${escapeHtml(d.frete_romaneio)}</strong> `
+                    + `romaneio <strong>${escapeHtml(freteLabel(d.frete_romaneio))}</strong> `
                     + `&times; nota <strong>${escapeHtml(d.frete_nf_label)}</strong></li>`;
             });
             html += `</ul>`;
@@ -1163,7 +1197,7 @@
                 method: "POST",
                 body: JSON.stringify({ motivo: motivo.trim() }),
             });
-            toast("Solicitação de exclusão enviada. Aguardando aprovação de um Admin.");
+            toast("Solicitação de exclusão enviada. Aguardando aprovação de um responsável autorizado.");
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -1309,12 +1343,13 @@
     // EVENTOS
     $("rom-btn-novo").addEventListener("click", async () => {
         try {
-            const r = await api("/api/expedicao/romaneio-fat", { method: "POST" });
+            const r = { status: "Rascunho" };
             romaneioAtual = r;
             nfsAtual = [];
             
             $("rom-modal-title").textContent = "Novo Romaneio";
-            $("rom-numero").value = r.numero_romaneio;
+            $("rom-modal-save").textContent = "Montar Romaneio";
+            $("rom-numero").value = r.numero_romaneio || "Gerado ao montar";
             $("rom-data").value = new Date().toISOString().split("T")[0];
             $("rom-tipo-frete").value = "FOB";
             $("rom-tipo-frete").disabled = false;
@@ -1337,10 +1372,17 @@
     });
 
     $("rom-btn-add-nf").addEventListener("click", async () => {
-        if (!romaneioAtual || !romaneioAtual.id) { toast("Romaneio ainda não foi criado.", "error"); return; }
+        if (!romaneioAtual) return;
         const marcados = Array.from($("rom-nfs-disponiveis-lista").querySelectorAll("input[type=checkbox]:checked")).map((el) => el.value);
         if (!marcados.length) { toast("Selecione ao menos uma NF.", "error"); return; }
 
+        if (!romaneioAtual.id) {
+            const disponiveis = await carregarNfsFaturadasDisponiveis();
+            for (const numero of marcados) adicionarNfLocal(numero, disponiveis.find(n => n.numero_nf === numero));
+            renderNFsList();
+            await atualizarSelectModal();
+            return;
+        }
         let sucesso = 0;
         for (const nf of marcados) {
             try {
@@ -1365,8 +1407,15 @@
         const input = $("rom-nf-manual");
         const nf = input.value.trim();
         if (!nf) { toast("Digite o número da NF.", "error"); return; }
-        if (!romaneioAtual || !romaneioAtual.id) { toast("Romaneio ainda não foi criado.", "error"); return; }
+        if (!romaneioAtual) return;
 
+        if (!romaneioAtual.id) {
+            adicionarNfLocal(nf);
+            input.value = "";
+            renderNFsList();
+            await atualizarSelectModal();
+            return;
+        }
         try {
             await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf`, {
                 method: "POST",
@@ -1390,12 +1439,15 @@
     $("rom-modal-save").addEventListener("click", async () => {
         if (!nfsAtual.length) { toast("Adicione ao menos uma NF", "error"); return; }
         
+        const botao = $("rom-modal-save");
+        if (botao.disabled) return;
+        botao.disabled = true;
         try {
-            if (romaneioAtual && romaneioAtual.id) {
-                // Atualizar romaneio existente
-                await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`, {
-                    method: "PUT",
+            if (romaneioAtual) {
+                await api(romaneioAtual.id ? `/api/expedicao/romaneio-fat/${romaneioAtual.id}` : "/api/expedicao/romaneio-fat", {
+                    method: romaneioAtual.id ? "PUT" : "POST",
                     body: JSON.stringify({
+                        ...(!romaneioAtual.id ? { nfs: nfsAtual } : {}),
                         orcamento: $("rom-orcamento").value,
                         cliente: $("rom-cliente").value,
                         tipo_frete: $("rom-tipo-frete").value,
@@ -1413,6 +1465,8 @@
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
+        } finally {
+            botao.disabled = false;
         }
     });
 
