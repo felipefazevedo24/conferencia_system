@@ -1751,10 +1751,18 @@ def central_viagens_criar_coleta_por_oc():
     form = request.form if request.form else {}
     numero_oc = str((form.get("numero_oc") if form else None) or payload.get("numero_oc") or "").strip()
     prioridade = str((form.get("prioridade") if form else None) or payload.get("prioridade") or "Media").strip()
+    data_liberacao_raw = str((form.get("data_liberacao") if form else None) or payload.get("data_liberacao") or "").strip()
+    observacao_coleta = str((form.get("observacao") if form else None) or payload.get("observacao") or "").strip()
     if prioridade not in PRIORIDADES_SOLICITACAO:
         prioridade = "Media"
     if not numero_oc:
         return jsonify({"error": "Informe o número da OC."}), 400
+    try:
+        data_liberacao = _parse_datetime(data_liberacao_raw, "a data de liberação")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not data_liberacao:
+        return jsonify({"error": "Informe a data/hora em que a coleta estará liberada."}), 400
 
     existente = (
         _query_solicitacoes_visiveis()
@@ -1807,7 +1815,7 @@ def central_viagens_criar_coleta_por_oc():
         documento_numero=numero_oc,
         numero_oc=numero_oc,
         origem_documento="ORDEM_DE_COMPRA",
-        observacoes_solicitante="Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
+        observacoes_solicitante=observacao_coleta or "Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
         observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
         payload_origem=_json_text(
             {
@@ -1854,7 +1862,14 @@ def central_viagens_criar_coleta_por_oc():
         detalhe=f"Solicitação criada a partir da OC {numero_oc} via bridge.",
         payload={"numero_oc": numero_oc, "fonte": fonte},
     )
-    db.session.commit()
+    detalhes_salvos = criar_ou_atualizar_detalhes_coleta(
+        solicitacao_id=sol.id,
+        data_liberacao=data_liberacao,
+        observacao=observacao_coleta,
+        usuario=usuario,
+    )
+    if not detalhes_salvos:
+        return jsonify({"error": "A coleta foi criada, mas não foi possível salvar a data de liberação e a observação."}), 500
 
     veiculo = AgendamentoVeiculo.query.get(sol.veiculo_id) if sol.veiculo_id else None
     return jsonify(
