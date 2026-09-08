@@ -14,3 +14,4 @@ google-auth
 google-auth-oauthlib
 reportlab
 brazilfiscalreport
+beautifulsoup4

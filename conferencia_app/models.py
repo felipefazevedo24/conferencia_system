@@ -1827,6 +1827,107 @@ class LogisticaInventarioAnaliseCausa(db.Model):
     )
 
 
+class LogisticaConsumoChapaNesting(db.Model):
+    """Um "Nesting" (Programa de corte) importado do relatorio HTML gerado
+    pela maquina de corte a laser/plasma (FastReport 5.0 - ver
+    logistica_consumo_chapa_parser.py). Cada arquivo .HTML exportado pode
+    ter varios Nestings (uma pagina = um Programa = um LogisticaConsumo
+    ChapaNesting) - o operador faz upload manual do arquivo, ja que o Sync
+    roda na nuvem e nao enxerga a rede local onde a maquina salva o export.
+
+    Workflow: Nesting (importado, chapas ja consumidas fisicamente pelo
+    corte) -> Concluido (confirmacao manual depois, ex.: baixa de estoque
+    conferida). Ramo lateral "Erro": o gestor pode marcar uma divergencia
+    (motivo obrigatorio) a qualquer momento em que o Nesting ainda nao
+    esteja Concluido - TRAVA o "Concluir" ate' resolver (voltar pra
+    Nesting)."""
+
+    __tablename__ = "logistica_consumo_chapa_nesting"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    numero_programa = db.Column(db.String(30), nullable=False, unique=True, index=True)
+    pagina_atual = db.Column(db.Integer)
+    pagina_total = db.Column(db.Integer)
+
+    programador = db.Column(db.String(100))
+    maquina = db.Column(db.String(120))
+    data_corte = db.Column(db.Date)
+    hora_corte = db.Column(db.String(10))
+    tempo_corte = db.Column(db.String(20))
+
+    material = db.Column(db.String(200))         # texto bruto do relatorio, ex.: "ASTM_A36/ 19-01-00549"
+    codigo_material = db.Column(db.String(60), index=True)  # extraido do material (depois da "/")
+    espessura_mm = db.Column(db.Float)
+
+    nome_tarefa = db.Column(db.String(100))
+
+    qtde_chapas = db.Column(db.Integer)  # "x 14" -> quantas chapas fisicas esse Nesting consumiu
+    peso_sucata_kg = db.Column(db.Float)
+    peso_pecas_kg = db.Column(db.Float)
+    peso_retalho_kg = db.Column(db.Float)
+    peso_total_kg = db.Column(db.Float)
+    aproveitamento_pct = db.Column(db.Float)
+    retalho_pct = db.Column(db.Float)
+    sucata_pct = db.Column(db.Float)
+
+    status = db.Column(db.String(20), nullable=False, default="Nesting", index=True)  # Nesting | Erro | Concluido
+
+    arquivo_origem = db.Column(db.String(260))
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_por = db.Column(db.String(100))
+    concluido_em = db.Column(db.DateTime)
+    concluido_por = db.Column(db.String(100))
+
+    # Ramo lateral "Erro" (divergencia) - trava o Concluir ate' ser resolvido.
+    motivo_erro = db.Column(db.Text)
+    erro_marcado_em = db.Column(db.DateTime)
+    erro_marcado_por = db.Column(db.String(100))
+    erro_resolvido_em = db.Column(db.DateTime)
+    erro_resolvido_por = db.Column(db.String(100))
+
+    pecas = db.relationship(
+        "LogisticaConsumoChapaPeca",
+        backref="nesting",
+        cascade="all, delete-orphan",
+        order_by="LogisticaConsumoChapaPeca.id",
+    )
+
+
+class LogisticaConsumoChapaPeca(db.Model):
+    """Uma peca cortada dentro de um Nesting - rastreabilidade (qual OS/
+    cliente consumiu aquela chapa). Varias por Nesting."""
+
+    __tablename__ = "logistica_consumo_chapa_peca"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nesting_id = db.Column(
+        db.Integer, db.ForeignKey("logistica_consumo_chapa_nesting.id"),
+        nullable=False, index=True,
+    )
+
+    peca_numero = db.Column(db.String(20))
+    nome_peca = db.Column(db.String(200))
+    qtd_requerida = db.Column(db.Float)
+    qtd_arranjada = db.Column(db.Float)
+    peso_liquido_kg = db.Column(db.Float)
+    prox_operacao = db.Column(db.String(60))
+    cliente = db.Column(db.String(150))
+    os_orcamento = db.Column(db.String(60))   # texto bruto, ex.: "OS 9776 - 7083"
+    os_numero = db.Column(db.String(20), index=True)  # so o numero da OS, extraido de os_orcamento
+
+    observacao = db.Column(db.Text)
+
+    # Confirmacao de baixa POR PECA/OS - independente da conclusao do
+    # Nesting inteiro (ver LogisticaConsumoChapaNesting.status): o gestor
+    # pode confirmar a baixa de estoque de cada peca conforme vai
+    # conferindo, sem precisar esperar o Nesting inteiro ser concluido.
+    baixado = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    baixado_em = db.Column(db.DateTime)
+    baixado_por = db.Column(db.String(100))
+
+
 class WMSPedidoSeparacao(db.Model):
     """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""
     __tablename__ = "wms_pedido_separacao"

@@ -6042,3 +6042,342 @@ def test_inventario_imagem_justificativa_anexar_baixar_remover(tmp_path):
         content_type="multipart/form-data",
     )
     assert resp_anexar_apos_finance.status_code == 400
+
+
+def test_parser_nesting_extrai_cabecalho_e_todas_as_pecas_de_relatorio_real(tmp_path):
+    """Parser do relatorio de Nesting (FastReport HTML da maquina de corte)
+    - fixture e' um arquivo REAL exportado pela maquina (nao reconstruido a
+    mao), pra pegar qualquer peculiaridade do formato de verdade. Precisa
+    extrair TODAS as linhas de OS/peca do Nesting, nao so a primeira."""
+    from conferencia_app.services.logistica_consumo_chapa_parser import parse_relatorio_nesting_html
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    html = caminho.read_text(encoding="utf-8", errors="replace")
+
+    nestings = parse_relatorio_nesting_html(html)
+    assert len(nestings) == 1
+    nst = nestings[0]
+
+    assert nst["numero_programa"] == "21690"
+    assert nst["pagina_atual"] == 1
+    assert nst["pagina_total"] == 1
+    assert nst["programador"] == "luis.custodio"
+    assert nst["maquina"] == "GloryStar_CypCut_3Kw"
+    assert nst["codigo_material"] == "19-01-00558"
+    assert nst["espessura_mm"] == 6.35
+    assert nst["qtde_chapas"] == 24
+    assert nst["peso_sucata_kg"] == 92.47
+    assert nst["peso_pecas_kg"] == 4140.75
+    assert nst["peso_retalho_kg"] == 1150.32
+    assert nst["peso_total_kg"] == 5383.53
+    assert nst["aproveitamento_pct"] == 97.82
+    assert nst["data_corte"] is not None
+
+    assert len(nst["pecas"]) == 1
+    peca = nst["pecas"][0]
+    assert peca["os_orcamento"] == "OS 9780 - 7083"
+    assert peca["os_numero"] == "9780"
+    assert "COMPONENTE" in peca["nome_peca"]
+    assert peca["qtd_arranjada"] == 6.0
+    assert peca["peso_liquido_kg"] == 28.76
+    assert peca["cliente"] == "WR ENGENHARIA"
+    assert peca["prox_operacao"] == "LASER"
+
+    # Arquivo vazio/sem tabela de Nesting -> lista vazia, sem estourar excecao.
+    assert parse_relatorio_nesting_html("<html><body>sem tabela nenhuma</body></html>") == []
+
+
+def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_path):
+    """Modulo de Consumo de Chapa: upload manual do relatorio de Nesting
+    (HTML da maquina de corte) - fixture e' um arquivo REAL. Cobre o
+    workflow Nesting -> Concluido -> estorno, e reimportar o mesmo arquivo
+    ATUALIZA (nao duplica)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp_page = client.get("/logistica/consumo-chapa")
+    assert resp_page.status_code == 200
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+
+    resp_sem_arquivo = client.post("/api/logistica/consumo-chapa/importar", data={}, content_type="multipart/form-data")
+    assert resp_sem_arquivo.status_code == 400
+
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["criados"] == 1
+    assert body["atualizados"] == 0
+    nesting_id = body["nestings"][0]["id"]
+    assert body["nestings"][0]["numero_programa"] == "21690"
+    assert body["nestings"][0]["status"] == "Nesting"
+    assert body["nestings"][0]["qtd_pecas"] == 1
+    # Descricao e codigo do material separados (material bruto vem
+    # "DESCRICAO/ CODIGO" do relatorio - ver _descricao_material).
+    assert body["nestings"][0]["codigo_material"] == "19-01-00558"
+    assert body["nestings"][0]["descricao_material"] == "ASTM_A36"
+
+    # Aparece na listagem, com o filtro de status funcionando.
+    resp_lista = client.get("/api/logistica/consumo-chapa")
+    assert resp_lista.status_code == 200
+    assert len(resp_lista.get_json()["nestings"]) == 1
+    resp_lista_concluido = client.get("/api/logistica/consumo-chapa?status=Concluido")
+    assert resp_lista_concluido.get_json()["nestings"] == []
+
+    # Detalhe traz TODAS as pecas/OS.
+    resp_detalhe = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe.status_code == 200
+    nesting_detalhe = resp_detalhe.get_json()["nesting"]
+    assert len(nesting_detalhe["pecas"]) == 1
+    assert nesting_detalhe["pecas"][0]["os_orcamento"] == "OS 9780 - 7083"
+    assert nesting_detalhe["pecas"][0]["os_numero"] == "9780"
+    # Peso Total a baixar = qtd arranjada por chapa x peso unitario x qtde de chapas do Nesting.
+    assert nesting_detalhe["qtde_chapas"] == 24
+    assert nesting_detalhe["pecas"][0]["qtd_arranjada"] == 6.0
+    assert nesting_detalhe["pecas"][0]["peso_liquido_kg"] == 28.76
+    assert nesting_detalhe["pecas"][0]["peso_total_baixa_kg"] == 6.0 * 28.76 * 24
+    # Check: soma do Peso Total calculado peca a peca bate com o "Peso
+    # Peças Kg" que veio pronto do relatorio da maquina (dentro da tolerancia).
+    assert nesting_detalhe["soma_peso_pecas_calculado_kg"] == round(6.0 * 28.76 * 24, 2)
+    assert nesting_detalhe["peso_pecas_confere"] is True
+    assert nesting_detalhe["diferenca_peso_pecas_kg"] is not None
+
+    # Observação e confirmação de baixa POR PEÇA (linha) - independente da
+    # conclusão do Nesting inteiro (ações de Concluir/Estornar abaixo).
+    peca_id = nesting_detalhe["pecas"][0]["id"]
+    assert nesting_detalhe["pecas"][0]["observacao"] is None
+    assert nesting_detalhe["pecas"][0]["baixado"] is False
+
+    resp_obs = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/observacao",
+        json={"observacao": "Conferido fisicamente, ok."},
+    )
+    assert resp_obs.status_code == 200
+    assert resp_obs.get_json()["peca"]["observacao"] == "Conferido fisicamente, ok."
+
+    resp_confirmar_baixa = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+    assert resp_confirmar_baixa.status_code == 200
+    peca_apos_baixa = resp_confirmar_baixa.get_json()["peca"]
+    assert peca_apos_baixa["baixado"] is True
+    assert peca_apos_baixa["baixado_por"] == "ADMIN"
+    assert peca_apos_baixa["baixado_em"] is not None
+
+    resp_confirmar_de_novo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+    assert resp_confirmar_de_novo.status_code == 400  # ja confirmada
+
+    resp_estornar_baixa = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/estornar-baixa", json={})
+    assert resp_estornar_baixa.status_code == 200
+    assert resp_estornar_baixa.get_json()["peca"]["baixado"] is False
+
+    resp_estornar_baixa_de_novo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/estornar-baixa", json={})
+    assert resp_estornar_baixa_de_novo.status_code == 400  # ja nao esta baixado
+
+    # Confirma de novo, pra testar que a baixa/observacao sobrevivem ao reimport.
+    client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/confirmar-baixa", json={})
+
+    # Peca inexistente -> 404 em todas as acoes.
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/observacao", json={}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/confirmar-baixa", json={}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/estornar-baixa", json={}).status_code == 404
+
+    # Forcando uma divergencia grande (fora da tolerancia) -> o check acusa.
+    with app.app_context():
+        from conferencia_app.models import LogisticaConsumoChapaNesting
+
+        nst = db.session.get(LogisticaConsumoChapaNesting, nesting_id)
+        nst.peso_pecas_kg = 999999.0
+        db.session.commit()
+    resp_detalhe_divergente = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe_divergente.get_json()["nesting"]["peso_pecas_confere"] is False
+
+    # Reimportar o MESMO arquivo -> atualiza, nao duplica.
+    resp_reimport = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    assert resp_reimport.status_code == 200
+    body_reimport = resp_reimport.get_json()
+    assert body_reimport["criados"] == 0
+    assert body_reimport["atualizados"] == 1
+    resp_lista2 = client.get("/api/logistica/consumo-chapa")
+    assert len(resp_lista2.get_json()["nestings"]) == 1  # continua so' 1, nao duplicou
+
+    # Reimportar NAO apaga observacao/baixa ja confirmada numa peca que
+    # continua existindo no relatorio (upsert por peca_numero+os_numero).
+    resp_detalhe_pos_reimport = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    peca_pos_reimport = resp_detalhe_pos_reimport.get_json()["nesting"]["pecas"][0]
+    assert peca_pos_reimport["id"] == peca_id  # mesma linha, nao recriada
+    assert peca_pos_reimport["observacao"] == "Conferido fisicamente, ok."
+    assert peca_pos_reimport["baixado"] is True
+
+    # Concluir -> estornar.
+    resp_concluir = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir.status_code == 200
+    assert resp_concluir.get_json()["nesting"]["status"] == "Concluido"
+
+    resp_concluir_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_de_novo.status_code == 400  # ja esta concluido
+
+    resp_estornar = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/estornar", json={})
+    assert resp_estornar.status_code == 200
+    assert resp_estornar.get_json()["nesting"]["status"] == "Nesting"
+
+    resp_estornar_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/estornar", json={})
+    assert resp_estornar_de_novo.status_code == 400  # nao esta concluido
+
+    # Nesting inexistente -> 404 em todas as acoes.
+    assert client.get("/api/logistica/consumo-chapa/999999").status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/999999/concluir", json={}).status_code == 404
+
+
+def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path):
+    """Ramo lateral "Erro" (divergencia) do Consumo de Chapa: gestor marca
+    uma divergencia com motivo obrigatorio -> Nesting vai pro status Erro e
+    NAO pode ser Concluido ate' a divergencia ser resolvida (volta pra
+    Nesting)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    nesting_id = resp.get_json()["nestings"][0]["id"]
+
+    # Nesting inexistente -> 404.
+    assert client.post("/api/logistica/consumo-chapa/999999/marcar-erro", json={"motivo": "x"}).status_code == 404
+    assert client.post("/api/logistica/consumo-chapa/999999/resolver-erro", json={}).status_code == 404
+
+    # Motivo vazio/ausente -> 400, nao marca erro.
+    resp_sem_motivo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={})
+    assert resp_sem_motivo.status_code == 400
+    resp_motivo_espacos = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "   "})
+    assert resp_motivo_espacos.status_code == 400
+
+    # Resolver sem estar em erro -> 400.
+    resp_resolver_sem_erro = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver_sem_erro.status_code == 400
+
+    # Marca a divergencia com motivo valido.
+    resp_marcar = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro",
+        json={"motivo": "Peso divergente do que veio fisicamente na chapa."},
+    )
+    assert resp_marcar.status_code == 200
+    nesting_erro = resp_marcar.get_json()["nesting"]
+    assert nesting_erro["status"] == "Erro"
+    assert nesting_erro["motivo_erro"] == "Peso divergente do que veio fisicamente na chapa."
+    assert nesting_erro["erro_marcado_por"] == "ADMIN"
+    assert nesting_erro["erro_marcado_em"] is not None
+    assert nesting_erro["erro_resolvido_em"] is None
+
+    # Marcar de novo enquanto ja esta em erro -> 400.
+    resp_marcar_de_novo = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "outro motivo"}
+    )
+    assert resp_marcar_de_novo.status_code == 400
+
+    # Concluir TRAVADO enquanto estiver em Erro.
+    resp_concluir_bloqueado = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_bloqueado.status_code == 400
+    assert "divergência" in resp_concluir_bloqueado.get_json()["error"].lower()
+
+    # Aparece filtrando por status=Erro.
+    resp_lista_erro = client.get("/api/logistica/consumo-chapa?status=Erro")
+    assert len(resp_lista_erro.get_json()["nestings"]) == 1
+    resp_lista_nesting = client.get("/api/logistica/consumo-chapa?status=Nesting")
+    assert resp_lista_nesting.get_json()["nestings"] == []
+
+    # Resolve a divergencia -> volta pra 'Nesting', motivo/marcacao ficam
+    # gravados como historico, ganha timestamp/usuario de resolucao.
+    resp_resolver = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver.status_code == 200
+    nesting_resolvido = resp_resolver.get_json()["nesting"]
+    assert nesting_resolvido["status"] == "Nesting"
+    assert nesting_resolvido["motivo_erro"] == "Peso divergente do que veio fisicamente na chapa."
+    assert nesting_resolvido["erro_resolvido_por"] == "ADMIN"
+    assert nesting_resolvido["erro_resolvido_em"] is not None
+
+    # Resolver de novo (nao esta mais em erro) -> 400.
+    resp_resolver_de_novo = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    assert resp_resolver_de_novo.status_code == 400
+
+    # Agora Concluir funciona normalmente.
+    resp_concluir = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir.status_code == 200
+    assert resp_concluir.get_json()["nesting"]["status"] == "Concluido"
+
+    # Marcar erro num Nesting ja Concluido -> 400 (precisa estornar antes).
+    resp_marcar_apos_concluido = client.post(
+        f"/api/logistica/consumo-chapa/{nesting_id}/marcar-erro", json={"motivo": "tarde demais"}
+    )
+    assert resp_marcar_apos_concluido.status_code == 400
+
+
+def test_consumo_chapa_marcar_erro_no_nivel_de_peca_e_atalho_pro_erro_do_nesting(tmp_path):
+    """Bota de "Marcar Divergencia" tambem disponivel dentro do Nesting, no
+    nivel de LINHA (peca) - e' so' um atalho: continua marcando o NESTING
+    INTEIRO como Erro (mesmo status/trava de sempre), mas identifica no
+    motivo qual peca disparou a divergencia."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    body = resp.get_json()
+    nesting_id = body["nestings"][0]["id"]
+    resp_detalhe = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    peca_id = resp_detalhe.get_json()["nesting"]["pecas"][0]["id"]
+
+    # Peca inexistente -> 404.
+    assert client.post("/api/logistica/consumo-chapa/pecas/999999/marcar-erro", json={"motivo": "x"}).status_code == 404
+
+    # Motivo vazio -> 400, nao marca nada.
+    resp_sem_motivo = client.post(f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro", json={})
+    assert resp_sem_motivo.status_code == 400
+    resp_detalhe_ainda_ok = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe_ainda_ok.get_json()["nesting"]["status"] == "Nesting"
+
+    # Marca a divergencia pela peca -> Nesting INTEIRO vira Erro, motivo
+    # traz a identificacao da peca/OS que disparou.
+    resp_marcar = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro",
+        json={"motivo": "peso não bate com a balança física."},
+    )
+    assert resp_marcar.status_code == 200
+    nesting_erro = resp_marcar.get_json()["nesting"]
+    assert nesting_erro["status"] == "Erro"
+    assert "OS 9780" in nesting_erro["motivo_erro"]
+    assert "peso não bate com a balança física." in nesting_erro["motivo_erro"]
+    assert nesting_erro["erro_marcado_por"] == "ADMIN"
+
+    # Concluir continua travado (mesma trava de sempre, so' que disparada
+    # pela peca).
+    resp_concluir_bloqueado = client.post(f"/api/logistica/consumo-chapa/{nesting_id}/concluir", json={})
+    assert resp_concluir_bloqueado.status_code == 400
+
+    # Resolvendo o erro do Nesting, tenta marcar de novo pela peca noutra
+    # peca (mesmo caso de so' ter 1 peca aqui) -> volta a funcionar.
+    client.post(f"/api/logistica/consumo-chapa/{nesting_id}/resolver-erro", json={})
+    resp_marcar_de_novo = client.post(
+        f"/api/logistica/consumo-chapa/pecas/{peca_id}/marcar-erro", json={"motivo": "outra divergencia"}
+    )
+    assert resp_marcar_de_novo.status_code == 200
+    assert resp_marcar_de_novo.get_json()["nesting"]["status"] == "Erro"
