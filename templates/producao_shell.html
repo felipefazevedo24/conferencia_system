@@ -20,7 +20,8 @@ document.getElementById('producao-frame').addEventListener('load', function () {
 	style.textContent = `
 		:root{--sync-blue:#0f62c9;--sync-navy:#12283a;--sync-bg:#f4f7fb;--sync-border:#dce5ef}
 		html,body,#root{background:var(--sync-bg)!important;color:var(--sync-navy)!important}
-		.app-shell{grid-template-rows:96px minmax(0,1fr)!important;background:var(--sync-bg)!important}
+		.app-shell{grid-template-rows:0 minmax(0,1fr)!important;background:var(--sync-bg)!important}
+		.app-header{display:none!important}
 		.app-header{padding:14px 24px!important;background:#fff!important;border-bottom:1px solid var(--sync-border)!important;box-shadow:0 2px 10px rgba(18,40,58,.06)!important}
 		.header-grid{opacity:.15!important}
 		.header-copy h1{font-size:24px!important;color:var(--sync-navy)!important;letter-spacing:-.02em!important}

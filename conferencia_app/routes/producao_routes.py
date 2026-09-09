@@ -237,6 +237,9 @@ def _serve_original_document(numero_os: str, aux_code: int, kind: str, document_
         content, filename = producao_service.obter_arquivo(numero_os, aux_code, kind, document_id)
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
+    except Exception:
+        current_app.logger.exception("Falha ao buscar documento de producao %s/%s/%s/%s", numero_os, aux_code, kind, document_id)
+        return jsonify({"detail": "Bridge de documentos indisponivel ou desatualizada."}), 503
     media_type = "application/pdf" if filename.lower().endswith(".pdf") else ("image/png" if filename.lower().endswith(".png") else "application/octet-stream")
     return current_app.response_class(content, mimetype=media_type, headers={"Content-Disposition": f"inline; filename=\"{filename}\""})
 
@@ -266,6 +269,9 @@ def original_thumbnail(numero_os: str, aux_code: int):
         content, media_type = producao_service.obter_thumbnail(numero_os, aux_code)
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
+    except Exception:
+        current_app.logger.exception("Falha ao gerar thumbnail de producao %s/%s", numero_os, aux_code)
+        return jsonify({"detail": "Bridge de documentos indisponivel ou desatualizada."}), 503
     return current_app.response_class(content, mimetype=media_type, headers={"Cache-Control": "private, max-age=300"})
 
 
