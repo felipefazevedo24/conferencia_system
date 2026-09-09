@@ -121,6 +121,9 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
     },
+    "PCP": {
+        "PAGE_PRODUCAO",
+    },
     "Solicitante": {
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
