@@ -124,7 +124,8 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
 def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     ordem = _obter_ordem(numero_os)
     rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
-    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{row.get('kind')}/{row.get('document_id')}"} for row in rows]
+    route_kind = {"drawing": "drawings", "attachment": "attachments", "image": "images"}
+    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
 
 
 def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) -> tuple[bytes, str]:
