@@ -206,6 +206,35 @@ WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
 ORDER BY codigo
 """
 
+SQL_PRODUCAO_DOCUMENTOS_ITEM = """
+SELECT codigo AS document_id, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo) AS size_bytes, 'drawing' AS kind
+FROM public.tos_aux_desenhos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+UNION ALL
+SELECT codigo, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo), 'attachment'
+FROM public.tos_aux_anexos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+UNION ALL
+SELECT codigo, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo), 'image'
+FROM public.tos_aux_imagens
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+ORDER BY kind, document_id
+"""
+
+SQL_PRODUCAO_DESENHO_ARQUIVO = """
+SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes, anexo
+FROM public.tos_aux_desenhos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+    AND cod_os_aux = %(cod_os_aux)s AND codigo = %(document_id)s
+LIMIT 1
+"""
+
+SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
+SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
+
 # -------------------------------------------------------------------
 # Indicadores de GAP de compras (necessidade x em OC x recebido)
 # -------------------------------------------------------------------

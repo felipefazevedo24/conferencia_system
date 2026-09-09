@@ -20,6 +20,7 @@ import re
 import sys
 import time
 import unicodedata
+import base64
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -1108,6 +1109,9 @@ def _json_safe(value: Any) -> Any:
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, Decimal):
         return float(value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return base64.b64encode(bytes(value)).decode("ascii")
+
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value

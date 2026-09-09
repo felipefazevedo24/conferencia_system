@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import base64
 from datetime import date, datetime
 from typing import Any
 
@@ -106,6 +107,26 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
         {"operacao": _texto(row.get("operation_code")), "sequencia": row.get("seq_processo_prod"), "operador": _texto(row.get("operator_name")), "inicio": _iso(row.get("started_at")), "maquina": _texto(row.get("machine")), "pausado": bool(row.get("paused"))}
         for row in rows
     ]}
+
+
+def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
+    ordem = _obter_ordem(numero_os)
+    rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{row.get('kind')}/{row.get('document_id')}"} for row in rows]
+
+
+def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) -> tuple[bytes, str]:
+    ordem = _obter_ordem(numero_os)
+    query = {"drawing": queries.SQL_PRODUCAO_DESENHO_ARQUIVO, "attachment": queries.SQL_PRODUCAO_ANEXO_ARQUIVO, "image": queries.SQL_PRODUCAO_IMAGEM_ARQUIVO}.get(kind)
+    if query is None:
+        raise LookupError("Tipo de documento invalido")
+    row = fetch_one(query, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code, "document_id": document_id})
+    if not row or row.get("anexo") is None:
+        raise LookupError("Documento nao encontrado")
+    content = row["anexo"]
+    if isinstance(content, str):
+        content = base64.b64decode(content)
+    return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
