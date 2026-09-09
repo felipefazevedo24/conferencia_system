@@ -2337,6 +2337,7 @@ class QualidadeCertificado(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    os_referencia = db.Column(db.String(120), nullable=False, default="", index=True)
     chave_acesso = db.Column(db.String(44), index=True)
     fornecedor = db.Column(db.String(100))
 
@@ -2369,9 +2370,31 @@ class QualidadeCertificado(db.Model):
     aprovado_em = db.Column(db.DateTime)    # data de aprovação pelo supervisor/gerente
     aprovado_por = db.Column(db.String(100))
 
-    __table_args__ = (
-        db.UniqueConstraint("numero_nota", name="ux_qualidade_certificado_nota"),
+    componentes = db.relationship(
+        "QualidadeCertificadoComponente",
+        backref="certificado",
+        cascade="all, delete-orphan",
+        lazy=True,
+        order_by="QualidadeCertificadoComponente.ordem",
     )
+
+    __table_args__ = (
+        db.UniqueConstraint("numero_nota", "os_referencia", name="ux_qualidade_certificado_nota_os"),
+    )
+
+
+class QualidadeCertificadoComponente(db.Model):
+    __tablename__ = "qualidade_certificado_componente"
+
+    id = db.Column(db.Integer, primary_key=True)
+    certificado_id = db.Column(db.Integer, db.ForeignKey("qualidade_certificado.id"), nullable=False, index=True)
+    ordem = db.Column(db.Integer, nullable=False, default=1)
+    tipo = db.Column(db.String(20), nullable=False, default="Grid")
+    os = db.Column(db.String(120))
+    numero_certificado = db.Column(db.String(120))
+    dureza = db.Column(db.String(120))
+    chd = db.Column(db.String(120))
+    resultado = db.Column(db.String(20))
 
 
 class ExpedicaoRomaneio(db.Model):

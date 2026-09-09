@@ -79,6 +79,14 @@ def perguntar():
         envio = None
     if envio is not None:
         return jsonify(envio)
+    # Ações de escrita no recebimento (estorno/avanço) para quem tem acesso ao
+    # módulo ou é Admin; isso permite a Bia operar sem burlar a conferência.
+    try:
+        acao_receb = svc._interpretar_acao_recebimento(pergunta, ctx)
+    except Exception:
+        acao_receb = None
+    if acao_receb is not None:
+        return jsonify(acao_receb)
     # Ações que ESCREVEM em romaneios só para quem opera a expedição (ou Admin).
     if is_admin_session() or has_permission(PERMISSION):
         try:

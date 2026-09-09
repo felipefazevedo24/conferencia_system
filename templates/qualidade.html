@@ -315,6 +315,7 @@
                     <thead>
                         <tr>
                             <th>NF</th>
+                            <th>OS</th>
                             <th>Fornecedor</th>
                             <th>Status</th>
                             <th>Emitido em</th>
@@ -327,6 +328,7 @@
                         ${registros.map(r => `
                             <tr class="${selecionado && selecionado.id === r.id ? 'active' : ''}">
                                 <td><strong>#${esc(r.numero_nota)}</strong></td>
+                                <td>${esc(r.os_referencia || r.os || '—')}</td>
                                 <td>${esc(r.fornecedor) || '—'}</td>
                                 <td>${badgeStatus(r)}</td>
                                 <td>${esc(r.analisado_em) || '—'}</td>
@@ -358,11 +360,11 @@
         const temLaudo = !!r.tem_laudo;      // Emitido ou Aprovado
         const badgeGeral = () => {
             if (!temLaudo) return badgeStatus(r);
-            const naoConf = r.grid_resultado === 'Não Conforme' || r.sapatas_resultado === 'Não Conforme';
+            const naoConf = (r.componentes || []).some(c => c.resultado === 'Não Conforme');
             return `${badgeStatus(r)} <span class="q-badge ${naoConf ? 'nconf' : 'conf'}">${naoConf ? 'Não Conforme' : 'Conforme'}</span>`;
         };
         document.getElementById('form-titulo').innerHTML =
-            `NF ${esc(r.numero_nota)} — ${esc(r.fornecedor)} ` + badgeGeral();
+            `NF ${esc(r.numero_nota)} · OS ${esc(r.os_referencia || r.os || '—')} — ${esc(r.fornecedor)} ` + badgeGeral();
 
         const ro = editavel ? '' : 'readonly';
         const roCls = editavel ? '' : 'q-readonly';
@@ -416,15 +418,16 @@
             </div>
         </div>`;
 
-        // Monta os blocos de componentes (Grid/Sapatas)
-        estadoBlocos = [];
-        if (r.grid_resultado || r.grid_dureza || r.grid_chd || r.grid_numero_certificado || r.grid_os) {
-            estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.os || '', numeroCertificado: r.grid_numero_certificado || r.numero_certificado || '', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
-        }
-        if (r.sapatas_resultado || r.sapatas_dureza || r.sapatas_chd || r.sapatas_numero_certificado || r.sapatas_os) {
-            estadoBlocos.push({ tipo: 'Sapatas', os: r.sapatas_os || r.os || '', numeroCertificado: r.sapatas_numero_certificado || r.numero_certificado || '', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
-        }
-        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.sapatas_os || r.os || '', numeroCertificado: r.grid_numero_certificado || r.sapatas_numero_certificado || r.numero_certificado || '', dureza: '', chd: '', resultado: '' });
+        estadoBlocos = Array.isArray(r.componentes) && r.componentes.length
+            ? r.componentes.map((c) => ({
+                tipo: c.tipo || 'Grid',
+                os: c.os || r.os_referencia || r.os || '',
+                numeroCertificado: c.numero_certificado || '',
+                dureza: c.dureza || '',
+                chd: c.chd || '',
+                resultado: c.resultado || '',
+            }))
+            : [{ tipo: 'Grid', os: r.os_referencia || r.os || '', numeroCertificado: '', dureza: '', chd: '', resultado: '' }];
         renderBlocos(!editavel);
     }
 
@@ -444,8 +447,8 @@
                     <option value="Grid" ${b.tipo === 'Grid' ? 'selected' : ''}>Grid</option>
                     <option value="Sapatas" ${b.tipo === 'Sapatas' ? 'selected' : ''}>Sapatas</option>
                </select>`;
-        const remover = (!concluido && idx === 1)
-            ? `<button type="button" onclick="removerComponente()" style="border:none;background:#fee2e2;color:#991b1b;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer;font-size:12px;"><i class="fas fa-times"></i> remover</button>`
+        const remover = (!concluido && estadoBlocos.length > 1)
+            ? `<button type="button" onclick="removerComponente(${idx})" style="border:none;background:#fee2e2;color:#991b1b;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer;font-size:12px;"><i class="fas fa-times"></i> remover</button>`
             : '';
         return `
         <div class="comp-bloco" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px;">
@@ -474,11 +477,7 @@
         if (!wrap) return;
         let html = estadoBlocos.map((b, i) => blocoComponenteHtml(i, b, concluido)).join('');
         if (!concluido) {
-            const limiteAtingido = estadoBlocos.length >= 2;
-            html += `<button type="button" onclick="adicionarComponente()" ${limiteAtingido ? 'disabled' : ''} style="border:1px dashed #1d4ed8;background:${limiteAtingido ? '#e2e8f0' : '#eff6ff'};color:${limiteAtingido ? '#64748b' : '#1d4ed8'};border-radius:8px;padding:9px 14px;font-weight:700;cursor:${limiteAtingido ? 'not-allowed' : 'pointer'};font-size:13px;margin-bottom:12px;"><i class="fas fa-plus"></i> Adicionar componente</button>`;
-            if (limiteAtingido) {
-                html += `<div style="font-size:11px;color:#94a3b8;margin:-4px 0 12px;">Máximo atual: 2 componentes no laudo (Grid e Sapatas).</div>`;
-            }
+            html += `<button type="button" onclick="adicionarComponente()" style="border:1px dashed #1d4ed8;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;font-size:13px;margin-bottom:12px;"><i class="fas fa-plus"></i> Adicionar componente</button>`;
         }
         wrap.innerHTML = html;
     }
@@ -504,28 +503,22 @@
 
     function onTipoChange(idx) {
         lerBlocosDOM();
-        // Evita os dois blocos com o mesmo tipo: ajusta o outro para o oposto.
-        if (estadoBlocos.length === 2) {
-            const outro = idx === 0 ? 1 : 0;
-            if (estadoBlocos[outro].tipo === estadoBlocos[idx].tipo) {
-                estadoBlocos[outro].tipo = estadoBlocos[idx].tipo === 'Grid' ? 'Sapatas' : 'Grid';
-            }
-        }
         renderBlocos(false);
     }
 
     function adicionarComponente() {
         lerBlocosDOM();
-        if (estadoBlocos.length >= 2) return;
-        const existente = estadoBlocos[0] ? estadoBlocos[0].tipo : 'Grid';
-        const novoTipo = existente === 'Grid' ? 'Sapatas' : 'Grid';
-        estadoBlocos.push({ tipo: novoTipo, os: '', numeroCertificado: '', dureza: '', chd: '', resultado: '' });
+        const osPadrao = (selecionado && (selecionado.os_referencia || selecionado.os)) || (estadoBlocos[0]?.os || '');
+        estadoBlocos.push({ tipo: 'Grid', os: osPadrao, numeroCertificado: '', dureza: '', chd: '', resultado: '' });
         renderBlocos(false);
     }
 
-    function removerComponente() {
+    function removerComponente(idx) {
         lerBlocosDOM();
-        estadoBlocos.splice(1, 1);
+        estadoBlocos.splice(idx, 1);
+        if (!estadoBlocos.length) {
+            estadoBlocos.push({ tipo: 'Grid', os: '', numeroCertificado: '', dureza: '', chd: '', resultado: '' });
+        }
         renderBlocos(false);
     }
 
@@ -547,31 +540,16 @@
         const r = selecionado;
         lerBlocosDOM();
 
-        // Bloqueia tipos duplicados
-        if (estadoBlocos.length === 2 && estadoBlocos[0].tipo === estadoBlocos[1].tipo) {
-            alert('Os dois componentes não podem ser do mesmo tipo. Selecione Grid e Sapatas.');
-            return;
-        }
-
         const fd = new FormData();
         fd.append('numero_orcamento', document.getElementById('f-orc').value.trim());
-        // Zera os dois; preenche conforme os blocos selecionados
-        const map = { Grid: 'grid', Sapatas: 'sapatas' };
-        ['grid', 'sapatas'].forEach(k => {
-            fd.append(`${k}_numero_certificado`, '');
-            fd.append(`${k}_os`, '');
-            fd.append(`${k}_dureza`, '');
-            fd.append(`${k}_chd`, '');
-            fd.append(`${k}_resultado`, '');
-        });
-        estadoBlocos.forEach(b => {
-            const k = map[b.tipo];
-            fd.set(`${k}_numero_certificado`, (b.numeroCertificado || '').trim());
-            fd.set(`${k}_os`, (b.os || '').trim());
-            fd.set(`${k}_dureza`, (b.dureza || '').trim());
-            fd.set(`${k}_chd`, (b.chd || '').trim());
-            fd.set(`${k}_resultado`, b.resultado || '');
-        });
+        fd.append('componentes_json', JSON.stringify(estadoBlocos.map((b) => ({
+            tipo: b.tipo || 'Grid',
+            numero_certificado: (b.numeroCertificado || '').trim(),
+            os: (b.os || '').trim(),
+            dureza: (b.dureza || '').trim(),
+            chd: (b.chd || '').trim(),
+            resultado: b.resultado || '',
+        }))));
 
         const fotoInput = document.getElementById('foto-input');
         if (fotoInput.files[0]) fd.append('foto', fotoInput.files[0]);
