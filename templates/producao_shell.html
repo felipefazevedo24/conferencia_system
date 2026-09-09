@@ -10,5 +10,31 @@
 </style>
 {% endblock %}
 {% block content %}
-<div class="producao-embed"><iframe title="Painel Visual de Produção" src="/producao-original/{{ request.query_string.decode('utf-8')|safe and '?' ~ request.query_string.decode('utf-8') or '' }}"></iframe></div>
+<div class="producao-embed"><iframe id="producao-frame" title="Painel Visual de Produção" src="/producao-original/{{ request.query_string.decode('utf-8')|safe and '?' ~ request.query_string.decode('utf-8') or '' }}"></iframe></div>
+<script>
+document.getElementById('producao-frame').addEventListener('load', function () {
+	const doc = this.contentDocument;
+	if (!doc || doc.getElementById('sync-production-theme')) return;
+	const style = doc.createElement('style');
+	style.id = 'sync-production-theme';
+	style.textContent = `
+		:root{--sync-blue:#0f62c9;--sync-navy:#12283a;--sync-bg:#f4f7fb;--sync-border:#dce5ef}
+		html,body,#root{background:var(--sync-bg)!important;color:var(--sync-navy)!important}
+		.app-shell{grid-template-rows:96px minmax(0,1fr)!important;background:var(--sync-bg)!important}
+		.app-header{padding:14px 24px!important;background:#fff!important;border-bottom:1px solid var(--sync-border)!important;box-shadow:0 2px 10px rgba(18,40,58,.06)!important}
+		.header-grid{opacity:.15!important}
+		.header-copy h1{font-size:24px!important;color:var(--sync-navy)!important;letter-spacing:-.02em!important}
+		.header-subtitle{color:#667e92!important}
+		.brand{display:none!important}
+		.global-search{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important}
+		.header-tile{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important;box-shadow:none!important}
+		.workspace{background:var(--sync-bg)!important;padding:12px!important;gap:12px!important}
+		.panel{border-color:var(--sync-border)!important;border-radius:8px!important;box-shadow:0 3px 12px rgba(18,40,58,.05)!important}
+		.panel-title h2,.sequence-heading h2{color:var(--sync-navy)!important;font-size:15px!important}
+		button,.search-results button{border-radius:7px!important}
+		.node-thumbnail,.detail-preview{background:#f8fafc!important;border-color:var(--sync-border)!important}
+	`;
+	doc.head.appendChild(style);
+});
+</script>
 {% endblock %}

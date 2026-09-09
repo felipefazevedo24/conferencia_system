@@ -27,6 +27,12 @@ def producao_original_page():
     )
 
 
+@producao_bp.get("/columbia-logo.png")
+@permission_required("PAGE_PRODUCAO")
+def producao_logo():
+    return send_from_directory(current_app.static_folder + "/producao_original", "columbia-logo.png")
+
+
 @producao_bp.get("/producao-original/assets/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_asset(filename: str):
