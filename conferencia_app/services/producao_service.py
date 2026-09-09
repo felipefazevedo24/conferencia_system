@@ -43,6 +43,14 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     return [_os_payload(row) for row in rows]
 
 
+def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        queries.SQL_PRODUCAO_OS_ABERTAS,
+        {"cod_empresa": 1, "limite": max(1, min(int(limite or 100), 200))},
+    )
+    return [_os_payload(row) for row in rows]
+
+
 def obter_estrutura(numero_os: str) -> dict[str, Any]:
     ordem = fetch_one(
         queries.SQL_PRODUCAO_BUSCAR_OS,

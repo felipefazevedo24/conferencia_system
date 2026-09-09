@@ -28,6 +28,15 @@ def buscar_os():
         return jsonify({"error": "Nao foi possivel consultar as OS no GRV."}), 503
 
 
+@producao_bp.get("/api/producao/os-abertas")
+@permission_required("PAGE_PRODUCAO")
+def listar_os_abertas():
+    try:
+        return jsonify({"resultados": producao_service.listar_os_abertas()})
+    except Exception:
+        return jsonify({"error": "Nao foi possivel consultar as OS abertas no GRV."}), 503
+
+
 @producao_bp.get("/api/producao/os/<path:numero_os>")
 @permission_required("PAGE_PRODUCAO")
 def estrutura_os(numero_os: str):

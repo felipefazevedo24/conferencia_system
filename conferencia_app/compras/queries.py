@@ -105,6 +105,17 @@ ORDER BY CASE WHEN LOWER(BTRIM(n_os)) = LOWER(BTRIM(%(termo)s)) THEN 0 ELSE 1 EN
 LIMIT %(limite)s
 """
 
+SQL_PRODUCAO_OS_ABERTAS = """
+SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
+             n_desenho, u_classificacao
+FROM public.tos
+WHERE cod_empresa = %(cod_empresa)s
+    AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
+    AND COALESCE(status_servico, '') !~* '(conclu|finaliz|cancel|encerr|fechad)'
+ORDER BY dt_prevista NULLS LAST, n_os DESC
+LIMIT %(limite)s
+"""
+
 SQL_PRODUCAO_ESTRUTURA_OS = """
 SELECT codigo AS aux_code, cod_os_completo, subtitulo, n_desenho,
              revisao_desenho, posicao_desenho, qtde_pecas, qtde_un, os_pai,
