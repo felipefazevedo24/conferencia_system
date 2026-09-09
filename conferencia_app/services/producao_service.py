@@ -144,15 +144,21 @@ def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) ->
 
 def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
     documents = obter_documentos(numero_os, aux_code)
-    document = next((item for item in documents if item["kind"] == "drawing"), None) or (documents[0] if documents else None)
+    # Prefer the product photo when available; the technical drawing remains
+    # the fallback for items without an image.
+    document = next((item for item in documents if item["kind"] == "image"), None) or next((item for item in documents if item["kind"] == "drawing"), None) or (documents[0] if documents else None)
     if not document:
         raise LookupError("Item sem documento visual")
     content, filename = obter_arquivo(numero_os, aux_code, document["kind"], int(document["id"]))
     lower = filename.lower()
     if lower.endswith(".png"):
         return content, "image/png"
-    if lower.endswith((".jpg", ".jpeg", ".webp", ".gif")):
+    if lower.endswith((".jpg", ".jpeg")):
         return content, "image/jpeg"
+    if lower.endswith(".webp"):
+        return content, "image/webp"
+    if lower.endswith(".gif"):
+        return content, "image/gif"
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
     pdf = fitz.open(stream=content, filetype="pdf")

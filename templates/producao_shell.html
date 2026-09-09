@@ -4,7 +4,7 @@
 {% block shell_subtitle %}Acompanhamento visual de OS, estrutura, montagem e processo produtivo.{% endblock %}
 {% block extra_head %}
 <style>
-.producao-header{display:flex;justify-content:flex-start;align-items:flex-start;gap:16px;margin:0 0 8px;padding:0}
+.producao-header{display:flex;justify-content:flex-start;align-items:flex-start;gap:16px;margin:0 0 10px;padding:0 10px}
 .producao-header__eyebrow{margin:0 0 5px;color:var(--eui-primary,#0f62c9);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .producao-header__title{margin:0;color:var(--eui-text,#12283a);font-size:clamp(24px,2.4vw,32px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
 .producao-header__sub{margin:7px 0 0;color:var(--eui-muted,#64748b);font-size:13px;line-height:1.45}
@@ -46,6 +46,9 @@ document.getElementById('producao-frame').addEventListener('load', function () {
 		.panel{border-color:var(--sync-border)!important;border-radius:8px!important;box-shadow:none!important;background:transparent!important}
 		.tree-panel,.map-panel,.details-panel,.sequence-panel{background:#fff!important}
 		.panel-title h2,.sequence-heading h2{color:var(--sync-navy)!important;font-size:15px!important}
+		.detail-preview{min-height:320px!important;height:320px!important;border-radius:12px!important;background:#f8fafc!important}
+		.detail-preview img{max-width:100%!important;max-height:100%!important;object-fit:contain!important;border-radius:10px!important}
+		.details-panel{min-width:340px!important}
 		button,.search-results button{border-radius:7px!important}
 		.node-thumbnail,.detail-preview{background:#f8fafc!important;border-color:var(--sync-border)!important}
 	`;

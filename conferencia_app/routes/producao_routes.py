@@ -152,7 +152,7 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
         "due_date": node.get("data_prevista"),
         "final_date": None,
         "has_drawing": bool(node.get("desenho")),
-        "thumbnail_url": f"/api/v1/orders/{order_number}/items/{node['aux_code']}/thumbnail" if node.get("desenho") else None,
+        "thumbnail_url": f"/api/v1/orders/{order_number}/items/{node['aux_code']}/thumbnail",
         "detail_url": f"/api/v1/orders/{{order}}/items/{node['aux_code']}",
     }
 
