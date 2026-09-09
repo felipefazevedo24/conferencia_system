@@ -83,6 +83,71 @@ LIMIT %(limite)s;
 """
 
 # -------------------------------------------------------------------
+# Produção: estrutura e processos da OS (somente leitura no GRV).
+# -------------------------------------------------------------------
+SQL_PRODUCAO_BUSCAR_OS = """
+SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
+             n_desenho, u_classificacao
+FROM public.tos
+WHERE cod_empresa = %(cod_empresa)s
+    AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
+    AND (
+            n_os ILIKE %(busca)s OR titulo ILIKE %(busca)s OR n_desenho ILIKE %(busca)s
+            OR codigo::text IN (
+                    SELECT cod_os::text FROM public.tos_aux
+                    WHERE cod_empresa = %(cod_empresa)s
+                        AND (cod_os_completo ILIKE %(busca)s OR subtitulo ILIKE %(busca)s
+                                 OR n_desenho ILIKE %(busca)s OR posicao_desenho ILIKE %(busca)s)
+            )
+    )
+ORDER BY CASE WHEN LOWER(BTRIM(n_os)) = LOWER(BTRIM(%(termo)s)) THEN 0 ELSE 1 END,
+                 n_os DESC
+LIMIT %(limite)s
+"""
+
+SQL_PRODUCAO_ESTRUTURA_OS = """
+SELECT codigo AS aux_code, cod_os_completo, subtitulo, n_desenho,
+             revisao_desenho, posicao_desenho, qtde_pecas, qtde_un, os_pai,
+             predecessora1, predecessora2, status, cod_staus, dt_entrada,
+             dt_prevista, dt_final, cod_produto_mat_padrao, cod_interno_mat_padrao,
+             desc_mat_padrao
+FROM public.tos_aux
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+ORDER BY codigo
+"""
+
+SQL_PRODUCAO_OPERACOES_OS = """
+WITH reported_machines AS (
+        SELECT cod_empresa, cod_os, cod_os_aux, seq_processo_prod,
+                     string_agg(machine, ' / ' ORDER BY machine) AS machine
+        FROM (
+                SELECT DISTINCT cod_empresa, cod_os, cod_os_aux, seq_processo_prod,
+                             btrim(maquina) AS machine
+                FROM public.tctrl_ph
+                WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+                    AND NULLIF(btrim(maquina), '') IS NOT NULL
+        ) machines
+        GROUP BY cod_empresa, cod_os, cod_os_aux, seq_processo_prod
+)
+SELECT process.cod_os_aux, process.codigo, process.tiposervico,
+             process.cod_tp_servico, process.seq, process.finalizado,
+             process.concluido, process.processo_travado, process.data_inicio,
+             process.dt_incio_previsto, process.dt_termino_previsto,
+             process.dt_finalizacao, process.hs_realizadas,
+             process.maquina, process.pcp_dt_primeiro_apont,
+             process.pcp_dt_ultimo_apont,
+             COALESCE(reported_machines.machine, NULLIF(btrim(process.maquina), '')) AS maquina_real
+FROM public.tpro_pro process
+LEFT JOIN reported_machines
+    ON reported_machines.cod_empresa = process.cod_empresa
+ AND reported_machines.cod_os = process.cod_os
+ AND reported_machines.cod_os_aux = process.cod_os_aux
+ AND reported_machines.seq_processo_prod = process.seq
+WHERE process.cod_empresa = %(cod_empresa)s AND process.cod_os = %(cod_os)s
+ORDER BY process.cod_os_aux, process.seq NULLS LAST, process.codigo
+"""
+
+# -------------------------------------------------------------------
 # Indicadores de GAP de compras (necessidade x em OC x recebido)
 # -------------------------------------------------------------------
 SQL_GAP_COMPRAS = """
