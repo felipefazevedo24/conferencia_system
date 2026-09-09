@@ -4,14 +4,13 @@
 {% block shell_subtitle %}Acompanhamento visual de OS, estrutura, montagem e processo produtivo.{% endblock %}
 {% block extra_head %}
 <style>
-.producao-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin:0 0 14px;padding:2px 2px 0}
+.producao-header{display:flex;justify-content:flex-start;align-items:flex-start;gap:16px;margin:0 0 8px;padding:0}
 .producao-header__eyebrow{margin:0 0 5px;color:var(--eui-primary,#0f62c9);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .producao-header__title{margin:0;color:var(--eui-text,#12283a);font-size:clamp(24px,2.4vw,32px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
 .producao-header__sub{margin:7px 0 0;color:var(--eui-muted,#64748b);font-size:13px;line-height:1.45}
-.producao-header__badge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--eui-border,#dce5ef);border-radius:999px;padding:7px 11px;background:var(--eui-surface,#fff);color:var(--eui-text-soft,#475569);font-size:11px;font-weight:700;white-space:nowrap}
-.producao-embed{height:calc(100vh - 190px);min-height:650px;background:transparent;overflow:hidden}
+.producao-embed{height:calc(100vh - 150px);min-height:700px;background:transparent;overflow:hidden}
 .producao-embed iframe{display:block;width:100%;height:100%;border:0;background:#f4f7fb}
-@media(max-width:900px){.producao-header{margin-bottom:10px}.producao-header__badge{display:none}.producao-embed{height:calc(100vh - 150px);min-height:580px}}
+@media(max-width:900px){.producao-header{margin-bottom:6px}.producao-embed{height:calc(100vh - 120px);min-height:580px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -21,7 +20,6 @@
 		<h1 class="producao-header__title">Painel Visual de Montagem</h1>
 		<p class="producao-header__sub">Acompanhe a estrutura da OS, o mapa do conjunto, as operações e o status produtivo em tempo real.</p>
 	</div>
-	<span class="producao-header__badge"><i class="fas fa-database"></i> Fonte: GRV via bridge do Sync</span>
 </header>
 <div class="producao-embed"><iframe id="producao-frame" title="Painel Visual de Produção" src="/producao-original/{{ request.query_string.decode('utf-8')|safe and '?' ~ request.query_string.decode('utf-8') or '' }}"></iframe></div>
 <script>
@@ -44,7 +42,9 @@ document.getElementById('producao-frame').addEventListener('load', function () {
 		.global-search{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important}
 		.header-tile{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important;box-shadow:none!important}
 		.workspace{height:100%!important;min-height:0!important;background:transparent!important;padding:10px!important;gap:10px!important}
-		.panel{border-color:var(--sync-border)!important;border-radius:8px!important;box-shadow:0 2px 8px rgba(18,40,58,.04)!important}
+		.workspace>*{min-height:0!important}
+		.panel{border-color:var(--sync-border)!important;border-radius:8px!important;box-shadow:none!important;background:transparent!important}
+		.tree-panel,.map-panel,.details-panel,.sequence-panel{background:#fff!important}
 		.panel-title h2,.sequence-heading h2{color:var(--sync-navy)!important;font-size:15px!important}
 		button,.search-results button{border-radius:7px!important}
 		.node-thumbnail,.detail-preview{background:#f8fafc!important;border-color:var(--sync-border)!important}
