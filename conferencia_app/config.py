@@ -91,7 +91,7 @@ class Config:
         if SQLALCHEMY_DATABASE_URI.startswith("sqlite:")
         else {
             "pool_pre_ping": True,
-            "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "280")),
+            "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "120")),
             # Limita o total de conexões por processo para não estourar o
             # max_user_connections do MySQL (ex.: 22 no PythonAnywhere).
             # pool_size + max_overflow = máximo de conexões simultâneas.

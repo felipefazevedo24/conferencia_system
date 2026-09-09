@@ -1,6 +1,7 @@
 from .models import ActiveSession
 from .extensions import db
 from flask import abort
+from sqlalchemy.exc import OperationalError
 import datetime
 import unicodedata
 # Middleware para atualizar sessão ativa e forçar logout se necessário
@@ -8,7 +9,15 @@ def check_active_session():
     session_id = session.get("session_id")
     if not session_id:
         return
-    sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+    try:
+        sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+    except OperationalError:
+        # PythonAnywhere/MySQL pode fechar uma conexão ociosa entre o
+        # checkout e a primeira consulta. Descarta o pool e tenta uma vez
+        # com uma conexão nova, sem derrubar a requisição inteira.
+        db.session.rollback()
+        db.engine.dispose()
+        sessao = ActiveSession.query.filter_by(session_id=session_id).first()
     if not sessao or not sessao.is_active:
         session.clear()
         abort(401, description="Sessão expirada ou removida pelo administrador.")
