@@ -15,19 +15,25 @@ producao_bp = Blueprint("producao", __name__)
 @producao_bp.get("/producao")
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
+    return render_template("producao_shell.html")
+
+
+@producao_bp.get("/producao-original/")
+@permission_required("PAGE_PRODUCAO")
+def producao_original_page():
     return send_from_directory(
         current_app.static_folder + "/producao_original",
         "index.html",
     )
 
 
-@producao_bp.get("/producao/assets/<path:filename>")
+@producao_bp.get("/producao-original/assets/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_asset(filename: str):
     return send_from_directory(current_app.static_folder + "/producao_original/assets", filename)
 
 
-@producao_bp.get("/producao/<path:filename>")
+@producao_bp.get("/producao-original/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_static(filename: str):
     return send_from_directory(current_app.static_folder + "/producao_original", filename)
@@ -106,7 +112,7 @@ def criar_observacao(numero_os: str, aux_code: int):
     return jsonify({"id": row.id, "texto": row.texto, "autor": row.autor, "criado_em": row.criado_em.isoformat()}), 201
 
 
-def _original_node(node: dict, all_nodes: list[dict]) -> dict:
+def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") -> dict:
     parent = next((item for item in all_nodes if item["id"] == node.get("parent_id")), None)
     path = []
     cursor = parent
@@ -140,13 +146,13 @@ def _original_node(node: dict, all_nodes: list[dict]) -> dict:
         "due_date": node.get("data_prevista"),
         "final_date": None,
         "has_drawing": bool(node.get("desenho")),
-        "thumbnail_url": None,
+        "thumbnail_url": f"/api/v1/orders/{order_number}/items/{node['aux_code']}/thumbnail" if node.get("desenho") else None,
         "detail_url": f"/api/v1/orders/{{order}}/items/{node['aux_code']}",
     }
 
 
 def _original_structure(data: dict) -> dict:
-    nodes = [_original_node(node, data.get("nos", [])) for node in data.get("nos", [])]
+    nodes = [_original_node(node, data.get("nos", []), data["ordem"]["numero"]) for node in data.get("nos", [])]
     for node in nodes:
         node["detail_url"] = node["detail_url"].format(order=data["ordem"]["numero"])
     return {
@@ -245,6 +251,16 @@ def original_attachment(numero_os: str, aux_code: int, document_id: int):
 @permission_required("PAGE_PRODUCAO")
 def original_image(numero_os: str, aux_code: int, document_id: int):
     return _serve_original_document(numero_os, aux_code, "image", document_id)
+
+
+@producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/thumbnail")
+@permission_required("PAGE_PRODUCAO")
+def original_thumbnail(numero_os: str, aux_code: int):
+    try:
+        content, media_type = producao_service.obter_thumbnail(numero_os, aux_code)
+    except LookupError as exc:
+        return jsonify({"detail": str(exc)}), 404
+    return current_app.response_class(content, mimetype=media_type, headers={"Cache-Control": "private, max-age=300"})
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/observations")

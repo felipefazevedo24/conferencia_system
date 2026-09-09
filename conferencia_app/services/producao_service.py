@@ -3,11 +3,17 @@ from __future__ import annotations
 
 from collections import defaultdict
 import base64
+import io
 from datetime import date, datetime
 from typing import Any
 
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
+
+try:
+    import fitz
+except ImportError:  # pragma: no cover
+    fitz = None
 
 
 STATUS_LABELS = {
@@ -127,6 +133,26 @@ def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) ->
     if isinstance(content, str):
         content = base64.b64decode(content)
     return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
+
+
+def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
+    documents = obter_documentos(numero_os, aux_code)
+    document = next((item for item in documents if item["kind"] == "drawing"), None) or (documents[0] if documents else None)
+    if not document:
+        raise LookupError("Item sem documento visual")
+    content, filename = obter_arquivo(numero_os, aux_code, document["kind"], int(document["id"]))
+    lower = filename.lower()
+    if lower.endswith(".png"):
+        return content, "image/png"
+    if lower.endswith((".jpg", ".jpeg", ".webp", ".gif")):
+        return content, "image/jpeg"
+    if not fitz:
+        raise LookupError("Renderizador de PDF nao instalado")
+    pdf = fitz.open(stream=content, filetype="pdf")
+    if pdf.page_count == 0:
+        raise LookupError("Documento sem paginas")
+    pixmap = pdf.load_page(0).get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+    return pixmap.tobytes("png"), "image/png"
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
