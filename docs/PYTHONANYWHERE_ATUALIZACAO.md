@@ -40,15 +40,30 @@ git pull
 Deve terminar em `Fast-forward`. Se aparecer erro de conflito, **pare aqui**
 e me manda o erro.
 
-**Passo 4 — só se o commit alterou banco, vá pra Parte 2 agora.** Se não
-alterou, pule direto pro Passo 5.
+**Passo 4 — atualizar as dependências no mesmo virtualenv configurado na aba Web:**
 
-**Passo 5 — reiniciar o app:**
+O `git pull` atualiza o código, mas não instala bibliotecas novas. Use o
+caminho do virtualenv informado em **Web → Virtualenv**:
+
+```bash
+source /home/felipefazevedo/.virtualenvs/SEU_VIRTUALENV/bin/activate
+python -m pip install -r requirements.txt
+python -c "from bs4 import BeautifulSoup; print('Dependencias OK')"
+```
+
+Se o Web App estiver configurado para usar o virtualenv diretamente, ainda
+assim o `pip` precisa ser executado nesse mesmo ambiente. O teste acima evita
+um Reload com erro `ModuleNotFoundError: No module named 'bs4'`.
+
+**Passo 5 — só se o commit alterou banco, vá pra Parte 2 agora.** Se não
+alterou, pule direto pro Passo 6.
+
+**Passo 6 — reiniciar o app:**
 
 **Onde:** PythonAnywhere → aba **Web** → botão verde **Reload** (perto do
 topo da página do seu app).
 
-**Passo 6 — testar:** abra `sync.columbiamachine.com` e confira a tela que
+**Passo 7 — testar:** abra `sync.columbiamachine.com` e confira a tela que
 mudou.
 
 ---
