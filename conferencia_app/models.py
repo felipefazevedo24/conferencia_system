@@ -3458,3 +3458,17 @@ class ProducaoObservacao(db.Model):
     texto = db.Column(db.Text, nullable=False)
     autor = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class ProducaoSequencia(db.Model):
+    """Etapa manual de montagem, mantida no banco do Sync."""
+
+    __tablename__ = "producao_sequencia"
+    id = db.Column(db.Integer, primary_key=True)
+    numero_os = db.Column(db.String(80), nullable=False, index=True)
+    aux_code = db.Column(db.Integer, nullable=True, index=True)
+    posicao = db.Column(db.Integer, nullable=False)
+    titulo = db.Column(db.String(240), nullable=False)
+    instrucoes = db.Column(db.Text)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)

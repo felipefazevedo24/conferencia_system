@@ -1195,6 +1195,31 @@ def _ensure_solicitacao_coleta_tabelas() -> None:
         conn.close()
 
 
+def _ensure_producao_tabelas() -> None:
+    """Cria persistencias nativas de sequencia manual da Producao."""
+    conn = db.engine.connect()
+    try:
+        conn.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS producao_sequencia (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                numero_os VARCHAR(80) NOT NULL,
+                aux_code INTEGER,
+                posicao INTEGER NOT NULL,
+                titulo VARCHAR(240) NOT NULL,
+                instrucoes TEXT,
+                criado_por VARCHAR(100) NOT NULL,
+                criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_producao_sequencia_os (numero_os)
+            )
+        """))
+        conn.commit()
+    except Exception as exc:
+        if "already exists" not in str(exc).lower():
+            raise
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         try:
@@ -1301,6 +1326,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_solicitacao_coleta_tabelas()
+        except Exception:
+            pass
+
+        try:
+            _ensure_producao_tabelas()
         except Exception:
             pass
 

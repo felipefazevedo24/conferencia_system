@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 
 from ..auth import permission_required
 from ..extensions import db
-from ..models import ProducaoObservacao
+from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
 
 producao_bp = Blueprint("producao", __name__)
@@ -265,3 +265,24 @@ def original_create_observation(numero_os: str, aux_code: int):
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": str(row.id), "order_number": numero_os, "item_aux_code": aux_code, "text": row.texto, "author": row.autor, "created_at": row.criado_em.isoformat()}), 201
+
+
+@producao_bp.get("/api/v1/orders/<path:numero_os>/sequence")
+@permission_required("PAGE_PRODUCAO")
+def original_list_sequence(numero_os: str):
+    rows = ProducaoSequencia.query.filter_by(numero_os=numero_os).order_by(ProducaoSequencia.posicao).all()
+    return jsonify([{"id": str(row.id), "order_number": row.numero_os, "item_aux_code": row.aux_code, "position": row.posicao, "title": row.titulo, "instructions": row.instrucoes, "source": "application", "created_by": row.criado_por, "created_at": row.criado_em.isoformat()} for row in rows])
+
+
+@producao_bp.post("/api/v1/orders/<path:numero_os>/sequence")
+@permission_required("PAGE_PRODUCAO")
+def original_create_sequence(numero_os: str):
+    payload = request.get_json(silent=True) or {}
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        return jsonify({"detail": "Informe o titulo da etapa."}), 400
+    last = ProducaoSequencia.query.filter_by(numero_os=numero_os).order_by(ProducaoSequencia.posicao.desc()).first()
+    row = ProducaoSequencia(numero_os=numero_os, aux_code=payload.get("item_aux_code"), posicao=(last.posicao + 1 if last else 1), titulo=title[:240], instrucoes=str(payload.get("instructions") or "").strip() or None, criado_por=session.get("username", "desconhecido"))
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({"id": str(row.id), "order_number": row.numero_os, "item_aux_code": row.aux_code, "position": row.posicao, "title": row.titulo, "instructions": row.instrucoes, "source": "application", "created_by": row.criado_por, "created_at": row.criado_em.isoformat()}), 201
