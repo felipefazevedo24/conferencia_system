@@ -266,7 +266,8 @@
                     or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ROMANEIO')
                     or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                     or can_access('PAGE_LOGISTICA_VIAGEM')
-                    or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_QUALIDADE') %}
+                    or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_QUALIDADE')
+                    or can_access('PAGE_PRODUCAO') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
@@ -330,6 +331,15 @@
 
                         {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') %}
                         <a href="/logistica/consumo-chapa" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</a>
+                        {% endif %}
+
+                        {% if can_access('PAGE_PRODUCAO') %}
+                        <div class="submenu-subgroup" data-subgroup="producao">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-industry submenu-icon"></i> Produção <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                <a href="/producao" class="list-group-item list-group-item-action"><i class="fas fa-industry"></i> Acompanhamento de OS</a>
+                            </div>
+                        </div>
                         {% endif %}
 
                         {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
