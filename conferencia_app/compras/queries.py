@@ -147,6 +147,54 @@ WHERE process.cod_empresa = %(cod_empresa)s AND process.cod_os = %(cod_os)s
 ORDER BY process.cod_os_aux, process.seq NULLS LAST, process.codigo
 """
 
+SQL_PRODUCAO_MATERIAIS_ITEM = """
+SELECT material.guid_linha::text AS line_id, material.cod_interno,
+             material.produto, material.unidade, material.qtde,
+             COALESCE(material.qtde_utilizada, 0) AS qtde_utilizada,
+             material.cod_os_completo, stock.qtde_disponivel
+FROM public.tlis_mat material
+LEFT JOIN public.tproduto_deposito stock
+    ON stock.cod_empresa = material.cod_empresa
+ AND stock.cod_produto = material.cod_produto
+ AND stock.cod_deposito = material.cod_deposito
+WHERE material.cod_empresa = %(cod_empresa)s
+    AND material.cod_os = %(cod_os)s
+    AND material.cod_os_aux = %(cod_os_aux)s
+ORDER BY material.cod_interno, material.produto, material.guid_linha
+"""
+
+SQL_PRODUCAO_APONTAMENTOS_ITEM = """
+SELECT pointing.cod_os_aux, process.codigo AS operation_code,
+             pointing.seq_processo_prod,
+             CASE WHEN pointing.data IS NOT NULL AND pointing.inicio IS NOT NULL
+                        THEN pointing.data::date + pointing.inicio::time
+                        ELSE COALESCE(pointing.data, pointing.inicio) END AS started_at,
+             COALESCE(NULLIF(btrim(pointing.maquina), ''), NULLIF(btrim(process.maquina), '')) AS machine,
+             COALESCE(NULLIF(btrim(employee.nome), ''), 'Operador nao identificado') AS operator_name,
+             ((pointing.parada1_ini IS NOT NULL AND pointing.parada1_fim IS NULL)
+                OR (pointing.parada2_ini IS NOT NULL AND pointing.parada2_fim IS NULL)
+                OR (pointing.parada3_ini IS NOT NULL AND pointing.parada3_fim IS NULL)
+                OR (pointing.parada4_ini IS NOT NULL AND pointing.parada4_fim IS NULL)
+                OR (pointing.parada5_ini IS NOT NULL AND pointing.parada5_fim IS NULL)
+                OR (pointing.parada6_ini IS NOT NULL AND pointing.parada6_fim IS NULL)) AS paused
+FROM public.taponta_aberto pointing
+LEFT JOIN public.tpro_pro process
+    ON process.cod_empresa = pointing.cod_empresa AND process.cod_os = pointing.cod_os
+ AND process.cod_os_aux = pointing.cod_os_aux AND process.seq = pointing.seq_processo_prod
+LEFT JOIN public.tfuncion employee
+    ON employee.cod_empresa = pointing.cod_empresa AND employee.codigo = pointing.cod_funcionario
+WHERE pointing.cod_empresa = %(cod_empresa)s AND pointing.cod_os = %(cod_os)s
+    AND pointing.cod_os_aux = %(cod_os_aux)s
+ORDER BY pointing.seq_processo_prod NULLS LAST, started_at, pointing.codigo
+"""
+
+SQL_PRODUCAO_RNCS_OS = """
+SELECT cod_os_aux, codigo, titulo, status_rnc, dt_fechamento
+FROM public.tn_conformidade
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+ORDER BY codigo
+"""
+
 # -------------------------------------------------------------------
 # Indicadores de GAP de compras (necessidade x em OC x recebido)
 # -------------------------------------------------------------------

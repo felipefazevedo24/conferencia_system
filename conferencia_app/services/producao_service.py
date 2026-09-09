@@ -58,7 +58,58 @@ def obter_estrutura(numero_os: str) -> dict[str, Any]:
         queries.SQL_PRODUCAO_OPERACOES_OS,
         {"cod_empresa": 1, "cod_os": ordem["codigo"]},
     )
-    return _estrutura_payload(ordem, itens, operacoes)
+    payload = _estrutura_payload(ordem, itens, operacoes)
+    payload["rncs"] = _rncs(ordem["codigo"])
+    return payload
+
+
+def obter_materiais(numero_os: str, aux_code: int) -> dict[str, Any]:
+    ordem = _obter_ordem(numero_os)
+    rows = fetch_all(
+        queries.SQL_PRODUCAO_MATERIAIS_ITEM,
+        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+    )
+    return {
+        "numero_os": numero_os,
+        "aux_code": aux_code,
+        "materiais": [
+            {
+                "id": _texto(row.get("line_id")),
+                "codigo": _texto(row.get("cod_interno") or row.get("produto")),
+                "descricao": _texto(row.get("produto")),
+                "unidade": _texto(row.get("unidade")),
+                "necessario": row.get("qtde") or 0,
+                "utilizado": row.get("qtde_utilizada") or 0,
+                "disponivel": row.get("qtde_disponivel"),
+                "restante": max(float(row.get("qtde") or 0) - float(row.get("qtde_utilizada") or 0), 0),
+            }
+            for row in rows
+        ],
+    }
+
+
+def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
+    ordem = _obter_ordem(numero_os)
+    rows = fetch_all(
+        queries.SQL_PRODUCAO_APONTAMENTOS_ITEM,
+        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+    )
+    return {"aux_code": aux_code, "atualizado_em": datetime.now().isoformat(), "apontamentos": [
+        {"operacao": _texto(row.get("operation_code")), "sequencia": row.get("seq_processo_prod"), "operador": _texto(row.get("operator_name")), "inicio": _iso(row.get("started_at")), "maquina": _texto(row.get("machine")), "pausado": bool(row.get("paused"))}
+        for row in rows
+    ]}
+
+
+def _obter_ordem(numero_os: str) -> dict[str, Any]:
+    ordem = fetch_one(queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
+    if not ordem:
+        raise LookupError(f"OS {numero_os} nao encontrada.")
+    return ordem
+
+
+def _rncs(cod_os: int) -> list[dict[str, Any]]:
+    rows = fetch_all(queries.SQL_PRODUCAO_RNCS_OS, {"cod_empresa": 1, "cod_os": cod_os})
+    return [{"codigo": row.get("codigo"), "aux_code": row.get("cod_os_aux"), "titulo": _texto(row.get("titulo")), "status": _texto(row.get("status_rnc")), "fechada_em": _iso(row.get("dt_fechamento")), "aberta": not bool(row.get("dt_fechamento"))} for row in rows]
 
 
 def _os_payload(row: dict[str, Any]) -> dict[str, Any]:

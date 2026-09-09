@@ -3445,3 +3445,16 @@ class ChapaCalculoLog(db.Model):
     alterado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     dados_anteriores = db.Column(db.Text)  # JSON do estado anterior (vazio na criação)
     dados_novos = db.Column(db.Text)       # JSON do estado novo
+
+
+class ProducaoObservacao(db.Model):
+    """Observacao operacional da estrutura, mantida no banco do Sync."""
+
+    __tablename__ = "producao_observacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_os = db.Column(db.String(80), nullable=False, index=True)
+    aux_code = db.Column(db.Integer, nullable=False, index=True)
+    texto = db.Column(db.Text, nullable=False)
+    autor = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
