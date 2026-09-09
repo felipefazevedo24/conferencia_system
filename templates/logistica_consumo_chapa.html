@@ -155,6 +155,7 @@
                         <th>Próx. Operação</th>
                         <th>Cliente</th>
                         <th>Peso Total</th>
+                        <th title="tlis_mat.qtde / tlis_mat.qtde_utilizada, pelo código interno do material da chapa">ERP (OS)</th>
                         <th style="min-width:180px;">Observação</th>
                         <th style="min-width:150px;">Baixa</th>
                     </tr>
@@ -201,6 +202,18 @@
     }
     function fmtKg(v) { return v === null || v === undefined ? "—" : `${fmtNum(v)} Kg`; }
     function fmtPct(v) { return v === null || v === undefined ? "—" : `${fmtNum(v)} %`; }
+    function fmtErpOs(p) {
+        // Qtde planejada (tlis_mat.qtde) x ja utilizada (tlis_mat.qtde_utilizada)
+        // no ERP, pra essa OS/material - ver svc.buscar_erp_materiais_por_os.
+        if (p.erp_qtde_necessaria == null && p.erp_qtde_utilizada == null) {
+            return `<span style="font-size:11px; color:var(--eui-muted);">sem dados</span>`;
+        }
+        const un = p.erp_unidade ? ` ${escapeHtml(p.erp_unidade)}` : "";
+        return `<span style="font-size:11.5px; white-space:nowrap;">
+            Plan.: <b>${fmtNum(p.erp_qtde_necessaria, 2)}</b>${un}<br>
+            Usado: <b>${fmtNum(p.erp_qtde_utilizada, 2)}</b>${un}
+        </span>`;
+    }
 
     let nestingsCache = [];
     let filtroAtual = "";
@@ -393,6 +406,13 @@
             } else {
                 $("cc-detalhe-erro-banner").innerHTML = "";
             }
+            if (n.erp_indisponivel) {
+                $("cc-detalhe-erro-banner").innerHTML += `
+                    <div class="cc-erro-banner" style="background:#fffbeb; border-color:#fde68a; color:#92400e; margin-top:8px;">
+                        <i class="fas fa-plug-circle-xmark"></i>
+                        <div>ERP indisponível no momento — a coluna "ERP (OS)" (tlis_mat.qtde/qtde_utilizada) ficou sem dado.</div>
+                    </div>`;
+            }
             const btnConfirmarRecebimentoModal = $("cc-detalhe-confirmar-recebimento");
             if (btnConfirmarRecebimentoModal) {
                 btnConfirmarRecebimentoModal.addEventListener("click", async () => {
@@ -434,6 +454,7 @@
                         <td>${escapeHtml(p.prox_operacao)}</td>
                         <td>${escapeHtml(p.cliente)}</td>
                         <td>${fmtKg(p.peso_total_baixa_kg)}</td>
+                        <td>${fmtErpOs(p)}</td>
                         <td>
                             ${n.status === "Nesting"
                                 ? `<span style="font-size:11.5px; color:var(--eui-muted);">${escapeHtml(p.observacao || "Aguardando confirmação")}</span>`
@@ -457,13 +478,13 @@
                         </td>
                     </tr>
                 `).join("")
-                : '<tr><td colspan="11" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
+                : '<tr><td colspan="12" class="cc-empty">Nenhuma peça encontrada nesse Nesting.</td></tr>';
 
             // Soma do Peso Total (o que precisa ser baixado do estoque) de
             // todas as pecas - calculada no backend (ver _fmt_nesting), pra
             // bater exatamente com o check contra o "Peso Peças Kg" do relatorio.
             let linhaTotal = pecas.length
-                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(n.soma_peso_pecas_calculado_kg)}</td><td colspan="2"></td></tr>`
+                ? `<tr><td colspan="8" style="text-align:right; font-weight:700;">Total a baixar</td><td style="font-weight:700;">${fmtKg(n.soma_peso_pecas_calculado_kg)}</td><td colspan="3"></td></tr>`
                 : "";
             if (pecas.length && n.peso_pecas_confere !== null && n.peso_pecas_confere !== undefined) {
                 const ok = n.peso_pecas_confere;
@@ -471,7 +492,7 @@
                 const texto = ok
                     ? 'Confere com o "Peso Peças" do relatório'
                     : `Diverge do "Peso Peças" do relatório (${fmtKg(n.peso_pecas_kg)}) em ${fmtKg(Math.abs(n.diferenca_peso_pecas_kg))}`;
-                linhaTotal += `<tr><td colspan="11" style="text-align:right; padding-top:2px;">
+                linhaTotal += `<tr><td colspan="12" style="text-align:right; padding-top:2px;">
                     <span style="color:${cor}; font-size:12px; font-weight:600;">
                         <i class="fas ${ok ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
                     </span>

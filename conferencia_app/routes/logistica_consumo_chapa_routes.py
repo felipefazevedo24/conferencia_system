@@ -17,13 +17,21 @@ logistica_consumo_chapa_bp = Blueprint("logistica_consumo_chapa", __name__)
 PERMISSION = "PAGE_LOGISTICA_CONSUMO_CHAPA"
 
 
-def _fmt_peca(p, qtde_chapas: int | None = None) -> dict:
+def _fmt_peca(p, qtde_chapas: int | None = None, codigo_material: str | None = None, erp_index: dict | None = None) -> dict:
     # Peso total a ser baixado do estoque pra essa peca/OS: quanto ela pesa
     # por chapa (qtd cortada x peso unitario) vezes o total de chapas que
     # o Nesting inteiro consumiu - ver LogisticaConsumoChapaNesting.qtde_chapas.
     peso_total_baixa_kg = None
     if qtde_chapas and p.qtd_arranjada is not None and p.peso_liquido_kg is not None:
         peso_total_baixa_kg = p.qtd_arranjada * p.peso_liquido_kg * qtde_chapas
+
+    # Qtde planejada (tlis_mat.qtde) e ja utilizada (tlis_mat.qtde_utilizada)
+    # pro material dessa chapa, na OS dessa peca - ver svc.buscar_erp_materiais_por_os.
+    dados_erp = None
+    if erp_index is not None:
+        chave = (str(p.os_numero or "").strip(), str(codigo_material or "").strip())
+        dados_erp = erp_index.get(chave)
+
     return {
         "id": p.id,
         "peca_numero": p.peca_numero,
@@ -40,6 +48,9 @@ def _fmt_peca(p, qtde_chapas: int | None = None) -> dict:
         "baixado": p.baixado,
         "baixado_em": p.baixado_em.strftime("%d/%m/%Y %H:%M") if p.baixado_em else None,
         "baixado_por": p.baixado_por,
+        "erp_qtde_necessaria": dados_erp["qtde_necessaria"] if dados_erp else None,
+        "erp_qtde_utilizada": dados_erp["qtde_utilizada"] if dados_erp else None,
+        "erp_unidade": dados_erp["unidade"] if dados_erp else None,
     }
 
 
@@ -96,7 +107,13 @@ def _fmt_nesting(n, com_pecas: bool = False) -> dict:
         "confirmado_por": n.confirmado_por,
     }
     if com_pecas:
-        pecas = [_fmt_peca(p, qtde_chapas=n.qtde_chapas) for p in n.pecas]
+        os_numeros = {p.os_numero for p in n.pecas if p.os_numero}
+        erp_index, erp_indisponivel = svc.buscar_erp_materiais_por_os(os_numeros)
+        dados["erp_indisponivel"] = erp_indisponivel
+        pecas = [
+            _fmt_peca(p, qtde_chapas=n.qtde_chapas, codigo_material=n.codigo_material, erp_index=erp_index)
+            for p in n.pecas
+        ]
         dados["pecas"] = pecas
 
         # Check: "Peso Peças Kg" que veio pronto do relatorio da maquina

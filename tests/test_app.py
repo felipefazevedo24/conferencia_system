@@ -6087,12 +6087,20 @@ def test_parser_nesting_extrai_cabecalho_e_todas_as_pecas_de_relatorio_real(tmp_
     assert parse_relatorio_nesting_html("<html><body>sem tabela nenhuma</body></html>") == []
 
 
-def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_path):
+def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_path, monkeypatch):
     """Modulo de Consumo de Chapa: upload manual do relatorio de Nesting
     (HTML da maquina de corte) - fixture e' um arquivo REAL. Cobre o
     workflow Nesting (bloqueado, so' Confirmar Recebimento) -> Nesting
     Liberado -> Concluido -> estorno, e reimportar o mesmo arquivo
     ATUALIZA (nao duplica)."""
+    from conferencia_app.services import logistica_consumo_chapa_service as cc_svc
+
+    # A tela de detalhe cruza com o ERP (tlis_mat, via bridge do modulo
+    # Compras) - nos testes nao ha bridge/Postgres real disponivel, entao
+    # troca por um stub que nao faz IO nenhum (ver teste dedicado abaixo
+    # pra cobertura do cruzamento em si).
+    monkeypatch.setattr(cc_svc, "buscar_erp_materiais_por_os", lambda os_numeros: ({}, False))
+
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -6264,11 +6272,15 @@ def test_consumo_chapa_importa_relatorio_e_segue_workflow_nesting_concluido(tmp_
     assert client.post("/api/logistica/consumo-chapa/999999/concluir", json={}).status_code == 404
 
 
-def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path):
+def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path, monkeypatch):
     """Ramo lateral "Erro" (divergencia) do Consumo de Chapa: gestor marca
     uma divergencia com motivo obrigatorio -> Nesting vai pro status Erro e
     NAO pode ser Concluido ate' a divergencia ser resolvida (volta pra
     Nesting Liberado)."""
+    from conferencia_app.services import logistica_consumo_chapa_service as cc_svc
+
+    monkeypatch.setattr(cc_svc, "buscar_erp_materiais_por_os", lambda os_numeros: ({}, False))
+
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -6359,11 +6371,15 @@ def test_consumo_chapa_ramo_erro_divergencia_trava_conclusao(tmp_path):
     assert resp_marcar_apos_concluido.status_code == 400
 
 
-def test_consumo_chapa_marcar_erro_no_nivel_de_peca_e_atalho_pro_erro_do_nesting(tmp_path):
+def test_consumo_chapa_marcar_erro_no_nivel_de_peca_e_atalho_pro_erro_do_nesting(tmp_path, monkeypatch):
     """Bota de "Marcar Divergencia" tambem disponivel dentro do Nesting, no
     nivel de LINHA (peca) - e' so' um atalho: continua marcando o NESTING
     INTEIRO como Erro (mesmo status/trava de sempre), mas identifica no
     motivo qual peca disparou a divergencia."""
+    from conferencia_app.services import logistica_consumo_chapa_service as cc_svc
+
+    monkeypatch.setattr(cc_svc, "buscar_erp_materiais_por_os", lambda os_numeros: ({}, False))
+
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -6422,3 +6438,71 @@ def test_consumo_chapa_marcar_erro_no_nivel_de_peca_e_atalho_pro_erro_do_nesting
     )
     assert resp_marcar_de_novo.status_code == 200
     assert resp_marcar_de_novo.get_json()["nesting"]["status"] == "Erro"
+
+
+def test_consumo_chapa_cruza_qtde_planejada_utilizada_do_erp_tlis_mat_por_os(tmp_path, monkeypatch):
+    """Detalhe do Nesting cruza, por OS, a Qtde planejada (tlis_mat.qtde) e
+    a Qtde ja utilizada (tlis_mat.qtde_utilizada) que vem do ERP (modulo
+    Compras, via bridge) - casando pelo codigo interno do material da
+    chapa. Se a bridge/ERP falhar, a tela nao quebra (so' fica sem esse
+    dado, com um aviso)."""
+    from conferencia_app.services import logistica_consumo_chapa_service as cc_svc
+
+    caminho = Path(__file__).parent / "fixtures" / "relatorio_nesting_exemplo.html"
+    conteudo = caminho.read_bytes()
+
+    chamadas = []
+
+    def fake_buscar(os_numeros):
+        chamadas.append(set(os_numeros))
+        # Fixture: peca da OS "9780", chapa codigo_material "19-01-00558".
+        return (
+            {("9780", "19-01-00558"): {"qtde_necessaria": 30.0, "qtde_utilizada": 18.0, "unidade": "KG"}},
+            False,
+        )
+
+    monkeypatch.setattr(cc_svc, "buscar_erp_materiais_por_os", fake_buscar)
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp = client.post(
+        "/api/logistica/consumo-chapa/importar",
+        data={"arquivo": (io.BytesIO(conteudo), "Relatorio 2.HTML")},
+        content_type="multipart/form-data",
+    )
+    nesting_id = resp.get_json()["nestings"][0]["id"]
+
+    resp_detalhe = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe.status_code == 200
+    nesting = resp_detalhe.get_json()["nesting"]
+    assert nesting["erp_indisponivel"] is False
+    assert chamadas == [{"9780"}]  # so' chamou a bridge UMA vez, com as OS unicas das pecas
+
+    peca = nesting["pecas"][0]
+    assert peca["erp_qtde_necessaria"] == 30.0
+    assert peca["erp_qtde_utilizada"] == 18.0
+    assert peca["erp_unidade"] == "KG"
+
+    # A listagem (sem com_pecas=True) NAO chama o ERP - so' o detalhe.
+    chamadas.clear()
+    resp_lista = client.get("/api/logistica/consumo-chapa")
+    assert resp_lista.status_code == 200
+    assert chamadas == []
+
+    # Se a bridge/ERP falhar -> tela de detalhe continua funcionando, so'
+    # sem o dado (e com o aviso erp_indisponivel=True).
+    monkeypatch.setattr(cc_svc, "buscar_erp_materiais_por_os", lambda os_numeros: ({}, True))
+    resp_detalhe_erp_fora = client.get(f"/api/logistica/consumo-chapa/{nesting_id}")
+    assert resp_detalhe_erp_fora.status_code == 200
+    nesting_erp_fora = resp_detalhe_erp_fora.get_json()["nesting"]
+    assert nesting_erp_fora["erp_indisponivel"] is True
+    assert nesting_erp_fora["pecas"][0]["erp_qtde_necessaria"] is None
+
+    # Sem OS pra consultar -> nem tenta falar com o ERP (caminho rapido,
+    # sem IO nenhum - unica parte de buscar_erp_materiais_por_os (a de
+    # verdade, sem mock) testavel sem uma bridge/Postgres real disponivel).
+    monkeypatch.undo()
+    assert cc_svc.buscar_erp_materiais_por_os(set()) == ({}, False)
+    assert cc_svc.buscar_erp_materiais_por_os([]) == ({}, False)
