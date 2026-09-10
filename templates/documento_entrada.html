@@ -1474,6 +1474,9 @@
             nota: String(auditorNotaSelecionada?.numero || ''),
             cnpj_emitente: String(auditorNotaSelecionada?.cnpj_emitente || ''),
             fornecedor: String(auditorNotaSelecionada?.fornecedor || ''),
+            material_cliente: !!document.getElementById('materialCliente')?.checked,
+            remessa: !!document.getElementById('remessa')?.checked,
+            sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
         };
     }
     let confirmResolver = null;

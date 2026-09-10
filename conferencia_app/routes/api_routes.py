@@ -4730,6 +4730,9 @@ def analisar_nota_xml_auditor():
 
     inconsistencias = _auditar_inconsistencias_fiscais(itens)
     status_auditoria = "ComInconsistencia" if inconsistencias else "SemInconsistencia"
+    material_cliente = bool(payload.get("material_cliente", False))
+    remessa = bool(payload.get("remessa", False))
+    sem_conferencia_logistica = bool(payload.get("sem_conferencia_logistica", False))
     usuario = session.get("username", "sistema")
     agora = datetime.now()
 
@@ -4747,6 +4750,9 @@ def analisar_nota_xml_auditor():
         item.auditor_justificativa = None
         item.auditor_usuario = usuario
         item.auditor_data = agora
+        item.material_cliente = material_cliente
+        item.remessa = remessa
+        item.sem_conferencia_logistica = sem_conferencia_logistica
 
     db.session.commit()
     return jsonify(
