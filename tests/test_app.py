@@ -5592,6 +5592,139 @@ def test_etiqueta_red_molds_bloqueia_sem_nf_e_gera_pdf_com_dados_e_volumes(tmp_p
     assert b"VOL: 02/02" in corpo
 
 
+def test_conf_cega_salvar_parcial_preserva_contagem_sem_finalizar_nem_revelar_divergencia(tmp_path):
+    """Botão "Salvar progresso" da conferência cega: salva a contagem já
+    feita (parcial - nem todos os itens precisam estar preenchidos) sem
+    finalizar a conferência nem checar/revelar divergência (mantém o
+    caráter CEGO). Serve pro conferente que precisa parar no meio (item
+    parcial, foi procurar o que falta) sem perder o que já digitou."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat, ExpedicaoOrdemFatItem
+        from conferencia_app.services.expedicao_fat_service import STATUS_PENDENTE
+
+        ordem = ExpedicaoOrdemFat(
+            cod_ordem_fat=8888, codigo_interno="OF-008888", cliente="CLIENTE TESTE",
+            orcamento="1234", status=STATUS_PENDENTE,
+        )
+        db.session.add(ordem)
+        db.session.commit()
+        it1 = ExpedicaoOrdemFatItem(ordem_id=ordem.id, linha=1, cod_interno="X1", item="Item 1", n_os="OS-1", qtde_a_faturar=5)
+        it2 = ExpedicaoOrdemFatItem(ordem_id=ordem.id, linha=2, cod_interno="X2", item="Item 2", n_os="OS-2", qtde_a_faturar=3)
+        it3 = ExpedicaoOrdemFatItem(ordem_id=ordem.id, linha=3, cod_interno="X3", item="Item 3", n_os="OS-3", qtde_a_faturar=7)
+        db.session.add_all([it1, it2, it3])
+        db.session.commit()
+        it1_id, it2_id, it3_id = it1.id, it2.id, it3.id
+
+    # Ordem inexistente -> 404.
+    resp_404 = client.post("/api/expedicao/conf-cega/ordens/999999/salvar-parcial", json={"itens": []})
+    assert resp_404.status_code == 404
+
+    # Antes de qualquer contagem: GET nao traz qtde_conferida nenhuma.
+    resp_antes = client.get("/api/expedicao/conf-cega/ordens/8888")
+    assert resp_antes.status_code == 200
+    itens_antes = resp_antes.get_json()["itens"]
+    assert all("qtde_conferida" not in it for it in itens_antes)
+    assert all("divergente" not in it for it in itens_antes)
+
+    # Salva parcial: so 2 dos 3 itens preenchidos, peso liquido preenchido
+    # mas peso bruto ainda vazio.
+    resp_parcial = client.post(
+        "/api/expedicao/conf-cega/ordens/8888/salvar-parcial",
+        json={
+            "itens": [
+                {"id": it1_id, "qtde_conferida": 5},
+                {"id": it2_id, "qtde_conferida": 1},  # errado de proposito (nao deve revelar)
+            ],
+            "peso_liquido": "100 kg",
+            "peso_bruto": "",
+        },
+    )
+    assert resp_parcial.status_code == 200
+    assert "2 item" in resp_parcial.get_json()["mensagem"]
+
+    # Ordem continua Pendente - salvar parcial NAO finaliza nem muda status.
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat as _Ordem
+        from conferencia_app.services.expedicao_fat_service import STATUS_PENDENTE as _PEND
+
+        ordem_db = _Ordem.query.filter_by(cod_ordem_fat=8888).first()
+        assert ordem_db.status == _PEND
+        assert ordem_db.conferido_at is None
+        assert ordem_db.peso_liquido == "100 kg"
+        assert not ordem_db.peso_bruto  # nao preenchido, nao mexeu
+
+    # GET de novo: os 2 itens contados vem PRE-PREENCHIDOS (rascunho), mas
+    # SEM "divergente" - a conferencia cega nao revela isso antes de
+    # finalizar de verdade (mesmo o item 2, contado errado de proposito).
+    resp_depois = client.get("/api/expedicao/conf-cega/ordens/8888")
+    itens_depois = {it["id"]: it for it in resp_depois.get_json()["itens"]}
+    assert itens_depois[it1_id]["qtde_conferida"] == 5
+    assert itens_depois[it2_id]["qtde_conferida"] == 1
+    assert "qtde_conferida" not in itens_depois[it3_id]
+    assert all("divergente" not in it for it in itens_depois.values())
+    assert resp_depois.get_json()["peso_liquido"] == "100 kg"
+
+    # Salva parcial de novo, completando o item que faltava + peso bruto -
+    # o que ja estava salvo continua intacto.
+    resp_parcial2 = client.post(
+        "/api/expedicao/conf-cega/ordens/8888/salvar-parcial",
+        json={"itens": [{"id": it3_id, "qtde_conferida": 7}], "peso_bruto": "120 kg"},
+    )
+    assert resp_parcial2.status_code == 200
+    resp_depois2 = client.get("/api/expedicao/conf-cega/ordens/8888")
+    itens_depois2 = {it["id"]: it for it in resp_depois2.get_json()["itens"]}
+    assert itens_depois2[it1_id]["qtde_conferida"] == 5  # preservado
+    assert itens_depois2[it3_id]["qtde_conferida"] == 7  # novo
+    assert resp_depois2.get_json()["peso_liquido"] == "100 kg"  # preservado
+    assert resp_depois2.get_json()["peso_bruto"] == "120 kg"  # novo
+
+    # Ordem ja expedida (nao editavel) -> 400, nao aceita mais parcial.
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat as _Ordem2
+        from conferencia_app.services.expedicao_fat_service import STATUS_EXPEDIDO
+
+        ordem_db2 = _Ordem2.query.filter_by(cod_ordem_fat=8888).first()
+        ordem_db2.status = STATUS_EXPEDIDO
+        db.session.commit()
+    resp_bloqueado = client.post(
+        "/api/expedicao/conf-cega/ordens/8888/salvar-parcial",
+        json={"itens": [{"id": it2_id, "qtde_conferida": 3}]},
+    )
+    assert resp_bloqueado.status_code == 400
+
+    # Volta pra Pendente, corrige o item 2 (errado antes) e finaliza de
+    # verdade - a partir dai SIM revela divergente (False, ja que corrigiu).
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat as _Ordem3
+        from conferencia_app.services.expedicao_fat_service import STATUS_PENDENTE as _PEND2
+
+        ordem_db3 = _Ordem3.query.filter_by(cod_ordem_fat=8888).first()
+        ordem_db3.status = _PEND2
+        db.session.commit()
+    resp_final = client.post(
+        "/api/expedicao/conf-cega/ordens/8888/conferir",
+        json={
+            "itens": [
+                {"id": it1_id, "qtde_conferida": 5},
+                {"id": it2_id, "qtde_conferida": 3},
+                {"id": it3_id, "qtde_conferida": 7},
+            ],
+            "peso_liquido": "100 kg", "peso_bruto": "120 kg",
+            "qtde_volumes": "1", "especie_volumes": "Caixa",
+        },
+    )
+    assert resp_final.status_code == 200
+    assert resp_final.get_json()["divergente"] is False
+
+    resp_final_get = client.get("/api/expedicao/conf-cega/ordens/8888")
+    itens_final = {it["id"]: it for it in resp_final_get.get_json()["itens"]}
+    assert itens_final[it2_id]["divergente"] is False  # so revela AGORA, apos finalizar
+
+
 def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     """Ao confirmar uma divergencia (Modulo 02), o gestor pode marcar
     `solicitar_analise_causa` - isso cria uma entrada na fila separada de

@@ -245,11 +245,15 @@ def obter_ordem_conf_cega(cod_ordem_fat):
         }
         # Conferencia CEGA: a quantidade esperada (qtde_a_faturar) NUNCA e
         # enviada ao front-end. Ela existe apenas no back-end para validar a
-        # contagem. Apos conferir, expomos somente o que o proprio operador
-        # contou (qtde_conferida) e se houve divergencia (booleano) — sem
-        # revelar o numero esperado.
-        if conferido:
+        # contagem. Apos conferir, expomos o que o operador contou
+        # (qtde_conferida) e se houve divergencia (booleano) — sem revelar
+        # o numero esperado. ANTES de conferir, se ja existir uma contagem
+        # PARCIAL salva (ver /salvar-parcial), devolve ela tambem pro campo
+        # vir pre-preenchido - mas sem "divergente" (isso so' e' calculado
+        # na conferencia oficial, nunca antes, senao vaza a resposta certa).
+        if it.qtde_conferida is not None:
             dados["qtde_conferida"] = it.qtde_conferida
+        if conferido:
             dados["divergente"] = bool(it.divergente)
         itens.append(dados)
 
@@ -800,6 +804,68 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
         "ordem": _ordem_resumo(ordem, len(itens)),
         "itens": resultado_itens,
         "historico": log_svc.listar_logs("fat", ordem.id),
+    })
+
+
+@expedicao_fat_bp.route(
+    "/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/salvar-parcial", methods=["POST"]
+)
+@roles_required(*ROLES)
+def salvar_parcial_conf_cega(cod_ordem_fat):
+    """Salva o PROGRESSO da conferencia (contagem de itens ja feita + peso/
+    volumes ja preenchidos) sem exigir todos os itens nem checar
+    divergencia - serve pro conferente que precisa parar no meio (ex.:
+    item parcial, precisa ir procurar o que falta) sem perder o que ja
+    digitou. NAO muda o status da ordem, NAO calcula/revela divergencia
+    (mantem a conferencia cega) e NAO dispara notificacao nenhuma - e' so'
+    um checkpoint. Itens nao enviados ou com valor vazio ficam como
+    estavam (nunca apaga um valor ja salvo com null)."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    if not _ordem_editavel(ordem):
+        return jsonify({"error": f"Ordem '{ordem.status}' nao pode ser editada."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    itens_payload = payload.get("itens") or []
+    itens_por_id = {it.id: it for it in ordem.itens}
+
+    salvos = 0
+    for entry in itens_payload:
+        try:
+            item_id = int(entry.get("id"))
+        except (TypeError, ValueError):
+            continue
+        item = itens_por_id.get(item_id)
+        if not item:
+            continue
+        qtd = svc._parse_int(entry.get("qtde_conferida"), None)
+        if qtd is None:
+            continue
+        item.qtde_conferida = qtd
+        salvos += 1
+
+    # Cabecalho (peso/volumes): so' grava o que ja foi preenchido, sem
+    # exigir tudo - igual aos itens, um checkpoint parcial.
+    peso_liquido = str(payload.get("peso_liquido") or "").strip()
+    peso_bruto = str(payload.get("peso_bruto") or "").strip()
+    qtde_volumes = str(payload.get("qtde_volumes") or "").strip()
+    especie_volumes = str(payload.get("especie_volumes") or "").strip()
+    if peso_liquido:
+        ordem.peso_liquido = peso_liquido
+    if peso_bruto:
+        ordem.peso_bruto = peso_bruto
+    if qtde_volumes:
+        ordem.qtde_volumes = qtde_volumes
+    if especie_volumes:
+        ordem.especie_volumes = especie_volumes
+
+    ordem.updated_at = datetime.now()
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "mensagem": f"Progresso salvo — {salvos} item(ns) com quantidade contada até agora.",
     })
 
 

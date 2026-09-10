@@ -531,6 +531,7 @@
                         <button class="eui-btn eui-btn--danger" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
                     </div>
                 </div>
+                <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-salvar-parcial" title="Salva o que já foi contado até agora, sem finalizar - use antes de sair pra procurar itens faltantes"><i class="fas fa-floppy-disk"></i> Salvar progresso</button>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
             </div>
         </div>
@@ -1564,6 +1565,8 @@
                 el("btn-finalizar-conf").innerHTML = editando
                     ? '<i class="fas fa-floppy-disk"></i> Salvar edição'
                     : '<i class="fas fa-check-double"></i> Finalizar conferência';
+                const bSalvarParcial = el("btn-salvar-parcial");
+                if (bSalvarParcial) bSalvarParcial.style.display = o.editavel ? "" : "none";
 
                 if (CE_IS_ADMIN) {
                     const podeEstornar = ["conferido", "faturado", "finalizado_sem_conf"].includes(o.status_slug);
@@ -1618,6 +1621,45 @@
                 const aviso = row.querySelector(".ce-reveal.bad.js-faltando-msg");
                 if (aviso) aviso.remove();
             });
+        }
+
+        async function salvarProgressoParcial() {
+            if (!currentOrdem) return;
+            // Diferente do finalizar: NAO exige todos os itens preenchidos nem
+            // peso/volumes - so' manda o que ja foi digitado ate' agora, pra
+            // nao perder a contagem se precisar sair procurar item faltante.
+            const itens = [];
+            el("conf-itens").querySelectorAll(".ce-conf-item[data-item-id]").forEach((row) => {
+                const inp = row.querySelector("input[data-qtd]");
+                if (!inp) return;
+                const id = parseInt(inp.dataset.qtd, 10);
+                const val = inp.value.trim();
+                if (val === "") return;
+                const numero = parseInt(val, 10);
+                if (Number.isNaN(numero)) return;
+                itens.push({ id, qtde_conferida: numero });
+            });
+
+            const body = {
+                itens,
+                peso_liquido: el("h-peso-liq").value.trim(),
+                peso_bruto: el("h-peso-bruto").value.trim(),
+                qtde_volumes: el("h-qtde-vol").value.trim(),
+                especie_volumes: el("h-especie").value.trim(),
+            };
+
+            const btn = el("btn-salvar-parcial");
+            if (btn) btn.disabled = true;
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/salvar-parcial", {
+                    method: "POST", body: JSON.stringify(body),
+                });
+                toast(r.mensagem || "Progresso salvo!", "success");
+            } catch (e) {
+                toast(e.message, "error");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         }
 
         async function finalizarConferencia() {
@@ -1942,6 +1984,7 @@
         el("btn-atualizar").addEventListener("click", carregarDashboard);
         el("btn-voltar").addEventListener("click", voltarDashboard);
         el("btn-voltar-2").addEventListener("click", voltarDashboard);
+        el("btn-salvar-parcial").addEventListener("click", salvarProgressoParcial);
         el("btn-finalizar-conf").addEventListener("click", finalizarConferencia);
         if (cfg.internacional) {
             const toggle = el("op-toggle");
