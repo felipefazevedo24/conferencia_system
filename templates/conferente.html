@@ -789,28 +789,11 @@
     <div id="lista-view" class="ce-wrap">
         <header class="eui-page-header">
             <div>
-                <div class="eui-page-header__eyebrow">Recebimento</div>
-                <h1 class="eui-page-header__title"><i class="fas fa-barcode"></i> Conferência de Recebimento</h1>
-                <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
+                <div class="eui-page-header__eyebrow">Logística · Recebimento</div>
+                <h1 class="eui-page-header__title"><i class="fas fa-box-open"></i> Conferência de Recebimento</h1>
+                <p class="eui-page-header__sub">Confronto físico do material a receber. Conferência cega — a quantidade esperada não é exibida.</p>
             </div>
         </header>
-
-        <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
-                <div class="eui-input-group" style="flex:1; position:relative;">
-                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
-                    <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" autocomplete="off" style="width:100%; padding-left:34px;" />
-                </div>
-                <button class="eui-btn eui-btn--ghost hidden" id="receb-btn-limpar-busca" onclick="limparBuscaReceb()" title="Limpar busca"><i class="fas fa-xmark"></i></button>
-            </div>
-            <div style="position:relative;">
-                <button class="eui-btn eui-btn--ghost" type="button" onclick="toggleMenuReceb(event)"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
-                <div class="ce-dropdown-menu" id="receb-toolbar-menu">
-                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); carregarNotas();"><i class="fas fa-rotate"></i> Atualizar</button>
-                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); abrirConsultaOcorrencias();"><i class="fas fa-clock-rotate-left"></i> Livro de ocorrências</button>
-                </div>
-            </div>
-        </div>
 
         <!-- KPIs / FLUXOS CLICÁVEIS (mesmo padrão da Conferência de Expedição) -->
         <div class="eui-stats" id="dashboard-resumo" style="margin-bottom:18px;">
@@ -856,6 +839,23 @@
                 </div>
             </div>
             {% endif %}
+        </div>
+
+        <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
+                <div class="eui-input-group" style="flex:1; position:relative;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" autocomplete="off" style="width:100%; padding-left:34px;" />
+                </div>
+                <button class="eui-btn eui-btn--ghost hidden" id="receb-btn-limpar-busca" onclick="limparBuscaReceb()" title="Limpar busca"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div style="position:relative;">
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="toggleMenuReceb(event)"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
+                <div class="ce-dropdown-menu" id="receb-toolbar-menu">
+                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); carregarNotas();"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); abrirConsultaOcorrencias();"><i class="fas fa-clock-rotate-left"></i> Livro de ocorrências</button>
+                </div>
+            </div>
         </div>
 
         <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:10px;" class="alert-pendencia"></div>

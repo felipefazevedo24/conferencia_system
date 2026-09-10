@@ -123,29 +123,127 @@ def inferir_os_por_pedido_compra(pedido_compra: str | None) -> str:
     return ", ".join(valores)[:120]
 
 
+def inferir_lista_os_por_pedido_compra(pedido_compra: str | None) -> list[str]:
+    pedido = str(pedido_compra or "").strip()
+    if not pedido:
+        return []
+
+    try:
+        from .pedidos_service import buscar_linhas_pedido
+
+        linhas = buscar_linhas_pedido(pedido)
+    except Exception:
+        return []
+
+    valores: list[str] = []
+    vistos: set[str] = set()
+    for linha in linhas or []:
+        for chave in ("cod_os_completo", "cod_os", "n_os", "numero_os", "os_numero"):
+            valor = str((linha or {}).get(chave) or "").strip()
+            if not valor or valor in vistos:
+                continue
+            vistos.add(valor)
+            valores.append(valor[:120])
+            break
+    return valores
+
+
+def _registro_sem_dados_operacionais(registro: QualidadeCertificado) -> bool:
+    if registro.componentes:
+        return False
+    return not any(
+        [
+            registro.numero_certificado,
+            registro.grid_os,
+            registro.grid_numero_certificado,
+            registro.grid_dureza,
+            registro.grid_chd,
+            registro.grid_resultado,
+            registro.sapatas_os,
+            registro.sapatas_numero_certificado,
+            registro.sapatas_dureza,
+            registro.sapatas_chd,
+            registro.sapatas_resultado,
+        ]
+    )
+
+
+def _garantir_registros_qualidade_por_os(numero_nota: str, chave_acesso: str | None, fornecedor: str | None, os_list: list[str]) -> list[QualidadeCertificado]:
+    numero_nota = str(numero_nota or "").strip()
+    if not numero_nota:
+        return []
+
+    os_alvo = [str(v or "").strip()[:120] for v in (os_list or []) if str(v or "").strip()]
+    if not os_alvo:
+        os_alvo = [""]
+
+    registros = QualidadeCertificado.query.filter_by(numero_nota=numero_nota).order_by(QualidadeCertificado.id.asc()).all()
+    por_os = {str(r.os_referencia or "").strip(): r for r in registros}
+
+    if len(registros) == 1 and "" in por_os and os_alvo and os_alvo[0] and _registro_sem_dados_operacionais(por_os[""]):
+        placeholder = por_os.pop("")
+        placeholder.os_referencia = os_alvo[0]
+        placeholder.os = os_alvo[0]
+        por_os[os_alvo[0]] = placeholder
+
+    criados: list[QualidadeCertificado] = []
+    for os_ref in os_alvo:
+        registro = por_os.get(os_ref)
+        if registro:
+            if not registro.chave_acesso and chave_acesso:
+                registro.chave_acesso = chave_acesso
+            if not registro.fornecedor and fornecedor:
+                registro.fornecedor = fornecedor
+            if os_ref and not str(registro.os or "").strip():
+                registro.os = os_ref
+            criados.append(registro)
+            continue
+
+        novo = QualidadeCertificado(
+            numero_nota=numero_nota,
+            os_referencia=os_ref,
+            chave_acesso=chave_acesso,
+            fornecedor=fornecedor,
+            os=os_ref or None,
+            grid_os=os_ref or None,
+            sapatas_os=os_ref or None,
+            status="Pendente de análise",
+        )
+        db.session.add(novo)
+        criados.append(novo)
+        por_os[os_ref] = novo
+    return criados
+
+
 def sincronizar_qualidade_por_pedido(numero_nota: str, pedido_compra: str | None) -> bool:
     numero_nota = str(numero_nota or "").strip()
     if not numero_nota:
         return False
 
-    os_inferida = inferir_os_por_pedido_compra(pedido_compra)
-    if not os_inferida:
+    os_lista = inferir_lista_os_por_pedido_compra(pedido_compra)
+    if not os_lista:
         return False
 
-    registro = QualidadeCertificado.query.filter_by(numero_nota=numero_nota).first()
-    if not registro:
+    primeiro_item = ItemNota.query.filter_by(numero_nota=numero_nota).first()
+    if not primeiro_item:
         return False
-
+    registros = _garantir_registros_qualidade_por_os(numero_nota, primeiro_item.chave_acesso, primeiro_item.fornecedor, os_lista)
     alterou = False
-    if not str(registro.os or "").strip():
-        registro.os = os_inferida
-        alterou = True
-    if not str(registro.grid_os or "").strip():
-        registro.grid_os = os_inferida
-        alterou = True
-    if not str(registro.sapatas_os or "").strip():
-        registro.sapatas_os = os_inferida
-        alterou = True
+    for registro in registros:
+        os_inferida = str(registro.os_referencia or "").strip()
+        if os_inferida and not str(registro.os or "").strip():
+            registro.os = os_inferida
+            alterou = True
+        if os_inferida and not str(registro.grid_os or "").strip():
+            registro.grid_os = os_inferida
+            alterou = True
+        if os_inferida and not str(registro.sapatas_os or "").strip():
+            registro.sapatas_os = os_inferida
+            alterou = True
+        for comp in registro.componentes or []:
+            if os_inferida and not str(comp.os or "").strip():
+                comp.os = os_inferida
+                alterou = True
     return alterou
 
 
@@ -177,21 +275,11 @@ def disparar_qualidade_se_necessario(numero_nota: str) -> QualidadeCertificado |
     if not nota_elegivel_para_qualidade(numero_nota):
         return None
 
-    ja_existe = QualidadeCertificado.query.filter_by(numero_nota=numero_nota).first()
-    if ja_existe:
-        return ja_existe
-
     pedido_compra = next((str(item.pedido_compra or "").strip() for item in itens_nota if str(item.pedido_compra or "").strip()), "")
-    os_inferida = inferir_os_por_pedido_compra(pedido_compra)
+    registros_existentes = QualidadeCertificado.query.filter_by(numero_nota=numero_nota).order_by(QualidadeCertificado.id.asc()).all()
+    if registros_existentes:
+        return registros_existentes[0]
 
-    registro = QualidadeCertificado(
-        numero_nota=numero_nota,
-        chave_acesso=nota_item.chave_acesso,
-        fornecedor=nota_item.fornecedor,
-        os=os_inferida or None,
-        grid_os=os_inferida or None,
-        sapatas_os=os_inferida or None,
-        status="Pendente de análise",
-    )
-    db.session.add(registro)
-    return registro
+    os_lista = inferir_lista_os_por_pedido_compra(pedido_compra)
+    registros = _garantir_registros_qualidade_por_os(numero_nota, nota_item.chave_acesso, nota_item.fornecedor, os_lista)
+    return registros[0] if registros else None

@@ -349,6 +349,18 @@
 
                 {% endif %}
 
+                {% if can_access('PAGE_PRODUCAO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-producao" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-industry"></i><span>Produção</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-producao">
+                        <a href="/producao" class="list-group-item list-group-item-action"><i class="fas fa-industry"></i> Acompanhamento de OS</a>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if can_access('PAGE_COMEX') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-comex" aria-expanded="false">

@@ -59,6 +59,47 @@ def _valor(v):
     return str(v).strip() if v is not None and str(v).strip() else "—"
 
 
+def _componentes_pdf(registro):
+    comps = getattr(registro, "componentes", None) or []
+    if comps:
+        return [
+            {
+                "tipo": getattr(c, "tipo", "") or "Grid",
+                "numero_certificado": getattr(c, "numero_certificado", "") or "",
+                "os": getattr(c, "os", "") or "",
+                "dureza": getattr(c, "dureza", "") or "",
+                "chd": getattr(c, "chd", "") or "",
+                "resultado": getattr(c, "resultado", "") or "",
+            }
+            for c in comps
+        ]
+
+    legados = []
+    if getattr(registro, "grid_resultado", None) or getattr(registro, "grid_dureza", None) or getattr(registro, "grid_chd", None):
+        legados.append(
+            {
+                "tipo": "Grid",
+                "numero_certificado": getattr(registro, "grid_numero_certificado", "") or getattr(registro, "numero_certificado", "") or "",
+                "os": getattr(registro, "grid_os", "") or getattr(registro, "os", "") or "",
+                "dureza": getattr(registro, "grid_dureza", "") or "",
+                "chd": getattr(registro, "grid_chd", "") or "",
+                "resultado": getattr(registro, "grid_resultado", "") or "",
+            }
+        )
+    if getattr(registro, "sapatas_resultado", None) or getattr(registro, "sapatas_dureza", None) or getattr(registro, "sapatas_chd", None):
+        legados.append(
+            {
+                "tipo": "Sapatas",
+                "numero_certificado": getattr(registro, "sapatas_numero_certificado", "") or getattr(registro, "numero_certificado", "") or "",
+                "os": getattr(registro, "sapatas_os", "") or getattr(registro, "os", "") or "",
+                "dureza": getattr(registro, "sapatas_dureza", "") or "",
+                "chd": getattr(registro, "sapatas_chd", "") or "",
+                "resultado": getattr(registro, "sapatas_resultado", "") or "",
+            }
+        )
+    return legados
+
+
 def _fmt_data(v):
     """Formata datetime para dd/mm/aaaa; retorna vazio quando ausente."""
     if not v:
@@ -291,31 +332,31 @@ def gerar_laudo_pdf(registro) -> bytes:
 
     # ---- 4. REGISTRO DOS RESULTADOS DO CORPO DE PROVA ----
     el.append(_secao("4.  REGISTRO DOS RESULTADOS DO CORPO DE PROVA"))
-    os_grid = _valor(getattr(registro, "grid_os", None) or getattr(registro, "os", ""))
-    os_sapatas = _valor(getattr(registro, "sapatas_os", None) or getattr(registro, "os", ""))
-    grid_tem = bool(getattr(registro, "grid_resultado", None) or getattr(registro, "grid_dureza", None))
-    sapatas_tem = bool(getattr(registro, "sapatas_resultado", None) or getattr(registro, "sapatas_dureza", None))
+    componentes = _componentes_pdf(registro)
 
     def _res_cell(valor):
         return _p(_valor(valor), bold=True, align=TA_CENTER)
 
+    linhas_registro = [[
+        _p("Componente", bold=True, color=colors.white, align=TA_CENTER),
+        _p("N° Cert.", bold=True, color=colors.white, align=TA_CENTER),
+        _p("Lote / CP", bold=True, color=colors.white, align=TA_CENTER),
+        _p("Dureza medida", bold=True, color=colors.white, align=TA_CENTER),
+        _p("CHD medida", bold=True, color=colors.white, align=TA_CENTER),
+        _p("Resultado", bold=True, color=colors.white, align=TA_CENTER),
+    ]]
+    for comp in componentes:
+        linhas_registro.append([
+            _p(comp.get("tipo") or "—", bold=True, align=TA_CENTER),
+            _res_cell(comp.get("numero_certificado", "")),
+            _res_cell(comp.get("os", "")),
+            _res_cell(comp.get("dureza", "")),
+            _res_cell(comp.get("chd", "")),
+            _res_cell(comp.get("resultado", "")),
+        ])
+
     reg = Table(
-        [
-            [_p("Componente", bold=True, color=colors.white, align=TA_CENTER),
-             _p("N° Cert.", bold=True, color=colors.white, align=TA_CENTER),
-             _p("Lote / CP", bold=True, color=colors.white, align=TA_CENTER),
-             _p("Dureza medida", bold=True, color=colors.white, align=TA_CENTER),
-             _p("CHD medida", bold=True, color=colors.white, align=TA_CENTER),
-             _p("Resultado", bold=True, color=colors.white, align=TA_CENTER)],
-            [_p("Grid", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "grid_numero_certificado", "") if grid_tem else ""), _res_cell(os_grid if grid_tem else ""),
-             _res_cell(getattr(registro, "grid_dureza", "")),
-             _res_cell(getattr(registro, "grid_chd", "")),
-             _res_cell(getattr(registro, "grid_resultado", ""))],
-            [_p("Sapatas", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "sapatas_numero_certificado", "") if sapatas_tem else ""), _res_cell(os_sapatas if sapatas_tem else ""),
-             _res_cell(getattr(registro, "sapatas_dureza", "")),
-             _res_cell(getattr(registro, "sapatas_chd", "")),
-             _res_cell(getattr(registro, "sapatas_resultado", ""))],
-        ],
+        linhas_registro,
         colWidths=[25 * mm, 28 * mm, 28 * mm, 34 * mm, 34 * mm, largura - 149 * mm],
         hAlign="LEFT",
     )
@@ -334,7 +375,7 @@ def gerar_laudo_pdf(registro) -> bytes:
     # ---- 5. CONCLUSÃO ----
     el.append(_secao("5.  CONCLUSÃO"))
     conclusao = (
-        "A conformidade final do grid e das sapatas será confirmada após o "
+        "A conformidade final dos componentes será confirmada após o "
         "preenchimento dos resultados reais dos corpos de prova e a verificação de "
         "atendimento às faixas especificadas neste documento."
     )

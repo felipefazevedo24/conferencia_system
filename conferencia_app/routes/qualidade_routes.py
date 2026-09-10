@@ -5,6 +5,7 @@ Paulista ou Friese) é finalizada, gera-se uma pendência aqui. O analista de
 qualidade anexa a foto do certificado e preenche os dados da análise.
 """
 import os
+import json
 from datetime import datetime
 from io import BytesIO
 
@@ -21,7 +22,7 @@ from werkzeug.utils import secure_filename
 
 from ..auth import has_permission, is_admin_session, login_required, permission_required
 from ..extensions import db
-from ..models import QualidadeCertificado
+from ..models import QualidadeCertificado, QualidadeCertificadoComponente
 from ..services.qualidade_service import nota_elegivel_para_qualidade, notas_qualidade_visiveis_map
 
 
@@ -41,6 +42,77 @@ STATUS_SLUG = {
     STATUS_EMITIDO: "emitido",
     STATUS_APROVADO: "aprovado",
 }
+
+TIPOS_COMPONENTE = {"Grid", "Sapatas"}
+
+
+def _componentes_legados(registro: QualidadeCertificado) -> list[dict]:
+    componentes = []
+    if registro.grid_resultado or registro.grid_dureza or registro.grid_chd or registro.grid_os or registro.grid_numero_certificado:
+        componentes.append(
+            {
+                "tipo": "Grid",
+                "os": registro.grid_os or registro.os_referencia or registro.os or "",
+                "numero_certificado": registro.grid_numero_certificado or registro.numero_certificado or "",
+                "dureza": registro.grid_dureza or "",
+                "chd": registro.grid_chd or "",
+                "resultado": registro.grid_resultado or "",
+            }
+        )
+    if registro.sapatas_resultado or registro.sapatas_dureza or registro.sapatas_chd or registro.sapatas_os or registro.sapatas_numero_certificado:
+        componentes.append(
+            {
+                "tipo": "Sapatas",
+                "os": registro.sapatas_os or registro.os_referencia or registro.os or "",
+                "numero_certificado": registro.sapatas_numero_certificado or registro.numero_certificado or "",
+                "dureza": registro.sapatas_dureza or "",
+                "chd": registro.sapatas_chd or "",
+                "resultado": registro.sapatas_resultado or "",
+            }
+        )
+    return componentes
+
+
+def _componentes_do_registro(registro: QualidadeCertificado) -> list[dict]:
+    if registro.componentes:
+        return [
+            {
+                "id": comp.id,
+                "tipo": comp.tipo or "Grid",
+                "os": comp.os or "",
+                "numero_certificado": comp.numero_certificado or "",
+                "dureza": comp.dureza or "",
+                "chd": comp.chd or "",
+                "resultado": comp.resultado or "",
+            }
+            for comp in sorted(registro.componentes, key=lambda c: (c.ordem or 0, c.id or 0))
+        ]
+    return _componentes_legados(registro)
+
+
+def _sincronizar_campos_legados(registro: QualidadeCertificado, componentes: list[dict]) -> None:
+    grids = [c for c in componentes if c.get("tipo") == "Grid"]
+    sapatas = [c for c in componentes if c.get("tipo") == "Sapatas"]
+
+    primeiro_grid = grids[0] if grids else None
+    primeiro_sapata = sapatas[0] if sapatas else None
+    primeiro_cert = next((str(c.get("numero_certificado") or "").strip() for c in componentes if str(c.get("numero_certificado") or "").strip()), "")
+    primeiro_os = next((str(c.get("os") or "").strip() for c in componentes if str(c.get("os") or "").strip()), "")
+
+    registro.numero_certificado = primeiro_cert[:120] or None
+    registro.os = primeiro_os[:120] or None
+
+    registro.grid_os = (primeiro_grid or {}).get("os", "")[:120] or None
+    registro.grid_numero_certificado = (primeiro_grid or {}).get("numero_certificado", "")[:120] or None
+    registro.grid_dureza = (primeiro_grid or {}).get("dureza", "")[:120] or None
+    registro.grid_chd = (primeiro_grid or {}).get("chd", "")[:120] or None
+    registro.grid_resultado = (primeiro_grid or {}).get("resultado") or None
+
+    registro.sapatas_os = (primeiro_sapata or {}).get("os", "")[:120] or None
+    registro.sapatas_numero_certificado = (primeiro_sapata or {}).get("numero_certificado", "")[:120] or None
+    registro.sapatas_dureza = (primeiro_sapata or {}).get("dureza", "")[:120] or None
+    registro.sapatas_chd = (primeiro_sapata or {}).get("chd", "")[:120] or None
+    registro.sapatas_resultado = (primeiro_sapata or {}).get("resultado") or None
 
 
 def _pode_aprovar() -> bool:
@@ -82,26 +154,29 @@ def _serialize(registro: QualidadeCertificado) -> dict:
     bloqueio_aprovacao_motivo = ""
     if mesmo_usuario_que_emitiu and registro.status == STATUS_EMITIDO:
         bloqueio_aprovacao_motivo = "Compliance (4 olhos): o emissor do laudo não pode ser o aprovador."
+    componentes = _componentes_do_registro(registro)
     return {
         "id": registro.id,
         "numero_nota": registro.numero_nota,
+        "os_referencia": registro.os_referencia or registro.os or "",
         "chave_acesso": registro.chave_acesso or "",
         "fornecedor": registro.fornecedor or "",
         "numero_orcamento": registro.numero_orcamento or "",
         "numero_certificado": registro.numero_certificado or "",
-        "os": registro.os or "",
-        "grid_os": registro.grid_os or registro.os or "",
+        "os": registro.os or registro.os_referencia or "",
+        "grid_os": registro.grid_os or registro.os_referencia or registro.os or "",
         "grid_numero_certificado": registro.grid_numero_certificado or registro.numero_certificado or "",
         "grid_dureza": registro.grid_dureza or "",
         "grid_chd": registro.grid_chd or "",
         "grid_resultado": registro.grid_resultado or "",
-        "sapatas_os": registro.sapatas_os or registro.os or "",
+        "sapatas_os": registro.sapatas_os or registro.os_referencia or registro.os or "",
         "sapatas_numero_certificado": registro.sapatas_numero_certificado or registro.numero_certificado or "",
         "sapatas_dureza": registro.sapatas_dureza or "",
         "sapatas_chd": registro.sapatas_chd or "",
         "sapatas_resultado": registro.sapatas_resultado or "",
         "status": registro.status,
         "status_slug": STATUS_SLUG.get(registro.status, "pendente"),
+        "componentes": componentes,
         "analista": registro.analista or "",
         "aprovado_por": registro.aprovado_por or "",
         "tem_foto": bool(registro.foto_path),
@@ -136,7 +211,7 @@ def api_listar_certificados():
     query = QualidadeCertificado.query
     if status and status.lower() != "todos":
         query = query.filter_by(status=status)
-    rows = query.order_by(QualidadeCertificado.criado_em.desc()).limit(500).all()
+    rows = query.order_by(QualidadeCertificado.criado_em.desc(), QualidadeCertificado.os_referencia.asc()).limit(500).all()
     vis_map = notas_qualidade_visiveis_map([r.numero_nota for r in rows])
     rows = [r for r in rows if vis_map.get(r.numero_nota, False)]
 
@@ -198,43 +273,73 @@ def api_analisar_certificado(id):
     else:
         dados = request.get_json(silent=True) or {}
 
-    numero_certificado = (dados.get("numero_certificado") or "").strip()
     numero_orcamento = (dados.get("numero_orcamento") or "").strip()
-    os_lote = (dados.get("os") or "").strip()
-    grid_os = (dados.get("grid_os") or os_lote or "").strip()
-    sapatas_os = (dados.get("sapatas_os") or os_lote or "").strip()
-    grid_numero_certificado = (dados.get("grid_numero_certificado") or numero_certificado or "").strip()
-    sapatas_numero_certificado = (dados.get("sapatas_numero_certificado") or numero_certificado or "").strip()
-    grid_dureza = (dados.get("grid_dureza") or "").strip()
-    grid_chd = (dados.get("grid_chd") or "").strip()
-    grid_resultado = (dados.get("grid_resultado") or "").strip()
-    sapatas_dureza = (dados.get("sapatas_dureza") or "").strip()
-    sapatas_chd = (dados.get("sapatas_chd") or "").strip()
-    sapatas_resultado = (dados.get("sapatas_resultado") or "").strip()
+    os_referencia = str(registro.os_referencia or registro.os or "").strip()
+    componentes_raw = dados.get("componentes")
+    if componentes_raw is None:
+        componentes_raw = dados.get("componentes_json")
 
-    grid_preenchido = bool(grid_resultado or grid_dureza or grid_chd)
-    sapatas_preenchido = bool(sapatas_resultado or sapatas_dureza or sapatas_chd)
+    componentes = []
+    if isinstance(componentes_raw, str):
+        try:
+            componentes = json.loads(componentes_raw)
+        except Exception:
+            componentes = []
+    elif isinstance(componentes_raw, list):
+        componentes = componentes_raw
 
-    if not grid_preenchido and not sapatas_preenchido:
-        return jsonify({"error": "Informe pelo menos um componente (Grid ou Sapatas)."}), 400
+    if not componentes:
+        componentes = _componentes_legados(registro)
 
-    obrigatorios = {
-        "Orçamento nº": numero_orcamento,
-    }
-    if grid_preenchido:
-        if grid_resultado not in RESULTADOS_VALIDOS:
-            return jsonify({"error": "Selecione o resultado do Grid: Conforme ou Não Conforme."}), 400
-        obrigatorios["N° do certificado (Grid)"] = grid_numero_certificado
-        obrigatorios["OS / Lote-CP (Grid)"] = grid_os
-        obrigatorios["Dureza medida (Grid)"] = grid_dureza
-        obrigatorios["CHD medida (Grid)"] = grid_chd
-    if sapatas_preenchido:
-        if sapatas_resultado not in RESULTADOS_VALIDOS:
-            return jsonify({"error": "Selecione o resultado das Sapatas: Conforme ou Não Conforme."}), 400
-        obrigatorios["N° do certificado (Sapatas)"] = sapatas_numero_certificado
-        obrigatorios["OS / Lote-CP (Sapatas)"] = sapatas_os
-        obrigatorios["Dureza medida (Sapatas)"] = sapatas_dureza
-        obrigatorios["CHD medida (Sapatas)"] = sapatas_chd
+    componentes_validos: list[dict] = []
+    obrigatorios = {"Orçamento nº": numero_orcamento}
+    for idx, item in enumerate(componentes, start=1):
+        tipo = str((item or {}).get("tipo") or "").strip() or "Grid"
+        numero_certificado = str((item or {}).get("numero_certificado") or "").strip()
+        os_lote = str((item or {}).get("os") or "").strip()
+        dureza = str((item or {}).get("dureza") or "").strip()
+        chd = str((item or {}).get("chd") or "").strip()
+        resultado = str((item or {}).get("resultado") or "").strip()
+
+        preenchido = bool(numero_certificado or os_lote or dureza or chd or resultado)
+        if not preenchido:
+            continue
+        if tipo not in TIPOS_COMPONENTE:
+            return jsonify({"error": f"Tipo de componente inválido na linha {idx}."}), 400
+        if resultado not in RESULTADOS_VALIDOS:
+            return jsonify({"error": f"Selecione o resultado do componente {idx}: Conforme ou Não Conforme."}), 400
+        if os_referencia and os_lote and os_lote != os_referencia:
+            return jsonify({"error": f"O componente {idx} usa a OS '{os_lote}', mas este laudo é da OS '{os_referencia}'. Para OS diferente, use outro laudo."}), 400
+        if os_referencia and not os_lote:
+            os_lote = os_referencia
+
+        rotulo = f"{tipo} {idx}"
+        obrigatorios[f"N° do certificado ({rotulo})"] = numero_certificado
+        obrigatorios[f"OS / Lote-CP ({rotulo})"] = os_lote
+        obrigatorios[f"Dureza medida ({rotulo})"] = dureza
+        obrigatorios[f"CHD medida ({rotulo})"] = chd
+        componentes_validos.append(
+            {
+                "tipo": tipo,
+                "numero_certificado": numero_certificado,
+                "os": os_lote,
+                "dureza": dureza,
+                "chd": chd,
+                "resultado": resultado,
+            }
+        )
+
+    if not componentes_validos:
+        return jsonify({"error": "Informe pelo menos um componente no laudo."}), 400
+
+    if not os_referencia:
+        os_referencia = str(componentes_validos[0].get("os") or "").strip()
+        if os_referencia:
+            registro.os_referencia = os_referencia[:120]
+
+    for idx, comp in enumerate(componentes_validos, start=1):
+        if os_referencia and str(comp.get("os") or "").strip() != os_referencia:
+            return jsonify({"error": f"O componente {idx} pertence a outra OS. Cada laudo aceita apenas uma OS."}), 400
 
     faltando = [rotulo for rotulo, valor in obrigatorios.items() if not valor]
     if faltando:
@@ -246,18 +351,21 @@ def api_analisar_certificado(id):
         registro.foto_path = nova_foto
 
     registro.numero_orcamento = numero_orcamento[:120]
-    registro.numero_certificado = (grid_numero_certificado or sapatas_numero_certificado or numero_certificado)[:120] or None
-    registro.grid_os = grid_os[:120] if grid_preenchido else None
-    registro.grid_numero_certificado = grid_numero_certificado[:120] if grid_preenchido else None
-    registro.sapatas_os = sapatas_os[:120] if sapatas_preenchido else None
-    registro.sapatas_numero_certificado = sapatas_numero_certificado[:120] if sapatas_preenchido else None
-    registro.os = (registro.grid_os or registro.sapatas_os or os_lote[:120] or None)
-    registro.grid_dureza = grid_dureza[:120] if grid_preenchido else None
-    registro.grid_chd = grid_chd[:120] if grid_preenchido else None
-    registro.grid_resultado = grid_resultado if grid_preenchido else None
-    registro.sapatas_dureza = sapatas_dureza[:120] if sapatas_preenchido else None
-    registro.sapatas_chd = sapatas_chd[:120] if sapatas_preenchido else None
-    registro.sapatas_resultado = sapatas_resultado if sapatas_preenchido else None
+    registro.componentes.clear()
+    for ordem, comp in enumerate(componentes_validos, start=1):
+        registro.componentes.append(
+            QualidadeCertificadoComponente(
+                ordem=ordem,
+                tipo=comp["tipo"],
+                os=comp["os"][:120],
+                numero_certificado=comp["numero_certificado"][:120],
+                dureza=comp["dureza"][:120],
+                chd=comp["chd"][:120],
+                resultado=comp["resultado"],
+            )
+        )
+    _sincronizar_campos_legados(registro, componentes_validos)
+    registro.os_referencia = os_referencia[:120] if os_referencia else ""
     registro.analista = user
     registro.status = STATUS_EMITIDO
     registro.analisado_em = datetime.now()
@@ -278,7 +386,9 @@ def api_excluir_laudo(id):
 
     registro.numero_certificado = None
     registro.numero_orcamento = None
+    registro.os_referencia = registro.os_referencia or ""
     registro.os = None
+    registro.componentes.clear()
     registro.grid_os = None
     registro.grid_numero_certificado = None
     registro.grid_dureza = registro.grid_chd = registro.grid_resultado = None

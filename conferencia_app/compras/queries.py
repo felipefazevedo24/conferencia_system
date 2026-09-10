@@ -83,6 +83,159 @@ LIMIT %(limite)s;
 """
 
 # -------------------------------------------------------------------
+# Produção: estrutura e processos da OS (somente leitura no GRV).
+# -------------------------------------------------------------------
+SQL_PRODUCAO_BUSCAR_OS = """
+SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
+             n_desenho, u_classificacao
+FROM public.tos
+WHERE cod_empresa = %(cod_empresa)s
+    AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
+    AND (
+            n_os ILIKE %(busca)s OR titulo ILIKE %(busca)s OR n_desenho ILIKE %(busca)s
+            OR codigo::text IN (
+                    SELECT cod_os::text FROM public.tos_aux
+                    WHERE cod_empresa = %(cod_empresa)s
+                        AND (cod_os_completo ILIKE %(busca)s OR subtitulo ILIKE %(busca)s
+                                 OR n_desenho ILIKE %(busca)s OR posicao_desenho ILIKE %(busca)s)
+            )
+    )
+ORDER BY CASE WHEN LOWER(BTRIM(n_os)) = LOWER(BTRIM(%(termo)s)) THEN 0 ELSE 1 END,
+                 n_os DESC
+LIMIT %(limite)s
+"""
+
+SQL_PRODUCAO_OS_ABERTAS = """
+SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
+             n_desenho, u_classificacao
+FROM public.tos
+WHERE cod_empresa = %(cod_empresa)s
+    AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
+    AND COALESCE(status_servico, '') !~* '(conclu|finaliz|cancel|encerr|fechad)'
+ORDER BY dt_prevista NULLS LAST, n_os DESC
+LIMIT %(limite)s
+"""
+
+SQL_PRODUCAO_ESTRUTURA_OS = """
+SELECT codigo AS aux_code, cod_os_completo, subtitulo, n_desenho,
+             revisao_desenho, posicao_desenho, qtde_pecas, qtde_un, os_pai,
+             predecessora1, predecessora2, status, cod_staus, dt_entrada,
+             dt_prevista, dt_final, cod_produto_mat_padrao, cod_interno_mat_padrao,
+             desc_mat_padrao
+FROM public.tos_aux
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+ORDER BY codigo
+"""
+
+SQL_PRODUCAO_OPERACOES_OS = """
+WITH reported_machines AS (
+        SELECT cod_empresa, cod_os, cod_os_aux, seq_processo_prod,
+                     string_agg(machine, ' / ' ORDER BY machine) AS machine
+        FROM (
+                SELECT DISTINCT cod_empresa, cod_os, cod_os_aux, seq_processo_prod,
+                             btrim(maquina) AS machine
+                FROM public.tctrl_ph
+                WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+                    AND NULLIF(btrim(maquina), '') IS NOT NULL
+        ) machines
+        GROUP BY cod_empresa, cod_os, cod_os_aux, seq_processo_prod
+)
+SELECT process.cod_os_aux, process.codigo, process.tiposervico,
+             process.cod_tp_servico, process.seq, process.finalizado,
+             process.concluido, process.processo_travado, process.data_inicio,
+             process.dt_incio_previsto, process.dt_termino_previsto,
+             process.dt_finalizacao, process.hs_realizadas,
+             process.maquina, process.pcp_dt_primeiro_apont,
+             process.pcp_dt_ultimo_apont,
+             COALESCE(reported_machines.machine, NULLIF(btrim(process.maquina), '')) AS maquina_real
+FROM public.tpro_pro process
+LEFT JOIN reported_machines
+    ON reported_machines.cod_empresa = process.cod_empresa
+ AND reported_machines.cod_os = process.cod_os
+ AND reported_machines.cod_os_aux = process.cod_os_aux
+ AND reported_machines.seq_processo_prod = process.seq
+WHERE process.cod_empresa = %(cod_empresa)s AND process.cod_os = %(cod_os)s
+ORDER BY process.cod_os_aux, process.seq NULLS LAST, process.codigo
+"""
+
+SQL_PRODUCAO_MATERIAIS_ITEM = """
+SELECT material.guid_linha::text AS line_id, material.cod_interno,
+             material.produto, material.unidade, material.qtde,
+             COALESCE(material.qtde_utilizada, 0) AS qtde_utilizada,
+             material.cod_os_completo, stock.qtde_disponivel
+FROM public.tlis_mat material
+LEFT JOIN public.tproduto_deposito stock
+    ON stock.cod_empresa = material.cod_empresa
+ AND stock.cod_produto = material.cod_produto
+ AND stock.cod_deposito = material.cod_deposito
+WHERE material.cod_empresa = %(cod_empresa)s
+    AND material.cod_os = %(cod_os)s
+    AND material.cod_os_aux = %(cod_os_aux)s
+ORDER BY material.cod_interno, material.produto, material.guid_linha
+"""
+
+SQL_PRODUCAO_APONTAMENTOS_ITEM = """
+SELECT pointing.cod_os_aux, process.codigo AS operation_code,
+             pointing.seq_processo_prod,
+             CASE WHEN pointing.data IS NOT NULL AND pointing.inicio IS NOT NULL
+                        THEN pointing.data::date + pointing.inicio::time
+                        ELSE COALESCE(pointing.data, pointing.inicio) END AS started_at,
+             COALESCE(NULLIF(btrim(pointing.maquina), ''), NULLIF(btrim(process.maquina), '')) AS machine,
+             COALESCE(NULLIF(btrim(employee.nome), ''), 'Operador nao identificado') AS operator_name,
+             ((pointing.parada1_ini IS NOT NULL AND pointing.parada1_fim IS NULL)
+                OR (pointing.parada2_ini IS NOT NULL AND pointing.parada2_fim IS NULL)
+                OR (pointing.parada3_ini IS NOT NULL AND pointing.parada3_fim IS NULL)
+                OR (pointing.parada4_ini IS NOT NULL AND pointing.parada4_fim IS NULL)
+                OR (pointing.parada5_ini IS NOT NULL AND pointing.parada5_fim IS NULL)
+                OR (pointing.parada6_ini IS NOT NULL AND pointing.parada6_fim IS NULL)) AS paused
+FROM public.taponta_aberto pointing
+LEFT JOIN public.tpro_pro process
+    ON process.cod_empresa = pointing.cod_empresa AND process.cod_os = pointing.cod_os
+ AND process.cod_os_aux = pointing.cod_os_aux AND process.seq = pointing.seq_processo_prod
+LEFT JOIN public.tfuncion employee
+    ON employee.cod_empresa = pointing.cod_empresa AND employee.codigo = pointing.cod_funcionario
+WHERE pointing.cod_empresa = %(cod_empresa)s AND pointing.cod_os = %(cod_os)s
+    AND pointing.cod_os_aux = %(cod_os_aux)s
+ORDER BY pointing.seq_processo_prod NULLS LAST, started_at, pointing.codigo
+"""
+
+SQL_PRODUCAO_RNCS_OS = """
+SELECT cod_os_aux, codigo, titulo, status_rnc, dt_fechamento
+FROM public.tn_conformidade
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+ORDER BY codigo
+"""
+
+SQL_PRODUCAO_DOCUMENTOS_ITEM = """
+SELECT codigo AS document_id, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo) AS size_bytes, 'drawing' AS kind
+FROM public.tos_aux_desenhos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+UNION ALL
+SELECT codigo, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo), 'attachment'
+FROM public.tos_aux_anexos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+UNION ALL
+SELECT codigo, cod_os_aux, nome_arquivo, descricao,
+             octet_length(anexo), 'image'
+FROM public.tos_aux_imagens
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
+ORDER BY kind, document_id
+"""
+
+SQL_PRODUCAO_DESENHO_ARQUIVO = """
+SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes, anexo
+FROM public.tos_aux_desenhos
+WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
+    AND cod_os_aux = %(cod_os_aux)s AND codigo = %(document_id)s
+LIMIT 1
+"""
+
+SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
+SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
+
+# -------------------------------------------------------------------
 # Indicadores de GAP de compras (necessidade x em OC x recebido)
 # -------------------------------------------------------------------
 SQL_GAP_COMPRAS = """
