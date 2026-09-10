@@ -4,7 +4,7 @@ Sistema Flask para recebimento, conferencia, expedicao, compras, logistica e int
 
 ## Estrutura
 
-- `conferencia_app/`: aplicacao Flask, modelos, rotas e servicosss.
+- `conferencia_app/`: aplicacao Flask, modelos, rotas e servicos.
 - `templates/` e `static/`: interface web e arquivos publicos.
 - `migrations/`: revisoes Alembic do banco da aplicacao.
 - `scripts/`: manutencoes, migracoes pontuais e bridge do ERP.
