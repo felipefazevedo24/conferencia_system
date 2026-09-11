@@ -106,6 +106,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     box-shadow: none;
 }
 .tree-search input { color: var(--ink); }
+.tree-row { min-height: 46px; margin-block: 1px; }
+.tree-item { padding-block: 5px; }
+.tree-row[data-production-depth]:not([data-production-depth="0"])::before {
+    position: absolute;
+    top: -2px;
+    bottom: 50%;
+    left: calc(var(--production-indent) + 2px);
+    width: 11px;
+    border-bottom: 1px solid var(--border-strong);
+    border-left: 1px solid var(--border-strong);
+    content: "";
+    pointer-events: none;
+}
 .tree-copy small { display: none; }
 .tree-copy strong { overflow-wrap: anywhere; }
 .tree-row.selected, .assembly-node.selected, .dependency-node.selected,
@@ -117,6 +130,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .status-legend h3 { margin-bottom: 6px; }
 .status-legend > div { gap: 6px; }
 .status-badge { white-space: normal; }
+.status-not_started { color: #111827; }
+.status-available { color: #7c3aed; }
 #detail-tab-details::before {
     display: block;
     margin: 12px 12px 0;

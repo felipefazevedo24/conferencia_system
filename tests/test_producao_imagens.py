@@ -125,6 +125,66 @@ def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_rotulo_isometrico_escolhe_a_regiao_correta_do_desenho():
+    fitz = producao_service.fitz
+    pdf = fitz.open()
+    page = pdf.new_page(width=700, height=600)
+
+    def draw_part(offset_x):
+        shape = page.new_shape()
+        points = [
+            (offset_x, 170), (offset_x + 90, 120), (offset_x + 180, 170),
+            (offset_x + 90, 225), (offset_x, 170), (offset_x, 300),
+            (offset_x + 90, 355), (offset_x + 180, 300), (offset_x + 180, 170),
+        ]
+        for start, end in zip(points, points[1:]):
+            shape.draw_line(start, end)
+        shape.draw_line((offset_x + 90, 225), (offset_x + 90, 355))
+        shape.finish(color=(0, 0, 0), width=1)
+        shape.commit()
+
+    draw_part(50)
+    draw_part(420)
+    page.insert_text((445, 390), "VISTA ISOMETRICA", fontsize=11)
+
+    candidates = producao_service._page_isometric_candidates(page)
+    pdf.close()
+
+    assert candidates[0][2] is True
+    assert candidates[0][1].x0 > 350
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_localiza_peca_isometrica_vertical_sem_incluir_carimbo():
+    fitz = producao_service.fitz
+    pdf = fitz.open()
+    page = pdf.new_page(width=595, height=842)
+    part = page.new_shape()
+    for start, end in [
+        ((190, 150), (350, 80)), ((350, 80), (440, 125)), ((440, 125), (275, 200)),
+        ((275, 200), (190, 150)), ((220, 165), (220, 520)), ((275, 550), (275, 200)),
+        ((220, 520), (275, 550)), ((275, 550), (360, 510)), ((360, 510), (360, 160)),
+        ((220, 470), (275, 500)), ((275, 500), (360, 460)),
+    ]:
+        part.draw_line(start, end)
+    part.draw_circle((315, 120), 12)
+    part.draw_circle((310, 360), 10)
+    part.draw_circle((310, 430), 10)
+    part.finish(color=(0, 0, 0), width=1)
+    part.commit()
+    page.draw_rect(fitz.Rect(390, 690, 565, 815), color=(0, 0, 0), width=1)
+
+    candidates = producao_service._page_isometric_candidates(page)
+    previews = producao_service._render_pdf_previews(pdf.tobytes())
+    pdf.close()
+
+    assert candidates
+    assert candidates[0][1].height > candidates[0][1].width
+    assert candidates[0][1].y1 < 650
+    assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
     fitz = producao_service.fitz
     pdf = fitz.open()
@@ -272,3 +332,15 @@ def test_arvore_exibe_somente_numero_da_os():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
     assert ".tree-copy small { display: none; }" in css
+
+
+def test_hierarquia_compacta_usa_as_cores_solicitadas_sem_rotulo_extra():
+    css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
+    script = (PROJECT_ROOT / "static" / "js" / "producao_panel.js").read_text(encoding="utf-8")
+
+    assert ".status-not_started { color: #111827; }" in css
+    assert ".status-available { color: #7c3aed; }" in css
+    assert "data-production-depth" in css
+    assert "productionDepth" in script
+    assert "Hierarquia compacta" not in css
+    assert "Hierarquia compacta" not in script

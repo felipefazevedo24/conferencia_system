@@ -7,6 +7,7 @@ import base64
 import copy
 import hashlib
 import io
+import math
 import re
 import threading
 import time
@@ -31,7 +32,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v2"
+_PREVIEW_CACHE_VERSION = "isometric-v3"
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
@@ -285,37 +286,69 @@ def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
     )
 
 
-def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
+def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
+    groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
+    changed = True
+    while changed:
+        changed = False
+        for index, group in enumerate(groups):
+            for other_index in range(index + 1, len(groups)):
+                other = groups[other_index]
+                if not _expand_rect(group["rect"], margin, page_rect).intersects(other["rect"]):
+                    continue
+                group["rect"] |= other["rect"]
+                for key in ("lines", "diagonals", "curves", "paths"):
+                    group[key] += other[key]
+                groups.pop(other_index)
+                changed = True
+                break
+            if changed:
+                break
+    return groups
+
+
+def _isometric_label_score(rect: Any, labels: list[Any], page_rect: Any) -> tuple[float, bool]:
+    if not labels:
+        return 0.0, False
+    maximum_distance = max(page_rect.width, page_rect.height) * 0.22
+    best_distance = maximum_distance + 1
+    for label in labels:
+        delta_x = max(label.x0 - rect.x1, rect.x0 - label.x1, 0)
+        delta_y = max(label.y0 - rect.y1, rect.y0 - label.y1, 0)
+        best_distance = min(best_distance, math.hypot(delta_x, delta_y))
+    if best_distance > maximum_distance:
+        return 0.0, False
+    return 4.0 + 6.0 * (1.0 - best_distance / maximum_distance), True
+
+
+def _overlap_ratio(first: Any, second: Any) -> float:
+    intersection = first & second
+    if intersection.is_empty:
+        return 0.0
+    intersection_area = intersection.width * intersection.height
+    smaller_area = min(first.width * first.height, second.width * second.height)
+    return intersection_area / max(smaller_area, 1)
+
+
+def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
     page_rect = page.rect
     page_area = max(page_rect.width * page_rect.height, 1)
     records = []
     for drawing in page.get_drawings():
         rect = fitz.Rect(drawing.get("rect")) & page_rect
         coverage = (rect.width * rect.height) / page_area
-        if rect.is_empty or coverage < 0.0002 or coverage > 0.82:
+        if rect.is_empty or coverage < 0.00002 or coverage > 0.82:
             continue
         lines, diagonals, curves = _line_stats(drawing.get("items") or [])
         records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
 
-    groups: list[dict[str, Any]] = []
-    join_margin = max(5.0, min(page_rect.width, page_rect.height) * 0.012)
-    for record in records:
-        matches = [group for group in groups if _expand_rect(group["rect"], join_margin, page_rect).intersects(record["rect"])]
-        if not matches:
-            groups.append(record)
-            continue
-        target = matches[0]
-        target["rect"] |= record["rect"]
-        for key in ("lines", "diagonals", "curves", "paths"):
-            target[key] += record[key]
-        for extra in matches[1:]:
-            target["rect"] |= extra["rect"]
-            for key in ("lines", "diagonals", "curves", "paths"):
-                target[key] += extra[key]
-            groups.remove(extra)
-
-    page_text = _normalizar_identificador(page.get_text("text"))
-    has_isometric_label = "ISOMETR" in page_text
+    join_margin = max(7.0, min(page_rect.width, page_rect.height) * 0.02)
+    groups = _merge_drawing_records(records, page_rect, join_margin)
+    labels = [
+        fitz.Rect(block[:4])
+        for block in page.get_text("blocks")
+        if len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4])
+    ]
     candidates = []
     for group in groups:
         rect = group["rect"]
@@ -323,22 +356,28 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
         diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
         if coverage < 0.008 or coverage > 0.72:
             continue
-        if group["diagonals"] < 2 and group["curves"] < 2:
+        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6:
             continue
-        score = diagonal_ratio * 8 + min(group["paths"], 40) / 20 + min(coverage, 0.35) * 3
-        if has_isometric_label:
-            score += 1.5
+        label_score, labeled = _isometric_label_score(rect, labels, page_rect)
+        score = diagonal_ratio * 8 + min(group["paths"], 40) / 12 + min(group["curves"], 8) * 0.35 + min(coverage, 0.35) * 4 + label_score
         if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
             score -= 4
-        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect)))
+        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect), labeled))
 
     for image in page.get_image_info():
         rect = fitz.Rect(image.get("bbox")) & page_rect
         coverage = (rect.width * rect.height) / page_area
         if not rect.is_empty and 0.06 <= coverage <= 0.72:
-            score = 3 + min(coverage, 0.4) * 3 + (1.5 if has_isometric_label else 0)
-            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect)))
-    return candidates
+            label_score, labeled = _isometric_label_score(rect, labels, page_rect)
+            score = 3 + min(coverage, 0.4) * 3 + label_score
+            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect), labeled))
+
+    unique_candidates = []
+    for candidate in sorted(candidates, key=lambda item: item[0], reverse=True):
+        if any(_overlap_ratio(candidate[1], existing[1]) >= 0.65 for existing in unique_candidates):
+            continue
+        unique_candidates.append(candidate)
+    return unique_candidates
 
 
 def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
@@ -351,11 +390,12 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
             candidates = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
-                candidates.extend((score, page_index, rect) for score, rect in _page_isometric_candidates(page))
+                candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
             candidates.sort(key=lambda item: item[0], reverse=True)
-            if not candidates or (len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.15):
+            ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
+            if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 raise LookupError("Vista isometrica nao identificada com confianca")
-            _, page_index, clip = candidates[0]
+            _, page_index, clip, _ = candidates[0]
             page = pdf.load_page(page_index)
             return _render_clip_previews(page, clip)
     except LookupError:

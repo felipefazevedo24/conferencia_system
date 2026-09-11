@@ -121,6 +121,12 @@
         document.querySelectorAll('.details-panel button').forEach((button) => {
             if (/^Ampliar(?: imagem)?$/i.test(button.textContent.trim())) button.remove();
         });
+        document.querySelectorAll('.tree-row').forEach((row) => {
+            const indent = Number.parseFloat(row.style.paddingLeft || '10');
+            const depth = Math.max(0, Math.round((indent - 10) / 18));
+            row.dataset.productionDepth = String(depth);
+            row.style.setProperty('--production-indent', `${indent}px`);
+        });
         const preview = document.querySelector('.detail-preview');
         if (preview) preparePreview(preview, true);
         document.querySelectorAll('.node-thumbnail').forEach((thumbnail) => preparePreview(thumbnail));
