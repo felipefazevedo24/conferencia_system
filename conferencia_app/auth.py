@@ -39,8 +39,6 @@ PERMISSION_CATALOG = {
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
-    "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL": "Controladoria > Contabilidade > Classificacao contabil",
-    "PAGE_FINANCEIRO_RELATORIO_CUSTOS": "Controladoria > Contabilidade > Relatorio de custos",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_CONF_CEGA": "Expedicao > Conferencia de Expedicao (cega)",
     "MANAGE_EXPEDICAO_ROMANEIO": "Expedicao > Gerenciar romaneios (editar, estornar e excluir)",
@@ -90,14 +88,10 @@ BASE_ROLE_PERMISSIONS = {
     "Financeiro": {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
-        "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
-        "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
     },
     "Controladoria": {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
-        "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
-        "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
     },
     "Logística": {
         "PAGE_CONFERENCIA",

@@ -387,26 +387,6 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
-                <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-coins"></i><span>Controladoria</span></span>
-                        <i class="fas fa-chevron-right nav-chevron"></i>
-                    </button>
-                    <div class="submenu-panel" id="menu-controladoria">
-                        {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
-                        <div class="submenu-subgroup" data-subgroup="contabilidade">
-                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-scale-balanced submenu-icon"></i> Contabilidade <i class="fas fa-chevron-down submenu-chevron"></i></button>
-                            <div class="submenu-items">
-                                {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') %}<a href="/financeiro/classificacao-contabil" class="list-group-item list-group-item-action"><i class="fas fa-scale-balanced"></i> Classificação contábil</a>{% endif %}
-                                {% if can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}<a href="/financeiro/relatorio-custos" class="list-group-item list-group-item-action"><i class="fas fa-chart-pie"></i> Relatório de custos</a>{% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
                 {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_ATUALIZACOES') or can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_EMAILS_NFE') or can_access('PAGE_PLANEJAMENTO_TAREFAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
@@ -1311,7 +1291,7 @@ if ("serviceWorker" in navigator) {
             footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
             await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema: recebimento, conferência, compras, expedição, romaneios, notas fiscais e mais. O que você precisa?", 900);
-            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Como vejo o relatório de custos?"];
+            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?"];
             renderChips(chips);
             flushAvisos();
             flushNovidades();
