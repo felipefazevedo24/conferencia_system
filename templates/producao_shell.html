@@ -3,56 +3,10 @@
 {% block shell_title %}Produção{% endblock %}
 {% block shell_subtitle %}Acompanhamento visual de OS, estrutura, montagem e processo produtivo.{% endblock %}
 {% block extra_head %}
-<style>
-.producao-header{display:flex;justify-content:flex-start;align-items:flex-start;gap:16px;margin:0 0 10px;padding:0 0 0 58px}
-.producao-header__eyebrow{margin:0 0 5px;color:var(--eui-primary,#0f62c9);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
-.producao-header__title{margin:0;color:var(--eui-text,#12283a);font-size:clamp(24px,2.4vw,32px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
-.producao-header__sub{margin:7px 0 0;color:var(--eui-muted,#64748b);font-size:13px;line-height:1.45}
-.producao-embed{height:calc(100vh - 150px);min-height:700px;background:transparent;overflow:hidden}
-.producao-embed iframe{display:block;width:100%;height:100%;border:0;background:#f4f7fb}
-@media(max-width:900px){.producao-header{margin-bottom:6px;padding-left:12px}.producao-embed{height:calc(100vh - 120px);min-height:580px}}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/producao_shell.css') }}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-<header class="producao-header">
-	<div>
-		<p class="producao-header__eyebrow"><i class="fas fa-industry"></i> PCP · PRODUÇÃO</p>
-		<h1 class="producao-header__title">Painel Visual de Montagem</h1>
-		<p class="producao-header__sub">Acompanhe a estrutura da OS, o mapa do conjunto, as operações e o status produtivo em tempo real.</p>
-	</div>
-</header>
-<div class="producao-embed"><iframe id="producao-frame" title="Painel Visual de Produção" src="/producao-original/{{ request.query_string.decode('utf-8')|safe and '?' ~ request.query_string.decode('utf-8') or '' }}"></iframe></div>
-<script>
-document.getElementById('producao-frame').addEventListener('load', function () {
-	const doc = this.contentDocument;
-	if (!doc || doc.getElementById('sync-production-theme')) return;
-	const style = doc.createElement('style');
-	style.id = 'sync-production-theme';
-	style.textContent = `
-		:root{--sync-blue:#0f62c9;--sync-navy:#12283a;--sync-bg:#f4f7fb;--sync-border:#dce5ef}
-		html,body,#root{background:var(--sync-bg)!important;color:var(--sync-navy)!important}
-		html,body,#root{width:100%!important;height:100%!important;min-width:0!important;background:transparent!important}
-		.app-shell{display:block!important;min-width:0!important;width:100%!important;height:100%!important;background:transparent!important}
-		.app-header{display:none!important}
-		.app-header{padding:14px 24px!important;background:#fff!important;border-bottom:1px solid var(--sync-border)!important;box-shadow:0 2px 10px rgba(18,40,58,.06)!important}
-		.header-grid{opacity:.15!important}
-		.header-copy h1{font-size:24px!important;color:var(--sync-navy)!important;letter-spacing:-.02em!important}
-		.header-subtitle{color:#667e92!important}
-		.brand{display:none!important}
-		.global-search{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important}
-		.header-tile{border-color:var(--sync-border)!important;background:#fff!important;border-radius:8px!important;box-shadow:none!important}
-		.workspace{height:100%!important;min-height:0!important;background:transparent!important;padding:10px!important;gap:10px!important}
-		.workspace>*{min-height:0!important}
-		.panel{border-color:var(--sync-border)!important;border-radius:8px!important;box-shadow:none!important;background:transparent!important}
-		.tree-panel,.map-panel,.details-panel,.sequence-panel{background:#fff!important}
-		.panel-title h2,.sequence-heading h2{color:var(--sync-navy)!important;font-size:15px!important}
-		.detail-preview{min-height:320px!important;height:320px!important;border-radius:12px!important;background:#f8fafc!important}
-		.detail-preview img{max-width:100%!important;max-height:100%!important;object-fit:contain!important;border-radius:10px!important}
-		.details-panel{min-width:340px!important}
-		button,.search-results button{border-radius:7px!important}
-		.node-thumbnail,.detail-preview{background:#f8fafc!important;border-color:var(--sync-border)!important}
-	`;
-	doc.head.appendChild(style);
-});
-</script>
+<section class="producao-page" aria-label="Produção">
+<div class="producao-embed"><iframe id="producao-frame" title="Painel Visual de Produção" src="/producao-original/{% if request.query_string %}?{{ request.query_string.decode('utf-8') }}{% endif %}"></iframe></div>
+</section>
 {% endblock %}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_from_directory, session
@@ -10,6 +11,10 @@ from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
 
 producao_bp = Blueprint("producao", __name__)
+
+_PREVIEW_PENDING_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 @producao_bp.get("/producao")
@@ -215,7 +220,8 @@ def original_item(numero_os: str, aux_code: int):
     operations = [{"code": op.get("codigo"), "name": op.get("nome"), "sequence": op.get("sequencia"), "finalized": op.get("finalizada"), "locked": op.get("travada"), "started_at": op.get("inicio"), "planned_start": None, "planned_end": None, "finished_at": op.get("fim"), "machine": op.get("maquina"), "first_report_at": None, "last_report_at": None} for op in node.get("operacoes", [])]
     documents = producao_service.obter_documentos(numero_os, aux_code)
     drawings = [item for item in documents if item["kind"] == "drawing"]
-    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": drawings[0]["filename"] if drawings else None})
+    primary_document = next((item for item in documents if item.get("is_primary")), None)
+    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/operations/live")
@@ -266,13 +272,26 @@ def original_image(numero_os: str, aux_code: int, document_id: int):
 @permission_required("PAGE_PRODUCAO")
 def original_thumbnail(numero_os: str, aux_code: int):
     try:
-        content, media_type = producao_service.obter_thumbnail(numero_os, aux_code)
+        variant = str(request.args.get("variant") or "thumbnail").strip().lower()
+        content, media_type, etag = producao_service.obter_preview(numero_os, aux_code, variant, wait=False)
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
     except Exception:
         current_app.logger.exception("Falha ao gerar thumbnail de producao %s/%s", numero_os, aux_code)
         return jsonify({"detail": "Bridge de documentos indisponivel ou desatualizada."}), 503
-    return current_app.response_class(content, mimetype=media_type, headers={"Cache-Control": "private, max-age=300"})
+    if content is None:
+        return current_app.response_class(
+            _PREVIEW_PENDING_PNG,
+            mimetype="image/png",
+            headers={"Cache-Control": "no-store", "X-Preview-State": "processing"},
+        )
+    if request.if_none_match.contains(etag):
+        response = current_app.response_class(status=304)
+    else:
+        response = current_app.response_class(content, mimetype=media_type)
+    response.set_etag(etag)
+    response.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return response
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/observations")

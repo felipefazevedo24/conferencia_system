@@ -224,6 +224,32 @@ WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(c
 ORDER BY kind, document_id
 """
 
+SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT = """
+WITH orc_link AS (
+    SELECT DISTINCT ON (sg.cod_empresa, sg.cod_os)
+        sg.cod_empresa, sg.cod_os, sg.cod_orcamento
+    FROM public.torcamento_servico_gerados sg
+    WHERE COALESCE(sg.cancelado, 0) = 0
+    ORDER BY sg.cod_empresa, sg.cod_os, sg.cod_orcamento DESC
+)
+SELECT item.codigo AS aux_code, item.cod_os_completo, item.subtitulo,
+    item.n_desenho, item.revisao_desenho, item.posicao_desenho,
+    COALESCE(os.cod_orcamento, orc_link.cod_orcamento) AS cod_orcamento,
+    COALESCE(os.n_orcamento, orc.n_orcamento) AS n_orcamento,
+    os.u_classificacao AS segmento
+FROM public.tos os
+INNER JOIN public.tos_aux item
+     ON item.cod_empresa = os.cod_empresa AND item.cod_os = os.codigo
+LEFT JOIN orc_link
+    ON orc_link.cod_empresa = os.cod_empresa AND orc_link.cod_os = os.codigo
+LEFT JOIN public.torcamento orc
+    ON orc.cod_empresa = os.cod_empresa
+      AND orc.codigo = COALESCE(os.cod_orcamento, orc_link.cod_orcamento)
+WHERE os.cod_empresa = %(cod_empresa)s AND os.codigo = %(cod_os)s
+  AND item.codigo = %(cod_os_aux)s
+LIMIT 1
+"""
+
 SQL_PRODUCAO_DESENHO_ARQUIVO = """
 SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes, anexo
 FROM public.tos_aux_desenhos
