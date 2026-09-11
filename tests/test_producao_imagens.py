@@ -249,3 +249,20 @@ def test_aviso_de_previa_fica_limitado_a_miniatura():
     assert ".node-thumbnail {" in css
     assert "position: relative;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
     assert "width: 54px;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+
+
+def test_controles_solicitados_nao_sao_criados_na_producao():
+    script = (PROJECT_ROOT / "static" / "js" / "producao_panel.js").read_text(encoding="utf-8")
+
+    assert "Ver em lista" not in script
+    assert "production-sequence-toggle" not in script
+    assert "^Ampliar(?: imagem)?$" in script
+
+
+def test_detalhes_identifica_e_limita_a_miniatura_isometrica():
+    css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
+
+    assert 'content: "Visão isométrica";' in css
+    detail_rule = css.split(".detail-preview {", 1)[1].split("}", 1)[0]
+    assert "width: 160px;" in detail_rule
+    assert "height: 160px;" in detail_rule

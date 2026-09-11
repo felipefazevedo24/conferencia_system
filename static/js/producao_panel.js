@@ -5,7 +5,6 @@
     const compact = window.matchMedia('(max-width: 1100px)');
     const views = [['tree', 'Estrutura'], ['map', 'Mapa'], ['operations', 'Operações'], ['details', 'Detalhes']];
     let view = 'map';
-    let sequenceList = false;
     let scheduled = false;
     let parentDocument;
 
@@ -119,17 +118,9 @@
             });
             header.append(nav);
         }
-        const heading = document.querySelector('.sequence-heading');
-        if (heading && !heading.querySelector('.production-sequence-toggle')) {
-            const toggle = control(sequenceList ? 'Ver sequência' : 'Ver em lista', 'production-sequence-toggle', () => {
-                sequenceList = !sequenceList;
-                root.classList.toggle('production-sequence-list', sequenceList);
-                toggle.textContent = sequenceList ? 'Ver sequência' : 'Ver em lista';
-                toggle.setAttribute('aria-pressed', String(sequenceList));
-            });
-            toggle.setAttribute('aria-pressed', String(sequenceList));
-            heading.append(toggle);
-        }
+        document.querySelectorAll('.details-panel button').forEach((button) => {
+            if (/^Ampliar(?: imagem)?$/i.test(button.textContent.trim())) button.remove();
+        });
         const preview = document.querySelector('.detail-preview');
         if (preview) preparePreview(preview, true);
         document.querySelectorAll('.node-thumbnail').forEach((thumbnail) => preparePreview(thumbnail));
