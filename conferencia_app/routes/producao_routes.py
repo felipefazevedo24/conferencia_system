@@ -226,6 +226,7 @@ def original_item(numero_os: str, aux_code: int):
             context={
                 "segmento": data["ordem"].get("classificacao"),
                 "cod_os_completo": node.get("codigo"),
+                "subtitulo": node.get("descricao"),
                 "n_desenho": node.get("desenho"),
                 "revisao_desenho": node.get("revisao"),
                 "posicao_desenho": node.get("posicao"),
@@ -255,8 +256,34 @@ def original_materials(numero_os: str, aux_code: int):
 
 def _serve_original_document(numero_os: str, aux_code: int, kind: str, document_id: int):
     try:
-        content, filename = producao_service.obter_arquivo(numero_os, aux_code, kind, document_id)
+        source_cod_os = request.args.get("source_cod_os", type=int)
+        source_aux_code = request.args.get("source_aux_code", type=int)
+        if source_cod_os is not None or source_aux_code is not None:
+            documents = producao_service.obter_documentos(numero_os, aux_code)
+            reference = next((
+                document for document in documents
+                if int(document.get("id") or 0) == document_id
+                and document.get("source_kind") == kind
+                and int(document.get("source_cod_os") or 0) == int(source_cod_os or 0)
+                and int(document.get("source_aux_code") or 0) == int(source_aux_code or 0)
+            ), None)
+            if reference is None:
+                raise LookupError("Referencia de documento invalida")
+            content, filename = producao_service.obter_arquivo(
+                numero_os,
+                aux_code,
+                kind,
+                document_id,
+                source_cod_os=source_cod_os,
+                source_aux_code=source_aux_code,
+            )
+        else:
+            content, filename = producao_service.obter_arquivo(numero_os, aux_code, kind, document_id)
     except LookupError as exc:
+        current_app.logger.warning(
+            "Previa de Producao indisponivel os=%s aux=%s motivo=%s",
+            numero_os, aux_code, str(exc),
+        )
         return jsonify({"detail": str(exc)}), 404
     except Exception:
         current_app.logger.exception("Falha ao buscar documento de producao %s/%s/%s/%s", numero_os, aux_code, kind, document_id)
@@ -290,6 +317,10 @@ def original_thumbnail(numero_os: str, aux_code: int):
         variant = str(request.args.get("variant") or "thumbnail").strip().lower()
         content, media_type, etag = producao_service.obter_preview(numero_os, aux_code, variant, wait=False)
     except LookupError as exc:
+        current_app.logger.warning(
+            "Thumbnail de Producao indisponivel os=%s aux=%s motivo=%s",
+            numero_os, aux_code, str(exc),
+        )
         return jsonify({"detail": str(exc)}), 404
     except Exception:
         current_app.logger.exception("Falha ao gerar thumbnail de producao %s/%s", numero_os, aux_code)

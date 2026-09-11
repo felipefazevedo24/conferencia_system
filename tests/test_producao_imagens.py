@@ -63,6 +63,101 @@ def test_cms_usa_anexo_da_peca_e_revisao_corretos():
     assert selected["kind"] == "attachment"
 
 
+def test_segmento_cms_complementado_continua_usando_anexo():
+    context = {"segmento": "  cms - montagem  ", "n_desenho": "DES-99"}
+    documents = [
+        document(1, "drawing", "DES-99.pdf"),
+        document(2, "attachment", "DES-99.pdf"),
+    ]
+
+    selected = producao_service._selecionar_documento_previa(documents, context)
+
+    assert selected["id"] == 2
+
+
+def test_cms_reconhece_anexo_nomeado_pela_descricao_da_peca():
+    context = {
+        "segmento": "CMS",
+        "n_desenho": "HTX900",
+        "subtitulo": "3 - FC U14X39 P25 F15 5V - CANECO",
+    }
+    documents = [
+        document(1, "attachment", "pedido-de-compra.pdf"),
+        document(2, "attachment", "FCU 14X39CM P25MM F15 5V - CANECO.pdf"),
+    ]
+
+    selected = producao_service._selecionar_documento_previa(documents, context)
+
+    assert selected["id"] == 2
+
+
+def test_resolve_desenho_vinculado_a_outro_item_da_mesma_os():
+    order = {"codigo": 9959, "n_os": "9959"}
+    context = {"segmento": "OUTROS", "n_desenho": "HTX900", "revisao_desenho": ""}
+    rows_by_query = {
+        producao_service.queries.SQL_PRODUCAO_DOCUMENTOS_ITEM: [],
+        producao_service.queries.SQL_PRODUCAO_ESTRUTURA_OS: [
+            {"aux_code": 4, "n_desenho": "HTX900", "revisao_desenho": ""},
+            {"aux_code": 7, "n_desenho": "HTX-900", "revisao_desenho": ""},
+        ],
+        producao_service.queries.SQL_PRODUCAO_DOCUMENTOS_OS: [
+            {"document_id": 31, "cod_os_aux": 7, "nome_arquivo": "HTX900.pdf", "descricao": "", "size_bytes": 10, "kind": "drawing", "content_revision": "12"},
+        ],
+    }
+
+    with patch.object(producao_service, "fetch_all", side_effect=lambda query, _params: rows_by_query[query]):
+        selected, documents = producao_service._resolver_documento_previa(order, "9959", 4, context)
+
+    assert selected["id"] == 31
+    assert selected["source_aux_code"] == 7
+    assert selected["source_kind"] == "drawing"
+    assert documents[-1]["content_revision"] == "12"
+
+
+def test_nao_usa_desenho_de_outro_numero():
+    order = {"codigo": 9959, "n_os": "9959"}
+    context = {"segmento": "MOLDE", "n_desenho": "HTX900", "revisao_desenho": ""}
+
+    def fetch_all(query, _params):
+        if query == producao_service.queries.SQL_PRODUCAO_ESTRUTURA_OS:
+            return [{"aux_code": 4, "n_desenho": "HTX900"}, {"aux_code": 7, "n_desenho": "OUTRO"}]
+        return []
+
+    with (
+        patch.object(producao_service, "fetch_all", side_effect=fetch_all),
+        patch.object(producao_service, "fetch_one", return_value={"supported": False}),
+    ):
+        selected, _ = producao_service._resolver_documento_previa(order, "9959", 4, context)
+
+    assert selected is None
+
+
+def test_arquivo_do_bridge_usa_fonte_resolvida_e_valida_base64():
+    encoded = "JVBERi0xLjQK"  # inicio de um PDF
+    with patch.object(
+        producao_service,
+        "fetch_one",
+        return_value={"nome_arquivo": "HTX900.pdf", "size_bytes": 9, "anexo": encoded},
+    ) as fetch_one:
+        content, filename = producao_service.obter_arquivo(
+            "9959", 4, "drawing", 31,
+            ordem={"codigo": 9959}, source_cod_os=8800, source_aux_code=7,
+        )
+
+    assert content == b"%PDF-1.4\n"
+    assert filename == "HTX900.pdf"
+    assert fetch_one.call_args.args[1]["cod_os"] == 8800
+    assert fetch_one.call_args.args[1]["cod_os_aux"] == 7
+
+
+def test_consultas_de_documento_carregam_revisao_origem_e_limite():
+    queries = producao_service.queries
+
+    assert "xmin::text AS content_revision" in queries.SQL_PRODUCAO_DOCUMENTOS_ITEM
+    assert "cod_os_aux_orig" in queries.SQL_PRODUCAO_ITEM_ORIGEM
+    assert "%(max_bytes)s" in queries.SQL_PRODUCAO_DESENHO_ARQUIVO
+
+
 @pytest.mark.parametrize("segment", ["MOLDE", "Outros"])
 def test_segmentos_nao_cms_usam_desenho(segment):
     context = {"segmento": segment, "n_desenho": "ABC-123", "revisao_desenho": "B"}

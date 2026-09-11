@@ -5,6 +5,7 @@ from collections import OrderedDict, defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
 import copy
+from difflib import SequenceMatcher
 import hashlib
 import io
 import math
@@ -32,7 +33,8 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v3"
+_PREVIEW_CACHE_VERSION = "isometric-v4"
+_MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
@@ -162,39 +164,93 @@ def obter_documentos(
     context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     ordem = ordem or _obter_ordem(numero_os)
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
     if context is None:
         context = fetch_one(
             queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
             {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
         )
-    selected = _selecionar_documento_previa(documents, context or {})
+    if not context:
+        raise LookupError("Item nao encontrado")
+    selected, documents = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     for document in documents:
         document["is_primary"] = bool(
             selected
-            and document.get("kind") == selected.get("kind")
+            and document.get("source_kind") == selected.get("source_kind")
             and document.get("id") == selected.get("id")
+            and document.get("source_cod_os") == selected.get("source_cod_os")
+            and document.get("source_aux_code") == selected.get("source_aux_code")
         )
     return documents
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+    return [_documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code) for row in rows]
+
+
+def _documento_payload(
+    row: dict[str, Any],
+    numero_os: str,
+    display_aux_code: int,
+    source_cod_os: int,
+    source_aux_code: int,
+    *,
+    from_origin: bool = False,
+) -> dict[str, Any]:
+    kind = _texto(row.get("kind"))
     route_kind = {"drawing": "drawings", "attachment": "attachments", "image": "images"}
-    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
+    source_query = ""
+    if from_origin or int(source_aux_code) != int(display_aux_code):
+        source_query = f"?source_cod_os={int(source_cod_os)}&source_aux_code={int(source_aux_code)}"
+    return {
+        "id": row.get("document_id"),
+        "kind": kind,
+        "source_kind": kind,
+        "filename": _texto(row.get("nome_arquivo")) or "documento",
+        "description": _texto(row.get("descricao")),
+        "size_bytes": row.get("size_bytes") or 0,
+        "content_revision": row.get("content_revision"),
+        "aux_code": int(display_aux_code),
+        "source_cod_os": int(source_cod_os),
+        "source_aux_code": int(source_aux_code),
+        "from_origin": bool(from_origin),
+        "open_url": f"/api/v1/orders/{numero_os}/items/{display_aux_code}/{route_kind.get(kind, kind)}/{row.get('document_id')}{source_query}",
+    }
 
 
-def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int, *, ordem: dict[str, Any] | None = None) -> tuple[bytes, str]:
+def obter_arquivo(
+    numero_os: str,
+    aux_code: int,
+    kind: str,
+    document_id: int,
+    *,
+    ordem: dict[str, Any] | None = None,
+    source_cod_os: int | None = None,
+    source_aux_code: int | None = None,
+) -> tuple[bytes, str]:
     ordem = ordem or _obter_ordem(numero_os)
     query = {"drawing": queries.SQL_PRODUCAO_DESENHO_ARQUIVO, "attachment": queries.SQL_PRODUCAO_ANEXO_ARQUIVO, "image": queries.SQL_PRODUCAO_IMAGEM_ARQUIVO}.get(kind)
     if query is None:
         raise LookupError("Tipo de documento invalido")
-    row = fetch_one(query, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code, "document_id": document_id})
+    row = fetch_one(query, {
+        "cod_empresa": 1,
+        "cod_os": int(source_cod_os or ordem["codigo"]),
+        "cod_os_aux": int(source_aux_code or aux_code),
+        "document_id": document_id,
+        "max_bytes": _MAX_DOCUMENT_BYTES,
+    })
+    if row and int(row.get("size_bytes") or 0) > _MAX_DOCUMENT_BYTES:
+        raise LookupError("Documento excede o limite permitido para previa")
     if not row or row.get("anexo") is None:
         raise LookupError("Documento nao encontrado")
     content = row["anexo"]
     if isinstance(content, str):
-        content = base64.b64decode(content)
+        try:
+            content = base64.b64decode(content, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise LookupError("Documento recebido da Bridge esta corrompido") from exc
+    if not isinstance(content, (bytes, bytearray, memoryview)):
+        raise LookupError("Formato de documento invalido recebido da Bridge")
     return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
 
 
@@ -217,6 +273,7 @@ def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int
     item_code = _texto_comparavel(context.get("cod_os_completo"))
     position = _texto_comparavel(context.get("posicao_desenho"))
     revision = _texto_comparavel(context.get("revisao_desenho"))
+    item_description = _texto_comparavel(context.get("subtitulo"))
     if drawing and drawing in metadata:
         score += 100
     if item_code and item_code in metadata:
@@ -225,6 +282,10 @@ def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int
         score += 15
     if revision and any(marker in metadata for marker in (f"REV{revision}", f"REVISAO{revision}", f"R{revision}")):
         score += 30
+    if item_description:
+        similarity = SequenceMatcher(None, item_description, metadata).ratio()
+        if similarity >= 0.55:
+            score += round(similarity * 60)
     return score
 
 
@@ -240,8 +301,12 @@ def _revisao_conflitante(document: dict[str, Any], context: dict[str, Any]) -> b
     return bool(revisions and expected not in revisions)
 
 
+def _segmento_cms(context: dict[str, Any]) -> bool:
+    return _normalizar_identificador(context.get("segmento")).startswith("CMS")
+
+
 def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
-    expected_kind = "attachment" if _normalizar_identificador(context.get("segmento")) == "CMS" else "drawing"
+    expected_kind = "attachment" if _segmento_cms(context) else "drawing"
     candidates = [
         document
         for document in documents
@@ -250,15 +315,101 @@ def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[
     if not candidates:
         return None
     ranked = sorted((( _pontuar_documento(document, context), document) for document in candidates), key=lambda item: (item[0], int(item[1].get("id") or 0)), reverse=True)
-    if len(candidates) == 1:
-        score, document = ranked[0]
-        if expected_kind == "attachment" and context.get("n_desenho") and score < 100:
-            return None
-        return document
     best_score, best = ranked[0]
+    if expected_kind == "attachment" and best_score < 45:
+        return None
+    if len(candidates) == 1:
+        return best
     if best_score <= 0 or best_score == ranked[1][0]:
         return None
     return best
+
+
+def _resolver_documento_previa(
+    ordem: dict[str, Any],
+    numero_os: str,
+    aux_code: int,
+    context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Resolve a fonte real sem trocar ANEXO/DESENHO nem aceitar outro desenho."""
+    direct_documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
+    selected = _selecionar_documento_previa(direct_documents, context)
+    if selected or _segmento_cms(context):
+        return selected, direct_documents
+
+    drawing_number = _texto_comparavel(context.get("n_desenho"))
+    if drawing_number:
+        item_rows = fetch_all(
+            queries.SQL_PRODUCAO_ESTRUTURA_OS,
+            {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+        )
+        matching_aux_codes = {
+            int(item["aux_code"])
+            for item in item_rows
+            if int(item["aux_code"]) != int(aux_code)
+            and _texto_comparavel(item.get("n_desenho")) == drawing_number
+            and not _revisao_contexto_conflitante(item, context)
+        }
+        if matching_aux_codes:
+            rows = fetch_all(
+                queries.SQL_PRODUCAO_DOCUMENTOS_OS,
+                {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+            )
+            candidates = []
+            for row in rows:
+                source_aux = int(row.get("cod_os_aux") or 0)
+                if source_aux not in matching_aux_codes:
+                    continue
+                candidate = _documento_payload(
+                    row, numero_os, aux_code, int(ordem["codigo"]), source_aux
+                )
+                if candidate["kind"] == "drawing" and not _revisao_conflitante(candidate, context):
+                    candidates.append(candidate)
+            selected = _selecionar_documento_previa(candidates, context)
+            if selected:
+                return selected, direct_documents + [selected]
+
+    origin = _origem_documento(ordem, aux_code)
+    if origin:
+        if _texto_comparavel(origin.get("n_desenho")) not in {"", drawing_number}:
+            return None, direct_documents
+        if _revisao_contexto_conflitante(origin, context):
+            return None, direct_documents
+        rows = fetch_all(
+            queries.SQL_PRODUCAO_DOCUMENTOS_ITEM,
+            {"cod_empresa": 1, **origin},
+        )
+        origin_documents = [
+            _documento_payload(
+                row,
+                numero_os,
+                aux_code,
+                int(origin["cod_os"]),
+                int(origin["cod_os_aux"]),
+                from_origin=True,
+            )
+            for row in rows
+        ]
+        selected = _selecionar_documento_previa(origin_documents, context)
+        if selected:
+            return selected, direct_documents + [selected]
+    return None, direct_documents
+
+
+def _revisao_contexto_conflitante(item: dict[str, Any], context: dict[str, Any]) -> bool:
+    expected = _texto_comparavel(context.get("revisao_desenho"))
+    candidate = _texto_comparavel(item.get("revisao_desenho"))
+    return bool(expected and candidate and expected != candidate)
+
+
+def _origem_documento(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | None:
+    schema = fetch_one(queries.SQL_PRODUCAO_ORIGEM_SCHEMA, {"cod_empresa": 1})
+    if not schema or not schema.get("supported"):
+        return None
+    return fetch_one(
+        queries.SQL_PRODUCAO_ITEM_ORIGEM,
+        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+    )
 
 
 def _line_stats(items: list[Any]) -> tuple[int, int, int]:
@@ -544,15 +695,25 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
     context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
     if not context:
         raise LookupError("Item nao encontrado")
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
-    document = _selecionar_documento_previa(documents, context)
+    document, _ = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     if not document:
         raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]), ordem=ordem)
+    content, filename = obter_arquivo(
+        numero_os,
+        aux_code,
+        str(document["source_kind"]),
+        int(document["id"]),
+        ordem=ordem,
+        source_cod_os=int(document["source_cod_os"]),
+        source_aux_code=int(document["source_aux_code"]),
+    )
     identity = "|".join((
         _PREVIEW_CACHE_VERSION,
-        str(document.get("kind")),
+        str(document.get("source_kind")),
         str(document.get("id")),
+        str(document.get("source_cod_os")),
+        str(document.get("source_aux_code")),
+        str(document.get("content_revision") or "unknown"),
         _texto(context.get("revisao_desenho")),
         hashlib.sha256(content).hexdigest(),
     ))
