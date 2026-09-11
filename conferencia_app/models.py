@@ -1,5 +1,5 @@
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.dialects.mysql import LONGBLOB
 from .extensions import db
 
@@ -3489,6 +3489,20 @@ class ChapaCalculoLog(db.Model):
     alterado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     dados_anteriores = db.Column(db.Text)  # JSON do estado anterior (vazio na criação)
     dados_novos = db.Column(db.Text)       # JSON do estado novo
+
+
+class ProducaoDerivedAsset(db.Model):
+    __tablename__ = "derived_assets"
+
+    cache_key = db.Column(db.String(64), primary_key=True)
+    company_code = db.Column(db.Integer, nullable=False, index=True)
+    order_number = db.Column(db.String(80), nullable=False)
+    item_aux_code = db.Column(db.Integer, nullable=False)
+    source_filename = db.Column(db.String(240), nullable=False)
+    source_sha256 = db.Column(db.String(64), nullable=False)
+    media_type = db.Column(db.String(40), nullable=False, default="image/png")
+    content = db.Column(db.LargeBinary().with_variant(LONGBLOB(), "mysql"), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class ProducaoObservacao(db.Model):

@@ -5,18 +5,19 @@ from collections import OrderedDict, defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
 import hashlib
-import io
-import re
+import json
 import threading
-import unicodedata
 from datetime import date, datetime
 from typing import Any
 
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
+from ..compras.config import get_settings
+from . import producao_documentos as documents_domain
+from . import producao_render
 
 try:
-    import fitz
+    import pymupdf as fitz
 except ImportError:  # pragma: no cover
     fitz = None
 
@@ -29,12 +30,12 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v1"
+_PREVIEW_CACHE_VERSION = documents_domain.RENDER_VERSION
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
-_PREVIEW_FAILURES: dict[str, str] = {}
 _PREVIEW_LOCK = threading.RLock()
+_DOCUMENT_LOCKS = tuple(threading.RLock() for _index in range(64))
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
 
 
@@ -53,7 +54,7 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     rows = fetch_all(
         queries.SQL_PRODUCAO_BUSCAR_OS,
         {
-            "cod_empresa": 1,
+            "cod_empresa": _empresa(),
             "busca": f"%{termo}%",
             "termo": termo,
             "limite": max(1, min(int(limite or 20), 50)),
@@ -65,27 +66,27 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
 def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
     rows = fetch_all(
         queries.SQL_PRODUCAO_OS_ABERTAS,
-        {"cod_empresa": 1, "limite": max(1, min(int(limite or 100), 200))},
+        {"cod_empresa": _empresa(), "limite": max(1, min(int(limite or 100), 200))},
     )
     return [_os_payload(row) for row in rows]
 
 
 def obter_estrutura(numero_os: str) -> dict[str, Any]:
-    ordem = fetch_one(
-        queries.SQL_PRODUCAO_BUSCAR_OS,
-        {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1},
-    )
-    if not ordem:
-        raise LookupError(f"OS {numero_os} nao encontrada.")
+    ordem = _obter_ordem(numero_os)
     itens = fetch_all(
         queries.SQL_PRODUCAO_ESTRUTURA_OS,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+        {"cod_empresa": _empresa(), "cod_os": ordem["codigo"]},
     )
     operacoes = fetch_all(
         queries.SQL_PRODUCAO_OPERACOES_OS,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+        {"cod_empresa": _empresa(), "cod_os": ordem["codigo"]},
     )
     payload = _estrutura_payload(ordem, itens, operacoes)
+    _, sources = _document_sources(ordem, numero_os, itens)
+    for node in payload["nos"]:
+        source = sources.get(node["aux_code"])
+        node["has_drawing"] = source is not None
+        node["thumbnail_url"] = documents_domain.thumbnail_url(numero_os, node["aux_code"], source)
     payload["rncs"] = _rncs(ordem["codigo"])
     return payload
 
@@ -94,7 +95,7 @@ def obter_materiais(numero_os: str, aux_code: int) -> dict[str, Any]:
     ordem = _obter_ordem(numero_os)
     rows = fetch_all(
         queries.SQL_PRODUCAO_MATERIAIS_ITEM,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+        {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
     )
     return {
         "numero_os": numero_os,
@@ -119,7 +120,7 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
     ordem = _obter_ordem(numero_os)
     rows = fetch_all(
         queries.SQL_PRODUCAO_APONTAMENTOS_ITEM,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+        {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
     )
     return {"aux_code": aux_code, "atualizado_em": datetime.now().isoformat(), "apontamentos": [
         {"operacao": _texto(row.get("operation_code")), "sequencia": row.get("seq_processo_prod"), "operador": _texto(row.get("operator_name")), "inicio": _iso(row.get("started_at")), "maquina": _texto(row.get("machine")), "pausado": bool(row.get("paused"))}
@@ -129,328 +130,218 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
 
 def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     ordem = _obter_ordem(numero_os)
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
     context = fetch_one(
         queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+        {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
     )
-    selected = _selecionar_documento_previa(documents, context or {})
+    if not context:
+        raise LookupError("Item nao encontrado")
+    all_documents, sources = _document_sources(ordem, numero_os)
+    documents = [doc for doc in all_documents if doc["aux_code"] == aux_code]
+    selected = sources.get(aux_code)
+    if selected and selected["aux_code"] != aux_code:
+        documents.append({**selected, "inherited": True})
+    origin = _origem(ordem, aux_code)
+    if origin:
+        rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": _empresa(), **origin})
+        documents.extend(_document_payload(row, numero_os, aux_code, origin=True) for row in rows)
     for document in documents:
         document["is_primary"] = bool(
             selected
-            and document.get("kind") == selected.get("kind")
-            and document.get("id") == selected.get("id")
+            and document["open_url"] == selected["open_url"]
         )
     return documents
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
-    route_kind = {"drawing": "drawings", "attachment": "attachments", "image": "images"}
-    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
+    rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+    return [_document_payload(row, numero_os, aux_code) for row in rows]
 
 
-def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) -> tuple[bytes, str]:
+def _empresa() -> int:
+    return get_settings().PG_COD_EMPRESA
+
+
+def _document_payload(row: dict, numero_os: str, aux_code: int, origin: bool = False) -> dict:
+    kind = row["kind"]
+    return {
+        "id": row["document_id"], "aux_code": aux_code, "source_kind": kind,
+        "kind": "attachment" if kind == "image" else kind,
+        "filename": documents_domain.safe_filename(row.get("nome_arquivo")),
+        "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0,
+        "content_revision": row.get("content_revision"), "from_origin": origin,
+        "open_url": documents_domain.document_url(numero_os, aux_code, kind, row["document_id"], origin),
+    }
+
+
+def _document_sources(ordem: dict, numero_os: str, itens: list[dict] | None = None) -> tuple[list[dict], dict]:
+    params = {"cod_empresa": _empresa(), "cod_os": ordem["codigo"]}
+    if itens is None:
+        itens = fetch_all(queries.SQL_PRODUCAO_ESTRUTURA_OS, params)
+    rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_OS, params)
+    documents = [_document_payload(row, numero_os, int(row["cod_os_aux"])) for row in rows]
+    return documents, documents_domain.resolve_sources(itens, documents, ordem)
+
+
+def _origem(ordem: dict, aux_code: int) -> dict | None:
+    schema = fetch_one(queries.SQL_PRODUCAO_ORIGEM_SCHEMA, {"cod_empresa": _empresa()})
+    if not schema or not schema.get("supported"):
+        return None
+    return fetch_one(queries.SQL_PRODUCAO_ITEM_ORIGEM, {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+
+
+def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int, origin: bool = False) -> tuple[bytes, str]:
     ordem = _obter_ordem(numero_os)
+    params = {"cod_empresa": _empresa(), "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
+    if not fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params):
+        raise LookupError("Item nao encontrado")
+    if origin:
+        source = _origem(ordem, aux_code)
+        if not source:
+            raise LookupError("Origem invalida")
+        params.update(source)
     query = {"drawing": queries.SQL_PRODUCAO_DESENHO_ARQUIVO, "attachment": queries.SQL_PRODUCAO_ANEXO_ARQUIVO, "image": queries.SQL_PRODUCAO_IMAGEM_ARQUIVO}.get(kind)
     if query is None:
         raise LookupError("Tipo de documento invalido")
-    row = fetch_one(query, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code, "document_id": document_id})
+    metadata = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, params)
+    document = next((doc for doc in metadata if doc["kind"] == kind and doc["document_id"] == document_id), None)
+    if document is None:
+        raise LookupError("Documento nao encontrado")
+    from flask import current_app, has_app_context
+    limit = int(current_app.config.get("PRODUCAO_DOCUMENT_MAX_BYTES", 20 * 1024 * 1024)) if has_app_context() else 20 * 1024 * 1024
+    if int(document.get("size_bytes") or 0) > limit:
+        raise documents_domain.DocumentError("Arquivo acima do limite", 413)
+    row = fetch_one(query, {**params, "document_id": document_id, "max_bytes": limit})
+    if row and int(row.get("size_bytes") or 0) > limit:
+        raise documents_domain.DocumentError("Arquivo acima do limite", 413)
     if not row or row.get("anexo") is None:
         raise LookupError("Documento nao encontrado")
     content = row["anexo"]
     if isinstance(content, str):
-        content = base64.b64decode(content)
-    return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
-
-
-def _normalizar_identificador(value: Any) -> str:
-    text = unicodedata.normalize("NFKD", _texto(value))
-    text = "".join(char for char in text if not unicodedata.combining(char)).upper()
-    return " ".join(text.split())
-
-
-def _texto_comparavel(value: Any) -> str:
-    return re.sub(r"[^A-Z0-9]+", "", _normalizar_identificador(value))
-
-
-def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int:
-    metadata = _texto_comparavel(f"{document.get('filename', '')} {document.get('description', '')}")
-    if not metadata:
-        return 0
-    score = 0
-    drawing = _texto_comparavel(context.get("n_desenho"))
-    item_code = _texto_comparavel(context.get("cod_os_completo"))
-    position = _texto_comparavel(context.get("posicao_desenho"))
-    revision = _texto_comparavel(context.get("revisao_desenho"))
-    if drawing and drawing in metadata:
-        score += 100
-    if item_code and item_code in metadata:
-        score += 35
-    if position and len(position) >= 2 and position in metadata:
-        score += 15
-    if revision and any(marker in metadata for marker in (f"REV{revision}", f"REVISAO{revision}", f"R{revision}")):
-        score += 30
-    return score
-
-
-def _revisao_conflitante(document: dict[str, Any], context: dict[str, Any]) -> bool:
-    expected = _texto_comparavel(context.get("revisao_desenho"))
-    if not expected:
-        return False
-    metadata = _normalizar_identificador(f"{document.get('filename', '')} {document.get('description', '')}")
-    revisions = {
-        _texto_comparavel(match)
-        for match in re.findall(r"(?:^|[^A-Z0-9])(?:REV(?:ISAO)?|R)[\s_.-]*([A-Z0-9]+)", metadata)
-    }
-    return bool(revisions and expected not in revisions)
+        if len(content) > (limit + 2) // 3 * 4:
+            raise documents_domain.DocumentError("Arquivo acima do limite", 413)
+        content = base64.b64decode(content, validate=True)
+    if len(content) > limit:
+        raise documents_domain.DocumentError("Arquivo acima do limite", 413)
+    if not content:
+        raise documents_domain.DocumentError("Arquivo vazio")
+    return bytes(content), documents_domain.safe_filename(row.get("nome_arquivo"))
 
 
 def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
-    expected_kind = "attachment" if _normalizar_identificador(context.get("segmento")) == "CMS" else "drawing"
-    candidates = [
-        document
-        for document in documents
-        if document.get("kind") == expected_kind and not _revisao_conflitante(document, context)
-    ]
-    if not candidates:
-        return None
-    ranked = sorted((( _pontuar_documento(document, context), document) for document in candidates), key=lambda item: (item[0], int(item[1].get("id") or 0)), reverse=True)
-    if len(candidates) == 1:
-        score, document = ranked[0]
-        if expected_kind == "attachment" and context.get("n_desenho") and score < 100:
-            return None
-        return document
-    best_score, best = ranked[0]
-    if best_score <= 0 or best_score == ranked[1][0]:
-        return None
-    return best
-
-
-def _line_stats(items: list[Any]) -> tuple[int, int, int]:
-    lines = diagonals = curves = 0
-    for item in items:
-        if not item:
-            continue
-        if item[0] == "l" and len(item) >= 3:
-            lines += 1
-            delta_x = abs(float(item[2].x) - float(item[1].x))
-            delta_y = abs(float(item[2].y) - float(item[1].y))
-            if delta_x > 1 and delta_y > 1:
-                diagonals += 1
-        elif item[0] in {"c", "qu"}:
-            curves += 1
-    return lines, diagonals, curves
-
-
-def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
-    return fitz.Rect(
-        max(bounds.x0, rect.x0 - margin),
-        max(bounds.y0, rect.y0 - margin),
-        min(bounds.x1, rect.x1 + margin),
-        min(bounds.y1, rect.y1 + margin),
-    )
-
-
-def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
-    page_rect = page.rect
-    page_area = max(page_rect.width * page_rect.height, 1)
-    records = []
-    for drawing in page.get_drawings():
-        rect = fitz.Rect(drawing.get("rect")) & page_rect
-        coverage = (rect.width * rect.height) / page_area
-        if rect.is_empty or coverage < 0.0002 or coverage > 0.82:
-            continue
-        lines, diagonals, curves = _line_stats(drawing.get("items") or [])
-        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
-
-    groups: list[dict[str, Any]] = []
-    join_margin = max(5.0, min(page_rect.width, page_rect.height) * 0.012)
-    for record in records:
-        matches = [group for group in groups if _expand_rect(group["rect"], join_margin, page_rect).intersects(record["rect"])]
-        if not matches:
-            groups.append(record)
-            continue
-        target = matches[0]
-        target["rect"] |= record["rect"]
-        for key in ("lines", "diagonals", "curves", "paths"):
-            target[key] += record[key]
-        for extra in matches[1:]:
-            target["rect"] |= extra["rect"]
-            for key in ("lines", "diagonals", "curves", "paths"):
-                target[key] += extra[key]
-            groups.remove(extra)
-
-    page_text = _normalizar_identificador(page.get_text("text"))
-    has_isometric_label = "ISOMETR" in page_text
-    candidates = []
-    for group in groups:
-        rect = group["rect"]
-        coverage = (rect.width * rect.height) / page_area
-        diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
-        if coverage < 0.008 or coverage > 0.72:
-            continue
-        if group["diagonals"] < 2 and group["curves"] < 2:
-            continue
-        score = diagonal_ratio * 8 + min(group["paths"], 40) / 20 + min(coverage, 0.35) * 3
-        if has_isometric_label:
-            score += 1.5
-        if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
-            score -= 4
-        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect)))
-
-    for image in page.get_image_info():
-        rect = fitz.Rect(image.get("bbox")) & page_rect
-        coverage = (rect.width * rect.height) / page_area
-        if not rect.is_empty and 0.06 <= coverage <= 0.72:
-            score = 3 + min(coverage, 0.4) * 3 + (1.5 if has_isometric_label else 0)
-            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect)))
-    return candidates
+    return documents_domain.select_primary(documents, context)
 
 
 def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
-    if fitz is None:
-        raise LookupError("Renderizador de PDF nao instalado")
-    try:
-        with fitz.open(stream=content, filetype="pdf") as pdf:
-            if pdf.page_count == 0:
-                raise LookupError("Documento sem paginas")
-            candidates = []
-            for page_index in range(pdf.page_count):
-                page = pdf.load_page(page_index)
-                candidates.extend((score, page_index, rect) for score, rect in _page_isometric_candidates(page))
-            candidates.sort(key=lambda item: item[0], reverse=True)
-            if not candidates or (len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.15):
-                raise LookupError("Vista isometrica nao identificada com confianca")
-            _, page_index, clip = candidates[0]
-            page = pdf.load_page(page_index)
-            return _render_clip_previews(page, clip)
-    except LookupError:
-        raise
-    except Exception as exc:
-        raise LookupError("Documento PDF invalido ou ilegivel") from exc
+    return producao_render.render(content, "documento.pdf")
 
 
-def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
-    rendered = {}
-    for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
-        scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
-        rendered[variant] = pixmap.tobytes("png")
-    return rendered
-
-
-def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
-    if fitz is None:
-        raise LookupError("Renderizador de imagem nao instalado")
-    try:
-        with fitz.open(stream=content, filetype=filetype) as image_document:
-            page = image_document.load_page(0)
-            page_rect = page.rect
-            analysis_scale = min(1.0, 800 / max(page_rect.width, page_rect.height))
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(analysis_scale, analysis_scale), alpha=False)
-            samples = pixmap.samples
-            channels = pixmap.n
-            min_x, min_y, max_x, max_y = pixmap.width, pixmap.height, -1, -1
-            ink_pixels = 0
-            for y_coord in range(pixmap.height):
-                row_start = y_coord * pixmap.stride
-                for x_coord in range(pixmap.width):
-                    offset = row_start + x_coord * channels
-                    if min(samples[offset:offset + min(channels, 3)]) >= 238:
-                        continue
-                    ink_pixels += 1
-                    min_x = min(min_x, x_coord)
-                    min_y = min(min_y, y_coord)
-                    max_x = max(max_x, x_coord)
-                    max_y = max(max_y, y_coord)
-            if ink_pixels < 80 or max_x < min_x or max_y < min_y:
-                raise LookupError("Vista isometrica nao identificada com confianca")
-            width = max_x - min_x + 1
-            height = max_y - min_y + 1
-            coverage = (width * height) / max(pixmap.width * pixmap.height, 1)
-            if coverage < 0.008 or coverage > 0.76:
-                raise LookupError("Vista isometrica nao identificada com confianca")
-            clip = fitz.Rect(
-                min_x / analysis_scale,
-                min_y / analysis_scale,
-                (max_x + 1) / analysis_scale,
-                (max_y + 1) / analysis_scale,
-            )
-            clip = _expand_rect(clip, max(clip.width, clip.height) * 0.06, page_rect)
-            return _render_clip_previews(page, clip)
-    except LookupError:
-        raise
-    except Exception as exc:
-        raise LookupError("Imagem invalida ou ilegivel") from exc
-
-
-def _gerar_previews(content: bytes, filename: str) -> dict[str, bytes]:
+def _gerar_previews(content: bytes, filename: str, settings: dict | None = None, description: str = "") -> dict[str, bytes]:
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if suffix == "pdf":
-        return _render_pdf_previews(content)
-    if suffix in {"png", "jpg", "jpeg", "webp"}:
-        return _render_raster_previews(content, "jpeg" if suffix in {"jpg", "jpeg"} else suffix)
-    raise LookupError("Formato sem suporte para previa isometrica")
+    if f".{suffix}" not in documents_domain.PREVIEW_EXTENSIONS:
+        raise documents_domain.DocumentError("Formato sem suporte", 415)
+    return producao_render.isolated_render(content, filename, settings or producao_render.options(), description)
 
 
 def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None:
     try:
         previews = future.result()
-    except Exception as exc:
+    except Exception:
         with _PREVIEW_LOCK:
             _PREVIEW_JOBS.pop(cache_key, None)
-            _PREVIEW_FAILURES[cache_key] = str(exc)
         return
     with _PREVIEW_LOCK:
         _PREVIEW_JOBS.pop(cache_key, None)
-        _PREVIEW_FAILURES.pop(cache_key, None)
         _PREVIEW_CACHE[cache_key] = previews
         _PREVIEW_CACHE.move_to_end(cache_key)
         while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_LIMIT:
             _PREVIEW_CACHE.popitem(last=False)
 
 
-def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool = True) -> dict[str, bytes] | None:
+def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool = True, settings: dict | None = None, description: str = "") -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
         if cached is not None:
             _PREVIEW_CACHE.move_to_end(cache_key)
             return cached
-        failure = _PREVIEW_FAILURES.get(cache_key)
-        if failure:
-            raise LookupError(failure)
         future = _PREVIEW_JOBS.get(cache_key)
         if future is None:
-            future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename)
+            if len(_PREVIEW_JOBS) >= 4:
+                raise documents_domain.DocumentError("Renderizador ocupado", 503)
+            future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename, settings, description)
             _PREVIEW_JOBS[cache_key] = future
             future.add_done_callback(lambda completed: _finalizar_preview(cache_key, completed))
-    return future.result() if wait else None
+    try:
+        return future.result(timeout=(settings or producao_render.options())["timeout"]) if wait else None
+    except TimeoutError:
+        raise documents_domain.DocumentError("Tempo limite da miniatura excedido", 503) from None
 
 
 def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wait: bool = True) -> tuple[bytes | None, str, str]:
     if variant not in {"thumbnail", "detail"}:
-        raise LookupError("Variante de previa invalida")
-    ordem = _obter_ordem(numero_os)
-    params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
-    context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
-    if not context:
-        raise LookupError("Item nao encontrado")
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
-    document = _selecionar_documento_previa(documents, context)
-    if not document:
-        raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]))
-    identity = "|".join((
-        _PREVIEW_CACHE_VERSION,
-        str(document.get("kind")),
-        str(document.get("id")),
-        _texto(context.get("revisao_desenho")),
-        hashlib.sha256(content).hexdigest(),
-    ))
-    cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-    previews = _previews_em_cache(cache_key, content, filename, wait=wait)
-    return previews[variant] if previews else None, "image/png", cache_key
+        raise documents_domain.DocumentError("Variante de previa invalida", 400)
+    from flask import current_app
+
+    company = _empresa()
+    request_key = f"{company}:{numero_os}:{aux_code}"
+    lock = _DOCUMENT_LOCKS[int(hashlib.sha256(request_key.encode()).hexdigest(), 16) % len(_DOCUMENT_LOCKS)]
+    with lock:
+        documents = obter_documentos(numero_os, aux_code)
+        document = next((doc for doc in documents if doc.get("is_primary")), None)
+        if not document:
+            raise LookupError("Previa indisponivel: documento elegivel ausente")
+        content, filename = obter_arquivo(numero_os, document["aux_code"], document["source_kind"], int(document["id"]))
+        settings = producao_render.options(current_app.config)
+        source_hash = hashlib.sha256(content).hexdigest()
+        identity = json.dumps([company, source_hash, _PREVIEW_CACHE_VERSION, settings, filename.rsplit(".", 1)[-1].lower(), "aprova" in document["description"].lower()], sort_keys=True)
+        render_key = hashlib.sha256(identity.encode()).hexdigest()
+        cache_key = hashlib.sha256(f"{render_key}:{variant}".encode()).hexdigest()
+        cached = _cached_asset(cache_key, company)
+        if cached is not None:
+            return cached, "image/png", cache_key
+        previews = _previews_em_cache(render_key, content, filename, wait, settings, document["description"])
+        if previews is None:
+            return None, "image/png", cache_key
+        binary = previews[variant]
+        producao_render.validate_png(binary)
+        binary = _store_asset(cache_key, company, numero_os, aux_code, filename, source_hash, binary)
+        return binary, "image/png", cache_key
+
+
+def _cached_asset(cache_key: str, company: int) -> bytes | None:
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import SQLAlchemyError
+    from ..extensions import db
+    from ..models import ProducaoDerivedAsset
+
+    try:
+        with Session(db.engine) as cache_session:
+            asset = cache_session.get(ProducaoDerivedAsset, cache_key)
+            return bytes(asset.content) if asset and asset.company_code == company else None
+    except SQLAlchemyError:
+        raise documents_domain.DocumentError("Cache de miniaturas indisponivel", 503) from None
+
+
+def _store_asset(cache_key: str, company: int, numero_os: str, aux_code: int, filename: str, source_hash: str, content: bytes) -> bytes:
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+    from ..extensions import db
+    from ..models import ProducaoDerivedAsset
+
+    try:
+        with Session(db.engine) as cache_session:
+            cache_session.add(ProducaoDerivedAsset(cache_key=cache_key, company_code=company, order_number=numero_os, item_aux_code=aux_code, source_filename=filename, source_sha256=source_hash, media_type="image/png", content=content))
+            try:
+                cache_session.commit()
+            except IntegrityError:
+                cache_session.rollback()
+                existing = cache_session.get(ProducaoDerivedAsset, cache_key)
+                if existing is None or existing.company_code != company:
+                    raise
+                return bytes(existing.content)
+        return content
+    except SQLAlchemyError:
+        raise documents_domain.DocumentError("Falha ao persistir miniatura", 503) from None
 
 
 def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
@@ -461,14 +352,14 @@ def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
-    ordem = fetch_one(queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
+    ordem = fetch_one(queries.SQL_PRODUCAO_OBTER_OS, {"cod_empresa": _empresa(), "numero_os": numero_os})
     if not ordem:
         raise LookupError(f"OS {numero_os} nao encontrada.")
     return ordem
 
 
 def _rncs(cod_os: int) -> list[dict[str, Any]]:
-    rows = fetch_all(queries.SQL_PRODUCAO_RNCS_OS, {"cod_empresa": 1, "cod_os": cod_os})
+    rows = fetch_all(queries.SQL_PRODUCAO_RNCS_OS, {"cod_empresa": _empresa(), "cod_os": cod_os})
     return [{"codigo": row.get("codigo"), "aux_code": row.get("cod_os_aux"), "titulo": _texto(row.get("titulo")), "status": _texto(row.get("status_rnc")), "fechada_em": _iso(row.get("dt_fechamento")), "aberta": not bool(row.get("dt_fechamento"))} for row in rows]
 
 

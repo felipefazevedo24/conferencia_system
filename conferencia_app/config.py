@@ -86,6 +86,11 @@ class Config:
     _database_url = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
     SQLALCHEMY_DATABASE_URI = _database_url or f"sqlite:///{_db_path.as_posix()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    PRODUCAO_DOCUMENT_MAX_BYTES = int(os.environ.get("PRODUCAO_DOCUMENT_MAX_BYTES", "20971520"))
+    PRODUCAO_THUMBNAIL_DPI = int(os.environ.get("PRODUCAO_THUMBNAIL_DPI", "180"))
+    PRODUCAO_THUMBNAIL_CROP = os.environ.get("PRODUCAO_THUMBNAIL_CROP", "0,0,1,1")
+    PRODUCAO_MAX_PIXELS = int(os.environ.get("PRODUCAO_MAX_PIXELS", "24000000"))
+    PRODUCAO_RENDER_TIMEOUT = float(os.environ.get("PRODUCAO_RENDER_TIMEOUT", "20"))
     SQLALCHEMY_ENGINE_OPTIONS = (
         {}
         if SQLALCHEMY_DATABASE_URI.startswith("sqlite:")

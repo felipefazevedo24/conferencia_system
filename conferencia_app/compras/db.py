@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import contextmanager
 from time import perf_counter
 from typing import Any, Iterable
@@ -11,6 +12,7 @@ from . import queries
 from .config import get_settings
 
 _logger = logging.getLogger(__name__)
+_PRODUCTION_READ_SLOTS = threading.BoundedSemaphore(4)
 
 _QUERY_NAMES = {
     value: name
@@ -20,11 +22,16 @@ _QUERY_NAMES = {
 
 
 @contextmanager
-def get_connection() -> Iterable[psycopg2.extensions.connection]:
+def get_connection(*, readonly: bool = False) -> Iterable[psycopg2.extensions.connection]:
     settings = get_settings()
-    conn = psycopg2.connect(settings.dsn, cursor_factory=RealDictCursor)
-    conn.autocommit = True
+    options = {"options": "-c default_transaction_read_only=on -c statement_timeout=15000"} if readonly else {}
+    conn = psycopg2.connect(settings.dsn, cursor_factory=RealDictCursor, **options)
+    conn.autocommit = not readonly
     try:
+        if readonly:
+            conn.set_session(readonly=True)
+            with conn.cursor() as cursor:
+                cursor.execute("SET TRANSACTION READ ONLY")
         yield conn
     finally:
         conn.close()
@@ -33,17 +40,24 @@ def get_connection() -> Iterable[psycopg2.extensions.connection]:
 def _exec_fetch(sql: str, params: tuple | dict | None, *, one: bool):
     started = perf_counter()
     settings = get_settings()
+    production = _QUERY_NAMES.get(sql, "").startswith("SQL_PRODUCAO_")
     if settings.API_URL and settings.USE_API_BRIDGE:
         try:
             return _exec_fetch_bridge(sql, params, one=one)
         except Exception as exc:
+            if production:
+                raise RuntimeError("Fonte de documentos indisponivel") from exc
             _logger.warning(
                 "compras_bridge_unavailable: fallback para Postgres direto (%s)",
                 type(exc).__name__,
             )
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, params or {})
-        result = cur.fetchone() if one else cur.fetchall()
+    from contextlib import nullcontext
+
+    with _PRODUCTION_READ_SLOTS if production else nullcontext():
+        connection = get_connection(readonly=True) if production else get_connection()
+        with connection as conn, conn.cursor() as cur:
+            cur.execute(sql, params or {})
+            result = cur.fetchone() if one else cur.fetchall()
     elapsed_ms = (perf_counter() - started) * 1000
     if elapsed_ms >= max(0, int(settings.APP_DB_SLOW_MS)):
         _logger.warning(
@@ -78,6 +92,8 @@ def _exec_fetch_bridge(sql: str, params: tuple | dict | None, *, one: bool):
     )
     response.raise_for_status()
     payload = response.json()
+    if query_name.startswith("SQL_PRODUCAO_") and payload.get("read_only") is not True:
+        raise RuntimeError("Bridge sem contrato de leitura de documentos")
     if not payload.get("sucesso"):
         raise RuntimeError(str(payload.get("erro") or "Falha na bridge de Compras"))
     return payload.get("row") if one else (payload.get("rows") or [])

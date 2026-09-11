@@ -16,3 +16,4 @@ reportlab
 brazilfiscalreport
 beautifulsoup4
 pymupdf
+Pillow>=11.3,<13
