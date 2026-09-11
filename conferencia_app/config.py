@@ -158,6 +158,15 @@ class Config:
     )
     INVENTARIO_LOCALIZACAO_API_TIMEOUT = int(os.environ.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT", "30"))
 
+    # Intralog > Chapa Picking Almoxarifado: lista de material a separar por
+    # OS, lida AO VIVO do ERP (nada e' importado pro banco - o Sync so' guarda
+    # a confirmacao de separacao do almoxarifado).
+    INTRALOG_PICKING_API_URL = os.environ.get(
+        "INTRALOG_PICKING_API_URL",
+        "https://columbia.consultoriarf.net/listamaterialseparar",
+    )
+    INTRALOG_PICKING_API_TIMEOUT = int(os.environ.get("INTRALOG_PICKING_API_TIMEOUT", "60"))
+
     # Sincronizacao automatica das ordens de Conferencia de Expedicao
     # (Faturamento + Servico de Terceiro). Solucao satelite: precisa buscar
     # continuamente no servidor para nao perder ordens que aparecem/somem no
