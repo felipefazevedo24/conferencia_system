@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}Intralog | Picking Almoxarifado{% endblock %}
+{% block shell_title %}Intralog — Picking Almoxarifado{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cp-wrap { display: grid; gap: 18px; }
+    .cp-table-wrap { overflow-x: auto; }
+    .cp-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    .cp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
+    .cp-toast.error { border-left-color: var(--eui-danger); }
+    .cp-toast.success { border-left-color: var(--eui-success); }
+
+    .cp-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .cp-modal-backdrop.open { display: flex; }
+    .cp-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 1280px; max-height: 90vh; overflow-y: auto; padding: 22px; }
+    .cp-modal h3 { margin: 0 0 6px; font-size: 17px; }
+    .cp-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
+    .cp-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+    /* Bloco de cada OS filha dentro da OS Pai */
+    .cp-os { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+    .cp-os-head { background: var(--eui-surface-2, #f8fafc); padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
+    .cp-os-cod { font-family: monospace; font-weight: 700; font-size: 14px; color: var(--eui-primary, #4f46e5); }
+    .cp-os-nome { font-weight: 600; font-size: 13px; }
+    .cp-os-prog { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--eui-muted); white-space: nowrap; }
+    .cp-badge-origem { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 999px; padding: 2px 9px; font-size: 10.5px; font-weight: 700; }
+
+    .cp-progress { height: 6px; background: var(--eui-surface-2, #e5e7eb); border-radius: 999px; overflow: hidden; min-width: 90px; }
+    .cp-progress span { display: block; height: 100%; background: #15803d; }
+
+    .cp-obs-cell { display: flex; gap: 4px; align-items: flex-start; }
+    .cp-obs-cell textarea { flex: 1; min-width: 130px; min-height: 32px; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; resize: vertical; }
+    .cp-obs-salvar { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer; color: var(--eui-primary, #4f46e5); }
+    .cp-obs-salvar:hover { background: var(--eui-surface-2, #f3f4f6); }
+
+    .cp-sep-badge { display: block; font-size: 11px; font-weight: 700; color: #15803d; margin-bottom: 3px; }
+    .cp-sep-badge small { display: block; font-weight: 500; color: var(--eui-muted); }
+    .cp-btn-sep { border: 1px solid var(--eui-primary, #4f46e5); background: #fff; color: var(--eui-primary, #4f46e5); border-radius: 6px; padding: 5px 9px; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .cp-btn-sep:hover { background: var(--eui-primary, #4f46e5); color: #fff; }
+    .cp-btn-estornar { border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .cp-btn-estornar:hover { background: var(--eui-danger, #dc2626); color: #fff; }
+
+    .cp-erp { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+    .cp-erp.processado { background: #dcfce7; color: #166534; }
+    .cp-erp.parcial { background: #fef3c7; color: #92400e; }
+    .cp-erp.pendente { background: #f1f5f9; color: #475569; }
+
+    .cp-alerta-qtde { display: block; font-size: 10.5px; color: #b45309; font-weight: 600; margin-top: 3px; }
+
+    /* Tag de chapa na linha do material (o picking separa de tudo - a
+       chapa so' ganha destaque visual pra ser identificada na hora). */
+    .cp-tag-chapa { display: inline-flex; align-items: center; gap: 4px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; margin-left: 6px; vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cp-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Intralog</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-hand-holding-box"></i> Picking Almoxarifado</h1>
+            <p class="eui-page-header__sub">Lista de material a separar por OS, direto do ERP — todo tipo de material, não só chapa (as chapas ficam marcadas com a tag <span class="cp-tag-chapa" style="margin-left:0;"><i class="fas fa-layer-group"></i> chapa</span>). Cada <b>OS Pai</b> abre a lista completa das OS que a compõem, com os materiais de cada uma.</p>
+        </div>
+    </header>
+
+    <div class="eui-stats" id="cp-metrics">
+        <div class="eui-stat is-clickable is-active" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-sitemap"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OS Pai</span><span class="eui-stat__value" id="cp-m-pais">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-diagram-project"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OS que compõem</span><span class="eui-stat__value" id="cp-m-filhas">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="pendente"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A separar</span><span class="eui-stat__value" id="cp-m-pendentes">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluídos</span><span class="eui-stat__value" id="cp-m-separados">0</span><span class="eui-stat__hint" id="cp-m-detalhe"></span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head" style="justify-content:flex-end;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <select id="cp-familia" class="eui-input" style="min-width:190px;">
+                    <option value="">Todas as famílias</option>
+                </select>
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cp-btn-limpar"><i class="fas fa-filter-circle-xmark"></i> Limpar filtros</button>
+                <button class="eui-btn eui-btn--primary" id="cp-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:460px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="cp-busca" class="eui-input" autocomplete="off" placeholder="Buscar por OS Pai, OS, código/descrição do material, produto ou orçamento…" style="width:100%; padding-left:34px;">
+                </div>
+            </div>
+            <div class="cp-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>OS Pai</th>
+                            <th>Produto</th>
+                            <th>Orçamento</th>
+                            <th>OS que compõem</th>
+                            <th>Materiais</th>
+                            <th>Concluídos</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cp-tbody"><tr><td colspan="7" class="cp-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="cp-toast" id="cp-toast"></div>
+
+<!-- Modal: LISTA PAI - todas as OS que compoem a OS Pai + materiais de cada uma -->
+<div class="cp-modal-backdrop" id="cp-modal">
+    <div class="cp-modal">
+        <h3><i class="fas fa-sitemap"></i> OS Pai <span id="cp-modal-os"></span></h3>
+        <p class="cp-modal-sub" id="cp-modal-sub"></p>
+        <div id="cp-modal-corpo"></div>
+        <div class="cp-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="cp-modal-fechar">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, tipo) {
+        const el = $("cp-toast");
+        el.textContent = msg;
+        el.className = "cp-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4500);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function fmtNum(v, casas) {
+        if (v === null || v === undefined) return "—";
+        return Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas == null ? 2 : casas, maximumFractionDigits: casas == null ? 2 : casas });
+    }
+    function barra(feito, total) {
+        const pct = total ? Math.round((feito / total) * 100) : 0;
+        return `<div style="display:flex; align-items:center; gap:8px;">
+            <div class="cp-progress"><span style="width:${pct}%"></span></div>
+            <span style="font-size:11.5px; font-weight:700; white-space:nowrap;">${feito}/${total}</span>
+        </div>`;
+    }
+
+    let cache = [];
+    let filtroStatus = "";
+
+    async function carregar() {
+        try {
+            const params = new URLSearchParams();
+            if (filtroStatus) params.set("status", filtroStatus);
+            const busca = $("cp-busca").value.trim();
+            if (busca) params.set("busca", busca);
+            const familia = $("cp-familia").value;
+            if (familia) params.set("familia", familia);
+
+            $("cp-tbody").innerHTML = '<tr><td colspan="7" class="cp-empty">Carregando…</td></tr>';
+            const data = await api("/api/intralog/picking?" + params.toString());
+            cache = data.os_pais || [];
+            const m = data.metricas || {};
+            $("cp-m-pais").textContent = m.os_pais || 0;
+            $("cp-m-filhas").textContent = m.os_filhas || 0;
+            $("cp-m-pendentes").textContent = m.pendentes || 0;
+            $("cp-m-separados").textContent = m.concluidos || 0;
+            $("cp-m-detalhe").textContent = `${m.concluidos_erp || 0} pelo ERP · ${m.separados_almox || 0} no almox.`;
+            preencherFamilias(data.familias_disponiveis || []);
+            renderTabela(cache);
+        } catch (err) {
+            $("cp-tbody").innerHTML = `<tr><td colspan="7" class="cp-empty" style="color:var(--eui-danger,#dc2626);">${escapeHtml(err.message)}</td></tr>`;
+            toast(err.message, "error");
+        }
+    }
+
+    let familiasCarregadas = false;
+    function preencherFamilias(lista) {
+        if (familiasCarregadas || !lista.length) return;
+        const sel = $("cp-familia");
+        lista.forEach((f) => {
+            const opt = document.createElement("option");
+            opt.value = f;
+            opt.textContent = f === "19-01" ? "19-01 (chapa)" : f;
+            sel.appendChild(opt);
+        });
+        familiasCarregadas = true;
+    }
+
+    function renderTabela(lista) {
+        const tb = $("cp-tbody");
+        if (!lista.length) {
+            tb.innerHTML = '<tr><td colspan="7" class="cp-empty">Nenhuma OS encontrada</td></tr>';
+            return;
+        }
+        tb.innerHTML = lista.map((r) => `
+            <tr>
+                <td><a href="#" data-ver="${escapeHtml(r.servico_raiz)}"><b>${escapeHtml(r.servico_raiz)}</b></a></td>
+                <td>${escapeHtml(r.produto || "—")}</td>
+                <td>${escapeHtml(r.orcamento_raiz || "—")}</td>
+                <td>${r.qtd_os_filhas}</td>
+                <td>${r.qtd_materiais}</td>
+                <td>${barra(r.qtd_concluidos, r.qtd_materiais)}</td>
+                <td style="text-align:right;"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver="${escapeHtml(r.servico_raiz)}"><i class="fas fa-list-ul"></i> Ver lista</button></td>
+            </tr>
+        `).join("");
+    }
+
+    // ── Modal: lista completa das OS que compoem a OS Pai ────────────────
+    let osPaiAberta = null;
+    function abrirDetalhe(servicoRaiz) {
+        const r = cache.find((x) => String(x.servico_raiz) === String(servicoRaiz));
+        if (!r) return;
+        osPaiAberta = servicoRaiz;
+
+        $("cp-modal-os").textContent = r.servico_raiz;
+        $("cp-modal-sub").textContent =
+            `${r.produto || "—"}` +
+            (r.orcamento_raiz ? ` · Orçamento ${r.orcamento_raiz}` : "") +
+            ` · ${r.qtd_os_filhas} OS que compõem · ${r.qtd_materiais} materiais (${r.qtd_concluidos} concluídos)`;
+
+        $("cp-modal-corpo").innerHTML = (r.os_filhas || []).map((f) => `
+            <div class="cp-os">
+                <div class="cp-os-head">
+                    <span class="cp-os-cod">${escapeHtml(f.cod_os_completo)}</span>
+                    <span class="cp-os-nome">${escapeHtml(f.os || "—")}</span>
+                    ${f.outra_origem ? '<span class="cp-badge-origem" title="Esta OS tem número de serviço diferente da OS Pai">outra origem</span>' : ""}
+                    <span class="cp-os-prog">${f.qtd_concluidos}/${f.qtd_materiais} concluídos</span>
+                </div>
+                <div class="cp-table-wrap">
+                    <table class="erp-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Material</th>
+                                <th>Un.</th>
+                                <th style="text-align:right;">Qtde</th>
+                                <th style="text-align:right;">Reservada</th>
+                                <th>ERP</th>
+                                <th style="min-width:170px;">Observação</th>
+                                <th style="min-width:160px;">Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${f.materiais.map((m) => linhaMaterial(m)).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `).join("") || '<div class="cp-empty">Nenhum material nessa OS Pai.</div>';
+
+        $("cp-modal").classList.add("open");
+    }
+
+    function linhaMaterial(m) {
+        const k = `${m.cod_os_completo}|${m.cod_interno}`;
+        const erpTitulo = `${m.linhas_processadas} de ${m.linhas_total} demandas processadas no ERP`;
+        return `
+            <tr>
+                <td style="font-family:monospace; white-space:nowrap;">${escapeHtml(m.cod_interno)}</td>
+                <td>${escapeHtml(m.item || "—")}${m.eh_chapa ? '<span class="cp-tag-chapa"><i class="fas fa-layer-group"></i> chapa</span>' : ""}</td>
+                <td>${escapeHtml(m.unidade || "—")}</td>
+                <td style="text-align:right; font-weight:700;">${fmtNum(m.qtde)}
+                    ${m.qtde_mudou ? `<span class="cp-alerta-qtde"><i class="fas fa-triangle-exclamation"></i> mudou (separou ${fmtNum(m.qtde_separada_snapshot)})</span>` : ""}
+                </td>
+                <td style="text-align:right;">${fmtNum(m.qtde_reservada)}</td>
+                <td><span class="cp-erp ${escapeHtml(m.erp_status)}" title="${escapeHtml(erpTitulo)}">${escapeHtml(m.erp_status)}${m.linhas_total > 1 ? ` ${m.linhas_processadas}/${m.linhas_total}` : ""}</span></td>
+                <td>
+                    <div class="cp-obs-cell">
+                        <textarea data-obs="${escapeHtml(k)}" rows="1" placeholder="Observação…">${escapeHtml(m.observacao || "")}</textarea>
+                        <button type="button" class="cp-obs-salvar" data-salvar-obs="${escapeHtml(k)}" title="Salvar observação"><i class="fas fa-floppy-disk"></i></button>
+                    </div>
+                </td>
+                <td>
+                    ${situacao(m, k)}
+                </td>
+            </tr>`;
+    }
+
+    function situacao(m, k) {
+        // Concluido pelo ERP: ja veio processado de la, nao tem o que o
+        // almoxarifado fazer (nem separar nem estornar) - so' informa.
+        if (m.concluido_erp) {
+            return `<span class="cp-sep-badge"><i class="fas fa-circle-check"></i> Concluído<small>já processado no ERP</small></span>`;
+        }
+        if (m.separado) {
+            return `<span class="cp-sep-badge"><i class="fas fa-circle-check"></i> Concluído<small>${escapeHtml(m.separado_por || "")} em ${escapeHtml(m.separado_em || "")}</small></span>
+                    <button type="button" class="cp-btn-estornar" data-estornar="${escapeHtml(k)}">Estornar</button>`;
+        }
+        return `<button type="button" class="cp-btn-sep" data-separar="${escapeHtml(k)}" data-qtde="${m.qtde}" data-unidade="${escapeHtml(m.unidade || "")}" data-raiz="${escapeHtml(m.servico_raiz || "")}"><i class="fas fa-check"></i> Separar</button>`;
+    }
+
+    function partesChave(k) {
+        const i = k.lastIndexOf("|");
+        return { cod_os_completo: k.slice(0, i), cod_interno: k.slice(i + 1) };
+    }
+
+    $("cp-modal-corpo").addEventListener("click", async (e) => {
+        const bSep = e.target.closest("[data-separar]");
+        const bEst = e.target.closest("[data-estornar]");
+        const bObs = e.target.closest("[data-salvar-obs]");
+        if (!bSep && !bEst && !bObs) return;
+
+        try {
+            if (bObs) {
+                const k = bObs.dataset.salvarObs;
+                const ta = $("cp-modal-corpo").querySelector(`[data-obs="${CSS.escape(k)}"]`);
+                await api("/api/intralog/picking/observacao", {
+                    method: "POST",
+                    body: JSON.stringify(Object.assign(partesChave(k), { observacao: ta.value })),
+                });
+                toast("Observação salva!", "success");
+                return; // nao precisa recarregar a lista inteira
+            } else if (bSep) {
+                const k = bSep.dataset.separar;
+                await api("/api/intralog/picking/separar", {
+                    method: "POST",
+                    body: JSON.stringify(Object.assign(partesChave(k), {
+                        qtde: parseFloat(bSep.dataset.qtde),
+                        unidade: bSep.dataset.unidade,
+                        servico_raiz: bSep.dataset.raiz,
+                    })),
+                });
+            } else if (bEst) {
+                const k = bEst.dataset.estornar;
+                if (!confirm("Estornar a separação desse material?")) return;
+                await api("/api/intralog/picking/estornar", {
+                    method: "POST", body: JSON.stringify(partesChave(k)),
+                });
+            }
+            toast("Atualizado!", "success");
+            await carregar();
+            if (osPaiAberta) abrirDetalhe(osPaiAberta);
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        const ver = e.target.closest("[data-ver]");
+        if (ver) { e.preventDefault(); abrirDetalhe(ver.dataset.ver); }
+    });
+    $("cp-modal-fechar").addEventListener("click", () => { $("cp-modal").classList.remove("open"); osPaiAberta = null; });
+    $("cp-modal").addEventListener("click", (e) => { if (e.target.id === "cp-modal") { $("cp-modal").classList.remove("open"); osPaiAberta = null; } });
+
+    // ── Filtros ─────────────────────────────────────────────────────────
+    $("cp-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        filtroStatus = card.dataset.filter;
+        $("cp-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        atualizarBotaoLimpar();
+        carregar();
+    });
+    function atualizarBotaoLimpar() {
+        const ativo = filtroStatus || $("cp-familia").value || $("cp-busca").value.trim();
+        $("cp-btn-limpar").classList.toggle("hidden", !ativo);
+    }
+    $("cp-btn-limpar").addEventListener("click", () => {
+        filtroStatus = "";
+        $("cp-familia").value = "";
+        $("cp-busca").value = "";
+        $("cp-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("cp-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
+        atualizarBotaoLimpar();
+        carregar();
+    });
+    $("cp-familia").addEventListener("change", () => { atualizarBotaoLimpar(); carregar(); });
+    $("cp-btn-atualizar").addEventListener("click", carregar);
+
+    let debounce;
+    $("cp-busca").addEventListener("input", () => {
+        clearTimeout(debounce);
+        atualizarBotaoLimpar();
+        debounce = setTimeout(carregar, 350);
+    });
+
+    carregar();
+})();
+</script>
+{% endblock %}

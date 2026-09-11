@@ -71,6 +71,7 @@ PERMISSION_CATALOG = {
     # A chave continua PAGE_LOGISTICA_* (nao renomeada de proposito, pra nao
     # revogar o acesso de quem ja tem), mas o modulo vive no menu Intralog.
     "PAGE_LOGISTICA_CONSUMO_CHAPA": "Intralog > Consumo de Chapa (Nesting)",
+    "PAGE_INTRALOG_PICKING": "Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
 }
 

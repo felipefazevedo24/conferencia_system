@@ -1936,6 +1936,50 @@ class LogisticaConsumoChapaPeca(db.Model):
     baixado_por = db.Column(db.String(100))
 
 
+class IntralogPickingSeparacao(db.Model):
+    """Confirmacao de separacao do almoxarifado (Intralog > Picking).
+
+    A lista de material a separar vem AO VIVO da API do ERP
+    (INTRALOG_PICKING_API_URL) - nao copiamos as linhas pro banco. Aqui
+    fica SO' o controle do almoxarifado: o que ja foi separado, por quem,
+    quando, e a observacao.
+
+    Chave: (cod_os_completo, cod_interno). A API nao tem id de linha - o
+    mesmo material aparece varias vezes pra mesma OS (ate' 10x), uma por
+    demanda. Prender a confirmacao a "uma linha" seria furado (qualquer
+    reordenacao da API faria a confirmacao pular de linha), entao o
+    servico AGREGA por esse par e o almoxarifado confirma o TOTAL daquele
+    material pra aquela OS - que e' como a separacao acontece na pratica.
+    """
+
+    __tablename__ = "intralog_picking_separacao"
+    __table_args__ = (
+        db.UniqueConstraint("cod_os_completo", "cod_interno", name="uq_intralog_picking_os_material"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # OS Pai (servico_raiz da API) - guardado pra permitir consulta/relatorio
+    # por OS Pai sem depender da API estar no ar.
+    servico_raiz = db.Column(db.String(30), index=True)
+    cod_os_completo = db.Column(db.String(40), nullable=False, index=True)  # ex.: "7847/001"
+    cod_interno = db.Column(db.String(40), nullable=False, index=True)      # ex.: "19-01-00558"
+
+    # Snapshot do que foi separado (a demanda na API pode mudar depois -
+    # guardando aqui da' pra sinalizar divergencia na tela).
+    qtde_snapshot = db.Column(db.Float)
+    unidade_snapshot = db.Column(db.String(10))
+
+    separado = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    separado_em = db.Column(db.DateTime)
+    separado_por = db.Column(db.String(100))
+
+    observacao = db.Column(db.Text)
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class WMSPedidoSeparacao(db.Model):
     """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""
     __tablename__ = "wms_pedido_separacao"
