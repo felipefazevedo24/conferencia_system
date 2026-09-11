@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from PIL import Image
 
 from ..auth import permission_required
+from ..compras.db import ProducaoSourceError
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
@@ -17,6 +18,11 @@ producao_bp = Blueprint("producao", __name__)
 @producao_bp.errorhandler(producao_service.documents_domain.DocumentError)
 def document_error(error):
     return jsonify({"detail": str(error)}), error.status
+
+
+@producao_bp.errorhandler(ProducaoSourceError)
+def production_source_error(error):
+    return jsonify({"detail": str(error), "error": str(error), "code": error.code}), 503
 
 
 @producao_bp.after_request
@@ -184,7 +190,7 @@ def _original_structure(data: dict) -> dict:
         "progress": {"percentage": data.get("progresso", 0), "finalized_operations": data.get("operacoes_concluidas", 0), "total_operations": data.get("operacoes_total", 0)},
         "pending_count": data.get("bloqueados", 0),
         "current_stage": "Producao",
-        "source": {"calculated_at": datetime.now().isoformat()},
+        "source": {"calculated_at": datetime.now().isoformat(), "documents_available": data.get("documents_available", True)},
     }
 
 
@@ -204,6 +210,8 @@ def _original_node_result(item: dict) -> dict:
 def original_structure(numero_os: str):
     try:
         return jsonify(_original_structure(producao_service.obter_estrutura(numero_os)))
+    except ProducaoSourceError:
+        raise
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
     except Exception:
@@ -216,6 +224,8 @@ def original_dependencies(numero_os: str):
     try:
         data = producao_service.obter_estrutura(numero_os)
         return jsonify({"selected_order_number": numero_os, "budget_number": None, "nodes": [{"number": data["ordem"]["numero"], "title": data["ordem"].get("titulo", ""), "source_status": data["ordem"].get("status_origem"), "due_date": data["ordem"].get("data_prevista"), "drawing_number": data["ordem"].get("desenho"), "is_budget_order": False}], "edges": [], "source": {"calculated_at": datetime.now().isoformat()}})
+    except ProducaoSourceError:
+        raise
     except Exception:
         return jsonify({"detail": "Falha ao consultar as dependencias da OS"}), 503
 
@@ -225,8 +235,7 @@ def original_dependencies(numero_os: str):
 def original_item(numero_os: str, aux_code: int):
     try:
         data = producao_service.obter_estrutura(numero_os)
-        documents = producao_service.obter_documentos(numero_os, aux_code)
-    except producao_service.documents_domain.DocumentError:
+    except (ProducaoSourceError, producao_service.documents_domain.DocumentError):
         raise
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
@@ -235,6 +244,14 @@ def original_item(numero_os: str, aux_code: int):
     node = next((item for item in data["nos"] if item["aux_code"] == aux_code), None)
     if not node:
         return jsonify({"detail": "Item nao encontrado"}), 404
+    documents = []
+    documents_available = data.get("documents_available", True)
+    if documents_available:
+        try:
+            documents = producao_service.obter_documentos(numero_os, aux_code)
+        except Exception as exc:
+            documents_available = False
+            current_app.logger.warning("producao_detalhe_documentos_indisponiveis error_type=%s", type(exc).__name__)
     original = _original_node(node, data["nos"], numero_os)
     operations = [{"code": op.get("codigo"), "name": op.get("nome"), "sequence": op.get("sequencia"), "finalized": op.get("finalizada"), "locked": op.get("travada"), "started_at": op.get("inicio"), "planned_start": None, "planned_end": None, "finished_at": op.get("fim"), "machine": op.get("maquina"), "first_report_at": None, "last_report_at": None} for op in node.get("operacoes", [])]
     drawings = [item for item in documents if item["kind"] == "drawing" and not item.get("from_origin")]
@@ -244,7 +261,7 @@ def original_item(numero_os: str, aux_code: int):
     if original["thumbnail_url"]:
         original["thumbnail_url"] += "&variant=detail"
     fallback = primary_document or next(iter(drawings or documents), None)
-    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item not in drawings], "observations_count": 0, "information_origin": "GRV", "document_path": fallback["filename"] if fallback else None})
+    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item not in drawings], "documents_available": documents_available, "observations_count": 0, "information_origin": "GRV", "document_path": fallback["filename"] if fallback else None})
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/operations/live")
@@ -267,7 +284,7 @@ def _serve_original_document(numero_os: str, aux_code: int, kind: str, document_
         return jsonify({"detail": "Origem invalida"}), 400
     try:
         content, filename = producao_service.obter_arquivo(numero_os, aux_code, kind, document_id, origin=origin == "true")
-    except producao_service.documents_domain.DocumentError:
+    except (ProducaoSourceError, producao_service.documents_domain.DocumentError):
         raise
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404
@@ -317,7 +334,7 @@ def original_thumbnail(numero_os: str, aux_code: int):
     try:
         variant = str(request.args.get("variant") or "thumbnail").strip().lower()
         content, media_type, etag = producao_service.obter_preview(numero_os, aux_code, variant, wait=True)
-    except producao_service.documents_domain.DocumentError:
+    except (ProducaoSourceError, producao_service.documents_domain.DocumentError):
         raise
     except LookupError as exc:
         return jsonify({"detail": str(exc)}), 404

@@ -21,7 +21,7 @@ def _load_production_service():
         package = ModuleType(package_name)
         package.__path__ = [str(package_path)]
         sys.modules[package_name] = package
-    database = ModuleType("production_test_app.compras.db")
+    database = importlib.import_module("production_test_app.compras.db")
     database.fetch_all = lambda *_args, **_kwargs: []
     database.fetch_one = lambda *_args, **_kwargs: None
     sys.modules[database.__name__] = database
@@ -90,8 +90,9 @@ def test_bridge_antiga_nao_faz_fallback_para_conexao_direta():
         settings.return_value.USE_API_BRIDGE = True
         settings.return_value.API_TOKEN = ""
         settings.return_value.API_TIMEOUT = 1
+        post.return_value.status_code = 200
         post.return_value.json.return_value = {"sucesso": True, "row": {"codigo": 1}}
-        with pytest.raises(RuntimeError, match="indisponivel"):
+        with pytest.raises(database.ProducaoSourceError, match="somente leitura"):
             database.fetch_one(database.queries.SQL_PRODUCAO_OBTER_OS, {"cod_empresa": 1, "numero_os": "OS-DEMO"})
         connection.assert_not_called()
         post.return_value.json.return_value["read_only"] = True
@@ -410,6 +411,73 @@ def document_client(document_app):
         session["role"] = "Producao"
     with patch.object(auth, "check_active_session"), patch.object(auth, "is_admin_session", return_value=False), patch.object(auth, "has_permission", return_value=True), patch.object(auth, "_registrar_acesso_admin"):
         yield client
+
+
+def test_estrutura_continua_disponivel_sem_consulta_documental(document_client, synthetic_source):
+    with patch.object(producao_service, "_document_sources", side_effect=RuntimeError("synthetic document failure")):
+        response = document_client.get("/api/v1/orders/OS-DEMO/structure")
+    assert response.status_code == 200
+    assert len(response.json["nodes"]) == len(synthetic_source.items)
+    assert all(node["thumbnail_url"] is None for node in response.json["nodes"])
+    assert response.json["source"]["documents_available"] is False
+
+
+@pytest.mark.parametrize("documents_failed_at_structure", [True, False])
+def test_detalhe_preserva_peca_sem_documentos(document_client, synthetic_source, documents_failed_at_structure):
+    owner = "_document_sources" if documents_failed_at_structure else "obter_documentos"
+    with patch.object(producao_service, owner, side_effect=RuntimeError("synthetic private failure")):
+        response = document_client.get("/api/v1/orders/OS-DEMO/items/7")
+    assert response.status_code == 200
+    assert response.json["node"]["aux_code"] == 7
+    assert response.json["documents_available"] is False
+    assert response.json["documents"] == response.json["drawings"] == []
+    assert response.json["node"]["thumbnail_url"] is None
+    assert b"synthetic private failure" not in response.data
+
+
+@pytest.mark.parametrize("status,payload,code", [
+    (400, {"sucesso": False, "erro": "query_nao_permitida"}, "bridge_catalog_outdated"),
+    (200, {"sucesso": True, "row": {}}, "bridge_readonly_required"),
+    (401, {}, "bridge_access_denied"),
+    (403, {"erro": "empresa_nao_autorizada"}, "bridge_access_denied"),
+    (503, {"erro": "sensitive SQL details"}, "bridge_unavailable"),
+    (200, [], "bridge_unavailable"),
+])
+def test_erro_bridge_identificado_sem_expor_resposta(status, payload, code, document_client):
+    database = importlib.import_module("production_test_app.compras.db")
+    with patch.object(database, "get_settings") as settings, patch.object(database.requests, "post") as post, patch.object(database, "get_connection") as connection:
+        settings.return_value.API_URL = "https://synthetic.invalid"
+        settings.return_value.USE_API_BRIDGE = True
+        settings.return_value.API_TOKEN = ""
+        settings.return_value.API_TIMEOUT = 1
+        post.return_value.status_code = status
+        post.return_value.json.return_value = payload
+        with patch.object(producao_service, "fetch_one", side_effect=lambda query, params: database._exec_fetch(query, params, one=True)):
+            response = document_client.get("/api/v1/orders/7807/structure")
+    assert response.status_code == 503
+    assert response.json["code"] == code
+    assert "sensitive" not in response.json["detail"]
+    assert "synthetic.invalid" not in response.json["detail"]
+    connection.assert_not_called()
+
+
+def test_falha_conexao_principal_nao_vira_estrutura_vazia(document_client):
+    database = importlib.import_module("production_test_app.compras.db")
+    with patch.object(database, "get_settings") as settings, patch.object(database, "get_connection", side_effect=database.psycopg2.OperationalError("private connection details")):
+        settings.return_value.API_URL = ""
+        with patch.object(producao_service, "fetch_one", side_effect=lambda query, params: database._exec_fetch(query, params, one=True)):
+            response = document_client.get("/api/v1/orders/7807/structure")
+    assert response.status_code == 503
+    assert response.json["code"] == "grv_unavailable"
+    assert "private" not in response.json["detail"]
+    assert "nodes" not in response.json
+
+
+def test_item_inexistente_continua_404_sem_documentos(document_client, synthetic_source):
+    with patch.object(producao_service, "_document_sources", side_effect=RuntimeError("document failure")):
+        response = document_client.get("/api/v1/orders/OS-DEMO/items/999")
+    assert response.status_code == 404
+    assert response.json["detail"] == "Item nao encontrado"
 
 
 def test_detalhe_lista_sem_binarios_com_identidade_e_origem(document_client, synthetic_source):

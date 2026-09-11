@@ -60,6 +60,15 @@ aprovada para documentos.
 
 Prefixo reutilizado: `/api/v1/orders/{numero_os}/items/{aux_code}`.
 
+Correcao de disponibilidade: uma falha apenas na consulta documental nao
+impede carregar a estrutura e os dados do item. A estrutura inclui
+`source.documents_available`; o detalhe inclui `documents_available`. Quando
+falso, as miniaturas ficam indisponiveis. Isso nao mascara falhas da consulta
+principal da OS: elas continuam retornando 503 com um `code` seguro que
+distingue bridge antiga, acesso negado, bridge indisponivel e PostgreSQL
+indisponivel. Ver o procedimento Tailscale em
+[BRIDGE_ERP_ATUALIZACAO.md](BRIDGE_ERP_ATUALIZACAO.md#falha-ao-carregar-os-na-producao).
+
 - `GET` no prefixo: detalhe com `drawings`, `documents`, `is_primary`,
   `document_path`, `information_origin` e campos documentais do `node`.
 - `GET /drawings/{id}`: original de `tos_aux_desenhos`.
@@ -212,12 +221,20 @@ Na raiz Sync:
 .\.venv312\Scripts\python.exe -m pytest conferencia_system/tests/test_producao_imagens.py -q
 ```
 
-Resultado focado final: 39 testes passaram em 21.13 s, incluindo disputa
+Resultado da implementacao inicial: 39 testes passaram em 21.13 s, incluindo disputa
 concorrente por um asset entre duas sessoes. Cobrem permissao nos binarios, OS exata,
 empresa, origem, IDs sobrepostos, selecao, fonte por numero/ancestral/ciclo,
 primeira pagina, rotulo, raster/aprovacao, RGBA, peca longa, arquivo invalido,
 PDF protegido, pixels, timeout, cache persistente, conflito, ETag/304,
 conteudo diferente com mesmo tamanho, versao/DPI e migracao SQLite isolada.
+
+Correcao posterior da falha de carregamento: 50 testes passaram em 22.66 s na
+mesma tarefa focada. Incluem estrutura/detalhe com documentos indisponiveis,
+catalogo antigo, bridge sem confirmacao de leitura, acesso negado, falha de rede
+ou banco e preservacao de 404 para item inexistente. O teste novo reproduziu
+503 indevido antes da correcao. A configuracao local nao possui bridge/host
+PostgreSQL remoto; o funcionamento da OS 7807 no servidor publicado nao foi
+confirmado nesta sessao. Nao houve restart remoto, deploy ou migracao.
 
 A tarefa existente da suite geral (`python -m pytest tests -q`, dentro de
 `conferencia_system`) foi executada e encerrou, mas a ferramenta nao preservou

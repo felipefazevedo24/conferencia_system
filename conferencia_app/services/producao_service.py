@@ -6,6 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 import base64
 import hashlib
 import json
+import logging
 import threading
 from datetime import date, datetime
 from typing import Any
@@ -31,6 +32,7 @@ STATUS_LABELS = {
 }
 
 _PREVIEW_CACHE_VERSION = documents_domain.RENDER_VERSION
+_logger = logging.getLogger(__name__)
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
@@ -82,7 +84,13 @@ def obter_estrutura(numero_os: str) -> dict[str, Any]:
         {"cod_empresa": _empresa(), "cod_os": ordem["codigo"]},
     )
     payload = _estrutura_payload(ordem, itens, operacoes)
-    _, sources = _document_sources(ordem, numero_os, itens)
+    payload["documents_available"] = True
+    try:
+        _, sources = _document_sources(ordem, numero_os, itens)
+    except Exception as exc:
+        sources = {}
+        payload["documents_available"] = False
+        _logger.warning("producao_documentos_indisponiveis error_type=%s", type(exc).__name__)
     for node in payload["nos"]:
         source = sources.get(node["aux_code"])
         node["has_drawing"] = source is not None
