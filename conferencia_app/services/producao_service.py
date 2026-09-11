@@ -4,10 +4,12 @@ from __future__ import annotations
 from collections import OrderedDict, defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
+import copy
 import hashlib
 import io
 import re
 import threading
+import time
 import unicodedata
 from datetime import date, datetime
 from typing import Any
@@ -29,13 +31,23 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v1"
+_PREVIEW_CACHE_VERSION = "isometric-v2"
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
 _PREVIEW_FAILURES: dict[str, str] = {}
 _PREVIEW_LOCK = threading.RLock()
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
+_PREVIEW_REQUEST_CACHE_TTL_SECONDS = 10.0
+_PREVIEW_REQUEST_CACHE_LIMIT = 128
+_PREVIEW_REQUEST_CACHE: OrderedDict[str, tuple[float, tuple[bytes, str, str] | Exception]] = OrderedDict()
+_PREVIEW_REQUEST_JOBS: dict[str, Future[tuple[bytes, str, str]]] = {}
+_PREVIEW_REQUEST_LOCK = threading.RLock()
+_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="production-preview-request")
+_STRUCTURE_CACHE_TTL_SECONDS = 10.0
+_STRUCTURE_CACHE_LIMIT = 16
+_STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_STRUCTURE_LOCK = threading.RLock()
 
 
 def _iso(value: Any) -> str | None:
@@ -71,6 +83,15 @@ def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
 
 
 def obter_estrutura(numero_os: str) -> dict[str, Any]:
+    cache_key = _texto(numero_os)
+    now = time.monotonic()
+    with _STRUCTURE_LOCK:
+        cached = _STRUCTURE_CACHE.get(cache_key)
+        if cached and now - cached[0] <= _STRUCTURE_CACHE_TTL_SECONDS:
+            _STRUCTURE_CACHE.move_to_end(cache_key)
+            return copy.deepcopy(cached[1])
+        if cached:
+            _STRUCTURE_CACHE.pop(cache_key, None)
     ordem = fetch_one(
         queries.SQL_PRODUCAO_BUSCAR_OS,
         {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1},
@@ -87,7 +108,12 @@ def obter_estrutura(numero_os: str) -> dict[str, Any]:
     )
     payload = _estrutura_payload(ordem, itens, operacoes)
     payload["rncs"] = _rncs(ordem["codigo"])
-    return payload
+    with _STRUCTURE_LOCK:
+        _STRUCTURE_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(payload))
+        _STRUCTURE_CACHE.move_to_end(cache_key)
+        while len(_STRUCTURE_CACHE) > _STRUCTURE_CACHE_LIMIT:
+            _STRUCTURE_CACHE.popitem(last=False)
+    return copy.deepcopy(payload)
 
 
 def obter_materiais(numero_os: str, aux_code: int) -> dict[str, Any]:
@@ -127,13 +153,20 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
     ]}
 
 
-def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    ordem = _obter_ordem(numero_os)
+def obter_documentos(
+    numero_os: str,
+    aux_code: int,
+    *,
+    ordem: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    ordem = ordem or _obter_ordem(numero_os)
     documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
-    context = fetch_one(
-        queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
-    )
+    if context is None:
+        context = fetch_one(
+            queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
+            {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+        )
     selected = _selecionar_documento_previa(documents, context or {})
     for document in documents:
         document["is_primary"] = bool(
@@ -150,8 +183,8 @@ def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int
     return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
 
 
-def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) -> tuple[bytes, str]:
-    ordem = _obter_ordem(numero_os)
+def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int, *, ordem: dict[str, Any] | None = None) -> tuple[bytes, str]:
+    ordem = ordem or _obter_ordem(numero_os)
     query = {"drawing": queries.SQL_PRODUCAO_DESENHO_ARQUIVO, "attachment": queries.SQL_PRODUCAO_ANEXO_ARQUIVO, "image": queries.SQL_PRODUCAO_IMAGEM_ARQUIVO}.get(kind)
     if query is None:
         raise LookupError("Tipo de documento invalido")
@@ -428,9 +461,44 @@ def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool
     return future.result() if wait else None
 
 
+def _finalizar_requisicao_preview(cache_key: str, future: Future[tuple[bytes, str, str]]) -> None:
+    try:
+        result: tuple[bytes, str, str] | Exception = future.result()
+    except Exception as exc:
+        result = exc
+    with _PREVIEW_REQUEST_LOCK:
+        _PREVIEW_REQUEST_JOBS.pop(cache_key, None)
+        _PREVIEW_REQUEST_CACHE[cache_key] = (time.monotonic(), result)
+        _PREVIEW_REQUEST_CACHE.move_to_end(cache_key)
+        while len(_PREVIEW_REQUEST_CACHE) > _PREVIEW_REQUEST_CACHE_LIMIT:
+            _PREVIEW_REQUEST_CACHE.popitem(last=False)
+
+
+def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tuple[bytes | None, str, str]:
+    request_key = f"{_texto(numero_os)}|{int(aux_code)}|{variant}"
+    now = time.monotonic()
+    with _PREVIEW_REQUEST_LOCK:
+        cached = _PREVIEW_REQUEST_CACHE.get(request_key)
+        if cached and now - cached[0] <= _PREVIEW_REQUEST_CACHE_TTL_SECONDS:
+            _PREVIEW_REQUEST_CACHE.move_to_end(request_key)
+            if isinstance(cached[1], Exception):
+                raise cached[1]
+            return cached[1]
+        if cached:
+            _PREVIEW_REQUEST_CACHE.pop(request_key, None)
+        if request_key not in _PREVIEW_REQUEST_JOBS:
+            future = _PREVIEW_REQUEST_EXECUTOR.submit(obter_preview, numero_os, aux_code, variant, True)
+            _PREVIEW_REQUEST_JOBS[request_key] = future
+            future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+    pending_etag = hashlib.sha256(request_key.encode("utf-8")).hexdigest()
+    return None, "image/png", pending_etag
+
+
 def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wait: bool = True) -> tuple[bytes | None, str, str]:
     if variant not in {"thumbnail", "detail"}:
         raise LookupError("Variante de previa invalida")
+    if not wait:
+        return _obter_preview_assincrono(numero_os, aux_code, variant)
     ordem = _obter_ordem(numero_os)
     params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
     context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
@@ -440,7 +508,7 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
     document = _selecionar_documento_previa(documents, context)
     if not document:
         raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]))
+    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]), ordem=ordem)
     identity = "|".join((
         _PREVIEW_CACHE_VERSION,
         str(document.get("kind")),

@@ -1,5 +1,7 @@
 import importlib
 import sys
+import threading
+import time
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
@@ -192,3 +194,58 @@ def test_imagem_original_isolada_gera_as_duas_variantes():
 
     assert previews["thumbnail"].startswith(b"\x89PNG")
     assert previews["detail"].startswith(b"\x89PNG")
+
+
+def test_estrutura_reutiliza_consulta_recente_sem_compartilhar_mutacoes():
+    producao_service._STRUCTURE_CACHE.clear()
+    order = {"codigo": 9, "n_os": "7807"}
+    payload = {"ordem": {"numero": "7807"}, "nos": [], "raizes": []}
+
+    with (
+        patch.object(producao_service, "fetch_one", return_value=order) as fetch_one,
+        patch.object(producao_service, "fetch_all", side_effect=[[], []]) as fetch_all,
+        patch.object(producao_service, "_estrutura_payload", return_value=payload),
+        patch.object(producao_service, "_rncs", return_value=[]),
+    ):
+        first = producao_service.obter_estrutura("7807")
+        first["nos"].append({"id": "alterado"})
+        second = producao_service.obter_estrutura("7807")
+
+    assert second["nos"] == []
+    assert fetch_one.call_count == 1
+    assert fetch_all.call_count == 2
+
+
+def test_requisicao_assincrona_nao_bloqueia_enquanto_busca_documento():
+    producao_service._PREVIEW_REQUEST_CACHE.clear()
+    producao_service._PREVIEW_REQUEST_JOBS.clear()
+    started = threading.Event()
+    release = threading.Event()
+    expected = (b"preview", "image/png", "etag")
+
+    def slow_preview(*_args):
+        started.set()
+        release.wait(timeout=2)
+        return expected
+
+    with patch.object(producao_service, "obter_preview", side_effect=slow_preview):
+        pending = producao_service._obter_preview_assincrono("7807", 2, "thumbnail")
+        assert pending[0] is None
+        assert started.wait(timeout=1)
+        release.set()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            completed = producao_service._obter_preview_assincrono("7807", 2, "thumbnail")
+            if completed[0] is not None:
+                break
+            time.sleep(0.01)
+
+    assert completed == expected
+
+
+def test_aviso_de_previa_fica_limitado_a_miniatura():
+    css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
+
+    assert ".node-thumbnail {" in css
+    assert "position: relative;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+    assert "width: 54px;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]

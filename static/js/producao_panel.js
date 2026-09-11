@@ -72,6 +72,10 @@
         if (image.naturalWidth === 1 && image.naturalHeight === 1) {
             const attempt = Number(image.dataset.previewAttempts || 0) + 1;
             image.dataset.previewAttempts = String(attempt);
+            if (attempt >= 60) {
+                container.dataset.previewState = 'unavailable';
+                return;
+            }
             container.dataset.previewState = 'loading';
             window.setTimeout(() => {
                 if (!image.isConnected) return;

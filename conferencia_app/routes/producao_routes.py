@@ -216,9 +216,24 @@ def original_item(numero_os: str, aux_code: int):
     node = next((item for item in data["nos"] if item["aux_code"] == aux_code), None)
     if not node:
         return jsonify({"detail": "Item nao encontrado"}), 404
-    original = _original_node(node, data["nos"])
+    original = _original_node(node, data["nos"], numero_os)
     operations = [{"code": op.get("codigo"), "name": op.get("nome"), "sequence": op.get("sequencia"), "finalized": op.get("finalizada"), "locked": op.get("travada"), "started_at": op.get("inicio"), "planned_start": None, "planned_end": None, "finished_at": op.get("fim"), "machine": op.get("maquina"), "first_report_at": None, "last_report_at": None} for op in node.get("operacoes", [])]
-    documents = producao_service.obter_documentos(numero_os, aux_code)
+    try:
+        documents = producao_service.obter_documentos(
+            numero_os,
+            aux_code,
+            ordem=data["ordem"],
+            context={
+                "segmento": data["ordem"].get("classificacao"),
+                "cod_os_completo": node.get("codigo"),
+                "n_desenho": node.get("desenho"),
+                "revisao_desenho": node.get("revisao"),
+                "posicao_desenho": node.get("posicao"),
+            },
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao listar documentos de producao %s/%s", numero_os, aux_code)
+        documents = []
     drawings = [item for item in documents if item["kind"] == "drawing"]
     primary_document = next((item for item in documents if item.get("is_primary")), None)
     return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
