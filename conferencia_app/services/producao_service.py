@@ -1,10 +1,14 @@
 """Nucleo nativo do modulo de Producao, usando o banco/bridge do Sync."""
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor
 import base64
+import hashlib
 import io
-import io
+import re
+import threading
+import unicodedata
 from datetime import date, datetime
 from typing import Any
 
@@ -16,12 +20,6 @@ try:
 except ImportError:  # pragma: no cover
     fitz = None
 
-try:
-    import fitz
-except ImportError:  # pragma: no cover
-    fitz = None
-
-
 STATUS_LABELS = {
     "bloqueado": "Bloqueado",
     "concluido": "Concluido",
@@ -30,6 +28,13 @@ STATUS_LABELS = {
     "fabricacao": "Em fabricacao",
     "nao_iniciado": "Nao iniciado",
 }
+
+_PREVIEW_CACHE_VERSION = "isometric-v1"
+_PREVIEW_CACHE_LIMIT = 64
+_PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
+_PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
+_PREVIEW_LOCK = threading.RLock()
+_PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
 
 
 def _iso(value: Any) -> str | None:
@@ -123,6 +128,10 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
 
 def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     ordem = _obter_ordem(numero_os)
+    return _obter_documentos_ordem(ordem, numero_os, aux_code)
+
+
+def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
     route_kind = {"drawing": "drawings", "attachment": "attachments", "image": "images"}
     return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
@@ -142,50 +151,219 @@ def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) ->
     return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
 
 
-def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
-    documents = obter_documentos(numero_os, aux_code)
-    # Prefer the product photo when available; the technical drawing remains
-    # the fallback for items without an image.
-    document = next((item for item in documents if item["kind"] == "image"), None) or next((item for item in documents if item["kind"] == "drawing"), None) or (documents[0] if documents else None)
-    if not document:
-        raise LookupError("Item sem documento visual")
-    content, filename = obter_arquivo(numero_os, aux_code, document["kind"], int(document["id"]))
-    lower = filename.lower()
-    if lower.endswith(".png"):
-        return content, "image/png"
-    if lower.endswith((".jpg", ".jpeg")):
-        return content, "image/jpeg"
-    if lower.endswith(".webp"):
-        return content, "image/webp"
-    if lower.endswith(".gif"):
-        return content, "image/gif"
+def _normalizar_identificador(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", _texto(value))
+    text = "".join(char for char in text if not unicodedata.combining(char)).upper()
+    return " ".join(text.split())
+
+
+def _texto_comparavel(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", _normalizar_identificador(value))
+
+
+def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int:
+    metadata = _texto_comparavel(f"{document.get('filename', '')} {document.get('description', '')}")
+    if not metadata:
+        return 0
+    score = 0
+    drawing = _texto_comparavel(context.get("n_desenho"))
+    item_code = _texto_comparavel(context.get("cod_os_completo"))
+    position = _texto_comparavel(context.get("posicao_desenho"))
+    revision = _texto_comparavel(context.get("revisao_desenho"))
+    if drawing and drawing in metadata:
+        score += 100
+    if item_code and item_code in metadata:
+        score += 35
+    if position and len(position) >= 2 and position in metadata:
+        score += 15
+    if revision and any(marker in metadata for marker in (f"REV{revision}", f"REVISAO{revision}", f"R{revision}")):
+        score += 30
+    return score
+
+
+def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
+    expected_kind = "attachment" if _normalizar_identificador(context.get("segmento")) == "CMS" else "drawing"
+    candidates = [document for document in documents if document.get("kind") == expected_kind]
+    if not candidates:
+        return None
+    ranked = sorted((( _pontuar_documento(document, context), document) for document in candidates), key=lambda item: (item[0], int(item[1].get("id") or 0)), reverse=True)
+    if len(candidates) == 1:
+        score, document = ranked[0]
+        if expected_kind == "attachment" and context.get("n_desenho") and score < 100:
+            return None
+        return document
+    best_score, best = ranked[0]
+    if best_score <= 0 or best_score == ranked[1][0]:
+        return None
+    return best
+
+
+def _line_stats(items: list[Any]) -> tuple[int, int, int]:
+    lines = diagonals = curves = 0
+    for item in items:
+        if not item:
+            continue
+        if item[0] == "l" and len(item) >= 3:
+            lines += 1
+            delta_x = abs(float(item[2].x) - float(item[1].x))
+            delta_y = abs(float(item[2].y) - float(item[1].y))
+            if delta_x > 1 and delta_y > 1:
+                diagonals += 1
+        elif item[0] in {"c", "qu"}:
+            curves += 1
+    return lines, diagonals, curves
+
+
+def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
+    return fitz.Rect(
+        max(bounds.x0, rect.x0 - margin),
+        max(bounds.y0, rect.y0 - margin),
+        min(bounds.x1, rect.x1 + margin),
+        min(bounds.y1, rect.y1 + margin),
+    )
+
+
+def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
+    page_rect = page.rect
+    page_area = max(page_rect.width * page_rect.height, 1)
+    records = []
+    for drawing in page.get_drawings():
+        rect = fitz.Rect(drawing.get("rect")) & page_rect
+        coverage = (rect.width * rect.height) / page_area
+        if rect.is_empty or coverage < 0.0002 or coverage > 0.82:
+            continue
+        lines, diagonals, curves = _line_stats(drawing.get("items") or [])
+        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
+
+    groups: list[dict[str, Any]] = []
+    join_margin = max(5.0, min(page_rect.width, page_rect.height) * 0.012)
+    for record in records:
+        matches = [group for group in groups if _expand_rect(group["rect"], join_margin, page_rect).intersects(record["rect"])]
+        if not matches:
+            groups.append(record)
+            continue
+        target = matches[0]
+        target["rect"] |= record["rect"]
+        for key in ("lines", "diagonals", "curves", "paths"):
+            target[key] += record[key]
+        for extra in matches[1:]:
+            target["rect"] |= extra["rect"]
+            for key in ("lines", "diagonals", "curves", "paths"):
+                target[key] += extra[key]
+            groups.remove(extra)
+
+    page_text = _normalizar_identificador(page.get_text("text"))
+    has_isometric_label = "ISOMETR" in page_text
+    candidates = []
+    for group in groups:
+        rect = group["rect"]
+        coverage = (rect.width * rect.height) / page_area
+        diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
+        if coverage < 0.008 or coverage > 0.72:
+            continue
+        if group["diagonals"] < 2 and group["curves"] < 2:
+            continue
+        score = diagonal_ratio * 8 + min(group["paths"], 40) / 20 + min(coverage, 0.35) * 3
+        if has_isometric_label:
+            score += 1.5
+        if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
+            score -= 4
+        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect)))
+
+    for image in page.get_image_info():
+        rect = fitz.Rect(image.get("bbox")) & page_rect
+        coverage = (rect.width * rect.height) / page_area
+        if not rect.is_empty and 0.06 <= coverage <= 0.72:
+            score = 3 + min(coverage, 0.4) * 3 + (1.5 if has_isometric_label else 0)
+            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect)))
+    return candidates
+
+
+def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
-    pdf = fitz.open(stream=content, filetype="pdf")
-    if pdf.page_count == 0:
-        raise LookupError("Documento sem paginas")
-    pixmap = pdf.load_page(0).get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
-    return pixmap.tobytes("png"), "image/png"
+    try:
+        with fitz.open(stream=content, filetype="pdf") as pdf:
+            if pdf.page_count == 0:
+                raise LookupError("Documento sem paginas")
+            candidates = []
+            for page_index in range(pdf.page_count):
+                page = pdf.load_page(page_index)
+                candidates.extend((score, page_index, rect) for score, rect in _page_isometric_candidates(page))
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            if not candidates or (len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.15):
+                raise LookupError("Vista isometrica nao identificada com confianca")
+            _, page_index, clip = candidates[0]
+            page = pdf.load_page(page_index)
+            rendered = {}
+            for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
+                scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+                rendered[variant] = pixmap.tobytes("png")
+            return rendered
+    except LookupError:
+        raise
+    except Exception as exc:
+        raise LookupError("Documento PDF invalido ou ilegivel") from exc
+
+
+def _gerar_previews(content: bytes, filename: str) -> dict[str, bytes]:
+    if not filename.lower().endswith(".pdf"):
+        raise LookupError("Vista isometrica nao identificada com confianca")
+    return _render_pdf_previews(content)
+
+
+def _previews_em_cache(cache_key: str, content: bytes, filename: str) -> dict[str, bytes]:
+    with _PREVIEW_LOCK:
+        cached = _PREVIEW_CACHE.get(cache_key)
+        if cached is not None:
+            _PREVIEW_CACHE.move_to_end(cache_key)
+            return cached
+        future = _PREVIEW_JOBS.get(cache_key)
+        if future is None:
+            future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename)
+            _PREVIEW_JOBS[cache_key] = future
+    try:
+        previews = future.result()
+    finally:
+        with _PREVIEW_LOCK:
+            _PREVIEW_JOBS.pop(cache_key, None)
+    with _PREVIEW_LOCK:
+        _PREVIEW_CACHE[cache_key] = previews
+        _PREVIEW_CACHE.move_to_end(cache_key)
+        while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_LIMIT:
+            _PREVIEW_CACHE.popitem(last=False)
+    return previews
+
+
+def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail") -> tuple[bytes, str, str]:
+    if variant not in {"thumbnail", "detail"}:
+        raise LookupError("Variante de previa invalida")
+    ordem = _obter_ordem(numero_os)
+    params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
+    context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
+    if not context:
+        raise LookupError("Item nao encontrado")
+    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
+    document = _selecionar_documento_previa(documents, context)
+    if not document:
+        raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
+    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]))
+    identity = "|".join((
+        _PREVIEW_CACHE_VERSION,
+        str(document.get("kind")),
+        str(document.get("id")),
+        _texto(context.get("revisao_desenho")),
+        hashlib.sha256(content).hexdigest(),
+    ))
+    cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    previews = _previews_em_cache(cache_key, content, filename)
+    return previews[variant], "image/png", cache_key
 
 
 def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
-    documents = obter_documentos(numero_os, aux_code)
-    document = next((item for item in documents if item["kind"] == "drawing"), None) or (documents[0] if documents else None)
-    if not document:
-        raise LookupError("Item sem documento visual")
-    content, filename = obter_arquivo(numero_os, aux_code, document["kind"], int(document["id"]))
-    lower = filename.lower()
-    if lower.endswith(".png"):
-        return content, "image/png"
-    if lower.endswith((".jpg", ".jpeg", ".webp", ".gif")):
-        return content, "image/jpeg"
-    if not fitz:
-        raise LookupError("Renderizador de PDF nao instalado")
-    pdf = fitz.open(stream=content, filetype="pdf")
-    if pdf.page_count == 0:
-        raise LookupError("Documento sem paginas")
-    pixmap = pdf.load_page(0).get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
-    return pixmap.tobytes("png"), "image/png"
+    content, media_type, _ = obter_preview(numero_os, aux_code, "thumbnail")
+    return content, media_type
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
