@@ -106,7 +106,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     box-shadow: none;
 }
 .tree-search input { color: var(--ink); }
-.tree-copy small { font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.tree-copy small { display: none; }
 .tree-copy strong { overflow-wrap: anywhere; }
 .tree-row.selected, .assembly-node.selected, .dependency-node.selected,
 .map-view-switch button.active, .dependency-filter button.active, .detail-tabs button.active {

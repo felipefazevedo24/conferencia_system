@@ -266,3 +266,9 @@ def test_detalhes_identifica_e_limita_a_miniatura_isometrica():
     detail_rule = css.split(".detail-preview {", 1)[1].split("}", 1)[0]
     assert "width: 160px;" in detail_rule
     assert "height: 160px;" in detail_rule
+
+
+def test_arvore_exibe_somente_numero_da_os():
+    css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
+
+    assert ".tree-copy small { display: none; }" in css
