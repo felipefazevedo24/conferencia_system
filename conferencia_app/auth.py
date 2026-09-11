@@ -68,7 +68,9 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
     "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
-    "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Consumo de Chapa (Nesting)",
+    # A chave continua PAGE_LOGISTICA_* (nao renomeada de proposito, pra nao
+    # revogar o acesso de quem ja tem), mas o modulo vive no menu Intralog.
+    "PAGE_LOGISTICA_CONSUMO_CHAPA": "Intralog > Consumo de Chapa (Nesting)",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
 }
 

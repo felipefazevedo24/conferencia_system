@@ -328,10 +328,6 @@
                         </div>
                         {% endif %}
 
-                        {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') %}
-                        <a href="/logistica/consumo-chapa" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</a>
-                        {% endif %}
-
                         {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                             or can_access('PAGE_LOGISTICA_VIAGEM') %}
                         <div class="submenu-subgroup" data-subgroup="transporte">
@@ -347,6 +343,20 @@
                 </div>
                 {% endif %}
 
+                {% endif %}
+
+                {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-intralog" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-dolly"></i><span>Intralog</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-intralog">
+                        {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') %}
+                        <a href="/logistica/consumo-chapa" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</a>
+                        {% endif %}
+                    </div>
+                </div>
                 {% endif %}
 
                 {% if can_access('PAGE_PRODUCAO') %}
