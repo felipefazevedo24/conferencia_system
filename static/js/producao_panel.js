@@ -5,7 +5,6 @@
     const compact = window.matchMedia('(max-width: 1100px)');
     const views = [['tree', 'Estrutura'], ['map', 'Mapa'], ['operations', 'Operações'], ['details', 'Detalhes']];
     let view = 'map';
-    let previewHidden = false;
     let sequenceList = false;
     let scheduled = false;
     let parentDocument;
@@ -47,19 +46,59 @@
         window.dispatchEvent(new Event('resize'));
     }
 
-    const dialog = document.createElement('dialog');
-    dialog.className = 'production-image-dialog';
-    dialog.setAttribute('aria-labelledby', 'production-image-title');
-    const dialogHeader = document.createElement('header');
-    const dialogTitle = document.createElement('h2');
-    dialogTitle.id = 'production-image-title';
-    dialogTitle.textContent = 'Imagem da peça';
-    dialogHeader.append(dialogTitle, control('Fechar', '', () => dialog.close()));
-    const enlargedImage = document.createElement('img');
-    dialog.append(dialogHeader, enlargedImage);
-    document.body.append(dialog);
-    dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
-    dialog.addEventListener('close', () => enlargedImage.removeAttribute('src'));
+    function previewSource(image, detail) {
+        const source = new URL(image.getAttribute('src'), window.location.href);
+        source.searchParams.delete('_preview');
+        if (detail) source.searchParams.set('variant', 'detail');
+        return `${source.pathname}${source.search}`;
+    }
+
+    function preparePreview(container, detail = false) {
+        const image = container.querySelector('img');
+        if (!image) {
+            container.dataset.previewState = 'unavailable';
+            return;
+        }
+        const source = previewSource(image, detail);
+        if (image.dataset.productionSource === source) return;
+        image.dataset.productionSource = source;
+        image.dataset.previewAttempts = '0';
+        container.dataset.previewState = 'loading';
+        if (image.getAttribute('src') !== source) image.setAttribute('src', source);
+        if (image.complete) handlePreviewDimensions(image, container);
+    }
+
+    function handlePreviewDimensions(image, container) {
+        if (image.naturalWidth === 1 && image.naturalHeight === 1) {
+            const attempt = Number(image.dataset.previewAttempts || 0) + 1;
+            image.dataset.previewAttempts = String(attempt);
+            container.dataset.previewState = 'loading';
+            window.setTimeout(() => {
+                if (!image.isConnected) return;
+                const detail = container.classList.contains('detail-preview');
+                if (previewSource(image, detail) !== image.dataset.productionSource) return;
+                const retry = new URL(image.dataset.productionSource, window.location.href);
+                retry.searchParams.set('_preview', String(Date.now()));
+                image.setAttribute('src', `${retry.pathname}${retry.search}`);
+            }, Math.min(250 * (1.35 ** attempt), 2000));
+            return;
+        }
+        container.dataset.previewState = image.naturalWidth > 0 ? 'ready' : 'unavailable';
+    }
+
+    function onPreviewResult(event) {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement)) return;
+        const container = image.closest('.detail-preview, .node-thumbnail');
+        if (!container) return;
+        const detail = container.classList.contains('detail-preview');
+        if (previewSource(image, detail) !== image.dataset.productionSource) return;
+        if (event.type === 'load') handlePreviewDimensions(image, container);
+        else container.dataset.previewState = 'unavailable';
+    }
+
+    document.addEventListener('load', onPreviewResult, true);
+    document.addEventListener('error', onPreviewResult, true);
 
     function enhance() {
         scheduled = false;
@@ -88,28 +127,8 @@
             heading.append(toggle);
         }
         const preview = document.querySelector('.detail-preview');
-        if (preview && !preview.previousElementSibling?.classList.contains('production-preview-tools')) {
-            const tools = document.createElement('div');
-            tools.className = 'production-preview-tools';
-            const toggle = control(previewHidden ? 'Mostrar imagem' : 'Recolher imagem', '', () => {
-                previewHidden = !previewHidden;
-                root.classList.toggle('production-preview-hidden', previewHidden);
-                toggle.textContent = previewHidden ? 'Mostrar imagem' : 'Recolher imagem';
-                toggle.setAttribute('aria-expanded', String(!previewHidden));
-            });
-            toggle.setAttribute('aria-expanded', String(!previewHidden));
-            const enlarge = control('Ampliar imagem', 'production-enlarge', () => {
-                const image = document.querySelector('.detail-preview img');
-                if (!image) return;
-                enlargedImage.src = image.currentSrc || image.src;
-                enlargedImage.alt = image.alt;
-                dialog.showModal();
-            });
-            tools.append(toggle, enlarge);
-            preview.before(tools);
-        }
-        const enlarge = document.querySelector('.production-enlarge');
-        if (enlarge) enlarge.disabled = !preview?.querySelector('img');
+        if (preview) preparePreview(preview, true);
+        document.querySelectorAll('.node-thumbnail').forEach((thumbnail) => preparePreview(thumbnail));
         // Reflect the selected order when it is supplied through navigation or a deep link.
         const order = new URLSearchParams(window.location.search).get('os');
         const treeTitle = document.querySelector('.tree-panel .panel-title h2');
@@ -122,7 +141,7 @@
     }
     // Only child/text changes: graph positions and preview pointer movement do not trigger work.
     const observer = new MutationObserver(schedule);
-    observer.observe(document.getElementById('root'), { childList: true, characterData: true, subtree: true });
+    observer.observe(document.getElementById('root'), { childList: true, characterData: true, attributes: true, attributeFilter: ['src'], subtree: true });
     root.dataset.productionView = view;
     enhance();
     window.addEventListener('popstate', schedule);
@@ -130,6 +149,8 @@
     window.addEventListener('pagehide', (event) => {
         if (event.persisted) return;
         observer.disconnect();
+        document.removeEventListener('load', onPreviewResult, true);
+        document.removeEventListener('error', onPreviewResult, true);
         parentDocument.removeEventListener('sync-theme-change', syncTheme);
         parentWindow.removeEventListener('resize', syncMenuSpace);
     });

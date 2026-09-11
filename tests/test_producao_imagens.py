@@ -87,6 +87,13 @@ def test_cms_nao_faz_fallback_nem_escolhe_anexo_ambiguo():
     assert producao_service._selecionar_documento_previa(documents, context) is None
 
 
+def test_revisao_conflitante_nao_e_associada_mesmo_com_um_documento():
+    context = {"segmento": "CMS", "n_desenho": "DES-99", "revisao_desenho": "03"}
+    documents = [document(1, "attachment", "DES-99_REV02.pdf")]
+
+    assert producao_service._selecionar_documento_previa(documents, context) is None
+
+
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
     fitz = producao_service.fitz
@@ -133,6 +140,7 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
 def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
+    producao_service._PREVIEW_FAILURES.clear()
     generated = {"thumbnail": b"thumb", "detail": b"detail"}
 
     with patch.object(producao_service, "_gerar_previews", return_value=generated) as generate:
@@ -143,3 +151,44 @@ def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     assert first is second
     assert changed == generated
     assert generate.call_count == 2
+
+
+def test_cache_assincrono_reutiliza_o_mesmo_processamento():
+    producao_service._PREVIEW_CACHE.clear()
+    producao_service._PREVIEW_JOBS.clear()
+    producao_service._PREVIEW_FAILURES.clear()
+    generated = {"thumbnail": b"thumb", "detail": b"detail"}
+
+    with patch.object(producao_service, "_gerar_previews", return_value=generated) as generate:
+        pending = producao_service._previews_em_cache("async-v1", b"pdf", "drawing.pdf", wait=False)
+        completed = producao_service._previews_em_cache("async-v1", b"pdf", "drawing.pdf")
+
+    assert pending is None
+    assert completed == generated
+    assert generate.call_count == 1
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_imagem_original_isolada_gera_as_duas_variantes():
+    fitz = producao_service.fitz
+    source = fitz.open()
+    page = source.new_page(width=500, height=500)
+    shape = page.new_shape()
+    shape.draw_line((130, 220), (250, 150))
+    shape.draw_line((250, 150), (370, 220))
+    shape.draw_line((370, 220), (250, 300))
+    shape.draw_line((250, 300), (130, 220))
+    shape.draw_line((130, 220), (130, 320))
+    shape.draw_line((130, 320), (250, 390))
+    shape.draw_line((250, 390), (370, 320))
+    shape.draw_line((370, 320), (370, 220))
+    shape.finish(color=(0, 0, 0), width=3)
+    shape.commit()
+    pixmap = page.get_pixmap(alpha=False)
+    content = pixmap.tobytes("png")
+    source.close()
+
+    previews = producao_service._gerar_previews(content, "peca.png")
+
+    assert previews["thumbnail"].startswith(b"\x89PNG")
+    assert previews["detail"].startswith(b"\x89PNG")

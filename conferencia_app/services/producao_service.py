@@ -33,6 +33,7 @@ _PREVIEW_CACHE_VERSION = "isometric-v1"
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
+_PREVIEW_FAILURES: dict[str, str] = {}
 _PREVIEW_LOCK = threading.RLock()
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
 
@@ -128,7 +129,19 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
 
 def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     ordem = _obter_ordem(numero_os)
-    return _obter_documentos_ordem(ordem, numero_os, aux_code)
+    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
+    context = fetch_one(
+        queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
+        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+    )
+    selected = _selecionar_documento_previa(documents, context or {})
+    for document in documents:
+        document["is_primary"] = bool(
+            selected
+            and document.get("kind") == selected.get("kind")
+            and document.get("id") == selected.get("id")
+        )
+    return documents
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
@@ -181,9 +194,25 @@ def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int
     return score
 
 
+def _revisao_conflitante(document: dict[str, Any], context: dict[str, Any]) -> bool:
+    expected = _texto_comparavel(context.get("revisao_desenho"))
+    if not expected:
+        return False
+    metadata = _normalizar_identificador(f"{document.get('filename', '')} {document.get('description', '')}")
+    revisions = {
+        _texto_comparavel(match)
+        for match in re.findall(r"(?:^|[^A-Z0-9])(?:REV(?:ISAO)?|R)[\s_.-]*([A-Z0-9]+)", metadata)
+    }
+    return bool(revisions and expected not in revisions)
+
+
 def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
     expected_kind = "attachment" if _normalizar_identificador(context.get("segmento")) == "CMS" else "drawing"
-    candidates = [document for document in documents if document.get("kind") == expected_kind]
+    candidates = [
+        document
+        for document in documents
+        if document.get("kind") == expected_kind and not _revisao_conflitante(document, context)
+    ]
     if not candidates:
         return None
     ranked = sorted((( _pontuar_documento(document, context), document) for document in candidates), key=lambda item: (item[0], int(item[1].get("id") or 0)), reverse=True)
@@ -295,48 +324,111 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
                 raise LookupError("Vista isometrica nao identificada com confianca")
             _, page_index, clip = candidates[0]
             page = pdf.load_page(page_index)
-            rendered = {}
-            for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
-                scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
-                pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
-                rendered[variant] = pixmap.tobytes("png")
-            return rendered
+            return _render_clip_previews(page, clip)
     except LookupError:
         raise
     except Exception as exc:
         raise LookupError("Documento PDF invalido ou ilegivel") from exc
 
 
+def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
+    rendered = {}
+    for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
+        scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+        rendered[variant] = pixmap.tobytes("png")
+    return rendered
+
+
+def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
+    if fitz is None:
+        raise LookupError("Renderizador de imagem nao instalado")
+    try:
+        with fitz.open(stream=content, filetype=filetype) as image_document:
+            page = image_document.load_page(0)
+            page_rect = page.rect
+            analysis_scale = min(1.0, 800 / max(page_rect.width, page_rect.height))
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(analysis_scale, analysis_scale), alpha=False)
+            samples = pixmap.samples
+            channels = pixmap.n
+            min_x, min_y, max_x, max_y = pixmap.width, pixmap.height, -1, -1
+            ink_pixels = 0
+            for y_coord in range(pixmap.height):
+                row_start = y_coord * pixmap.stride
+                for x_coord in range(pixmap.width):
+                    offset = row_start + x_coord * channels
+                    if min(samples[offset:offset + min(channels, 3)]) >= 238:
+                        continue
+                    ink_pixels += 1
+                    min_x = min(min_x, x_coord)
+                    min_y = min(min_y, y_coord)
+                    max_x = max(max_x, x_coord)
+                    max_y = max(max_y, y_coord)
+            if ink_pixels < 80 or max_x < min_x or max_y < min_y:
+                raise LookupError("Vista isometrica nao identificada com confianca")
+            width = max_x - min_x + 1
+            height = max_y - min_y + 1
+            coverage = (width * height) / max(pixmap.width * pixmap.height, 1)
+            if coverage < 0.008 or coverage > 0.76:
+                raise LookupError("Vista isometrica nao identificada com confianca")
+            clip = fitz.Rect(
+                min_x / analysis_scale,
+                min_y / analysis_scale,
+                (max_x + 1) / analysis_scale,
+                (max_y + 1) / analysis_scale,
+            )
+            clip = _expand_rect(clip, max(clip.width, clip.height) * 0.06, page_rect)
+            return _render_clip_previews(page, clip)
+    except LookupError:
+        raise
+    except Exception as exc:
+        raise LookupError("Imagem invalida ou ilegivel") from exc
+
+
 def _gerar_previews(content: bytes, filename: str) -> dict[str, bytes]:
-    if not filename.lower().endswith(".pdf"):
-        raise LookupError("Vista isometrica nao identificada com confianca")
-    return _render_pdf_previews(content)
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if suffix == "pdf":
+        return _render_pdf_previews(content)
+    if suffix in {"png", "jpg", "jpeg", "webp"}:
+        return _render_raster_previews(content, "jpeg" if suffix in {"jpg", "jpeg"} else suffix)
+    raise LookupError("Formato sem suporte para previa isometrica")
 
 
-def _previews_em_cache(cache_key: str, content: bytes, filename: str) -> dict[str, bytes]:
+def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None:
+    try:
+        previews = future.result()
+    except Exception as exc:
+        with _PREVIEW_LOCK:
+            _PREVIEW_JOBS.pop(cache_key, None)
+            _PREVIEW_FAILURES[cache_key] = str(exc)
+        return
+    with _PREVIEW_LOCK:
+        _PREVIEW_JOBS.pop(cache_key, None)
+        _PREVIEW_FAILURES.pop(cache_key, None)
+        _PREVIEW_CACHE[cache_key] = previews
+        _PREVIEW_CACHE.move_to_end(cache_key)
+        while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_LIMIT:
+            _PREVIEW_CACHE.popitem(last=False)
+
+
+def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool = True) -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
         if cached is not None:
             _PREVIEW_CACHE.move_to_end(cache_key)
             return cached
+        failure = _PREVIEW_FAILURES.get(cache_key)
+        if failure:
+            raise LookupError(failure)
         future = _PREVIEW_JOBS.get(cache_key)
         if future is None:
             future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename)
             _PREVIEW_JOBS[cache_key] = future
-    try:
-        previews = future.result()
-    finally:
-        with _PREVIEW_LOCK:
-            _PREVIEW_JOBS.pop(cache_key, None)
-    with _PREVIEW_LOCK:
-        _PREVIEW_CACHE[cache_key] = previews
-        _PREVIEW_CACHE.move_to_end(cache_key)
-        while len(_PREVIEW_CACHE) > _PREVIEW_CACHE_LIMIT:
-            _PREVIEW_CACHE.popitem(last=False)
-    return previews
+            future.add_done_callback(lambda completed: _finalizar_preview(cache_key, completed))
+    return future.result() if wait else None
 
 
-def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail") -> tuple[bytes, str, str]:
+def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wait: bool = True) -> tuple[bytes | None, str, str]:
     if variant not in {"thumbnail", "detail"}:
         raise LookupError("Variante de previa invalida")
     ordem = _obter_ordem(numero_os)
@@ -357,12 +449,14 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail") -> 
         hashlib.sha256(content).hexdigest(),
     ))
     cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-    previews = _previews_em_cache(cache_key, content, filename)
-    return previews[variant], "image/png", cache_key
+    previews = _previews_em_cache(cache_key, content, filename, wait=wait)
+    return previews[variant] if previews else None, "image/png", cache_key
 
 
 def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
     content, media_type, _ = obter_preview(numero_os, aux_code, "thumbnail")
+    if content is None:  # pragma: no cover - a chamada bloqueante sempre produz conteudo
+        raise LookupError("Previa ainda em processamento")
     return content, media_type
 
 
