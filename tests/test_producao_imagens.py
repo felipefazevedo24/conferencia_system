@@ -12,19 +12,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def _load_production_service():
     package_paths = {
-        "conferencia_app": PROJECT_ROOT / "conferencia_app",
-        "conferencia_app.compras": PROJECT_ROOT / "conferencia_app" / "compras",
-        "conferencia_app.services": PROJECT_ROOT / "conferencia_app" / "services",
+        "production_test_app": PROJECT_ROOT / "conferencia_app",
+        "production_test_app.compras": PROJECT_ROOT / "conferencia_app" / "compras",
+        "production_test_app.services": PROJECT_ROOT / "conferencia_app" / "services",
     }
     for package_name, package_path in package_paths.items():
         package = ModuleType(package_name)
         package.__path__ = [str(package_path)]
         sys.modules[package_name] = package
-    database = ModuleType("conferencia_app.compras.db")
+    database = ModuleType("production_test_app.compras.db")
     database.fetch_all = lambda *_args, **_kwargs: []
     database.fetch_one = lambda *_args, **_kwargs: None
     sys.modules[database.__name__] = database
-    return importlib.import_module("conferencia_app.services.producao_service")
+    return importlib.import_module("production_test_app.services.producao_service")
 
 
 producao_service = _load_production_service()
