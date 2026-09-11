@@ -6651,14 +6651,14 @@ def _linhas_picking_fixture():
     return json.loads(caminho.read_text(encoding="utf-8"))
 
 
-def test_chapa_picking_monta_lista_pai_com_todas_as_os_que_compoem(tmp_path):
-    """Intralog > Chapa Picking: o servico monta a LISTA PAI - cada OS Pai
+def test_picking_monta_lista_pai_com_todas_as_os_que_compoem(tmp_path):
+    """Intralog > Picking: o servico monta a LISTA PAI - cada OS Pai
     (servico_raiz) com TODAS as OS filhas que a compoem, mesmo quando a OS
     filha tem numero de servico diferente da raiz (origem_diferente=SIM).
     Os materiais sao AGREGADOS por (cod_os_completo, cod_interno), porque a
     API repete o mesmo material varias vezes pra mesma OS e nao tem id de
     linha - o almoxarifado separa o total."""
-    from conferencia_app.services import intralog_chapa_picking_service as svc
+    from conferencia_app.services import intralog_picking_service as svc
 
     app = build_test_app(tmp_path)
     linhas = _linhas_picking_fixture()
@@ -6690,16 +6690,26 @@ def test_chapa_picking_monta_lista_pai_com_todas_as_os_que_compoem(tmp_path):
         assert round(mat["qtde"], 2) == 75.24
         assert mat["unidade"] == "KG"
         assert mat["familia"] == "19-01"
+        assert mat["eh_chapa"] is True   # ganha a tag "chapa" na linha
         assert mat["separado"] is False
 
+        # O picking separa de TUDO, nao so' chapa - materiais de outras
+        # familias aparecem normalmente, so' sem a tag.
+        nao_chapa = [
+            m for p in arvore["os_pais"] for f in p["os_filhas"] for m in f["materiais"]
+            if not m["eh_chapa"]
+        ]
+        assert nao_chapa, "a lista precisa trazer material que nao e' chapa"
+        assert all(m["familia"] != "19-01" for m in nao_chapa)
 
-def test_chapa_picking_confirma_separacao_estorna_e_sinaliza_qtde_alterada(tmp_path):
+
+def test_picking_confirma_separacao_estorna_e_sinaliza_qtde_alterada(tmp_path):
     """Confirmacao de separacao do almoxarifado (guardada no banco do Sync,
     a lista em si nunca e' copiada): confirma -> aparece separado; se a
     demanda da API mudar depois, a tela sinaliza; estorno volta ao inicio."""
     import pytest
 
-    from conferencia_app.services import intralog_chapa_picking_service as svc
+    from conferencia_app.services import intralog_picking_service as svc
 
     app = build_test_app(tmp_path)
     linhas = _linhas_picking_fixture()
@@ -6755,7 +6765,7 @@ def test_chapa_picking_confirma_separacao_estorna_e_sinaliza_qtde_alterada(tmp_p
             svc.confirmar_separacao("", "19-01-00564", "ALMOX")
 
 
-def test_chapa_picking_filtros_e_api_http(tmp_path):
+def test_picking_filtros_e_api_http(tmp_path):
     """Filtros (status/familia/busca) e as rotas HTTP do modulo, com a
     chamada ao ERP mockada (o endpoint externo nao existe nos testes)."""
     import requests as _requests
@@ -6766,19 +6776,19 @@ def test_chapa_picking_filtros_e_api_http(tmp_path):
     linhas = _linhas_picking_fixture()
 
     with patch(
-        "conferencia_app.services.intralog_chapa_picking_service.buscar_linhas_api",
+        "conferencia_app.services.intralog_picking_service.buscar_linhas_api",
         return_value=linhas,
     ):
-        assert client.get("/intralog/chapa-picking").status_code == 200
+        assert client.get("/intralog/picking").status_code == 200
 
-        resp = client.get("/api/intralog/chapa-picking")
+        resp = client.get("/api/intralog/picking")
         assert resp.status_code == 200
         corpo = resp.get_json()
         assert corpo["metricas"]["os_pais"] == 2
         assert "19-01" in corpo["familias_disponiveis"]
 
         # Filtro por familia do material.
-        so_chapa = client.get("/api/intralog/chapa-picking?familia=19-01").get_json()
+        so_chapa = client.get("/api/intralog/picking?familia=19-01").get_json()
         assert so_chapa["metricas"]["materiais"] < corpo["metricas"]["materiais"]
         assert all(
             m["familia"] == "19-01"
@@ -6786,7 +6796,7 @@ def test_chapa_picking_filtros_e_api_http(tmp_path):
         )
 
         # Busca por OS filha.
-        busca = client.get("/api/intralog/chapa-picking?busca=7847").get_json()
+        busca = client.get("/api/intralog/picking?busca=7847").get_json()
         assert busca["metricas"]["os_pais"] == 1
         assert busca["os_pais"][0]["os_filhas"][0]["cod_os_completo"] == "7847/001"
 
@@ -6794,26 +6804,26 @@ def test_chapa_picking_filtros_e_api_http(tmp_path):
         # (par OS+material que existe de fato na lista - a confirmacao e'
         # guardada por (cod_os_completo, cod_interno).)
         chave = {"cod_os_completo": "7847/001", "cod_interno": "19-02-00065"}
-        assert client.post("/api/intralog/chapa-picking/separar", json=chave).status_code == 200
-        assert client.post("/api/intralog/chapa-picking/separar", json=chave).status_code == 400  # ja separado
+        assert client.post("/api/intralog/picking/separar", json=chave).status_code == 200
+        assert client.post("/api/intralog/picking/separar", json=chave).status_code == 400  # ja separado
 
-        separados = client.get("/api/intralog/chapa-picking?status=separado").get_json()
+        separados = client.get("/api/intralog/picking?status=separado").get_json()
         assert separados["metricas"]["separados"] == 1
         mat = separados["os_pais"][0]["os_filhas"][0]["materiais"][0]
         assert mat["separado"] is True
         assert mat["separado_por"] == "ADMIN"
 
-        assert client.post("/api/intralog/chapa-picking/observacao",
+        assert client.post("/api/intralog/picking/observacao",
                            json=dict(chave, observacao="conferido")).status_code == 200
-        assert client.post("/api/intralog/chapa-picking/estornar", json=chave).status_code == 200
-        assert client.post("/api/intralog/chapa-picking/estornar", json=chave).status_code == 400
-        assert client.get("/api/intralog/chapa-picking?status=separado").get_json()["metricas"]["separados"] == 0
+        assert client.post("/api/intralog/picking/estornar", json=chave).status_code == 200
+        assert client.post("/api/intralog/picking/estornar", json=chave).status_code == 400
+        assert client.get("/api/intralog/picking?status=separado").get_json()["metricas"]["separados"] == 0
 
     # ERP fora do ar -> 502 com mensagem amigavel, sem estourar 500.
     with patch(
-        "conferencia_app.services.intralog_chapa_picking_service.buscar_linhas_api",
+        "conferencia_app.services.intralog_picking_service.buscar_linhas_api",
         side_effect=_requests.ConnectionError("sem rede"),
     ):
-        fora = client.get("/api/intralog/chapa-picking")
+        fora = client.get("/api/intralog/picking")
         assert fora.status_code == 502
         assert "ERP" in fora.get_json()["error"]

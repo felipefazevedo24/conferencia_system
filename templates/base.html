@@ -345,7 +345,7 @@
 
                 {% endif %}
 
-                {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') or can_access('PAGE_INTRALOG_CHAPA_PICKING') %}
+                {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') or can_access('PAGE_INTRALOG_PICKING') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-intralog" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-dolly"></i><span>Intralog</span></span>
@@ -355,8 +355,8 @@
                         {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') %}
                         <a href="/logistica/consumo-chapa" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</a>
                         {% endif %}
-                        {% if can_access('PAGE_INTRALOG_CHAPA_PICKING') %}
-                        <a href="/intralog/chapa-picking" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-box"></i> Chapa Picking Almoxarifado</a>
+                        {% if can_access('PAGE_INTRALOG_PICKING') %}
+                        <a href="/intralog/picking" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-box"></i> Picking Almoxarifado</a>
                         {% endif %}
                     </div>
                 </div>

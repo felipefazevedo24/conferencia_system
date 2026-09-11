@@ -1,21 +1,21 @@
-"""Rotas do modulo Intralog > Chapa Picking Almoxarifado.
+"""Rotas do modulo Intralog > Picking Almoxarifado.
 
 Lista de material a separar, vinda AO VIVO da API do ERP, organizada como
 LISTA PAI: cada OS Pai (servico_raiz) com TODAS as OS filhas que a
 compoem e os materiais de cada uma. O almoxarifado confirma a separacao
 material a material (guardado no banco do Sync - ver
-intralog_chapa_picking_service)."""
+intralog_picking_service)."""
 from __future__ import annotations
 
 import requests
 from flask import Blueprint, current_app, jsonify, render_template, request, session
 
 from ..auth import permission_required
-from ..services import intralog_chapa_picking_service as svc
+from ..services import intralog_picking_service as svc
 
-intralog_chapa_picking_bp = Blueprint("intralog_chapa_picking", __name__)
+intralog_picking_bp = Blueprint("intralog_picking", __name__)
 
-PERMISSION = "PAGE_INTRALOG_CHAPA_PICKING"
+PERMISSION = "PAGE_INTRALOG_PICKING"
 
 
 def _erro_api(exc: Exception):
@@ -27,19 +27,19 @@ def _erro_api(exc: Exception):
     return jsonify({"error": f"Falha ao carregar a lista de separação: {exc}"}), 502
 
 
-@intralog_chapa_picking_bp.route("/intralog/chapa-picking")
+@intralog_picking_bp.route("/intralog/picking")
 @permission_required(PERMISSION)
-def chapa_picking_page():
+def picking_page():
     return render_template(
-        "intralog_chapa_picking.html",
+        "intralog_picking.html",
         user=session["username"],
         user_role=session.get("role", ""),
     )
 
 
-@intralog_chapa_picking_bp.route("/api/intralog/chapa-picking", methods=["GET"])
+@intralog_picking_bp.route("/api/intralog/picking", methods=["GET"])
 @permission_required(PERMISSION)
-def api_listar_chapa_picking():
+def api_listar_picking():
     try:
         dados = svc.montar_arvore(
             busca=request.args.get("busca") or "",
@@ -53,7 +53,7 @@ def api_listar_chapa_picking():
     return jsonify(dados)
 
 
-@intralog_chapa_picking_bp.route("/api/intralog/chapa-picking/separar", methods=["POST"])
+@intralog_picking_bp.route("/api/intralog/picking/separar", methods=["POST"])
 @permission_required(PERMISSION)
 def api_confirmar_separacao():
     payload = request.get_json(silent=True) or {}
@@ -71,7 +71,7 @@ def api_confirmar_separacao():
     return jsonify({"sucesso": True, "message": "Material separado."})
 
 
-@intralog_chapa_picking_bp.route("/api/intralog/chapa-picking/estornar", methods=["POST"])
+@intralog_picking_bp.route("/api/intralog/picking/estornar", methods=["POST"])
 @permission_required(PERMISSION)
 def api_estornar_separacao():
     payload = request.get_json(silent=True) or {}
@@ -82,7 +82,7 @@ def api_estornar_separacao():
     return jsonify({"sucesso": True, "message": "Separação estornada."})
 
 
-@intralog_chapa_picking_bp.route("/api/intralog/chapa-picking/observacao", methods=["POST"])
+@intralog_picking_bp.route("/api/intralog/picking/observacao", methods=["POST"])
 @permission_required(PERMISSION)
 def api_salvar_observacao():
     payload = request.get_json(silent=True) or {}

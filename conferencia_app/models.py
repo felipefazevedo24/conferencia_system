@@ -1936,8 +1936,8 @@ class LogisticaConsumoChapaPeca(db.Model):
     baixado_por = db.Column(db.String(100))
 
 
-class IntralogChapaPickingSeparacao(db.Model):
-    """Confirmacao de separacao do almoxarifado (Intralog > Chapa Picking).
+class IntralogPickingSeparacao(db.Model):
+    """Confirmacao de separacao do almoxarifado (Intralog > Picking).
 
     A lista de material a separar vem AO VIVO da API do ERP
     (INTRALOG_PICKING_API_URL) - nao copiamos as linhas pro banco. Aqui
@@ -1952,7 +1952,7 @@ class IntralogChapaPickingSeparacao(db.Model):
     material pra aquela OS - que e' como a separacao acontece na pratica.
     """
 
-    __tablename__ = "intralog_chapa_picking_separacao"
+    __tablename__ = "intralog_picking_separacao"
     __table_args__ = (
         db.UniqueConstraint("cod_os_completo", "cod_interno", name="uq_intralog_picking_os_material"),
     )

@@ -1,10 +1,10 @@
-"""Servico do modulo Intralog > Chapa Picking Almoxarifado.
+"""Servico do modulo Intralog > Picking Almoxarifado.
 
 A lista de material a separar vem AO VIVO da API do ERP
 (INTRALOG_PICKING_API_URL, hoje https://columbia.consultoriarf.net/
 listamaterialseparar) - nada e' importado/copiado pro banco. O banco do
 Sync guarda SO' a confirmacao de separacao do almoxarifado (ver
-IntralogChapaPickingSeparacao).
+IntralogPickingSeparacao).
 
 Estrutura que a API devolve (lista de linhas):
     servico_raiz      OS Pai (ex.: "7844")
@@ -31,7 +31,7 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import IntralogChapaPickingSeparacao
+from ..models import IntralogPickingSeparacao
 
 _URL_PADRAO = "https://columbia.consultoriarf.net/listamaterialseparar"
 
@@ -49,7 +49,7 @@ def buscar_linhas_api(timeout: int | None = None) -> list[dict]:
     headers = {
         "Accept": "application/json",
         "ngrok-skip-browser-warning": "true",
-        "User-Agent": "ColumbiaSync/1.0 (intralog-chapa-picking)",
+        "User-Agent": "ColumbiaSync/1.0 (intralog-picking)",
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
@@ -70,10 +70,20 @@ def _txt(valor) -> str:
     return str(valor if valor is not None else "").strip()
 
 
+# Familia do codigo interno que corresponde a CHAPA. O picking do
+# almoxarifado separa material de todo tipo - a chapa nao e' o foco, so'
+# ganha uma tag na linha pra ser identificada de bate-pronto.
+FAMILIA_CHAPA = "19-01"
+
+
 def familia_do_material(cod_interno: str) -> str:
     """Familia = 2 primeiros blocos do codigo interno (ex.: "19-01" = chapa)."""
     partes = _txt(cod_interno).split("-")
     return "-".join(partes[:2]) if len(partes) >= 2 else _txt(cod_interno)
+
+
+def eh_chapa(cod_interno: str) -> bool:
+    return familia_do_material(cod_interno) == FAMILIA_CHAPA
 
 
 def _chave(linha: dict) -> tuple[str, str]:
@@ -101,6 +111,7 @@ def agregar_materiais(linhas: list[dict]) -> dict[tuple[str, str], dict]:
                 "produto": _txt(linha.get("produto")),
                 "orcamento_raiz": _txt(linha.get("orcamento_raiz")),
                 "familia": familia_do_material(chave[1]),
+                "eh_chapa": eh_chapa(chave[1]),
                 "origem_diferente": _txt(linha.get("origem_diferente")).upper() == "SIM",
                 "qtde": 0.0,
                 "qtde_reservada": 0.0,
@@ -129,10 +140,10 @@ def agregar_materiais(linhas: list[dict]) -> dict[tuple[str, str], dict]:
     return agregado
 
 
-def _confirmacoes_por_chave() -> dict[tuple[str, str], IntralogChapaPickingSeparacao]:
+def _confirmacoes_por_chave() -> dict[tuple[str, str], IntralogPickingSeparacao]:
     return {
         (registro.cod_os_completo, registro.cod_interno): registro
-        for registro in IntralogChapaPickingSeparacao.query.all()
+        for registro in IntralogPickingSeparacao.query.all()
     }
 
 
@@ -252,16 +263,16 @@ def montar_arvore(linhas: list[dict] | None = None, busca: str = "", status: str
     }
 
 
-def _obter_ou_criar(cod_os_completo: str, cod_interno: str) -> IntralogChapaPickingSeparacao:
+def _obter_ou_criar(cod_os_completo: str, cod_interno: str) -> IntralogPickingSeparacao:
     cod_os_completo = _txt(cod_os_completo)
     cod_interno = _txt(cod_interno)
     if not cod_os_completo or not cod_interno:
         raise ValueError("Informe a OS e o código do material.")
-    registro = IntralogChapaPickingSeparacao.query.filter_by(
+    registro = IntralogPickingSeparacao.query.filter_by(
         cod_os_completo=cod_os_completo, cod_interno=cod_interno
     ).first()
     if registro is None:
-        registro = IntralogChapaPickingSeparacao(
+        registro = IntralogPickingSeparacao(
             cod_os_completo=cod_os_completo, cod_interno=cod_interno
         )
         db.session.add(registro)
@@ -271,7 +282,7 @@ def _obter_ou_criar(cod_os_completo: str, cod_interno: str) -> IntralogChapaPick
 def confirmar_separacao(
     cod_os_completo: str, cod_interno: str, usuario: str,
     servico_raiz: str = "", qtde: float | None = None, unidade: str = "",
-) -> IntralogChapaPickingSeparacao:
+) -> IntralogPickingSeparacao:
     registro = _obter_ou_criar(cod_os_completo, cod_interno)
     if registro.separado:
         raise ValueError("Esse material já está separado.")
@@ -288,7 +299,7 @@ def confirmar_separacao(
     return registro
 
 
-def estornar_separacao(cod_os_completo: str, cod_interno: str) -> IntralogChapaPickingSeparacao:
+def estornar_separacao(cod_os_completo: str, cod_interno: str) -> IntralogPickingSeparacao:
     registro = _obter_ou_criar(cod_os_completo, cod_interno)
     if not registro.separado:
         raise ValueError("Esse material ainda não foi separado.")
@@ -300,7 +311,7 @@ def estornar_separacao(cod_os_completo: str, cod_interno: str) -> IntralogChapaP
     return registro
 
 
-def salvar_observacao(cod_os_completo: str, cod_interno: str, observacao: str | None) -> IntralogChapaPickingSeparacao:
+def salvar_observacao(cod_os_completo: str, cod_interno: str, observacao: str | None) -> IntralogPickingSeparacao:
     registro = _obter_ou_criar(cod_os_completo, cod_interno)
     registro.observacao = _txt(observacao)[:2000] or None
     db.session.commit()

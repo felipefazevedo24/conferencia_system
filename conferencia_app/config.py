@@ -158,7 +158,7 @@ class Config:
     )
     INVENTARIO_LOCALIZACAO_API_TIMEOUT = int(os.environ.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT", "30"))
 
-    # Intralog > Chapa Picking Almoxarifado: lista de material a separar por
+    # Intralog > Picking Almoxarifado: lista de material a separar por
     # OS, lida AO VIVO do ERP (nada e' importado pro banco - o Sync so' guarda
     # a confirmacao de separacao do almoxarifado).
     INTRALOG_PICKING_API_URL = os.environ.get(

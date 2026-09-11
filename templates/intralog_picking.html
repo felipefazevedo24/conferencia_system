@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Intralog | Chapa Picking Almoxarifado{% endblock %}
-{% block shell_title %}Intralog — Chapa Picking Almoxarifado{% endblock %}
+{% block title %}Intralog | Picking Almoxarifado{% endblock %}
+{% block shell_title %}Intralog — Picking Almoxarifado{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -51,6 +51,10 @@
     .cp-erp.pendente { background: #f1f5f9; color: #475569; }
 
     .cp-alerta-qtde { display: block; font-size: 10.5px; color: #b45309; font-weight: 600; margin-top: 3px; }
+
+    /* Tag de chapa na linha do material (o picking separa de tudo - a
+       chapa so' ganha destaque visual pra ser identificada na hora). */
+    .cp-tag-chapa { display: inline-flex; align-items: center; gap: 4px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; margin-left: 6px; vertical-align: middle; }
 </style>
 {% endblock %}
 
@@ -59,8 +63,8 @@
     <header class="eui-page-header">
         <div>
             <div class="eui-page-header__eyebrow">Intralog</div>
-            <h1 class="eui-page-header__title"><i class="fas fa-hand-holding-box"></i> Chapa Picking Almoxarifado</h1>
-            <p class="eui-page-header__sub">Lista de material a separar por OS, direto do ERP. Cada <b>OS Pai</b> abre a lista completa das OS que a compõem, com os materiais de cada uma.</p>
+            <h1 class="eui-page-header__title"><i class="fas fa-hand-holding-box"></i> Picking Almoxarifado</h1>
+            <p class="eui-page-header__sub">Lista de material a separar por OS, direto do ERP — todo tipo de material, não só chapa (as chapas ficam marcadas com a tag <span class="cp-tag-chapa" style="margin-left:0;"><i class="fas fa-layer-group"></i> chapa</span>). Cada <b>OS Pai</b> abre a lista completa das OS que a compõem, com os materiais de cada uma.</p>
         </div>
     </header>
 
@@ -172,7 +176,7 @@
             if (familia) params.set("familia", familia);
 
             $("cp-tbody").innerHTML = '<tr><td colspan="7" class="cp-empty">Carregando…</td></tr>';
-            const data = await api("/api/intralog/chapa-picking?" + params.toString());
+            const data = await api("/api/intralog/picking?" + params.toString());
             cache = data.os_pais || [];
             const m = data.metricas || {};
             $("cp-m-pais").textContent = m.os_pais || 0;
@@ -271,7 +275,7 @@
         return `
             <tr>
                 <td style="font-family:monospace; white-space:nowrap;">${escapeHtml(m.cod_interno)}</td>
-                <td>${escapeHtml(m.item || "—")}</td>
+                <td>${escapeHtml(m.item || "—")}${m.eh_chapa ? '<span class="cp-tag-chapa"><i class="fas fa-layer-group"></i> chapa</span>' : ""}</td>
                 <td>${escapeHtml(m.unidade || "—")}</td>
                 <td style="text-align:right; font-weight:700;">${fmtNum(m.qtde)}
                     ${m.qtde_mudou ? `<span class="cp-alerta-qtde"><i class="fas fa-triangle-exclamation"></i> mudou (separou ${fmtNum(m.qtde_separada_snapshot)})</span>` : ""}
@@ -308,7 +312,7 @@
             if (bObs) {
                 const k = bObs.dataset.salvarObs;
                 const ta = $("cp-modal-corpo").querySelector(`[data-obs="${CSS.escape(k)}"]`);
-                await api("/api/intralog/chapa-picking/observacao", {
+                await api("/api/intralog/picking/observacao", {
                     method: "POST",
                     body: JSON.stringify(Object.assign(partesChave(k), { observacao: ta.value })),
                 });
@@ -316,7 +320,7 @@
                 return; // nao precisa recarregar a lista inteira
             } else if (bSep) {
                 const k = bSep.dataset.separar;
-                await api("/api/intralog/chapa-picking/separar", {
+                await api("/api/intralog/picking/separar", {
                     method: "POST",
                     body: JSON.stringify(Object.assign(partesChave(k), {
                         qtde: parseFloat(bSep.dataset.qtde),
@@ -327,7 +331,7 @@
             } else if (bEst) {
                 const k = bEst.dataset.estornar;
                 if (!confirm("Estornar a separação desse material?")) return;
-                await api("/api/intralog/chapa-picking/estornar", {
+                await api("/api/intralog/picking/estornar", {
                     method: "POST", body: JSON.stringify(partesChave(k)),
                 });
             }
