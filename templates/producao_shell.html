@@ -7,13 +7,6 @@
 {% endblock %}
 {% block content %}
 <section class="producao-page" aria-label="Produção">
-<header class="producao-header">
-	<div>
-		<p class="producao-header__eyebrow"><i class="fas fa-industry"></i> PCP · PRODUÇÃO</p>
-		<h1 class="producao-header__title">Painel Visual de Montagem</h1>
-		<p class="producao-header__sub">Acompanhe a estrutura da OS, o mapa do conjunto, as operações e o status produtivo em tempo real.</p>
-	</div>
-</header>
 <div class="producao-embed"><iframe id="producao-frame" title="Painel Visual de Produção" src="/producao-original/{% if request.query_string %}?{{ request.query_string.decode('utf-8') }}{% endif %}"></iframe></div>
 </section>
 {% endblock %}

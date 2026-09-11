@@ -18,6 +18,16 @@
     syncTheme();
     parentDocument.addEventListener('sync-theme-change', syncTheme);
 
+    // The floating mobile menu shares the first row now that the page title is removed.
+    const parentWindow = parentDocument.defaultView;
+    function syncMenuSpace() {
+        const menu = parentDocument.getElementById('mobile-menu-toggle');
+        root.classList.toggle('production-mobile-menu', parentDocument !== document &&
+            !!menu && parentWindow.getComputedStyle(menu).display !== 'none');
+    }
+    syncMenuSpace();
+    parentWindow.addEventListener('resize', syncMenuSpace);
+
     function control(text, className, action) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -121,5 +131,6 @@
         if (event.persisted) return;
         observer.disconnect();
         parentDocument.removeEventListener('sync-theme-change', syncTheme);
+        parentWindow.removeEventListener('resize', syncMenuSpace);
     });
 })();

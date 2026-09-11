@@ -59,6 +59,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 .header-copy, .header-grid, .brand, .app-header::before { display: none; }
 .global-search { grid-area: 1 / 1; min-width: 0; height: 48px; padding: 0 10px; }
+.production-mobile-menu .global-search { margin-left: 48px; }
 .global-search input { min-width: 0; font-size: 14px; }
 .global-search > svg, .search-back-button { flex-shrink: 0; }
 .header-metrics { grid-area: 1 / 2; display: grid; grid-template-columns: 1.15fr .85fr 1.2fr; gap: 8px; min-width: 0; }
