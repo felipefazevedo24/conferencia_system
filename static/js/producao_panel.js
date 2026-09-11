@@ -1,4 +1,4 @@
-/* Presentation adapter for the production bundle. */
+/* Presentation adapter for the production bundle. No API or business-rule changes. */
 (() => {
     'use strict';
     const root = document.documentElement;
@@ -62,8 +62,7 @@
         const source = previewSource(image, detail);
         if (image.dataset.productionSource === source) return;
         image.dataset.productionSource = source;
-        image.style.removeProperty('display');
-        if (!detail) image.loading = 'lazy';
+        image.dataset.previewAttempts = '0';
         container.dataset.previewState = 'loading';
         if (image.getAttribute('src') !== source) image.setAttribute('src', source);
         if (image.complete) handlePreviewDimensions(image, container);
@@ -71,7 +70,17 @@
 
     function handlePreviewDimensions(image, container) {
         if (image.naturalWidth === 1 && image.naturalHeight === 1) {
-            container.dataset.previewState = 'unavailable';
+            const attempt = Number(image.dataset.previewAttempts || 0) + 1;
+            image.dataset.previewAttempts = String(attempt);
+            container.dataset.previewState = 'loading';
+            window.setTimeout(() => {
+                if (!image.isConnected) return;
+                const detail = container.classList.contains('detail-preview');
+                if (previewSource(image, detail) !== image.dataset.productionSource) return;
+                const retry = new URL(image.dataset.productionSource, window.location.href);
+                retry.searchParams.set('_preview', String(Date.now()));
+                image.setAttribute('src', `${retry.pathname}${retry.search}`);
+            }, Math.min(250 * (1.35 ** attempt), 2000));
             return;
         }
         container.dataset.previewState = image.naturalWidth > 0 ? 'ready' : 'unavailable';

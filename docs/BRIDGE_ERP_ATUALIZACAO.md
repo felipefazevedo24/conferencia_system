@@ -101,47 +101,6 @@ partir de `conferencia_app/compras/queries.py` na hora que o processo sobe
 (`vars(conferencia_app.compras.queries)`), então só editar o arquivo sem
 reiniciar não tem efeito.
 
-## Falha ao carregar OS na Producao
-
-O fluxo de documentos passou a usar consultas novas, como
-`SQL_PRODUCAO_OBTER_OS` e `SQL_PRODUCAO_DOCUMENTOS_OS`, e exige a confirmacao
-`read_only: true` da bridge. Atualizar somente o Sync no PythonAnywhere nao
-atualiza a VM da bridge. O endpoint `/health` responder nao comprova que o
-catalogo de queries e o contrato de leitura estejam atualizados.
-
-Na API de Producao, verifique o campo `code` da resposta:
-
-| Codigo | Acao |
-|---|---|
-| `bridge_catalog_outdated` | Atualizar o catalogo de consultas na VM e reiniciar a bridge |
-| `bridge_readonly_required` | Atualizar tambem o script da bridge para confirmar leitura e reiniciar |
-| `bridge_access_denied` | Conferir autenticacao servidor-servidor e empresa autorizada, sem compartilhar segredos |
-| `bridge_unavailable` | Conferir processo da bridge, Funnel e acesso de rede a partir do servidor Sync |
-| `grv_unavailable` | Conferir a conexao PostgreSQL direta configurada no Sync |
-
-Para o ambiente Tailscale descrito no inicio deste documento:
-
-1. Na VM da bridge, revisar as alteracoes locais e atualizar os arquivos
-   `conferencia_app/compras/queries.py` e `scripts/erp_lancamento_api_bridge.py`
-   com a mesma versao usada no Sync. Preservar os arquivos privados em
-   `instance/`. Nao fazer pull geral nem sobrescrever alteracoes locais sem
-   revisao.
-2. Na pasta do projeto da VM, reiniciar com
-   `.\start_erp_bridge_tailscale.bat`. O launcher encerra o processo anterior
-   na porta da bridge e inicia o novo; fazer em janela operacional apropriada.
-   Nao trocar para os launchers ngrok legados citados abaixo.
-3. Conferir que `ERP_BRIDGE_PRODUCAO_EMPRESA` corresponde a
-   `COMPRAS_PG_COD_EMPRESA` do Sync. Nao desativar a exigencia de somente leitura.
-4. Atualizar o codigo do Sync e executar Reload no web app do PythonAnywhere.
-5. Reabrir a OS afetada. Confirmar a resposta de `/api/v1/orders/7807/structure`
-   no navegador autenticado. Nao compartilhar cookies, tokens, SQL ou documentos.
-
-A estrutura e o detalhe agora preservam os dados da peca quando apenas os
-documentos falham. A estrutura sinaliza `source.documents_available: false`;
-o detalhe sinaliza `documents_available: false` e nao promete miniaturas.
-Falhas na consulta principal da OS continuam sendo erros, nao respostas vazias
-de sucesso. Nenhuma dessas correcoes aplica migracao ou reinicia a VM sozinha.
-
 ## Como atualizar (passo a passo)
 
 A pasta na VM tem muita coisa não sincronizada (outros projetos, documentos
