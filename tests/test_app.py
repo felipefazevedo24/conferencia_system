@@ -6667,7 +6667,10 @@ def test_picking_monta_lista_pai_com_todas_as_os_que_compoem(tmp_path):
         arvore = svc.montar_arvore(linhas=linhas)
 
         assert arvore["metricas"]["os_pais"] == 2
-        assert arvore["metricas"]["separados"] == 0
+        # O que o ERP ja marcou como processado entra CONCLUIDO sozinho.
+        assert arvore["metricas"]["concluidos_erp"] == 75
+        assert arvore["metricas"]["separados_almox"] == 0
+        assert arvore["metricas"]["concluidos"] == 75
 
         # OS Pai 7844: composta por 6 OS filhas, TODAS de servico != 7844.
         pai = next(p for p in arvore["os_pais"] if p["servico_raiz"] == "7844")
@@ -6692,6 +6695,11 @@ def test_picking_monta_lista_pai_com_todas_as_os_que_compoem(tmp_path):
         assert mat["familia"] == "19-01"
         assert mat["eh_chapa"] is True   # ganha a tag "chapa" na linha
         assert mat["separado"] is False
+        # Parcial (6 de 10 demandas processadas) NAO conta como concluido:
+        # ainda falta separar o resto.
+        assert mat["concluido_erp"] is False
+        assert mat["concluido"] is False
+        assert mat["origem_conclusao"] is None
 
         # O picking separa de TUDO, nao so' chapa - materiais de outras
         # familias aparecem normalmente, so' sem a tag.
@@ -6726,7 +6734,9 @@ def test_picking_confirma_separacao_estorna_e_sinaliza_qtde_alterada(tmp_path):
         assert mat["separado_por"] == "ALMOX"
         assert mat["separado_em"]
         assert mat["qtde_mudou"] is False
-        assert arvore["metricas"]["separados"] == 1
+        assert mat["concluido"] is True
+        assert mat["origem_conclusao"] == "almoxarifado"
+        assert arvore["metricas"]["separados_almox"] == 1
 
         # Separar de novo -> erro (ja separado).
         with pytest.raises(ValueError):
@@ -6756,7 +6766,7 @@ def test_picking_confirma_separacao_estorna_e_sinaliza_qtde_alterada(tmp_path):
 
         # Estorno.
         svc.estornar_separacao("10583/002", "19-01-00564")
-        assert svc.montar_arvore(linhas=linhas)["metricas"]["separados"] == 0
+        assert svc.montar_arvore(linhas=linhas)["metricas"]["separados_almox"] == 0
         with pytest.raises(ValueError):
             svc.estornar_separacao("10583/002", "19-01-00564")
 
@@ -6807,17 +6817,26 @@ def test_picking_filtros_e_api_http(tmp_path):
         assert client.post("/api/intralog/picking/separar", json=chave).status_code == 200
         assert client.post("/api/intralog/picking/separar", json=chave).status_code == 400  # ja separado
 
-        separados = client.get("/api/intralog/picking?status=separado").get_json()
-        assert separados["metricas"]["separados"] == 1
-        mat = separados["os_pais"][0]["os_filhas"][0]["materiais"][0]
+        concluidos = client.get("/api/intralog/picking?status=concluido").get_json()
+        assert concluidos["metricas"]["separados_almox"] == 1
+        mat = next(
+            m for p in concluidos["os_pais"] for f in p["os_filhas"] for m in f["materiais"]
+            if f["cod_os_completo"] == chave["cod_os_completo"] and m["cod_interno"] == chave["cod_interno"]
+        )
         assert mat["separado"] is True
+        assert mat["concluido"] is True
         assert mat["separado_por"] == "ADMIN"
+        # Todo material listado nesse filtro esta concluido (pelo ERP ou pelo almox).
+        assert all(
+            m["concluido"]
+            for p in concluidos["os_pais"] for f in p["os_filhas"] for m in f["materiais"]
+        )
 
         assert client.post("/api/intralog/picking/observacao",
                            json=dict(chave, observacao="conferido")).status_code == 200
         assert client.post("/api/intralog/picking/estornar", json=chave).status_code == 200
         assert client.post("/api/intralog/picking/estornar", json=chave).status_code == 400
-        assert client.get("/api/intralog/picking?status=separado").get_json()["metricas"]["separados"] == 0
+        assert client.get("/api/intralog/picking").get_json()["metricas"]["separados_almox"] == 0
 
     # ERP fora do ar -> 502 com mensagem amigavel, sem estourar 500.
     with patch(
@@ -6827,3 +6846,75 @@ def test_picking_filtros_e_api_http(tmp_path):
         fora = client.get("/api/intralog/picking")
         assert fora.status_code == 502
         assert "ERP" in fora.get_json()["error"]
+
+
+def test_picking_processado_no_erp_entra_concluido_automaticamente(tmp_path):
+    """O que o ERP ja marcou como processado entra CONCLUIDO sozinho no
+    Picking - o almoxarifado nao precisa clicar de novo no que ja foi
+    feito. E' estado DERIVADO (nunca gravado): se o ERP desfizer o
+    processamento, a tela volta pra pendente sozinha."""
+    from conferencia_app.services import intralog_picking_service as svc
+
+    app = build_test_app(tmp_path)
+    linhas = _linhas_picking_fixture()
+
+    with app.app_context():
+        arvore = svc.montar_arvore(linhas=linhas)
+        materiais = [m for p in arvore["os_pais"] for f in p["os_filhas"] for m in f["materiais"]]
+
+        concluidos_erp = [m for m in materiais if m["concluido_erp"]]
+        assert concluidos_erp, "a fixture precisa ter material ja processado no ERP"
+        # Todo material 100% processado no ERP ja nasce concluido, sem
+        # nenhuma confirmacao no banco do Sync.
+        for m in concluidos_erp:
+            assert m["erp_status"] == "processado"
+            assert m["concluido"] is True
+            assert m["origem_conclusao"] == "erp"
+            assert m["separado"] is False       # ninguem clicou - veio do ERP
+            assert m["separado_por"] is None
+
+        # O filtro "pendente" nao traz nada que o ERP ja concluiu.
+        pendentes = svc.montar_arvore(linhas=linhas, status="pendente")
+        assert all(
+            not m["concluido"]
+            for p in pendentes["os_pais"] for f in p["os_filhas"] for m in f["materiais"]
+        )
+        assert pendentes["metricas"]["materiais"] == arvore["metricas"]["pendentes"]
+
+        # Nada foi gravado no banco por causa disso.
+        from conferencia_app.models import IntralogPickingSeparacao
+
+        assert IntralogPickingSeparacao.query.count() == 0
+
+        # Estado DERIVADO: se o ERP desfizer o processamento, some o
+        # concluido - nao fica dado velho preso no Sync.
+        desfeito = []
+        for linha in linhas:
+            copia = dict(linha)
+            copia["processado"] = "nao"
+            desfeito.append(copia)
+        assert svc.montar_arvore(linhas=desfeito)["metricas"]["concluidos"] == 0
+
+        # Se o ERP concluir DEPOIS de o almoxarifado ja ter separado, a
+        # origem da conclusao continua sendo o almoxarifado (quem fez
+        # primeiro), sem duplicar a contagem.
+        alvo = next(m for m in materiais if not m["concluido"])
+        svc.confirmar_separacao(alvo["cod_os_completo"], alvo["cod_interno"], "ALMOX")
+        processado_depois = []
+        for linha in linhas:
+            copia = dict(linha)
+            if (copia["cod_os_completo"] == alvo["cod_os_completo"]
+                    and copia["cod_interno"] == alvo["cod_interno"]):
+                copia["processado"] = "sim"
+            processado_depois.append(copia)
+        depois = svc.montar_arvore(linhas=processado_depois)
+        m_alvo = next(
+            m for p in depois["os_pais"] for f in p["os_filhas"] for m in f["materiais"]
+            if f["cod_os_completo"] == alvo["cod_os_completo"] and m["cod_interno"] == alvo["cod_interno"]
+        )
+        assert m_alvo["concluido"] is True
+        assert m_alvo["origem_conclusao"] == "almoxarifado"
+        assert depois["metricas"]["concluidos"] == (
+            depois["metricas"]["concluidos_erp"] + 1
+            if not m_alvo["concluido_erp"] else depois["metricas"]["concluidos_erp"]
+        )

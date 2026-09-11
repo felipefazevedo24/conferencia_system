@@ -72,7 +72,7 @@
         <div class="eui-stat is-clickable is-active" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-sitemap"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OS Pai</span><span class="eui-stat__value" id="cp-m-pais">0</span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-diagram-project"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OS que compõem</span><span class="eui-stat__value" id="cp-m-filhas">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="pendente"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A separar</span><span class="eui-stat__value" id="cp-m-pendentes">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="separado"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Separados</span><span class="eui-stat__value" id="cp-m-separados">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluídos</span><span class="eui-stat__value" id="cp-m-separados">0</span><span class="eui-stat__hint" id="cp-m-detalhe"></span></div></div>
     </div>
 
     <div class="eui-card">
@@ -101,7 +101,7 @@
                             <th>Orçamento</th>
                             <th>OS que compõem</th>
                             <th>Materiais</th>
-                            <th>Separação</th>
+                            <th>Concluídos</th>
                             <th style="text-align:right;">Ação</th>
                         </tr>
                     </thead>
@@ -182,7 +182,8 @@
             $("cp-m-pais").textContent = m.os_pais || 0;
             $("cp-m-filhas").textContent = m.os_filhas || 0;
             $("cp-m-pendentes").textContent = m.pendentes || 0;
-            $("cp-m-separados").textContent = m.separados || 0;
+            $("cp-m-separados").textContent = m.concluidos || 0;
+            $("cp-m-detalhe").textContent = `${m.concluidos_erp || 0} pelo ERP · ${m.separados_almox || 0} no almox.`;
             preencherFamilias(data.familias_disponiveis || []);
             renderTabela(cache);
         } catch (err) {
@@ -217,7 +218,7 @@
                 <td>${escapeHtml(r.orcamento_raiz || "—")}</td>
                 <td>${r.qtd_os_filhas}</td>
                 <td>${r.qtd_materiais}</td>
-                <td>${barra(r.qtd_separados, r.qtd_materiais)}</td>
+                <td>${barra(r.qtd_concluidos, r.qtd_materiais)}</td>
                 <td style="text-align:right;"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver="${escapeHtml(r.servico_raiz)}"><i class="fas fa-list-ul"></i> Ver lista</button></td>
             </tr>
         `).join("");
@@ -234,7 +235,7 @@
         $("cp-modal-sub").textContent =
             `${r.produto || "—"}` +
             (r.orcamento_raiz ? ` · Orçamento ${r.orcamento_raiz}` : "") +
-            ` · ${r.qtd_os_filhas} OS que compõem · ${r.qtd_materiais} materiais (${r.qtd_separados} separados)`;
+            ` · ${r.qtd_os_filhas} OS que compõem · ${r.qtd_materiais} materiais (${r.qtd_concluidos} concluídos)`;
 
         $("cp-modal-corpo").innerHTML = (r.os_filhas || []).map((f) => `
             <div class="cp-os">
@@ -242,7 +243,7 @@
                     <span class="cp-os-cod">${escapeHtml(f.cod_os_completo)}</span>
                     <span class="cp-os-nome">${escapeHtml(f.os || "—")}</span>
                     ${f.outra_origem ? '<span class="cp-badge-origem" title="Esta OS tem número de serviço diferente da OS Pai">outra origem</span>' : ""}
-                    <span class="cp-os-prog">${f.qtd_separados}/${f.qtd_materiais} separados</span>
+                    <span class="cp-os-prog">${f.qtd_concluidos}/${f.qtd_materiais} concluídos</span>
                 </div>
                 <div class="cp-table-wrap">
                     <table class="erp-table">
@@ -255,7 +256,7 @@
                                 <th style="text-align:right;">Reservada</th>
                                 <th>ERP</th>
                                 <th style="min-width:170px;">Observação</th>
-                                <th style="min-width:150px;">Separação</th>
+                                <th style="min-width:160px;">Situação</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -289,12 +290,22 @@
                     </div>
                 </td>
                 <td>
-                    ${m.separado
-                        ? `<span class="cp-sep-badge"><i class="fas fa-circle-check"></i> Separado<small>${escapeHtml(m.separado_por || "")} em ${escapeHtml(m.separado_em || "")}</small></span>
-                           <button type="button" class="cp-btn-estornar" data-estornar="${escapeHtml(k)}">Estornar</button>`
-                        : `<button type="button" class="cp-btn-sep" data-separar="${escapeHtml(k)}" data-qtde="${m.qtde}" data-unidade="${escapeHtml(m.unidade || "")}" data-raiz="${escapeHtml(m.servico_raiz || "")}"><i class="fas fa-check"></i> Separar</button>`}
+                    ${situacao(m, k)}
                 </td>
             </tr>`;
+    }
+
+    function situacao(m, k) {
+        // Concluido pelo ERP: ja veio processado de la, nao tem o que o
+        // almoxarifado fazer (nem separar nem estornar) - so' informa.
+        if (m.concluido_erp) {
+            return `<span class="cp-sep-badge"><i class="fas fa-circle-check"></i> Concluído<small>já processado no ERP</small></span>`;
+        }
+        if (m.separado) {
+            return `<span class="cp-sep-badge"><i class="fas fa-circle-check"></i> Concluído<small>${escapeHtml(m.separado_por || "")} em ${escapeHtml(m.separado_em || "")}</small></span>
+                    <button type="button" class="cp-btn-estornar" data-estornar="${escapeHtml(k)}">Estornar</button>`;
+        }
+        return `<button type="button" class="cp-btn-sep" data-separar="${escapeHtml(k)}" data-qtde="${m.qtde}" data-unidade="${escapeHtml(m.unidade || "")}" data-raiz="${escapeHtml(m.servico_raiz || "")}"><i class="fas fa-check"></i> Separar</button>`;
     }
 
     function partesChave(k) {

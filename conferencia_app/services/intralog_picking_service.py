@@ -182,11 +182,26 @@ def montar_arvore(linhas: list[dict] | None = None, busca: str = "", status: str
             and abs(_num(registro.qtde_snapshot) - material["qtde"]) > 0.01
         )
 
+        # CONCLUIDO = derivado, nunca gravado. O que o ERP ja marcou como
+        # processado (TODAS as demandas daquele material naquela OS) entra
+        # concluido sozinho - o almoxarifado nao precisa clicar de novo.
+        # Parcial NAO conta como concluido: ainda falta separar uma parte.
+        # Sendo derivado, se o ERP desfizer o processamento a tela volta
+        # sozinha pra pendente, sem dado velho preso no banco.
+        material["concluido_erp"] = material["erp_status"] == "processado"
+        material["concluido"] = material["concluido_erp"] or material["separado"]
+        if material["separado"]:
+            material["origem_conclusao"] = "almoxarifado"
+        elif material["concluido_erp"]:
+            material["origem_conclusao"] = "erp"
+        else:
+            material["origem_conclusao"] = None
+
         if familia_norm and material["familia"] != familia_norm:
             continue
-        if status_norm == "separado" and not material["separado"]:
+        if status_norm in ("separado", "concluido") and not material["concluido"]:
             continue
-        if status_norm == "pendente" and material["separado"]:
+        if status_norm == "pendente" and material["concluido"]:
             continue
         if busca_norm:
             alvo = " ".join([
@@ -230,7 +245,9 @@ def montar_arvore(linhas: list[dict] | None = None, busca: str = "", status: str
         for filha in raiz["os_filhas"].values():
             filha["materiais"].sort(key=lambda m: (m["cod_interno"], m["item"]))
             filha["qtd_materiais"] = len(filha["materiais"])
-            filha["qtd_separados"] = sum(1 for m in filha["materiais"] if m["separado"])
+            # Progresso = concluido (ERP processado OU separado pelo almox).
+            filha["qtd_concluidos"] = sum(1 for m in filha["materiais"] if m["concluido"])
+            filha["qtd_separados"] = filha["qtd_concluidos"]  # compat. do front
             filhas.append(filha)
         filhas.sort(key=lambda f: f["cod_os_completo"])
 
@@ -242,22 +259,28 @@ def montar_arvore(linhas: list[dict] | None = None, busca: str = "", status: str
             "os_filhas": filhas,
             "qtd_os_filhas": len(filhas),
             "qtd_materiais": len(materiais_raiz),
-            "qtd_separados": sum(1 for m in materiais_raiz if m["separado"]),
+            "qtd_concluidos": sum(1 for m in materiais_raiz if m["concluido"]),
+            "qtd_separados": sum(1 for m in materiais_raiz if m["concluido"]),  # compat.
+            "qtd_concluidos_erp": sum(1 for m in materiais_raiz if m["concluido_erp"]),
+            "qtd_separados_almox": sum(1 for m in materiais_raiz if m["separado"]),
             "qtd_erp_pendentes": sum(1 for m in materiais_raiz if m["erp_status"] != "processado"),
             "familias": sorted({m["familia"] for m in materiais_raiz}),
         })
     resultado.sort(key=lambda r: r["servico_raiz"])
 
     total_materiais = sum(r["qtd_materiais"] for r in resultado)
-    total_separados = sum(r["qtd_separados"] for r in resultado)
+    total_concluidos = sum(r["qtd_concluidos"] for r in resultado)
     return {
         "os_pais": resultado,
         "metricas": {
             "os_pais": len(resultado),
             "os_filhas": sum(r["qtd_os_filhas"] for r in resultado),
             "materiais": total_materiais,
-            "separados": total_separados,
-            "pendentes": total_materiais - total_separados,
+            "concluidos": total_concluidos,
+            "separados": total_concluidos,  # compat. do front
+            "concluidos_erp": sum(r["qtd_concluidos_erp"] for r in resultado),
+            "separados_almox": sum(r["qtd_separados_almox"] for r in resultado),
+            "pendentes": total_materiais - total_concluidos,
         },
         "familias_disponiveis": sorted({m["familia"] for m in agregado.values()}),
     }
