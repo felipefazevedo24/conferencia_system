@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import threading
 import time
@@ -303,6 +304,33 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
         producao_service._render_pdf_previews(b"nao e pdf")
 
 
+def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (360, 480), "white")
+    ImageDraw.Draw(image).ellipse((70, 40, 280, 440), fill=(120, 80, 60))
+    content = io.BytesIO()
+    image.save(content, format="PNG")
+    with producao_service.fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=600)
+        page.insert_image(producao_service.fitz.Rect(420, 90, 600, 330), stream=content.getvalue())
+        # A dense technical view would otherwise win the geometry score.
+        shape = page.new_shape()
+        for y in range(120, 330, 5):
+            shape.draw_line((40, y), (300, y + 80))
+        shape.finish(color=(0, 0, 0), width=1)
+        shape.commit()
+        previews = producao_service._render_pdf_previews(pdf.tobytes())
+
+    thumb = Image.open(io.BytesIO(previews["thumbnail"]))
+    detail = Image.open(io.BytesIO(previews["detail"]))
+    assert thumb.mode == detail.mode == "RGBA"
+    assert max(thumb.size) <= 720
+    assert detail.getpixel((detail.width // 2, detail.height // 2)) == (120, 80, 60, 255)
+    assert detail.getchannel("A").getextrema() == (0, 255)
+    assert abs(thumb.width / thumb.height - detail.width / detail.height) < 0.01
+
+
 def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
@@ -466,13 +494,12 @@ def test_controles_solicitados_nao_sao_criados_na_producao():
     assert "^Ampliar(?: imagem)?$" in script
 
 
-def test_detalhes_identifica_e_limita_a_miniatura_isometrica():
+def test_detalhes_exibe_a_peca_no_tamanho_da_referencia():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
-    assert 'content: "Visão isométrica";' in css
     detail_rule = css.split(".detail-preview {", 1)[1].split("}", 1)[0]
-    assert "width: 160px;" in detail_rule
-    assert "height: 160px;" in detail_rule
+    assert "width: calc(100% - 24px);" in detail_rule
+    assert "height: clamp(280px, 36vh, 360px);" in detail_rule
 
 
 def test_arvore_exibe_somente_numero_da_os():

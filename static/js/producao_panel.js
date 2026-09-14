@@ -45,9 +45,11 @@
         window.dispatchEvent(new Event('resize'));
     }
 
+    const previewLoads = new WeakMap();
     function previewSource(image, detail) {
         const source = new URL(image.getAttribute('src'), window.location.href);
         source.searchParams.delete('_preview');
+        source.searchParams.set('renderer', 'isometric-cutout-v5');
         if (detail) source.searchParams.set('variant', 'detail');
         return `${source.pathname}${source.search}`;
     }
@@ -60,6 +62,19 @@
         }
         const source = previewSource(image, detail);
         if (image.dataset.productionSource === source) return;
+        const previous = previewLoads.get(image);
+        if (previous) {
+            clearTimeout(previous.retry);
+            clearTimeout(previous.deadline);
+        }
+        const load = { source, retry: null, deadline: null, expired: false };
+        previewLoads.set(image, load);
+        load.deadline = window.setTimeout(() => {
+            if (previewLoads.get(image) !== load || !image.isConnected) return;
+            load.expired = true;
+            clearTimeout(load.retry);
+            container.dataset.previewState = 'unavailable';
+        }, 120000);
         image.dataset.productionSource = source;
         image.dataset.previewAttempts = '0';
         container.dataset.previewState = 'loading';
@@ -68,16 +83,20 @@
     }
 
     function handlePreviewDimensions(image, container) {
+        const load = previewLoads.get(image);
+        if (!load || load.expired) return;
+        clearTimeout(load.retry);
         if (image.naturalWidth === 1 && image.naturalHeight === 1) {
             const attempt = Number(image.dataset.previewAttempts || 0) + 1;
             image.dataset.previewAttempts = String(attempt);
             if (attempt >= 60) {
+                clearTimeout(load.deadline);
                 container.dataset.previewState = 'unavailable';
                 return;
             }
             container.dataset.previewState = 'loading';
-            window.setTimeout(() => {
-                if (!image.isConnected) return;
+            load.retry = window.setTimeout(() => {
+                if (!image.isConnected || previewLoads.get(image) !== load) return;
                 const detail = container.classList.contains('detail-preview');
                 if (previewSource(image, detail) !== image.dataset.productionSource) return;
                 const retry = new URL(image.dataset.productionSource, window.location.href);
@@ -86,6 +105,8 @@
             }, Math.min(250 * (1.35 ** attempt), 2000));
             return;
         }
+        clearTimeout(load.deadline);
+        if (image.naturalWidth > 1) image.style.removeProperty('display');
         container.dataset.previewState = image.naturalWidth > 0 ? 'ready' : 'unavailable';
     }
 
@@ -97,7 +118,14 @@
         const detail = container.classList.contains('detail-preview');
         if (previewSource(image, detail) !== image.dataset.productionSource) return;
         if (event.type === 'load') handlePreviewDimensions(image, container);
-        else container.dataset.previewState = 'unavailable';
+        else {
+            const load = previewLoads.get(image);
+            if (load) {
+                clearTimeout(load.retry);
+                clearTimeout(load.deadline);
+            }
+            container.dataset.previewState = 'unavailable';
+        }
     }
 
     document.addEventListener('load', onPreviewResult, true);

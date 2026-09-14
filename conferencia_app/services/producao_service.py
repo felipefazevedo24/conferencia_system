@@ -35,7 +35,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v4"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v5"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -586,11 +586,24 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
         with fitz.open(stream=content, filetype="pdf") as pdf:
             if pdf.page_count == 0:
                 raise LookupError("Documento sem paginas")
+            from .production_images import _largest_placed_image, render_variants
+
             candidates = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
                 candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
             candidates.sort(key=lambda item: item[0], reverse=True)
+            # CAD PDFs can contain a shaded rendering alongside vector dimensions.
+            # Match Estrutura: an explicit isometric view takes priority, then the
+            # embedded rendering, before scoring unlabelled technical linework.
+            labeled = [candidate for candidate in candidates if candidate[3]]
+            if labeled:
+                _, page_index, clip, _ = labeled[0]
+                return _render_clip_previews(pdf.load_page(page_index), clip)
+            for page in pdf:
+                image = _largest_placed_image(pdf, page)
+                if image is not None:
+                    return render_variants(image)
             ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
             if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 raise LookupError("Vista isometrica nao identificada com confianca")
@@ -604,12 +617,13 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
 
 
 def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
-    rendered = {}
-    for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
-        scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
-        rendered[variant] = pixmap.tobytes("png")
-    return rendered
+    from PIL import Image
+    from .production_images import render_variants
+
+    scale = max(1.5, min(300 / 72, 1800 / max(clip.width, clip.height)))
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+    image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+    return render_variants(image)
 
 
 def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
