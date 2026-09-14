@@ -2,6 +2,8 @@ import importlib
 import sys
 import threading
 import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
@@ -367,6 +369,49 @@ def test_estrutura_reutiliza_consulta_recente_sem_compartilhar_mutacoes():
         second = producao_service.obter_estrutura("7807")
 
     assert second["nos"] == []
+    assert fetch_one.call_count == 1
+    assert fetch_all.call_count == 2
+
+
+def test_estrutura_simultanea_consulta_grv_uma_vez():
+    started = threading.Event()
+    second_lookup = threading.Event()
+    release = threading.Event()
+
+    class ObservedCache(OrderedDict):
+        lookups = 0
+
+        def get(self, key, default=None):
+            self.lookups += 1
+            if self.lookups == 2:
+                second_lookup.set()
+            return super().get(key, default)
+
+    def load_order(*_args):
+        started.set()
+        assert release.wait(timeout=2)
+        return {"codigo": 9, "n_os": "7807"}
+
+    with (
+        patch.object(producao_service, "_STRUCTURE_CACHE", ObservedCache()),
+        patch.object(producao_service, "fetch_one", side_effect=load_order) as fetch_one,
+        patch.object(producao_service, "fetch_all", return_value=[]) as fetch_all,
+        patch.object(producao_service, "_estrutura_payload", return_value={"nos": []}),
+        patch.object(producao_service, "_rncs", return_value=[]),
+        ThreadPoolExecutor(max_workers=2) as executor,
+    ):
+        first = executor.submit(producao_service.obter_estrutura, "7807")
+        try:
+            assert started.wait(timeout=1)
+            second = executor.submit(producao_service.obter_estrutura, "7807")
+            assert second_lookup.wait(timeout=1)
+        finally:
+            release.set()
+        first_result = first.result(timeout=2)
+        second_result = second.result(timeout=2)
+
+    first_result["nos"].append({"id": "alterado"})
+    assert second_result["nos"] == []
     assert fetch_one.call_count == 1
     assert fetch_all.call_count == 2
 
