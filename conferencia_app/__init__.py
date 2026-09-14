@@ -68,6 +68,7 @@ from .routes.solicitacao_nf_routes import solicitacao_nf_bp
 from .routes.logistica_inventario_routes import logistica_inventario_bp
 from .routes.logistica_consumo_chapa_routes import logistica_consumo_chapa_bp
 from .routes.intralog_picking_routes import intralog_picking_bp
+from .routes.compras_homologacao_routes import compras_homologacao_bp
 from .routes.producao_routes import producao_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
 from .routes.comex_routes import comex_bp
@@ -118,6 +119,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(logistica_inventario_bp)
     app.register_blueprint(logistica_consumo_chapa_bp)
     app.register_blueprint(intralog_picking_bp)
+    app.register_blueprint(compras_homologacao_bp)
     app.register_blueprint(producao_bp)
     app.register_blueprint(viagem_bp)
     app.register_blueprint(motorista_bp)

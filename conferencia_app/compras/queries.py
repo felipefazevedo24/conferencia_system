@@ -208,21 +208,26 @@ ORDER BY codigo
 
 SQL_PRODUCAO_DOCUMENTOS_ITEM = """
 SELECT codigo AS document_id, cod_os_aux, nome_arquivo, descricao,
-             octet_length(anexo) AS size_bytes, 'drawing' AS kind
+             octet_length(anexo) AS size_bytes, 'drawing' AS kind,
+             xmin::text AS content_revision
 FROM public.tos_aux_desenhos
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
 UNION ALL
 SELECT codigo, cod_os_aux, nome_arquivo, descricao,
-             octet_length(anexo), 'attachment'
+             octet_length(anexo), 'attachment', xmin::text
 FROM public.tos_aux_anexos
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
 UNION ALL
 SELECT codigo, cod_os_aux, nome_arquivo, descricao,
-             octet_length(anexo), 'image'
+             octet_length(anexo), 'image', xmin::text
 FROM public.tos_aux_imagens
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s AND cod_os_aux = %(cod_os_aux)s
 ORDER BY kind, document_id
 """
+
+SQL_PRODUCAO_DOCUMENTOS_OS = SQL_PRODUCAO_DOCUMENTOS_ITEM.replace(
+    " AND cod_os_aux = %(cod_os_aux)s", ""
+)
 
 SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT = """
 WITH orc_link AS (
@@ -236,7 +241,7 @@ SELECT item.codigo AS aux_code, item.cod_os_completo, item.subtitulo,
     item.n_desenho, item.revisao_desenho, item.posicao_desenho,
     COALESCE(os.cod_orcamento, orc_link.cod_orcamento) AS cod_orcamento,
     COALESCE(os.n_orcamento, orc.n_orcamento) AS n_orcamento,
-    os.u_classificacao AS segmento
+    os.u_classificacao AS segmento, os.titulo
 FROM public.tos os
 INNER JOIN public.tos_aux item
      ON item.cod_empresa = os.cod_empresa AND item.cod_os = os.codigo
@@ -251,7 +256,8 @@ LIMIT 1
 """
 
 SQL_PRODUCAO_DESENHO_ARQUIVO = """
-SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes, anexo
+SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes,
+    CASE WHEN octet_length(anexo) <= %(max_bytes)s THEN anexo END AS anexo
 FROM public.tos_aux_desenhos
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
     AND cod_os_aux = %(cod_os_aux)s AND codigo = %(document_id)s
@@ -260,6 +266,29 @@ LIMIT 1
 
 SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
 SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
+
+SQL_PRODUCAO_ORIGEM_SCHEMA = """
+SELECT count(*) = 2 AS supported
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'tos_aux'
+    AND column_name IN ('cod_os_orig', 'cod_os_aux_orig')
+    AND %(cod_empresa)s > 0
+"""
+
+SQL_PRODUCAO_ITEM_ORIGEM = """
+SELECT origin.cod_os, origin.codigo AS cod_os_aux,
+       origin.n_desenho, origin.revisao_desenho
+FROM public.tos_aux item
+INNER JOIN public.tos_aux origin
+    ON origin.cod_empresa = item.cod_empresa
+   AND origin.cod_os = item.cod_os_orig
+   AND origin.codigo = item.cod_os_aux_orig
+WHERE item.cod_empresa = %(cod_empresa)s
+  AND item.cod_os = %(cod_os)s
+  AND item.codigo = %(cod_os_aux)s
+  AND (origin.cod_os <> item.cod_os OR origin.codigo <> item.codigo)
+LIMIT 1
+"""
 
 # -------------------------------------------------------------------
 # Indicadores de GAP de compras (necessidade x em OC x recebido)

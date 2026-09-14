@@ -4,10 +4,14 @@ from __future__ import annotations
 from collections import OrderedDict, defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
+import copy
+from difflib import SequenceMatcher
 import hashlib
 import io
+import math
 import re
 import threading
+import time
 import unicodedata
 from datetime import date, datetime
 from typing import Any
@@ -29,13 +33,24 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v1"
+_PREVIEW_CACHE_VERSION = "isometric-v4"
+_MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
 _PREVIEW_FAILURES: dict[str, str] = {}
 _PREVIEW_LOCK = threading.RLock()
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
+_PREVIEW_REQUEST_CACHE_TTL_SECONDS = 10.0
+_PREVIEW_REQUEST_CACHE_LIMIT = 128
+_PREVIEW_REQUEST_CACHE: OrderedDict[str, tuple[float, tuple[bytes, str, str] | Exception]] = OrderedDict()
+_PREVIEW_REQUEST_JOBS: dict[str, Future[tuple[bytes, str, str]]] = {}
+_PREVIEW_REQUEST_LOCK = threading.RLock()
+_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="production-preview-request")
+_STRUCTURE_CACHE_TTL_SECONDS = 10.0
+_STRUCTURE_CACHE_LIMIT = 16
+_STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+_STRUCTURE_LOCK = threading.RLock()
 
 
 def _iso(value: Any) -> str | None:
@@ -71,6 +86,15 @@ def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
 
 
 def obter_estrutura(numero_os: str) -> dict[str, Any]:
+    cache_key = _texto(numero_os)
+    now = time.monotonic()
+    with _STRUCTURE_LOCK:
+        cached = _STRUCTURE_CACHE.get(cache_key)
+        if cached and now - cached[0] <= _STRUCTURE_CACHE_TTL_SECONDS:
+            _STRUCTURE_CACHE.move_to_end(cache_key)
+            return copy.deepcopy(cached[1])
+        if cached:
+            _STRUCTURE_CACHE.pop(cache_key, None)
     ordem = fetch_one(
         queries.SQL_PRODUCAO_BUSCAR_OS,
         {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1},
@@ -87,7 +111,12 @@ def obter_estrutura(numero_os: str) -> dict[str, Any]:
     )
     payload = _estrutura_payload(ordem, itens, operacoes)
     payload["rncs"] = _rncs(ordem["codigo"])
-    return payload
+    with _STRUCTURE_LOCK:
+        _STRUCTURE_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(payload))
+        _STRUCTURE_CACHE.move_to_end(cache_key)
+        while len(_STRUCTURE_CACHE) > _STRUCTURE_CACHE_LIMIT:
+            _STRUCTURE_CACHE.popitem(last=False)
+    return copy.deepcopy(payload)
 
 
 def obter_materiais(numero_os: str, aux_code: int) -> dict[str, Any]:
@@ -127,40 +156,101 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
     ]}
 
 
-def obter_documentos(numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    ordem = _obter_ordem(numero_os)
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
-    context = fetch_one(
-        queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
-    )
-    selected = _selecionar_documento_previa(documents, context or {})
+def obter_documentos(
+    numero_os: str,
+    aux_code: int,
+    *,
+    ordem: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    ordem = ordem or _obter_ordem(numero_os)
+    if context is None:
+        context = fetch_one(
+            queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
+            {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+        )
+    if not context:
+        raise LookupError("Item nao encontrado")
+    selected, documents = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     for document in documents:
         document["is_primary"] = bool(
             selected
-            and document.get("kind") == selected.get("kind")
+            and document.get("source_kind") == selected.get("source_kind")
             and document.get("id") == selected.get("id")
+            and document.get("source_cod_os") == selected.get("source_cod_os")
+            and document.get("source_aux_code") == selected.get("source_aux_code")
         )
     return documents
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
     rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+    return [_documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code) for row in rows]
+
+
+def _documento_payload(
+    row: dict[str, Any],
+    numero_os: str,
+    display_aux_code: int,
+    source_cod_os: int,
+    source_aux_code: int,
+    *,
+    from_origin: bool = False,
+) -> dict[str, Any]:
+    kind = _texto(row.get("kind"))
     route_kind = {"drawing": "drawings", "attachment": "attachments", "image": "images"}
-    return [{"id": row.get("document_id"), "kind": row.get("kind"), "filename": _texto(row.get("nome_arquivo")), "description": _texto(row.get("descricao")), "size_bytes": row.get("size_bytes") or 0, "open_url": f"/api/v1/orders/{numero_os}/items/{aux_code}/{route_kind.get(row.get('kind'), row.get('kind'))}/{row.get('document_id')}"} for row in rows]
+    source_query = ""
+    if from_origin or int(source_aux_code) != int(display_aux_code):
+        source_query = f"?source_cod_os={int(source_cod_os)}&source_aux_code={int(source_aux_code)}"
+    return {
+        "id": row.get("document_id"),
+        "kind": kind,
+        "source_kind": kind,
+        "filename": _texto(row.get("nome_arquivo")) or "documento",
+        "description": _texto(row.get("descricao")),
+        "size_bytes": row.get("size_bytes") or 0,
+        "content_revision": row.get("content_revision"),
+        "aux_code": int(display_aux_code),
+        "source_cod_os": int(source_cod_os),
+        "source_aux_code": int(source_aux_code),
+        "from_origin": bool(from_origin),
+        "open_url": f"/api/v1/orders/{numero_os}/items/{display_aux_code}/{route_kind.get(kind, kind)}/{row.get('document_id')}{source_query}",
+    }
 
 
-def obter_arquivo(numero_os: str, aux_code: int, kind: str, document_id: int) -> tuple[bytes, str]:
-    ordem = _obter_ordem(numero_os)
+def obter_arquivo(
+    numero_os: str,
+    aux_code: int,
+    kind: str,
+    document_id: int,
+    *,
+    ordem: dict[str, Any] | None = None,
+    source_cod_os: int | None = None,
+    source_aux_code: int | None = None,
+) -> tuple[bytes, str]:
+    ordem = ordem or _obter_ordem(numero_os)
     query = {"drawing": queries.SQL_PRODUCAO_DESENHO_ARQUIVO, "attachment": queries.SQL_PRODUCAO_ANEXO_ARQUIVO, "image": queries.SQL_PRODUCAO_IMAGEM_ARQUIVO}.get(kind)
     if query is None:
         raise LookupError("Tipo de documento invalido")
-    row = fetch_one(query, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code, "document_id": document_id})
+    row = fetch_one(query, {
+        "cod_empresa": 1,
+        "cod_os": int(source_cod_os or ordem["codigo"]),
+        "cod_os_aux": int(source_aux_code or aux_code),
+        "document_id": document_id,
+        "max_bytes": _MAX_DOCUMENT_BYTES,
+    })
+    if row and int(row.get("size_bytes") or 0) > _MAX_DOCUMENT_BYTES:
+        raise LookupError("Documento excede o limite permitido para previa")
     if not row or row.get("anexo") is None:
         raise LookupError("Documento nao encontrado")
     content = row["anexo"]
     if isinstance(content, str):
-        content = base64.b64decode(content)
+        try:
+            content = base64.b64decode(content, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise LookupError("Documento recebido da Bridge esta corrompido") from exc
+    if not isinstance(content, (bytes, bytearray, memoryview)):
+        raise LookupError("Formato de documento invalido recebido da Bridge")
     return bytes(content), _texto(row.get("nome_arquivo")) or "documento"
 
 
@@ -183,6 +273,7 @@ def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int
     item_code = _texto_comparavel(context.get("cod_os_completo"))
     position = _texto_comparavel(context.get("posicao_desenho"))
     revision = _texto_comparavel(context.get("revisao_desenho"))
+    item_description = _texto_comparavel(context.get("subtitulo"))
     if drawing and drawing in metadata:
         score += 100
     if item_code and item_code in metadata:
@@ -191,6 +282,10 @@ def _pontuar_documento(document: dict[str, Any], context: dict[str, Any]) -> int
         score += 15
     if revision and any(marker in metadata for marker in (f"REV{revision}", f"REVISAO{revision}", f"R{revision}")):
         score += 30
+    if item_description:
+        similarity = SequenceMatcher(None, item_description, metadata).ratio()
+        if similarity >= 0.55:
+            score += round(similarity * 60)
     return score
 
 
@@ -206,8 +301,12 @@ def _revisao_conflitante(document: dict[str, Any], context: dict[str, Any]) -> b
     return bool(revisions and expected not in revisions)
 
 
+def _segmento_cms(context: dict[str, Any]) -> bool:
+    return _normalizar_identificador(context.get("segmento")).startswith("CMS")
+
+
 def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any] | None:
-    expected_kind = "attachment" if _normalizar_identificador(context.get("segmento")) == "CMS" else "drawing"
+    expected_kind = "attachment" if _segmento_cms(context) else "drawing"
     candidates = [
         document
         for document in documents
@@ -216,15 +315,101 @@ def _selecionar_documento_previa(documents: list[dict[str, Any]], context: dict[
     if not candidates:
         return None
     ranked = sorted((( _pontuar_documento(document, context), document) for document in candidates), key=lambda item: (item[0], int(item[1].get("id") or 0)), reverse=True)
-    if len(candidates) == 1:
-        score, document = ranked[0]
-        if expected_kind == "attachment" and context.get("n_desenho") and score < 100:
-            return None
-        return document
     best_score, best = ranked[0]
+    if expected_kind == "attachment" and best_score < 45:
+        return None
+    if len(candidates) == 1:
+        return best
     if best_score <= 0 or best_score == ranked[1][0]:
         return None
     return best
+
+
+def _resolver_documento_previa(
+    ordem: dict[str, Any],
+    numero_os: str,
+    aux_code: int,
+    context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Resolve a fonte real sem trocar ANEXO/DESENHO nem aceitar outro desenho."""
+    direct_documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
+    selected = _selecionar_documento_previa(direct_documents, context)
+    if selected or _segmento_cms(context):
+        return selected, direct_documents
+
+    drawing_number = _texto_comparavel(context.get("n_desenho"))
+    if drawing_number:
+        item_rows = fetch_all(
+            queries.SQL_PRODUCAO_ESTRUTURA_OS,
+            {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+        )
+        matching_aux_codes = {
+            int(item["aux_code"])
+            for item in item_rows
+            if int(item["aux_code"]) != int(aux_code)
+            and _texto_comparavel(item.get("n_desenho")) == drawing_number
+            and not _revisao_contexto_conflitante(item, context)
+        }
+        if matching_aux_codes:
+            rows = fetch_all(
+                queries.SQL_PRODUCAO_DOCUMENTOS_OS,
+                {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+            )
+            candidates = []
+            for row in rows:
+                source_aux = int(row.get("cod_os_aux") or 0)
+                if source_aux not in matching_aux_codes:
+                    continue
+                candidate = _documento_payload(
+                    row, numero_os, aux_code, int(ordem["codigo"]), source_aux
+                )
+                if candidate["kind"] == "drawing" and not _revisao_conflitante(candidate, context):
+                    candidates.append(candidate)
+            selected = _selecionar_documento_previa(candidates, context)
+            if selected:
+                return selected, direct_documents + [selected]
+
+    origin = _origem_documento(ordem, aux_code)
+    if origin:
+        if _texto_comparavel(origin.get("n_desenho")) not in {"", drawing_number}:
+            return None, direct_documents
+        if _revisao_contexto_conflitante(origin, context):
+            return None, direct_documents
+        rows = fetch_all(
+            queries.SQL_PRODUCAO_DOCUMENTOS_ITEM,
+            {"cod_empresa": 1, **origin},
+        )
+        origin_documents = [
+            _documento_payload(
+                row,
+                numero_os,
+                aux_code,
+                int(origin["cod_os"]),
+                int(origin["cod_os_aux"]),
+                from_origin=True,
+            )
+            for row in rows
+        ]
+        selected = _selecionar_documento_previa(origin_documents, context)
+        if selected:
+            return selected, direct_documents + [selected]
+    return None, direct_documents
+
+
+def _revisao_contexto_conflitante(item: dict[str, Any], context: dict[str, Any]) -> bool:
+    expected = _texto_comparavel(context.get("revisao_desenho"))
+    candidate = _texto_comparavel(item.get("revisao_desenho"))
+    return bool(expected and candidate and expected != candidate)
+
+
+def _origem_documento(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | None:
+    schema = fetch_one(queries.SQL_PRODUCAO_ORIGEM_SCHEMA, {"cod_empresa": 1})
+    if not schema or not schema.get("supported"):
+        return None
+    return fetch_one(
+        queries.SQL_PRODUCAO_ITEM_ORIGEM,
+        {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
+    )
 
 
 def _line_stats(items: list[Any]) -> tuple[int, int, int]:
@@ -252,37 +437,69 @@ def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
     )
 
 
-def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
+def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
+    groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
+    changed = True
+    while changed:
+        changed = False
+        for index, group in enumerate(groups):
+            for other_index in range(index + 1, len(groups)):
+                other = groups[other_index]
+                if not _expand_rect(group["rect"], margin, page_rect).intersects(other["rect"]):
+                    continue
+                group["rect"] |= other["rect"]
+                for key in ("lines", "diagonals", "curves", "paths"):
+                    group[key] += other[key]
+                groups.pop(other_index)
+                changed = True
+                break
+            if changed:
+                break
+    return groups
+
+
+def _isometric_label_score(rect: Any, labels: list[Any], page_rect: Any) -> tuple[float, bool]:
+    if not labels:
+        return 0.0, False
+    maximum_distance = max(page_rect.width, page_rect.height) * 0.22
+    best_distance = maximum_distance + 1
+    for label in labels:
+        delta_x = max(label.x0 - rect.x1, rect.x0 - label.x1, 0)
+        delta_y = max(label.y0 - rect.y1, rect.y0 - label.y1, 0)
+        best_distance = min(best_distance, math.hypot(delta_x, delta_y))
+    if best_distance > maximum_distance:
+        return 0.0, False
+    return 4.0 + 6.0 * (1.0 - best_distance / maximum_distance), True
+
+
+def _overlap_ratio(first: Any, second: Any) -> float:
+    intersection = first & second
+    if intersection.is_empty:
+        return 0.0
+    intersection_area = intersection.width * intersection.height
+    smaller_area = min(first.width * first.height, second.width * second.height)
+    return intersection_area / max(smaller_area, 1)
+
+
+def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
     page_rect = page.rect
     page_area = max(page_rect.width * page_rect.height, 1)
     records = []
     for drawing in page.get_drawings():
         rect = fitz.Rect(drawing.get("rect")) & page_rect
         coverage = (rect.width * rect.height) / page_area
-        if rect.is_empty or coverage < 0.0002 or coverage > 0.82:
+        if rect.is_empty or coverage < 0.00002 or coverage > 0.82:
             continue
         lines, diagonals, curves = _line_stats(drawing.get("items") or [])
         records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
 
-    groups: list[dict[str, Any]] = []
-    join_margin = max(5.0, min(page_rect.width, page_rect.height) * 0.012)
-    for record in records:
-        matches = [group for group in groups if _expand_rect(group["rect"], join_margin, page_rect).intersects(record["rect"])]
-        if not matches:
-            groups.append(record)
-            continue
-        target = matches[0]
-        target["rect"] |= record["rect"]
-        for key in ("lines", "diagonals", "curves", "paths"):
-            target[key] += record[key]
-        for extra in matches[1:]:
-            target["rect"] |= extra["rect"]
-            for key in ("lines", "diagonals", "curves", "paths"):
-                target[key] += extra[key]
-            groups.remove(extra)
-
-    page_text = _normalizar_identificador(page.get_text("text"))
-    has_isometric_label = "ISOMETR" in page_text
+    join_margin = max(7.0, min(page_rect.width, page_rect.height) * 0.02)
+    groups = _merge_drawing_records(records, page_rect, join_margin)
+    labels = [
+        fitz.Rect(block[:4])
+        for block in page.get_text("blocks")
+        if len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4])
+    ]
     candidates = []
     for group in groups:
         rect = group["rect"]
@@ -290,22 +507,28 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any]]:
         diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
         if coverage < 0.008 or coverage > 0.72:
             continue
-        if group["diagonals"] < 2 and group["curves"] < 2:
+        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6:
             continue
-        score = diagonal_ratio * 8 + min(group["paths"], 40) / 20 + min(coverage, 0.35) * 3
-        if has_isometric_label:
-            score += 1.5
+        label_score, labeled = _isometric_label_score(rect, labels, page_rect)
+        score = diagonal_ratio * 8 + min(group["paths"], 40) / 12 + min(group["curves"], 8) * 0.35 + min(coverage, 0.35) * 4 + label_score
         if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
             score -= 4
-        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect)))
+        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect), labeled))
 
     for image in page.get_image_info():
         rect = fitz.Rect(image.get("bbox")) & page_rect
         coverage = (rect.width * rect.height) / page_area
         if not rect.is_empty and 0.06 <= coverage <= 0.72:
-            score = 3 + min(coverage, 0.4) * 3 + (1.5 if has_isometric_label else 0)
-            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect)))
-    return candidates
+            label_score, labeled = _isometric_label_score(rect, labels, page_rect)
+            score = 3 + min(coverage, 0.4) * 3 + label_score
+            candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect), labeled))
+
+    unique_candidates = []
+    for candidate in sorted(candidates, key=lambda item: item[0], reverse=True):
+        if any(_overlap_ratio(candidate[1], existing[1]) >= 0.65 for existing in unique_candidates):
+            continue
+        unique_candidates.append(candidate)
+    return unique_candidates
 
 
 def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
@@ -318,11 +541,12 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
             candidates = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
-                candidates.extend((score, page_index, rect) for score, rect in _page_isometric_candidates(page))
+                candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
             candidates.sort(key=lambda item: item[0], reverse=True)
-            if not candidates or (len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.15):
+            ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
+            if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 raise LookupError("Vista isometrica nao identificada com confianca")
-            _, page_index, clip = candidates[0]
+            _, page_index, clip, _ = candidates[0]
             page = pdf.load_page(page_index)
             return _render_clip_previews(page, clip)
     except LookupError:
@@ -428,23 +652,68 @@ def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool
     return future.result() if wait else None
 
 
+def _finalizar_requisicao_preview(cache_key: str, future: Future[tuple[bytes, str, str]]) -> None:
+    try:
+        result: tuple[bytes, str, str] | Exception = future.result()
+    except Exception as exc:
+        result = exc
+    with _PREVIEW_REQUEST_LOCK:
+        _PREVIEW_REQUEST_JOBS.pop(cache_key, None)
+        _PREVIEW_REQUEST_CACHE[cache_key] = (time.monotonic(), result)
+        _PREVIEW_REQUEST_CACHE.move_to_end(cache_key)
+        while len(_PREVIEW_REQUEST_CACHE) > _PREVIEW_REQUEST_CACHE_LIMIT:
+            _PREVIEW_REQUEST_CACHE.popitem(last=False)
+
+
+def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tuple[bytes | None, str, str]:
+    request_key = f"{_texto(numero_os)}|{int(aux_code)}|{variant}"
+    now = time.monotonic()
+    with _PREVIEW_REQUEST_LOCK:
+        cached = _PREVIEW_REQUEST_CACHE.get(request_key)
+        if cached and now - cached[0] <= _PREVIEW_REQUEST_CACHE_TTL_SECONDS:
+            _PREVIEW_REQUEST_CACHE.move_to_end(request_key)
+            if isinstance(cached[1], Exception):
+                raise cached[1]
+            return cached[1]
+        if cached:
+            _PREVIEW_REQUEST_CACHE.pop(request_key, None)
+        if request_key not in _PREVIEW_REQUEST_JOBS:
+            future = _PREVIEW_REQUEST_EXECUTOR.submit(obter_preview, numero_os, aux_code, variant, True)
+            _PREVIEW_REQUEST_JOBS[request_key] = future
+            future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+    pending_etag = hashlib.sha256(request_key.encode("utf-8")).hexdigest()
+    return None, "image/png", pending_etag
+
+
 def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wait: bool = True) -> tuple[bytes | None, str, str]:
     if variant not in {"thumbnail", "detail"}:
         raise LookupError("Variante de previa invalida")
+    if not wait:
+        return _obter_preview_assincrono(numero_os, aux_code, variant)
     ordem = _obter_ordem(numero_os)
     params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
     context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
     if not context:
         raise LookupError("Item nao encontrado")
-    documents = _obter_documentos_ordem(ordem, numero_os, aux_code)
-    document = _selecionar_documento_previa(documents, context)
+    document, _ = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     if not document:
         raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(numero_os, aux_code, str(document["kind"]), int(document["id"]))
+    content, filename = obter_arquivo(
+        numero_os,
+        aux_code,
+        str(document["source_kind"]),
+        int(document["id"]),
+        ordem=ordem,
+        source_cod_os=int(document["source_cod_os"]),
+        source_aux_code=int(document["source_aux_code"]),
+    )
     identity = "|".join((
         _PREVIEW_CACHE_VERSION,
-        str(document.get("kind")),
+        str(document.get("source_kind")),
         str(document.get("id")),
+        str(document.get("source_cod_os")),
+        str(document.get("source_aux_code")),
+        str(document.get("content_revision") or "unknown"),
         _texto(context.get("revisao_desenho")),
         hashlib.sha256(content).hexdigest(),
     ))

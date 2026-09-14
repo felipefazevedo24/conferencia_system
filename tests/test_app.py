@@ -5912,3 +5912,262 @@ def test_picking_processado_no_erp_entra_concluido_automaticamente(tmp_path):
             depois["metricas"]["concluidos_erp"] + 1
             if not m_alvo["concluido_erp"] else depois["metricas"]["concluidos_erp"]
         )
+
+
+def _respostas_homologacao(valor_questionario="Sim", valor_legal="Conforme"):
+    """Respostas pra TODOS os itens do F-COM-001-01."""
+    from conferencia_app.services import compras_homologacao_form as form
+
+    return [
+        {
+            "secao": secao["chave"],
+            "item": i,
+            "resposta": valor_legal if secao["escala"] == form.RESPOSTAS_LEGAL else valor_questionario,
+            "comentario": "",
+        }
+        for secao in form.SECOES
+        for i, _ in enumerate(secao["itens"], start=1)
+    ]
+
+
+def test_homologacao_pontuacao_segue_os_pesos_do_formulario(tmp_path):
+    """A nota reproduz a regra da planilha F-COM-001-01: cada secao
+    distribui seu peso entre os itens; Sim/Nao Aplicavel valem o item
+    inteiro, Parcial vale metade e Nao vale zero. As faixas sao
+    >=75,001% Aprovado, >=55,001% Aprovado com ressalvas, abaixo disso
+    Reprovado."""
+    from conferencia_app.services import compras_homologacao_form as form
+    from conferencia_app.services import compras_homologacao_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        # Os pesos das 4 secoes somam 100%.
+        assert round(sum(s["peso"] for s in form.SECOES), 6) == 1.0
+        assert form.total_itens() == 23
+
+        def respostas(valor_q, valor_legal):
+            return {
+                (s["chave"], i): (valor_legal if s["escala"] == form.RESPOSTAS_LEGAL else valor_q)
+                for s in form.SECOES
+                for i, _ in enumerate(s["itens"], start=1)
+            }
+
+        nota, classificacao, detalhe = svc.calcular_nota(respostas("Sim", "Conforme"))
+        assert nota == 1.0
+        assert classificacao == form.CLASSIFICACAO_APROVADO
+        assert detalhe[form.SECAO_QUALIDADE]["peso"] == 0.5
+        assert detalhe[form.SECAO_QUALIDADE]["aproveitamento"] == 1.0
+
+        nota, classificacao, _ = svc.calcular_nota(respostas("Nao", "Nao Conforme"))
+        assert nota == 0.0
+        assert classificacao == form.CLASSIFICACAO_REPROVADO
+
+        # Conformidade legal OK (20%) + todo o resto Parcial (metade de 80%) = 60%
+        nota, classificacao, _ = svc.calcular_nota(respostas("Parcial", "Conforme"))
+        assert round(nota, 6) == 0.6
+        assert classificacao == form.CLASSIFICACAO_RESSALVAS
+
+        # "Nao Aplicavel" nao penaliza - vale igual a "Sim".
+        base = respostas("Sim", "Conforme")
+        base[(form.SECAO_SEGURANCA, 1)] = "Nao Aplicavel"
+        assert svc.calcular_nota(base)[0] == 1.0
+
+        # Item sem resposta simplesmente nao pontua.
+        parcial = respostas("Sim", "Conforme")
+        del parcial[(form.SECAO_QUALIDADE, 1)]
+        nota_sem_um, _, detalhe_sem = svc.calcular_nota(parcial)
+        assert round(nota_sem_um, 6) == round(1 - 0.5 / 12, 6)
+        assert detalhe_sem[form.SECAO_QUALIDADE]["respondidos"] == 11
+
+        # A faixa e' EXCLUSIVA: 75% redondo ainda e' "com ressalvas".
+        assert svc.calcular_nota({})[1] == form.CLASSIFICACAO_REPROVADO
+        for nota_alvo, esperado in [
+            (0.75, form.CLASSIFICACAO_RESSALVAS),
+            (0.76, form.CLASSIFICACAO_APROVADO),
+            (0.55, form.CLASSIFICACAO_REPROVADO),
+        ]:
+            respondido = {(form.SECAO_QUALIDADE, 1): "Sim"}
+            # calcula direto pela faixa, sem depender de montar respostas
+            classe = (
+                form.CLASSIFICACAO_APROVADO if nota_alvo >= form.NOTA_MINIMA_APROVADO
+                else form.CLASSIFICACAO_RESSALVAS if nota_alvo >= form.NOTA_MINIMA_RESSALVAS
+                else form.CLASSIFICACAO_REPROVADO
+            )
+            assert classe == esperado, (nota_alvo, classe)
+
+
+def test_homologacao_workflow_rascunho_aprovacao_homologado(tmp_path):
+    """Workflow completo: rascunho -> em aprovacao -> homologado, com a
+    validade contada a partir da decisao. So' o rascunho e' editavel e o
+    envio exige o formulario inteiro respondido."""
+    import pytest
+
+    from conferencia_app.models import ComprasHomologacaoFornecedor as Homologacao
+    from conferencia_app.services import compras_homologacao_form as form
+    from conferencia_app.services import compras_homologacao_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        # Sem razao social -> nem cria.
+        with pytest.raises(ValueError):
+            svc.criar({"razao_social": "  "}, "COMPRAS")
+
+        h = svc.criar({"razao_social": "FORNECEDOR TESTE LTDA", "validade_meses": 6}, "COMPRAS")
+        assert h.status == Homologacao.STATUS_RASCUNHO
+        assert h.nota == 0.0
+
+        # Formulario incompleto trava o envio, dizendo quantos faltam.
+        assert len(svc.itens_faltando(h)) == form.total_itens()
+        with pytest.raises(ValueError) as erro:
+            svc.enviar_para_aprovacao(h, "COMPRAS")
+        assert "todos os 23" in str(erro.value)
+
+        # Resposta fora da escala da secao e' recusada.
+        with pytest.raises(ValueError):
+            svc.salvar_respostas(h, [{"secao": form.SECAO_QUALIDADE, "item": 1, "resposta": "Talvez"}])
+
+        svc.salvar_respostas(h, _respostas_homologacao())
+        assert h.nota == 1.0
+        assert h.classificacao == form.CLASSIFICACAO_APROVADO
+        assert svc.itens_faltando(h) == []
+
+        svc.enviar_para_aprovacao(h, "COMPRAS")
+        assert h.status == Homologacao.STATUS_EM_APROVACAO
+        assert h.enviado_por == "COMPRAS"
+
+        # Em aprovacao nao aceita edicao nem novo envio.
+        with pytest.raises(ValueError):
+            svc.atualizar(h, {"razao_social": "OUTRO NOME"})
+        with pytest.raises(ValueError):
+            svc.enviar_para_aprovacao(h, "COMPRAS")
+
+        # Devolver volta pro rascunho e reabre a edicao.
+        svc.devolver_para_rascunho(h, "GESTOR", "faltou anexar o contrato social")
+        assert h.status == Homologacao.STATUS_RASCUNHO
+        assert h.enviado_em is None
+        svc.atualizar(h, {"razao_social": "FORNECEDOR TESTE LTDA"})
+
+        svc.enviar_para_aprovacao(h, "COMPRAS")
+        svc.homologar(h, "GESTOR", "auditoria presencial aprovada")
+        assert h.status == Homologacao.STATUS_HOMOLOGADO
+        assert h.decidido_por == "GESTOR"
+        assert h.valido_ate is not None
+        # validade de 6 meses a partir da decisao (~180 dias)
+        assert 170 <= (h.valido_ate - h.decidido_em.date()).days <= 190
+        assert svc.situacao_validade(h)["situacao"] == "vigente"
+
+        # Homologado nao pode ser excluido nem re-decidido.
+        with pytest.raises(ValueError):
+            svc.excluir(h)
+        with pytest.raises(ValueError):
+            svc.homologar(h, "GESTOR")
+
+        # Reabrir desfaz a decisao e a validade.
+        svc.reabrir(h, "GESTOR")
+        assert h.status == Homologacao.STATUS_RASCUNHO
+        assert h.valido_ate is None
+        assert svc.situacao_validade(h)["situacao"] is None
+
+
+def test_homologacao_reprovacao_exige_motivo_e_validade_alerta_vencimento(tmp_path):
+    """Reprovar exige motivo e nao gera validade. Homologacao perto do fim
+    entra no alerta 'a vencer' e depois em 'vencido'."""
+    import pytest
+    from datetime import date, timedelta
+
+    from conferencia_app.extensions import db as _db
+    from conferencia_app.models import ComprasHomologacaoFornecedor as Homologacao
+    from conferencia_app.services import compras_homologacao_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        h = svc.criar({"razao_social": "FORNECEDOR REPROVADO"}, "COMPRAS")
+        svc.salvar_respostas(h, _respostas_homologacao(valor_questionario="Nao", valor_legal="Nao Conforme"))
+        assert h.nota == 0.0
+        svc.enviar_para_aprovacao(h, "COMPRAS")
+
+        with pytest.raises(ValueError):
+            svc.reprovar(h, "GESTOR", "   ")
+        svc.reprovar(h, "GESTOR", "não atende requisitos mínimos de qualidade")
+        assert h.status == Homologacao.STATUS_REPROVADO
+        assert h.valido_ate is None
+        assert svc.situacao_validade(h)["situacao"] is None
+        # Reprovado pode ser excluido (diferente do homologado).
+        assert h.justificativa_decisao.startswith("não atende")
+
+        # Alerta de vencimento.
+        outro = svc.criar({"razao_social": "FORNECEDOR VIGENTE"}, "COMPRAS")
+        svc.salvar_respostas(outro, _respostas_homologacao())
+        svc.enviar_para_aprovacao(outro, "COMPRAS")
+        svc.homologar(outro, "GESTOR")
+
+        outro.valido_ate = date.today() + timedelta(days=10)
+        _db.session.commit()
+        assert svc.situacao_validade(outro)["situacao"] == "a_vencer"
+        assert svc.situacao_validade(outro)["dias_restantes"] == 10
+
+        outro.valido_ate = date.today() - timedelta(days=1)
+        _db.session.commit()
+        assert svc.situacao_validade(outro)["situacao"] == "vencido"
+
+        metricas = svc.metricas(svc.listar())
+        assert metricas["vencido"] == 1
+        assert metricas[Homologacao.STATUS_REPROVADO] == 1
+        assert svc.listar(validade="vencido") == [outro]
+        assert svc.listar(busca="VIGENTE") == [outro]
+
+
+def test_homologacao_api_http_e_pdf_do_formulario(tmp_path):
+    """Rotas HTTP do modulo + geracao do F-COM-001-01 preenchido em PDF."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    assert client.get("/compras/homologacao").status_code == 200
+
+    modelo = client.get("/api/compras/homologacao/modelo").get_json()
+    assert modelo["codigo"] == "F-COM-001-01"
+    assert sum(len(s["itens"]) for s in modelo["secoes"]) == 23
+
+    criado = client.post("/api/compras/homologacao", json={
+        "razao_social": "USINAGEM MODELO LTDA",
+        "cnpj": "12.345.678/0001-90",
+        "categoria_compra": "Serviço Terceiro - Usinagem",
+        "validade_meses": 12,
+        "respostas": _respostas_homologacao(),
+    })
+    assert criado.status_code == 200
+    h = criado.get_json()["homologacao"]
+    assert h["nota"] == 1.0
+    assert h["classificacao"] == "Aprovado"
+    assert h["itens_faltando"] == 0
+    hid = h["id"]
+
+    # Uma resposta "Nao" na Gestao da Qualidade tira 1/12 dos 50% da secao.
+    from conferencia_app.services import compras_homologacao_form as form
+
+    atualizado = client.put(f"/api/compras/homologacao/{hid}", json={
+        "respostas": [{"secao": form.SECAO_QUALIDADE, "item": 1, "resposta": "Nao", "comentario": "sem ISO"}],
+    })
+    assert round(atualizado.get_json()["homologacao"]["nota"], 6) == round(1 - 0.5 / 12, 6)
+
+    assert client.post(f"/api/compras/homologacao/{hid}/enviar", json={}).status_code == 200
+    decidido = client.post(f"/api/compras/homologacao/{hid}/homologar", json={"justificativa": "ok"})
+    assert decidido.status_code == 200
+    assert decidido.get_json()["homologacao"]["status"] == "Homologado"
+    assert decidido.get_json()["homologacao"]["valido_ate"]
+
+    # Homologado nao aceita mais edicao.
+    assert client.put(f"/api/compras/homologacao/{hid}", json={"razao_social": "X"}).status_code == 400
+
+    pdf = client.get(f"/api/compras/homologacao/{hid}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["Content-Type"] == "application/pdf"
+    # PDF gerado sem compressao - da pra conferir o conteudo nos bytes crus.
+    for trecho in (b"F-COM-001-01", b"USINAGEM MODELO LTDA", b"Aprovado", b"Homologado"):
+        assert trecho in pdf.data
+
+    # Inexistente -> 404 em todas as acoes.
+    assert client.get("/api/compras/homologacao/999999").status_code == 404
+    assert client.post("/api/compras/homologacao/999999/enviar", json={}).status_code == 404
+    assert client.get("/api/compras/homologacao/999999/pdf").status_code == 404

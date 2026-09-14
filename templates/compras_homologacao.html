@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+
+{% block title %}Compras | Homologação de Fornecedores{% endblock %}
+{% block shell_title %}Compras — Homologação de Fornecedores{% endblock %}
+
+{% block extra_head %}
+<style>
+    .hf-wrap { display: grid; gap: 18px; }
+    .hf-table-wrap { overflow-x: auto; }
+    .hf-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    .hf-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; max-width: 400px; display: none; }
+    .hf-toast.error { border-left-color: var(--eui-danger); }
+    .hf-toast.success { border-left-color: var(--eui-success); }
+
+    .hf-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 18px; }
+    .hf-modal-backdrop.open { display: flex; }
+    .hf-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 1180px; max-height: 92vh; overflow-y: auto; padding: 22px; }
+    .hf-modal h3 { margin: 0 0 4px; font-size: 17px; }
+    .hf-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 14px; }
+    .hf-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; position: sticky; bottom: -22px; background: #fff; padding: 12px 0 0; border-top: 1px solid var(--eui-border, #e5e7eb); }
+
+    .hf-secao { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+    .hf-secao-head { background: var(--eui-surface-2, #f8fafc); padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
+    .hf-secao-titulo { font-weight: 700; font-size: 13.5px; }
+    .hf-secao-peso { font-size: 11px; font-weight: 700; color: var(--eui-muted); background: #fff; border: 1px solid var(--eui-border, #e5e7eb); border-radius: 999px; padding: 2px 9px; }
+    .hf-secao-prog { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--eui-muted); }
+    .hf-secao-body { padding: 6px 0; }
+
+    .hf-item { display: grid; grid-template-columns: 26px 1fr 210px 210px; gap: 10px; align-items: start; padding: 8px 14px; border-bottom: 1px solid #f1f5f9; }
+    .hf-item:last-child { border-bottom: none; }
+    .hf-item.sem-resposta { background: #fffbeb; }
+    .hf-item-num { font-size: 12px; font-weight: 700; color: var(--eui-muted); padding-top: 6px; }
+    .hf-item-texto { font-size: 12.5px; line-height: 1.45; padding-top: 4px; }
+    .hf-opcoes { display: flex; flex-wrap: wrap; gap: 4px; }
+    .hf-opt { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; padding: 4px 9px; font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .hf-opt:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .hf-opt.sel { background: var(--eui-primary, #4f46e5); border-color: var(--eui-primary, #4f46e5); color: #fff; }
+    .hf-opt.sel.neg { background: #dc2626; border-color: #dc2626; }
+    .hf-opt.sel.meio { background: #b45309; border-color: #b45309; }
+    .hf-opt.sel.na { background: #64748b; border-color: #64748b; }
+    .hf-item textarea { width: 100%; min-height: 32px; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; resize: vertical; }
+
+    .hf-nota { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--eui-surface-2, #f8fafc); border: 1px solid var(--eui-border, #e5e7eb); border-radius: 10px; padding: 12px 16px; margin: 4px 0 14px; }
+    .hf-nota-valor { font-size: 26px; font-weight: 800; line-height: 1; }
+    .hf-nota-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); font-weight: 700; }
+    .hf-classe { font-size: 12.5px; font-weight: 800; border-radius: 999px; padding: 4px 12px; }
+    .hf-classe.aprovado { background: #dcfce7; color: #166534; }
+    .hf-classe.ressalvas { background: #fef3c7; color: #92400e; }
+    .hf-classe.reprovado { background: #fee2e2; color: #991b1b; }
+
+    .hf-badge { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .hf-badge.rascunho { background: #f1f5f9; color: #475569; }
+    .hf-badge.aprovacao { background: #e0e7ff; color: #3730a3; }
+    .hf-badge.homologado { background: #dcfce7; color: #166534; }
+    .hf-badge.reprovado { background: #fee2e2; color: #991b1b; }
+    .hf-val { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+    .hf-val.a_vencer { background: #fef3c7; color: #92400e; }
+    .hf-val.vencido { background: #fee2e2; color: #991b1b; }
+
+    .hf-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .hf-field label { display: block; font-size: 11px; font-weight: 700; color: var(--eui-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .02em; }
+    .hf-field input, .hf-field textarea, .hf-field select { width: 100%; font-size: 12.5px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 6px 8px; }
+    .hf-field.wide { grid-column: 1 / -1; }
+
+    .hf-fotos { display: flex; flex-wrap: wrap; gap: 10px; }
+    .hf-foto { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; padding: 6px; width: 160px; }
+    .hf-foto img { width: 100%; height: 104px; object-fit: cover; border-radius: 5px; display: block; }
+    .hf-foto small { display: block; font-size: 10.5px; color: var(--eui-muted); margin-top: 4px; word-break: break-word; }
+    .hf-foto button { margin-top: 4px; width: 100%; border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 5px; font-size: 11px; font-weight: 700; cursor: pointer; padding: 3px; }
+
+    .hf-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hf-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Compras</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-check"></i> Homologação de Fornecedores</h1>
+            <p class="eui-page-header__sub">Formulário <b id="hf-codigo">F-COM-001-01</b> — a nota é calculada automaticamente pelos pesos de cada seção. Rascunho → Em aprovação → Homologado.</p>
+        </div>
+        <div class="eui-page-header__actions">
+            <button class="eui-btn eui-btn--primary" id="hf-btn-novo"><i class="fas fa-plus"></i> Nova homologação</button>
+        </div>
+    </header>
+
+    <div class="eui-stats" id="hf-metrics">
+        <div class="eui-stat is-clickable is-active" data-filter="" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todas</span><span class="eui-stat__value" id="hf-m-total">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Rascunho" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-pen-to-square"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Rascunho</span><span class="eui-stat__value" id="hf-m-rascunho">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Em aprovação" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em aprovação</span><span class="eui-stat__value" id="hf-m-aprovacao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Homologado" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Homologados</span><span class="eui-stat__value" id="hf-m-homologado">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="a_vencer" data-tipo="validade"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A vencer (30d)</span><span class="eui-stat__value" id="hf-m-avencer">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="vencido" data-tipo="validade"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Vencidos</span><span class="eui-stat__value" id="hf-m-vencido">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:440px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="hf-busca" class="eui-input" autocomplete="off" placeholder="Buscar por razão social, fantasia, CNPJ ou categoria…" style="width:100%; padding-left:34px;">
+                </div>
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="hf-btn-limpar"><i class="fas fa-filter-circle-xmark"></i> Limpar filtros</button>
+            </div>
+            <div class="hf-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Fornecedor</th>
+                            <th>CNPJ</th>
+                            <th>Categoria</th>
+                            <th>Nota</th>
+                            <th>Classificação</th>
+                            <th>Status</th>
+                            <th>Validade</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hf-tbody"><tr><td colspan="8" class="hf-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="hf-toast" id="hf-toast"></div>
+
+<div class="hf-modal-backdrop" id="hf-modal">
+    <div class="hf-modal">
+        <h3><i class="fas fa-clipboard-check"></i> <span id="hf-modal-titulo">Nova homologação</span></h3>
+        <p class="hf-modal-sub" id="hf-modal-sub"></p>
+        <div id="hf-avisos"></div>
+        <div class="hf-nota" id="hf-nota-box"></div>
+        <div id="hf-corpo"></div>
+        <div class="hf-modal-foot" id="hf-acoes"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, tipo) {
+        const el = $("hf-toast");
+        el.textContent = msg;
+        el.className = "hf-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 5000);
+    }
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const pct = (v) => (v == null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%");
+    const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
+
+    const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado" };
+    const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado" };
+    const SLUG_OPT = { "Sim": "", "Conforme": "", "Parcial": "meio", "Não": "neg", "Nao": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
+
+    let filtroStatus = "", filtroValidade = "", modelo = null, atual = null;
+
+    async function carregar() {
+        try {
+            const p = new URLSearchParams();
+            if (filtroStatus) p.set("status", filtroStatus);
+            if (filtroValidade) p.set("validade", filtroValidade);
+            const busca = $("hf-busca").value.trim();
+            if (busca) p.set("busca", busca);
+            const d = await api("/api/compras/homologacao?" + p.toString());
+            const m = d.metricas || {};
+            $("hf-m-total").textContent = m.total || 0;
+            $("hf-m-rascunho").textContent = m["Rascunho"] || 0;
+            $("hf-m-aprovacao").textContent = m["Em aprovação"] || 0;
+            $("hf-m-homologado").textContent = m["Homologado"] || 0;
+            $("hf-m-avencer").textContent = m.a_vencer || 0;
+            $("hf-m-vencido").textContent = m.vencido || 0;
+            if (d.formulario) $("hf-codigo").textContent = d.formulario.codigo;
+            render(d.homologacoes || []);
+        } catch (e) {
+            $("hf-tbody").innerHTML = `<tr><td colspan="8" class="hf-empty" style="color:var(--eui-danger,#dc2626);">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    function render(lista) {
+        const tb = $("hf-tbody");
+        if (!lista.length) { tb.innerHTML = '<tr><td colspan="8" class="hf-empty">Nenhuma homologação encontrada</td></tr>'; return; }
+        tb.innerHTML = lista.map((h) => {
+            const val = h.valido_ate
+                ? `${dataBR(h.valido_ate)}${h.validade_situacao === "a_vencer" ? `<span class="hf-val a_vencer">${h.validade_dias_restantes}d</span>`
+                   : h.validade_situacao === "vencido" ? '<span class="hf-val vencido">vencido</span>' : ""}`
+                : "—";
+            return `<tr>
+                <td><a href="#" data-abrir="${h.id}"><b>${esc(h.razao_social)}</b></a>${h.nome_fantasia ? `<div style="font-size:11px;color:var(--eui-muted);">${esc(h.nome_fantasia)}</div>` : ""}</td>
+                <td>${esc(h.cnpj || "—")}</td>
+                <td>${esc(h.categoria_compra || "—")}</td>
+                <td><b>${pct(h.nota)}</b></td>
+                <td>${h.classificacao ? `<span class="hf-classe ${SLUG_CLASSE[h.classificacao] || ""}">${esc(h.classificacao)}</span>` : "—"}</td>
+                <td><span class="hf-badge ${SLUG_STATUS[h.status] || ""}">${esc(h.status)}</span></td>
+                <td>${val}</td>
+                <td style="text-align:right; white-space:nowrap;">
+                    <button class="eui-btn eui-btn--subtle eui-btn--sm" data-abrir="${h.id}"><i class="fas fa-eye"></i> Abrir</button>
+                    <a class="eui-btn eui-btn--subtle eui-btn--sm" href="/api/compras/homologacao/${h.id}/pdf" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> PDF</a>
+                </td>
+            </tr>`;
+        }).join("");
+    }
+
+    // ── Modal ──────────────────────────────────────────────────────────
+    async function abrirNovo() {
+        if (!modelo) modelo = await api("/api/compras/homologacao/modelo");
+        atual = {
+            id: null, status: "Rascunho", validade_meses: 12,
+            secoes: JSON.parse(JSON.stringify(modelo.secoes)),
+            fotos: [],
+        };
+        desenhar("Nova homologação");
+    }
+
+    async function abrir(id) {
+        const d = await api(`/api/compras/homologacao/${id}`);
+        atual = d.homologacao;
+        desenhar(atual.razao_social || "Homologação");
+    }
+
+    const CAMPOS = [
+        ["razao_social", "Razão Social *", "wide"], ["cnpj", "CNPJ"], ["nome_fantasia", "Nome Fantasia"],
+        ["inscricao_estadual", "Inscrição Estadual"], ["endereco", "Endereço", "wide"], ["cidade_estado", "Cidade/Estado"],
+        ["contato_principal", "Contato Principal"], ["telefone", "Telefone"], ["email", "E-mail"], ["website", "Website"],
+        ["categoria_compra", "Categoria de Compra"],
+    ];
+
+    function desenhar(titulo) {
+        const ed = atual.status === "Rascunho";
+        $("hf-modal-titulo").textContent = titulo;
+        $("hf-modal-sub").textContent = atual.id
+            ? `#${atual.id} · ${atual.status} · criado por ${atual.criado_por || "—"} em ${atual.criado_em || "—"}`
+            : "Preencha os dados e responda todos os itens para enviar à aprovação.";
+
+        const faltando = (atual.secoes || []).reduce((n, s) => n + s.itens.filter((i) => !i.resposta).length, 0);
+        $("hf-avisos").innerHTML = (ed && faltando)
+            ? `<div class="hf-aviso"><i class="fas fa-circle-info"></i> Faltam <b>${faltando}</b> item(ns) sem resposta — o envio para aprovação só é liberado com o formulário completo.</div>` : "";
+        if (atual.justificativa_decisao) {
+            $("hf-avisos").innerHTML += `<div class="hf-aviso"><b>Justificativa:</b> ${esc(atual.justificativa_decisao)}</div>`;
+        }
+
+        desenharNota();
+
+        let html = `<div class="hf-form-grid">` + CAMPOS.map(([k, rot, cls]) => `
+            <div class="hf-field ${cls || ""}"><label>${rot}</label>
+                <input data-campo="${k}" value="${esc(atual[k] || "")}" ${ed ? "" : "disabled"}></div>`).join("") + `
+            <div class="hf-field"><label>Validade (meses)</label><input type="number" min="1" max="120" data-campo="validade_meses" value="${atual.validade_meses || 12}" ${ed ? "" : "disabled"}></div>
+            <div class="hf-field wide"><label>Descrição do Produto/Serviço</label><textarea data-campo="descricao_produto_servico" rows="2" ${ed ? "" : "disabled"}>${esc(atual.descricao_produto_servico || "")}</textarea></div>
+            <div class="hf-field wide"><label>Resultado da Auditoria</label><textarea data-campo="resultado_auditoria" rows="2" ${ed ? "" : "disabled"}>${esc(atual.resultado_auditoria || "")}</textarea></div>
+        </div>`;
+
+        (atual.secoes || []).forEach((s) => {
+            const resp = s.itens.filter((i) => i.resposta).length;
+            html += `<div class="hf-secao">
+                <div class="hf-secao-head">
+                    <span class="hf-secao-titulo">${esc(s.titulo)}</span>
+                    <span class="hf-secao-peso">peso ${(s.peso * 100).toFixed(0)}%</span>
+                    <span class="hf-secao-prog">${resp}/${s.itens.length} respondidos</span>
+                </div>
+                <div class="hf-secao-body">` + s.itens.map((it) => `
+                    <div class="hf-item ${it.resposta ? "" : "sem-resposta"}">
+                        <div class="hf-item-num">${it.item}</div>
+                        <div class="hf-item-texto">${esc(it.texto)}</div>
+                        <div class="hf-opcoes">${s.escala.map((op) => `
+                            <button type="button" class="hf-opt ${it.resposta === op ? "sel " + (SLUG_OPT[op] || "") : ""}"
+                                data-resp="${esc(s.chave)}|${it.item}|${esc(op)}" ${ed ? "" : "disabled"}>${esc(op)}</button>`).join("")}</div>
+                        <textarea data-coment="${esc(s.chave)}|${it.item}" rows="1" placeholder="Comentário…" ${ed ? "" : "disabled"}>${esc(it.comentario || "")}</textarea>
+                    </div>`).join("") + `</div></div>`;
+        });
+
+        html += `<div class="hf-form-grid">
+            <div class="hf-field wide"><label>Obs. Conformidade Legal</label><textarea data-campo="obs_conformidade_legal" rows="2" ${ed ? "" : "disabled"}>${esc(atual.obs_conformidade_legal || "")}</textarea></div>
+            <div class="hf-field wide"><label>Comentário final</label><textarea data-campo="comentario" rows="2" ${ed ? "" : "disabled"}>${esc(atual.comentario || "")}</textarea></div>
+        </div>`;
+
+        if (atual.id) {
+            html += `<div class="hf-secao"><div class="hf-secao-head"><span class="hf-secao-titulo">Fotos da visita</span>
+                ${ed ? '<input type="file" id="hf-foto-input" accept="image/*" style="margin-left:auto; font-size:12px;">' : ""}</div>
+                <div class="hf-secao-body" style="padding:12px 14px;"><div class="hf-fotos">` +
+                ((atual.fotos || []).map((f) => `<div class="hf-foto">
+                    <a href="${f.url}" target="_blank" rel="noopener"><img src="${f.url}" alt="${esc(f.nome_arquivo || "")}"></a>
+                    <small>${esc(f.legenda || f.nome_arquivo || "")}</small>
+                    ${ed ? `<button type="button" data-del-foto="${f.id}">Remover</button>` : ""}
+                </div>`).join("") || '<div style="font-size:12.5px;color:var(--eui-muted);">Nenhuma foto anexada.</div>') +
+                `</div></div></div>`;
+        }
+
+        $("hf-corpo").innerHTML = html;
+        desenharAcoes();
+        $("hf-modal").classList.add("open");
+
+        const inp = $("hf-foto-input");
+        if (inp) inp.addEventListener("change", enviarFoto);
+    }
+
+    function notaLocal() {
+        let nota = 0;
+        (atual.secoes || []).forEach((s) => {
+            const fator = { "Sim": 1, "Conforme": 1, "Não Aplicável": 1, "Nao Aplicavel": 1, "Parcial": .5 };
+            const pi = s.peso / (s.itens.length || 1);
+            s.itens.forEach((i) => { nota += pi * (fator[i.resposta] || 0); });
+        });
+        return nota;
+    }
+
+    function desenharNota() {
+        const n = notaLocal();
+        const classe = n >= 0.75001 ? "Aprovado" : n >= 0.55001 ? "Aprovado com ressalvas" : "Reprovado";
+        $("hf-nota-box").innerHTML = `
+            <div><div class="hf-nota-label">Nota</div><div class="hf-nota-valor">${pct(n)}</div></div>
+            <span class="hf-classe ${SLUG_CLASSE[classe]}">${classe}</span>
+            <div style="font-size:11.5px; color:var(--eui-muted); margin-left:auto;">
+                ≥ 75% Aprovado · ≥ 55% Com ressalvas · abaixo disso Reprovado
+            </div>`;
+    }
+
+    function desenharAcoes() {
+        const ed = atual.status === "Rascunho";
+        let b = "";
+        if (ed) b += `<button class="eui-btn eui-btn--primary" data-act="salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>`;
+        if (ed && atual.id) b += `<button class="eui-btn eui-btn--success" data-act="enviar"><i class="fas fa-paper-plane"></i> Enviar para aprovação</button>`;
+        if (atual.status === "Em aprovação") {
+            b += `<button class="eui-btn eui-btn--success" data-act="homologar"><i class="fas fa-circle-check"></i> Homologar</button>`;
+            b += `<button class="eui-btn eui-btn--danger" data-act="reprovar"><i class="fas fa-ban"></i> Reprovar</button>`;
+            b += `<button class="eui-btn eui-btn--subtle" data-act="devolver"><i class="fas fa-rotate-left"></i> Devolver</button>`;
+        }
+        if (["Homologado", "Reprovado"].includes(atual.status)) {
+            b += `<button class="eui-btn eui-btn--subtle" data-act="reabrir"><i class="fas fa-rotate-left"></i> Reabrir</button>`;
+        }
+        if (atual.id) b += `<a class="eui-btn eui-btn--subtle" href="/api/compras/homologacao/${atual.id}/pdf" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> PDF</a>`;
+        b += `<button class="eui-btn eui-btn--ghost" data-act="fechar">Fechar</button>`;
+        $("hf-acoes").innerHTML = b;
+    }
+
+    function coletar() {
+        const corpo = $("hf-corpo");
+        const dados = {};
+        corpo.querySelectorAll("[data-campo]").forEach((el) => { dados[el.dataset.campo] = el.value; });
+        const respostas = [];
+        (atual.secoes || []).forEach((s) => s.itens.forEach((i) => {
+            const ta = corpo.querySelector(`[data-coment="${CSS.escape(s.chave + "|" + i.item)}"]`);
+            respostas.push({ secao: s.chave, item: i.item, resposta: i.resposta || "", comentario: ta ? ta.value : "" });
+        }));
+        dados.respostas = respostas;
+        return dados;
+    }
+
+    $("hf-corpo").addEventListener("click", (e) => {
+        const op = e.target.closest("[data-resp]");
+        if (op) {
+            const [chave, item, valor] = op.dataset.resp.split("|");
+            const s = atual.secoes.find((x) => x.chave === chave);
+            const it = s && s.itens.find((x) => String(x.item) === item);
+            if (!it) return;
+            // Guarda comentarios digitados antes de redesenhar.
+            $("hf-corpo").querySelectorAll("[data-coment]").forEach((ta) => {
+                const [ck, ci] = ta.dataset.coment.split("|");
+                const cs = atual.secoes.find((x) => x.chave === ck);
+                const cit = cs && cs.itens.find((x) => String(x.item) === ci);
+                if (cit) cit.comentario = ta.value;
+            });
+            $("hf-corpo").querySelectorAll("[data-campo]").forEach((el) => { atual[el.dataset.campo] = el.value; });
+            it.resposta = it.resposta === valor ? null : valor;
+            desenhar($("hf-modal-titulo").textContent);
+            return;
+        }
+        const del = e.target.closest("[data-del-foto]");
+        if (del) removerFoto(del.dataset.delFoto);
+    });
+
+    $("hf-acoes").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-act]");
+        if (!btn) return;
+        const act = btn.dataset.act;
+        if (act === "fechar") { $("hf-modal").classList.remove("open"); return; }
+        btn.disabled = true;
+        try {
+            if (act === "salvar") {
+                const dados = coletar();
+                const r = atual.id
+                    ? await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(dados) })
+                    : await api("/api/compras/homologacao", { method: "POST", body: JSON.stringify(dados) });
+                atual = r.homologacao;
+                toast(r.message, "success");
+                desenhar(atual.razao_social || "Homologação");
+                carregar();
+                return;
+            }
+            if (act === "enviar") {
+                await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(coletar()) });
+                const r = await api(`/api/compras/homologacao/${atual.id}/enviar`, { method: "POST" });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "homologar") {
+                const just = prompt("Observação da aprovação (opcional):");
+                if (just === null) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/homologar`, { method: "POST", body: JSON.stringify({ justificativa: just }) });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "reprovar") {
+                const just = prompt("Motivo da reprovação (obrigatório):");
+                if (just === null) { btn.disabled = false; return; }
+                if (!just.trim()) { toast("Informe o motivo da reprovação.", "error"); btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/reprovar`, { method: "POST", body: JSON.stringify({ justificativa: just }) });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "devolver") {
+                const motivo = prompt("Motivo da devolução (opcional):");
+                if (motivo === null) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/devolver`, { method: "POST", body: JSON.stringify({ motivo }) });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "reabrir") {
+                if (!confirm("Reabrir como rascunho? A decisão atual será desfeita.")) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/reabrir`, { method: "POST" });
+                atual = r.homologacao; toast(r.message, "success");
+            }
+            desenhar(atual.razao_social || "Homologação");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    async function enviarFoto(e) {
+        const arquivo = e.target.files[0];
+        if (!arquivo) return;
+        const fd = new FormData();
+        fd.append("arquivo", arquivo);
+        try {
+            const resp = await fetch(`/api/compras/homologacao/${atual.id}/fotos`, { method: "POST", body: fd });
+            const d = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(d.error || ("Erro " + resp.status));
+            atual = d.homologacao;
+            toast(d.message, "success");
+            desenhar(atual.razao_social || "Homologação");
+        } catch (err) { toast(err.message, "error"); }
+    }
+
+    async function removerFoto(id) {
+        if (!confirm("Remover essa foto?")) return;
+        try {
+            await api(`/api/compras/homologacao/fotos/${id}`, { method: "DELETE" });
+            await abrir(atual.id);
+        } catch (err) { toast(err.message, "error"); }
+    }
+
+    document.addEventListener("click", (e) => {
+        const a = e.target.closest("[data-abrir]");
+        if (a) { e.preventDefault(); abrir(a.dataset.abrir).catch((err) => toast(err.message, "error")); }
+    });
+    $("hf-btn-novo").addEventListener("click", () => abrirNovo().catch((e) => toast(e.message, "error")));
+    $("hf-modal").addEventListener("click", (e) => { if (e.target.id === "hf-modal") $("hf-modal").classList.remove("open"); });
+
+    $("hf-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        if (card.dataset.tipo === "validade") { filtroValidade = card.dataset.filter; filtroStatus = ""; }
+        else { filtroStatus = card.dataset.filter; filtroValidade = ""; }
+        $("hf-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        $("hf-btn-limpar").classList.toggle("hidden", !(filtroStatus || filtroValidade));
+        carregar();
+    });
+    $("hf-btn-limpar").addEventListener("click", () => {
+        filtroStatus = filtroValidade = ""; $("hf-busca").value = "";
+        $("hf-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("hf-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
+        $("hf-btn-limpar").classList.add("hidden");
+        carregar();
+    });
+    let deb;
+    $("hf-busca").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(carregar, 350); });
+
+    carregar();
+})();
+</script>
+{% endblock %}

@@ -5,7 +5,6 @@
     const compact = window.matchMedia('(max-width: 1100px)');
     const views = [['tree', 'Estrutura'], ['map', 'Mapa'], ['operations', 'Operações'], ['details', 'Detalhes']];
     let view = 'map';
-    let sequenceList = false;
     let scheduled = false;
     let parentDocument;
 
@@ -72,6 +71,10 @@
         if (image.naturalWidth === 1 && image.naturalHeight === 1) {
             const attempt = Number(image.dataset.previewAttempts || 0) + 1;
             image.dataset.previewAttempts = String(attempt);
+            if (attempt >= 60) {
+                container.dataset.previewState = 'unavailable';
+                return;
+            }
             container.dataset.previewState = 'loading';
             window.setTimeout(() => {
                 if (!image.isConnected) return;
@@ -115,17 +118,15 @@
             });
             header.append(nav);
         }
-        const heading = document.querySelector('.sequence-heading');
-        if (heading && !heading.querySelector('.production-sequence-toggle')) {
-            const toggle = control(sequenceList ? 'Ver sequência' : 'Ver em lista', 'production-sequence-toggle', () => {
-                sequenceList = !sequenceList;
-                root.classList.toggle('production-sequence-list', sequenceList);
-                toggle.textContent = sequenceList ? 'Ver sequência' : 'Ver em lista';
-                toggle.setAttribute('aria-pressed', String(sequenceList));
-            });
-            toggle.setAttribute('aria-pressed', String(sequenceList));
-            heading.append(toggle);
-        }
+        document.querySelectorAll('.details-panel button').forEach((button) => {
+            if (/^Ampliar(?: imagem)?$/i.test(button.textContent.trim())) button.remove();
+        });
+        document.querySelectorAll('.tree-row').forEach((row) => {
+            const indent = Number.parseFloat(row.style.paddingLeft || '10');
+            const depth = Math.max(0, Math.round((indent - 10) / 18));
+            row.dataset.productionDepth = String(depth);
+            row.style.setProperty('--production-indent', `${indent}px`);
+        });
         const preview = document.querySelector('.detail-preview');
         if (preview) preparePreview(preview, true);
         document.querySelectorAll('.node-thumbnail').forEach((thumbnail) => preparePreview(thumbnail));
