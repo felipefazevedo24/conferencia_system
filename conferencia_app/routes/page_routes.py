@@ -251,34 +251,6 @@ HOME_MODULES = [
         "metric_key": "expedicao_aberta",
     },
     {
-        "id": "classificacao_contabil",
-        "title": "Classificacao Contabil",
-        "subtitle": "Contabilidade",
-        "description": "Revise classificacoes de entradas, ajuste contas e acompanhe pendencias do contador.",
-        "href": "/financeiro/classificacao-contabil",
-        "icon": "fa-scale-balanced",
-        "permission": "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
-        "section": "Controladoria",
-        "tone": "red",
-        "priority": 84,
-        "keywords": ["contabil", "classificacao", "contador", "conta", "entrada"],
-        "metric_key": "boletos_gerados",
-    },
-    {
-        "id": "relatorio_custos",
-        "title": "Relatorio de Custos",
-        "subtitle": "Contabilidade",
-        "description": "Consolide custos de insumos produtivos, energia, qualidade e gases com base nos lancamentos reais.",
-        "href": "/financeiro/relatorio-custos",
-        "icon": "fa-chart-pie",
-        "permission": "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
-        "section": "Controladoria",
-        "tone": "red",
-        "priority": 83,
-        "keywords": ["custos", "usinagem", "solda", "energia", "qualidade", "oxigenio"],
-        "metric_key": "boletos_gerados",
-    },
-    {
         "id": "emails_nfe",
         "title": "E-mails de NF-e",
         "subtitle": "Administração",
@@ -365,11 +337,6 @@ SECTION_META = {
         "description": "Importação e exportação: OC, PO, cotação de frete, desembaraço e transporte.",
         "icon": "fa-ship",
         "tone": "navy",
-    },
-    "Controladoria": {
-        "description": "Classificação contábil e relatório de custos.",
-        "icon": "fa-coins",
-        "tone": "violet",
     },
     "Administração": {
         "description": "Governança, permissões, dashboards e auditorias.",
@@ -636,10 +603,6 @@ _PERM_RECEBIMENTO = ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_FISCAL_LIBERADAS
 _PERM_COMPRAS = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 _PERM_EXPEDICAO = ("PAGE_EXPEDICAO_CONFERENCIA", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_ROMANEIO")
 _PERM_LOGISTICA = ("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO", "PAGE_LOGISTICA_VIAGEM")
-_PERM_CONTROLADORIA = (
-    "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
-    "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
-)
 
 
 def _serie_entradas_por_dia(dias: int = 14) -> dict:
@@ -961,18 +924,6 @@ def lancamento_page():
 @permission_required("PAGE_FISCAL_LIBERADAS")
 def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
-
-
-@page_bp.route("/financeiro/classificacao-contabil")
-@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
-def financeiro_classificacao_contabil_page():
-    return render_template("classificacao_contabil.html", user=session["username"])
-
-
-@page_bp.route("/financeiro/relatorio-custos")
-@permission_required("PAGE_FINANCEIRO_RELATORIO_CUSTOS")
-def financeiro_relatorio_custos_page():
-    return render_template("relatorio_custos.html", user=session["username"])
 
 
 @page_bp.route("/expedicao/conferencia")

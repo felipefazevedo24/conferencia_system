@@ -15,12 +15,13 @@ Endpoint:
 from __future__ import annotations
 
 import base64
+from contextlib import nullcontext
 import os
 import re
 import sys
+import threading
 import time
 import unicodedata
-import base64
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -79,7 +80,10 @@ def _validar_table(table: str) -> str:
     return table
 
 
-def _conectar(cfg: dict[str, Any]):
+_PRODUCAO_QUERY_SLOTS = threading.BoundedSemaphore(4)
+
+
+def _conectar(cfg: dict[str, Any], *, readonly: bool = False):
     return psycopg2.connect(
         host=cfg["host"],
         port=cfg["port"],
@@ -87,6 +91,7 @@ def _conectar(cfg: dict[str, Any]):
         user=cfg["user"],
         password=cfg["password"],
         connect_timeout=cfg["connect_timeout"],
+        **({"options": "-c default_transaction_read_only=on -c statement_timeout=15000"} if readonly else {}),
     )
 
 
@@ -1628,15 +1633,24 @@ def create_app() -> Flask:
             if not isinstance(params, dict):
                 return jsonify({"sucesso": False, "erro": "params_deve_ser_objeto"}), 400
 
-            with _conectar(cfg) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(sql, params)
-                    cols = [desc[0] for desc in (cur.description or [])]
-                    if one:
-                        row = cur.fetchone()
-                        return jsonify({"sucesso": True, "row": _json_safe(dict(zip(cols, row)) if row else None)})
-                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-                    return jsonify({"sucesso": True, "rows": _json_safe(rows)})
+            production = query_name.startswith("SQL_PRODUCAO_")
+            if production and int(params.get("cod_empresa") or 0) != 1:
+                return jsonify({"sucesso": False, "erro": "empresa_nao_permitida"}), 403
+            guard = _PRODUCAO_QUERY_SLOTS if production else nullcontext()
+            with guard:
+                with _conectar(cfg, readonly=production) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        cols = [desc[0] for desc in (cur.description or [])]
+                        if one:
+                            row = cur.fetchone()
+                            return jsonify({
+                                "sucesso": True,
+                                "row": _json_safe(dict(zip(cols, row)) if row else None),
+                                "read_only": production,
+                            })
+                        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                        return jsonify({"sucesso": True, "rows": _json_safe(rows), "read_only": production})
         except Exception as exc:
             app.logger.exception("Falha ao executar query de Compras na bridge")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
