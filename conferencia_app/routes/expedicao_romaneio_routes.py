@@ -197,6 +197,12 @@ _FRETE_GRUPO_LABEL = {
 # PROP_DEST=4.
 _TIPOS_FRETE_VALIDOS = ("FOB", "CIF", "PROP_REM", "PROP_DEST")
 
+
+def _normalizar_tipo_frete(tipo_frete) -> str:
+    """Converte os nomes comerciais DAP/FCA nos valores internos do romaneio."""
+    tipo = str(tipo_frete or "").strip().upper()
+    return {"DAP": "PROP_REM", "FCA": "PROP_DEST"}.get(tipo, tipo)
+
 _TIPO_FRETE_LABEL = {
     "CIF": "CIF - Frete por conta do remetente",
     "FOB": "FOB - Frete por conta do destinatário",
@@ -216,9 +222,8 @@ def _tipo_frete_label(tipo_frete) -> str:
 
 
 def _incoterm_frete(tipo_frete) -> str:
-    return {"CIF": "CIF", "FOB": "FOB", "PROP_REM": "DAP", "PROP_DEST": "FCA"}.get(
-        str(tipo_frete or "").strip().upper(), "FOB"
-    )
+    tipo = _normalizar_tipo_frete(tipo_frete)
+    return {"CIF": "CIF", "FOB": "FOB", "PROP_REM": "DAP", "PROP_DEST": "FCA"}.get(tipo, "FOB")
 
 
 def _modfrete_grupo(codigo) -> str:
@@ -680,7 +685,7 @@ def criar_romaneio():
         return jsonify({"error": "Adicione ao menos uma NF."}), 400
     if any(not isinstance(nf, dict) or not str(nf.get("numero_nf") or "").strip() for nf in nfs):
         return jsonify({"error": "Número da NF é obrigatório."}), 400
-    frete = str(payload.get("tipo_frete") or "FOB").strip().upper()
+    frete = _normalizar_tipo_frete(payload.get("tipo_frete") or "FOB")
     if frete not in _TIPOS_FRETE_VALIDOS:
         return jsonify({"error": "Tipo de frete inválido."}), 400
 
@@ -830,7 +835,7 @@ def atualizar_romaneio(romaneio_id):
         if "cliente" in payload:
             romaneio.cliente = str(payload["cliente"]).strip()
         if "tipo_frete" in payload:
-            frete = str(payload["tipo_frete"]).strip().upper()
+            frete = _normalizar_tipo_frete(payload["tipo_frete"])
             if frete not in _TIPOS_FRETE_VALIDOS:
                 return jsonify({"error": "Tipo de frete inválido."}), 400
             disparar_aviso_fob = frete in ("FOB", "PROP_REM", "PROP_DEST")
@@ -875,9 +880,10 @@ def atualizar_romaneio(romaneio_id):
 
 
 def _avisar_coleta_romaneio_fob(romaneio):
-    if romaneio.tipo_frete not in ("FOB", "PROP_REM", "PROP_DEST"):
+    tipo_frete = _normalizar_tipo_frete(romaneio.tipo_frete)
+    if tipo_frete not in ("FOB", "PROP_REM", "PROP_DEST"):
         return
-    modalidade = _incoterm_frete(romaneio.tipo_frete)
+    modalidade = _incoterm_frete(tipo_frete)
     for nf in romaneio.nfs or []:
         try:
             enviar_aviso_coleta_fob(
@@ -1384,7 +1390,7 @@ def editar_romaneio_campos(romaneio, alteracoes, autor):
     if "motorista_documento" in alteracoes:
         romaneio.motorista_documento = str(alteracoes["motorista_documento"] or "").strip()
     if "tipo_frete" in alteracoes:
-        frete = str(alteracoes["tipo_frete"] or "").strip().upper()
+        frete = _normalizar_tipo_frete(alteracoes["tipo_frete"])
         if frete not in _TIPOS_FRETE_VALIDOS:
             return False, "Tipo de frete inválido."
         disparar_aviso_fob = frete in ("FOB", "PROP_REM", "PROP_DEST")

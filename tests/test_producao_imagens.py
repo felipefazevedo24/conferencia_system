@@ -34,6 +34,13 @@ def _load_production_service():
 producao_service = _load_production_service()
 
 
+@pytest.fixture(autouse=True)
+def reset_query_cache():
+    producao_service._QUERY_CACHE.clear()
+    yield
+    producao_service._QUERY_CACHE.clear()
+
+
 def document(document_id, kind, filename, description=""):
     return {
         "id": document_id,
@@ -484,3 +491,56 @@ def test_hierarquia_compacta_usa_as_cores_solicitadas_sem_rotulo_extra():
     assert "productionDepth" in script
     assert "Hierarquia compacta" not in css
     assert "Hierarquia compacta" not in script
+
+
+def test_busca_reutiliza_resultado_sem_misturar_termos():
+    with patch.object(producao_service, "fetch_all", return_value=[{"n_os": "7807"}]) as query:
+        first = producao_service.buscar_os("7807")
+        first.clear()
+        assert len(producao_service.buscar_os("7807")) == 1
+        producao_service.buscar_os("9959")
+    assert query.call_count == 2
+
+
+def test_cache_expira_e_nao_guarda_falhas():
+    cache, jobs, lock = OrderedDict(), {}, threading.RLock()
+    with patch.object(producao_service.time, "monotonic", return_value=0):
+        assert producao_service._cached_read(cache, jobs, lock, "os", lambda: 1) == 1
+    with patch.object(producao_service.time, "monotonic", return_value=11):
+        with pytest.raises(ValueError):
+            producao_service._cached_read(cache, jobs, lock, "os", lambda: (_ for _ in ()).throw(ValueError()))
+        assert producao_service._cached_read(cache, jobs, lock, "os", lambda: 2) == 2
+    assert not jobs
+
+
+def test_contexto_preservado_no_worker_e_cache_isolado_por_app():
+    from flask import Flask, current_app
+    first, second = Flask("first"), Flask("second")
+    first.config["PRODUCTION_TEST"] = "configured"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(producao_service._run_with_app, first,
+                           lambda: current_app.config["PRODUCTION_TEST"]).result() == "configured"
+    with patch.object(producao_service, "fetch_one", side_effect=[{"codigo": 1}, {"codigo": 2}]) as query:
+        with first.app_context():
+            assert producao_service._obter_ordem("7807")["codigo"] == 1
+            assert producao_service._obter_ordem("7807")["codigo"] == 1
+        with second.app_context():
+            assert producao_service._obter_ordem("7807")["codigo"] == 2
+    assert query.call_count == 2
+
+
+def test_primeira_abertura_executa_consultas_independentes_em_paralelo():
+    barrier = threading.Barrier(3, timeout=2)
+
+    def read(*args):
+        barrier.wait()
+        return []
+
+    with (
+        patch.object(producao_service, "_STRUCTURE_CACHE", OrderedDict()),
+        patch.object(producao_service, "fetch_one", return_value={"codigo": 9}),
+        patch.object(producao_service, "fetch_all", side_effect=read) as query,
+        patch.object(producao_service, "_estrutura_payload", return_value={"nos": []}),
+    ):
+        assert producao_service.obter_estrutura("parallel")["rncs"] == []
+    assert query.call_count == 3
