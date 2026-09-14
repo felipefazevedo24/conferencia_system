@@ -206,6 +206,21 @@ def _drive_service():
 
 
 def upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = None) -> StoredPhoto:
+    from google.auth.exceptions import RefreshError
+
+    try:
+        return _upload_bytes_to_drive(data, file_name, mimetype)
+    except RefreshError as exc:
+        # A conta de servico autentica durante execute(), e nao ao construir
+        # as credenciais. Erro de autenticacao nao deve virar fallback local.
+        current_app.logger.exception("Google Drive recusou a autenticacao no envio da foto")
+        raise RuntimeError(
+            "A autenticação do Google Drive está inválida. O administrador precisa "
+            "reconectar uma conta válida ao Drive e atualizar as credenciais no servidor."
+        ) from exc
+
+
+def _upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = None) -> StoredPhoto:
     from googleapiclient.http import MediaIoBaseUpload
 
     folder_id = str(current_app.config.get("EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID") or "").strip()
