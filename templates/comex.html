@@ -355,23 +355,15 @@
             <div class="cx-field hidden" id="cx-inst-status-wrap">
                 <div id="cx-inst-status-info" style="font-size:13px; color:var(--eui-text);"></div>
             </div>
+            <!-- Campos operacionais: montados a partir de
+                 comex_service.CAMPOS_OPERACIONAIS (o back manda rotulo, a
+                 etapa em que cada um abre e se ja liberou). Mudar campo ou
+                 etapa e' alteracao so' no servico - a tela acompanha. -->
+            <div id="cx-inst-campos"></div>
             <div class="cx-grid-2">
-                <div class="cx-field"><label>Ref. Despachante</label><input type="text" maxlength="20" id="cx-inst-ref-despachante" class="eui-input"></div>
-                <div class="cx-field"><label>BL/AWB</label><input type="text" maxlength="20" id="cx-inst-bl-awb" class="eui-input"></div>
-            </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>Invoice</label><input type="text" maxlength="20" id="cx-inst-invoice" class="eui-input"></div>
-                <div class="cx-field"><label>ETD</label><input type="date" id="cx-inst-etd" class="eui-input"></div>
-            </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>ETA</label><input type="date" id="cx-inst-eta" class="eui-input"></div>
                 <div class="cx-field"><label>Previsão Entrega/Expedição</label><input type="date" id="cx-inst-previsao-entrega" class="eui-input"></div>
             </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>Entrega Real</label><input type="text" maxlength="20" id="cx-inst-entrega-real" class="eui-input"></div>
-                <div class="cx-field"><label>NF Impo</label><input type="text" maxlength="20" id="cx-inst-nf-impo" class="eui-input"></div>
-            </div>
-            <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-inst-nf-recebimento" class="eui-input"></div>
+            <div id="cx-inst-pendencias"></div>
             <div class="cx-field">
                 <label>Documentos anexados <small style="font-weight:400; color:var(--eui-muted);">— ex.: HBL, Invoice, packing list...</small></label>
                 <div class="cx-checklist" id="cx-inst-documentos"><span class="cx-empty-mini">—</span></div>
@@ -724,6 +716,21 @@
         return escapeHtml(p.cod_ordem_compra || "—");
     }
 
+    // Marca processo com campo operacional em branco. Interessa sobretudo
+    // no Concluido: processo fechado antes da regra nova (ou via "Pular
+    // Status") ficou sem os dados e precisa ser completado.
+    function badgePendencias(p) {
+        const faltando = p.campos_faltando_concluir || [];
+        if (!faltando.length) return "";
+        const concluido = p.status_modulo === "Concluido";
+        const cor = concluido ? "#b91c1c" : "#92400e";
+        const fundo = concluido ? "#fee2e2" : "#fef3c7";
+        const titulo = `Faltam ${faltando.length}: ${faltando.join(", ")}`;
+        return `<span title="${escapeHtml(titulo)}" style="display:inline-block; margin-left:6px; background:${fundo}; color:${cor}; border-radius:999px; padding:1px 8px; font-size:10.5px; font-weight:800; white-space:nowrap;">
+            <i class="fas fa-triangle-exclamation"></i> ${faltando.length} sem preencher
+        </span>`;
+    }
+
     function renderTabela(processos) {
         const tb = $("cx-tbody");
         if (!processos.length) {
@@ -738,7 +745,7 @@
                 <td>${ocColunaHtml(p)}</td>
                 <td>${escapeHtml(p.po_numero || "—")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
-                <td>${badgeStatus(p)}</td>
+                <td>${badgeStatus(p)}${badgePendencias(p)}</td>
                 <td style="text-align:right;"><button class="cx-actions-btn" data-kebab="${p.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
         `).join("");
@@ -752,8 +759,9 @@
     // A partir de "Instrucao" em diante, avançar de modulo e' so
     // atualizacao de status (sem acao de negocio dedicada) - por isso
     // ganham o botao generico "Avançar" (valida por transicao, ver
-    // comex_service.avancar_status; hoje so Coleta -> Em Transito exige
-    // os dados de embarque preenchidos). OC/PO/Cotacao NAO ganham
+    // comex_service.avancar_status; as etapas do meio andam livres e so' a
+    // ultima, NF/Cambio -> Concluido, exige os campos operacionais
+    // preenchidos). OC/PO/Cotacao NAO ganham
     // "Avançar" porque ja tem seu proprio mecanismo de avanco (Criar PO,
     // finalizar PO, gerar link + escolher cotacao / enviar instrucao).
     // "Pular Status" ignora toda validacao e so aparece pra quem tem a
@@ -762,7 +770,15 @@
         const it = (act, icon, label, danger) =>
             `<button data-act="${act}" data-id="${p.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
         const btnPularStatus = () => PODE_PULAR_STATUS ? it("pular-status", "fa-forward-fast", "Pular Status", true) : "";
-        let itens = "";
+        // "Editar dados de embarque" (o formulario com TODOS os campos
+        // operacionais) aparece em TODO status a partir da Instrucao,
+        // inclusive no Concluido. Quem decide e' o back-end
+        // (comex_service.pode_editar_dados) - aqui e' uma linha so', em vez
+        // de repetir a regra em cada ramo abaixo e esquecer num deles.
+        const itemEditarDados = p.pode_editar_dados
+            ? it("instrucao", "fa-clipboard-list", "Editar dados de embarque")
+            : "";
+        let itens = itemEditarDados;
         if (p.status_modulo === "OC") {
             itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
             itens += it("criar-po", "fa-file-signature", "Criar PO");
@@ -785,12 +801,10 @@
             itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
             itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
         } else if (p.status_modulo === "Coleta" || p.status_modulo === "EmTransito") {
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
@@ -1781,18 +1795,57 @@
     // ── MODAL: Instrução de Embarque (Módulo 4, versão mínima) ─────────
     let processoInstrucaoAtual = null;
 
+    // Monta os campos operacionais a partir dos metadados do back-end.
+    // Campo cuja etapa ainda nao chegou aparece desabilitado, dizendo em
+    // qual modulo ele abre (o back tambem recusa a gravacao, nao e' so'
+    // visual). Obrigatorio mesmo, so' na hora de concluir.
+    function renderCamposOperacionais(p) {
+        const campos = p.campos_operacionais || [];
+        const cont = $("cx-inst-campos");
+        cont.innerHTML = campos.map((c) => {
+            const attrs = c.liberado ? "" : "disabled";
+            const dica = c.liberado
+                ? ""
+                : `<small style="font-weight:400; color:var(--eui-muted);">— abre em ${escapeHtml(c.modulo_minimo_label)}</small>`;
+            let input;
+            if (c.tipo === "data") {
+                input = `<input type="date" data-campo="${c.campo}" class="eui-input" value="${c.valor || ""}" ${attrs}>`;
+            } else if (c.tipo === "valor") {
+                input = `<input type="number" step="0.01" min="0" data-campo="${c.campo}" class="eui-input" value="${c.valor != null ? c.valor : ""}" ${attrs}>`;
+            } else {
+                input = `<input type="text" maxlength="20" data-campo="${c.campo}" class="eui-input" value="${escapeHtml(c.valor || "")}" ${attrs}>`;
+            }
+            return `<div class="cx-field" style="${c.liberado ? "" : "opacity:.6;"}">
+                <label>${escapeHtml(c.label)} ${dica}</label>${input}
+            </div>`;
+        }).join("");
+
+        const faltando = p.campos_faltando_concluir || [];
+        $("cx-inst-pendencias").innerHTML = faltando.length
+            ? `<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; border-radius:8px; padding:10px 12px; font-size:12.5px; margin-top:6px;">
+                   <i class="fas fa-circle-info"></i> Faltam <b>${faltando.length}</b> campo(s) para poder concluir o processo: ${escapeHtml(faltando.join(", "))}.
+               </div>`
+            : `<div style="background:#dcfce7; border:1px solid #bbf7d0; color:#166534; border-radius:8px; padding:10px 12px; font-size:12.5px; margin-top:6px;">
+                   <i class="fas fa-circle-check"></i> Todos os campos obrigatórios estão preenchidos.
+               </div>`;
+    }
+
+    // Manda so' os campos habilitados (o back ignora o resto de qualquer
+    // forma) + a previsao de entrega, que nao segue a regra por modulo.
+    function coletarCamposOperacionais() {
+        const dados = { previsao_entrega: $("cx-inst-previsao-entrega").value || null };
+        $("cx-inst-campos").querySelectorAll("[data-campo]:not([disabled])").forEach((el) => {
+            const v = el.value.trim();
+            dados[el.dataset.campo] = el.type === "text" ? v : (v || null);
+        });
+        return dados;
+    }
+
     function abrirModalInstrucao(p) {
         processoInstrucaoAtual = p;
         $("cx-inst-id-op").textContent = p.id_op;
-        $("cx-inst-ref-despachante").value = p.ref_despachante || "";
-        $("cx-inst-bl-awb").value = p.bl_awb || "";
-        $("cx-inst-invoice").value = p.invoice_numero || "";
-        $("cx-inst-etd").value = p.etd || "";
-        $("cx-inst-eta").value = p.eta || "";
+        renderCamposOperacionais(p);
         $("cx-inst-previsao-entrega").value = p.previsao_entrega || "";
-        $("cx-inst-entrega-real").value = p.entrega_real || "";
-        $("cx-inst-nf-impo").value = p.nf_impo || "";
-        $("cx-inst-nf-recebimento").value = p.nf_recebimento || "";
         docsInst.carregar(p.id);
         comentariosInst.carregar(p.id);
 
@@ -1815,17 +1868,7 @@
         try {
             const resp = await api(`/api/comex/processos/${processoInstrucaoAtual.id}/instrucao`, {
                 method: "POST",
-                body: JSON.stringify({
-                    ref_despachante: $("cx-inst-ref-despachante").value.trim(),
-                    bl_awb: $("cx-inst-bl-awb").value.trim(),
-                    invoice_numero: $("cx-inst-invoice").value.trim(),
-                    etd: $("cx-inst-etd").value || null,
-                    eta: $("cx-inst-eta").value || null,
-                    previsao_entrega: $("cx-inst-previsao-entrega").value || null,
-                    entrega_real: $("cx-inst-entrega-real").value.trim(),
-                    nf_impo: $("cx-inst-nf-impo").value.trim(),
-                    nf_recebimento: $("cx-inst-nf-recebimento").value.trim(),
-                }),
+                body: JSON.stringify(coletarCamposOperacionais()),
             });
             toast(resp.message, "success");
             fecharModalInstrucao();

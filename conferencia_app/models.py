@@ -3134,7 +3134,23 @@ class ComexProcesso(db.Model):
     previsao_entrega = db.Column(db.Date)
     entrega_real = db.Column(db.String(40))
     nf_impo = db.Column(db.String(40))
+    # Aposentado: saiu do formulario a pedido do Comex. A coluna fica no
+    # banco so' pra preservar o historico ja preenchido - nada escreve nela.
     nf_recebimento = db.Column(db.String(40))
+
+    # Numerario (adiantamento ao despachante) - abre no Desembarque.
+    numerario_numero = db.Column(db.String(40))
+    numerario_valor = db.Column(db.Float)
+    numerario_data_pagamento = db.Column(db.Date)
+
+    # DI (Declaracao de Importacao) - abre no Desembaraco.
+    di_numero = db.Column(db.String(40))
+    di_data = db.Column(db.Date)
+
+    # Data em que o processo foi efetivamente fechado. Nasce preenchida com
+    # a data da conclusao e continua editavel no Concluido (o fechamento
+    # contabil pode ter sido em outra data).
+    data_fechamento = db.Column(db.Date)
 
     # ── Modulo 3: Cotacao (resumo; detalhe/historico em ComexCotacao) ──────
     frete_aplicavel = db.Column(db.Boolean)  # deriva de pagador_frete == "Columbia"

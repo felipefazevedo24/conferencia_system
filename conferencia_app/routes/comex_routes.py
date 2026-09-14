@@ -88,7 +88,23 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "previsao_entrega": p.previsao_entrega.isoformat() if p.previsao_entrega else None,
         "entrega_real": p.entrega_real,
         "nf_impo": p.nf_impo,
+        # Aposentado do formulario; segue no payload so' pra nao quebrar
+        # quem ainda le' o historico.
         "nf_recebimento": p.nf_recebimento,
+        "numerario_numero": p.numerario_numero,
+        "numerario_valor": p.numerario_valor,
+        "numerario_data_pagamento": p.numerario_data_pagamento.isoformat() if p.numerario_data_pagamento else None,
+        "di_numero": p.di_numero,
+        "di_data": p.di_data.isoformat() if p.di_data else None,
+        "data_fechamento": p.data_fechamento.isoformat() if p.data_fechamento else None,
+        # Metadados por campo (rotulo, etapa em que abre, se ja liberou) +
+        # o que ainda falta pra poder concluir - o front monta o formulario
+        # a partir daqui, entao regra nova nao precisa ser repetida la'.
+        "campos_operacionais": svc.campos_operacionais_do_processo(p),
+        "campos_faltando_concluir": svc.campos_faltando_para_concluir(p),
+        # Se o menu de acoes deve oferecer "Editar dados de embarque" -
+        # regra fica no servico pra nao ser repetida ramo a ramo na tela.
+        "pode_editar_dados": svc.pode_editar_dados(p),
         "instrucao_enviada_em": p.instrucao_enviada_em.strftime("%d/%m/%Y %H:%M") if p.instrucao_enviada_em else None,
         "instrucao_enviada_por": p.instrucao_enviada_por,
         "cotacao_vencedora_id": p.cotacao_vencedora_id,

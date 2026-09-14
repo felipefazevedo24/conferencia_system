@@ -4915,6 +4915,11 @@ def test_comex_avancar_de_nf_cambio_conclui_processo(tmp_path):
         db.session.commit()
         pid = processo.id
 
+    # Concluir passou a exigir os campos operacionais preenchidos (regra do
+    # Comex: as etapas do meio andam livres, a conclusao e' que cobra tudo -
+    # ver test_comex_so_trava_na_conclusao_e_nao_nas_etapas_do_meio).
+    client.post(f"/api/comex/processos/{pid}/instrucao", json=_PAYLOAD_COMPLETO)
+
     resp = client.post(f"/api/comex/processos/{pid}/avancar", json={})
     assert resp.status_code == 200
     processo_payload = resp.get_json()["processo"]
@@ -6171,3 +6176,281 @@ def test_homologacao_api_http_e_pdf_do_formulario(tmp_path):
     assert client.get("/api/compras/homologacao/999999").status_code == 404
     assert client.post("/api/compras/homologacao/999999/enviar", json={}).status_code == 404
     assert client.get("/api/compras/homologacao/999999/pdf").status_code == 404
+
+
+def _criar_processo_comex(id_op="IM-0001/26", status="PO"):
+    from conferencia_app.models import ComexProcesso
+    from conferencia_app.services import comex_service as svc
+
+    processo = ComexProcesso(
+        id_op=id_op, tipo_operacao="IM", status_modulo=status,
+        status_slug=svc.status_slug(status), criado_por="TESTE",
+    )
+    db.session.add(processo)
+    db.session.commit()
+    return processo
+
+
+_PAYLOAD_COMPLETO = {
+    "ref_ff": "FF-1", "ref_despachante": "DESP-1", "invoice_numero": "INV-1", "bl_awb": "BL-1",
+    "etd": "2026-01-10", "eta": "2026-02-10",
+    "numerario_numero": "NUM-1", "numerario_valor": "5.000,50", "numerario_data_pagamento": "2026-02-01",
+    "entrega_real": "2026-02-15", "nf_impo": "NF-1", "di_numero": "DI-1", "di_data": "2026-02-12",
+}
+
+
+def test_comex_campo_so_abre_no_modulo_certo_e_dai_pra_frente(tmp_path):
+    """Cada campo operacional abre no modulo definido pelo Comex e segue
+    aberto nas etapas seguintes. A trava nao e' so' visual: o back-end
+    IGNORA campo de etapa que ainda nao chegou, senao bastaria chamar a API
+    direto pra furar a regra."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        processo = _criar_processo_comex(status="PO")
+
+        # Em PO nenhum campo operacional esta liberado ainda.
+        campos = svc.campos_operacionais_do_processo(processo)
+        assert campos, "o formulario precisa ter campos"
+        assert not any(c["liberado"] for c in campos)
+
+        # Tentar gravar de qualquer jeito nao grava nada.
+        svc._aplicar_campos_operacionais(processo, {"invoice_numero": "INV-9", "di_numero": "DI-9"})
+        assert processo.invoice_numero is None
+        assert processo.di_numero is None
+
+        # Em Transito: abre o bloco de embarque, mas DI/numerario ainda nao.
+        processo.status_modulo = "EmTransito"
+        svc._aplicar_campos_operacionais(processo, {
+            "invoice_numero": "INV-9", "numerario_numero": "NUM-9", "di_numero": "DI-9",
+        })
+        assert processo.invoice_numero == "INV-9"
+        assert processo.numerario_numero is None
+        assert processo.di_numero is None
+
+        # Desembarque abre o numerario (e o de Em Transito continua aberto).
+        processo.status_modulo = "Desembarque"
+        svc._aplicar_campos_operacionais(processo, {"numerario_numero": "NUM-9", "di_numero": "DI-9"})
+        assert processo.numerario_numero == "NUM-9"
+        assert processo.di_numero is None
+
+        # Desembaraco abre a DI.
+        processo.status_modulo = "Desembaraco"
+        svc._aplicar_campos_operacionais(processo, {"di_numero": "DI-9"})
+        assert processo.di_numero == "DI-9"
+
+        # Valor em pt-BR ("5.000,50") e' entendido como 5000.50.
+        svc._aplicar_campos_operacionais(processo, {"numerario_valor": "5.000,50"})
+        assert processo.numerario_valor == 5000.50
+
+        # Cada etapa libera um superconjunto da anterior.
+        liberados_por_etapa = []
+        for etapa in ("EmTransito", "Desembarque", "Desembaraco", "Concluido"):
+            processo.status_modulo = etapa
+            liberados_por_etapa.append({
+                c["campo"] for c in svc.campos_operacionais_do_processo(processo) if c["liberado"]
+            })
+        for anterior, seguinte in zip(liberados_por_etapa, liberados_por_etapa[1:]):
+            assert anterior < seguinte, "etapa seguinte tem que manter o que a anterior abriu"
+
+
+def test_comex_so_trava_na_conclusao_e_nao_nas_etapas_do_meio(tmp_path):
+    """Regra do Comex: as etapas intermediarias andam livres (campo vazio
+    nao trava nada no meio do caminho) e SO' a conclusao exige tudo
+    preenchido - inclusive a antiga trava de Coleta -> Em Transito, que
+    deixou de existir."""
+    import pytest
+
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        processo = _criar_processo_comex(status="Coleta")
+
+        # Antes isso estourava por falta de Ref. Despachante/BL/ETD/ETA.
+        svc.avancar_status(processo, "TESTE")
+        assert processo.status_modulo == "EmTransito"
+
+        # Segue andando livre ate' a ultima etapa, tudo vazio.
+        for esperado in ("Desembarque", "Desembaraco", "Transporte", "NFCambio"):
+            svc.avancar_status(processo, "TESTE")
+            assert processo.status_modulo == esperado
+
+        # Na conclusao, ai' sim: lista o que falta e nao deixa passar.
+        faltando = svc.campos_faltando_para_concluir(processo)
+        assert len(faltando) == 13
+        assert "REF Agente de Carga" in faltando
+        # Data de fechamento e' preenchida automaticamente - nao pode ser exigida.
+        assert not any("fechamento" in f.lower() for f in faltando)
+
+        with pytest.raises(ValueError) as erro:
+            svc.avancar_status(processo, "TESTE")
+        assert "antes de concluir" in str(erro.value)
+        assert processo.status_modulo == "NFCambio"
+
+        # Preenche tudo -> conclui, e a data de fechamento nasce sozinha.
+        svc._aplicar_campos_operacionais(processo, _PAYLOAD_COMPLETO)
+        assert svc.campos_faltando_para_concluir(processo) == []
+        svc.avancar_status(processo, "TESTE")
+        assert processo.status_modulo == "Concluido"
+        assert processo.data_fechamento is not None
+        assert processo.data_fechamento == processo.processo_concluido_em.date()
+
+        # No Concluido a data de fechamento fica editavel (o fechamento
+        # contabil pode ter sido em outra data).
+        svc._aplicar_campos_operacionais(processo, {"data_fechamento": "2026-03-01"})
+        assert processo.data_fechamento.isoformat() == "2026-03-01"
+
+
+def test_comex_api_expoe_campos_por_modulo_e_bloqueia_conclusao(tmp_path):
+    """A API entrega os metadados que a tela usa pra montar o formulario
+    (rotulo, etapa em que abre, se ja liberou) e o que falta pra concluir."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-0002/26", status="NFCambio")
+        processo_id = processo.id
+
+    assert client.get("/comex").status_code == 200
+
+    # Concluir vazio -> 400 dizendo exatamente o que falta.
+    bloqueado = client.post(f"/api/comex/processos/{processo_id}/avancar", json={})
+    assert bloqueado.status_code == 400
+    assert "antes de concluir" in bloqueado.get_json()["error"]
+
+    salvo = client.post(f"/api/comex/processos/{processo_id}/instrucao", json=_PAYLOAD_COMPLETO)
+    assert salvo.status_code == 200
+    payload = salvo.get_json()["processo"]
+    assert payload["numerario_valor"] == 5000.50
+    assert payload["di_numero"] == "DI-1"
+    assert payload["ref_ff"] == "FF-1"
+    assert payload["campos_faltando_concluir"] == []
+
+    # Metadados por campo, na ordem do formulario.
+    campos = {c["campo"]: c for c in payload["campos_operacionais"]}
+    assert campos["invoice_numero"]["modulo_minimo"] == "EmTransito"
+    assert campos["invoice_numero"]["modulo_minimo_label"] == "Em Trânsito"
+    assert campos["numerario_numero"]["modulo_minimo"] == "Desembarque"
+    assert campos["di_numero"]["modulo_minimo_label"] == "Desembaraço"
+    assert campos["data_fechamento"]["modulo_minimo"] == "Concluido"
+    # Em NF/Cambio, a data de fechamento ainda nao abriu.
+    assert campos["data_fechamento"]["liberado"] is False
+    assert campos["di_numero"]["liberado"] is True
+
+    concluido = client.post(f"/api/comex/processos/{processo_id}/avancar", json={})
+    assert concluido.status_code == 200
+    assert concluido.get_json()["processo"]["status_modulo"] == "Concluido"
+    assert concluido.get_json()["processo"]["data_fechamento"]
+
+
+def test_comex_nf_recebimento_saiu_do_formulario_mas_o_historico_fica(tmp_path):
+    """"NF Recebimento" foi aposentada: some do formulario e nada mais
+    escreve nela, mas a coluna continua no banco preservando o que ja
+    estava preenchido."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        processo = _criar_processo_comex(status="EmTransito")
+        processo.nf_recebimento = "NF-ANTIGA-123"
+        db.session.commit()
+
+        # Nao esta mais entre os campos do formulario.
+        campos = {c["campo"] for c in svc.campos_operacionais_do_processo(processo)}
+        assert "nf_recebimento" not in campos
+        # Nem entre os exigidos pra concluir.
+        assert not any("recebimento" in f.lower() for f in svc.campos_faltando_para_concluir(processo))
+
+        # Mandar o campo pela API nao grava mais nada.
+        svc._aplicar_campos_operacionais(processo, {"nf_recebimento": "NF-NOVA-999"})
+        assert processo.nf_recebimento == "NF-ANTIGA-123"
+
+
+def test_comex_processo_ja_concluido_sem_dados_ainda_pode_ser_preenchido(tmp_path):
+    """Processo fechado ANTES da regra nova (ou via "Pular Status", que
+    ignora validacao) ficou sem os campos operacionais. No Concluido todos
+    os campos continuam editaveis - inclusive a Data de fechamento - pra
+    esse historico poder ser completado sem precisar estornar o processo."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-LEGADO/25", status="Concluido")
+        processo_id = processo.id
+
+        # Concluido libera TODOS os campos (e' a ultima etapa da sequencia).
+        assert all(c["liberado"] for c in svc.campos_operacionais_do_processo(processo))
+        assert len(svc.campos_faltando_para_concluir(processo)) == 13
+
+    # Preenche tudo depois de concluido, sem estornar.
+    completo = dict(_PAYLOAD_COMPLETO, data_fechamento="2025-06-30")
+    resposta = client.post(f"/api/comex/processos/{processo_id}/instrucao", json=completo)
+    assert resposta.status_code == 200
+    payload = resposta.get_json()["processo"]
+    assert payload["campos_faltando_concluir"] == []
+    assert payload["data_fechamento"] == "2025-06-30"
+    assert payload["numerario_valor"] == 5000.50
+    # Preencher nao mexe no status - o processo continua concluido.
+    assert payload["status_modulo"] == "Concluido"
+
+
+def test_comex_pular_status_conclui_sem_exigir_campos(tmp_path):
+    """"Pular Status" (permissao de gerencia) existe justamente pra
+    processo que comecou fora do sistema: conclui sem exigir os campos,
+    e' o caminho que gera os concluidos incompletos - que depois sao
+    completados pelo proprio Concluido."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-PULA/26", status="NFCambio")
+
+        # Avancar normal e' barrado...
+        import pytest
+
+        with pytest.raises(ValueError):
+            svc.avancar_status(processo, "TESTE")
+
+        # ...mas pular status passa, por design.
+        svc.pular_status(processo, "GERENTE")
+        assert processo.status_modulo == "Concluido"
+        # E a data de fechamento nasce preenchida tambem por esse caminho.
+        assert processo.data_fechamento is not None
+        # Os campos seguem pendentes, esperando alguem completar.
+        assert len(svc.campos_faltando_para_concluir(processo)) == 13
+
+
+def test_comex_editar_dados_disponivel_em_todo_status_a_partir_da_instrucao(tmp_path):
+    """O formulario "Editar dados de embarque" (com TODOS os campos
+    operacionais) fica disponivel em TODO status a partir da Instrucao,
+    inclusive no Concluido. A regra vive no servico e vai pro front pelo
+    payload (pode_editar_dados), em vez de repetida ramo a ramo no menu."""
+    from conferencia_app.models import ComexProcesso
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        antes_da_instrucao = ("OC", "PO", "Cotacao")
+        for i, modulo in enumerate(svc.MODULOS_SEQUENCIA):
+            processo = ComexProcesso(
+                id_op=f"IM-{i:04d}/26", tipo_operacao="IM", status_modulo=modulo,
+                status_slug=svc.status_slug(modulo), criado_por="TESTE",
+            )
+            esperado = modulo not in antes_da_instrucao
+            assert svc.pode_editar_dados(processo) is esperado, modulo
+
+    # O payload da API leva a decisao pronta pra tela.
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-7777/26", status="Transporte")
+        processo_id = processo.id
+    payload = client.get(f"/api/comex/processos/{processo_id}").get_json()
+    payload = payload.get("processo") or payload
+    assert payload["pode_editar_dados"] is True

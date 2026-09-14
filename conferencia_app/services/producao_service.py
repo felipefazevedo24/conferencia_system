@@ -16,6 +16,8 @@ import unicodedata
 from datetime import date, datetime
 from typing import Any
 
+from flask import current_app, has_app_context
+
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
 
@@ -33,7 +35,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v4"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v5"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -51,6 +53,60 @@ _STRUCTURE_CACHE_TTL_SECONDS = 10.0
 _STRUCTURE_CACHE_LIMIT = 16
 _STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
 _STRUCTURE_LOCK = threading.RLock()
+_STRUCTURE_JOBS = {}
+_QUERY_CACHE = OrderedDict()
+_QUERY_JOBS = {}
+_QUERY_LOCK = threading.RLock()
+_STRUCTURE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="production-structure")
+
+
+def _scope():
+    return current_app._get_current_object() if has_app_context() else None
+
+
+def _cached_read(cache, jobs, lock, key, loader, ttl=10.0, limit=128):
+    # Only identical reads share work; unrelated OS requests never hold this lock.
+    key = (_scope(), key)
+    with lock:
+        cached = cache.get(key)
+        if cached and time.monotonic() - cached[0] <= ttl:
+            cache.move_to_end(key)
+            return copy.deepcopy(cached[1])
+        future = jobs.get(key)
+        owner = future is None
+        if owner:
+            future = Future()
+            jobs[key] = future
+    if not owner:
+        return copy.deepcopy(future.result())
+    try:
+        result = loader()
+        with lock:
+            cache[key] = (time.monotonic(), copy.deepcopy(result))
+            cache.move_to_end(key)
+            while len(cache) > limit:
+                cache.popitem(last=False)
+        future.set_result(result)
+        return copy.deepcopy(result)
+    except BaseException as error:
+        future.set_exception(error)
+        raise
+    finally:
+        with lock:
+            jobs.pop(key, None)
+
+
+def _metadata_read(fetch, sql, params):
+    key = (sql, tuple(sorted(params.items())))
+    return _cached_read(_QUERY_CACHE, _QUERY_JOBS, _QUERY_LOCK, key,
+                        lambda: fetch(sql, params))
+
+
+def _run_with_app(app, function, *args):
+    if app is None:
+        return function(*args)
+    with app.app_context():
+        return function(*args)
 
 
 def _iso(value: Any) -> str | None:
@@ -65,7 +121,7 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     termo = _texto(termo)
     if not termo:
         return []
-    rows = fetch_all(
+    rows = _metadata_read(fetch_all,
         queries.SQL_PRODUCAO_BUSCAR_OS,
         {
             "cod_empresa": 1,
@@ -86,37 +142,29 @@ def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
 
 
 def obter_estrutura(numero_os: str) -> dict[str, Any]:
-    cache_key = _texto(numero_os)
-    now = time.monotonic()
-    with _STRUCTURE_LOCK:
-        cached = _STRUCTURE_CACHE.get(cache_key)
-        if cached and now - cached[0] <= _STRUCTURE_CACHE_TTL_SECONDS:
-            _STRUCTURE_CACHE.move_to_end(cache_key)
-            return copy.deepcopy(cached[1])
-        if cached:
-            _STRUCTURE_CACHE.pop(cache_key, None)
-    ordem = fetch_one(
-        queries.SQL_PRODUCAO_BUSCAR_OS,
-        {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1},
+    numero_os = _texto(numero_os)
+    return _cached_read(
+        _STRUCTURE_CACHE, _STRUCTURE_JOBS, _STRUCTURE_LOCK, numero_os,
+        lambda: _carregar_estrutura(numero_os),
+        _STRUCTURE_CACHE_TTL_SECONDS, _STRUCTURE_CACHE_LIMIT,
     )
-    if not ordem:
-        raise LookupError(f"OS {numero_os} nao encontrada.")
-    itens = fetch_all(
-        queries.SQL_PRODUCAO_ESTRUTURA_OS,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+
+
+def _carregar_estrutura(numero_os):
+    ordem = _obter_ordem(numero_os)
+    params = {"cod_empresa": 1, "cod_os": ordem["codigo"]}
+    app = _scope()
+    items_job = _STRUCTURE_EXECUTOR.submit(
+        _run_with_app, app, _metadata_read, fetch_all,
+        queries.SQL_PRODUCAO_ESTRUTURA_OS, params,
     )
-    operacoes = fetch_all(
-        queries.SQL_PRODUCAO_OPERACOES_OS,
-        {"cod_empresa": 1, "cod_os": ordem["codigo"]},
+    operations_job = _STRUCTURE_EXECUTOR.submit(
+        _run_with_app, app, fetch_all, queries.SQL_PRODUCAO_OPERACOES_OS, params,
     )
-    payload = _estrutura_payload(ordem, itens, operacoes)
-    payload["rncs"] = _rncs(ordem["codigo"])
-    with _STRUCTURE_LOCK:
-        _STRUCTURE_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(payload))
-        _STRUCTURE_CACHE.move_to_end(cache_key)
-        while len(_STRUCTURE_CACHE) > _STRUCTURE_CACHE_LIMIT:
-            _STRUCTURE_CACHE.popitem(last=False)
-    return copy.deepcopy(payload)
+    rncs_job = _STRUCTURE_EXECUTOR.submit(_run_with_app, app, _rncs, ordem["codigo"])
+    payload = _estrutura_payload(ordem, items_job.result(), operations_job.result())
+    payload["rncs"] = rncs_job.result()
+    return payload
 
 
 def obter_materiais(numero_os: str, aux_code: int) -> dict[str, Any]:
@@ -165,7 +213,7 @@ def obter_documentos(
 ) -> list[dict[str, Any]]:
     ordem = ordem or _obter_ordem(numero_os)
     if context is None:
-        context = fetch_one(
+        context = _metadata_read(fetch_one,
             queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
             {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
         )
@@ -184,7 +232,7 @@ def obter_documentos(
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    rows = fetch_all(queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
     return [_documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code) for row in rows]
 
 
@@ -339,7 +387,7 @@ def _resolver_documento_previa(
 
     drawing_number = _texto_comparavel(context.get("n_desenho"))
     if drawing_number:
-        item_rows = fetch_all(
+        item_rows = _metadata_read(fetch_all,
             queries.SQL_PRODUCAO_ESTRUTURA_OS,
             {"cod_empresa": 1, "cod_os": ordem["codigo"]},
         )
@@ -351,7 +399,7 @@ def _resolver_documento_previa(
             and not _revisao_contexto_conflitante(item, context)
         }
         if matching_aux_codes:
-            rows = fetch_all(
+            rows = _metadata_read(fetch_all,
                 queries.SQL_PRODUCAO_DOCUMENTOS_OS,
                 {"cod_empresa": 1, "cod_os": ordem["codigo"]},
             )
@@ -375,7 +423,7 @@ def _resolver_documento_previa(
             return None, direct_documents
         if _revisao_contexto_conflitante(origin, context):
             return None, direct_documents
-        rows = fetch_all(
+        rows = _metadata_read(fetch_all,
             queries.SQL_PRODUCAO_DOCUMENTOS_ITEM,
             {"cod_empresa": 1, **origin},
         )
@@ -403,7 +451,7 @@ def _revisao_contexto_conflitante(item: dict[str, Any], context: dict[str, Any])
 
 
 def _origem_documento(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | None:
-    schema = fetch_one(queries.SQL_PRODUCAO_ORIGEM_SCHEMA, {"cod_empresa": 1})
+    schema = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ORIGEM_SCHEMA, {"cod_empresa": 1})
     if not schema or not schema.get("supported"):
         return None
     return fetch_one(
@@ -538,11 +586,24 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
         with fitz.open(stream=content, filetype="pdf") as pdf:
             if pdf.page_count == 0:
                 raise LookupError("Documento sem paginas")
+            from .production_images import _largest_placed_image, render_variants
+
             candidates = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
                 candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
             candidates.sort(key=lambda item: item[0], reverse=True)
+            # CAD PDFs can contain a shaded rendering alongside vector dimensions.
+            # Match Estrutura: an explicit isometric view takes priority, then the
+            # embedded rendering, before scoring unlabelled technical linework.
+            labeled = [candidate for candidate in candidates if candidate[3]]
+            if labeled:
+                _, page_index, clip, _ = labeled[0]
+                return _render_clip_previews(pdf.load_page(page_index), clip)
+            for page in pdf:
+                image = _largest_placed_image(pdf, page)
+                if image is not None:
+                    return render_variants(image)
             ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
             if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 raise LookupError("Vista isometrica nao identificada com confianca")
@@ -556,12 +617,13 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
 
 
 def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
-    rendered = {}
-    for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
-        scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
-        rendered[variant] = pixmap.tobytes("png")
-    return rendered
+    from PIL import Image
+    from .production_images import render_variants
+
+    scale = max(1.5, min(300 / 72, 1800 / max(clip.width, clip.height)))
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+    image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+    return render_variants(image)
 
 
 def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
@@ -666,7 +728,7 @@ def _finalizar_requisicao_preview(cache_key: str, future: Future[tuple[bytes, st
 
 
 def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tuple[bytes | None, str, str]:
-    request_key = f"{_texto(numero_os)}|{int(aux_code)}|{variant}"
+    request_key = f"{id(_scope())}|{_texto(numero_os)}|{int(aux_code)}|{variant}"
     now = time.monotonic()
     with _PREVIEW_REQUEST_LOCK:
         cached = _PREVIEW_REQUEST_CACHE.get(request_key)
@@ -678,7 +740,9 @@ def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tu
         if cached:
             _PREVIEW_REQUEST_CACHE.pop(request_key, None)
         if request_key not in _PREVIEW_REQUEST_JOBS:
-            future = _PREVIEW_REQUEST_EXECUTOR.submit(obter_preview, numero_os, aux_code, variant, True)
+            future = _PREVIEW_REQUEST_EXECUTOR.submit(
+                _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
+            )
             _PREVIEW_REQUEST_JOBS[request_key] = future
             future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
     pending_etag = hashlib.sha256(request_key.encode("utf-8")).hexdigest()
@@ -692,7 +756,7 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
         return _obter_preview_assincrono(numero_os, aux_code, variant)
     ordem = _obter_ordem(numero_os)
     params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
-    context = fetch_one(queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
+    context = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
     if not context:
         raise LookupError("Item nao encontrado")
     document, _ = _resolver_documento_previa(ordem, numero_os, aux_code, context)
@@ -730,7 +794,7 @@ def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
-    ordem = fetch_one(queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
+    ordem = _metadata_read(fetch_one, queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
     if not ordem:
         raise LookupError(f"OS {numero_os} nao encontrada.")
     return ordem

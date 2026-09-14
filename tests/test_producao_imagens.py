@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import threading
 import time
@@ -32,6 +33,13 @@ def _load_production_service():
 
 
 producao_service = _load_production_service()
+
+
+@pytest.fixture(autouse=True)
+def reset_query_cache():
+    producao_service._QUERY_CACHE.clear()
+    yield
+    producao_service._QUERY_CACHE.clear()
 
 
 def document(document_id, kind, filename, description=""):
@@ -296,6 +304,33 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
         producao_service._render_pdf_previews(b"nao e pdf")
 
 
+def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (360, 480), "white")
+    ImageDraw.Draw(image).ellipse((70, 40, 280, 440), fill=(120, 80, 60))
+    content = io.BytesIO()
+    image.save(content, format="PNG")
+    with producao_service.fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=600)
+        page.insert_image(producao_service.fitz.Rect(420, 90, 600, 330), stream=content.getvalue())
+        # A dense technical view would otherwise win the geometry score.
+        shape = page.new_shape()
+        for y in range(120, 330, 5):
+            shape.draw_line((40, y), (300, y + 80))
+        shape.finish(color=(0, 0, 0), width=1)
+        shape.commit()
+        previews = producao_service._render_pdf_previews(pdf.tobytes())
+
+    thumb = Image.open(io.BytesIO(previews["thumbnail"]))
+    detail = Image.open(io.BytesIO(previews["detail"]))
+    assert thumb.mode == detail.mode == "RGBA"
+    assert max(thumb.size) <= 720
+    assert detail.getpixel((detail.width // 2, detail.height // 2)) == (120, 80, 60, 255)
+    assert detail.getchannel("A").getextrema() == (0, 255)
+    assert abs(thumb.width / thumb.height - detail.width / detail.height) < 0.01
+
+
 def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
@@ -459,13 +494,12 @@ def test_controles_solicitados_nao_sao_criados_na_producao():
     assert "^Ampliar(?: imagem)?$" in script
 
 
-def test_detalhes_identifica_e_limita_a_miniatura_isometrica():
+def test_detalhes_exibe_a_peca_no_tamanho_da_referencia():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
-    assert 'content: "Visão isométrica";' in css
     detail_rule = css.split(".detail-preview {", 1)[1].split("}", 1)[0]
-    assert "width: 160px;" in detail_rule
-    assert "height: 160px;" in detail_rule
+    assert "width: calc(100% - 24px);" in detail_rule
+    assert "height: clamp(280px, 36vh, 360px);" in detail_rule
 
 
 def test_arvore_exibe_somente_numero_da_os():
@@ -484,3 +518,56 @@ def test_hierarquia_compacta_usa_as_cores_solicitadas_sem_rotulo_extra():
     assert "productionDepth" in script
     assert "Hierarquia compacta" not in css
     assert "Hierarquia compacta" not in script
+
+
+def test_busca_reutiliza_resultado_sem_misturar_termos():
+    with patch.object(producao_service, "fetch_all", return_value=[{"n_os": "7807"}]) as query:
+        first = producao_service.buscar_os("7807")
+        first.clear()
+        assert len(producao_service.buscar_os("7807")) == 1
+        producao_service.buscar_os("9959")
+    assert query.call_count == 2
+
+
+def test_cache_expira_e_nao_guarda_falhas():
+    cache, jobs, lock = OrderedDict(), {}, threading.RLock()
+    with patch.object(producao_service.time, "monotonic", return_value=0):
+        assert producao_service._cached_read(cache, jobs, lock, "os", lambda: 1) == 1
+    with patch.object(producao_service.time, "monotonic", return_value=11):
+        with pytest.raises(ValueError):
+            producao_service._cached_read(cache, jobs, lock, "os", lambda: (_ for _ in ()).throw(ValueError()))
+        assert producao_service._cached_read(cache, jobs, lock, "os", lambda: 2) == 2
+    assert not jobs
+
+
+def test_contexto_preservado_no_worker_e_cache_isolado_por_app():
+    from flask import Flask, current_app
+    first, second = Flask("first"), Flask("second")
+    first.config["PRODUCTION_TEST"] = "configured"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(producao_service._run_with_app, first,
+                           lambda: current_app.config["PRODUCTION_TEST"]).result() == "configured"
+    with patch.object(producao_service, "fetch_one", side_effect=[{"codigo": 1}, {"codigo": 2}]) as query:
+        with first.app_context():
+            assert producao_service._obter_ordem("7807")["codigo"] == 1
+            assert producao_service._obter_ordem("7807")["codigo"] == 1
+        with second.app_context():
+            assert producao_service._obter_ordem("7807")["codigo"] == 2
+    assert query.call_count == 2
+
+
+def test_primeira_abertura_executa_consultas_independentes_em_paralelo():
+    barrier = threading.Barrier(3, timeout=2)
+
+    def read(*args):
+        barrier.wait()
+        return []
+
+    with (
+        patch.object(producao_service, "_STRUCTURE_CACHE", OrderedDict()),
+        patch.object(producao_service, "fetch_one", return_value={"codigo": 9}),
+        patch.object(producao_service, "fetch_all", side_effect=read) as query,
+        patch.object(producao_service, "_estrutura_payload", return_value={"nos": []}),
+    ):
+        assert producao_service.obter_estrutura("parallel")["rncs"] == []
+    assert query.call_count == 3
