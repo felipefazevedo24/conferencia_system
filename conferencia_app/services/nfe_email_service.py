@@ -1019,6 +1019,7 @@ def _montar_corpo_html_aviso_coleta_fob(
     endereco_retirada: str,
     modo_teste: bool,
     destino_real: str,
+    modalidade: str = "FOB",
 ) -> str:
     aviso_teste = ""
     if modo_teste:
@@ -1031,6 +1032,13 @@ def _montar_corpo_html_aviso_coleta_fob(
 
     cliente = (nome_cliente or "Cliente").strip()
     peso_fmt = _fmt_num_ptbr(peso, 2)
+
+    incoterm_descricao = {
+        "CIF": "CIF (Cost, Insurance and Freight)",
+        "FOB": "FOB (Free On Board)",
+        "DAP": "DAP (Delivered at Place)",
+        "FCA": "FCA (Free Carrier)",
+    }.get(str(modalidade or "FOB").upper(), "FOB (Free On Board)")
 
     return f"""\
         <!DOCTYPE html>
@@ -1056,7 +1064,7 @@ def _montar_corpo_html_aviso_coleta_fob(
                                 Informamos que seu pedido sob a nota fiscal n&ordm; <strong>{numero_nf}</strong>
                                 encontra-se pronto para expedição e disponível para coleta em nossa unidade.
                                 <br><br>
-                                Conforme acordado na modalidade <strong>FOB (Free On Board)</strong>,
+                                Conforme acordado na modalidade <strong>{incoterm_descricao}</strong>,
                                 solicitamos que seja providenciado o transporte para retirada da mercadoria
                                 dentro do prazo estabelecido.
                             </td>
@@ -1249,6 +1257,7 @@ def enviar_aviso_coleta_fob(
     peso: float = 0,
     disparado_por: str = "sistema",
     origem: str = "RomaneioFOB",
+    modalidade: str = "FOB",
     envio_assincrono: bool = True,
 ) -> dict:
     """Envia aviso de mercadoria disponivel para coleta para frete FOB.
@@ -1375,6 +1384,7 @@ def enviar_aviso_coleta_fob(
         endereco_retirada=endereco,
         modo_teste=modo_teste,
         destino_real=destino_real,
+        modalidade=modalidade,
     )
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(f"Mercadoria disponível para coleta - Pedido {nota.numero}", "plain", "utf-8"))

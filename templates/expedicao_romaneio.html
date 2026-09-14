@@ -340,9 +340,10 @@
                         <select id="rom-tipo-frete" class="rom-input">
                             <option value="FOB">FOB - Frete por conta do destinatário</option>
                             <option value="CIF">CIF - Frete por conta do remetente</option>
-                            <option value="PROP_REM">Transporte próprio do remetente</option>
-                            <option value="PROP_DEST">Transporte próprio do destinatário</option>
+                            <option value="PROP_REM">DAP - Transporte próprio do remetente</option>
+                            <option value="PROP_DEST">FCA - Transporte próprio do destinatário</option>
                         </select>
+                        <small style="display:block;margin-top:6px;color:#64748b;line-height:1.45;">CONSIDERAR: MODALIDADE DO TRANSPORTE CIF (Cost, Insurance and Freight), FOB (Free On Board), DAP (Delivered at Place) E FCA (Free Carrier).</small>
                     </div>
                     <div class="rom-form-group">
                         <label class="rom-label">Orçamento (Faturamento)</label>
@@ -653,8 +654,8 @@
         switch (t) {
             case "CIF": return "CIF";
             case "FOB": return "FOB";
-            case "PROP_REM": return "Próprio rem.";
-            case "PROP_DEST": return "Próprio dest.";
+            case "PROP_REM": return "DAP";
+            case "PROP_DEST": return "FCA";
             default: return t || "FOB";
         }
     }
@@ -832,8 +833,8 @@
                         <select class="rom-select" id="rom-frete-inline-${r.id}" ${editavel ? "" : "disabled"} onchange="alterarFreteInline(${r.id}, this.value)">
                             <option value="FOB" ${r.tipo_frete === "FOB" ? "selected" : ""}>FOB - Frete por conta do destinatário</option>
                             <option value="CIF" ${r.tipo_frete === "CIF" ? "selected" : ""}>CIF - Frete por conta do remetente</option>
-                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>Transporte próprio do remetente</option>
-                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>Transporte próprio do destinatário</option>
+                            <option value="PROP_REM" ${r.tipo_frete === "PROP_REM" ? "selected" : ""}>DAP - Transporte próprio do remetente</option>
+                            <option value="PROP_DEST" ${r.tipo_frete === "PROP_DEST" ? "selected" : ""}>FCA - Transporte próprio do destinatário</option>
                         </select>
                         ${editavel ? "" : `<small style="color:#9ca3af;">Somente romaneios em Rascunho podem ser alterados.</small>`}
                     </div>
