@@ -1,10 +1,10 @@
 # Endereçamento após recebimento
 
-Menu: **Logística → Recebimento → Endereçamento**. A fila é criada apenas na confirmação final de `/validar`, para itens conformes e com quantidade positiva. A validação preliminar não cria tarefas. Divergências seguem a tratativa existente; não são liberadas automaticamente para armazenagem. A tarefa usa o ID do item da nota, preservando a identidade mesmo quando números de NF se repetem.
+Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparece logo após **Conferido / Ag. Lançamento**. Ao clicar, a fila aparece na mesma tela; não existe página ou item adicional no menu lateral. A fila é criada apenas na confirmação final de `/validar`, para itens conformes e com quantidade positiva. A validação preliminar não cria tarefas. Divergências seguem a tratativa existente; não são liberadas automaticamente para armazenagem. A tarefa usa o ID do item da nota, preservando a identidade mesmo quando números de NF se repetem.
 
 ## Operação
 
-- A confirmação do recebimento oferece endereçar agora ou deixar na fila.
+- A confirmação do recebimento oferece endereçar agora ou deixar na fila. Ao aceitar, abre a etapa dentro de `/conferencia?etapa=enderecamento`, filtrada pelos itens recém-conferidos.
 - Filtros por NF, SKU, descrição e fornecedor; filas Pendente, Aguardando sincronização e Concluído.
 - Câmera do celular lê SKU e local. Não há entrada manual, colagem, upload de fotografia ou alternativa de teclado para esses campos. Quantidade e lote podem ser digitados.
 - SKU deve ser o `codigo_grv` vinculado ao item; um vínculo ausente precisa ser corrigido no recebimento. O próximo scan atualiza o vínculo da tarefa pendente.

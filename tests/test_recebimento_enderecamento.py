@@ -245,9 +245,12 @@ def test_final_receiving_creates_queue_but_preliminary_validation_does_not(tmp_p
     with app.app_context():
         assert Tarefa.query.first().status == 'Pendente'
         assert db.session.get(ItemNota,item_id).status == 'Concluído'
-    page = client.get('/recebimento/enderecamento')
+    page = client.get('/conferencia')
     assert page.status_code == 200
     assert b'pa-camera' in page.data
+    assert b'receb-enderecamento-painel' in page.data
+    assert b'href="/recebimento/enderecamento"' not in page.data
+    assert client.get('/recebimento/enderecamento').status_code == 404
 
 
 def test_bridge_location_query_is_authenticated_and_parameterized(monkeypatch):

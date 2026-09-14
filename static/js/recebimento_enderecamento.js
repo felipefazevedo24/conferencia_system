@@ -4,7 +4,7 @@
  const $ = id => document.getElementById(id);
  const api = '/api/recebimento/enderecamento';
  let status = 'Pendente', page = 1, items = [], selected, skuToken, allocations = [], scanner, scanning = false, busy = false, listRequest = 0;
- const ids = new URLSearchParams(location.search).get('ids') || '';
+ let ids = new URLSearchParams(location.search).get('ids') || '';
  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
  const date = value => value ? new Date(value).toLocaleString('pt-BR') : '—';
  function feedback(message, work = false) { $(work ? 'pa-work-feedback' : 'pa-feedback').textContent = message; }
@@ -22,6 +22,7 @@
    const data = await request(`${api}?${query}`);
    if (version !== listRequest) return;
    items = data.itens; $('pa-list').replaceChildren();
+   if (!ids && !$('pa-search').value) $('dash-enderecamento').textContent = data.contadores.Pendente;
    document.querySelectorAll('#pa-tabs button').forEach(b => { b.classList.toggle('active', b.dataset.status === status); b.querySelector('span').textContent = `(${data.contadores[b.dataset.status]})`; });
    if (!items.length) $('pa-list').append(el('p', 'Nenhum material nesta fila para o filtro selecionado.', 'pa-card'));
    items.forEach(item => {
@@ -135,5 +136,10 @@
   $('pa-show-locals').onclick = async () => {try {showLocals(await request(`${api}/locais`));} catch(err) {feedback(err.message);}};
  }
  document.addEventListener('visibilitychange', () => {if (document.hidden) stopCamera();});
- window.addEventListener('pagehide', stopCamera); refresh();
+ window.addEventListener('pagehide', stopCamera);
+ document.addEventListener('recebimento:abrir-enderecamento', refresh);
+ $('pa-clear-filter').onclick = () => { ids=''; page=1; $('pa-search').value=''; refresh(); };
+ if (new URLSearchParams(location.search).get('etapa') === 'enderecamento') {
+  aplicarFiltroReceb('enderecamento', document.querySelector('[data-filter="enderecamento"]'));
+ } else { refresh(); }
 })();

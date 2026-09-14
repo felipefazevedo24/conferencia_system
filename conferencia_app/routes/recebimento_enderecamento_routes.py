@@ -1,5 +1,5 @@
 """Fila de endereçamento do recebimento e leituras pela câmera."""
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy import or_
 
 from ..auth import permission_required, has_permission
@@ -23,12 +23,6 @@ def serializar(t):
             "criado_em": t.criado_em.isoformat(), "confirmado_por": t.confirmado_por,
             "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
             "erro": t.erro, "enviado": t.enderecos_enviados}
-
-
-@recebimento_enderecamento_bp.get("/recebimento/enderecamento")
-@permission_required(PERMISSION)
-def pagina():
-    return render_template("recebimento_enderecamento.html", pode_gerenciar=has_permission(MANAGE))
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento")
