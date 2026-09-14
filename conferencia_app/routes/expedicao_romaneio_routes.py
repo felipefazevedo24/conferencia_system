@@ -184,8 +184,8 @@ _MODFRETE_LABEL = {
 _FRETE_GRUPO_LABEL = {
     "CIF": "CIF",
     "FOB": "FOB",
-    "PROP_REM": "DAP - Transporte próprio do remetente",
-    "PROP_DEST": "FCA - Transporte próprio do destinatário",
+    "PROP_REM": "DAP - TRANSPORTE PRÓPRIO DO REMETENTE",
+    "PROP_DEST": "FCA - TRANSPORTE PRÓPRIO DO DESTINATÁRIO",
     "TERCEIROS": "Terceiros",
     "SEM_FRETE": "Sem frete",
 }
