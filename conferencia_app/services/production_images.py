@@ -9,7 +9,7 @@ import io
 import math
 from typing import cast
 
-import fitz
+import pymupdf as fitz
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
@@ -129,7 +129,7 @@ def _isolate_dominant_object(image: Image.Image) -> tuple[Image.Image, Image.Ima
     difference = ImageChops.difference(image, Image.new("RGB", image.size, background))
     red, green, blue = difference.split()
     maximum = ImageChops.lighter(ImageChops.lighter(red, green), blue)
-    foreground = maximum.point(lambda value: 255 if value >= 18 else 0)
+    foreground = maximum.point([255 if value >= 18 else 0 for value in range(256)])
     component = _dominant_component(foreground)
     if component is None:
         return image, Image.new("L", image.size, 255)
@@ -180,9 +180,9 @@ def _background_to_alpha(image: Image.Image, selection: Image.Image) -> Image.Im
         else 96
     )
     alpha = maximum.point(
-        lambda value: _background_difference_to_alpha(value, opaque_limit)
+        [_background_difference_to_alpha(value, opaque_limit) for value in range(256)]
     )
-    candidate = maximum.point(lambda value: 255 if value > 6 else 0)
+    candidate = maximum.point([255 if value > 6 else 0 for value in range(256)])
     interior = candidate.filter(ImageFilter.MinFilter(3))
     interior = ImageChops.multiply(interior, selection.convert("L"))
     alpha = ImageChops.lighter(alpha, interior)
@@ -234,7 +234,7 @@ def _clamp_channel(value: int) -> int:
 
 def _trim_transparent_space(image: Image.Image) -> Image.Image:
     alpha = image.getchannel("A")
-    bbox = alpha.point(lambda value: 255 if value > 2 else 0).getbbox()
+    bbox = alpha.point([255 if value > 2 else 0 for value in range(256)]).getbbox()
     if bbox is None:
         return image
     padding = 8
@@ -464,7 +464,7 @@ def _mask_value(image: Image.Image, x: int, y: int) -> int:
 def _trim_white_space(image: Image.Image) -> Image.Image:
     background = Image.new("RGB", image.size, "white")
     difference = ImageChops.difference(image, background).convert("L")
-    difference = difference.point(lambda value: 255 if value > 18 else 0)
+    difference = difference.point([255 if value > 18 else 0 for value in range(256)])
     bbox = difference.getbbox()
     if bbox is None:
         return image

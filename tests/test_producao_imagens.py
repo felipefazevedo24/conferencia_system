@@ -304,6 +304,20 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
         producao_service._render_pdf_previews(b"nao e pdf")
 
 
+@pytest.mark.parametrize("function_name, args, media_type", [
+    ("_expand_rect", (None, 1.0, None), "PDF"),
+    ("_merge_drawing_records", ([], None, 1.0), "PDF"),
+    ("_page_isometric_candidates", (None,), "PDF"),
+    ("_render_clip_previews", (None, None), "PDF"),
+    ("_render_pdf_previews", (b"pdf",), "PDF"),
+    ("_render_raster_previews", (b"png", "png"), "imagem"),
+])
+def test_renderizadores_sem_pymupdf_informam_dependencia_ausente(function_name, args, media_type):
+    with patch.object(producao_service, "fitz", None):
+        with pytest.raises(LookupError, match=f"Renderizador de {media_type} nao instalado"):
+            getattr(producao_service, function_name)(*args)
+
+
 def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
     from PIL import Image, ImageDraw
 

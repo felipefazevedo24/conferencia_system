@@ -17,6 +17,13 @@ _PREVIEW_PENDING_PNG = base64.b64decode(
 )
 
 
+def _original_static_directory() -> str:
+    static_folder = current_app.static_folder
+    if static_folder is None:
+        raise RuntimeError("Pasta de arquivos estaticos nao configurada.")
+    return static_folder + "/producao_original"
+
+
 @producao_bp.get("/producao")
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
@@ -27,7 +34,7 @@ def producao_page():
 @permission_required("PAGE_PRODUCAO")
 def producao_original_page():
     return send_from_directory(
-        current_app.static_folder + "/producao_original",
+        _original_static_directory(),
         "index.html",
     )
 
@@ -35,19 +42,19 @@ def producao_original_page():
 @producao_bp.get("/columbia-logo.png")
 @permission_required("PAGE_PRODUCAO")
 def producao_logo():
-    return send_from_directory(current_app.static_folder + "/producao_original", "columbia-logo.png")
+    return send_from_directory(_original_static_directory(), "columbia-logo.png")
 
 
 @producao_bp.get("/producao-original/assets/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_asset(filename: str):
-    return send_from_directory(current_app.static_folder + "/producao_original/assets", filename)
+    return send_from_directory(_original_static_directory() + "/assets", filename)
 
 
 @producao_bp.get("/producao-original/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_static(filename: str):
-    return send_from_directory(current_app.static_folder + "/producao_original", filename)
+    return send_from_directory(_original_static_directory(), filename)
 
 
 @producao_bp.get("/api/producao/os")
@@ -117,7 +124,11 @@ def criar_observacao(numero_os: str, aux_code: int):
     texto = str((request.get_json(silent=True) or {}).get("texto") or "").strip()
     if not texto:
         return jsonify({"error": "Informe a observacao."}), 400
-    row = ProducaoObservacao(numero_os=numero_os, aux_code=aux_code, texto=texto[:4000], autor=session.get("username", "desconhecido"))
+    row = ProducaoObservacao()
+    row.numero_os = numero_os
+    row.aux_code = aux_code
+    row.texto = texto[:4000]
+    row.autor = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": row.id, "texto": row.texto, "autor": row.autor, "criado_em": row.criado_em.isoformat()}), 201
@@ -145,7 +156,7 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
         "predecessor_ids": [],
         "path_ids": [item["id"] for item in path],
         "path_labels": [item.get("codigo") or item["id"] for item in path],
-        "state": {"bloqueado": "blocked", "concluido": "completed", "disponivel": "available", "montagem": "assembling", "fabricacao": "manufacturing", "nao_iniciado": "not_started"}.get(node.get("estado"), "not_started"),
+        "state": {"bloqueado": "blocked", "concluido": "completed", "disponivel": "available", "montagem": "assembling", "fabricacao": "manufacturing", "nao_iniciado": "not_started"}.get(node.get("estado") or "nao_iniciado", "not_started"),
         "state_reason_code": "process_locked" if node.get("estado") == "bloqueado" else "no_execution_evidence",
         "state_reason": node.get("estado_motivo") or "Sem informacao",
         "operations_total": node.get("operacoes_total", 0),
@@ -354,7 +365,11 @@ def original_create_observation(numero_os: str, aux_code: int):
     text = str(payload.get("text") or "").strip()
     if not text:
         return jsonify({"detail": "Informe a observacao."}), 400
-    row = ProducaoObservacao(numero_os=numero_os, aux_code=aux_code, texto=text[:4000], autor=session.get("username", "desconhecido"))
+    row = ProducaoObservacao()
+    row.numero_os = numero_os
+    row.aux_code = aux_code
+    row.texto = text[:4000]
+    row.autor = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": str(row.id), "order_number": numero_os, "item_aux_code": aux_code, "text": row.texto, "author": row.autor, "created_at": row.criado_em.isoformat()}), 201
@@ -375,7 +390,13 @@ def original_create_sequence(numero_os: str):
     if not title:
         return jsonify({"detail": "Informe o titulo da etapa."}), 400
     last = ProducaoSequencia.query.filter_by(numero_os=numero_os).order_by(ProducaoSequencia.posicao.desc()).first()
-    row = ProducaoSequencia(numero_os=numero_os, aux_code=payload.get("item_aux_code"), posicao=(last.posicao + 1 if last else 1), titulo=title[:240], instrucoes=str(payload.get("instructions") or "").strip() or None, criado_por=session.get("username", "desconhecido"))
+    row = ProducaoSequencia()
+    row.numero_os = numero_os
+    row.aux_code = payload.get("item_aux_code")
+    row.posicao = last.posicao + 1 if last else 1
+    row.titulo = title[:240]
+    row.instrucoes = str(payload.get("instructions") or "").strip() or None
+    row.criado_por = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": str(row.id), "order_number": row.numero_os, "item_aux_code": row.aux_code, "position": row.posicao, "title": row.titulo, "instructions": row.instrucoes, "source": "application", "created_by": row.criado_por, "created_at": row.criado_em.isoformat()}), 201

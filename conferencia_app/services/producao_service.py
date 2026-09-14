@@ -14,15 +14,16 @@ import threading
 import time
 import unicodedata
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 
-from flask import current_app, has_app_context
+from flask import Flask, current_app, has_app_context
+from werkzeug.local import LocalProxy
 
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
 
 try:
-    import fitz
+    import pymupdf as fitz
 except ImportError:  # pragma: no cover
     fitz = None
 
@@ -60,8 +61,8 @@ _QUERY_LOCK = threading.RLock()
 _STRUCTURE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="production-structure")
 
 
-def _scope():
-    return current_app._get_current_object() if has_app_context() else None
+def _scope() -> Flask | None:
+    return cast(LocalProxy[Flask], current_app)._get_current_object() if has_app_context() else None
 
 
 def _cached_read(cache, jobs, lock, key, loader, ttl=10.0, limit=128):
@@ -477,6 +478,8 @@ def _line_stats(items: list[Any]) -> tuple[int, int, int]:
 
 
 def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     return fitz.Rect(
         max(bounds.x0, rect.x0 - margin),
         max(bounds.y0, rect.y0 - margin),
@@ -486,6 +489,8 @@ def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
 
 
 def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
     changed = True
     while changed:
@@ -530,6 +535,8 @@ def _overlap_ratio(first: Any, second: Any) -> float:
 
 
 def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     page_rect = page.rect
     page_area = max(page_rect.width * page_rect.height, 1)
     records = []
@@ -617,6 +624,8 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
 
 
 def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     from PIL import Image
     from .production_images import render_variants
 

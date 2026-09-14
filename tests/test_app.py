@@ -54,6 +54,108 @@ def test_alembic_env_works_with_app_context(tmp_path):
         assert env_module.target_db is not None
 
 
+def test_producao_paginas_e_arquivos_estaticos(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    assert app.static_folder is not None
+    assets = Path(app.static_folder) / "producao_original" / "assets"
+    stylesheet = next(assets.glob("*.css"))
+
+    for path in (
+        "/producao",
+        "/producao-original/",
+        "/columbia-logo.png",
+        "/producao-original/columbia-logo.png",
+        f"/producao-original/assets/{stylesheet.name}",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.data, path
+
+
+def test_producao_estaticos_exigem_pasta_configurada():
+    import pytest
+    from flask import Flask
+    from conferencia_app.routes.producao_routes import _original_static_directory
+
+    app = Flask("producao_sem_estaticos", static_folder=None)
+    with app.app_context():
+        with pytest.raises(RuntimeError, match="arquivos estaticos nao configurada"):
+            _original_static_directory()
+
+
+def test_producao_observacoes_preservam_campos_e_validacao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with client.session_transaction() as session_data:
+        author = session_data["username"]
+
+    endpoints = (
+        ("/api/producao/os/DIAG-001/itens/7/observacoes", "texto", "autor"),
+        ("/api/v1/orders/DIAG-001/items/7/observations", "text", "author"),
+    )
+    for endpoint, text_key, author_key in endpoints:
+        response = client.post(endpoint, json={text_key: "  " + "x" * 4005 + "  "})
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data[text_key] == "x" * 4000
+        assert data[author_key] == author
+        assert data["id"]
+        assert client.post(endpoint, json={text_key: "  "}).status_code == 400
+
+    native = client.get(endpoints[0][0]).get_json()["observacoes"]
+    original = client.get(endpoints[1][0]).get_json()
+    assert len(native) == len(original) == 2
+    assert all(item["order_number"] == "DIAG-001" and item["item_aux_code"] == 7 for item in original)
+
+
+def test_producao_sequencia_preserva_ordem_e_campos_opcionais(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with client.session_transaction() as session_data:
+        author = session_data["username"]
+
+    endpoint = "/api/v1/orders/DIAG-001/sequence"
+    first = client.post(endpoint, json={
+        "title": "x" * 250,
+        "item_aux_code": 7,
+        "instructions": "  Conferir desenho  ",
+    })
+    second = client.post(endpoint, json={"title": "Etapa 2"})
+    assert first.status_code == second.status_code == 201
+    first_data = first.get_json()
+    second_data = second.get_json()
+    assert first_data["title"] == "x" * 240
+    assert first_data["item_aux_code"] == 7
+    assert first_data["instructions"] == "Conferir desenho"
+    assert first_data["created_by"] == author
+    assert first_data["order_number"] == "DIAG-001"
+    assert first_data["position"] == 1
+    assert second_data["position"] == 2
+    assert second_data["item_aux_code"] is None
+    assert second_data["instructions"] is None
+    assert client.post(endpoint, json={"title": "  "}).status_code == 400
+    assert [item["position"] for item in client.get(endpoint).get_json()] == [1, 2]
+
+
+def test_producao_estado_ausente_ou_desconhecido_mantem_padrao():
+    from conferencia_app.routes.producao_routes import _original_node
+
+    node = {"id": "item-7", "aux_code": 7}
+    assert _original_node(node, [node])["state"] == "not_started"
+    for state, expected in (
+        (None, "not_started"),
+        ("", "not_started"),
+        ("desconhecido", "not_started"),
+        ("concluido", "completed"),
+    ):
+        node["estado"] = state
+        assert _original_node(node, [node])["state"] == expected
+
+
 def enable_sqlite_foreign_keys(app):
     with app.app_context():
         engine = db.engine
