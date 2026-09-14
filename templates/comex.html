@@ -716,6 +716,21 @@
         return escapeHtml(p.cod_ordem_compra || "—");
     }
 
+    // Marca processo com campo operacional em branco. Interessa sobretudo
+    // no Concluido: processo fechado antes da regra nova (ou via "Pular
+    // Status") ficou sem os dados e precisa ser completado.
+    function badgePendencias(p) {
+        const faltando = p.campos_faltando_concluir || [];
+        if (!faltando.length) return "";
+        const concluido = p.status_modulo === "Concluido";
+        const cor = concluido ? "#b91c1c" : "#92400e";
+        const fundo = concluido ? "#fee2e2" : "#fef3c7";
+        const titulo = `Faltam ${faltando.length}: ${faltando.join(", ")}`;
+        return `<span title="${escapeHtml(titulo)}" style="display:inline-block; margin-left:6px; background:${fundo}; color:${cor}; border-radius:999px; padding:1px 8px; font-size:10.5px; font-weight:800; white-space:nowrap;">
+            <i class="fas fa-triangle-exclamation"></i> ${faltando.length} sem preencher
+        </span>`;
+    }
+
     function renderTabela(processos) {
         const tb = $("cx-tbody");
         if (!processos.length) {
@@ -730,7 +745,7 @@
                 <td>${ocColunaHtml(p)}</td>
                 <td>${escapeHtml(p.po_numero || "—")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
-                <td>${badgeStatus(p)}</td>
+                <td>${badgeStatus(p)}${badgePendencias(p)}</td>
                 <td style="text-align:right;"><button class="cx-actions-btn" data-kebab="${p.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
         `).join("");
@@ -744,8 +759,9 @@
     // A partir de "Instrucao" em diante, avançar de modulo e' so
     // atualizacao de status (sem acao de negocio dedicada) - por isso
     // ganham o botao generico "Avançar" (valida por transicao, ver
-    // comex_service.avancar_status; hoje so Coleta -> Em Transito exige
-    // os dados de embarque preenchidos). OC/PO/Cotacao NAO ganham
+    // comex_service.avancar_status; as etapas do meio andam livres e so' a
+    // ultima, NF/Cambio -> Concluido, exige os campos operacionais
+    // preenchidos). OC/PO/Cotacao NAO ganham
     // "Avançar" porque ja tem seu proprio mecanismo de avanco (Criar PO,
     // finalizar PO, gerar link + escolher cotacao / enviar instrucao).
     // "Pular Status" ignora toda validacao e so aparece pra quem tem a
@@ -787,9 +803,15 @@
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else if (p.status_modulo === "Concluido") {
+            // Processo concluido antes da regra nova (ou via "Pular Status")
+            // costuma estar sem os dados - por isso continua editavel aqui.
+            itens += it("instrucao", "fa-clipboard-list", "Editar dados do processo");
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else {
+            // Desembarque / Desembaraco / Transporte / NF-Cambio: e' onde
+            // Numerario e DI abrem, entao precisa dar pra editar aqui.
+            itens += it("instrucao", "fa-clipboard-list", "Editar dados do processo");
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         }

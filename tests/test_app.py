@@ -6367,3 +6367,60 @@ def test_comex_nf_recebimento_saiu_do_formulario_mas_o_historico_fica(tmp_path):
         # Mandar o campo pela API nao grava mais nada.
         svc._aplicar_campos_operacionais(processo, {"nf_recebimento": "NF-NOVA-999"})
         assert processo.nf_recebimento == "NF-ANTIGA-123"
+
+
+def test_comex_processo_ja_concluido_sem_dados_ainda_pode_ser_preenchido(tmp_path):
+    """Processo fechado ANTES da regra nova (ou via "Pular Status", que
+    ignora validacao) ficou sem os campos operacionais. No Concluido todos
+    os campos continuam editaveis - inclusive a Data de fechamento - pra
+    esse historico poder ser completado sem precisar estornar o processo."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-LEGADO/25", status="Concluido")
+        processo_id = processo.id
+
+        # Concluido libera TODOS os campos (e' a ultima etapa da sequencia).
+        assert all(c["liberado"] for c in svc.campos_operacionais_do_processo(processo))
+        assert len(svc.campos_faltando_para_concluir(processo)) == 13
+
+    # Preenche tudo depois de concluido, sem estornar.
+    completo = dict(_PAYLOAD_COMPLETO, data_fechamento="2025-06-30")
+    resposta = client.post(f"/api/comex/processos/{processo_id}/instrucao", json=completo)
+    assert resposta.status_code == 200
+    payload = resposta.get_json()["processo"]
+    assert payload["campos_faltando_concluir"] == []
+    assert payload["data_fechamento"] == "2025-06-30"
+    assert payload["numerario_valor"] == 5000.50
+    # Preencher nao mexe no status - o processo continua concluido.
+    assert payload["status_modulo"] == "Concluido"
+
+
+def test_comex_pular_status_conclui_sem_exigir_campos(tmp_path):
+    """"Pular Status" (permissao de gerencia) existe justamente pra
+    processo que comecou fora do sistema: conclui sem exigir os campos,
+    e' o caminho que gera os concluidos incompletos - que depois sao
+    completados pelo proprio Concluido."""
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-PULA/26", status="NFCambio")
+
+        # Avancar normal e' barrado...
+        import pytest
+
+        with pytest.raises(ValueError):
+            svc.avancar_status(processo, "TESTE")
+
+        # ...mas pular status passa, por design.
+        svc.pular_status(processo, "GERENTE")
+        assert processo.status_modulo == "Concluido"
+        # E a data de fechamento nasce preenchida tambem por esse caminho.
+        assert processo.data_fechamento is not None
+        # Os campos seguem pendentes, esperando alguem completar.
+        assert len(svc.campos_faltando_para_concluir(processo)) == 13
