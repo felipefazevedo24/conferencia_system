@@ -38,6 +38,7 @@ PERMISSION_CATALOG = {
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
+    "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL": "Controladoria > Contabilidade > Classificacao contabil",
     "PAGE_FINANCEIRO_RELATORIO_CUSTOS": "Controladoria > Contabilidade > Relatorio de custos",
@@ -126,6 +127,7 @@ BASE_ROLE_PERMISSIONS = {
     },
     "Compras": {
         "PAGE_UPLOAD",
+        "PAGE_COMPRAS_HOMOLOGACAO",
         "PAGE_XML_AUDITOR",
         "PAGE_COMPRAS_CPS",
         "PAGE_PRODUCAO",

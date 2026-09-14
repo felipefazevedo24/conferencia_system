@@ -1936,6 +1936,125 @@ class LogisticaConsumoChapaPeca(db.Model):
     baixado_por = db.Column(db.String(100))
 
 
+class ComprasHomologacaoFornecedor(db.Model):
+    """Homologacao de fornecedor - formulario F-COM-001-01 (Compras).
+
+    Substitui a planilha Excel que Compras preenchia a mao. A definicao do
+    formulario (secoes, perguntas e pesos) fica em
+    services/compras_homologacao_form.py; aqui ficam os dados preenchidos.
+
+    Workflow: Rascunho (Compras preenche, pode salvar e voltar depois) ->
+    Em aprovacao (nota ja calculada, aguardando o gestor) -> Homologado ou
+    Reprovado. A nota/classificacao e' calculada pelo service a cada
+    salvamento, seguindo a regra de pontuacao da planilha.
+    """
+
+    __tablename__ = "compras_homologacao_fornecedor"
+
+    STATUS_RASCUNHO = "Rascunho"
+    STATUS_EM_APROVACAO = "Em aprovação"
+    STATUS_HOMOLOGADO = "Homologado"
+    STATUS_REPROVADO = "Reprovado"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # 1. Dados do fornecedor
+    razao_social = db.Column(db.String(200), nullable=False, index=True)
+    cnpj = db.Column(db.String(20), index=True)
+    nome_fantasia = db.Column(db.String(200))
+    inscricao_estadual = db.Column(db.String(40))
+    endereco = db.Column(db.String(250))
+    cidade_estado = db.Column(db.String(120))
+    contato_principal = db.Column(db.String(120))
+    telefone = db.Column(db.String(40))
+    email = db.Column(db.String(120))
+    website = db.Column(db.String(150))
+
+    # 2. Escopo de fornecimento
+    categoria_compra = db.Column(db.String(150))
+    descricao_produto_servico = db.Column(db.Text)
+
+    # 3. Resultado da auditoria (texto livre do formulario)
+    resultado_auditoria = db.Column(db.Text)
+
+    # 4. Conformidade legal - observacao geral da secao
+    obs_conformidade_legal = db.Column(db.Text)
+
+    # 9. Comentario final
+    comentario = db.Column(db.Text)
+
+    # Nota calculada (0 a 1) + classificacao pelas faixas do formulario.
+    nota = db.Column(db.Float)
+    classificacao = db.Column(db.String(40), index=True)
+
+    status = db.Column(db.String(20), nullable=False, default=STATUS_RASCUNHO, index=True)
+
+    # Validade da homologacao (conta a partir da decisao).
+    validade_meses = db.Column(db.Integer, nullable=False, default=12)
+    valido_ate = db.Column(db.Date, index=True)
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    enviado_em = db.Column(db.DateTime)
+    enviado_por = db.Column(db.String(100))
+
+    decidido_em = db.Column(db.DateTime)
+    decidido_por = db.Column(db.String(100))
+    justificativa_decisao = db.Column(db.Text)
+
+    respostas = db.relationship(
+        "ComprasHomologacaoResposta",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoResposta.id",
+    )
+    fotos = db.relationship(
+        "ComprasHomologacaoFoto",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoFoto.id",
+    )
+
+
+class ComprasHomologacaoResposta(db.Model):
+    """Uma resposta do formulario de homologacao (um item de uma secao)."""
+
+    __tablename__ = "compras_homologacao_resposta"
+    __table_args__ = (
+        db.UniqueConstraint("homologacao_id", "secao", "item", name="uq_homologacao_item"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    secao = db.Column(db.String(60), nullable=False)   # ver compras_homologacao_form.SECOES
+    item = db.Column(db.Integer, nullable=False)       # 1-based, dentro da secao
+    resposta = db.Column(db.String(20))                # Sim|Parcial|Nao|Nao Aplicavel|Conforme|Nao Conforme
+    comentario = db.Column(db.Text)
+
+
+class ComprasHomologacaoFoto(db.Model):
+    """Foto da visita/auditoria (secao 8 do formulario), guardada no banco -
+    mesmo padrao do Comex/Inventario, sem depender de drive externo."""
+
+    __tablename__ = "compras_homologacao_foto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    nome_arquivo = db.Column(db.String(260))
+    content_type = db.Column(db.String(80))
+    tamanho_bytes = db.Column(db.Integer)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    legenda = db.Column(db.String(250))
+    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_por = db.Column(db.String(100))
+
+
 class IntralogPickingSeparacao(db.Model):
     """Confirmacao de separacao do almoxarifado (Intralog > Picking).
 
