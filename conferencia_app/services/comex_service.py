@@ -45,6 +45,21 @@ MODULOS_SEQUENCIA = [
     "Concluido",
 ]
 
+# Rotulo amigavel de cada modulo (o nome interno nao tem acento nem espaco).
+LABELS_MODULO = {
+    "OC": "OC",
+    "PO": "PO",
+    "Cotacao": "Cotação",
+    "Instrucao": "Instrução",
+    "Coleta": "Coleta",
+    "EmTransito": "Em Trânsito",
+    "Desembarque": "Desembarque",
+    "Desembaraco": "Desembaraço",
+    "Transporte": "Transporte",
+    "NFCambio": "NF/Câmbio",
+    "Concluido": "Concluído",
+}
+
 STATUS_SLUGS = {
     "OC": "oc",
     "PO": "po",
@@ -488,20 +503,85 @@ def _mesmo_fornecedor(processos: list[ComexProcesso]) -> bool:
 # a coluna tem folga ate 40 so como buffer) e data, mapeados pelo nome que
 # chega no JSON do navegador para o atributo do model (o front manda "eta",
 # que reaproveita a coluna ja existente `em_transito_eta`).
-_CAMPOS_PO_TEXTO = {
-    "ref_despachante": "ref_despachante",
-    "bl_awb": "bl_awb",
-    "invoice_numero": "invoice_numero",
-    "entrega_real": "entrega_real",
-    "nf_impo": "nf_impo",
-    "nf_recebimento": "nf_recebimento",
-}
-_CAMPOS_PO_DATA = {
+# Campos operacionais com a etapa a partir da qual cada um fica EDITAVEL.
+#
+# Regra definida pelo Comex: o campo so' abre no modulo indicado e
+# permanece aberto nas etapas seguintes; a exigencia de estar preenchido
+# acontece SO' na conclusao do processo (nenhuma transicao intermediaria
+# trava por campo vazio - ver avancar_status).
+#
+# (chave_json, atributo_no_model, label, modulo_minimo, tipo)
+CAMPOS_OPERACIONAIS = (
+    ("ref_ff", "ref_ff", "REF Agente de Carga", "EmTransito", "texto"),
+    ("ref_despachante", "ref_despachante", "REF. Despachante", "EmTransito", "texto"),
+    ("invoice_numero", "invoice_numero", "Invoice", "EmTransito", "texto"),
+    ("bl_awb", "bl_awb", "BL/AWB", "EmTransito", "texto"),
+    ("etd", "etd", "ETD", "EmTransito", "data"),
+    ("eta", "em_transito_eta", "ETA", "EmTransito", "data"),
+    ("numerario_numero", "numerario_numero", "Nº do Numerário", "Desembarque", "texto"),
+    ("numerario_valor", "numerario_valor", "Valor do Numerário", "Desembarque", "valor"),
+    ("numerario_data_pagamento", "numerario_data_pagamento", "Data de pagamento", "Desembarque", "data"),
+    ("entrega_real", "entrega_real", "Entrega Real", "Desembaraco", "texto"),
+    ("nf_impo", "nf_impo", "NF IMPO", "Desembaraco", "texto"),
+    ("di_numero", "di_numero", "Número da DI", "Desembaraco", "texto"),
+    ("di_data", "di_data", "Data da DI", "Desembaraco", "data"),
+    # Nasce preenchida ao concluir e segue editavel no Concluido - por isso
+    # NAO entra na lista de exigidos pra concluir (seria impossivel).
+    ("data_fechamento", "data_fechamento", "Data de fechamento", "Concluido", "data"),
+)
+
+# Campos gerais que nao seguem a regra por modulo (continuam editaveis
+# desde a PO, como sempre foram).
+_CAMPOS_GERAIS_DATA = {
     "po_data": "po_data",
-    "etd": "etd",
-    "eta": "em_transito_eta",
     "previsao_entrega": "previsao_entrega",
 }
+
+# Preenchido automaticamente na conclusao, logo nao pode ser exigido antes.
+_CAMPO_AUTO_NA_CONCLUSAO = "data_fechamento"
+
+
+def _indice_modulo(modulo: str) -> int:
+    try:
+        return MODULOS_SEQUENCIA.index(modulo)
+    except ValueError:
+        return -1
+
+
+def campo_liberado(status_modulo: str, modulo_minimo: str) -> bool:
+    """O campo abre no modulo indicado e continua aberto dali pra frente."""
+    return _indice_modulo(status_modulo) >= _indice_modulo(modulo_minimo)
+
+
+def campos_operacionais_do_processo(processo: ComexProcesso) -> list[dict]:
+    """Metadados dos campos pro front-end: rotulo, etapa em que abre, se ja
+    esta liberado e o valor atual."""
+    campos = []
+    for chave, atributo, label, modulo_minimo, tipo in CAMPOS_OPERACIONAIS:
+        valor = getattr(processo, atributo, None)
+        if hasattr(valor, "isoformat"):
+            valor = valor.isoformat()
+        campos.append({
+            "campo": chave,
+            "label": label,
+            "modulo_minimo": modulo_minimo,
+            "modulo_minimo_label": LABELS_MODULO.get(modulo_minimo, modulo_minimo),
+            "liberado": campo_liberado(processo.status_modulo, modulo_minimo),
+            "tipo": tipo,
+            "valor": valor,
+        })
+    return campos
+
+
+def campos_faltando_para_concluir(processo: ComexProcesso) -> list[str]:
+    """Rotulos dos campos ainda vazios que travam a conclusao."""
+    faltando = []
+    for chave, atributo, label, _modulo, _tipo in CAMPOS_OPERACIONAIS:
+        if chave == _CAMPO_AUTO_NA_CONCLUSAO:
+            continue
+        if not getattr(processo, atributo, None):
+            faltando.append(label)
+    return faltando
 
 
 def _parse_date(value):
@@ -509,12 +589,41 @@ def _parse_date(value):
     return convertido.date() if convertido else None
 
 
+def _parse_valor(value):
+    if value in (None, ""):
+        return None
+    texto = str(value).strip()
+    if not texto:
+        return None
+    # Aceita "1.234,56" (pt-BR) e "1234.56".
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        return float(texto)
+    except (TypeError, ValueError):
+        return None
+
+
 def _aplicar_campos_operacionais(processo: ComexProcesso, dados: dict) -> None:
-    for chave_json, atributo in _CAMPOS_PO_TEXTO.items():
-        if chave_json in dados:
+    """Grava os campos operacionais enviados pelo front.
+
+    Campo cuja etapa ainda nao chegou e' IGNORADO (a trava nao e' so'
+    visual - o back-end tambem recusa, senao bastaria chamar a API direto
+    pra furar a regra)."""
+    for chave_json, atributo, _label, modulo_minimo, tipo in CAMPOS_OPERACIONAIS:
+        if chave_json not in dados:
+            continue
+        if not campo_liberado(processo.status_modulo, modulo_minimo):
+            continue
+        if tipo == "data":
+            setattr(processo, atributo, _parse_date(dados.get(chave_json)))
+        elif tipo == "valor":
+            setattr(processo, atributo, _parse_valor(dados.get(chave_json)))
+        else:
             valor = str(dados.get(chave_json) or "").strip()
             setattr(processo, atributo, (valor[:40] or None) if valor else None)
-    for chave_json, atributo in _CAMPOS_PO_DATA.items():
+
+    for chave_json, atributo in _CAMPOS_GERAIS_DATA.items():
         if chave_json in dados:
             setattr(processo, atributo, _parse_date(dados.get(chave_json)))
 
@@ -772,40 +881,37 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     processo.atualizado_em = datetime.now()
     processo.atualizado_por = usuario
     if proximo == "Concluido":
-        processo.processo_concluido_em = datetime.now()
+        agora = datetime.now()
+        processo.processo_concluido_em = agora
+        # Nasce com a data da conclusao e segue editavel no Concluido (o
+        # fechamento contabil pode ter sido em outra data). Por isso a
+        # "Data de fechamento" nao entra na lista de exigidos pra concluir.
+        if not processo.data_fechamento:
+            processo.data_fechamento = agora.date()
     db.session.commit()
     return processo
-
-
-# Campos minimos de embarque exigidos pra avancar normalmente (nao via
-# "Pular Status") de Coleta pra Em Transito.
-_CAMPOS_OBRIGATORIOS_EM_TRANSITO = {
-    "ref_despachante": "Ref. Despachante",
-    "bl_awb": "BL/AWB",
-    "etd": "ETD",
-    "em_transito_eta": "ETA",
-}
 
 
 def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     """Funcao "Avançar" - avanco NORMAL (validado) pro proximo modulo,
     disponivel pra qualquer operador com acesso ao Comex (diferente de
     "Pular Status", que ignora toda validacao e exige permissao extra de
-    gerencia). Cada transicao pode ter sua propria regra de validacao; hoje
-    so Coleta -> Em Transito exige algo (dados minimos de embarque ja
-    preenchidos - ver `_CAMPOS_OBRIGATORIOS_EM_TRANSITO`)."""
+    gerencia).
+
+    Regra do Comex: as etapas intermediarias andam livres - campo vazio nao
+    trava nada no meio do caminho. A unica transicao validada e' a ULTIMA
+    (NF/Cambio -> Concluido), que exige todos os campos operacionais
+    preenchidos (ver CAMPOS_OPERACIONAIS / campos_faltando_para_concluir)."""
     proximo = _proximo_modulo(processo.status_modulo)
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
 
-    if processo.status_modulo == "Coleta" and proximo == "EmTransito":
-        faltando = [
-            label for campo, label in _CAMPOS_OBRIGATORIOS_EM_TRANSITO.items()
-            if not getattr(processo, campo, None)
-        ]
+    if proximo == "Concluido":
+        faltando = campos_faltando_para_concluir(processo)
         if faltando:
             raise ValueError(
-                "Preencha os dados de embarque antes de avançar pra Em Trânsito: " + ", ".join(faltando) + "."
+                "Preencha todos os campos do processo antes de concluir. "
+                f"Faltam {len(faltando)}: " + ", ".join(faltando) + "."
             )
 
     processo.status_modulo = proximo
@@ -813,7 +919,13 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     processo.atualizado_em = datetime.now()
     processo.atualizado_por = usuario
     if proximo == "Concluido":
-        processo.processo_concluido_em = datetime.now()
+        agora = datetime.now()
+        processo.processo_concluido_em = agora
+        # Nasce com a data da conclusao e segue editavel no Concluido (o
+        # fechamento contabil pode ter sido em outra data). Por isso a
+        # "Data de fechamento" nao entra na lista de exigidos pra concluir.
+        if not processo.data_fechamento:
+            processo.data_fechamento = agora.date()
     db.session.commit()
     return processo
 
@@ -1321,7 +1433,12 @@ def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> Come
     atualiza os campos, sem mexer no status_modulo)."""
     if processo.status_modulo == "Cotacao" and not processo.cotacao_vencedora_id:
         raise ValueError("Escolha uma cotação de frete antes de enviar a instrução de embarque.")
-    if processo.status_modulo not in ("Cotacao", "Instrucao", "Coleta", "EmTransito"):
+    # Limite so' por baixo (a PO precisa estar finalizada). Nao ha limite
+    # por cima: campo como Numerario (Desembarque), DI (Desembaraco) e Data
+    # de fechamento (Concluido) so' existe DEPOIS daqui. Quais campos podem
+    # de fato ser gravados em cada etapa e' decidido campo a campo em
+    # _aplicar_campos_operacionais.
+    if _indice_modulo(processo.status_modulo) < _indice_modulo("Cotacao"):
         raise ValueError("A instrução de embarque só pode ser enviada depois da PO finalizada.")
 
     agora = datetime.now()
