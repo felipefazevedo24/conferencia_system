@@ -6424,3 +6424,33 @@ def test_comex_pular_status_conclui_sem_exigir_campos(tmp_path):
         assert processo.data_fechamento is not None
         # Os campos seguem pendentes, esperando alguem completar.
         assert len(svc.campos_faltando_para_concluir(processo)) == 13
+
+
+def test_comex_editar_dados_disponivel_em_todo_status_a_partir_da_instrucao(tmp_path):
+    """O formulario "Editar dados de embarque" (com TODOS os campos
+    operacionais) fica disponivel em TODO status a partir da Instrucao,
+    inclusive no Concluido. A regra vive no servico e vai pro front pelo
+    payload (pode_editar_dados), em vez de repetida ramo a ramo no menu."""
+    from conferencia_app.models import ComexProcesso
+    from conferencia_app.services import comex_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        antes_da_instrucao = ("OC", "PO", "Cotacao")
+        for i, modulo in enumerate(svc.MODULOS_SEQUENCIA):
+            processo = ComexProcesso(
+                id_op=f"IM-{i:04d}/26", tipo_operacao="IM", status_modulo=modulo,
+                status_slug=svc.status_slug(modulo), criado_por="TESTE",
+            )
+            esperado = modulo not in antes_da_instrucao
+            assert svc.pode_editar_dados(processo) is esperado, modulo
+
+    # O payload da API leva a decisao pronta pra tela.
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        processo = _criar_processo_comex(id_op="IM-7777/26", status="Transporte")
+        processo_id = processo.id
+    payload = client.get(f"/api/comex/processos/{processo_id}").get_json()
+    payload = payload.get("processo") or payload
+    assert payload["pode_editar_dados"] is True

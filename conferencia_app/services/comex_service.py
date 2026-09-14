@@ -540,6 +540,16 @@ _CAMPOS_GERAIS_DATA = {
 # Preenchido automaticamente na conclusao, logo nao pode ser exigido antes.
 _CAMPO_AUTO_NA_CONCLUSAO = "data_fechamento"
 
+# A partir de qual modulo o formulario "Editar dados de embarque" (com
+# TODOS os campos operacionais) fica disponivel. Dali pra frente aparece
+# em TODO status, inclusive no Concluido - processo fechado antes da regra
+# nova (ou via "Pular Status") precisa poder ser completado depois.
+MODULO_MINIMO_EDICAO_DADOS = "Instrucao"
+
+
+def pode_editar_dados(processo: ComexProcesso) -> bool:
+    return campo_liberado(processo.status_modulo, MODULO_MINIMO_EDICAO_DADOS)
+
 
 def _indice_modulo(modulo: str) -> int:
     try:
