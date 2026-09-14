@@ -43,8 +43,9 @@ def test_gestao_romaneio_por_usuario(tmp_path, permitido):
     assert client.delete(base + "/deletar").status_code == esperado
 
 
+@pytest.mark.parametrize("tipo_frete, modalidade", [("FOB", "FOB"), ("DAP", "DAP")])
 @pytest.mark.parametrize("duplicar", [False, True])
-def test_montagem_romaneio_atomica(tmp_path, duplicar):
+def test_montagem_romaneio_atomica(tmp_path, duplicar, tipo_frete, modalidade):
     app = build_test_app(tmp_path)
     client = app.test_client()
     set_logged_user(client, "admin", "Admin")
@@ -52,7 +53,7 @@ def test_montagem_romaneio_atomica(tmp_path, duplicar):
            {"numero_nf": "100" if duplicar else "200", "peso_bruto": 20, "qtde_volumes": 3}]
     with patch("conferencia_app.routes.expedicao_romaneio_routes._dados_nf_do_bridge", return_value={}), \
          patch("conferencia_app.routes.expedicao_romaneio_routes.enviar_aviso_coleta_fob") as aviso:
-        resp = client.post("/api/expedicao/romaneio-fat", json={"nfs": nfs, "tipo_frete": "FOB", "placa": "ABC1D23"})
+        resp = client.post("/api/expedicao/romaneio-fat", json={"nfs": nfs, "tipo_frete": tipo_frete, "placa": "ABC1D23"})
     assert resp.status_code == (400 if duplicar else 201)
     with app.app_context():
         assert ExpedicaoRomaneio.query.count() == (0 if duplicar else 1)
@@ -63,6 +64,8 @@ def test_montagem_romaneio_atomica(tmp_path, duplicar):
             assert rom.qtde_volumes_total == 5
             assert rom.placa == "ABC1D23"
     assert aviso.call_count == (0 if duplicar else 2)
+    if not duplicar:
+        assert all(chamada.kwargs["modalidade"] == modalidade for chamada in aviso.call_args_list)
 
 
 def test_montagem_rejeita_romaneio_vazio(tmp_path):
