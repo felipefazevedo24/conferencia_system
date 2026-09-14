@@ -900,6 +900,7 @@
     }
 
     async function abrirModalFotosPreexpedicao(apiBase, cod, ordem) {
+        if ($("ce-fotos-salvar").disabled) return;
         _revogarPreviews();
         ceFotos = { apiBase, cod, novasMaterial: [], novaCliente: null, existentes: { fotos_material: [], foto_cliente_url: null } };
         const titulo = $("ce-fotos-titulo");
@@ -925,6 +926,7 @@
     }
 
     function fecharModalFotosPreexpedicao() {
+        if ($("ce-fotos-salvar").disabled) return;
         _revogarPreviews();
         $("ce-fotos-modal").classList.add("hidden");
         $("ce-fotos-modal").setAttribute("aria-hidden", "true");
@@ -964,27 +966,72 @@
         renderFotosGrids();
     }
 
+    async function cePrepararFotoUpload(file) {
+        if (!file || !(file.type || "").startsWith("image/") || file.size <= 2 * 1024 * 1024) return file;
+        let bitmap;
+        try {
+            bitmap = await createImageBitmap(file);
+            const escala = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(bitmap.width * escala));
+            canvas.height = Math.max(1, Math.round(bitmap.height * escala));
+            canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+            if (!blob || blob.size >= file.size) return file;
+            const nome = (file.name || "foto").replace(/\.[^.]+$/, "");
+            return new File([blob], `${nome}.jpg`, { type: "image/jpeg" });
+        } catch (e) {
+            return file;
+        } finally {
+            if (bitmap && bitmap.close) bitmap.close();
+        }
+    }
+
+    async function ceLerRespostaUpload(resp) {
+        const data = await resp.json().catch(() => null);
+        if (resp.ok && data && data.sucesso) return data;
+        const mensagens = {
+            401: "Sua sessão expirou. Entre novamente para salvar as fotos.",
+            403: "Você não tem permissão para salvar as fotos desta ordem.",
+            413: "As fotos ultrapassam o tamanho aceito pelo servidor. Selecione menos fotos e tente novamente.",
+            502: "O servidor não conseguiu salvar as fotos. Aguarde um momento e tente novamente.",
+            503: "O serviço está temporariamente indisponível. Aguarde um momento e tente novamente.",
+            504: "O servidor demorou para responder. Confira as fotos salvas antes de tentar novamente.",
+        };
+        throw new Error((data && (data.error || data.msg)) || mensagens[resp.status] ||
+            (resp.ok ? "O servidor retornou uma resposta inválida. Confira as fotos salvas antes de tentar novamente." :
+                `Não foi possível salvar as fotos (erro ${resp.status}). Tente novamente.`));
+    }
+
     async function salvarFotosPreexpedicao() {
-        if (!ceFotos.apiBase || !ceFotos.cod) return;
+        const btn = $("ce-fotos-salvar");
+        if (btn.disabled || !ceFotos.apiBase || !ceFotos.cod) return;
         if (!ceFotos.novasMaterial.length && !ceFotos.novaCliente) {
             toast("Adicione ao menos uma foto do material ou do cliente.", "error");
             return;
         }
-        const fd = new FormData();
-        ceFotos.novasMaterial.forEach((f) => fd.append("fotos_material", f, f.name));
-        if (ceFotos.novaCliente) fd.append("foto_cliente", ceFotos.novaCliente, ceFotos.novaCliente.name);
-        const btn = $("ce-fotos-salvar");
-        btn.disabled = true;
+        const controles = Array.from($("ce-fotos-modal").querySelectorAll("button, input"))
+            .map(el => ({ el, disabled: el.disabled }));
+        controles.forEach(({ el }) => { el.disabled = true; });
         try {
+            const fd = new FormData();
+            for (const foto of ceFotos.novasMaterial) {
+                const arquivo = await cePrepararFotoUpload(foto);
+                fd.append("fotos_material", arquivo, arquivo.name);
+            }
+            if (ceFotos.novaCliente) {
+                const arquivo = await cePrepararFotoUpload(ceFotos.novaCliente);
+                fd.append("foto_cliente", arquivo, arquivo.name);
+            }
             const resp = await fetch(`${ceFotos.apiBase}/ordens/${encodeURIComponent(ceFotos.cod)}/fotos-preexpedicao`, { method: "POST", body: fd });
-            const data = await resp.json();
-            if (!resp.ok || !data.sucesso) throw new Error(data.error || ("Erro " + resp.status));
+            await ceLerRespostaUpload(resp);
             toast("Fotos salvas com sucesso.", "success");
+            btn.disabled = false;
             fecharModalFotosPreexpedicao();
         } catch (e) {
             toast(e.message, "error");
         } finally {
-            btn.disabled = false;
+            controles.forEach(({ el, disabled }) => { el.disabled = disabled; });
         }
     }
 

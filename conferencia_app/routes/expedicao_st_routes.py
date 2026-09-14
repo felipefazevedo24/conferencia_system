@@ -92,7 +92,6 @@ def _fotos_dir() -> str:
     fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
     if not fotos_dir:
         fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
-    os.makedirs(fotos_dir, exist_ok=True)
     return fotos_dir
 
 
@@ -132,6 +131,7 @@ def _salvar_foto_expedicao(foto, fotos_dir, prefix, registro_id):
                 foto.stream.seek(0)
             except Exception:  # noqa: BLE001
                 pass
+    os.makedirs(fotos_dir, exist_ok=True)
     caminho = os.path.join(fotos_dir, nome)
     foto.save(caminho)
     return nome, caminho
@@ -239,11 +239,11 @@ def upload_fotos_preexpedicao_st(cod_ordem_compra):
         return jsonify({"error": "Envie ao menos uma foto do material ou do cliente."}), 400
 
     usuario = session.get("username", "desconhecido")
-    registro = _obter_ou_criar_registro_rascunho(ordem, usuario)
-    fotos_dir = _fotos_dir()
     agora = datetime.now()
 
     try:
+        registro = _obter_ou_criar_registro_rascunho(ordem, usuario)
+        fotos_dir = _fotos_dir()
         for foto in fotos_material:
             nome, caminho = _salvar_foto_expedicao(foto, fotos_dir, "material", registro.id)
             db.session.add(ExpedicaoConferenciaSimplesFoto(
@@ -255,13 +255,13 @@ def upload_fotos_preexpedicao_st(cod_ordem_compra):
             registro.foto_cliente_file_path = caminho
             registro.foto_cliente_uploaded_at = agora
             registro.foto_cliente_uploaded_by = usuario
+        registro.updated_at = agora
+        db.session.commit()
     except Exception as exc:  # noqa: BLE001
         db.session.rollback()
         current_app.logger.exception("Falha ao salvar fotos de pre-expedicao (ST)")
         return jsonify({"error": f"Falha ao salvar as fotos: {exc}"}), 502
 
-    registro.updated_at = agora
-    db.session.commit()
     return jsonify({"sucesso": True, **_fotos_preexpedicao_payload(registro)})
 
 
