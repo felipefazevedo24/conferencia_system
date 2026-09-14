@@ -31,6 +31,8 @@ from flask import g, jsonify, redirect, render_template, request, session, url_f
 
 
 PERMISSION_CATALOG = {
+    "PAGE_RECEBIMENTO_ENDERECAMENTO": "Recebimento > Endereçamento",
+    "MANAGE_RECEBIMENTO_ENDERECAMENTO": "Recebimento > Gerenciar locais e autorizar destino alternativo",
     "PAGE_CONFERENCIA": "Recebimento > Conferencia cega",
     "PAGE_PORTARIA": "Recebimento > Inclusao XML (Portaria)",
     "PAGE_FISCAL_LIBERADAS": "Recebimento > NF-e liberadas",
@@ -76,8 +78,10 @@ PERMISSION_CATALOG = {
 
 
 BASE_ROLE_PERMISSIONS = {
+    "Conferente": {"PAGE_CONFERENCIA", "PAGE_RECEBIMENTO_ENDERECAMENTO"},
     "Admin": set(PERMISSION_CATALOG.keys()),
     "Fiscal": {
+        "PAGE_RECEBIMENTO_ENDERECAMENTO",
         "PAGE_CONFERENCIA",
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_XML_AUDITOR",
@@ -95,6 +99,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LANCAMENTO",
     },
     "Logística": {
+        "PAGE_RECEBIMENTO_ENDERECAMENTO",
         "PAGE_CONFERENCIA",
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_EXPEDICAO_CONFERENCIA",

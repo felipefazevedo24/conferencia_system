@@ -3,6 +3,7 @@
 {% block title %}Conferência de Materiais{% endblock %}
 
 {% block extra_head %}
+    {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_enderecamento.css') }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
     <style>
         :root {
@@ -813,6 +814,16 @@
                     <div class="eui-stat__hint">Conferidas sem divergência</div>
                 </div>
             </div>
+            {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}
+            <button type="button" class="eui-stat is-clickable" data-filter="enderecamento" onclick="aplicarFiltroReceb('enderecamento', this)" style="text-align:left; color:inherit; font:inherit;">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-map-marker-alt"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Endereçamento</div>
+                    <div class="eui-stat__value" id="dash-enderecamento">—</div>
+                    <div class="eui-stat__hint">Materiais aguardando endereçamento</div>
+                </div>
+            </button>
+            {% endif %}
             <div class="eui-stat is-clickable" data-filter="divergencia" onclick="aplicarFiltroReceb('divergencia', this)">
                 <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div>
                 <div class="eui-stat__body">
@@ -841,6 +852,12 @@
             {% endif %}
         </div>
 
+        {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}
+        <section id="receb-enderecamento-painel" class="hidden" aria-label="Endereçamento do recebimento">
+            {% include 'recebimento_enderecamento_painel.html' %}
+        </section>
+        {% endif %}
+        <div id="receb-notas-painel">
         <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
             <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
                 <div class="eui-input-group" style="flex:1; position:relative;">
@@ -888,6 +905,7 @@
                     </table>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -1513,7 +1531,7 @@
             const params = new URLSearchParams();
             const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
             if (termo) params.set('q', termo);
-            else if (filtroReceb) params.set('status', filtroReceb);
+            else if (filtroReceb && filtroReceb !== 'enderecamento') params.set('status', filtroReceb);
             const qs = params.toString();
             const res = await fetch('/api/conferencia/dashboard' + (qs ? ('?' + qs) : ''));
             const data = await res.json();
@@ -1556,6 +1574,11 @@
 
     function aplicarFiltroReceb(slug, elemento) {
         filtroReceb = (filtroReceb === slug) ? null : slug;
+        const enderecando = filtroReceb === 'enderecamento';
+        document.getElementById('receb-notas-painel').classList.toggle('hidden', enderecando);
+        document.getElementById('receb-enderecamento-painel')?.classList.toggle('hidden', !enderecando);
+        if (enderecando) document.dispatchEvent(new Event('recebimento:abrir-enderecamento'));
+
         document.querySelectorAll('#dashboard-resumo .eui-stat').forEach(el => el.classList.remove('is-active'));
         if (filtroReceb) {
             const alvo = elemento || document.querySelector(`#dashboard-resumo .eui-stat[data-filter="${filtroReceb}"]`);
@@ -1565,7 +1588,7 @@
         if (btn) btn.classList.toggle('hidden', !filtroReceb);
         const sub = document.getElementById('notas-subtitulo');
         if (sub) {
-            const labels = { pendente: 'Pendentes de conferência.', conferido: 'Conferidas — aguardando lançamento.', divergencia: 'Conferidas com divergência.', lancado: 'Notas já lançadas no ERP.' };
+            const labels = { pendente: 'Pendentes de conferência.', conferido: 'Conferidas — aguardando lançamento.', divergencia: 'Conferidas com divergência.', lancado: 'Notas já lançadas no ERP.', enderecamento: 'Endereçamento dos materiais conferidos.' };
             sub.textContent = filtroReceb ? labels[filtroReceb] : 'Fila operacional das NF-es no recebimento.';
         }
         carregarNotas();
@@ -1987,6 +2010,15 @@
         }
     }
 
+    let enderecamentoAposRecebimento = [];
+    function oferecerEnderecamento(ids) {
+        pararHeartbeat();
+        if ({{ 'true' if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }} && ids?.length && confirm('Recebimento concluído. Deseja endereçar os materiais conformes agora?\nSe deixar para depois, eles ficarão em Conferência de Recebimento → Endereçamento.')) {
+            location.href = '/conferencia?etapa=enderecamento&ids=' + ids.join(',');
+        } else {
+            location.reload();
+        }
+    }
     async function efetivarGravacaoFinal() {
         const btn = document.getElementById('btn-efetivar-ok');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Concluindo...'; }
@@ -2006,8 +2038,8 @@
                 }),
             });
             if (r.ok) {
-                pararHeartbeat();
-                location.reload();
+                const concluido = await r.json();
+                oferecerEnderecamento(concluido.enderecamento_ids);
                 return;
             }
             const d = await r.json().catch(() => ({}));
@@ -2106,6 +2138,7 @@
             return;
         }
 
+        enderecamentoAposRecebimento = data.enderecamento_ids || [];
         document.getElementById('modal-motivo').style.display = 'none';
         document.getElementById('modal-resultado').style.display = 'none';
 
@@ -2528,7 +2561,7 @@
         }
     }
 
-    function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; location.reload(); }
+    function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; oferecerEnderecamento(enderecamentoAposRecebimento); }
     function fecharModalReversao() { document.getElementById('modal-reversao').style.display = 'none'; }
     function iniciarHeartbeat() { heartbeatTimer = setInterval(() => { if(notaSel) fetch('/api/lock/heartbeat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nota:notaSel})}) }, 45000); }
     function pararHeartbeat() { clearInterval(heartbeatTimer); }
@@ -2561,4 +2594,8 @@
         atualizarDashboard();
     }).catch(() => {});
 </script>
+{% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}
+<script src="{{ url_for('static', filename='vendor/html5-qrcode/html5-qrcode.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/recebimento_enderecamento.js') }}"></script>
+{% endif %}
 {% endblock %}

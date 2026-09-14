@@ -65,6 +65,22 @@ def _headers(cfg: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
+def buscar_localizacao_produto_grv(codigo_interno: str) -> str:
+    """Consulta direta, sem cache e inclusive para produtos sem saldo."""
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise RuntimeError("Consulta ao GRV não configurada.")
+    response = requests.post(
+        f"{cfg['api_url']}/api/erp/produto-localizacao",
+        json={"codigo_interno": codigo_interno}, headers=_headers(cfg), timeout=cfg["timeout"],
+    )
+    response.raise_for_status()
+    dados = response.json()
+    if dados.get("sucesso") is not True or not dados.get("encontrado"):
+        raise ValueError("SKU não encontrado no GRV ou consulta indisponível.")
+    return str(dados.get("localizacao_estoque") or "")
+
+
 def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> dict[str, Any]:
     """Retorna o saldo do GRV, cacheado por alguns minutos (a consulta traz
     o estoque inteiro de uma vez, entao nao vale a pena bater a cada request).

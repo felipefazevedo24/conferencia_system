@@ -1390,6 +1390,44 @@ class FrotaChecklistDiario(db.Model):
 # MODELOS WMS - WAREHOUSE MANAGEMENT SYSTEM
 # ============================================================================
 
+class RecebimentoEnderecamento(db.Model):
+    """Uma tarefa por item conferido; a confirmação no GRV é independente da NF."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_nota_id = db.Column(db.Integer, db.ForeignKey("item_nota.id"), unique=True, nullable=False)
+    sku = db.Column(db.String(80), nullable=False, index=True)
+    quantidade = db.Column(db.Float, nullable=False)
+    versao_leitura = db.Column(db.Integer, nullable=False, default=1)
+    unidade = db.Column(db.String(20))
+    status = db.Column(db.String(40), nullable=False, default="Pendente", index=True)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    criado_por = db.Column(db.String(100), nullable=False)
+    concluido_em = db.Column(db.DateTime)
+    alocacoes = db.Column(db.JSON)
+    motivo = db.Column(db.String(30))
+    justificativa = db.Column(db.String(500))
+    confirmado_por = db.Column(db.String(100))
+    enderecos_antes = db.Column(db.JSON)
+    enderecos_enviados = db.Column(db.Text)
+    erro = db.Column(db.Text)
+    executando_em = db.Column(db.DateTime)
+    item = db.relationship("ItemNota")
+
+
+class RecebimentoEnderecamentoTrava(db.Model):
+    sku = db.Column(db.String(80), primary_key=True)
+    token = db.Column(db.String(36))
+    expira_em = db.Column(db.DateTime)
+
+
+class RecebimentoEnderecamentoEvento(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tarefa_id = db.Column(db.Integer, db.ForeignKey("recebimento_enderecamento.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(40), nullable=False)
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    detalhes = db.Column(db.JSON)
+
+
 class LocalizacaoArmazem(db.Model):
     """Localização física no armazém (Rua-Prédio-Nível-Apartamento)"""
     id = db.Column(db.Integer, primary_key=True)
