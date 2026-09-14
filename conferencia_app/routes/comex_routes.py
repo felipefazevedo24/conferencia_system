@@ -102,6 +102,9 @@ def _processo_payload(p: ComexProcesso) -> dict:
         # a partir daqui, entao regra nova nao precisa ser repetida la'.
         "campos_operacionais": svc.campos_operacionais_do_processo(p),
         "campos_faltando_concluir": svc.campos_faltando_para_concluir(p),
+        # Se o menu de acoes deve oferecer "Editar dados de embarque" -
+        # regra fica no servico pra nao ser repetida ramo a ramo na tela.
+        "pode_editar_dados": svc.pode_editar_dados(p),
         "instrucao_enviada_em": p.instrucao_enviada_em.strftime("%d/%m/%Y %H:%M") if p.instrucao_enviada_em else None,
         "instrucao_enviada_por": p.instrucao_enviada_por,
         "cotacao_vencedora_id": p.cotacao_vencedora_id,

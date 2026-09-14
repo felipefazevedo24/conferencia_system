@@ -770,7 +770,15 @@
         const it = (act, icon, label, danger) =>
             `<button data-act="${act}" data-id="${p.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
         const btnPularStatus = () => PODE_PULAR_STATUS ? it("pular-status", "fa-forward-fast", "Pular Status", true) : "";
-        let itens = "";
+        // "Editar dados de embarque" (o formulario com TODOS os campos
+        // operacionais) aparece em TODO status a partir da Instrucao,
+        // inclusive no Concluido. Quem decide e' o back-end
+        // (comex_service.pode_editar_dados) - aqui e' uma linha so', em vez
+        // de repetir a regra em cada ramo abaixo e esquecer num deles.
+        const itemEditarDados = p.pode_editar_dados
+            ? it("instrucao", "fa-clipboard-list", "Editar dados de embarque")
+            : "";
+        let itens = itemEditarDados;
         if (p.status_modulo === "OC") {
             itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
             itens += it("criar-po", "fa-file-signature", "Criar PO");
@@ -793,25 +801,17 @@
             itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
             itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
         } else if (p.status_modulo === "Coleta" || p.status_modulo === "EmTransito") {
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else if (p.status_modulo === "Concluido") {
-            // Processo concluido antes da regra nova (ou via "Pular Status")
-            // costuma estar sem os dados - por isso continua editavel aqui.
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados do processo");
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else {
-            // Desembarque / Desembaraco / Transporte / NF-Cambio: e' onde
-            // Numerario e DI abrem, entao precisa dar pra editar aqui.
-            itens += it("instrucao", "fa-clipboard-list", "Editar dados do processo");
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         }
