@@ -1987,6 +1987,15 @@
         }
     }
 
+    let enderecamentoAposRecebimento = [];
+    function oferecerEnderecamento(ids) {
+        pararHeartbeat();
+        if ({{ 'true' if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }} && ids?.length && confirm('Recebimento concluído. Deseja endereçar os materiais conformes agora?\nSe deixar para depois, eles ficarão em Recebimento → Endereçamento.')) {
+            location.href = '/recebimento/enderecamento?ids=' + ids.join(',');
+        } else {
+            location.reload();
+        }
+    }
     async function efetivarGravacaoFinal() {
         const btn = document.getElementById('btn-efetivar-ok');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Concluindo...'; }
@@ -2006,8 +2015,8 @@
                 }),
             });
             if (r.ok) {
-                pararHeartbeat();
-                location.reload();
+                const concluido = await r.json();
+                oferecerEnderecamento(concluido.enderecamento_ids);
                 return;
             }
             const d = await r.json().catch(() => ({}));
@@ -2106,6 +2115,7 @@
             return;
         }
 
+        enderecamentoAposRecebimento = data.enderecamento_ids || [];
         document.getElementById('modal-motivo').style.display = 'none';
         document.getElementById('modal-resultado').style.display = 'none';
 
@@ -2528,7 +2538,7 @@
         }
     }
 
-    function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; location.reload(); }
+    function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; oferecerEnderecamento(enderecamentoAposRecebimento); }
     function fecharModalReversao() { document.getElementById('modal-reversao').style.display = 'none'; }
     function iniciarHeartbeat() { heartbeatTimer = setInterval(() => { if(notaSel) fetch('/api/lock/heartbeat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nota:notaSel})}) }, 45000); }
     function pararHeartbeat() { clearInterval(heartbeatTimer); }

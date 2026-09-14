@@ -2189,6 +2189,30 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar NF-e emitidas no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/produto-localizacao")
+    def consultar_produto_localizacao():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        codigo = str((request.get_json(silent=True) or {}).get("codigo_interno") or "").strip()
+        if not codigo or len(codigo) > 80:
+            return jsonify({"erro": "codigo_interno_invalido"}), 400
+        try:
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT localizacao_estoque FROM tproduto WHERE codigo_interno = %s LIMIT 2",
+                        (codigo,),
+                    )
+                    rows = cur.fetchall()
+            if len(rows) > 1:
+                return jsonify({"sucesso": False, "erro": "codigo_ambiguo"}), 409
+            return jsonify({"sucesso": True, "encontrado": bool(rows),
+                            "localizacao_estoque": (rows[0][0] or "") if rows else ""})
+        except Exception:
+            app.logger.exception("Falha ao consultar localização do produto")
+            return jsonify({"sucesso": False, "erro": "consulta_indisponivel"}), 502
+
     @app.post("/api/erp/nfe-emitida")
     def consultar_nfe_emitida():
         cfg = _config()

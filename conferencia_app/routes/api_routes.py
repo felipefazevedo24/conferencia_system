@@ -5928,7 +5928,13 @@ def validar():
     else:
         motivos_resolvidos = {}
 
+    enderecamento_ids = []
     if forcar_pendencia:
+        from ..services.recebimento_enderecamento_service import criar_pendencias
+        enderecamento_ids = criar_pendencias(
+            itens_db, contagens, conversoes_itens,
+            {i["id"] for i in resultado_itens if i["status"] == "OK"}, user,
+        )
         ids_itens = [int(item.id) for item in itens_db]
         ItemNota.query.filter(ItemNota.id.in_(ids_itens)).update(
             {
@@ -5989,6 +5995,9 @@ def validar():
             "tentativa": tentativa_numero,
         },
     }
+
+    if enderecamento_ids:
+        payload["enderecamento_ids"] = enderecamento_ids
 
     if forcar_pendencia and total_divergencias > 0:
         payload["pendencia_confirmada"] = True
