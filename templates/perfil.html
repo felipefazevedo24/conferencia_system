@@ -65,6 +65,15 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
     }
+    .perfil-tabs { display: flex; gap: 6px; padding: 4px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-surface-muted); }
+    .perfil-tab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 18px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--color-text-muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .perfil-tab[aria-selected="true"] { background: var(--color-surface); color: var(--color-primary-600); border-color: var(--color-border); box-shadow: var(--shadow-1); }
+    .perfil-tab:focus-visible { outline: 2px solid var(--color-primary-600); outline-offset: 2px; }
+    .perfil-panel[hidden] { display: none; }
+    .perfil-conta-head { margin-bottom: 18px; }
+    .perfil-conta-head h2 { margin: 0 0 5px; color: var(--color-text); font-size: 18px; }
+    .perfil-conta-head p { margin: 0; color: var(--color-text-muted); font-size: 13px; }
+    @media (max-width: 600px) { .perfil-tab { flex: 1; padding: 11px 8px; } }
 
     .perfil-card {
         border: 1px solid var(--color-border);
@@ -185,8 +194,16 @@
             </div>
         </div>
 
-        {% include "_perfil_atividade.html" %}
+        <div class="perfil-tabs" role="tablist" aria-label="Seções do perfil">
+            <button type="button" class="perfil-tab" id="tab-atividade" role="tab" aria-selected="true" aria-controls="painel-atividade"><i class="fas fa-chart-column" aria-hidden="true"></i> Minha atividade</button>
+            <button type="button" class="perfil-tab" id="tab-conta" role="tab" aria-selected="false" aria-controls="painel-conta" tabindex="-1"><i class="fas fa-user-gear" aria-hidden="true"></i> Dados e configurações</button>
+        </div>
+        <div class="perfil-panel" id="painel-atividade" role="tabpanel" aria-labelledby="tab-atividade" tabindex="0">
+            {% include "_perfil_atividade.html" %}
+        </div>
 
+        <div class="perfil-panel" id="painel-conta" role="tabpanel" aria-labelledby="tab-conta" tabindex="0" hidden>
+        <div class="perfil-conta-head"><h2>Dados e configurações</h2><p>Atualize seus dados, a senha e as preferências da conta.</p></div>
         <div class="perfil-grid">
             <!-- Dados cadastrais -->
             <div class="perfil-card">
@@ -317,6 +334,7 @@
                 </div>
             </div>
         </div>
+        </div>
     </section>
 </div>
 {% endblock %}
@@ -324,6 +342,34 @@
 {% block extra_js %}
 <script>
 (function () {
+    const tabs = Array.from(document.querySelectorAll('.perfil-tab'));
+    function selecionarAba(id, atualizarUrl = true) {
+        tabs.forEach(tab => {
+            const ativo = tab.id === id;
+            tab.setAttribute('aria-selected', String(ativo));
+            tab.tabIndex = ativo ? 0 : -1;
+            document.getElementById(tab.getAttribute('aria-controls')).hidden = !ativo;
+        });
+        if (atualizarUrl) history.replaceState(null, '', id === 'tab-conta' ? '#minha-conta' : '#minha-atividade');
+    }
+    tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => selecionarAba(tab.id));
+        tab.addEventListener('keydown', event => {
+            let next;
+            if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+            if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+            if (event.key === 'Home') next = 0;
+            if (event.key === 'End') next = tabs.length - 1;
+            if (next === undefined) return;
+            event.preventDefault();
+            selecionarAba(tabs[next].id);
+            tabs[next].focus();
+        });
+    });
+    function restaurarAba() { selecionarAba(location.hash === '#minha-conta' ? 'tab-conta' : 'tab-atividade', false); }
+    window.addEventListener('hashchange', restaurarAba);
+    restaurarAba();
+
     function setFeedback(id, msg, ok) {
         const el = document.getElementById(id);
         if (!el) return;

@@ -86,11 +86,11 @@ def indicadores_perfil(username, periodo):
 
     return [
         modulo("recebimento", "Recebimento", "fa-box-open", "Conferências vinculadas à sua conta.", [
-            ("NFs conferidas", notas(ItemNota.usuario_conferencia, ItemNota.fim_conferencia, ItemNota.tipo_documento == "NFE")),
+            ("Notas fiscais conferidas por você", notas(ItemNota.usuario_conferencia, ItemNota.fim_conferencia, ItemNota.tipo_documento == "NFE")),
             ("Itens conferidos", contar(ItemNota, ItemNota.usuario_conferencia, ItemNota.fim_conferencia)),
         ]),
         modulo("expedicao", "Expedição", "fa-truck-ramp-box", "Conferências encerradas e saídas realizadas por você.", [
-            ("NFs expedidas", avulsas.union(romaneios).count()),
+            ("Notas fiscais expedidas por você", avulsas.union(romaneios).count()),
             ("Ordens FAT conferidas", contar(ExpedicaoOrdemFat, ExpedicaoOrdemFat.conferente, ExpedicaoOrdemFat.conferido_at, ExpedicaoOrdemFat.excluido.is_(False))),
             ("Ordens ST conferidas", contar(ExpedicaoOrdemST, ExpedicaoOrdemST.conferente, ExpedicaoOrdemST.conferido_at, ExpedicaoOrdemST.excluido.is_(False))),
             ("Conferências manuais", contar(e, e.conferente, e.data_conferencia, e.origem == "Manual", e.sem_conferencia.is_(False))),
@@ -98,21 +98,21 @@ def indicadores_perfil(username, periodo):
             ("Romaneios expedidos", contar(r, r.expedido_por, r.expedido_em, r.status == "Expedido")),
         ]),
         modulo("viagens", "Viagens e agendamentos", "fa-route", "Viagens realizadas consideram seu vínculo como motorista.", [
-            ("Viagens realizadas", viagens.count()),
+            ("Viagens concluídas como motorista", viagens.count()),
             ("Viagens criadas", contar(Viagem, Viagem.criado_por, Viagem.criado_em)),
             ("Agendamentos solicitados", contar(AgendamentoSolicitacao, AgendamentoSolicitacao.solicitante, AgendamentoSolicitacao.criado_em)),
         ]),
         modulo("inventarios", "Inventários", "fa-boxes-stacked", "Cada contagem representa um registro de produto e local.", [
-            ("Contagens registradas", contar(LogisticaInventarioInicial, LogisticaInventarioInicial.criado_por, LogisticaInventarioInicial.criado_em)),
+            ("Contagens de estoque feitas por você", contar(LogisticaInventarioInicial, LogisticaInventarioInicial.criado_por, LogisticaInventarioInicial.criado_em)),
             ("Contagens cíclicas", contar(WMSInventarioCiclico, WMSInventarioCiclico.contado_por, WMSInventarioCiclico.contado_em)),
             ("Contagens aprovadas", contar(WMSInventarioCiclico, WMSInventarioCiclico.aprovado_por, WMSInventarioCiclico.aprovado_em, WMSInventarioCiclico.status == "Aprovado")),
         ]),
         modulo("documentos", "Documentos de entrada", "fa-file-invoice", "Documentos únicos, independentemente da quantidade de itens.", [
-            ("Documentos importados", notas(ItemNota.usuario_importacao, ItemNota.data_importacao)),
+            ("Documentos importados por você", notas(ItemNota.usuario_importacao, ItemNota.data_importacao)),
             ("Documentos auditados", notas(ItemNota.auditor_usuario, ItemNota.auditor_data)),
             ("Documentos lançados", notas(ItemNota.usuario_lancamento, ItemNota.data_lancamento)),
         ]),
         modulo("cadastros", "Cadastros", "fa-diagram-project", "Solicitações de cadastro abertas por você.", [
-            ("Solicitações abertas", contar(CadastroWorkflowSolicitacao, CadastroWorkflowSolicitacao.solicitante, CadastroWorkflowSolicitacao.data_abertura)),
+            ("Solicitações de cadastro abertas por você", contar(CadastroWorkflowSolicitacao, CadastroWorkflowSolicitacao.solicitante, CadastroWorkflowSolicitacao.data_abertura)),
         ]),
     ]
