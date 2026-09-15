@@ -24,23 +24,26 @@
    items = data.itens; $('pa-list').replaceChildren();
    if (!ids && !$('pa-search').value) $('dash-enderecamento').textContent = data.contadores.Pendente;
    document.querySelectorAll('#pa-tabs button').forEach(b => { b.classList.toggle('active', b.dataset.status === status); b.querySelector('span').textContent = `(${data.contadores[b.dataset.status]})`; });
-   if (!items.length) $('pa-list').append(el('p', 'Nenhum material nesta fila para o filtro selecionado.', 'pa-card'));
+    if (!items.length) {
+     const row = el('tr');
+     const cell = el('td', 'Nenhum material nesta fila para o filtro selecionado.', 'pa-empty');
+     cell.colSpan = 7;
+     row.append(cell);
+     $('pa-list').append(row);
+    }
    items.forEach(item => {
-    const card = el('article', null, 'pa-card pa-row');
-    const material = el('div', null, 'pa-row__material');
-    material.append(el('h3', item.descricao || 'Material sem descrição'), el('p', `NF ${item.nota} · ${item.fornecedor || 'Fornecedor não informado'}`, 'pa-meta'));
-    if (!item.sku) material.append(el('p', 'Vínculo de SKU pendente no recebimento.', 'pa-sku-pendente'));
-    const quantidade = el('div', null, 'pa-row__quantity');
-    quantidade.append(el('strong', `${item.quantidade} ${item.unidade || ''}`), el('span', `Recebido em ${date(item.criado_em)}`));
-    card.append(el('span', item.status, 'pa-badge'), material, quantidade);
-    if (item.erro) card.append(el('p', item.erro, 'pa-alert'));
+     const card = el('tr', null, 'pa-row');
+     const statusCell = el('td');
+     statusCell.append(el('span', item.status, 'pa-badge'));
+     card.append(el('td', `NF ${item.nota}`, 'pa-nf'), el('td', item.fornecedor || '---'), el('td', item.descricao || 'Material sem descrição', 'pa-description'), el('td', `${item.quantidade} ${item.unidade || ''}`), el('td', date(item.criado_em), 'pa-date'), statusCell);
     const actions = el('div', null, 'pa-tools');
     if (item.status === 'Pendente') actions.append(button('Endereçar material', () => openWork(item)));
     if (item.status === 'Aguardando sincronização') actions.append(button('Tentar sincronizar', async e => {
      e.target.disabled = true;
      try { const data = await request(`${api}/${item.id}/sincronizar`, {}); feedback(data.item.status === 'Concluído' ? 'Endereço sincronizado com o GRV.' : data.item.erro || 'Sincronização pendente.'); await refresh(); } catch (err) { feedback(err.message); } finally { e.target.disabled = false; }
     }));
-    actions.append(button('Ver histórico e origem', () => history(item.id))); card.append(actions); $('pa-list').append(card);
+    actions.append(button('Ver histórico e origem', () => history(item.id))); const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
+    if (item.erro) { const errorRow = el('tr', null, 'pa-error-row'); const errorCell = el('td', item.erro, 'pa-alert'); errorCell.colSpan = 7; errorRow.append(errorCell); $('pa-list').append(errorRow); }
     if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') actions.append(button('Revisar leituras', async () => {
      const justificativa = prompt('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.');
      if (!justificativa) return;
