@@ -3,7 +3,7 @@
 {% block title %}Conferência de Materiais{% endblock %}
 
 {% block extra_head %}
-    {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_enderecamento.css') }}">{% endif %}
+    {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_enderecamento.css') }}?v={{ asset_version }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
     <style>
         :root {
@@ -2596,6 +2596,6 @@
 </script>
 {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}
 <script src="{{ url_for('static', filename='vendor/html5-qrcode/html5-qrcode.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/recebimento_enderecamento.js') }}"></script>
+<script src="{{ url_for('static', filename='js/recebimento_enderecamento.js') }}?v={{ asset_version }}"></script>
 {% endif %}
 {% endblock %}
