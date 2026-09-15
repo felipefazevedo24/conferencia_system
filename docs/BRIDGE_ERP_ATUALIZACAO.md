@@ -186,6 +186,34 @@ Use o launcher Tailscale ja existente; nao altere o token nem a senha. Depois,
 atualize o servidor web e faca Reload (Parte 1, sem migration/Parte 2).
 A deteccao do endpoint e automatica, sem cadastrar outra URL no sistema.
 
+### Atualizacao adicional de cache e fila
+
+Se o endpoint de previas ja responde, o cache compartilhado entre processos
+fica no servidor web, nao no tunel. Publicar o codigo apenas na VM nao ativa
+esse cache no PythonAnywhere: atualizar tambem o web app e fazer Reload.
+
+Depois de publicar esta versao em `origin/main`, os dois arquivos de servico
+podem ser atualizados seletivamente na VM. Execute no CMD, uma linha por vez,
+e pare diante de qualquer erro. Confirme as copias antes da substituicao:
+
+```bat
+cd /d "C:\Users\cmb-dev\Desktop\conferencia_system"
+set "BACKUP=%TEMP%\bridge-producao-%RANDOM%-%RANDOM%"
+mkdir "%BACKUP%"
+copy conferencia_app\services\producao_service.py "%BACKUP%\producao_service.py"
+copy conferencia_app\services\producao_bridge.py "%BACKUP%\producao_bridge.py"
+git fetch origin
+git checkout origin/main -- conferencia_app/services/producao_service.py conferencia_app/services/producao_bridge.py
+.venv\Scripts\python.exe -m py_compile conferencia_app\services\producao_service.py conferencia_app\services\producao_bridge.py
+start_erp_bridge_tailscale.bat
+```
+
+Essa rodada evita analisar geometria desnecessaria em PDFs com imagem
+incorporada. No servidor web, tambem limita trabalhos de imagem pendentes e
+reaproveita previas em disco entre trabalhadores, sem mudar credenciais,
+dependencias ou esquema do banco. Manter a janela do servidor aberta e
+testar uma peca na Producao apos o Reload; `OPTIONS` verifica apenas a rota.
+
 Verificacao local da rota, sem enviar segredos e sem consultar o banco:
 
 ```powershell

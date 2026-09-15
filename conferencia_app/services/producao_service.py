@@ -52,8 +52,10 @@ _PREVIEW_REQUEST_CACHE_LIMIT = 128
 _PREVIEW_REQUEST_CACHE: OrderedDict[str, tuple[float, tuple[bytes, str, str] | Exception]] = OrderedDict()
 _PREVIEW_REQUEST_JOBS: dict[str, Future[tuple[bytes, str, str]]] = {}
 _PREVIEW_REQUEST_LOCK = threading.RLock()
-_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="production-preview-request")
-_PREVIEW_DETAIL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="production-preview-detail")
+_PREVIEW_REQUEST_CONCURRENCY = 4
+_PREVIEW_DETAIL_CONCURRENCY = 2
+_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=_PREVIEW_REQUEST_CONCURRENCY, thread_name_prefix="production-preview-request")
+_PREVIEW_DETAIL_EXECUTOR = ThreadPoolExecutor(max_workers=_PREVIEW_DETAIL_CONCURRENCY, thread_name_prefix="production-preview-detail")
 _STRUCTURE_CACHE_TTL_SECONDS = 10.0
 _STRUCTURE_CACHE_LIMIT = 16
 _STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
@@ -624,22 +626,29 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
                 raise LookupError("Documento sem paginas")
             from .production_images import _largest_placed_image, render_variants
 
-            candidates = []
+            analyzed_pages = {}
+            labeled = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
-                candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
-            candidates.sort(key=lambda item: item[0], reverse=True)
+                if any(len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4]) for block in page.get_text("blocks")):
+                    analyzed_pages[page_index] = _page_isometric_candidates(page)
+                    labeled.extend((score, page_index, rect) for score, rect, is_labeled in analyzed_pages[page_index] if is_labeled)
             # CAD PDFs can contain a shaded rendering alongside vector dimensions.
             # Match Estrutura: an explicit isometric view takes priority, then the
             # embedded rendering, before scoring unlabelled technical linework.
-            labeled = [candidate for candidate in candidates if candidate[3]]
             if labeled:
-                _, page_index, clip, _ = labeled[0]
+                _, page_index, clip = max(labeled, key=lambda candidate: candidate[0])
                 return _render_clip_previews(pdf.load_page(page_index), clip)
             for page in pdf:
                 image = _largest_placed_image(pdf, page)
                 if image is not None:
                     return render_variants(image)
+            candidates = []
+            for page_index in range(pdf.page_count):
+                if page_index not in analyzed_pages:
+                    analyzed_pages[page_index] = _page_isometric_candidates(pdf.load_page(page_index))
+                candidates.extend((score, page_index, rect, is_labeled) for score, rect, is_labeled in analyzed_pages[page_index])
+            candidates.sort(key=lambda candidate: candidate[0], reverse=True)
             ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
             if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 raise LookupError("Vista isometrica nao identificada com confianca")
@@ -807,13 +816,19 @@ def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tu
             return cached[1]
         if cached:
             _PREVIEW_REQUEST_CACHE.pop(request_key, None)
-        if request_key not in _PREVIEW_REQUEST_JOBS:
-            executor = _PREVIEW_DETAIL_EXECUTOR if variant == "detail" else _PREVIEW_REQUEST_EXECUTOR
-            future = executor.submit(
-                _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
-            )
-            _PREVIEW_REQUEST_JOBS[request_key] = future
-            future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+        future = _PREVIEW_REQUEST_JOBS.get(request_key)
+        if future is None:
+            limit = _PREVIEW_DETAIL_CONCURRENCY if variant == "detail" else _PREVIEW_REQUEST_CONCURRENCY
+            active = sum(key.endswith(f"|{variant}") for key in _PREVIEW_REQUEST_JOBS)
+            if active < limit:
+                executor = _PREVIEW_DETAIL_EXECUTOR if variant == "detail" else _PREVIEW_REQUEST_EXECUTOR
+                future = executor.submit(
+                    _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
+                )
+                _PREVIEW_REQUEST_JOBS[request_key] = future
+                future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+    if future is not None and future.done():
+        return future.result()
     pending_etag = hashlib.sha256(request_key.encode("utf-8")).hexdigest()
     return None, "image/png", pending_etag
 
