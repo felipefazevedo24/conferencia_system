@@ -2318,15 +2318,21 @@ def create_app() -> Flask:
         cfg = _config()
         if not _authorized(cfg):
             return jsonify({"erro": "nao_autorizado"}), 401
-        codigo = str((request.get_json(silent=True) or {}).get("codigo_interno") or "").strip()
+        payload = request.get_json(silent=True) or {}
+        codigo = str(payload.get("codigo_interno") or "").strip()
+        try:
+            empresa = int(payload.get("empresa") or 1)
+        except (TypeError, ValueError):
+            empresa = 1
         if not codigo or len(codigo) > 80:
             return jsonify({"erro": "codigo_interno_invalido"}), 400
         try:
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT localizacao_estoque FROM tproduto WHERE btrim(codigo_interno) = btrim(%s) LIMIT 2",
-                        (codigo,),
+                        "SELECT localizacao_estoque FROM tproduto"
+                        " WHERE cod_empresa = %s AND btrim(codigo_interno) = btrim(%s) LIMIT 2",
+                        (empresa, codigo),
                     )
                     rows = cur.fetchall()
             if len(rows) > 1:

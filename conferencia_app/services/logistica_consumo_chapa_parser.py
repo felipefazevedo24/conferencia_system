@@ -41,8 +41,6 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from bs4 import BeautifulSoup
-
 
 def _grid_from_table(table) -> tuple[dict[tuple[int, int], str], int]:
     """Expande uma <table> HTML (com colspan/rowspan) numa grade
@@ -218,6 +216,11 @@ def parse_relatorio_nesting_html(conteudo_html: str | bytes) -> list[dict]:
     primeira."""
     if isinstance(conteudo_html, bytes):
         conteudo_html = conteudo_html.decode("utf-8", errors="replace")
+    try:
+        # Import preguicoso: a bridge do ERP importa o app sem usar o parser.
+        from bs4 import BeautifulSoup
+    except ModuleNotFoundError:
+        raise RuntimeError("Biblioteca beautifulsoup4 nao instalada. Rode: pip install -r requirements.txt")
     soup = BeautifulSoup(conteudo_html, "html.parser")
     resultado = []
     for table in soup.find_all("table"):
