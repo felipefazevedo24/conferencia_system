@@ -52,6 +52,7 @@ def test_finalizar_romaneio_gera_entregas_na_central(ambiente, frete, origem):
                return_value={"nome": "Cliente Teste"}):
         response = client.post(f'/api/expedicao/romaneio-fat/{rid}/finalizar')
         assert response.status_code == 200, response.get_json()
+        assert response.get_json()['entrega_automatica_criada'] is (origem is not None)
         with app.app_context():
             # Reprocessamento (inclui romaneios já existentes) não duplica NFs.
             gerar_solicitacoes_entrega_cif()
