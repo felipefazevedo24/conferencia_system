@@ -138,7 +138,9 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
     parent = next((item for item in all_nodes if item["id"] == node.get("parent_id")), None)
     path = []
     cursor = parent
-    while cursor:
+    visited = {node["id"]}
+    while cursor and cursor["id"] not in visited:
+        visited.add(cursor["id"])
         path.insert(0, cursor)
         cursor = next((item for item in all_nodes if item["id"] == cursor.get("parent_id")), None)
     return {
@@ -153,9 +155,9 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
         "parent_id": node.get("parent_id"),
         "child_ids": node.get("child_ids") or [],
         "has_children": bool(node.get("child_ids")),
-        "predecessor_ids": [],
-        "path_ids": [item["id"] for item in path],
-        "path_labels": [item.get("codigo") or item["id"] for item in path],
+        "predecessor_ids": node.get("predecessor_ids") or [],
+        "path_ids": [item["id"] for item in path] + [node["id"]],
+        "path_labels": [item.get("codigo") or item["id"] for item in path] + [node.get("codigo") or node["id"]],
         "state": {"bloqueado": "blocked", "concluido": "completed", "disponivel": "available", "montagem": "assembling", "fabricacao": "manufacturing", "nao_iniciado": "not_started"}.get(node.get("estado") or "nao_iniciado", "not_started"),
         "state_reason_code": "process_locked" if node.get("estado") == "bloqueado" else "no_execution_evidence",
         "state_reason": node.get("estado_motivo") or "Sem informacao",
@@ -196,7 +198,7 @@ def original_search_orders():
 
 
 def _original_node_result(item: dict) -> dict:
-    return {"number": item.get("numero"), "title": item.get("titulo"), "source_status": item.get("status_origem") or None, "due_date": item.get("data_prevista"), "drawing_number": item.get("desenho") or None, "matched_item_code": None, "matched_item_description": None, "matched_budget_number": None}
+    return {"number": item.get("numero"), "title": item.get("titulo"), "source_status": item.get("status_origem") or None, "due_date": item.get("data_prevista"), "drawing_number": item.get("desenho") or None, "matched_item_code": item.get("matched_item_code"), "matched_item_description": item.get("matched_item_description"), "matched_budget_number": item.get("matched_budget_number")}
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/structure")
@@ -214,8 +216,9 @@ def original_structure(numero_os: str):
 @permission_required("PAGE_PRODUCAO")
 def original_dependencies(numero_os: str):
     try:
-        data = producao_service.obter_estrutura(numero_os)
-        return jsonify({"selected_order_number": numero_os, "budget_number": None, "nodes": [{"number": data["ordem"]["numero"], "title": data["ordem"].get("titulo", ""), "source_status": data["ordem"].get("status_origem"), "due_date": data["ordem"].get("data_prevista"), "drawing_number": data["ordem"].get("desenho"), "is_budget_order": False}], "edges": [], "source": {"calculated_at": datetime.now().isoformat()}})
+        return jsonify(producao_service.obter_dependencias(numero_os))
+    except LookupError as exc:
+        return jsonify({"detail": str(exc)}), 404
     except Exception:
         return jsonify({"detail": "Falha ao consultar as dependencias da OS"}), 503
 
@@ -248,7 +251,8 @@ def original_item(numero_os: str, aux_code: int):
         documents = []
     drawings = [item for item in documents if item["kind"] == "drawing"]
     primary_document = next((item for item in documents if item.get("is_primary")), None)
-    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
+    related = {item["id"]: _original_node(item, data["nos"], numero_os) for item in data["nos"]}
+    return jsonify({"node": original, "parent": related.get(original["parent_id"]), "path": [related[item_id] for item_id in original["path_ids"] if item_id in related], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [related[item_id] for item_id in original["predecessor_ids"] if item_id in related], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/operations/live")

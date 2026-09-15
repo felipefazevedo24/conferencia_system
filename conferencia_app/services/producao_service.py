@@ -114,8 +114,8 @@ def _remember_order(row):
     numero_os = _texto(row.get("n_os"))
     if not numero_os:
         return
-    params = {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1}
-    key = (_scope(), (queries.SQL_PRODUCAO_BUSCAR_OS, tuple(sorted(params.items()))))
+    params = {"cod_empresa": 1, "numero_os": numero_os}
+    key = (_scope(), (queries.SQL_PRODUCAO_OBTER_OS, tuple(sorted(params.items()))))
     with _QUERY_LOCK:
         _QUERY_CACHE[key] = (time.monotonic(), copy.deepcopy(row))
         _QUERY_CACHE.move_to_end(key)
@@ -153,7 +153,56 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     )
     for row in rows:
         _remember_order(row)
-    return [_os_payload(row) for row in rows]
+    results = []
+    for row in rows:
+        result = _os_payload(row)
+        exact_order = result["numero"].casefold() == termo.casefold()
+        item_code = None if exact_order else row.get("matched_item_code")
+        result.update(
+            matched_item_code=item_code,
+            matched_item_description=row.get("matched_item_description") if item_code else None,
+            matched_budget_number=None if exact_order else row.get("matched_budget_number"),
+        )
+        results.append(result)
+    return results
+
+
+def obter_dependencias(numero_os: str) -> dict[str, Any]:
+    """Rastreia o orcamento e as OS geradas por solicitacoes reais do GRV."""
+    ordem = _obter_ordem(_texto(numero_os))
+    params = {"cod_empresa": 1, "cod_os": ordem["codigo"]}
+    budget = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ORCAMENTO_OS, params)
+    budget_number = budget.get("budget_number") if budget else None
+    rows = [dict(ordem, is_budget_order=False)]
+    if budget_number is not None:
+        rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DEPENDENCIAS_OS,
+                              {"cod_empresa": 1, "numero_orcamento": budget_number})
+    nodes = {}
+    links = set()
+    for row in rows:
+        code = int(row["codigo"])
+        is_budget_order = bool(row.get("is_budget_order"))
+        if code not in nodes or is_budget_order:
+            nodes[code] = {
+                "number": _texto(row.get("n_os")), "title": _texto(row.get("titulo")),
+                "source_status": row.get("status_servico"), "due_date": _iso(row.get("dt_prevista")),
+                "drawing_number": row.get("n_desenho"), "is_budget_order": is_budget_order,
+            }
+        dependent = row.get("dependent_cod_os")
+        if dependent is not None and int(dependent) != code:
+            links.add((int(dependent), code))
+    return {
+        "selected_order_number": _texto(ordem.get("n_os")),
+        "budget_number": budget_number,
+        "nodes": list(nodes.values()),
+        "edges": [
+            {"dependent_order_number": nodes[dependent]["number"],
+             "prerequisite_order_number": nodes[prerequisite]["number"]}
+            for dependent, prerequisite in sorted(links)
+            if dependent in nodes and prerequisite in nodes
+        ],
+        "source": {"calculated_at": datetime.now().isoformat()},
+    }
 
 
 def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
@@ -1216,7 +1265,7 @@ def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
-    ordem = _metadata_read(fetch_one, queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
+    ordem = _metadata_read(fetch_one, queries.SQL_PRODUCAO_OBTER_OS, {"cod_empresa": 1, "numero_os": numero_os})
     if not ordem:
         raise LookupError(f"OS {numero_os} nao encontrada.")
     return ordem
@@ -1261,23 +1310,33 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             states[item_id] = "bloqueado"
             return states[item_id]
         visiting.add(item_id)
+        item = itens_por_id[item_id]
         item_ops = ops_por_item.get(item_id, [])
         finished = sum(bool(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops)
-        started = sum(bool(op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or op.get("hs_realizadas")) for op in item_ops)
         children = [derive(child_id) for child_id in filhos.get(item_id, [])]
-        has_assembly = any("MONTAGEM" in _texto(op.get("tiposervico")).upper().split() for op in item_ops)
+        assembly_ops = [op for op in item_ops if "MONTAGEM" in re.sub(r"[^\w]+", " ", _texto(op.get("tiposervico")).upper()).split()]
+        productive_ops = [op for op in item_ops if op not in assembly_ops]
+        has_assembly = bool(assembly_ops)
+        productive_finished = all(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao") for op in productive_ops)
+        def running(operations):
+            return any((op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or op.get("hs_realizadas"))
+                       and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao"))
+                       for op in operations)
         if item_ops and finished == len(item_ops):
             state = "concluido" if has_assembly else "disponivel"
-        elif any(bool(op.get("processo_travado")) for op in item_ops):
+        elif any(op.get("processo_travado") and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops):
             state = "bloqueado"
-        elif started:
-            state = "montagem" if has_assembly else "fabricacao"
-        elif has_assembly and children and all(child in {"disponivel", "concluido"} for child in children):
+        elif running(assembly_ops):
+            state = "montagem"
+        elif running(productive_ops):
+            state = "fabricacao"
+        elif has_assembly and productive_finished and children and all(child in {"disponivel", "concluido"} for child in children):
             state = "disponivel"
         elif item_ops:
             state = "nao_iniciado"
         else:
-            state = "disponivel" if _texto(item.get("status")).upper() in {"CONCLUIDO", "FINALIZADO"} else "nao_iniciado"
+            source_finished = any(word in _texto(item.get("status")).upper() for word in ("CONCLU", "FINALIZ"))
+            state = ("concluido" if children and item.get("os_pai") is None else "disponivel") if source_finished else "nao_iniciado"
         visiting.remove(item_id)
         states[item_id] = state
         return state
@@ -1298,6 +1357,8 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             "quantidade": item.get("qtde_pecas") or 0,
             "parent_id": str(parent_id) if parent_id is not None else None,
             "child_ids": [str(child_id) for child_id in filhos.get(item_id, [])],
+            "predecessor_ids": list(dict.fromkeys(str(item[key]) for key in ("predecessora1", "predecessora2")
+                                                  if item.get(key) is not None and int(item[key]) in itens_por_id and int(item[key]) != item_id)),
             "estado": state,
             "estado_label": STATUS_LABELS[state],
             "estado_motivo": _motivo(state, item_operations),

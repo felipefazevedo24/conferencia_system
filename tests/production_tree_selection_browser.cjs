@@ -5,6 +5,7 @@ const {spawn} = require('node:child_process');
 const assert = require('node:assert/strict');
 const project = path.resolve(__dirname, '..');
 const performanceMode = process.argv.includes('--performance');
+const budgetContext = process.argv.includes('--budget-context');
 const recognitionPreviews = process.argv.includes('--recognition-previews');
 const cylinderPreviews = process.argv.includes('--cylinder-previews');
 const slowPreviewMode = process.argv.includes('--slow-previews');
@@ -29,6 +30,18 @@ function payload(url) {
   const parts=url.pathname.split('/');
   const number=parts[4];
   const node=nodes[Number(parts[6])-1]||nodes[1];
+  if(budgetContext) {
+    const budgetOrders=[{number:'9958',title:'MOLD HTX900 FBE14X39CM P25MM 5V',source_status:'CONCLUÍDO',is_budget_order:true},
+      {number:'9959',title:'MOLD HTX900 FC U14X39 P25 F15 5V',source_status:'APROVADO',is_budget_order:true}];
+    if(url.pathname.endsWith('/search')) return [{number:'7175',title:'3CC 85-100KVA - COMPACTA'},...budgetOrders.map(o=>({...o,matched_budget_number:7175}))];
+    if(url.pathname.endsWith('/dependencies')) return {selected_order_number:number,budget_number:7175,nodes:budgetOrders,edges:[],source};
+    if(url.pathname.endsWith('/structure')) {
+      const order=budgetOrders.find(o=>o.number===number)||{number,title:'Conjunto industrial'};
+      const pieces=[['5','PB2',1],['2','PB',1],['3','CANECO',10],['6','USINAGEM FACÃO',5]].map(([id,description,quantity],i)=>({...nodes[i],id,aux_code:Number(id),code:`${number}/${id.padStart(3,'0')}`,description,quantity,
+        parent_id:i?'5':null,child_ids:i?[]:['2','3','6'],has_children:!i,path_ids:i?['5',id]:['5'],path_labels:i?[`${number}/005`,`${number}/${id.padStart(3,'0')}`]:[`${number}/005`],state:'available'}));
+      return {order,nodes:pieces,roots:['5'],progress:{percentage:100,finalized_operations:8,total_operations:8},pending_count:0,current_stage:'Produção',source};
+    }
+  }
   if(url.pathname.endsWith('/search')) return [{number:'7900',title:'Outra ordem para validar navegação',source_status:'Em produção'}];
   if(url.pathname.endsWith('/structure')) return {order:{number,title:'Conjunto industrial'},nodes:apiMode==='empty'?[]:nodes,roots:apiMode==='empty'?[]:['1'],progress:{percentage:38,finalized_operations:3,total_operations:8},pending_count:2,current_stage:'Montagem e inspeção final',source};
   if(url.pathname.endsWith('/dependencies')) return {selected_order_number:number,budget_number:null,nodes:[{number,title:'Conjunto industrial',source_status:'Em produção',is_budget_order:false}],edges:[],source};
@@ -103,6 +116,37 @@ const server=http.createServer((req,res)=>{
     await call('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     await call('Page.navigate',{url:base+'/producao'}); await sleep(500);
     await wait("return !!d.querySelector('.workspace') && d.querySelectorAll('.sequence-operation-card').length===8;");
+
+    if(budgetContext) {
+      await inner("const input=d.querySelector('input[placeholder*=\"orçamento\"]');Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set.call(input,'7175');input.dispatchEvent(new w.Event('input',{bubbles:true}));");
+      await wait("return d.body.innerText.includes('Orçamento 7175 · OS 9958') && d.body.innerText.includes('Orçamento 7175 · OS 9959');");
+      await inner("[...d.querySelectorAll('button')].find(b=>b.textContent.includes('Orçamento 7175 · OS 9958')).click();");
+      await wait("return d.querySelector('.tree-row strong')?.textContent==='9958/005';");
+      await inner("[...d.querySelectorAll('.map-view-switch button')].find(b=>b.textContent==='Dependências').click();");
+      await wait("return !!d.querySelector('.dependency-node') && d.body.innerText.includes('Orçamento 7175');");
+      await inner("[...d.querySelectorAll('.dependency-filter button')].find(b=>b.textContent==='Todas as OS').click();");
+      await wait("return d.querySelectorAll('.dependency-node').length===2;");
+      assert(await inner("return d.querySelectorAll('.react-flow__edge').length===0;"));
+      assert(await inner("return d.querySelector('.dependency-canvas').textContent.includes('CONCLUÍDO') && d.querySelector('.dependency-canvas').textContent.includes('APROVADO');"));
+      await inner("[...d.querySelectorAll('.dependency-filter button')].find(b=>b.textContent==='Cadeia da OS').click();");
+      await wait("return d.querySelectorAll('.dependency-node').length===1 && d.body.innerText.includes('Esta OS não possui dependências registradas.');");
+      await inner("[...d.querySelectorAll('.map-view-switch button')].find(b=>b.textContent==='Estrutura da OS').click();");
+      await wait("return d.querySelectorAll('.assembly-node').length===4;");
+      assert(await inner("return d.querySelectorAll('.react-flow__edge').length===3;"));
+      assert(await inner("return [...d.querySelectorAll('.assembly-node')].find(n=>n.textContent.includes('9958/003')).textContent.includes('10');"));
+      const artifact=path.join(project,'tmp_producao_contexto');fs.mkdirSync(artifact,{recursive:true});
+      fs.writeFileSync(path.join(artifact,'estrutura.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await inner("[...d.querySelectorAll('.map-view-switch button')].find(b=>b.textContent==='Dependências').click();");
+      await wait("return !!d.querySelector('.dependency-filter');");
+      await inner("[...d.querySelectorAll('.dependency-filter button')].find(b=>b.textContent==='Todas as OS').click();");
+      await wait("return d.querySelectorAll('.dependency-node').length===2;");
+      fs.writeFileSync(path.join(artifact,'dependencias.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await inner("[...d.querySelectorAll('.dependency-node')].find(b=>b.textContent.includes('OS 9959')).click();");
+      await wait("return d.querySelector('.tree-row strong')?.textContent==='9959/005';");
+      assert.deepEqual(exceptions,[]);
+      console.log('PASS: orçamento 7175, duas OS, filtros, navegação e hierarquia das peças (dados simulados)');
+      await call('Browser.close');return;
+    }
 
     const selectLast=()=>inner("const cards=[...d.querySelectorAll('.assembly-node')];const card=cards.find(c=>c.querySelector('.node-main strong')?.textContent==='PC-014');if(!card)throw Error('Missing card');card.click();");
     await inner("d.querySelector('.tree-scroll').style.maxHeight='220px';d.querySelector('.tree-scroll').scrollTop=0;");
