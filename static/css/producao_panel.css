@@ -95,7 +95,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .panel-title h2, .sequence-heading h2 { font-size: 15px; }
 .panel-title h2::after, .sequence-heading h2::after { display: none; }
 .panel-title > div { flex-wrap: wrap; min-width: 0; }
-.center-column { grid-template-rows: minmax(120px, 1fr) 24px minmax(130px, 36%); }
+.center-column { grid-template-rows: minmax(120px, 1fr) 24px fit-content(36%); }
 .center-column.sequence-collapsed { grid-template-rows: minmax(0, 1fr) 24px 0; }
 .map-panel { grid-template-rows: auto minmax(0, 1fr); }
 .flow-canvas, .dependency-message, .node-thumbnail, .detail-preview, .detail-tab-content,
@@ -120,6 +120,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     pointer-events: none;
 }
 .tree-copy small { display: none; }
+.tree-row.selected { box-shadow: inset 3px 0 var(--blue-600); border-radius: 6px; }
+.tree-row.selected .tree-copy small { display: block; white-space: normal; overflow-wrap: anywhere; }
 .tree-copy strong { overflow-wrap: anywhere; }
 .tree-row.selected, .assembly-node.selected, .dependency-node.selected,
 .map-view-switch button.active, .dependency-filter button.active, .detail-tabs button.active {

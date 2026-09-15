@@ -7,6 +7,7 @@
     let view = 'map';
     let scheduled = false;
     let parentDocument;
+    let pendingTreeSelection = null;
 
     try { parentDocument = window.parent.document; } catch (_) { parentDocument = document; }
     function syncTheme() {
@@ -43,7 +44,50 @@
         });
         // React Flow observes its container; a resize also updates its controls after revealing it.
         window.dispatchEvent(new Event('resize'));
+        schedule();
     }
+
+    function onMapSelection(event) {
+        const card = event.target.closest?.('.assembly-node');
+        if (!card) return;
+        pendingTreeSelection = {
+            code: card.querySelector('.node-main strong')?.textContent.trim(),
+            filtersChecked: false
+        };
+        const toggle = document.querySelector('.tree-divider button[aria-expanded="false"]');
+        if (!compact.matches) toggle?.click();
+        document.querySelector('.tree-search button')?.click();
+        schedule();
+    }
+
+    function revealTreeSelection() {
+        if (!pendingTreeSelection) return;
+        const row = document.querySelector('.tree-row.selected');
+        if (!row || row.querySelector('.tree-copy strong')?.textContent.trim() !== pendingTreeSelection.code) {
+            // A map selection must also be discoverable when a status filter hides it.
+            if (!pendingTreeSelection.filtersChecked) {
+                pendingTreeSelection.filtersChecked = true;
+                const filterToggle = document.querySelector('[aria-label="Filtrar estrutura"]');
+                const wasOpen = !!document.querySelector('.status-filters');
+                if (!wasOpen) filterToggle?.click();
+                requestAnimationFrame(() => {
+                    document.querySelectorAll('.status-filters input:checked').forEach(input => input.click());
+                    if (!wasOpen) filterToggle?.click();
+                    schedule();
+                });
+            }
+            return;
+        }
+        const scroller = row.closest('.tree-scroll');
+        if (!scroller || !row.getClientRects().length) return;
+        const bounds = scroller.getBoundingClientRect();
+        const selected = row.getBoundingClientRect();
+        scroller.scrollTop += selected.top - bounds.top - (scroller.clientHeight - selected.height) / 2;
+        pendingTreeSelection = null;
+    }
+
+    // Capture keyboard-generated clicks too; React opens the ancestor path before the next frame.
+    document.addEventListener('click', onMapSelection, true);
 
     const previewLoads = new WeakMap();
     const activePreviews = new Set();
@@ -203,6 +247,7 @@
         const treeTitle = document.querySelector('.tree-panel .panel-title h2');
         const title = order ? `Estrutura da OS · ${order}` : 'Estrutura da OS';
         if (treeTitle && treeTitle.textContent !== title) treeTitle.textContent = title;
+        revealTreeSelection();
     }
 
     function schedule() {
@@ -228,6 +273,7 @@
     window.addEventListener('pagehide', (event) => {
         if (event.persisted) return;
         observer.disconnect();
+        document.removeEventListener('click', onMapSelection, true);
         activePreviews.forEach(stopPreview);
         previewVisibility.disconnect();
         document.removeEventListener('load', onPreviewResult, true);
