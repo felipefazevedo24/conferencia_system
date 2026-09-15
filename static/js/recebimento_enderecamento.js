@@ -14,7 +14,12 @@
   if (!response.ok) throw new Error(result.erro || 'Não foi possível concluir. Verifique a conexão e tente novamente.');
   return result;
  }
- function button(text, action) { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; }
+ function button(text, action, icon, variant) {
+  const b = el('button', null, 'pa-act' + (variant ? ` pa-act--${variant}` : ''));
+  b.type = 'button';
+  if (icon) { const i = document.createElement('i'); i.className = `fas ${icon}`; i.setAttribute('aria-hidden', 'true'); b.append(i); }
+  b.append(document.createTextNode(text)); b.onclick = action; return b;
+ }
  async function refresh() {
   const version = ++listRequest;
   try {
@@ -33,22 +38,30 @@
     }
    items.forEach(item => {
      const card = el('tr', null, 'pa-row');
+     const skuCell = el('td', item.sku || 'Sem vínculo', item.sku ? 'pa-sku' : 'pa-sku pa-sku--pendente');
+     const materialCell = el('td', null, 'pa-description');
+     materialCell.append(el('div', item.descricao || 'Material sem descrição', 'pa-desc'), el('div', item.fornecedor || '', 'pa-meta'));
      const statusCell = el('td');
      statusCell.append(el('span', item.status, 'pa-badge'));
-     card.append(el('td', `NF ${item.nota}`, 'pa-nf'), el('td', item.fornecedor || '---'), el('td', item.descricao || 'Material sem descrição', 'pa-description'), el('td', `${item.quantidade} ${item.unidade || ''}`), el('td', date(item.criado_em), 'pa-date'), statusCell);
+     card.append(skuCell, materialCell, el('td', `${item.quantidade} ${item.unidade || ''}`), el('td', item.nota, 'pa-nf'), el('td', date(item.criado_em), 'pa-date'), statusCell);
     const actions = el('div', null, 'pa-tools');
-    if (item.status === 'Pendente') actions.append(button('Endereçar material', () => openWork(item)));
+    if (item.status === 'Pendente') actions.append(button('Endereçar material', () => openWork(item), 'fa-qrcode', 'primary'));
     if (item.status === 'Aguardando sincronização') actions.append(button('Tentar sincronizar', async e => {
-     e.target.disabled = true;
-     try { const data = await request(`${api}/${item.id}/sincronizar`, {}); feedback(data.item.status === 'Concluído' ? 'Endereço sincronizado com o GRV.' : data.item.erro || 'Sincronização pendente.'); await refresh(); } catch (err) { feedback(err.message); } finally { e.target.disabled = false; }
-    }));
-    actions.append(button('Ver histórico e origem', () => history(item.id))); const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
+     const alvo = e.currentTarget; alvo.disabled = true;
+     try { const data = await request(`${api}/${item.id}/sincronizar`, {}); feedback(data.item.status === 'Concluído' ? 'Endereço sincronizado com o GRV.' : data.item.erro || 'Sincronização pendente.'); await refresh(); } catch (err) { feedback(err.message); } finally { alvo.disabled = false; }
+    }, 'fa-sync-alt'));
+    actions.append(button('Ver histórico e origem', () => history(item.id), 'fa-history')); const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
     if (item.erro) { const errorRow = el('tr', null, 'pa-error-row'); const errorCell = el('td', item.erro, 'pa-alert'); errorCell.colSpan = 7; errorRow.append(errorCell); $('pa-list').append(errorRow); }
     if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') actions.append(button('Revisar leituras', async () => {
      const justificativa = prompt('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.');
      if (!justificativa) return;
      try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
-    }));
+    }, 'fa-redo'));
+    if (item.status === 'Concluído' && $('putaway').dataset.manage === 'true') actions.append(button('Estornar endereçamento', async () => {
+     const justificativa = prompt('Informe o motivo do estorno. O material volta para a fila "A endereçar"; os endereços já enviados ao GRV são preservados.');
+     if (!justificativa) return;
+     try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
+    }, 'fa-undo', 'danger'));
    });
    $('pa-page').textContent = `Página ${page}`; $('pa-prev').disabled = page === 1; $('pa-next').disabled = page * 40 >= data.contadores[status];
   } catch (err) { feedback(err.message); }

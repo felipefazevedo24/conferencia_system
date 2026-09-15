@@ -181,14 +181,16 @@ def reabrir(tarefa, justificativa):
     token = adquirir_trava(tarefa)
     try:
         db.session.refresh(tarefa)
-        if tarefa.status != "Aguardando sincronização":
-            raise ValueError("Somente endereçamentos aguardando sincronização podem ser revisados.")
-        evento(tarefa, "Reaberto para nova leitura", {"justificativa": justificativa[:500],
-                                                   "alocacoes": tarefa.alocacoes})
+        if tarefa.status not in ("Aguardando sincronização", "Concluído"):
+            raise ValueError("Somente endereçamentos aguardando sincronização ou concluídos podem ser revisados/estornados.")
+        tipo = "Estornado" if tarefa.status == "Concluído" else "Reaberto para nova leitura"
+        evento(tarefa, tipo, {"justificativa": justificativa[:500],
+                              "alocacoes": tarefa.alocacoes})
         tarefa.status = "Pendente"
         tarefa.versao_leitura += 1
         tarefa.alocacoes = None
         tarefa.erro = None
+        tarefa.concluido_em = None
     finally:
         Trava.query.filter_by(sku=tarefa.sku, token=token).update({"token": None, "expira_em": None})
         db.session.commit()

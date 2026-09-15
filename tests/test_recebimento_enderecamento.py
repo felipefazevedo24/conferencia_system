@@ -189,6 +189,17 @@ def test_reopen_pending_sync_requires_new_scans_and_preserves_audit(state):
     update.assert_not_called()
 
 
+def test_estorno_de_concluido_volta_para_fila(state):
+    task, _, update = state
+    svc.confirmar(task, payload(task))
+    svc.sincronizar(task)
+    assert task.status == 'Concluído'
+    svc.reabrir(task, 'Endereçado no local errado')
+    assert task.status == 'Pendente'
+    assert task.alocacoes is None and task.concluido_em is None
+    assert Evento.query.filter_by(tipo='Estornado').count() == 1
+
+
 def test_receiving_reopened_blocks_address_update(state):
     task, _, update = state
     data = payload(task)
