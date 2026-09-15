@@ -1,0 +1,92 @@
+<style>
+    .atividade { display: grid; gap: 20px; }
+    .atividade-intro { padding: 26px; border: 1px solid var(--color-border); border-radius: 20px; background: linear-gradient(120deg, rgba(15,98,201,.12), transparent 75%), var(--color-surface); }
+    .atividade-eyebrow { color: var(--color-primary-600); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .atividade h2 { margin: 8px 0; font-size: 26px; letter-spacing: -.04em; color: var(--color-text); }
+    .atividade p { margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
+    .atividade-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 22px; }
+    .atividade-filtros label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--color-text-muted); }
+    .atividade-filtros input, .atividade-filtros select { padding: 10px 12px; min-height: 40px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text); font: inherit; }
+    .atividade-datas { display: flex; flex-wrap: wrap; gap: 12px; }
+    .atividade-datas[hidden] { display: none; }
+    .atividade-resumo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+    .atividade-resumo strong { font-size: 14px; color: var(--color-text); }
+    .atividade-resumo span { font-size: 12px; color: var(--color-text-muted); }
+    .atividade-modulos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .atividade-modulo { position: relative; overflow: hidden; padding: 22px; border-radius: 18px; border: 1px solid var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-1); }
+    .atividade-modulo::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--atividade-cor); }
+    .atividade-modulo[data-modulo="recebimento"] { --atividade-cor: #259d86; }
+    .atividade-modulo[data-modulo="expedicao"] { --atividade-cor: #4089e0; }
+    .atividade-modulo[data-modulo="viagens"] { --atividade-cor: #8d72de; }
+    .atividade-modulo[data-modulo="inventarios"] { --atividade-cor: #d69b30; }
+    .atividade-modulo[data-modulo="documentos"] { --atividade-cor: #db805c; }
+    .atividade-modulo[data-modulo="cadastros"] { --atividade-cor: #40a1b6; }
+    .atividade-modulo header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .atividade-modulo header i { color: var(--atividade-cor); font-size: 20px; }
+    .atividade-modulo h3 { margin: 0; color: var(--color-text); font-size: 14px; }
+    .atividade-modulo dl { margin: 0 0 16px; }
+    .atividade-metrica { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+    .atividade-metrica dt { font-size: 12px; color: var(--color-text-muted); }
+    .atividade-metrica dd { margin: 0; font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--color-text); }
+    .atividade-metrica:first-child { flex-direction: column-reverse; align-items: start; gap: 0; padding-top: 0; padding-bottom: 18px; }
+    .atividade-metrica:first-child dd { font-size: 42px; letter-spacing: -.05em; line-height: 1.2; }
+    .atividade-modulo p { font-size: 11px; }
+    .atividade-vazio { display: inline-block; margin-top: 12px; color: var(--color-text-muted); font-size: 11px; }
+    .atividade-erro { padding: 14px; border: 1px solid var(--color-danger-500); border-radius: 12px; color: var(--color-danger-500); }
+    @media (max-width: 1050px) { .atividade-modulos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { .atividade-modulos { grid-template-columns: 1fr; } .atividade-intro { padding: 20px; } .atividade-filtros > label, .atividade-datas, .atividade-datas label { width: 100%; } }
+</style>
+<section class="atividade" aria-labelledby="atividade-titulo" id="minha-atividade">
+    <div class="atividade-intro">
+        <span class="atividade-eyebrow">Sua trajetória no Sync</span>
+        <h2 id="atividade-titulo">Minha atividade</h2>
+        <p>Seu trabalho, módulo por módulo. Acompanhe as operações registradas com a sua conta.</p>
+        <form class="atividade-filtros" method="get" action="{{ url_for('pages.perfil') }}#minha-atividade">
+            <label for="atividade-periodo">Período
+                <select id="atividade-periodo" name="periodo">
+                    {% for valor, rotulo in [('30', 'Últimos 30 dias'), ('90', 'Últimos 90 dias'), ('personalizado', 'Personalizado')] %}
+                    <option value="{{ valor }}" {{ 'selected' if (request.args.get('periodo') if atividade_erro else atividade_periodo.periodo) == valor }}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="atividade-datas" id="atividade-datas">
+                <label for="atividade-inicio">De <input type="date" id="atividade-inicio" name="inicio" value="{{ request.args.get('inicio', '') if atividade_erro else atividade_periodo.inicio.isoformat() }}" max="{{ atividade_periodo.hoje.isoformat() }}" required></label>
+                <label for="atividade-fim">Até <input type="date" id="atividade-fim" name="fim" value="{{ request.args.get('fim', '') if atividade_erro else atividade_periodo.fim.isoformat() }}" max="{{ atividade_periodo.hoje.isoformat() }}" required></label>
+            </div>
+            <button class="perfil-btn" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Aplicar período</button>
+        </form>
+        <p style="margin-top:12px;font-size:11px">Período personalizado: até 6 meses, incluindo o primeiro e o último dia.</p>
+    </div>
+    {% if atividade_erro %}
+    <div class="atividade-erro" role="alert">{{ atividade_erro }}</div>
+    {% else %}
+    <div class="atividade-resumo">
+        <strong>{{ atividade_periodo.inicio.strftime('%d/%m/%Y') }} — {{ atividade_periodo.fim.strftime('%d/%m/%Y') }}</strong>
+        <span>{{ atividade_modulos|selectattr('ativo')|list|length }} de {{ atividade_modulos|length }} módulos com atividade</span>
+    </div>
+    <div class="atividade-modulos">
+        {% for modulo in atividade_modulos %}
+        <article class="atividade-modulo" data-modulo="{{ modulo.id }}">
+            <header><i class="fas {{ modulo.icone }}" aria-hidden="true"></i><h3>{{ modulo.titulo }}</h3></header>
+            <dl>{% for metrica in modulo.metricas %}<div class="atividade-metrica"><dt>{{ metrica.rotulo }}</dt><dd>{{ '{:,}'.format(metrica.valor).replace(',', '.') }}</dd></div>{% endfor %}</dl>
+            <p>{{ modulo.descricao }}</p>
+            {% if not modulo.ativo %}<span class="atividade-vazio">Sem atividade neste período</span>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+    <p>Os indicadores usam a data de cada ação e os registros disponíveis no sistema. Operações estornadas ou excluídas podem deixar de aparecer.</p>
+    {% endif %}
+</section>
+<script>
+(() => {
+    const periodo = document.getElementById('atividade-periodo');
+    const datas = document.getElementById('atividade-datas');
+    function atualizar() {
+        const personalizado = periodo.value === 'personalizado';
+        datas.hidden = !personalizado;
+        datas.querySelectorAll('input').forEach(input => input.disabled = !personalizado);
+    }
+    periodo.addEventListener('change', atualizar);
+    atualizar();
+})();
+</script>
