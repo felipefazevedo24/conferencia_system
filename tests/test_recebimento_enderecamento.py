@@ -268,7 +268,7 @@ def test_bridge_location_query_is_authenticated_and_parameterized(monkeypatch):
     sku = "SKU' OR 1=1 --"
     result = client.post('/api/erp/produto-localizacao',json={'codigo_interno':sku})
     assert result.get_json()['localizacao_estoque'] == 'A;B'
-    assert cursor.execute.call_args.args[1] == (sku,)
+    assert cursor.execute.call_args.args[1] == (1, sku)
     assert sku not in cursor.execute.call_args.args[0]
 
 

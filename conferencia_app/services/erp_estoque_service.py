@@ -74,9 +74,14 @@ def buscar_localizacao_produto_grv(codigo_interno: str) -> str:
     if not cfg["api_url"]:
         raise ValueError("Consulta ao GRV não configurada (ERP_LANCAMENTO_API_URL ausente).")
     try:
+        empresa = int(current_app.config.get("ERP_ESTOQUE_PG_COMPANY") or 1)
+    except (TypeError, ValueError):
+        empresa = 1
+    try:
         response = requests.post(
             f"{cfg['api_url']}/api/erp/produto-localizacao",
-            json={"codigo_interno": codigo_interno}, headers=_headers(cfg), timeout=cfg["timeout"],
+            json={"codigo_interno": codigo_interno, "empresa": empresa},
+            headers=_headers(cfg), timeout=cfg["timeout"],
         )
     except requests.RequestException:
         raise ValueError("Bridge do ERP inacessível para consultar o endereço. Verifique se a bridge está no ar e tente novamente.")
@@ -84,6 +89,8 @@ def buscar_localizacao_produto_grv(codigo_interno: str) -> str:
         raise ValueError("Bridge do ERP desatualizada: falta o endpoint de localização. Atualize (git pull) e reinicie a bridge na VM.")
     if response.status_code == 401:
         raise ValueError("Bridge do ERP recusou o acesso (token). Confira o ERP_LANCAMENTO_API_TOKEN.")
+    if response.status_code == 409:
+        raise ValueError(f"SKU {codigo_interno} cadastrado mais de uma vez no ERP (empresa {empresa}). Regularize o cadastro no GRV antes de endereçar.")
     if response.status_code >= 400:
         raise ValueError(f"Consulta de endereço no GRV falhou (HTTP {response.status_code}). Tente novamente.")
     dados = response.json()
