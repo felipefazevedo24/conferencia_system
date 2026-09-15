@@ -51,7 +51,11 @@
 
     .perm-section { margin-bottom: var(--eui-space-6); }
     .perm-section:last-child { margin-bottom: 0; }
-    .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--eui-border); }
+    .perm-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--eui-border); }
+    .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0; }
+    .perm-section-count { font-weight: 600; color: var(--eui-muted); letter-spacing: 0; margin-left: 6px; }
+    .perm-section-toggle { border: 1px solid var(--eui-border-strong); border-radius: var(--eui-radius-sm); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 11px; font-weight: 600; padding: 4px 9px; cursor: pointer; }
+    .perm-section-toggle:hover { border-color: var(--eui-primary); color: var(--eui-primary); background: var(--eui-primary-soft); }
     .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 10px; }
     @media (max-width: 960px) { .permissions-grid { grid-template-columns: 1fr; } }
     .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 9px 10px; background: var(--eui-surface-2); }
@@ -727,8 +731,10 @@
             return;
         }
 
-        wrap.innerHTML = Object.keys(grupos).sort().map((secao) => {
-            const itensHtml = grupos[secao].map((p) => {
+        wrap.innerHTML = Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((secao) => {
+            const itens = grupos[secao].slice().sort((a, b) => a.nomeCurto.localeCompare(b.nomeCurto, 'pt-BR'));
+            const marcadas = itens.filter((p) => !!efetivo[p.key]).length;
+            const itensHtml = itens.map((p) => {
                 const checked = !!efetivo[p.key] ? 'checked' : '';
                 const baseVal = !!base[p.key];
                 const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
@@ -745,11 +751,21 @@
             }).join('');
             return `
                 <div class="perm-section">
-                    <h4 class="perm-section-title">${escapeHtml(secao)}</h4>
+                    <div class="perm-section-head">
+                        <h4 class="perm-section-title">${escapeHtml(secao)} <span class="perm-section-count">${marcadas}/${itens.length}</span></h4>
+                        <button type="button" class="perm-section-toggle" onclick="alternarSecaoPermissoes('${escapeHtml(secao)}', ${marcadas < itens.length})">${marcadas < itens.length ? 'Marcar todas' : 'Desmarcar todas'}</button>
+                    </div>
                     <div class="permissions-grid">${itensHtml}</div>
                 </div>
             `;
         }).join('');
+    }
+
+    function alternarSecaoPermissoes(secao, valor) {
+        catalogoPermissoes.forEach((p) => {
+            if (p.label.split(' > ')[0] === secao) permissoesEditando[p.key] = !!valor;
+        });
+        renderPermissoesGrid(permissoesEditando, window._permBaseAtual || {}, window._permOverridesAtual || {});
     }
 
     function alterarPermissaoChave(chave, valor) {
