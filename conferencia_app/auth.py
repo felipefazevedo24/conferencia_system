@@ -31,35 +31,35 @@ from flask import g, jsonify, redirect, render_template, request, session, url_f
 
 
 # ATENCAO: as CHAVES nunca mudam (renomear revoga acesso de quem ja tem).
-# Os rotulos seguem o formato "Area > Pagina" e a Gestao de Acessos agrupa
-# pelo texto EXATO da area - manter grafia/acentuacao unicas por area.
+# Rotulos no formato "Departamento > Subarea > Pagina" (subarea opcional);
+# a Gestao de Acessos agrupa pelo texto EXATO - manter grafia unica.
 PERMISSION_CATALOG = {
-    "PAGE_RECEBIMENTO_ENDERECAMENTO": "Recebimento > Endereçamento",
-    "MANAGE_RECEBIMENTO_ENDERECAMENTO": "Recebimento > Gerenciar locais e autorizar destino alternativo",
-    "PAGE_CONFERENCIA": "Recebimento > Conferência cega",
-    "PAGE_PORTARIA": "Recebimento > Inclusão XML (Portaria)",
-    "PAGE_FISCAL_LIBERADAS": "Recebimento > NF-e liberadas",
+    "PAGE_RECEBIMENTO_ENDERECAMENTO": "Logística > Recebimento > Endereçamento",
+    "MANAGE_RECEBIMENTO_ENDERECAMENTO": "Logística > Recebimento > Gerenciar locais e autorizar destino alternativo",
+    "PAGE_CONFERENCIA": "Logística > Recebimento > Conferência cega",
+    "PAGE_PORTARIA": "Logística > Recebimento > Inclusão XML (Portaria)",
+    "PAGE_FISCAL_LIBERADAS": "Logística > Recebimento > NF-e liberadas",
     "PAGE_UPLOAD": "Compras > Pré-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
-    "PAGE_EXPEDICAO_CONFERENCIA": "Expedição > Conferência",
-    "PAGE_EXPEDICAO_CONF_CEGA": "Expedição > Conferência de Expedição (cega)",
-    "MANAGE_EXPEDICAO_ROMANEIO": "Expedição > Gerenciar romaneios (editar, estornar e excluir)",
-    "PAGE_EXPEDICAO_ROMANEIO": "Expedição > Romaneios",
+    "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
+    "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
+    "MANAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Gerenciar romaneios (editar, estornar e excluir)",
+    "PAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
     "PAGE_ADMIN_ATUALIZACOES": "Administração > Avisos de atualizações",
     "PAGE_ADMIN_ATUALIZACOES_CADASTRAIS": "Administração > Atualizações cadastrais recebidas",
     "PAGE_ADMIN_USUARIOS": "Administração > Gestão de acessos",
     "PAGE_ADMIN_EMAILS_NFE": "Administração > E-mails de NF-e",
-    "PAGE_LOGISTICA_AGENDAMENTO": "Logística > Gestão de Rotas",
-    "PAGE_LOGISTICA_SOLICITACAO": "Logística > Solicitar Coleta/Entrega",
-    "PAGE_LOGISTICA_MOTORISTA": "Logística > Painel do Motorista",  # motorista
-    "PAGE_LOGISTICA_RASTREAMENTO": "Logística > Rastreamento de Veículos",
-    "PAGE_LOGISTICA_FROTA": "Logística > Gestão de Frota",
-    "PAGE_LOGISTICA_VIAGEM": "Logística > Gestão de Viagens",
+    "PAGE_LOGISTICA_AGENDAMENTO": "Logística > Transporte > Gestão de Rotas",
+    "PAGE_LOGISTICA_SOLICITACAO": "Logística > Transporte > Solicitar Coleta/Entrega",
+    "PAGE_LOGISTICA_MOTORISTA": "Logística > Transporte > Painel do Motorista",  # motorista
+    "PAGE_LOGISTICA_RASTREAMENTO": "Logística > Transporte > Rastreamento de Veículos",
+    "PAGE_LOGISTICA_FROTA": "Logística > Transporte > Gestão de Frota",
+    "PAGE_LOGISTICA_VIAGEM": "Logística > Transporte > Gestão de Viagens",
     "PAGE_LOGISTICA_INVENTARIO": "Logística > Inventário > Inventariar (contagem)",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestão (Admin)",
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
@@ -72,10 +72,8 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
     "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
-    # A chave continua PAGE_LOGISTICA_* (nao renomeada de proposito, pra nao
-    # revogar o acesso de quem ja tem), mas o modulo vive no menu Intralog.
-    "PAGE_LOGISTICA_CONSUMO_CHAPA": "Intralog > Consumo de Chapa (Nesting)",
-    "PAGE_INTRALOG_PICKING": "Intralog > Picking Almoxarifado",
+    "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Intralog > Consumo de Chapa (Nesting)",
+    "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
 }
 
