@@ -345,6 +345,37 @@ def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
     assert abs(thumb.width / thumb.height - detail.width / detail.height) < 0.01
 
 
+def test_alpha_otimizado_preserva_pixels_e_limiar_original():
+    from PIL import Image, ImageChops, ImageFilter
+
+    images = importlib.import_module("production_test_app.services.production_images")
+    source = Image.new("RGB", (32, 32))
+    source.putdata([((offset * 7) % 256, (offset * 13) % 256, (offset * 19) % 256) for offset in range(1024)])
+    selection = Image.new("L", source.size)
+    selection.putdata([(offset * 17) % 256 for offset in range(1024)])
+    background = images._estimate_background_color(source)
+    channels = ImageChops.difference(source, Image.new("RGB", source.size, background)).split()
+    maximum = ImageChops.lighter(ImageChops.lighter(channels[0], channels[1]), channels[2])
+    samples = sorted(value for value, selected in zip(maximum.tobytes(), selection.tobytes()) if selected >= 128 and value > 6)
+    opaque_limit = max(30, samples[round((len(samples) - 1) * 0.7)]) if samples else 96
+    alpha = maximum.point([images._background_difference_to_alpha(value, opaque_limit) for value in range(256)])
+    interior = maximum.point([255 if value > 6 else 0 for value in range(256)]).filter(ImageFilter.MinFilter(3))
+    alpha = ImageChops.multiply(ImageChops.lighter(alpha, ImageChops.multiply(interior, selection)), selection)
+    expected_pixels = []
+    for offset, opacity in enumerate(alpha.tobytes()):
+        pixel = source.getpixel((offset % source.width, offset // source.width))
+        if opacity <= 2:
+            expected_pixels.append((0, 0, 0, 0))
+        elif opacity >= 252:
+            expected_pixels.append((*pixel, 255))
+        else:
+            corrected = tuple(max(0, min(255, round((channel * 255 - background_channel * (255 - opacity)) / opacity))) for channel, background_channel in zip(pixel, background))
+            expected_pixels.append((*corrected, opacity))
+    expected = Image.new("RGBA", source.size)
+    expected.putdata(expected_pixels)
+    assert images._background_to_alpha(source, selection).tobytes() == expected.tobytes()
+
+
 def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
@@ -374,6 +405,75 @@ def test_cache_assincrono_reutiliza_o_mesmo_processamento():
     assert pending is None
     assert completed == generated
     assert generate.call_count == 1
+
+
+def test_preview_revisado_reutiliza_download_entre_variantes_e_revalida_mudancas():
+    producao_service._PREVIEW_CACHE.clear()
+    document_data = {
+        "source_kind": "drawing", "id": 31, "source_cod_os": 9,
+        "source_aux_code": 7, "content_revision": "rev-1",
+    }
+    with (
+        patch.object(producao_service, "_obter_ordem", return_value={"codigo": 9}),
+        patch.object(producao_service, "_contexto_previa", return_value={"revisao_desenho": "A"}),
+        patch.object(producao_service, "_resolver_documento_previa", return_value=(document_data, [])),
+        patch.object(producao_service, "obter_arquivo", return_value=(b"pdf", "drawing.pdf")) as download,
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+    ):
+        first = producao_service.obter_preview("7807", 7)
+        detail = producao_service.obter_preview("7807", 7, "detail")
+        assert first[0] == b"thumb"
+        assert detail[0] == b"detail"
+        assert first[2] == detail[2]
+        assert download.call_count == render.call_count == 1
+        document_data["content_revision"] = "rev-2"
+        changed = producao_service.obter_preview("7807", 7)
+        assert changed[2] != first[2]
+        assert download.call_count == render.call_count == 2
+
+
+def test_preview_sem_revisao_confere_conteudo_antes_de_reutilizar():
+    producao_service._PREVIEW_CACHE.clear()
+    document_data = {"source_kind": "drawing", "id": 32, "source_cod_os": 9, "source_aux_code": 7}
+    with (
+        patch.object(producao_service, "_obter_ordem", return_value={"codigo": 9}),
+        patch.object(producao_service, "_contexto_previa", return_value={"revisao_desenho": "A"}),
+        patch.object(producao_service, "_resolver_documento_previa", return_value=(document_data, [])),
+        patch.object(producao_service, "obter_arquivo", side_effect=[(b"pdf1", "drawing.pdf"), (b"pdf2", "drawing.pdf")]) as download,
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+    ):
+        first = producao_service.obter_preview("7807", 7)
+        second = producao_service.obter_preview("7807", 7)
+    assert first[2] != second[2]
+    assert download.call_count == render.call_count == 2
+
+
+def test_preview_simultaneo_compartilha_download_e_contexto_flask():
+    from flask import Flask, current_app
+
+    producao_service._PREVIEW_CACHE.clear()
+    started, release = threading.Event(), threading.Event()
+    app = Flask("preview_download")
+
+    def load_document():
+        assert current_app.name == app.name
+        started.set()
+        assert release.wait(timeout=2)
+        return b"pdf", "drawing.pdf"
+
+    with (
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+        patch.object(producao_service, "obter_arquivo", side_effect=load_document) as download,
+        app.app_context(),
+    ):
+        try:
+            assert producao_service._previews_em_cache("shared-download", wait=False, document_loader=download) is None
+            assert started.wait(timeout=1)
+            assert producao_service._previews_em_cache("shared-download", wait=False, document_loader=download) is None
+        finally:
+            release.set()
+        assert producao_service._previews_em_cache("shared-download", document_loader=download)["thumbnail"] == b"thumb"
+    assert download.call_count == render.call_count == 1
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
@@ -492,6 +592,40 @@ def test_requisicao_assincrona_nao_bloqueia_enquanto_busca_documento():
     assert completed == expected
 
 
+def test_detalhe_nao_espera_fila_de_consultas_das_miniaturas():
+    from concurrent.futures import Future
+
+    producao_service._PREVIEW_REQUEST_CACHE.clear()
+    producao_service._PREVIEW_REQUEST_JOBS.clear()
+    thumbnail_job, detail_job = Future(), Future()
+    with (
+        patch.object(producao_service._PREVIEW_REQUEST_EXECUTOR, "submit", return_value=thumbnail_job) as thumbnails,
+        patch.object(producao_service._PREVIEW_DETAIL_EXECUTOR, "submit", return_value=detail_job) as details,
+    ):
+        assert producao_service._obter_preview_assincrono("priority", 7, "thumbnail")[0] is None
+        assert producao_service._obter_preview_assincrono("priority", 7, "detail")[0] is None
+        assert thumbnails.call_count == details.call_count == 1
+        detail_job.set_result((b"detail", "image/png", "etag"))
+        assert producao_service._obter_preview_assincrono("priority", 7, "detail")[0] == b"detail"
+        thumbnail_job.set_result((b"thumb", "image/png", "etag"))
+
+
+def test_falha_temporaria_da_imagem_expira_e_permite_nova_tentativa():
+    producao_service._PREVIEW_FAILURES.clear()
+    with (
+        patch.object(producao_service, "_gerar_previews", side_effect=[LookupError("bridge indisponivel"), {"thumbnail": b"thumb"}]) as render,
+        patch.object(producao_service.time, "monotonic", return_value=0) as clock,
+    ):
+        with pytest.raises(LookupError, match="bridge indisponivel"):
+            producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")
+        with pytest.raises(LookupError, match="bridge indisponivel"):
+            producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")
+        assert render.call_count == 1
+        clock.return_value = 11
+        assert producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")["thumbnail"] == b"thumb"
+        assert render.call_count == 2
+
+
 def test_aviso_de_previa_fica_limitado_a_miniatura():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
@@ -540,6 +674,42 @@ def test_busca_reutiliza_resultado_sem_misturar_termos():
         first.clear()
         assert len(producao_service.buscar_os("7807")) == 1
         producao_service.buscar_os("9959")
+    assert query.call_count == 2
+
+
+def test_selecionar_os_encontrada_nao_repete_busca_no_grv():
+    with (
+        patch.object(producao_service, "fetch_all", return_value=[{"codigo": 9, "n_os": "7807"}]),
+        patch.object(producao_service, "fetch_one") as lookup,
+    ):
+        producao_service.buscar_os("780")
+        assert producao_service._obter_ordem("7807")["codigo"] == 9
+        lookup.assert_not_called()
+
+
+def test_miniaturas_da_os_compartilham_contexto_e_catalogo_de_documentos():
+    order = {"codigo": 9, "n_os": "7807", "u_classificacao": "CMS"}
+    rows = {
+        producao_service.queries.SQL_PRODUCAO_ESTRUTURA_OS: [
+            {"aux_code": 1, "n_desenho": "ABC", "revisao_desenho": "A"},
+            {"aux_code": 2, "n_desenho": "XYZ", "revisao_desenho": "B"},
+        ],
+        producao_service.queries.SQL_PRODUCAO_DOCUMENTOS_OS: [
+            {"document_id": 31, "cod_os_aux": 1, "kind": "attachment", "nome_arquivo": "ABC.pdf"},
+            {"document_id": 32, "cod_os_aux": 2, "kind": "attachment", "nome_arquivo": "XYZ.pdf"},
+            {"document_id": 33, "cod_os_aux": None, "kind": "attachment", "nome_arquivo": "OS.pdf"},
+        ],
+    }
+    with patch.object(producao_service, "fetch_all", side_effect=lambda sql, _params: rows[sql]) as query:
+        for aux_code, drawing in ((1, "ABC"), (2, "XYZ")):
+            context = producao_service._contexto_previa(order, aux_code)
+            assert context["n_desenho"] == drawing
+            assert context["segmento"] == "CMS"
+            documents = producao_service._obter_documentos_ordem(order, "7807", aux_code)
+            assert len(documents) == 1
+            assert documents[0]["source_aux_code"] == aux_code
+        assert producao_service._contexto_previa(order, 999) is None
+        assert producao_service._obter_documentos_ordem(order, "7807", 0) == []
     assert query.call_count == 2
 
 

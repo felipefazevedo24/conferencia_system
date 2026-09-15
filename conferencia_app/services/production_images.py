@@ -167,18 +167,19 @@ def _background_to_alpha(image: Image.Image, selection: Image.Image) -> Image.Im
     difference = ImageChops.difference(image, Image.new("RGB", image.size, background))
     red, green, blue = difference.split()
     maximum = ImageChops.lighter(ImageChops.lighter(red, green), blue)
-    difference_values = list(maximum.get_flattened_data())
-    selection_values = list(selection.convert("L").get_flattened_data())
-    object_differences = sorted(
-        cast(int, value)
-        for value, selected in zip(difference_values, selection_values, strict=True)
-        if cast(int, selected) >= 128 and cast(int, value) > 6
-    )
-    opaque_limit = (
-        max(30, object_differences[round((len(object_differences) - 1) * 0.7)])
-        if object_differences
-        else 96
-    )
+    selected_mask = selection.convert("L").point([255 if value >= 128 else 0 for value in range(256)])
+    histogram = maximum.histogram(mask=selected_mask)
+    histogram[:7] = [0] * 7
+    sample_count = sum(histogram)
+    opaque_limit = 96
+    if sample_count:
+        target = round((sample_count - 1) * 0.7)
+        accumulated = 0
+        for value, count in enumerate(histogram):
+            accumulated += count
+            if accumulated > target:
+                opaque_limit = max(30, value)
+                break
     alpha = maximum.point(
         [_background_difference_to_alpha(value, opaque_limit) for value in range(256)]
     )
@@ -188,18 +189,14 @@ def _background_to_alpha(image: Image.Image, selection: Image.Image) -> Image.Im
     alpha = ImageChops.lighter(alpha, interior)
     alpha = ImageChops.multiply(alpha, selection.convert("L"))
 
-    source_pixels = list(image.get_flattened_data())
-    alpha_values = list(alpha.get_flattened_data())
-    rgba_pixels: list[tuple[int, int, int, int]] = []
-    for pixel, alpha_value in zip(source_pixels, alpha_values, strict=True):
-        rgb = cast(tuple[int, int, int], pixel)
-        opacity = cast(int, alpha_value)
-        if opacity <= 2:
-            rgba_pixels.append((0, 0, 0, 0))
+    result = image.convert("RGBA")
+    result.putalpha(alpha.point([0 if value <= 2 else 255 if value >= 252 else value for value in range(256)]))
+    result.paste((0, 0, 0, 0), mask=alpha.point([255 if value <= 2 else 0 for value in range(256)]))
+    for offset, opacity in enumerate(alpha.tobytes()):
+        if opacity <= 2 or opacity >= 252:
             continue
-        if opacity >= 252:
-            rgba_pixels.append((*rgb, 255))
-            continue
+        position = (offset % image.width, offset // image.width)
+        rgb = cast(tuple[int, int, int], image.getpixel(position))
         clean_rgb = cast(
             tuple[int, int, int],
             tuple(
@@ -212,10 +209,7 @@ def _background_to_alpha(image: Image.Image, selection: Image.Image) -> Image.Im
                 for channel, background_channel in zip(rgb, background, strict=True)
             ),
         )
-        rgba_pixels.append((*clean_rgb, opacity))
-
-    result = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    result.putdata(rgba_pixels)
+        result.putpixel(position, (*clean_rgb, opacity))
     return result
 
 
@@ -275,13 +269,14 @@ def _dominant_component(
     reduced = _remove_isolated_long_rules(reduced)
     connected = reduced.filter(ImageFilter.MaxFilter(7))
     width, height = connected.size
+    pixels = connected.tobytes()
     visited = bytearray(width * height)
     best: tuple[int, tuple[int, int, int, int], list[tuple[int, int]]] | None = None
 
     for start_y in range(height):
         for start_x in range(width):
             index = start_y * width + start_x
-            if visited[index] or _mask_value(connected, start_x, start_y) < 128:
+            if visited[index] or pixels[index] < 128:
                 continue
             stack = [(start_x, start_y)]
             visited[index] = 1
@@ -306,7 +301,7 @@ def _dominant_component(
                     neighbor_index = neighbor_y * width + neighbor_x
                     if (
                         not visited[neighbor_index]
-                        and _mask_value(connected, neighbor_x, neighbor_y) >= 128
+                        and pixels[neighbor_index] >= 128
                     ):
                         visited[neighbor_index] = 1
                         stack.append((neighbor_x, neighbor_y))
@@ -364,6 +359,7 @@ def _remove_isolated_long_rules(mask: Image.Image) -> Image.Image:
     cleaned = mask.copy()
     probe = mask.filter(ImageFilter.MaxFilter(3))
     width, height = probe.size
+    pixels = probe.tobytes()
     visited = bytearray(width * height)
     components: list[
         tuple[int, tuple[int, int, int, int], bool, bool]
@@ -372,7 +368,7 @@ def _remove_isolated_long_rules(mask: Image.Image) -> Image.Image:
     for start_y in range(height):
         for start_x in range(width):
             index = start_y * width + start_x
-            if visited[index] or _mask_value(probe, start_x, start_y) < 128:
+            if visited[index] or pixels[index] < 128:
                 continue
             stack = [(start_x, start_y)]
             visited[index] = 1
@@ -397,7 +393,7 @@ def _remove_isolated_long_rules(mask: Image.Image) -> Image.Image:
                     neighbor_index = neighbor_y * width + neighbor_x
                     if (
                         not visited[neighbor_index]
-                        and _mask_value(probe, neighbor_x, neighbor_y) >= 128
+                        and pixels[neighbor_index] >= 128
                     ):
                         visited[neighbor_index] = 1
                         stack.append((neighbor_x, neighbor_y))

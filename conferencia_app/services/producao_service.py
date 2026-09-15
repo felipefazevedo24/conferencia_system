@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
 import copy
@@ -41,7 +42,8 @@ _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
-_PREVIEW_FAILURES: dict[str, str] = {}
+_PREVIEW_FAILURES: OrderedDict[str, tuple[float, str]] = OrderedDict()
+_PREVIEW_FAILURE_TTL_SECONDS = 10.0
 _PREVIEW_LOCK = threading.RLock()
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
 _PREVIEW_REQUEST_CACHE_TTL_SECONDS = 10.0
@@ -50,6 +52,7 @@ _PREVIEW_REQUEST_CACHE: OrderedDict[str, tuple[float, tuple[bytes, str, str] | E
 _PREVIEW_REQUEST_JOBS: dict[str, Future[tuple[bytes, str, str]]] = {}
 _PREVIEW_REQUEST_LOCK = threading.RLock()
 _PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="production-preview-request")
+_PREVIEW_DETAIL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="production-preview-detail")
 _STRUCTURE_CACHE_TTL_SECONDS = 10.0
 _STRUCTURE_CACHE_LIMIT = 16
 _STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
@@ -103,6 +106,19 @@ def _metadata_read(fetch, sql, params):
                         lambda: fetch(sql, params))
 
 
+def _remember_order(row):
+    numero_os = _texto(row.get("n_os"))
+    if not numero_os:
+        return
+    params = {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1}
+    key = (_scope(), (queries.SQL_PRODUCAO_BUSCAR_OS, tuple(sorted(params.items()))))
+    with _QUERY_LOCK:
+        _QUERY_CACHE[key] = (time.monotonic(), copy.deepcopy(row))
+        _QUERY_CACHE.move_to_end(key)
+        while len(_QUERY_CACHE) > 128:
+            _QUERY_CACHE.popitem(last=False)
+
+
 def _run_with_app(app, function, *args):
     if app is None:
         return function(*args)
@@ -131,6 +147,8 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
             "limite": max(1, min(int(limite or 20), 50)),
         },
     )
+    for row in rows:
+        _remember_order(row)
     return [_os_payload(row) for row in rows]
 
 
@@ -139,6 +157,8 @@ def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
         queries.SQL_PRODUCAO_OS_ABERTAS,
         {"cod_empresa": 1, "limite": max(1, min(int(limite or 100), 200))},
     )
+    for row in rows:
+        _remember_order(row)
     return [_os_payload(row) for row in rows]
 
 
@@ -214,10 +234,7 @@ def obter_documentos(
 ) -> list[dict[str, Any]]:
     ordem = ordem or _obter_ordem(numero_os)
     if context is None:
-        context = _metadata_read(fetch_one,
-            queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
-            {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
-        )
+        context = _contexto_previa(ordem, aux_code)
     if not context:
         raise LookupError("Item nao encontrado")
     selected, documents = _resolver_documento_previa(ordem, numero_os, aux_code, context)
@@ -233,8 +250,19 @@ def obter_documentos(
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
-    return [_documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code) for row in rows]
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DOCUMENTOS_OS, {"cod_empresa": 1, "cod_os": ordem["codigo"]})
+    return [
+        _documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code)
+        for row in rows if row.get("cod_os_aux") is not None and int(row["cod_os_aux"]) == aux_code
+    ]
+
+
+def _contexto_previa(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | None:
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_ESTRUTURA_OS, {"cod_empresa": 1, "cod_os": ordem["codigo"]})
+    item = next((row for row in rows if int(row["aux_code"]) == aux_code), None)
+    if item is None:
+        return None
+    return {**item, "segmento": ordem.get("u_classificacao") or ordem.get("classificacao")}
 
 
 def _documento_payload(
@@ -695,7 +723,10 @@ def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None
     except Exception as exc:
         with _PREVIEW_LOCK:
             _PREVIEW_JOBS.pop(cache_key, None)
-            _PREVIEW_FAILURES[cache_key] = str(exc)
+            _PREVIEW_FAILURES[cache_key] = (time.monotonic(), str(exc))
+            _PREVIEW_FAILURES.move_to_end(cache_key)
+            while len(_PREVIEW_FAILURES) > _PREVIEW_CACHE_LIMIT:
+                _PREVIEW_FAILURES.popitem(last=False)
         return
     with _PREVIEW_LOCK:
         _PREVIEW_JOBS.pop(cache_key, None)
@@ -706,7 +737,14 @@ def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None
             _PREVIEW_CACHE.popitem(last=False)
 
 
-def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool = True) -> dict[str, bytes] | None:
+def _previews_em_cache(
+    cache_key: str,
+    content: bytes = b"",
+    filename: str = "",
+    wait: bool = True,
+    *,
+    document_loader: Callable[[], tuple[bytes, str]] | None = None,
+) -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
         if cached is not None:
@@ -714,12 +752,29 @@ def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool
             return cached
         failure = _PREVIEW_FAILURES.get(cache_key)
         if failure:
-            raise LookupError(failure)
+            if time.monotonic() - failure[0] <= _PREVIEW_FAILURE_TTL_SECONDS:
+                raise LookupError(failure[1])
+            _PREVIEW_FAILURES.pop(cache_key, None)
         future = _PREVIEW_JOBS.get(cache_key)
+        owner = future is None
         if future is None:
-            future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename)
+            future = Future()
             _PREVIEW_JOBS[cache_key] = future
             future.add_done_callback(lambda completed: _finalizar_preview(cache_key, completed))
+
+    if owner:
+        def render():
+            try:
+                payload, name = document_loader() if document_loader is not None else (content, filename)
+                result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
+                future.set_result(result)
+            except BaseException as exc:
+                future.set_exception(exc)
+
+        if wait:
+            render()
+        else:
+            _PREVIEW_REQUEST_EXECUTOR.submit(_run_with_app, _scope(), render)
     return future.result() if wait else None
 
 
@@ -749,7 +804,8 @@ def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tu
         if cached:
             _PREVIEW_REQUEST_CACHE.pop(request_key, None)
         if request_key not in _PREVIEW_REQUEST_JOBS:
-            future = _PREVIEW_REQUEST_EXECUTOR.submit(
+            executor = _PREVIEW_DETAIL_EXECUTOR if variant == "detail" else _PREVIEW_REQUEST_EXECUTOR
+            future = executor.submit(
                 _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
             )
             _PREVIEW_REQUEST_JOBS[request_key] = future
@@ -764,34 +820,42 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
     if not wait:
         return _obter_preview_assincrono(numero_os, aux_code, variant)
     ordem = _obter_ordem(numero_os)
-    params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
-    context = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
+    context = _contexto_previa(ordem, aux_code)
     if not context:
         raise LookupError("Item nao encontrado")
     document, _ = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     if not document:
         raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(
-        numero_os,
-        aux_code,
-        str(document["source_kind"]),
-        int(document["id"]),
-        ordem=ordem,
-        source_cod_os=int(document["source_cod_os"]),
-        source_aux_code=int(document["source_aux_code"]),
-    )
-    identity = "|".join((
+
+    def load_document():
+        return obter_arquivo(
+            numero_os,
+            aux_code,
+            str(document["source_kind"]),
+            int(document["id"]),
+            ordem=ordem,
+            source_cod_os=int(document["source_cod_os"]),
+            source_aux_code=int(document["source_aux_code"]),
+        )
+
+    identity = (
         _PREVIEW_CACHE_VERSION,
+        str(id(_scope())),
         str(document.get("source_kind")),
         str(document.get("id")),
         str(document.get("source_cod_os")),
         str(document.get("source_aux_code")),
         str(document.get("content_revision") or "unknown"),
         _texto(context.get("revisao_desenho")),
-        hashlib.sha256(content).hexdigest(),
-    ))
-    cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-    previews = _previews_em_cache(cache_key, content, filename, wait=wait)
+    )
+    if document.get("content_revision"):
+        cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
+        previews = _previews_em_cache(cache_key, document_loader=load_document)
+    else:
+        content, filename = load_document()
+        identity += (hashlib.sha256(content).hexdigest(),)
+        cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
+        previews = _previews_em_cache(cache_key, content, filename)
     return previews[variant] if previews else None, "image/png", cache_key
 
 

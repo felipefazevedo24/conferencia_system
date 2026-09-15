@@ -46,6 +46,33 @@
     }
 
     const previewLoads = new WeakMap();
+    const activePreviews = new Set();
+    const previewVisibility = new IntersectionObserver((entries) => {
+        entries.forEach(({ target: image, isIntersecting }) => {
+            const load = previewLoads.get(image);
+            if (!load) return;
+            load.visible = isIntersecting;
+            if (!isIntersecting) {
+                clearTimeout(load.retry);
+                load.retry = null;
+                clearTimeout(load.deadline);
+                load.deadline = null;
+            } else if (image.complete && !load.retry) {
+                handlePreviewDimensions(image, load.container);
+            }
+        });
+    }, { rootMargin: '120px' });
+
+    function stopPreview(image) {
+        const load = previewLoads.get(image);
+        if (load) {
+            clearTimeout(load.retry);
+            clearTimeout(load.deadline);
+        }
+        activePreviews.delete(image);
+        previewVisibility.unobserve(image);
+    }
+
     function previewSource(image, detail) {
         const source = new URL(image.getAttribute('src'), window.location.href);
         source.searchParams.delete('_preview');
@@ -62,19 +89,13 @@
         }
         const source = previewSource(image, detail);
         if (image.dataset.productionSource === source) return;
-        const previous = previewLoads.get(image);
-        if (previous) {
-            clearTimeout(previous.retry);
-            clearTimeout(previous.deadline);
-        }
-        const load = { source, retry: null, deadline: null, expired: false };
+        stopPreview(image);
+        const load = { source, container, detail, visible: false, retry: null, deadline: null, expired: false };
         previewLoads.set(image, load);
-        load.deadline = window.setTimeout(() => {
-            if (previewLoads.get(image) !== load || !image.isConnected) return;
-            load.expired = true;
-            clearTimeout(load.retry);
-            container.dataset.previewState = 'unavailable';
-        }, 120000);
+        activePreviews.add(image);
+        previewVisibility.observe(image);
+        image.decoding = 'async';
+        image.fetchPriority = detail ? 'high' : 'low';
         image.dataset.productionSource = source;
         image.dataset.previewAttempts = '0';
         container.dataset.previewState = 'loading';
@@ -86,26 +107,32 @@
         const load = previewLoads.get(image);
         if (!load || load.expired) return;
         clearTimeout(load.retry);
+        load.retry = null;
         if (image.naturalWidth === 1 && image.naturalHeight === 1) {
+            container.dataset.previewState = 'loading';
+            if (!load.visible || document.hidden) return;
+            if (!load.deadline) {
+                load.deadline = window.setTimeout(() => {
+                    if (previewLoads.get(image) !== load || !image.isConnected) return;
+                    load.expired = true;
+                    stopPreview(image);
+                    container.dataset.previewState = 'unavailable';
+                }, 120000);
+            }
             const attempt = Number(image.dataset.previewAttempts || 0) + 1;
             image.dataset.previewAttempts = String(attempt);
-            if (attempt >= 60) {
-                clearTimeout(load.deadline);
-                container.dataset.previewState = 'unavailable';
-                return;
-            }
-            container.dataset.previewState = 'loading';
             load.retry = window.setTimeout(() => {
-                if (!image.isConnected || previewLoads.get(image) !== load) return;
+                load.retry = null;
+                if (!image.isConnected || !load.visible || document.hidden || previewLoads.get(image) !== load) return;
                 const detail = container.classList.contains('detail-preview');
                 if (previewSource(image, detail) !== image.dataset.productionSource) return;
                 const retry = new URL(image.dataset.productionSource, window.location.href);
                 retry.searchParams.set('_preview', String(Date.now()));
                 image.setAttribute('src', `${retry.pathname}${retry.search}`);
-            }, Math.min(250 * (1.35 ** attempt), 2000));
+            }, load.detail ? Math.min(100 * (1.25 ** attempt), 500) : Math.min(200 * (1.35 ** attempt), 1000));
             return;
         }
-        clearTimeout(load.deadline);
+        stopPreview(image);
         if (image.naturalWidth > 1) image.style.removeProperty('display');
         container.dataset.previewState = image.naturalWidth > 0 ? 'ready' : 'unavailable';
     }
@@ -119,11 +146,7 @@
         if (previewSource(image, detail) !== image.dataset.productionSource) return;
         if (event.type === 'load') handlePreviewDimensions(image, container);
         else {
-            const load = previewLoads.get(image);
-            if (load) {
-                clearTimeout(load.retry);
-                clearTimeout(load.deadline);
-            }
+            stopPreview(image);
             container.dataset.previewState = 'unavailable';
         }
     }
@@ -131,8 +154,25 @@
     document.addEventListener('load', onPreviewResult, true);
     document.addEventListener('error', onPreviewResult, true);
 
+    function resumePreviews() {
+        activePreviews.forEach((image) => {
+            const load = previewLoads.get(image);
+            clearTimeout(load.retry);
+            load.retry = null;
+            if (document.hidden) {
+                clearTimeout(load.deadline);
+                load.deadline = null;
+            }
+            if (!document.hidden && image.complete) handlePreviewDimensions(image, load.container);
+        });
+    }
+    document.addEventListener('visibilitychange', resumePreviews);
+
     function enhance() {
         scheduled = false;
+        activePreviews.forEach((image) => {
+            if (!image.isConnected) stopPreview(image);
+        });
         const header = document.querySelector('.app-header');
         if (header && !header.querySelector('.production-view-nav')) {
             const nav = document.createElement('nav');
@@ -169,7 +209,17 @@
         if (!scheduled) { scheduled = true; requestAnimationFrame(enhance); }
     }
     // Only child/text changes: graph positions and preview pointer movement do not trigger work.
-    const observer = new MutationObserver(schedule);
+    const observer = new MutationObserver((records) => {
+        records.forEach((record) => {
+            if (record.type !== 'attributes') {
+                schedule();
+                return;
+            }
+            const image = record.target;
+            const container = image.closest('.detail-preview, .node-thumbnail');
+            if (container) preparePreview(container, container.classList.contains('detail-preview'));
+        });
+    });
     observer.observe(document.getElementById('root'), { childList: true, characterData: true, attributes: true, attributeFilter: ['src'], subtree: true });
     root.dataset.productionView = view;
     enhance();
@@ -178,8 +228,11 @@
     window.addEventListener('pagehide', (event) => {
         if (event.persisted) return;
         observer.disconnect();
+        activePreviews.forEach(stopPreview);
+        previewVisibility.disconnect();
         document.removeEventListener('load', onPreviewResult, true);
         document.removeEventListener('error', onPreviewResult, true);
+        document.removeEventListener('visibilitychange', resumePreviews);
         parentDocument.removeEventListener('sync-theme-change', syncTheme);
         parentWindow.removeEventListener('resize', syncMenuSpace);
     });
