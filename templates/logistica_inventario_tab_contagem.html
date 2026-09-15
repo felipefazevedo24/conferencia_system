@@ -9,7 +9,6 @@
     .inv-status.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
     .inv-status.err { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .inv-status.info { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
-    .invc-table-wrap { overflow-x: auto; }
 
     .scan-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .72); z-index: 11000; align-items: center; justify-content: center; padding: 14px; }
     .scan-modal.open { display: flex; }
@@ -76,34 +75,6 @@
     </div>
 </div>
 
-<div class="eui-card">
-    <div class="eui-card__head">
-        <h2 class="eui-card__title"><i class="fas fa-clock-rotate-left"></i> Últimos registros</h2>
-        <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="inv-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
-    </div>
-    <div class="eui-card__body eui-card__body--tight">
-        <div class="invc-table-wrap">
-            <table class="erp-table">
-                <thead>
-                    <tr>
-                        <th>Data</th>
-                        <th>Local</th>
-                        <th>Cód. Produto</th>
-                        <th>Unid.</th>
-                        <th>Qtd</th>
-                        <th>Lote</th>
-                        <th>Obs</th>
-                        <th>Usuário</th>
-                    </tr>
-                </thead>
-                <tbody id="inv-tbody">
-                    <tr><td colspan="8" style="text-align:center;color:var(--eui-muted);padding:14px;">Carregando...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
 <div class="scan-modal" id="scan-modal">
     <div class="scan-box">
         <div class="scan-head">
@@ -120,7 +91,6 @@
 <script>
 (function () {
     const unidadeSel = document.getElementById('inv-unidade');
-    const tbody = document.getElementById('inv-tbody');
     const statusBox = document.getElementById('inv-status');
     const modal = document.getElementById('scan-modal');
     const video = document.getElementById('scan-video');
@@ -161,30 +131,6 @@
         document.getElementById('inv-local').focus();
     }
 
-    function fmtData(iso) {
-        if (!iso) return '-';
-        try { return new Date(iso).toLocaleString('pt-BR'); } catch (_) { return iso; }
-    }
-
-    function renderRegistros(rows) {
-        if (!rows || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--eui-muted);padding:14px;">Nenhum registro ainda.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows.map((r) => `
-            <tr>
-                <td>${esc(fmtData(r.criado_em))}</td>
-                <td>${esc(r.local_codigo)}</td>
-                <td>${esc(r.codigo_produto)}</td>
-                <td>${esc(r.unidade_medida)}</td>
-                <td>${Number(r.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
-                <td>${esc(r.lote || '-')}</td>
-                <td>${esc(r.observacao || '-')}</td>
-                <td>${esc(r.criado_por || '-')}</td>
-            </tr>
-        `).join('');
-    }
-
     async function carregarUnidades() {
         try {
             const data = await api('/api/logistica/inventario-inicial/unidades');
@@ -192,15 +138,6 @@
         } catch (err) {
             preencherUnidades(['UN', 'KG', 'L', 'M']);
             showStatus(`Falha ao carregar unidades: ${err.message}`, 'err');
-        }
-    }
-
-    async function carregarRegistros() {
-        try {
-            const data = await api('/api/logistica/inventario-inicial?limit=120');
-            renderRegistros(data.registros || []);
-        } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--eui-danger,#b91c1c);padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
         }
     }
 
@@ -239,7 +176,6 @@
             });
             showStatus('Registro salvo com sucesso.', 'ok');
             limparFormulario();
-            await carregarRegistros();
         } catch (err) {
             showStatus(`Falha ao salvar: ${err.message}`, 'err');
         } finally {
@@ -330,7 +266,6 @@
     });
 
     document.getElementById('inv-salvar').addEventListener('click', salvarRegistro);
-    document.getElementById('inv-atualizar').addEventListener('click', carregarRegistros);
     document.getElementById('inv-limpar').addEventListener('click', () => {
         limparFormulario();
         showStatus('Formulario limpo.', 'info');
@@ -341,6 +276,5 @@
     });
 
     carregarUnidades();
-    carregarRegistros();
 })();
 </script>
