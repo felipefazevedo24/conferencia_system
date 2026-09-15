@@ -819,6 +819,14 @@ def home():
 @page_bp.route("/perfil")
 @login_required
 def perfil():
+    from ..services.perfil_service import indicadores_perfil, periodo_perfil
+
+    erro_periodo = None
+    try:
+        periodo = periodo_perfil(request.args)
+    except ValueError as exc:
+        erro_periodo = str(exc)
+        periodo = periodo_perfil({})
     username = session.get("username", "")
     usuario = Usuario.query.filter_by(username=username).first()
     role = session.get("role", "Operação")
@@ -845,6 +853,9 @@ def perfil():
     return render_template(
         "perfil.html",
         usuario=usuario,
+        atividade_periodo=periodo,
+        atividade_erro=erro_periodo,
+        atividade_modulos=indicadores_perfil(username, periodo) if not erro_periodo else [],
         role_display=role_display,
         sessoes=sessoes,
         outras_sessoes=sum(1 for s in sessoes if not s["is_current"]),
