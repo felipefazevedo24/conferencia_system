@@ -1,9 +1,5 @@
 
 <div class="putaway eui-scope" id="putaway" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}">
- <header class="pa-header">
-    <div><div class="pa-eyebrow"><i class="fas fa-barcode"></i> Recebimento</div><h2>Endereçamento</h2><p>Fila de materiais conformes para armazenagem.</p></div>
-    <div class="pa-header-status"><i class="fas fa-camera"></i> Leitura por câmera</div>
- </header>
  <div id="pa-feedback" class="pa-alert" role="status" aria-live="polite"></div>
  <div class="pa-toolbar"><div class="pa-search"><i class="fas fa-search"></i><input id="pa-search" type="search" placeholder="Buscar NF, SKU, descrição ou fornecedor" aria-label="Buscar pendências"></div><button id="pa-refresh" class="pa-icon-button" type="button" title="Atualizar fila" aria-label="Atualizar fila"><i class="fas fa-rotate"></i></button><button id="pa-clear-filter" class="pa-button pa-button--secondary" type="button">Ver todos</button></div>
  <div class="pa-tabs" id="pa-tabs">
