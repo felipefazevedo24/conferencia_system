@@ -26,8 +26,13 @@
    document.querySelectorAll('#pa-tabs button').forEach(b => { b.classList.toggle('active', b.dataset.status === status); b.querySelector('span').textContent = `(${data.contadores[b.dataset.status]})`; });
    if (!items.length) $('pa-list').append(el('p', 'Nenhum material nesta fila para o filtro selecionado.', 'pa-card'));
    items.forEach(item => {
-    const card = el('article', null, 'pa-card');
-    card.append(el('span', item.status, 'pa-badge'), el('h3', `${item.sku || 'SKU GRV não vinculado'} · ${item.descricao}`), el('p', `NF ${item.nota} · ${item.fornecedor || ''}`, 'pa-meta'), el('p', `${item.quantidade} ${item.unidade || ''} · Recebido em ${date(item.criado_em)}`));
+    const card = el('article', null, 'pa-card pa-row');
+    const material = el('div', null, 'pa-row__material');
+    material.append(el('h3', item.descricao || 'Material sem descrição'), el('p', `NF ${item.nota} · ${item.fornecedor || 'Fornecedor não informado'}`, 'pa-meta'));
+    if (!item.sku) material.append(el('p', 'Vínculo de SKU pendente no recebimento.', 'pa-sku-pendente'));
+    const quantidade = el('div', null, 'pa-row__quantity');
+    quantidade.append(el('strong', `${item.quantidade} ${item.unidade || ''}`), el('span', `Recebido em ${date(item.criado_em)}`));
+    card.append(el('span', item.status, 'pa-badge'), material, quantidade);
     if (item.erro) card.append(el('p', item.erro, 'pa-alert'));
     const actions = el('div', null, 'pa-tools');
     if (item.status === 'Pendente') actions.append(button('Endereçar material', () => openWork(item)));

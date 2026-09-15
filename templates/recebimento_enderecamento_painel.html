@@ -5,8 +5,7 @@
  <div class="pa-tools pa-tabs" id="pa-tabs">
   <button data-status="Pendente">Pendentes <span></span></button><button data-status="Aguardando sincronização">Aguardando sincronização <span></span></button><button data-status="Concluído">Concluídos <span></span></button>
  </div>
- <div id="pa-list" aria-live="polite"></div>
- <div class="pa-tools"><button id="pa-prev">Anterior</button><span id="pa-page"></span><button id="pa-next">Próxima</button></div>
+ <section class="pa-queue" aria-label="Fila de materiais para endereçamento"><div class="pa-queue-head"><span>Situação</span><span>Material recebido</span><span>Quantidade</span><span>Ações</span></div><div id="pa-list" aria-live="polite"></div><div class="pa-pagination"><button id="pa-prev" type="button">Anterior</button><span id="pa-page"></span><button id="pa-next" type="button">Próxima</button></div></section>
  {% if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') %}<details class="pa-card"><summary>Cadastro de endereços</summary><p>Cadastre o código impresso na etiqueta física. O conferente só poderá selecionar o local pela câmera.</p><form id="pa-locals"><label>Código da etiqueta <input id="pa-local-code" maxlength="80" required></label><label><input id="pa-local-active" type="checkbox" checked> Ativo</label><button>Salvar endereço</button></form><button id="pa-show-locals">Consultar endereços cadastrados</button><div id="pa-local-list"></div></details>{% endif %}
  <dialog id="pa-work" class="pa-dialog"><button class="close" id="pa-close">Fechar</button><h3 id="pa-title"></h3><p id="pa-description"></p>
   <div id="pa-work-feedback" class="pa-alert" role="status"></div>
