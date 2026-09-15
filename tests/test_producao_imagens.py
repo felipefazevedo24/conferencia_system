@@ -532,6 +532,36 @@ def test_bridge_preview_nao_retorna_documento_incorreto(bridge_preview_client, c
     assert response.status_code == status
     render.assert_not_called()
     assert len(connections) == (2 if case == "changed-during-read" else 1)
+    if case == "changed-during-read":
+        assert response.get_json()["motivo"] == "documento_alterado"
+
+
+@pytest.mark.parametrize("message, reason", [
+    ("Vista isometrica nao identificada com confianca", "vista_isometrica_nao_identificada"),
+    ("Documento PDF invalido ou ilegivel", "pdf_invalido_ou_ilegivel"),
+    ("Documento sem paginas", "documento_sem_paginas"),
+    ("Imagem invalida ou ilegivel", "imagem_invalida_ou_ilegivel"),
+    ("Formato sem suporte para previa isometrica", "formato_nao_suportado"),
+    ("Documento sem conteudo disponivel", "documento_sem_conteudo"),
+    ("Documento excede o limite da previa", "documento_muito_grande"),
+    ("detalhe-interno-nao-deve-ser-exposto", "falha_ao_processar_documento"),
+])
+def test_bridge_preview_422_informa_causa_segura_e_identifica_documento(bridge_preview_client, caplog, message, reason):
+    client, payload, _expected, render, _metadata, _content, _connections, _service = bridge_preview_client
+    render.side_effect = LookupError(message)
+    for _attempt in range(2):
+        response = client.post("/api/erp/producao/preview", json=payload, headers={"Authorization": "Bearer test-only-token"})
+        assert response.status_code == 422
+        assert response.get_json() == {"erro": "previa_indisponivel", "motivo": reason}
+    assert render.call_count == 1
+    diagnostics = [record.getMessage() for record in caplog.records if "producao_preview_indisponivel" in record.getMessage()]
+    assert len(diagnostics) == 2
+    for diagnostic in diagnostics:
+        assert "os=9959 item=4 documento=31 tipo=attachment" in diagnostic
+        assert f"motivo={reason}" in diagnostic
+        assert "elapsed_ms=" in diagnostic
+        assert message not in diagnostic
+        assert "test-only-token" not in diagnostic
 
 
 @pytest.fixture

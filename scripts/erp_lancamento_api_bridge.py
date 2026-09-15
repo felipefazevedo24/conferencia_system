@@ -1714,8 +1714,25 @@ def create_app() -> Flask:
             })
             response.set_etag(cache_key)
             return response
-        except LookupError:
-            return jsonify({"erro": "previa_indisponivel"}), 422
+        except LookupError as exc:
+            reason = {
+                "Vista isometrica nao identificada com confianca": "vista_isometrica_nao_identificada",
+                "Documento PDF invalido ou ilegivel": "pdf_invalido_ou_ilegivel",
+                "Documento sem paginas": "documento_sem_paginas",
+                "Imagem invalida ou ilegivel": "imagem_invalida_ou_ilegivel",
+                "Formato sem suporte para previa isometrica": "formato_nao_suportado",
+                "Documento alterado durante o carregamento": "documento_alterado",
+                "Documento sem conteudo disponivel": "documento_sem_conteudo",
+                "Documento excede o limite da previa": "documento_muito_grande",
+                "Renderizador de PDF nao instalado": "renderizador_nao_instalado",
+                "Renderizador de imagem nao instalado": "renderizador_nao_instalado",
+            }.get(str(exc), "falha_ao_processar_documento")
+            app.logger.warning(
+                "producao_preview_indisponivel os=%s item=%s documento=%s tipo=%s motivo=%s elapsed_ms=%.2f error_type=%s",
+                params["cod_os"], params["cod_os_aux"], params["document_id"], kind, reason,
+                (time.perf_counter() - started) * 1000, type(exc).__name__,
+            )
+            return jsonify({"erro": "previa_indisponivel", "motivo": reason}), 422
         except Exception:
             app.logger.exception("Falha ao gerar previa de Producao na bridge")
             return jsonify({"erro": "previa_bridge_indisponivel"}), 503

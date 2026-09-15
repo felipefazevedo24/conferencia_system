@@ -204,6 +204,34 @@ somente leitura e revisoes divergentes. Ausencia do endpoint, falta das
 bibliotecas de imagem ou versao de renderizador incompatível usam o caminho
 anterior; a disponibilidade e verificada novamente em cinco minutos.
 
+### Quando a previa retorna HTTP 422
+
+POST com HTTP 200 confirma a geracao das duas imagens. HTTP 422 indica que
+uma consulta foi aceita, mas a previa daquele documento nao foi gerada;
+nao significa que o tunel esteja desconectado.
+
+A bridge registra em nivel WARNING uma linha `producao_preview_indisponivel`
+com os codigos da OS, do item, do documento, o tipo, o motivo e o tempo gasto.
+A resposta JSON mantem `erro=previa_indisponivel` e inclui `motivo`.
+Somente motivos conhecidos sao expostos, sem nome/conteudo do arquivo,
+credenciais ou mensagens internas arbitrarias.
+
+| Motivo | O que verificar |
+|---|---|
+| `vista_isometrica_nao_identificada` | A vista da peca nao foi identificada com confianca no documento. |
+| `pdf_invalido_ou_ilegivel` / `imagem_invalida_ou_ilegivel` | Falha ao abrir ou processar o arquivo; examinar o documento original. |
+| `formato_nao_suportado` | A extensao do documento nao esta entre PDF, PNG, JPG, JPEG e WebP. |
+| `documento_sem_paginas` / `documento_sem_conteudo` | O documento nao tem conteudo que possa ser renderizado. |
+| `documento_alterado` | A revisao mudou durante a leitura; repetir com metadados atualizados. |
+| `documento_muito_grande` | O arquivo excede o limite de 25 MiB. |
+| `falha_ao_processar_documento` | Falha sem motivo conhecido; investigar com o documento correspondente. |
+
+Se aparecer apenas a linha de acesso com status 422, sem esse diagnostico,
+publicar o ajuste de `scripts/erp_lancamento_api_bridge.py` na VM e reiniciar
+a bridge. Nao e necessario reinstalar bibliotecas nem mudar o banco para
+ativar esse registro. Identificar o motivo antes de alterar a selecao ou o
+recorte do desenho; um status 422 sozinho nao comprova arquivo corrompido.
+
 ## Como diagnosticar quando der erro
 
 - **Produção mostra "Falha ao consultar o ERP: connection to server at
