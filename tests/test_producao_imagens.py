@@ -334,7 +334,8 @@ def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
             shape.draw_line((40, y), (300, y + 80))
         shape.finish(color=(0, 0, 0), width=1)
         shape.commit()
-        previews = producao_service._render_pdf_previews(pdf.tobytes())
+        with patch.object(producao_service, "_page_isometric_candidates", side_effect=AssertionError("Imagem incorporada nao deve analisar a geometria sem rotulo")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
 
     thumb = Image.open(io.BytesIO(previews["thumbnail"]))
     detail = Image.open(io.BytesIO(previews["detail"]))
@@ -609,6 +610,101 @@ def test_transporte_bridge_usa_conexao_configurada_e_retorna_variantes(preview_t
     response.close.assert_called_once_with()
 
 
+def test_previa_em_disco_e_compartilhada_entre_processos_e_revisao_invalida_cache(preview_transport, tmp_path):
+    import json
+    import subprocess
+    from flask import Flask
+
+    transport, document_data, settings, session, _response = preview_transport
+    first_worker = Flask("web_worker_1", instance_path=str(tmp_path))
+    second_worker = Flask("web_worker_2", instance_path=str(tmp_path))
+    with first_worker.app_context():
+        first = transport.obter_previews_bridge(document_data, "renderer-test")
+    independent_worker = subprocess.run(
+        [sys.executable, "-c", """
+import json
+import sys
+from types import SimpleNamespace
+from unittest.mock import patch
+from flask import Flask
+from conferencia_app.services import producao_bridge
+
+data = json.load(sys.stdin)
+settings = SimpleNamespace(**data['settings'])
+app = Flask('independent_worker', instance_path=data['instance_path'])
+with app.app_context(), patch.object(producao_bridge, 'get_settings', return_value=settings), patch.object(producao_bridge, '_session', side_effect=AssertionError('Cache deve dispensar HTTP')):
+    result = producao_bridge.obter_previews_bridge(data['document'], 'renderer-test')
+    assert result['thumbnail'].endswith(b'thumbnail')
+    assert result['detail'].endswith(b'detail')
+print('CACHE_SHARED_PROCESS_OK')
+"""],
+        input=json.dumps({"settings": vars(settings), "document": document_data, "instance_path": str(tmp_path)}),
+        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+    )
+    assert independent_worker.returncode == 0, independent_worker.stderr
+    assert "CACHE_SHARED_PROCESS_OK" in independent_worker.stdout
+    with second_worker.app_context():
+        second = transport.obter_previews_bridge(document_data, "renderer-test")
+        assert second == first
+        assert session.post.call_count == 1
+        transport.obter_previews_bridge({**document_data, "content_revision": "revision-2"}, "renderer-test")
+        assert session.post.call_count == 2
+    files = list((tmp_path / "producao_previews").glob("*.zip"))
+    assert len(files) == 2
+    assert not list((tmp_path / "producao_previews").glob("*.tmp"))
+
+
+def test_previa_em_disco_isola_bridge_credenciais_e_renderizador(preview_transport, tmp_path):
+    from flask import Flask
+
+    transport, document_data, settings, session, response = preview_transport
+    app = Flask("cache_isolado", instance_path=str(tmp_path))
+    with app.app_context():
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        settings.API_URL = "https://other-bridge.invalid"
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        settings.API_TOKEN = "other-test-token"
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        response.headers["X-Production-Preview-Version"] = "renderer-updated"
+        transport.obter_previews_bridge(document_data, "renderer-updated")
+    assert session.post.call_count == 4
+
+
+def test_cache_disco_corrompido_ou_sem_permissao_nao_impede_imagem(preview_transport, tmp_path):
+    from flask import Flask
+
+    transport, document_data, _settings, session, _response = preview_transport
+    app = Flask("cache_fallback", instance_path=str(tmp_path))
+    with app.app_context():
+        expected = transport.obter_previews_bridge(document_data, "renderer-test")
+        archive = next((tmp_path / "producao_previews").glob("*.zip"))
+        archive.write_bytes(b"invalid archive")
+        assert transport.obter_previews_bridge(document_data, "renderer-test") == expected
+        archive.unlink()
+        with patch.object(transport.tempfile, "NamedTemporaryFile", side_effect=PermissionError()):
+            assert transport.obter_previews_bridge(document_data, "renderer-test") == expected
+    assert session.post.call_count == 3
+
+
+def test_cache_disco_tem_limite_e_expiracao(preview_transport, tmp_path, monkeypatch):
+    import os
+    from flask import Flask
+
+    transport, document_data, _settings, session, _response = preview_transport
+    app = Flask("cache_limitado", instance_path=str(tmp_path))
+    monkeypatch.setattr(transport, "_DISK_CACHE_LIMIT", 2)
+    with app.app_context():
+        for document_id in range(3):
+            transport.obter_previews_bridge({**document_data, "id": document_id}, "renderer-test")
+        archives = list((tmp_path / "producao_previews").glob("*.zip"))
+        assert len(archives) == 2
+        for archive in archives:
+            os.utime(archive, (0, 0))
+        transport.obter_previews_bridge({**document_data, "id": 2}, "renderer-test")
+    assert session.post.call_count == 4
+    assert len(list((tmp_path / "producao_previews").glob("*.zip"))) == 1
+
+
 def test_transporte_bridge_antiga_e_detectada_sem_tentativa_por_imagem(preview_transport, monkeypatch):
     transport, document_data, _settings, session, response = preview_transport
     response.status_code = 404
@@ -659,7 +755,7 @@ def test_transporte_bridge_valida_resposta_e_fallback(preview_transport, monkeyp
         response.close.assert_called_once_with()
 
 
-def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch):
+def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch, tmp_path):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from flask import Flask
@@ -701,7 +797,7 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
     sizes = []
     session.hooks["response"].append(lambda response, **_kwargs: sizes.append(int(response.headers["Content-Length"])))
     monkeypatch.setattr(producao_bridge, "_session", lambda: session)
-    web_app = Flask("preview_web_http_test")
+    web_app = Flask("preview_web_http_test", instance_path=str(tmp_path))
     worker.start()
     try:
         with web_app.app_context():
@@ -711,6 +807,11 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
             started = time.perf_counter()
             detail = service.obter_preview("9959", 4, "detail")
             warm_seconds = time.perf_counter() - started
+        with Flask("preview_web_other_worker", instance_path=str(tmp_path)).app_context():
+            started = time.perf_counter()
+            shared_detail = service.obter_preview("9959", 4, "detail")
+            shared_seconds = time.perf_counter() - started
+            assert shared_detail[0] == detail[0]
         for result in (thumbnail, detail):
             with Image.open(io.BytesIO(result[0])) as preview:
                 assert preview.format == "PNG"
@@ -720,7 +821,7 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
         assert renderer.call_count == len(sizes) == 1
         assert sizes[0] < len(original) // 10
         raw_download.assert_not_called()
-        print(f"\nBRIDGE_HTTP original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f}")
+        print(f"\nBRIDGE_HTTP original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f} other_worker_seconds={shared_seconds:.5f}")
     finally:
         server.shutdown()
         server.server_close()
@@ -959,6 +1060,46 @@ def test_detalhe_nao_espera_fila_de_consultas_das_miniaturas():
         detail_job.set_result((b"detail", "image/png", "etag"))
         assert producao_service._obter_preview_assincrono("priority", 7, "detail")[0] == b"detail"
         thumbnail_job.set_result((b"thumb", "image/png", "etag"))
+
+
+@pytest.mark.parametrize("variant, executor_name, limit", [
+    ("thumbnail", "_PREVIEW_REQUEST_EXECUTOR", 4),
+    ("detail", "_PREVIEW_DETAIL_EXECUTOR", 2),
+])
+def test_requisicoes_de_preview_nao_acumulam_fila_de_itens_antigos(variant, executor_name, limit):
+    from concurrent.futures import Future
+
+    jobs = [Future() for _index in range(limit + 1)]
+    with (
+        patch.object(producao_service, "_PREVIEW_REQUEST_JOBS", {}),
+        patch.object(producao_service, "_PREVIEW_REQUEST_CACHE", OrderedDict()),
+        patch.object(getattr(producao_service, executor_name), "submit", side_effect=jobs) as submit,
+    ):
+        for aux_code in range(1, 51):
+            assert producao_service._obter_preview_assincrono("large-order", aux_code, variant)[0] is None
+        assert submit.call_count == limit
+        assert len(producao_service._PREVIEW_REQUEST_JOBS) == limit
+        jobs[0].set_result((b"preview", "image/png", "ready"))
+        assert producao_service._obter_preview_assincrono("large-order", 42, variant)[0] is None
+        assert submit.call_count == limit + 1
+        assert submit.call_args.args[4] == 42
+        for job in jobs[1:]:
+            job.set_result((b"preview", "image/png", "ready"))
+        assert not producao_service._PREVIEW_REQUEST_JOBS
+
+
+def test_preview_que_termina_imediatamente_nao_exige_outra_requisicao():
+    from concurrent.futures import Future
+
+    job = Future()
+    expected = (b"preview", "image/png", "ready")
+    job.set_result(expected)
+    with (
+        patch.object(producao_service, "_PREVIEW_REQUEST_JOBS", {}),
+        patch.object(producao_service, "_PREVIEW_REQUEST_CACHE", OrderedDict()),
+        patch.object(producao_service._PREVIEW_DETAIL_EXECUTOR, "submit", return_value=job),
+    ):
+        assert producao_service._obter_preview_assincrono("cached-order", 42, "detail") == expected
 
 
 def test_falha_temporaria_da_imagem_expira_e_permite_nova_tentativa():
