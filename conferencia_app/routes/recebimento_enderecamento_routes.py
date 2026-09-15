@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy import or_
 
-from ..auth import permission_required, has_permission
+from ..auth import permission_required, roles_required, is_admin_session, has_permission
 from ..extensions import db
 from ..models import (ItemNota, LocalizacaoArmazem, RecebimentoEnderecamento as Tarefa,
                       RecebimentoEnderecamentoEvento as Evento)
@@ -50,7 +50,7 @@ def listar():
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento/<int:tarefa_id>/historico")
-@permission_required(PERMISSION)
+@roles_required("Admin")
 def historico(tarefa_id):
     t = db.get_or_404(Tarefa, tarefa_id)
     eventos = Evento.query.filter_by(tarefa_id=t.id).order_by(Evento.id).all()
@@ -74,8 +74,8 @@ def operar(tarefa_id, acao):
         elif acao == "sincronizar":
             svc.sincronizar(tarefa)
         elif acao == "reabrir":
-            if not has_permission(MANAGE):
-                return jsonify(erro="Sem permissão para revisar o endereçamento."), 403
+            if not is_admin_session():
+                return jsonify(erro="Somente administradores podem revisar ou estornar o endereçamento."), 403
             svc.reabrir(tarefa, dados.get("justificativa"))
         else:
             return jsonify(erro="Ação inválida."), 404

@@ -88,6 +88,7 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
             page.locator('#pa-submit').click()
             expect(page.locator('#pa-feedback')).to_contain_text('sincronizado com o GRV')
             update.assert_called_once_with('SKU-1','A;B')
+            page.get_by_role('button',name='Mais ações').click()
             page.get_by_role('button',name='Ver histórico e origem').click()
             expect(page.locator('#pa-history-body')).to_contain_text('A;B')
             page.locator('#pa-history-close').click()

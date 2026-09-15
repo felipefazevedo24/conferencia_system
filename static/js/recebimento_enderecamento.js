@@ -20,6 +20,28 @@
   if (icon) { const i = document.createElement('i'); i.className = `fas ${icon}`; i.setAttribute('aria-hidden', 'true'); b.append(i); }
   b.append(document.createTextNode(text)); b.onclick = action; return b;
  }
+ let menuAberto = null;
+ function fecharMenu() { if (menuAberto) { menuAberto.remove(); menuAberto = null; } }
+ document.addEventListener('click', e => { if (menuAberto && !menuAberto.contains(e.target) && !e.target.closest('.pa-menu-btn')) fecharMenu(); });
+ document.addEventListener('scroll', fecharMenu, true);
+ function kebab(itens) {
+  const b = el('button', null, 'pa-act pa-menu-btn'); b.type = 'button'; b.setAttribute('aria-label', 'Mais ações'); b.title = 'Mais ações';
+  const i = document.createElement('i'); i.className = 'fas fa-ellipsis-v'; i.setAttribute('aria-hidden', 'true'); b.append(i);
+  b.onclick = () => {
+   if (menuAberto) { fecharMenu(); return; }
+   const list = el('div', null, 'pa-menu-list');
+   itens.forEach(({texto, icone, acao, perigo}) => {
+    const item = el('button', null, 'pa-menu-item' + (perigo ? ' pa-menu-item--perigo' : '')); item.type = 'button';
+    const ic = document.createElement('i'); ic.className = `fas ${icone}`; ic.setAttribute('aria-hidden', 'true'); item.append(ic, document.createTextNode(texto));
+    item.onclick = () => { fecharMenu(); acao(); }; list.append(item);
+   });
+   document.body.append(list);
+   const r = b.getBoundingClientRect();
+   list.style.top = `${r.bottom + 4}px`; list.style.left = `${Math.max(8, r.right - list.offsetWidth)}px`;
+   menuAberto = list;
+  };
+  return b;
+ }
  async function refresh() {
   const version = ++listRequest;
   try {
@@ -50,18 +72,19 @@
      const alvo = e.currentTarget; alvo.disabled = true;
      try { const data = await request(`${api}/${item.id}/sincronizar`, {}); feedback(data.item.status === 'Concluído' ? 'Endereço sincronizado com o GRV.' : data.item.erro || 'Sincronização pendente.'); await refresh(); } catch (err) { feedback(err.message); } finally { alvo.disabled = false; }
     }, 'fa-sync-alt'));
-    actions.append(button('Ver histórico e origem', () => history(item.id), 'fa-history')); const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
+    const isAdmin = $('putaway').dataset.admin === 'true';
+    const reabrir = mensagem => async () => {
+     const justificativa = prompt(mensagem);
+     if (!justificativa) return;
+     try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
+    };
+    const menuItens = [];
+    if (isAdmin) menuItens.push({texto:'Ver histórico e origem', icone:'fa-history', acao:() => history(item.id)});
+    if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') menuItens.push({texto:'Revisar leituras', icone:'fa-redo', acao:reabrir('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.')});
+    if (item.status === 'Concluído' && isAdmin) menuItens.push({texto:'Estornar endereçamento', icone:'fa-undo', perigo:true, acao:reabrir('Informe o motivo do estorno. O material volta para a fila "A endereçar"; os endereços já enviados ao GRV são preservados.')});
+    if (menuItens.length) actions.append(kebab(menuItens));
+    const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
     if (item.erro) { const errorRow = el('tr', null, 'pa-error-row'); const errorCell = el('td', item.erro, 'pa-alert'); errorCell.colSpan = 7; errorRow.append(errorCell); $('pa-list').append(errorRow); }
-    if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') actions.append(button('Revisar leituras', async () => {
-     const justificativa = prompt('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.');
-     if (!justificativa) return;
-     try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
-    }, 'fa-redo'));
-    if (item.status === 'Concluído' && $('putaway').dataset.manage === 'true') actions.append(button('Estornar endereçamento', async () => {
-     const justificativa = prompt('Informe o motivo do estorno. O material volta para a fila "A endereçar"; os endereços já enviados ao GRV são preservados.');
-     if (!justificativa) return;
-     try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
-    }, 'fa-undo', 'danger'));
    });
    $('pa-page').textContent = `Página ${page}`; $('pa-prev').disabled = page === 1; $('pa-next').disabled = page * 40 >= data.contadores[status];
   } catch (err) { feedback(err.message); }

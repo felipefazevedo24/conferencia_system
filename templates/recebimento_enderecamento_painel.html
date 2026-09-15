@@ -1,5 +1,5 @@
 
-<div class="putaway" id="putaway" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}">
+<div class="putaway" id="putaway" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}" data-admin="{{ 'true' if session.get('role') == 'Admin' else 'false' }}">
  <div id="pa-feedback" class="pa-alert" role="status" aria-live="polite"></div>
  <div class="pa-tools pa-filterbar"><input id="pa-search" type="search" placeholder="Buscar NF, SKU, descrição ou fornecedor" aria-label="Buscar pendências"><button id="pa-refresh">Atualizar</button><button id="pa-clear-filter" type="button">Ver todos os recebimentos</button></div>
  <div class="pa-tools pa-tabs" id="pa-tabs">
