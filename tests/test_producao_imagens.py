@@ -471,6 +471,10 @@ def test_bridge_preview_entrega_so_pngs_reutiliza_render_e_fecha_conexoes(bridge
 
     client, payload, expected, render, metadata, content, connections, _service = bridge_preview_client
     headers = {"Authorization": "Bearer test-only-token"}
+    availability = client.options("/api/erp/producao/preview")
+    assert availability.status_code == 200
+    assert "POST" in availability.headers["Allow"]
+    assert not connections
     first = client.post("/api/erp/producao/preview", json=payload, headers=headers)
     second = client.post("/api/erp/producao/preview", json=payload, headers=headers)
     assert first.status_code == second.status_code == 200

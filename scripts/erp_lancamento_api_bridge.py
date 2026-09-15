@@ -1652,7 +1652,7 @@ def create_app() -> Flask:
             from conferencia_app.services import production_images
         except ImportError:
             return jsonify({"erro": "renderizador_nao_instalado"}), 501
-        if not callable(production_images.render_variants):
+        if not callable(getattr(production_images, "render_variants", None)):
             return jsonify({"erro": "renderizador_nao_instalado"}), 501
 
         started = time.perf_counter()
