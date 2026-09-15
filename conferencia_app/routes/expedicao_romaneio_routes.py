@@ -62,14 +62,14 @@ def _parse_int(valor, default=0) -> int:
 
 def _gerar_solicitacao_entrega_cif(romaneio) -> None:
     """Gatilho imediato da Regra 2: gera a Solicitacao de Entrega de um
-    romaneio CIF assim que ele fica Pronto ou Expedido. Best-effort: nunca
+    romaneio CIF/DAP assim que ele fica Pronto ou Expedido. Best-effort: nunca
     interrompe o fluxo do romaneio (o scheduler cobre eventuais falhas)."""
     try:
         if not current_app.config.get("SOLICITACAO_CIF_AUTO_ENABLED", True):
             return
         if not current_app.config.get("SOLICITACAO_CIF_ENTREGA_ENABLED", True):
             return
-        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
+        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) not in ("CIF", "PROP_REM"):
             return
         from ..services.solicitacao_logistica_cif_service import (
             gerar_solicitacao_entrega_para_romaneio,
@@ -88,7 +88,7 @@ def _cancelar_solicitacao_entrega_cif(romaneio, motivo: str = "") -> None:
     """Estorna a Solicitacao de Entrega CIF gerada automaticamente quando o
     romaneio e estornado/excluido. Best-effort: nunca interrompe o fluxo."""
     try:
-        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
+        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) not in ("CIF", "PROP_REM"):
             return
         from ..services.solicitacao_logistica_cif_service import (
             cancelar_solicitacao_entrega_para_romaneio,

@@ -29,6 +29,7 @@ from ..models import (
     Usuario,
 )
 from ..services.email_service import enviar_email_agendamento_update
+from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
 from ..compras.services import compras_service
 from ..services.erp_estoque_service import buscar_consumo_kardex_grv, buscar_estoque_grv
 from ..services.agendamento_service import (
@@ -172,6 +173,7 @@ def _origem_documento_label(origem: str | None) -> str:
         "ERPPostgres": "ERP/Postgres",
         "Manual": "Manual",
         "AutoCIF": "Automático (CIF)",
+        "AutoDAP": "Automático (DAP)",
         "ORDEM_DE_COMPRA": "Ordem de Compra",
         "ROMANEIO": "Romaneio",
     }
@@ -759,7 +761,7 @@ def recebimento_calendario_dados():
             )
             .join(Viagem, Viagem.id == ViagemParada.viagem_id)
             .filter(ViagemParada.solicitacao_id.in_(ids))
-            .filter(Viagem.status != "Cancelada")
+            .filter(filtro_vinculo_solicitacao())
             .order_by(Viagem.id.desc())
             .all()
         )
@@ -1113,7 +1115,7 @@ def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:
     if str(row.tipo or "").strip() == "COLETA":
         return origem in {"ORDEM_DE_COMPRA", "AutoCIF"}
     if str(row.tipo or "").strip() == "ENTREGA":
-        return origem in {"AutoCIF", "ROMANEIO"}
+        return origem in {"AutoCIF", "AutoDAP", "ROMANEIO"}
     return False
 
 
@@ -1576,8 +1578,6 @@ def dashboard_central_viagens():
     status = str(request.args.get("status") or "").strip()
 
     query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA", "AVULSA"]))
-    if status:
-        query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
 
     # Exibir somente fluxos automaticos e o novo canal de solicitacao do usuario.
@@ -1623,7 +1623,7 @@ def dashboard_central_viagens():
                 )
                 .join(Viagem, Viagem.id == ViagemParada.viagem_id)
                 .filter(ViagemParada.solicitacao_id.in_(ids_solicitacao))
-                .filter(Viagem.status != "Cancelada")
+                .filter(filtro_vinculo_solicitacao())
                 .order_by(Viagem.id.desc())
                 .all()
             )
@@ -1642,6 +1642,14 @@ def dashboard_central_viagens():
         # Compatibilidade defensiva: em ambientes legados, não quebrar dashboard.
         viagem_por_solicitacao = {}
 
+    # Repara solicitações que o dashboard antigo recolocou em rota após
+    # a tentativa frustrada, sem uma nova alocação de veículo/motorista.
+    tentativas_nao_realizadas = {
+        sid for (sid,) in db.session.query(ViagemParada.solicitacao_id).filter(
+            ViagemParada.solicitacao_id.in_([r.id for r in automaticas]),
+            ViagemParada.status == "Nao_realizada",
+        ).distinct().all()
+    }
     rows_por_id = {int(r.id): r for r in automaticas}
     alterou_status = False
 
@@ -1650,6 +1658,14 @@ def dashboard_central_viagens():
         viagem = viagem_por_solicitacao.get(sid) if sid is not None else None
         card["viagem"] = viagem
         card["viagem_codigo"] = viagem.get("codigo") if viagem else ""
+        row = rows_por_id.get(sid)
+        if (not viagem and sid in tentativas_nao_realizadas and row
+                and not row.veiculo_id and not row.alocado_em
+                and card.get("status") in {"Alocada", "EmAndamento", "EmRota"}):
+            row.status = card["status"] = "Pendente"
+            card["status_label"] = status_label_agendamento("Pendente")
+            row.atualizado_em = datetime.now()
+            alterou_status = True
         if viagem and card.get("status") in {"Pendente", "EmAnalise", "Alocada", "EmAndamento", "EmRota"}:
             status_viagem = str(viagem.get("status") or "").strip()
             status_parada = str(viagem.get("parada_status") or "").strip()
@@ -1676,6 +1692,9 @@ def dashboard_central_viagens():
 
     if alterou_status:
         db.session.commit()
+
+    if status:
+        cards = [card for card in cards if card.get("status") == status]
 
     # Sem aba AVULSA na Central, exibir AVULSA junto de Coletas para não ocultar solicitações.
     coletas = [c for c in cards if c.get("tipo") in {"COLETA", "AVULSA"}]

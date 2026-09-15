@@ -1,4 +1,4 @@
-"""Automacao de Solicitacoes Logisticas por modalidade de frete CIF.
+"""Automacao de coletas CIF e entregas de romaneios CIF/DAP.
 
 Duas regras, ambas sem intervencao do usuario (scheduler) e com
 reprocessamento manual:
@@ -9,14 +9,14 @@ Regra 1 - Coleta (Pedido de Compra CIF):
     numero da OC, fornecedor, endereco de coleta, previsao de entrega e
     observacoes. Evita duplicidade e recalcula a data se a previsao mudar.
 
-Regra 2 - Entrega (NF de Saida CIF com Romaneio):
-    Sempre que um Romaneio de saida com tipo_frete = CIF estiver em status
+Regra 2 - Entrega (NF de Saida com Romaneio CIF/DAP):
+    Sempre que um Romaneio de saida com frete CIF ou DAP estiver em status
     Pronto ou Expedido, gera uma Solicitacao de Entrega herdando as NFs, o
     cliente, o romaneio, o volume/peso e o responsavel pela emissao. Evita
     duplicidade.
 
 Regras gerais atendidas: log de criacao automatica (historico), rastreabilidade
-via payload_origem (numero da OC / romaneio_id) e origem_documento = "AutoCIF".
+via payload_origem (numero da OC / romaneio_id) e origem_documento AutoCIF/AutoDAP.
 
 Como o nome da coluna "frete por conta" no ERP nao e conhecido a priori, a OC e
 lida inteira (to_jsonb) e a modalidade de frete e identificada e classificada
@@ -36,6 +36,8 @@ from ..models import (
 )
 
 ORIGEM_AUTO_CIF = "AutoCIF"
+ORIGEM_AUTO_DAP = "AutoDAP"
+FRETES_ENTREGA_AUTOMATICA = ("CIF", "PROP_REM", "DAP")
 
 # Chaves candidatas para a coluna "frete por conta" no cabecalho da OC.
 _FRETE_KEY_TOKENS = (
@@ -165,6 +167,7 @@ def _criar_solicitacao(
     payload_origem: Any = None,
     solicitante: str = "sistema",
     evento_detalhe: str = "",
+    origem_documento: str = ORIGEM_AUTO_CIF,
 ) -> AgendamentoSolicitacao | None:
     """Cria uma AgendamentoSolicitacao automatica (sem contexto de request)."""
     from ..routes.agendamento_routes import (
@@ -189,7 +192,7 @@ def _criar_solicitacao(
         numero_oc=(str(numero_oc)[:60] if numero_oc else None),
         numero_nf=(str(numero_nf)[:60] if numero_nf else None),
         orcamento=(str(orcamento)[:80] if orcamento else None),
-        origem_documento=ORIGEM_AUTO_CIF,
+        origem_documento=origem_documento,
         observacoes_solicitante=(observacoes_solicitante or None),
         observacoes_logistica=(observacoes_logistica or None),
         payload_origem=(_json_text(payload_origem) if payload_origem is not None else None),
@@ -210,7 +213,7 @@ def _criar_solicitacao(
     _sincronizar_itens(row, itens)
     _registrar_historico(
         row.id,
-        evento="CRIADA_AUTO_CIF",
+        evento="CRIADA_AUTO_DAP" if origem_documento == ORIGEM_AUTO_DAP else "CRIADA_AUTO_CIF",
         usuario=solicitante or "sistema",
         status_novo="Pendente",
         detalhe=evento_detalhe or f"Solicitacao gerada automaticamente (frete CIF) via {documento_tipo} {documento_numero}.",
@@ -230,7 +233,7 @@ def _buscar_entregas_do_romaneio(romaneio_id: int) -> list[AgendamentoSolicitaca
         AgendamentoSolicitacao.query
         .filter(
             AgendamentoSolicitacao.tipo == "ENTREGA",
-            AgendamentoSolicitacao.origem_documento == ORIGEM_AUTO_CIF,
+            AgendamentoSolicitacao.origem_documento.in_((ORIGEM_AUTO_CIF, ORIGEM_AUTO_DAP)),
             AgendamentoSolicitacao.payload_origem.like(f"%{marcador}%"),
         )
         .all()
@@ -251,7 +254,7 @@ def _buscar_entrega_de_nf(romaneio_id: int, numero_nf: str) -> AgendamentoSolici
         AgendamentoSolicitacao.query
         .filter(
             AgendamentoSolicitacao.tipo == "ENTREGA",
-            AgendamentoSolicitacao.origem_documento == ORIGEM_AUTO_CIF,
+            AgendamentoSolicitacao.origem_documento.in_((ORIGEM_AUTO_CIF, ORIGEM_AUTO_DAP)),
             AgendamentoSolicitacao.payload_origem.like(f"%{marcador_rom}%"),
             AgendamentoSolicitacao.payload_origem.like(f"%{marcador_nf}%"),
         )
@@ -294,15 +297,17 @@ def gerar_solicitacao_entrega_para_romaneio(
     solicitante: str = "sistema",
     commit: bool = True,
 ) -> tuple[bool, list[AgendamentoSolicitacao], str]:
-    """Gera (ou reaproveita) UMA Solicitacao de Entrega por NF do romaneio CIF.
+    """Gera (ou reaproveita) UMA Solicitacao de Entrega por NF do romaneio CIF/DAP.
 
     Um romaneio pode reunir varias entregas (uma por NF/cliente), portanto cada
     NF vira uma entrega/parada propria - obrigatoriamente, mesmo que a NF em si
     seja FOB (o romaneio e CIF; eventual divergencia e tratada por CC-e)."""
     if not romaneio:
         return False, [], "Romaneio inexistente."
-    if str(romaneio.tipo_frete or "").strip().upper() != "CIF":
-        return False, [], "Romaneio nao e CIF."
+    frete = str(romaneio.tipo_frete or "").strip().upper()
+    if frete not in FRETES_ENTREGA_AUTOMATICA:
+        return False, [], "Romaneio nao e CIF/DAP."
+    modalidade = "DAP" if frete in ("PROP_REM", "DAP") else "CIF"
     status = str(romaneio.status or "").strip()
     if status not in ("Pronto", "Expedido"):
         return False, [], f"Romaneio em status '{status}' (aguardando Pronto/Expedido)."
@@ -328,7 +333,8 @@ def gerar_solicitacao_entrega_para_romaneio(
         peso = float(getattr(nf, "peso_bruto", 0) or 0)
         volumes = int(getattr(nf, "qtde_volumes", 0) or 0)
         payload = {
-            "origem": "RomaneioCIF",
+            "origem": f"Romaneio{modalidade}",
+            "modalidade_frete": modalidade,
             "romaneio_id": romaneio.id,
             "romaneio_numero": romaneio.numero_romaneio,
             "numero_nf": numero_nf,
@@ -339,7 +345,7 @@ def gerar_solicitacao_entrega_para_romaneio(
             "data_romaneio": romaneio.data_romaneio.isoformat() if romaneio.data_romaneio else None,
         }
         obs_log = (
-            f"Romaneio {romaneio.numero_romaneio} (CIF) - NF {numero_nf}. "
+            f"Romaneio {romaneio.numero_romaneio} ({modalidade}) - NF {numero_nf}. "
             f"Cliente: {_first(getattr(nf, 'cliente', ''), romaneio.cliente) or '---'}. "
             f"Peso bruto {peso:g} kg, {volumes} volume(s). "
             f"Responsavel pela emissao: {romaneio.criado_por or '---'}."
@@ -355,8 +361,9 @@ def gerar_solicitacao_entrega_para_romaneio(
             observacoes_logistica=obs_log,
             payload_origem=payload,
             solicitante=solicitante,
+            origem_documento=ORIGEM_AUTO_DAP if modalidade == "DAP" else ORIGEM_AUTO_CIF,
             evento_detalhe=(
-                f"Entrega gerada automaticamente (frete CIF) da NF {numero_nf} "
+                f"Entrega gerada automaticamente (frete {modalidade}) da NF {numero_nf} "
                 f"do romaneio {romaneio.numero_romaneio}."
             ),
         )
@@ -371,13 +378,13 @@ def gerar_solicitacao_entrega_para_romaneio(
 
 
 def gerar_solicitacoes_entrega_cif(app=None) -> dict:
-    """Varre romaneios CIF em Pronto/Expedido e gera as entregas faltantes."""
+    """Varre romaneios CIF/DAP em Pronto/Expedido e gera as entregas faltantes."""
 
     def _run() -> dict:
         romaneios = (
             ExpedicaoRomaneio.query
             .filter(
-                ExpedicaoRomaneio.tipo_frete == "CIF",
+                ExpedicaoRomaneio.tipo_frete.in_(FRETES_ENTREGA_AUTOMATICA),
                 ExpedicaoRomaneio.status.in_(("Pronto", "Expedido")),
             )
             .all()
@@ -446,7 +453,7 @@ def cancelar_solicitacao_entrega_para_romaneio(
 
             _registrar_historico(
                 row.id,
-                evento="CANCELADA_AUTO_CIF",
+                evento="CANCELADA_AUTO_DAP" if row.origem_documento == ORIGEM_AUTO_DAP else "CANCELADA_AUTO_CIF",
                 usuario=usuario or "sistema",
                 status_anterior=status_anterior,
                 status_novo="Cancelada",

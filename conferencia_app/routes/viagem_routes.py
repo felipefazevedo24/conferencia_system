@@ -30,6 +30,7 @@ from ..models import (
 )
 from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
+from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
 
@@ -796,15 +797,24 @@ def _atualizar_tipo_viagem_por_paradas(v: Viagem | None) -> None:
         v.tipo = list(tipos_validos)[0]
 
 
-def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
+def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None, *, viagem_origem_id=None) -> None:
     if not sol or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return
+    vinculo = ViagemParada.query.join(Viagem, Viagem.id == ViagemParada.viagem_id).filter(
+        ViagemParada.solicitacao_id == sol.id, filtro_vinculo_solicitacao(),
+    )
+    if viagem_origem_id is not None:
+        vinculo = vinculo.filter(ViagemParada.viagem_id != viagem_origem_id)
+    if vinculo.first():
+        return  # Concluir/cancelar a viagem antiga não pode desfazer a nova alocação.
     sol.status = "Pendente"
     sol.veiculo_id = None
     sol.motorista_id = None
     sol.motorista_nome = None
     sol.data_hora_saida_prevista = None
     sol.data_hora_retorno_prevista = None
+    sol.data_hora_saida_real = None
+    sol.data_hora_retorno_real = None
     sol.alocado_por = None
     sol.alocado_em = None
     sol.atualizado_em = datetime.now()
@@ -1225,7 +1235,7 @@ def excluir(vid: int):
         return jsonify({"sucesso": False, "msg": "Não é possível excluir viagem em andamento. Cancele primeiro."}), 400
     for parada in ViagemParada.query.filter_by(viagem_id=vid).all():
         if parada.solicitacao_id and v.status == "Planejada":
-            _solicitacao_volta_pendente(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id))
+            _solicitacao_volta_pendente(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id), viagem_origem_id=vid)
     ViagemEvento.query.filter_by(viagem_id=vid).delete()
     ViagemPosicao.query.filter_by(viagem_id=vid).delete()
     ViagemParada.query.filter_by(viagem_id=vid).delete()
@@ -1380,6 +1390,8 @@ def parada_chegar(pid: int):
     parada = db.session.get(ViagemParada, pid)
     if not parada:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if parada.status in {"Nao_realizada", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     p = request.get_json(silent=True) or {}
     parada.chegada_real = datetime.now()
     parada.status = "EmAndamento"
@@ -1408,6 +1420,8 @@ def parada_concluir(pid: int):
     parada = db.session.get(ViagemParada, pid)
     if not parada:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if parada.status in {"Nao_realizada", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     if request.content_type and "multipart" in request.content_type:
         p = request.form.to_dict()
         foto = _save_upload("foto")
@@ -1471,11 +1485,14 @@ def parada_nao_realizada(pid: int):
     parada = db.session.get(ViagemParada, pid)
     if not parada:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if parada.status in {"Nao_realizada", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     p = request.get_json(silent=True) or {}
     motivo = str(p.get("motivo") or "").strip()
     if not motivo:
         return jsonify({"sucesso": False, "msg": "Motivo obrigatório."}), 400
     parada.status = "Nao_realizada"
+    parada.saida_real = datetime.now()
     parada.resultado = str(p.get("resultado") or "Recusado").strip()
     parada.observacao = motivo
     if parada.solicitacao_id:
@@ -1748,7 +1765,7 @@ def nova_viagem_de_solicitacao(sid: int):
         db.session.query(ViagemParada.id, Viagem.id, Viagem.codigo)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id == sid)
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .first()
     )
     if conflito_em_aberta:
@@ -1880,7 +1897,7 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
         db.session.query(ViagemParada.id, ViagemParada.viagem_id, Viagem.codigo)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id == sid)
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .first()
     )
     if vinculo:
@@ -2013,7 +2030,7 @@ def montar_viagem_com_solicitacoes():
         db.session.query(ViagemParada.solicitacao_id, ViagemParada.viagem_id, Viagem.codigo)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id.in_(ids))
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .all()
     )
     vinculo_por_solicitacao = {int(sid): (int(vid), str(cod or "").strip()) for sid, vid, cod in vinculos}
@@ -2321,7 +2338,7 @@ def auxiliares():
         r[0] for r in db.session.query(ViagemParada.solicitacao_id)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id.isnot(None))
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .all()
     }
     sols = [s for s in sols if s.id not in ja_usadas]
@@ -2376,7 +2393,7 @@ def rotas_planejadas():
         r[0] for r in db.session.query(ViagemParada.solicitacao_id)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id.isnot(None))
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .all()
     }
 
@@ -2578,7 +2595,7 @@ def assistente_candidatos():
         r[0] for r in db.session.query(ViagemParada.solicitacao_id)
         .join(Viagem, Viagem.id == ViagemParada.viagem_id)
         .filter(ViagemParada.solicitacao_id.isnot(None))
-        .filter(Viagem.status != "Cancelada")
+        .filter(filtro_vinculo_solicitacao())
         .all()
     }
 
@@ -3064,6 +3081,8 @@ def motorista_chegar_parada(vid: int, token: str, pid: int):
     p = ViagemParada.query.filter_by(id=pid, viagem_id=vid).first()
     if not p:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if p.status in {"Nao_realizada", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     if p.status == "Concluida":
         return jsonify({"sucesso": True, "msg": "Parada já concluída."})
     data = request.get_json(silent=True) or {}
@@ -3093,6 +3112,8 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
     p = ViagemParada.query.filter_by(id=pid, viagem_id=vid).first()
     if not p:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if p.status in {"Nao_realizada", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     if request.content_type and "multipart" in request.content_type:
         data = request.form
         foto = _save_upload("foto")
