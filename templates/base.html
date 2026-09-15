@@ -263,11 +263,14 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS')
-                    or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ROMANEIO')
+                {# Uniao de TODAS as permissoes dos subgrupos abaixo - esquecer uma esconde o grupo inteiro de quem so tem ela. #}
+                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_QUALIDADE')
+                    or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_CONF_CEGA') or can_access('PAGE_EXPEDICAO_ROMANEIO')
+                    or can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA')
                     or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                     or can_access('PAGE_LOGISTICA_VIAGEM')
-                    or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_QUALIDADE') %}
+                    or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_INVENTARIO_VALIDACAO')
+                    or can_access('PAGE_LOGISTICA_INVENTARIO_FINANCE') or can_access('PAGE_LOGISTICA_INVENTARIO_FISCAL') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
