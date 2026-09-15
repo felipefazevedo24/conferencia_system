@@ -268,6 +268,120 @@ def test_agrupamento_espacial_nao_compara_todos_os_tracos_separados():
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("angle", [-30, 30])
+@pytest.mark.parametrize("combined_paths", [False, True])
+def test_perspectiva_cilindrica_tem_prioridade_sobre_frontal_com_cotas(angle, combined_paths):
+    import math
+
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=900)
+        radians = math.radians(angle)
+
+        def point(horizontal, vertical):
+            return fitz.Point(300 + horizontal * math.cos(radians) - vertical * math.sin(radians),
+                             220 + horizontal * math.sin(radians) + vertical * math.cos(radians))
+
+        cylinder = page.new_shape()
+
+        def finish_path():
+            if not combined_paths:
+                cylinder.finish(color=(0, 0, 0), width=1, closePath=False)
+                cylinder.commit()
+
+        for radius_x, radius_y in ((35, 70), (18, 37)):
+            control = 0.5522847498
+            for points in (
+                ((0, -radius_y), (control * radius_x, -radius_y), (radius_x, -control * radius_y), (radius_x, 0)),
+                ((radius_x, 0), (radius_x, control * radius_y), (control * radius_x, radius_y), (0, radius_y)),
+                ((0, radius_y), (-control * radius_x, radius_y), (-radius_x, control * radius_y), (-radius_x, 0)),
+                ((-radius_x, 0), (-radius_x, -control * radius_y), (-control * radius_x, -radius_y), (0, -radius_y)),
+            ):
+                cylinder.draw_bezier(*(point(*coordinates) for coordinates in points))
+            finish_path()
+        cylinder.draw_bezier(point(190, -70), point(209.32996624, -70), point(225, -38.65993249), point(225, 0))
+        cylinder.draw_bezier(point(225, 0), point(225, 38.65993249), point(209.32996624, 70), point(190, 70))
+        finish_path()
+        for vertical in (-70, 70):
+            cylinder.draw_line(point(0, vertical), point(190, vertical))
+            finish_path()
+        if combined_paths:
+            cylinder.finish(color=(0, 0, 0), width=1, closePath=False)
+            cylinder.commit()
+        expected = page.get_drawings()[0]["rect"]
+        for drawing in page.get_drawings()[1:]:
+            expected |= drawing["rect"]
+        items = [item for drawing in page.get_drawings() for item in drawing["items"]]
+        assert len(producao_service._projection_axes(items)) == 1
+        assert producao_service._is_cylindrical_view(producao_service._drawing_segments(items), [item[1:5] for item in items if item[0] == "c"], expected)
+        tangent_endpoint = point(190, -70)
+        nearby_label = fitz.Rect(tangent_endpoint.x - 2, tangent_endpoint.y - 2, tangent_endpoint.x + 2, tangent_endpoint.y + 2)
+        assert not producao_service._dimension_segments(page.get_drawings(), [nearby_label])
+        page.insert_text((315, expected.y1 + 24), "( 2 : 1 )")
+        page.draw_circle((495, 580), 75)
+        page.draw_circle((495, 580), 40)
+        for start, end, label in (((465, 645), (565, 435), "\u00d825"), ((435, 630), (610, 465), "\u00d813")):
+            page.draw_line(start, end)
+            direction = fitz.Point(end) - fitz.Point(start)
+            direction /= abs(direction)
+            normal = fitz.Point(-direction.y, direction.x)
+            tip = fitz.Point(start)
+            page.draw_polyline([tip + direction * 9 + normal * 3, tip, tip + direction * 9 - normal * 3])
+            page.insert_text((end[0] - 5, end[1] - 3), label)
+        page.draw_rect(fitz.Rect(90, 500, 260, 650))
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert clip.contains(expected)
+        assert clip.y1 < 410
+        assert clip.x0 > expected.x0 - 35 and clip.x1 < expected.x1 + 35
+        assert not any(clip.intersects(fitz.Rect(word[:4])) for word in page.get_text("words"))
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Usar a perspectiva cilindrica, nao a folha")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("combined_paths", [False, True])
+def test_cotas_de_diametro_nao_aumentam_pontuacao_da_vista_frontal(combined_paths):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=650, height=880)
+        page.draw_circle((495, 535), 75)
+        page.draw_circle((495, 535), 40)
+        before = producao_service._page_isometric_candidates(page)
+        shape = page.new_shape()
+        if combined_paths:
+            page = pdf.new_page(width=650, height=880)
+            shape = page.new_shape()
+            shape.draw_circle((495, 535), 75)
+            shape.draw_circle((495, 535), 40)
+        shape.draw_line((460, 600), (540, 395))
+        shape.draw_line((435, 585), (575, 445))
+        shape.finish(color=(0, 0, 0), width=1, closePath=False)
+        shape.commit()
+        page.insert_text((535, 392), "\u00d825")
+        page.insert_text((570, 442), "\u00d813")
+        after = producao_service._page_isometric_candidates(page)
+        assert before and after
+        assert after[0][0] <= before[0][0]
+        assert after[0][1] == before[0][1]
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_circulos_com_cotas_nao_sao_evidencia_de_cilindro():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.draw_circle((220, 220), 75)
+        page.draw_circle((220, 220), 40)
+        page.draw_line((185, 285), (270, 80))
+        page.draw_line((160, 270), (300, 130))
+        items = [item for drawing in page.get_drawings() for item in drawing["items"]]
+        assert not producao_service._is_cylindrical_view(producao_service._drawing_segments(items), [item[1:5] for item in items if item[0] == "c"], fitz.Rect(145, 80, 300, 295))
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_perfil_longitudinal_sem_rotulo_e_preferido_a_secao_e_tabela():
     fitz = producao_service.fitz
     with fitz.open() as pdf:

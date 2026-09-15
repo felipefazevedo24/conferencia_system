@@ -39,7 +39,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-cutout-v7"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v8"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -538,6 +538,111 @@ def _projection_axes(items: list[Any]) -> set[int]:
     return axes
 
 
+def _curve_tangent_at(point: Any, direction: Any, curves: list[Any], tolerance: float) -> bool:
+    length = abs(direction)
+    if length == 0:
+        return False
+    for curve in curves:
+        for endpoint, handle in ((curve[0], curve[1]), (curve[3], curve[2])):
+            tangent = handle - endpoint
+            tangent_length = abs(tangent)
+            if abs(point - endpoint) <= tolerance and tangent_length > 0:
+                alignment = abs(direction.x * tangent.x + direction.y * tangent.y) / (length * tangent_length)
+                if alignment >= 0.97:
+                    return True
+    return False
+
+
+def _is_cylindrical_view(segments: list[Any], curves: list[Any], bounds: Any) -> bool:
+    if len(segments) < 2 or len(curves) < 4:
+        return False
+    tolerance = max(1, min(bounds.width, bounds.height) * 0.01)
+    remaining = set(range(len(curves)))
+    rims = []
+    while remaining:
+        initial = curves[remaining.pop()]
+        vertices = [initial[0]]
+        endpoint = initial[3]
+        while abs(endpoint - vertices[0]) > tolerance:
+            vertices.append(endpoint)
+            following = next((index for index in remaining if min(abs(curves[index][0] - endpoint), abs(curves[index][3] - endpoint)) <= tolerance), None)
+            if following is None:
+                break
+            curve = curves[following]
+            remaining.remove(following)
+            endpoint = curve[3] if abs(curve[0] - endpoint) <= tolerance else curve[0]
+        if abs(endpoint - vertices[0]) > tolerance or len(vertices) < 4:
+            continue
+        center_x = sum(vertex.x for vertex in vertices) / len(vertices)
+        center_y = sum(vertex.y for vertex in vertices) / len(vertices)
+        spread_x = sum((vertex.x - center_x) ** 2 for vertex in vertices)
+        spread_y = sum((vertex.y - center_y) ** 2 for vertex in vertices)
+        covariance = sum((vertex.x - center_x) * (vertex.y - center_y) for vertex in vertices)
+        if math.hypot(spread_x - spread_y, 2 * covariance) > (spread_x + spread_y) * 0.2:
+            rims.append(vertices)
+    if not rims:
+        return False
+    generators = []
+    for start, end in segments:
+        direction = end - start
+        length = abs(direction)
+        if length < max(16, max(bounds.width, bounds.height) * 0.2):
+            continue
+        if not all(_curve_tangent_at(endpoint, direction, curves, tolerance) for endpoint in (start, end)):
+            continue
+        touched_rims = {index for index, rim in enumerate(rims) if any(min(abs(start - vertex), abs(end - vertex)) <= tolerance for vertex in rim)}
+        if not touched_rims:
+            continue
+        axis = direction / length
+        for previous_start, previous_end, previous_rims in generators:
+            previous = previous_end - previous_start
+            previous_length = abs(previous)
+            if not touched_rims.intersection(previous_rims) or min(length, previous_length) < max(length, previous_length) * 0.6:
+                continue
+            if abs(axis.x * previous.y - axis.y * previous.x) > previous_length * 0.05:
+                continue
+            offset = previous_start - start
+            separation = abs(axis.x * offset.y - axis.y * offset.x)
+            if separation < max(4, min(bounds.width, bounds.height) * 0.15):
+                continue
+            projections = [axis.x * (point.x - start.x) + axis.y * (point.y - start.y) for point in (previous_start, previous_end)]
+            overlap = min(length, max(projections)) - max(0, min(projections))
+            if overlap >= min(length, previous_length) * 0.7:
+                return True
+        generators.append((start, end, touched_rims))
+    return False
+
+
+def _dimension_segments(drawings: list[dict[str, Any]], labels: list[Any]) -> list[tuple[Any, Any]]:
+    curves = [item[1:5] for drawing in drawings for item in drawing.get("items") or [] if item[0] == "c"]
+    segments = []
+    for drawing in drawings:
+        for item in drawing.get("items") or []:
+            if item[0] != "l":
+                continue
+            start, end = item[1:3]
+            if abs(end - start) >= 12 and any(label.contains(start) or label.contains(end) for label in labels):
+                if not all(_curve_tangent_at(endpoint, end - start, curves, 1.5) for endpoint in (start, end)):
+                    segments.append((start, end))
+    return segments
+
+
+def _without_dimension_items(items: list[Any], dimensions: list[tuple[Any, Any]]) -> list[Any]:
+    filtered = []
+    for item in items:
+        if item[0] == "l":
+            start, end = item[1:3]
+            dimension = any(
+                (start == first and end == last)
+                or (abs(end - start) <= 12 and min(abs(start - first), abs(start - last), abs(end - first), abs(end - last)) <= 1)
+                for first, last in dimensions
+            )
+            if dimension:
+                continue
+        filtered.append(item)
+    return filtered
+
+
 def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
@@ -596,6 +701,9 @@ def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin
             group[key] += other[key]
         if "axes" in group:
             group["axes"] = group["axes"] | other["axes"]
+        if "segments" in group:
+            group["segments"] = group["segments"] + other["segments"]
+            group["beziers"] = group["beziers"] + other["beziers"]
         register(index)
         expanded = _expand_rect(group["rect"], margin, page_rect)
         for candidate in neighbors(expanded) | {index}:
@@ -683,9 +791,27 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
     page_area = max(page_rect.width * page_rect.height, 1)
     text_blocks = page.get_text("blocks")
     text_words = page.get_text("words")
+    dimension_labels = [
+        _expand_rect(fitz.Rect(word[:4]), max(4, (word[3] - word[1]) * 0.35), page_rect)
+        for word in text_words
+        if re.fullmatch(r"(?:[\u00d8\u00f8\u2300\u2205RrDdMm]\s*)?\d+(?:[.,]\d+)?(?:mm|\u00b0)?", str(word[4]).strip())
+    ]
+    drawings = page.get_drawings()
+    dimensions = _dimension_segments(drawings, dimension_labels)
     records = []
-    for drawing in page.get_drawings():
+    for drawing in drawings:
+        original_items = drawing.get("items") or []
+        items = _without_dimension_items(original_items, dimensions)
+        if not items:
+            continue
         rect = fitz.Rect(drawing.get("rect"))
+        if len(items) != len(original_items):
+            points = [point for segment in _drawing_segments(items) for point in segment]
+            points.extend(point for item in items if item[0] == "c" for point in item[1:5])
+            if not points:
+                continue
+            rect = fitz.Rect(min(point.x for point in points), min(point.y for point in points),
+                             max(point.x for point in points), max(point.y for point in points))
         if rect.width == 0 or rect.height == 0:
             rect = _expand_rect(rect, max(0.5, float(drawing.get("width") or 0) / 2), page_rect)
         rect &= page_rect
@@ -699,11 +825,12 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
         )
         if rect.is_empty or coverage < 0.00002 or coverage > 0.82 or sheet_rule:
             continue
-        items = drawing.get("items") or []
         lines, diagonals, curves = _line_stats(items)
         color = drawing.get("color") or drawing.get("fill") or (0, 0, 0)
         annotation = (max(color) - min(color) > 0.3) or bool(re.search(r"\[\s*\d", str(drawing.get("dashes") or "")))
-        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1, "axes": _projection_axes(items), "annotation": annotation})
+        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1,
+                "axes": _projection_axes(items), "annotation": annotation,
+                "segments": _drawing_segments(items), "beziers": [item[1:5] for item in items if item[0] == "c"]})
 
     neutral_records = [record for record in records if not record["annotation"]]
     if len(neutral_records) >= 3:
@@ -743,6 +870,8 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
         score = diagonal_ratio * 8 + min(group["paths"], 40) / 12 + min(group["curves"], 8) * 0.35 + min(coverage, 0.35) * 4 + label_score
         if len(group["axes"]) >= 2 and group["diagonals"] >= 3:
             score += 3
+        if _is_cylindrical_view(group["segments"], group["beziers"], rect):
+            score += 4
         score -= min(word_count / 4, 4)
         if main_profile:
             score += 5 + min(aspect_ratio, 20) / 5
@@ -751,7 +880,19 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
         rect, joined_components = _assembly_view_rect(group, groups, page_rect)
         score += min(joined_components * 3, 9)
         padding = max(2, min(rect.width, rect.height) * 0.1) if main_profile else max(rect.width, rect.height) * 0.06
-        candidates.append((score, _expand_rect(rect, padding, page_rect), labeled))
+        clip = _expand_rect(rect, padding, page_rect)
+        for word in text_words:
+            if not clip.intersects(fitz.Rect(word[:4])):
+                continue
+            if word[1] > rect.y1 + 1:
+                clip.y1 = min(clip.y1, word[1] - 1)
+            elif word[3] < rect.y0 - 1:
+                clip.y0 = max(clip.y0, word[3] + 1)
+            elif word[0] > rect.x1 + 1:
+                clip.x1 = min(clip.x1, word[0] - 1)
+            elif word[2] < rect.x0 - 1:
+                clip.x0 = max(clip.x0, word[2] + 1)
+        candidates.append((score, clip, labeled))
 
     for image in page.get_image_info():
         rect = fitz.Rect(image.get("bbox")) & page_rect

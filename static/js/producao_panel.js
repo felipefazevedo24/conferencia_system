@@ -76,7 +76,7 @@
     function previewSource(image, detail) {
         const source = new URL(image.getAttribute('src'), window.location.href);
         source.searchParams.delete('_preview');
-        source.searchParams.set('renderer', 'isometric-cutout-v7');
+        source.searchParams.set('renderer', 'isometric-cutout-v8');
         if (detail) source.searchParams.set('variant', 'detail');
         return `${source.pathname}${source.search}`;
     }
