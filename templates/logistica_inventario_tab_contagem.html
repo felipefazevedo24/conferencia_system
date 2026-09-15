@@ -1,257 +1,122 @@
-{% extends "base.html" %}
-
-{% block title %}Logistica | Novo Inventario{% endblock %}
-{% block shell_title %}Novo Inventario{% endblock %}
-
-{% block extra_head %}
 <style>
-    :root {
-        --inv-bg: #f3f6fb;
-        --inv-card: #ffffff;
-        --inv-line: #d9e2ee;
-        --inv-ink: #102033;
-        --inv-muted: #5c6f86;
-        --inv-blue: #0a6ed1;
-        --inv-ok: #15803d;
-        --inv-danger: #b91c1c;
-    }
-    body { background: var(--inv-bg); }
-    .inv-shell { max-width: 1040px; margin: 0 auto; padding: 14px; color: var(--inv-ink); }
-    .inv-hero {
-        background: linear-gradient(135deg, #0f172a, #123e72 55%, #0a6ed1);
-        color: #fff;
-        border-radius: 16px;
-        padding: 18px;
-        box-shadow: 0 14px 30px rgba(15, 23, 42, .22);
-    }
-    .inv-hero h1 { margin: 0; font-size: 22px; font-weight: 800; }
-    .inv-hero p { margin: 6px 0 0; font-size: 13px; color: rgba(255,255,255,.85); }
-    .inv-card {
-        margin-top: 14px;
-        background: var(--inv-card);
-        border: 1px solid var(--inv-line);
-        border-radius: 14px;
-        padding: 14px;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
-    }
-    .inv-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(260px, 1fr));
-        gap: 12px;
-    }
-    .inv-field { display: grid; gap: 6px; }
-    .inv-label {
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: .4px;
-        text-transform: uppercase;
-        color: var(--inv-muted);
-    }
-    .inv-input, .inv-select, .inv-textarea {
-        width: 100%;
-        border: 1px solid #bfd0e3;
-        border-radius: 10px;
-        padding: 10px 11px;
-        font-size: 14px;
-        background: #fff;
-        color: var(--inv-ink);
-    }
-    .inv-input:focus, .inv-select:focus, .inv-textarea:focus {
-        outline: none;
-        border-color: var(--inv-blue);
-        box-shadow: 0 0 0 3px rgba(10, 110, 209, .14);
-    }
-    .inv-scan-wrap {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 8px;
-    }
-    .inv-btn {
-        border: 1px solid var(--inv-line);
-        border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        background: #fff;
-        color: #1f334a;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 7px;
-    }
-    .inv-btn.primary { background: var(--inv-blue); border-color: var(--inv-blue); color: #fff; }
-    .inv-btn.ghost { background: #f8fbff; }
-    .inv-btn:disabled { opacity: .55; cursor: not-allowed; }
-    .inv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-    .inv-status {
-        display: none;
-        margin-top: 10px;
-        padding: 10px 12px;
-        border-radius: 10px;
-        font-size: 13px;
-        font-weight: 700;
-    }
+    .invc-grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; }
+    .invc-field { display: grid; gap: 6px; }
+    .invc-field label { font-size: 12px; font-weight: 600; color: var(--eui-text-soft); }
+    .invc-scan { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .invc-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .inv-status { display: none; margin-top: 12px; padding: 10px 12px; border-radius: var(--eui-radius-sm); font-size: 13px; font-weight: 600; }
     .inv-status.show { display: block; }
-    .inv-status.ok { background: #dcfce7; color: #14532d; }
-    .inv-status.err { background: #fee2e2; color: #991b1b; }
-    .inv-status.info { background: #e8f2ff; color: #1e3a8a; }
-    .inv-table-wrap { overflow: auto; }
-    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .inv-table th, .inv-table td { border-bottom: 1px solid #e6edf6; padding: 9px 8px; text-align: left; }
-    .inv-table th { background: #f7fbff; color: #35506e; font-size: 11px; text-transform: uppercase; letter-spacing: .35px; }
+    .inv-status.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .inv-status.err { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .inv-status.info { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .invc-table-wrap { overflow-x: auto; }
 
-    .scan-modal {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(3, 12, 24, .72);
-        z-index: 11000;
-        align-items: center;
-        justify-content: center;
-        padding: 14px;
-    }
+    .scan-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .72); z-index: 11000; align-items: center; justify-content: center; padding: 14px; }
     .scan-modal.open { display: flex; }
-    .scan-box {
-        width: min(680px, 100%);
-        background: #ffffff;
-        border-radius: 14px;
-        border: 1px solid #d8e0ea;
-        padding: 12px;
-    }
+    .scan-box { width: min(680px, 100%); background: var(--eui-surface); border-radius: var(--eui-radius-lg); border: 1px solid var(--eui-border); padding: 14px; color: var(--eui-text); }
     .scan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .scan-head h3 { margin: 0; font-size: 16px; }
-    .scan-video-wrap {
-        border: 1px solid #d8e0ea;
-        border-radius: 12px;
-        background: #0b1320;
-        overflow: hidden;
-        position: relative;
-    }
-    .scan-video {
-        width: 100%;
-        display: block;
-        max-height: 62vh;
-        object-fit: cover;
-    }
-    .scan-tip {
-        margin-top: 8px;
-        color: #5b6b7f;
-        font-size: 12px;
-    }
+    .scan-video-wrap { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: #0b1320; overflow: hidden; position: relative; }
+    .scan-video { width: 100%; display: block; max-height: 62vh; object-fit: cover; }
+    .scan-tip { margin-top: 8px; color: var(--eui-muted); font-size: 12px; }
 
     @media (max-width: 760px) {
-        .inv-shell { padding: 10px; }
-        .inv-grid { grid-template-columns: 1fr; }
-        .inv-scan-wrap { grid-template-columns: 1fr; }
-        .inv-actions { flex-direction: column; }
-        .inv-btn { width: 100%; }
+        .invc-grid { grid-template-columns: 1fr; }
+        .invc-scan { grid-template-columns: 1fr; }
+        .invc-actions { flex-direction: column; }
+        .invc-actions .eui-btn { width: 100%; }
     }
 </style>
-{% endblock %}
 
-{% block content %}
-<div class="inv-shell">
-    <section class="inv-hero">
-        <h1><i class="fas fa-plus-circle"></i> Novo Inventario - Logistica</h1>
-        <p>Registre o saldo inicial por local e produto. Leitura por camera para tablet e digitacao manual quando necessario.</p>
-    </section>
-
-    <section class="inv-card" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="inv-btn" href="/logistica/inventario"><i class="fas fa-grid-2"></i> Modulo Inventario</a>
-        <a class="inv-btn" href="/logistica/inventario/consulta"><i class="fas fa-magnifying-glass"></i> Consulta de Inventario</a>
-        <a class="inv-btn" href="/api/logistica/inventario-inicial/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
-    </section>
-
-    <section class="inv-card">
-        <div class="inv-grid">
-            <div class="inv-field">
-                <label class="inv-label" for="inv-local">Local</label>
-                <div class="inv-scan-wrap">
-                    <input id="inv-local" class="inv-input" autocomplete="off" placeholder="Bipe ou digite o local" />
-                    <button type="button" class="inv-btn ghost" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
+<div class="eui-card" style="margin-bottom: 18px;">
+    <div class="eui-card__head">
+        <div>
+            <h2 class="eui-card__title"><i class="fas fa-plus-circle"></i> Nova contagem</h2>
+            <p class="eui-card__sub">Registre local, produto e quantidade. Leitura por câmera disponível no tablet.</p>
+        </div>
+    </div>
+    <div class="eui-card__body">
+        <div class="invc-grid">
+            <div class="invc-field">
+                <label for="inv-local">Local</label>
+                <div class="invc-scan">
+                    <input id="inv-local" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o local" />
+                    <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
                 </div>
             </div>
-
-            <div class="inv-field">
-                <label class="inv-label" for="inv-codigo">Cod. Produto</label>
-                <div class="inv-scan-wrap">
-                    <input id="inv-codigo" class="inv-input" autocomplete="off" placeholder="Bipe ou digite o codigo" />
-                    <button type="button" class="inv-btn ghost" data-scan-target="inv-codigo"><i class="fas fa-camera"></i> Ler</button>
+            <div class="invc-field">
+                <label for="inv-codigo">Cód. Produto</label>
+                <div class="invc-scan">
+                    <input id="inv-codigo" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o código" />
+                    <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-codigo"><i class="fas fa-camera"></i> Ler</button>
                 </div>
             </div>
-
-            <div class="inv-field">
-                <label class="inv-label" for="inv-unidade">Unidade de medida</label>
-                <select id="inv-unidade" class="inv-select"></select>
+            <div class="invc-field">
+                <label for="inv-unidade">Unidade de medida</label>
+                <select id="inv-unidade" class="eui-input"></select>
             </div>
-
-            <div class="inv-field">
-                <label class="inv-label" for="inv-quantidade">Quantidade</label>
-                <input id="inv-quantidade" class="inv-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+            <div class="invc-field">
+                <label for="inv-quantidade">Quantidade</label>
+                <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
             </div>
-
-            <div class="inv-field">
-                <label class="inv-label" for="inv-lote">Lote</label>
-                <input id="inv-lote" class="inv-input" autocomplete="off" placeholder="Informe o lote" />
+            <div class="invc-field">
+                <label for="inv-lote">Lote</label>
+                <input id="inv-lote" class="eui-input" autocomplete="off" placeholder="Informe o lote (opcional)" />
             </div>
-
-            <div class="inv-field" style="grid-column: 1 / -1;">
-                <label class="inv-label" for="inv-obs">Obs</label>
-                <textarea id="inv-obs" class="inv-textarea" rows="3" placeholder="Comentarios livres"></textarea>
+            <div class="invc-field" style="grid-column: 1 / -1;">
+                <label for="inv-obs">Observações</label>
+                <textarea id="inv-obs" class="eui-input" rows="3" placeholder="Comentários livres"></textarea>
             </div>
         </div>
-
-        <div class="inv-actions">
-            <button type="button" class="inv-btn" id="inv-limpar"><i class="fas fa-eraser"></i> Limpar</button>
-            <button type="button" class="inv-btn primary" id="inv-salvar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
+        <div class="invc-actions">
+            <button type="button" class="eui-btn eui-btn--subtle" id="inv-limpar"><i class="fas fa-eraser"></i> Limpar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="inv-salvar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
         </div>
-
         <div id="inv-status" class="inv-status"></div>
-    </section>
+    </div>
+</div>
 
-    <section class="inv-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-            <h3 style="margin:0; font-size:16px;">Ultimos registros</h3>
-            <button type="button" class="inv-btn" id="inv-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
-        </div>
-        <div class="inv-table-wrap">
-            <table class="inv-table">
+<div class="eui-card">
+    <div class="eui-card__head">
+        <h2 class="eui-card__title"><i class="fas fa-clock-rotate-left"></i> Últimos registros</h2>
+        <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="inv-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+    </div>
+    <div class="eui-card__body eui-card__body--tight">
+        <div class="invc-table-wrap">
+            <table class="erp-table">
                 <thead>
                     <tr>
                         <th>Data</th>
                         <th>Local</th>
-                        <th>Cod. Produto</th>
+                        <th>Cód. Produto</th>
                         <th>Unid.</th>
                         <th>Qtd</th>
                         <th>Lote</th>
                         <th>Obs</th>
-                        <th>Usuario</th>
+                        <th>Usuário</th>
                     </tr>
                 </thead>
                 <tbody id="inv-tbody">
-                    <tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
+                    <tr><td colspan="8" style="text-align:center;color:var(--eui-muted);padding:14px;">Carregando...</td></tr>
                 </tbody>
             </table>
         </div>
-    </section>
+    </div>
 </div>
 
 <div class="scan-modal" id="scan-modal">
     <div class="scan-box">
         <div class="scan-head">
-            <h3><i class="fas fa-camera"></i> Leitura de codigo de barras</h3>
-            <button type="button" class="inv-btn" id="scan-fechar"><i class="fas fa-xmark"></i> Fechar</button>
+            <h3><i class="fas fa-camera"></i> Leitura de código de barras</h3>
+            <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="scan-fechar"><i class="fas fa-xmark"></i> Fechar</button>
         </div>
         <div class="scan-video-wrap">
             <video id="scan-video" class="scan-video" autoplay playsinline muted></video>
         </div>
-        <div class="scan-tip" id="scan-tip">Aponte a camera para o codigo. Se seu navegador nao suportar leitura nativa, use digitacao manual.</div>
+        <div class="scan-tip" id="scan-tip">Aponte a câmera para o código. Se seu navegador não suportar leitura nativa, use digitação manual.</div>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
 <script>
 (function () {
     const unidadeSel = document.getElementById('inv-unidade');
@@ -303,14 +168,14 @@
 
     function renderRegistros(rows) {
         if (!rows || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Nenhum registro ainda.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--eui-muted);padding:14px;">Nenhum registro ainda.</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map((r) => `
             <tr>
                 <td>${esc(fmtData(r.criado_em))}</td>
-                <td><strong>${esc(r.local_codigo)}</strong></td>
-                <td><strong>${esc(r.codigo_produto)}</strong></td>
+                <td>${esc(r.local_codigo)}</td>
+                <td>${esc(r.codigo_produto)}</td>
                 <td>${esc(r.unidade_medida)}</td>
                 <td>${Number(r.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
                 <td>${esc(r.lote || '-')}</td>
@@ -335,7 +200,7 @@
             const data = await api('/api/logistica/inventario-inicial?limit=120');
             renderRegistros(data.registros || []);
         } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--eui-danger,#b91c1c);padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
         }
     }
 
@@ -479,4 +344,3 @@
     carregarRegistros();
 })();
 </script>
-{% endblock %}

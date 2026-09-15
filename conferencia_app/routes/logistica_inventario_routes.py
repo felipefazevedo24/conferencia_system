@@ -47,6 +47,14 @@ from ..services import logistica_inventario_ajuste_service as ajuste_svc
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
 
 PERMISSION = "PAGE_LOGISTICA_INVENTARIO"
+PERMISSION_VALIDACAO = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
+PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
+PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
+PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
+# Analisar (realizados/ajustes/analise de causa) exige permissao propria;
+# a permissao base (PERMISSION) da acesso so a aba de contagem.
+PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+ABAS_INVENTARIO = ("inventariar", "realizados", "ajustes", "analise")
 INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
@@ -241,34 +249,47 @@ def _enviar_para_grv(payload: dict) -> dict:
     }
 
 
-@logistica_inventario_bp.route("/logistica/inventario")
-@permission_required(PERMISSION)
-def inventario_home_page():
+def _pode_analisar() -> bool:
+    return any(has_permission(p) for p in PERMISSOES_ANALISE)
+
+
+def _render_inventario(aba: str):
+    """Tela unica do inventario: as abas visiveis dependem da permissao."""
+    if aba not in ABAS_INVENTARIO:
+        aba = "inventariar"
     return render_template(
-        "logistica_inventario_home.html",
+        "logistica_inventario.html",
         user=session["username"],
         user_role=session.get("role", ""),
+        aba_inicial=aba,
+        pode_inventariar=has_permission(PERMISSION),
+        pode_analisar=_pode_analisar(),
+        pode_validar=has_permission(PERMISSION_VALIDACAO),
+        pode_finance=has_permission(PERMISSION_FINANCE),
+        pode_fiscal=has_permission(PERMISSION_FISCAL),
+        pode_pular_etapa=has_permission(PERMISSION_PULAR_ETAPA),
     )
+
+
+@logistica_inventario_bp.route("/logistica/inventario")
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def inventario_home_page():
+    aba = str(request.args.get("aba") or "")
+    if aba not in ABAS_INVENTARIO:
+        aba = "inventariar" if has_permission(PERMISSION) else "ajustes"
+    return _render_inventario(aba)
 
 
 @logistica_inventario_bp.route("/logistica/inventario/novo")
 @permission_required(PERMISSION)
 def inventario_novo_page():
-    return render_template(
-        "logistica_inventario_inicial.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-    )
+    return _render_inventario("inventariar")
 
 
 @logistica_inventario_bp.route("/logistica/inventario/consulta")
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def inventario_consulta_page():
-    return render_template(
-        "logistica_inventario_consulta.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-    )
+    return _render_inventario("realizados")
 
 
 @logistica_inventario_bp.route("/logistica/estoque")
@@ -432,7 +453,7 @@ def listar_unidades_padrao():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def listar_inventario_inicial():
     limite = request.args.get("limit", type=int) or 100
     limite = max(1, min(limite, 500))
@@ -449,7 +470,8 @@ def listar_inventario_inicial():
     # O valor usado e' o snapshot gravado no momento de cada contagem (ver
     # criar_inventario_inicial), nao uma consulta em tempo real - o
     # "forcar_grv"/cache do buscar_estoque_grv() nao se aplica mais aqui.
-    incluir_grv = request.args.get("comparar_grv") == "1"
+    # A comparacao exige permissao de analise (nao vaza pro conferente).
+    incluir_grv = request.args.get("comparar_grv") == "1" and _pode_analisar()
 
     resposta = {"registros": [_fmt_registro(row, incluir_grv) for row in rows]}
     if incluir_grv:
@@ -462,11 +484,11 @@ def listar_inventario_inicial():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial/exportar", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def exportar_inventario_inicial_excel():
     local = (request.args.get("local") or "").strip().lower()
     codigo = (request.args.get("codigo") or "").strip().lower()
-    comparar_grv = request.args.get("comparar_grv") == "1"
+    comparar_grv = request.args.get("comparar_grv") == "1" and _pode_analisar()
 
     query = _build_query(local=local, codigo=codigo)
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).all()
@@ -625,7 +647,7 @@ def inventario_material_local_integracao():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial/sincronizar-grv", methods=["POST"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def sincronizar_inventario_grv():
     payload = _montar_payload_material_local()
     _salvar_snapshot_inventario_json(payload)
@@ -649,10 +671,7 @@ def sincronizar_inventario_grv():
 
 
 # ── Fluxo de ajuste de estoque (Modulos 02-04, itens divergentes) ─────────
-PERMISSION_VALIDACAO = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
-PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
-PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
-PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
+# Permissoes PERMISSION_VALIDACAO/FINANCE/FISCAL/PULAR_ETAPA definidas no topo.
 
 # Mesmos rotulos exibidos na tela (ver LABEL_STATUS em
 # logistica_inventario_ajustes.html) - usado na exportacao Excel pra nao
@@ -729,21 +748,13 @@ def _fmt_analise_causa(a: LogisticaInventarioAnaliseCausa) -> dict:
 
 
 @logistica_inventario_bp.route("/logistica/inventario/ajustes")
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def inventario_ajustes_page():
-    return render_template(
-        "logistica_inventario_ajustes.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-        pode_validar=has_permission(PERMISSION_VALIDACAO),
-        pode_finance=has_permission(PERMISSION_FINANCE),
-        pode_fiscal=has_permission(PERMISSION_FISCAL),
-        pode_pular_etapa=has_permission(PERMISSION_PULAR_ETAPA),
-    )
+    return _render_inventario("ajustes")
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_listar_ajustes():
     status_modulo = request.args.get("status") or None
     ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo)
@@ -757,7 +768,7 @@ def api_listar_ajustes():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/exportar", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def exportar_inventario_ajustes_excel():
     status_modulo = request.args.get("status") or None
     busca = request.args.get("busca") or ""
@@ -849,7 +860,7 @@ def exportar_inventario_ajustes_excel():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/confirmar", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_confirmar_ajuste(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
@@ -875,7 +886,7 @@ def api_confirmar_ajuste(ajuste_id):
 # ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
 # disponivel enquanto o item ainda esta em Validacao ou Relatorio.
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_anexar_imagem_justificativa(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
@@ -895,7 +906,7 @@ def api_anexar_imagem_justificativa(ajuste_id):
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_baixar_imagem_justificativa(ajuste_id):
     ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
     if not ajuste or not ajuste.justificativa_imagem:
@@ -908,7 +919,7 @@ def api_baixar_imagem_justificativa(ajuste_id):
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/justificativa-imagem", methods=["DELETE"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_remover_imagem_justificativa(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
@@ -925,7 +936,7 @@ def api_remover_imagem_justificativa(ajuste_id):
 # item a item quando o gestor precisa mandar varias juntas com o mesmo
 # documento).
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio/opcoes", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_relatorio_ajuste_opcoes():
     return jsonify({
         "tipos_ajuste": RELATORIO_AJUSTE_TIPOS,
@@ -936,7 +947,7 @@ def api_relatorio_ajuste_opcoes():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_gerar_relatorio_ajuste():
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
@@ -977,7 +988,7 @@ def api_gerar_relatorio_ajuste():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/relatorio/<int:relatorio_id>.pdf", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_relatorio_ajuste_pdf(relatorio_id):
     relatorio = ajuste_svc.buscar_relatorio_ajuste(relatorio_id)
     if not relatorio:
@@ -997,7 +1008,7 @@ def api_relatorio_ajuste_pdf(relatorio_id):
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/descartar", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_descartar_ajuste(ajuste_id):
     if not has_permission(PERMISSION_VALIDACAO):
         return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
@@ -1012,6 +1023,7 @@ def api_descartar_ajuste(ajuste_id):
     return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_finance_concluir_ajuste(ajuste_id):
     if not has_permission(PERMISSION_FINANCE):
         return jsonify({"error": "Você não tem permissão de Finance nesse fluxo - fale com a gerência."}), 403
@@ -1027,7 +1039,7 @@ def api_finance_concluir_ajuste(ajuste_id):
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/fiscal-concluir", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_fiscal_concluir_ajuste(ajuste_id):
     if not has_permission(PERMISSION_FISCAL):
         return jsonify({"error": "Você não tem permissão de Fiscal nesse fluxo - fale com a gerência."}), 403
@@ -1081,7 +1093,7 @@ def api_estornar_ajuste(ajuste_id):
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/pular-etapa", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL, PERMISSION_PULAR_ETAPA)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL, PERMISSION_PULAR_ETAPA)
 def api_pular_etapa_ajuste(ajuste_id):
     """"Pular Etapa" - avanço SEM validação nenhuma pra próxima etapa do
     ajuste, reservado pra casos excepcionais. Exige permissão extra de
@@ -1102,17 +1114,13 @@ def api_pular_etapa_ajuste(ajuste_id):
 
 # ── Analise de Causa Raiz (fila separada, nao bloqueia Finance/Fiscal) ────
 @logistica_inventario_bp.route("/logistica/inventario/analise-causa")
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def inventario_analise_causa_page():
-    return render_template(
-        "logistica_inventario_analise_causa.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-    )
+    return _render_inventario("analise")
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-analise-causa", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_listar_analise_causa():
     status = request.args.get("status") or None
     analises = ajuste_svc.listar_analises_causa(status=status)
@@ -1120,7 +1128,7 @@ def api_listar_analise_causa():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-analise-causa/<int:analise_id>/preencher", methods=["POST"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def api_preencher_analise_causa(analise_id):
     analise = db.session.get(LogisticaInventarioAnaliseCausa, analise_id)
     if not analise:

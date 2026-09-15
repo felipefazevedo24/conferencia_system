@@ -317,14 +317,10 @@
                         <div class="submenu-subgroup" data-subgroup="inventario">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-clipboard-list submenu-icon"></i> Inventário <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
+                                <a href="/logistica/inventario" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Inventário</a>
                                 {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}
-                                <a href="/logistica/inventario" class="list-group-item list-group-item-action"><i class="fas fa-grid-2"></i> Módulo de Inventário</a>
                                 <a href="/logistica/estoque" class="list-group-item list-group-item-action"><i class="fas fa-boxes-stacked"></i> Estoque</a>
-                                <a href="/logistica/inventario/novo" class="list-group-item list-group-item-action"><i class="fas fa-plus-circle"></i> Criar Novo Inventário</a>
-                                <a href="/logistica/inventario/consulta" class="list-group-item list-group-item-action"><i class="fas fa-magnifying-glass"></i> Inventário Realizado</a>
                                 {% endif %}
-                                <a href="/logistica/inventario/ajustes" class="list-group-item list-group-item-action"><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</a>
-                                <a href="/logistica/inventario/analise-causa" class="list-group-item list-group-item-action"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</a>
                             </div>
                         </div>
                         {% endif %}

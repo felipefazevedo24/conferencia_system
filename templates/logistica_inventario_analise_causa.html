@@ -1,9 +1,3 @@
-{% extends "base.html" %}
-
-{% block title %}Logistica | Analise de Causa Raiz{% endblock %}
-{% block shell_title %}Logística — Análise de Causa Raiz{% endblock %}
-
-{% block extra_head %}
 <style>
     .ac-wrap { display: grid; gap: 18px; }
     .ac-table-wrap { overflow-x: auto; }
@@ -34,18 +28,7 @@
     .ac-modal textarea { width: 100%; min-height: 140px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; }
     .ac-modal .ac-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 </style>
-{% endblock %}
-
-{% block content %}
 <div class="ac-wrap">
-    <header class="eui-page-header">
-        <div>
-            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
-            <h1 class="eui-page-header__title"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</h1>
-            <p class="eui-page-header__sub">Fila separada dos itens que o gestor marcou, ao confirmar a divergência, como precisando de investigação mais detalhada do motivo. Não bloqueia o fluxo normal de Finance/Fiscal/Concluído.</p>
-        </div>
-    </header>
-
     <div class="eui-stats" id="ac-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ac-m-todos">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Pendente"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Pendente</span><span class="eui-stat__value" id="ac-m-pendente">0</span></div></div>
@@ -101,9 +84,6 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
@@ -290,4 +270,3 @@
     carregar();
 })();
 </script>
-{% endblock %}
