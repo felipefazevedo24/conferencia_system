@@ -13,8 +13,8 @@ import pymupdf as fitz
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
-def render_variants(image: Image.Image) -> dict[str, bytes]:
-    part = _transparent_part_thumbnail(_trim_white_space(image))
+def render_variants(image: Image.Image, *, preserve_components: bool = False) -> dict[str, bytes]:
+    part = _transparent_part_thumbnail(_trim_white_space(image), preserve_components=preserve_components)
     rendered = {}
     for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
         resized = part.copy()

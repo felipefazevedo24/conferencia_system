@@ -202,6 +202,215 @@ def test_revisao_conflitante_nao_e_associada_mesmo_com_um_documento():
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_quadrilatero_do_pdf_mantem_arestas_e_direcoes_da_perspectiva():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.draw_polyline([(80, 180), (190, 120), (300, 180), (190, 240), (80, 180)])
+        items = page.get_drawings()[0]["items"]
+        assert items[0][0] == "qu"
+        assert producao_service._line_stats(items) == (4, 4, 0)
+        assert len(producao_service._projection_axes(items)) == 2
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_agrupamento_espacial_preserva_ordem_limites_e_estatisticas():
+    import random
+
+    fitz = producao_service.fitz
+    bounds = fitz.Rect(0, 0, 500, 500)
+
+    def reference(records, margin):
+        groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
+        changed = True
+        while changed:
+            changed = False
+            for index, group in enumerate(groups):
+                for other_index in range(index + 1, len(groups)):
+                    other = groups[other_index]
+                    if not producao_service._expand_rect(group["rect"], margin, bounds).intersects(other["rect"]):
+                        continue
+                    group["rect"] |= other["rect"]
+                    for key in ("lines", "diagonals", "curves", "paths"):
+                        group[key] += other[key]
+                    groups.pop(other_index)
+                    changed = True
+                    break
+                if changed:
+                    break
+        return groups
+
+    generator = random.Random(14794)
+    for _case in range(60):
+        records = []
+        for index in range(generator.randrange(1, 60)):
+            left, top = generator.randrange(430), generator.randrange(430)
+            records.append({
+                "rect": fitz.Rect(left, top, left + generator.randrange(1, 70), top + generator.randrange(1, 70)),
+                "lines": index, "diagonals": index % 3, "curves": index % 5, "paths": 1,
+            })
+        margin = generator.randrange(0, 25)
+        assert producao_service._merge_drawing_records(records, bounds, margin) == reference(records, margin)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_agrupamento_espacial_nao_compara_todos_os_tracos_separados():
+    fitz = producao_service.fitz
+    records = [
+        {"rect": fitz.Rect(20 + column * 100, 20 + row * 100, 32 + column * 100, 32 + row * 100),
+         "lines": 4, "diagonals": 0, "curves": 0, "paths": 1}
+        for row in range(25) for column in range(25)
+    ]
+    with patch.object(producao_service, "_expand_rect", wraps=producao_service._expand_rect) as expand:
+        groups = producao_service._merge_drawing_records(records, fitz.Rect(0, 0, 2600, 2600), 5)
+    assert groups == records
+    assert expand.call_count <= len(records) * 2
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_perfil_longitudinal_sem_rotulo_e_preferido_a_secao_e_tabela():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_polyline([(180, 280), (205, 255), (230, 280), (230, 350), (205, 375), (180, 350), (180, 280)])
+        for height in (300, 315, 330):
+            page.draw_line((350, height), (920, height))
+        page.draw_line((350, 300), (350, 330))
+        page.draw_line((920, 300), (920, 330))
+        page.draw_line((350, 260), (920, 260))
+        page.insert_text((610, 250), "500")
+        page.draw_rect(fitz.Rect(350, 560, 920, 610))
+        page.insert_text((390, 585), "POSICAO   MATERIAL   QUANTIDADE   DESCRICAO")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert clip.x0 > 300 and clip.x1 >= 920
+        assert 280 < clip.y0 <= 300 and 330 <= clip.y1 < 350
+        assert not candidates[0][2]
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Usar a vista principal, nao a folha inteira")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("perspective_left", [False, True])
+def test_conjunto_sem_legenda_prioriza_perspectiva_sem_depender_da_posicao(perspective_left):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        perspective_x, orthogonal_x = (100, 620) if perspective_left else (620, 100)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_rect(fitz.Rect(orthogonal_x, 130, orthogonal_x + 240, 200))
+        page.draw_circle((orthogonal_x + 120, 285), 65)
+        page.draw_rect(fitz.Rect(orthogonal_x + 65, 190, orthogonal_x + 175, 260))
+        page.draw_line((orthogonal_x - 25, 80), (orthogonal_x + 280, 370), color=(1, 0, 0))
+        page.draw_line((orthogonal_x - 25, 370), (orthogonal_x + 280, 80), color=(0, 1, 0))
+        page.insert_text((orthogonal_x + 90, 95), "210 156 89")
+        board = [(perspective_x, 180), (perspective_x + 170, 95), (perspective_x + 220, 125), (perspective_x + 50, 210), (perspective_x, 180)]
+        page.draw_polyline(board)
+        page.draw_line((perspective_x + 90, 190), (perspective_x + 90, 290))
+        page.draw_line((perspective_x + 160, 155), (perspective_x + 160, 270))
+        page.draw_oval(fitz.Rect(perspective_x + 45, 265, perspective_x + 210, 335))
+        page.draw_circle((perspective_x + 170, 110), 7)
+        page.draw_circle((perspective_x + 55, 170), 7)
+        for row in range(7):
+            page.draw_rect(fitz.Rect(500, 475 + row * 20, 950, 495 + row * 20), color=(0, 0, 1))
+            page.insert_text((520, 490 + row * 20), f"{row + 1} PARAFUSO ACO MATERIAL 2 UNIDADES")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        selected = candidates[0][1]
+        assert selected.x0 <= perspective_x and selected.x1 >= perspective_x + 220
+        assert selected.x0 > perspective_x - 40 and selected.x1 < perspective_x + 260
+        assert 60 < selected.y0 <= 95 and 335 <= selected.y1 < 380
+        assert not candidates[0][2]
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Conjunto deve ser reconhecido sem legenda")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("labeled", [False, True])
+def test_vista_explodida_preserva_placa_e_fixador_separados_sem_incluir_outra_vista(labeled):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_rect(fitz.Rect(100, 170, 320, 370))
+        page.draw_circle((210, 270), 40)
+        body = [(650, 350), (760, 290), (875, 350), (765, 415), (650, 350), (650, 415), (765, 480), (875, 415), (875, 350)]
+        page.draw_polyline(body)
+        page.draw_line((765, 415), (765, 480))
+        plate = [(650, 185), (760, 130), (875, 185), (765, 240), (650, 185)]
+        page.draw_polyline(plate)
+        page.draw_circle((760, 83), 9)
+        page.draw_circle((940, 185), 15)
+        page.insert_text((935, 190), "7")
+        page.draw_rect(fitz.Rect(550, 560, 950, 640))
+        page.insert_text((565, 590), "POSICAO MATERIAL QUANTIDADE DESCRICAO PARAFUSO PORCA ARRUELA ACO")
+        if labeled:
+            page.insert_text((690, 522), "VISTA EXPLODIDA")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert 610 < clip.x0 <= 650 and 875 <= clip.x1 < 920
+        assert clip.y0 <= 74 and 480 <= clip.y1 < 540
+        assert candidates[0][2] is labeled
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Preservar a vista explodida no recorte")):
+            assert producao_service._render_pdf_previews(pdf.tobytes())["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_perspectivas_independentes_equivalentes_nao_sao_unidas_como_explodida():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        for offset in (100, 450):
+            page.draw_polyline([(offset, 250), (offset + 90, 200), (offset + 180, 250), (offset + 90, 300), (offset, 250), (offset, 350), (offset + 90, 400), (offset + 180, 350), (offset + 180, 250)])
+            page.draw_line((offset + 90, 300), (offset + 90, 400))
+        candidates = producao_service._page_isometric_candidates(page)
+        assert len(candidates) == 2
+        assert all(candidate[1].width < 220 for candidate in candidates)
+        assert abs(candidates[0][0] - candidates[1][0]) < 0.08
+        with patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma das vistas equivalentes")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        from PIL import Image
+
+        with Image.open(io.BytesIO(previews["detail"])) as image:
+            assert image.info["preview_kind"] == "original-document"
+
+
+def test_render_de_componentes_separados_preserva_todas_as_pecas():
+    from PIL import Image, ImageDraw
+
+    images = importlib.import_module("production_test_app.services.production_images")
+    source = Image.new("RGB", (360, 600), "white")
+    drawing = ImageDraw.Draw(source)
+    drawing.rectangle((70, 300, 290, 530), fill=(180, 30, 30))
+    drawing.rectangle((80, 140, 280, 200), fill=(30, 30, 180))
+    drawing.ellipse((170, 50, 190, 70), fill=(30, 180, 30))
+    previews = images.render_variants(source, preserve_components=True)
+    for content in previews.values():
+        with Image.open(io.BytesIO(content)) as image:
+            colors = set(image.get_flattened_data())
+            assert (180, 30, 30, 255) in colors
+            assert (30, 30, 180, 255) in colors
+            assert (30, 180, 30, 255) in colors
+            assert image.getchannel("A").getextrema() == (0, 255)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_tabela_nao_e_candidata_a_vista_principal():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=900, height=600)
+        for row in range(8):
+            page.draw_rect(fitz.Rect(250, 150 + row * 20, 750, 170 + row * 20))
+            page.insert_text((270, 165 + row * 20), f"{row + 1} PARAFUSO ACO MATERIAL 2 UNIDADES")
+        assert not producao_service._page_isometric_candidates(page)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
     fitz = producao_service.fitz
     pdf = fitz.open()
@@ -222,7 +431,8 @@ def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
     content = pdf.tobytes()
     pdf.close()
 
-    previews = producao_service._render_pdf_previews(content)
+    with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Vista isometrica segura deve continuar tendo prioridade")):
+        previews = producao_service._render_pdf_previews(content)
 
     assert previews["thumbnail"].startswith(b"\x89PNG")
     assert previews["detail"].startswith(b"\x89PNG")
@@ -304,11 +514,43 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
         producao_service._render_pdf_previews(b"nao e pdf")
 
 
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_pdf_sem_recorte_seguro_mostra_desenho_original_identificado(ambiguous):
+    from PIL import Image
+
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        cover = pdf.new_page(width=700, height=600)
+        cover.insert_text((40, 40), "Capa sem desenho")
+        page = pdf.new_page(width=700, height=600)
+        page.draw_rect(fitz.Rect(80, 100, 280, 400), color=(1, 0, 0), width=3)
+        page.draw_rect(fitz.Rect(400, 100, 600, 400), color=(0, 0, 1), width=3)
+        page.insert_text((80, 440), "VISTAS ORTOGONAIS - NAO RECORTAR")
+        content = pdf.tobytes()
+    candidates = [(2.0, fitz.Rect(80, 100, 280, 400), False), (2.0, fitz.Rect(400, 100, 600, 400), False)] if ambiguous else []
+    with (
+        patch.object(producao_service, "_page_isometric_candidates", return_value=candidates),
+        patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma vista ambigua")),
+    ):
+        previews = producao_service._render_pdf_previews(content)
+    for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
+        with Image.open(io.BytesIO(previews[variant])) as image:
+            assert image.info["preview_kind"] == "original-document"
+            assert image.info["page_number"] == "2"
+            assert max(image.size) <= maximum
+            assert image.crop((0, 0, image.width, max(40, round(maximum * 0.06)))).convert("L").getextrema()[0] < 100
+            colors = image.get_flattened_data()
+            assert any(red > 200 and green < 80 and blue < 80 for red, green, blue in colors)
+            assert any(blue > 200 and red < 80 and green < 80 for red, green, blue in image.get_flattened_data())
+
+
 @pytest.mark.parametrize("function_name, args, media_type", [
     ("_expand_rect", (None, 1.0, None), "PDF"),
     ("_merge_drawing_records", ([], None, 1.0), "PDF"),
     ("_page_isometric_candidates", (None,), "PDF"),
     ("_render_clip_previews", (None, None), "PDF"),
+    ("_render_document_previews", (None,), "PDF"),
     ("_render_pdf_previews", (b"pdf",), "PDF"),
     ("_render_raster_previews", (b"png", "png"), "imagem"),
 ])
@@ -755,7 +997,8 @@ def test_transporte_bridge_valida_resposta_e_fallback(preview_transport, monkeyp
         response.close.assert_called_once_with()
 
 
-def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch, tmp_path):
+@pytest.mark.parametrize("document_kind", ["embedded", "orthogonal"])
+def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch, tmp_path, document_kind):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from flask import Flask
@@ -773,14 +1016,20 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
     image.save(embedded, format="PNG")
     with service.fitz.open() as pdf:
         page = pdf.new_page()
-        page.insert_image(service.fitz.Rect(50, 50, 545, 792), stream=embedded.getvalue())
+        if document_kind == "embedded":
+            page.insert_image(service.fitz.Rect(50, 50, 545, 792), stream=embedded.getvalue())
+        else:
+            page.draw_rect(service.fitz.Rect(70, 80, 240, 400), color=(0, 0, 0), width=2)
+            page.draw_rect(service.fitz.Rect(320, 80, 490, 400), color=(0, 0, 0), width=2)
+            page.insert_text((70, 450), "DESENHO COM VISTAS ORTOGONAIS")
         original = pdf.tobytes(deflate=False)
-    metadata.fetchall.return_value = [(31, "attachment", len(original), "revision-1")]
+    source_kind = "attachment" if document_kind == "embedded" else "drawing"
+    metadata.fetchall.return_value = [(31, source_kind, len(original), "revision-1")]
     content.fetchone.return_value = (31, "drawing.pdf", "revision-1", memoryview(original))
     renderer = Mock(wraps=producao_service._gerar_previews)
     monkeypatch.setattr(service, "_gerar_previews", renderer)
     document_data = {
-        "id": 31, "source_kind": "attachment", "source_cod_os": 9959,
+        "id": 31, "source_kind": source_kind, "source_cod_os": 9959,
         "source_aux_code": 4, "content_revision": "revision-1",
     }
     monkeypatch.setattr(service, "_obter_ordem", lambda _number: {"codigo": 9959})
@@ -815,13 +1064,17 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
         for result in (thumbnail, detail):
             with Image.open(io.BytesIO(result[0])) as preview:
                 assert preview.format == "PNG"
-                assert preview.mode == "RGBA"
+                assert preview.mode == ("RGBA" if document_kind == "embedded" else "RGB")
+                if document_kind == "orthogonal":
+                    assert preview.info["preview_kind"] == "original-document"
+                    assert preview.info["page_number"] == "1"
                 assert min(preview.size) > 1
         assert thumbnail[2] == detail[2]
         assert renderer.call_count == len(sizes) == 1
-        assert sizes[0] < len(original) // 10
+        if document_kind == "embedded":
+            assert sizes[0] < len(original) // 10
         raw_download.assert_not_called()
-        print(f"\nBRIDGE_HTTP original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f} other_worker_seconds={shared_seconds:.5f}")
+        print(f"\nBRIDGE_HTTP kind={document_kind} original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f} other_worker_seconds={shared_seconds:.5f}")
     finally:
         server.shutdown()
         server.server_close()
@@ -1124,6 +1377,11 @@ def test_aviso_de_previa_fica_limitado_a_miniatura():
     assert ".node-thumbnail {" in css
     assert "position: relative;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
     assert "width: 54px;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+
+
+def test_versao_do_renderizador_no_navegador_acompanha_o_servico():
+    script = (PROJECT_ROOT / "static" / "js" / "producao_panel.js").read_text(encoding="utf-8")
+    assert f"source.searchParams.set('renderer', '{producao_service._PREVIEW_CACHE_VERSION}')" in script
 
 
 def test_controles_solicitados_nao_sao_criados_na_producao():

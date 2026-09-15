@@ -8,6 +8,7 @@ import base64
 import copy
 from difflib import SequenceMatcher
 import hashlib
+import heapq
 import io
 import math
 import re
@@ -38,7 +39,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-cutout-v5"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v7"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -492,20 +493,25 @@ def _origem_documento(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | 
     )
 
 
-def _line_stats(items: list[Any]) -> tuple[int, int, int]:
-    lines = diagonals = curves = 0
+def _drawing_segments(items: list[Any]) -> list[tuple[Any, Any]]:
+    segments = []
     for item in items:
         if not item:
             continue
         if item[0] == "l" and len(item) >= 3:
-            lines += 1
-            delta_x = abs(float(item[2].x) - float(item[1].x))
-            delta_y = abs(float(item[2].y) - float(item[1].y))
-            if delta_x > 1 and delta_y > 1:
-                diagonals += 1
-        elif item[0] in {"c", "qu"}:
-            curves += 1
-    return lines, diagonals, curves
+            segments.append((item[1], item[2]))
+        elif item[0] in {"re", "qu"} and len(item) >= 2:
+            shape = item[1]
+            vertices = (shape.tl, shape.tr, shape.br, shape.bl) if item[0] == "re" else (shape.ul, shape.ur, shape.lr, shape.ll)
+            segments.extend(zip(vertices, vertices[1:] + vertices[:1]))
+    return segments
+
+
+def _line_stats(items: list[Any]) -> tuple[int, int, int]:
+    segments = _drawing_segments(items)
+    diagonals = sum(abs(float(end.x) - float(start.x)) > 1 and abs(float(end.y) - float(start.y)) > 1 for start, end in segments)
+    curves = sum(bool(item) and item[0] == "c" for item in items)
+    return len(segments), diagonals, curves
 
 
 def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
@@ -519,27 +525,84 @@ def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
     )
 
 
+def _projection_axes(items: list[Any]) -> set[int]:
+    axes = set()
+    for start, end in _drawing_segments(items):
+        delta_x = float(end.x) - float(start.x)
+        delta_y = float(end.y) - float(start.y)
+        if math.hypot(delta_x, delta_y) < 8:
+            continue
+        direction = round((math.atan2(delta_y, delta_x) % math.pi) * 12 / math.pi) % 12
+        if direction not in {0, 6}:
+            axes.add(direction)
+    return axes
+
+
 def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
     groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
-    changed = True
-    while changed:
-        changed = False
-        for index, group in enumerate(groups):
-            for other_index in range(index + 1, len(groups)):
-                other = groups[other_index]
-                if not _expand_rect(group["rect"], margin, page_rect).intersects(other["rect"]):
-                    continue
-                group["rect"] |= other["rect"]
-                for key in ("lines", "diagonals", "curves", "paths"):
-                    group[key] += other[key]
-                groups.pop(other_index)
-                changed = True
-                break
-            if changed:
-                break
-    return groups
+    if len(groups) < 2:
+        return groups
+    cell_size = max(1.0, margin * 2, min(page_rect.width, page_rect.height) / math.sqrt(len(groups)))
+    cells = defaultdict(set)
+    occupied = {}
+    active = set(range(len(groups)))
+    pending = list(range(len(groups)))
+    queued = set(pending)
+
+    def cell_keys(rect):
+        return {
+            (cell_x, cell_y)
+            for cell_x in range(math.floor(rect.x0 / cell_size), math.floor(rect.x1 / cell_size) + 1)
+            for cell_y in range(math.floor(rect.y0 / cell_size), math.floor(rect.y1 / cell_size) + 1)
+        }
+
+    def register(index):
+        occupied[index] = cell_keys(groups[index]["rect"])
+        for cell in occupied[index]:
+            cells[cell].add(index)
+
+    def remove(index):
+        for cell in occupied.pop(index):
+            cells[cell].discard(index)
+            if not cells[cell]:
+                del cells[cell]
+
+    def neighbors(rect):
+        return {index for cell in cell_keys(rect) for index in cells.get(cell, ())}
+
+    for index in pending:
+        register(index)
+    while pending:
+        index = heapq.heappop(pending)
+        queued.remove(index)
+        if index not in active:
+            continue
+        group = groups[index]
+        expanded = _expand_rect(group["rect"], margin, page_rect)
+        other_index = next((
+            candidate for candidate in sorted(neighbors(expanded))
+            if candidate > index and expanded.intersects(groups[candidate]["rect"])
+        ), None)
+        if other_index is None:
+            continue
+        other = groups[other_index]
+        remove(index)
+        remove(other_index)
+        active.remove(other_index)
+        group["rect"] |= other["rect"]
+        for key in ("lines", "diagonals", "curves", "paths"):
+            group[key] += other[key]
+        if "axes" in group:
+            group["axes"] = group["axes"] | other["axes"]
+        register(index)
+        expanded = _expand_rect(group["rect"], margin, page_rect)
+        for candidate in neighbors(expanded) | {index}:
+            if candidate <= index and candidate not in queued:
+                heapq.heappush(pending, candidate)
+                queued.add(candidate)
+    return [groups[index] for index in sorted(active)]
 
 
 def _isometric_label_score(rect: Any, labels: list[Any], page_rect: Any) -> tuple[float, bool]:
@@ -565,41 +628,130 @@ def _overlap_ratio(first: Any, second: Any) -> float:
     return intersection_area / max(smaller_area, 1)
 
 
+def _projection_label(value: Any) -> bool:
+    normalized = _normalizar_identificador(value)
+    return "ISOMETR" in normalized or "EXPLOD" in normalized
+
+
+def _assembly_view_rect(group: dict[str, Any], groups: list[dict[str, Any]], page_rect: Any) -> tuple[Any, int]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
+    bounds = group["rect"]
+    if len(group["axes"]) < 2 or group["diagonals"] < 3:
+        return bounds, 0
+    combined = fitz.Rect(bounds)
+    area = bounds.width * bounds.height
+    included = set()
+    changed = True
+    while changed:
+        changed = False
+        for index, other in enumerate(groups):
+            if other is group or index in included or other["word_count"]:
+                continue
+            rect = other["rect"]
+            other_area = rect.width * rect.height
+            if other_area > area * 0.65:
+                continue
+            compatible_axes = len(group["axes"] & other["axes"]) >= 2 and other["diagonals"] >= 2
+            small_component = other["curves"] >= 1 and other_area <= area * 0.1
+            if not compatible_axes and not small_component:
+                continue
+            overlap_x = max(0, min(combined.x1, rect.x1) - max(combined.x0, rect.x0))
+            overlap_y = max(0, min(combined.y1, rect.y1) - max(combined.y0, rect.y0))
+            gap_x = max(rect.x0 - combined.x1, combined.x0 - rect.x1, 0)
+            gap_y = max(rect.y0 - combined.y1, combined.y0 - rect.y1, 0)
+            aligned = (
+                overlap_x >= min(bounds.width, rect.width) * 0.7 and gap_y <= max(bounds.width, bounds.height) * 0.55
+            ) or (
+                overlap_y >= min(bounds.height, rect.height) * 0.7 and gap_x <= max(bounds.width, bounds.height) * 0.55
+            )
+            joined = combined | rect
+            if not aligned or max(joined.width, joined.height) > max(bounds.width, bounds.height) * 2.5:
+                continue
+            if joined.width * joined.height > page_rect.width * page_rect.height * 0.55:
+                continue
+            combined = joined
+            included.add(index)
+            changed = True
+    return combined, len(included)
+
+
 def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
     page_rect = page.rect
     page_area = max(page_rect.width * page_rect.height, 1)
+    text_blocks = page.get_text("blocks")
+    text_words = page.get_text("words")
     records = []
     for drawing in page.get_drawings():
-        rect = fitz.Rect(drawing.get("rect")) & page_rect
+        rect = fitz.Rect(drawing.get("rect"))
+        if rect.width == 0 or rect.height == 0:
+            rect = _expand_rect(rect, max(0.5, float(drawing.get("width") or 0) / 2), page_rect)
+        rect &= page_rect
         coverage = (rect.width * rect.height) / page_area
-        if rect.is_empty or coverage < 0.00002 or coverage > 0.82:
+        sheet_rule = (
+            rect.width > page_rect.width * 0.8 and rect.height < 2
+            and (rect.y0 < page_rect.y0 + page_rect.height * 0.1 or rect.y1 > page_rect.y1 - page_rect.height * 0.1)
+        ) or (
+            rect.height > page_rect.height * 0.8 and rect.width < 2
+            and (rect.x0 < page_rect.x0 + page_rect.width * 0.1 or rect.x1 > page_rect.x1 - page_rect.width * 0.1)
+        )
+        if rect.is_empty or coverage < 0.00002 or coverage > 0.82 or sheet_rule:
             continue
-        lines, diagonals, curves = _line_stats(drawing.get("items") or [])
-        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
+        items = drawing.get("items") or []
+        lines, diagonals, curves = _line_stats(items)
+        color = drawing.get("color") or drawing.get("fill") or (0, 0, 0)
+        annotation = (max(color) - min(color) > 0.3) or bool(re.search(r"\[\s*\d", str(drawing.get("dashes") or "")))
+        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1, "axes": _projection_axes(items), "annotation": annotation})
 
+    neutral_records = [record for record in records if not record["annotation"]]
+    if len(neutral_records) >= 3:
+        records = neutral_records
     join_margin = max(7.0, min(page_rect.width, page_rect.height) * 0.02)
     groups = _merge_drawing_records(records, page_rect, join_margin)
     labels = [
         fitz.Rect(block[:4])
-        for block in page.get_text("blocks")
-        if len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4])
+        for block in text_blocks
+        if len(block) > 4 and _projection_label(block[4])
     ]
+    for group in groups:
+        group["word_count"] = sum(
+            group["rect"].x0 <= (word[0] + word[2]) / 2 <= group["rect"].x1
+            and group["rect"].y0 <= (word[1] + word[3]) / 2 <= group["rect"].y1
+            for word in text_words
+        )
     candidates = []
     for group in groups:
         rect = group["rect"]
         coverage = (rect.width * rect.height) / page_area
         diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
+        aspect_ratio = max(rect.width, rect.height) / max(min(rect.width, rect.height), 1)
+        word_count = group["word_count"]
+        if word_count >= 8 and group["diagonals"] < 3 and group["curves"] < 2:
+            continue
+        contains_text = word_count > 0
+        main_profile = (
+            aspect_ratio >= 4 and max(rect.width, rect.height) >= max(page_rect.width, page_rect.height) * 0.3
+            and group["lines"] >= 3 and not contains_text
+        )
         if coverage < 0.008 or coverage > 0.72:
             continue
-        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6:
+        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6 and not main_profile:
             continue
         label_score, labeled = _isometric_label_score(rect, labels, page_rect)
         score = diagonal_ratio * 8 + min(group["paths"], 40) / 12 + min(group["curves"], 8) * 0.35 + min(coverage, 0.35) * 4 + label_score
+        if len(group["axes"]) >= 2 and group["diagonals"] >= 3:
+            score += 3
+        score -= min(word_count / 4, 4)
+        if main_profile:
+            score += 5 + min(aspect_ratio, 20) / 5
         if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
             score -= 4
-        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect), labeled))
+        rect, joined_components = _assembly_view_rect(group, groups, page_rect)
+        score += min(joined_components * 3, 9)
+        padding = max(2, min(rect.width, rect.height) * 0.1) if main_profile else max(rect.width, rect.height) * 0.06
+        candidates.append((score, _expand_rect(rect, padding, page_rect), labeled))
 
     for image in page.get_image_info():
         rect = fitz.Rect(image.get("bbox")) & page_rect
@@ -630,7 +782,7 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
             labeled = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
-                if any(len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4]) for block in page.get_text("blocks")):
+                if any(len(block) > 4 and _projection_label(block[4]) for block in page.get_text("blocks")):
                     analyzed_pages[page_index] = _page_isometric_candidates(page)
                     labeled.extend((score, page_index, rect) for score, rect, is_labeled in analyzed_pages[page_index] if is_labeled)
             # CAD PDFs can contain a shaded rendering alongside vector dimensions.
@@ -651,6 +803,9 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
             candidates.sort(key=lambda candidate: candidate[0], reverse=True)
             ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
             if not candidates or candidates[0][0] < 1.5 or ambiguous:
+                for page in pdf:
+                    if any(drawing.get("items") for drawing in (page.get_cdrawings() or [])):
+                        return _render_document_previews(page)
                 raise LookupError("Vista isometrica nao identificada com confianca")
             _, page_index, clip, _ = candidates[0]
             page = pdf.load_page(page_index)
@@ -659,6 +814,37 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
         raise
     except Exception as exc:
         raise LookupError("Documento PDF invalido ou ilegivel") from exc
+
+
+def _render_document_previews(page: Any) -> dict[str, bytes]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
+    from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
+
+    scale = min(2.0, 1568 / max(page.rect.width, page.rect.height))
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+    source = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+    label = f"DESENHO ORIGINAL - PAGINA {page.number + 1}"
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("preview_kind", "original-document")
+    metadata.add_text("page_number", str(page.number + 1))
+    previews = {}
+    for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
+        header_height = max(40, round(maximum * 0.06))
+        font_size = max(16, round(maximum * 0.032))
+        font = ImageFont.load_default(size=font_size)
+        image = source.copy()
+        image.thumbnail((maximum, maximum - header_height), Image.Resampling.LANCZOS)
+        label_width = math.ceil(font.getlength(label)) + 16
+        canvas = Image.new("RGB", (max(image.width, label_width), image.height + header_height), "white")
+        canvas.paste(image, ((canvas.width - image.width) // 2, header_height))
+        drawing = ImageDraw.Draw(canvas)
+        drawing.text((8, (header_height - font_size) // 2), label, fill=(40, 50, 60), font=font)
+        drawing.line((0, header_height - 1, canvas.width, header_height - 1), fill=(210, 215, 220))
+        output = io.BytesIO()
+        canvas.save(output, format="PNG", pnginfo=metadata)
+        previews[variant] = output.getvalue()
+    return previews
 
 
 def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
@@ -670,7 +856,7 @@ def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
     scale = max(1.5, min(300 / 72, 1800 / max(clip.width, clip.height)))
     pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
     image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
-    return render_variants(image)
+    return render_variants(image, preserve_components=True)
 
 
 def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:

@@ -186,13 +186,13 @@ Use o launcher Tailscale ja existente; nao altere o token nem a senha. Depois,
 atualize o servidor web e faca Reload (Parte 1, sem migration/Parte 2).
 A deteccao do endpoint e automatica, sem cadastrar outra URL no sistema.
 
-### Atualizacao adicional de cache e fila
+### Atualizacao de reconhecimento, cache e fila
 
 Se o endpoint de previas ja responde, o cache compartilhado entre processos
 fica no servidor web, nao no tunel. Publicar o codigo apenas na VM nao ativa
 esse cache no PythonAnywhere: atualizar tambem o web app e fazer Reload.
 
-Depois de publicar esta versao em `origin/main`, os dois arquivos de servico
+Depois de publicar esta versao em `origin/main`, os tres arquivos de servico
 podem ser atualizados seletivamente na VM. Execute no CMD, uma linha por vez,
 e pare diante de qualquer erro. Confirme as copias antes da substituicao:
 
@@ -202,17 +202,26 @@ set "BACKUP=%TEMP%\bridge-producao-%RANDOM%-%RANDOM%"
 mkdir "%BACKUP%"
 copy conferencia_app\services\producao_service.py "%BACKUP%\producao_service.py"
 copy conferencia_app\services\producao_bridge.py "%BACKUP%\producao_bridge.py"
+copy conferencia_app\services\production_images.py "%BACKUP%\production_images.py"
 git fetch origin
-git checkout origin/main -- conferencia_app/services/producao_service.py conferencia_app/services/producao_bridge.py
-.venv\Scripts\python.exe -m py_compile conferencia_app\services\producao_service.py conferencia_app\services\producao_bridge.py
+git checkout origin/main -- conferencia_app/services/producao_service.py conferencia_app/services/producao_bridge.py conferencia_app/services/production_images.py
+.venv\Scripts\python.exe -m py_compile conferencia_app\services\producao_service.py conferencia_app\services\producao_bridge.py conferencia_app\services\production_images.py
+findstr /C:"_PREVIEW_CACHE_VERSION =" conferencia_app\services\producao_service.py
 start_erp_bridge_tailscale.bat
 ```
 
-Essa rodada evita analisar geometria desnecessaria em PDFs com imagem
-incorporada. No servidor web, tambem limita trabalhos de imagem pendentes e
-reaproveita previas em disco entre trabalhadores, sem mudar credenciais,
-dependencias ou esquema do banco. Manter a janela do servidor aberta e
-testar uma peca na Producao apos o Reload; `OPTIONS` verifica apenas a rota.
+O comando findstr deve mostrar `isometric-cutout-v7`. Essa versao considera
+vistas principais alongadas, perspectivas sem legenda e partes separadas de
+vistas explodidas, preservando os componentes do recorte. Os arquivos de
+servico devem ser atualizados juntos, pois o tratamento de imagens possui
+um novo parametro opcional usado pelo servico de Producao.
+
+No PythonAnywhere, publicar tambem o adaptador `static/js/producao_panel.js`
+e a pagina `static/producao_original/index.html`, alem dos servicos. Fazer
+Reload e reabrir a tela. A chave v7 invalida automaticamente as previas antigas.
+Nao ha mudanca de credenciais, dependencias ou esquema do banco. Manter a
+janela do servidor da VM aberta e testar a peca na Producao apos o Reload;
+`OPTIONS` verifica apenas a existencia da rota, nao a qualidade do recorte.
 
 Verificacao local da rota, sem enviar segredos e sem consultar o banco:
 

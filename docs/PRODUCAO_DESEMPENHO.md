@@ -23,11 +23,25 @@ As melhorias ficam no modulo de Producao do servidor web, em seu adaptador de in
 - O cache da imagem pronta e consultado antes de baixar o arquivo, usando origem, codigo, revisao do documento, revisao do desenho e aplicativo como identidade.
 - Miniatura e detalhe compartilham download e renderizacao. Uma revisao nova gera outra imagem; documentos sem revisao continuam sendo conferidos pelo hash do conteudo.
 - Downloads nao ocupam os dois trabalhadores de renderizacao. Sao admitidas quatro requisicoes de miniatura e duas de detalhe por processo web. Quando nao ha vaga, a resposta indica processamento pendente sem enfileirar o item; a proxima tentativa visivel pode ocupar a vaga liberada. Assim, uma OS grande nao acumula trabalhos de pecas que ja sairam da tela. Trabalho ja iniciado nao e interrompido.
-- Em PDFs com imagem incorporada, somente paginas com rotulo isometrico precisam de analise geometrica antes de aproveitar a imagem. A geometria completa continua sendo analisada se nao houver imagem incorporada nem vista rotulada utilizavel. A prioridade de selecao do desenho foi preservada.
+- Em PDFs com imagem incorporada, somente paginas com rotulo isometrico ou de vista explodida precisam de analise geometrica antes de aproveitar a imagem. A geometria completa continua sendo analisada se nao houver imagem incorporada nem vista rotulada utilizavel. A prioridade de selecao do documento foi preservada.
 - A analise de transparencia usa histograma e operacoes nativas do Pillow. As mascaras sao lidas como bytes contiguos em vez de consultar cada pixel individualmente.
 - As derivadas permanecem limitadas a 64 entradas. Falhas de imagem ficam limitadas e expiram em 10 segundos, permitindo nova tentativa apos uma indisponibilidade temporaria.
 - A tela usa decodificacao assincrona e prioriza o detalhe. A consulta de processamento pendente fica limitada a 500 ms entre tentativas no detalhe e 1 segundo nas miniaturas visiveis, em vez dos 2 segundos anteriores.
 - Tentativas e prazo de carregamento sao pausados fora da area visivel ou com a pagina oculta. Atualizacoes de uma imagem nao percorrem novamente toda a arvore do DOM.
+
+## Reconhecimento das vistas
+
+O renderizador `isometric-cutout-v7` usa a geometria e as anotacoes do PDF para selecionar a vista, sem depender de uma posicao fixa na folha:
+
+- Legendas de vista isometrica ou explodida continuam tendo prioridade quando associadas a um candidato utilizavel.
+- Sem legenda, o detector considera as direcoes das arestas e curvas. Quadrilateros `qu` e retangulos `re` do PyMuPDF sao tratados como quatro arestas; linhas horizontais e verticais isoladas tambem participam do agrupamento.
+- Uma vista principal alongada, como uma barra, pode ser selecionada mesmo sem diagonais. O recorte usa uma margem curta para nao incorporar a cota paralela ou a secao transversal.
+- Molduras de folha e tabelas com texto sao excluidas dos candidatos. Cotas coloridas e tracejadas sao desconsideradas quando existe geometria neutra suficiente. A contagem de palavras considera palavras dentro da regiao, mesmo quando o bloco de texto ultrapassa sua borda.
+- Para uma perspectiva com partes separadas, o recorte pode incluir componentes menores proximos, alinhados e com direcoes compativeis, alem de pequenos elementos curvos sem texto. Componentes que nao atendem a esses criterios nao sao unidos; duas vistas completas equivalentes permanecem ambiguas.
+- O recorte vetorial preserva todos os componentes nele contidos, sem descartar automaticamente as pecas menores. Uma vista explodida permanece explodida; nao e reconstruida uma montagem 3D inexistente no documento.
+- Quando ainda nao existe um candidato seguro, a pagina original identificada pode ser exibida como ultimo recurso. A folha inteira nao e o resultado normal dos casos acima. Arquivos invalidos ou sem conteudo grafico continuam sendo sinalizados.
+
+Este e um reconhecimento heuristico, nao uma garantia de interpretar todos os desenhos ou PDFs digitalizados. Os exemplos enviados na conversa eram capturas; os testes reproduzem os padroes em PDFs sinteticos. Os PDFs originais precisam ser conferidos antes de afirmar que o recorte de cada arquivo real esta correto. As marcacoes vermelhas das capturas nao sao usadas como regra de recorte.
 
 ## Validacao local
 
@@ -38,6 +52,8 @@ Em 15/09/2026, um teste HTTP completo, autenticado, gerou um PDF local de 1.539.
 Na verificacao adicional de 15/09/2026, um PDF sintetico com 500 registros vetoriais e imagem incorporada passou de mediana de 1,142 s para 0,685 s em tres execucoes, 40% menos tempo. Os dois PNGs permaneceram identicos. No teste HTTP, outra instancia web recuperou a previa em 0,00114 s pelo disco, sem nova transferencia. Um processo Python independente tambem confirmou o reaproveitamento sem HTTP. Estes tempos nao representam uma medicao da OS 7807/042 no GRV.
 
 Os testes de fila simulam 50 itens concorrentes e verificam a admissao limitada, a liberacao de vagas para a selecao atual e a entrega imediata de trabalhos ja concluidos.
+
+O reconhecimento tem testes de perfil longo sem legenda, perspectiva montada em diferentes posicoes da folha, vistas rotuladas, tabelas, arestas `qu`, componentes separados e ambiguidade entre vistas equivalentes. Os testes verificam limites do recorte e preservacao dos pixels das partes, alem do percurso HTTP e dos caches existentes.
 
 Executar a partir de `conferencia_system`, usando o Python 3.12 do ambiente do projeto:
 
@@ -56,7 +72,9 @@ Aplicar a Parte 1 do procedimento de atualizacao no PythonAnywhere e a atualizac
 
 Atualizar somente o servidor web mantem a compatibilidade, mas nao ativa o processamento junto ao ERP enquanto a VM nao receber o novo endpoint. Nao rodar `git pull` completo na VM e nao sobrescrever arquivos locais sem backup.
 
-Quando o endpoint ja estiver ativo, esta rodada adicional exige publicar `conferencia_app/services/producao_service.py` e `conferencia_app/services/producao_bridge.py` no servidor web e fazer Reload. A mesma versao do servico deve estar na VM para o caminho rapido de PDF. Nao e necessario reinstalar PyMuPDF/Pillow nem atualizar o bundle JavaScript nesta rodada. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
+Com o endpoint ja ativo, publicar os servicos `producao_service.py`, `production_images.py` e a versao atual de `producao_bridge.py` tanto no servidor web quanto na VM. No servidor web, publicar tambem `static/js/producao_panel.js` e `static/producao_original/index.html`, que atualizam a chave do navegador para v7. Fazer Reload do web app e reiniciar a bridge. Nao e necessario reinstalar PyMuPDF/Pillow nem alterar banco ou credenciais. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
+
+Nao publicar apenas `producao_service.py`: ele chama `render_variants(..., preserve_components=True)`, cuja assinatura esta na nova versao de `production_images.py`. A chave v7 invalida imagens e falhas antigas sem apagar arquivos manualmente. Durante uma atualizacao parcial entre web e bridge, versoes diferentes acionam o fallback local em vez de aceitar uma previa de outra versao.
 
 O cliente e a bridge registram `producao_bridge_preview`/`producao_preview_bridge` em nivel INFO, com tempo e quantidade de bytes, sem token ou conteudo do documento. A resposta interna da bridge inclui `Server-Timing`, `X-Original-Bytes` e `X-Production-Preview-Version` para diagnostico.
 
