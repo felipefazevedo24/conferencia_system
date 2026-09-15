@@ -44,7 +44,8 @@ def listar():
     contadores = {s: query.filter(Tarefa.status == s).count() for s in (
         "Pendente", "Aguardando sincronização", "Concluído")}
     pagina = max(1, request.args.get("pagina", 1, type=int))
-    tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em, Tarefa.id).offset((pagina-1)*40).limit(40).all()
+    # Fila operacional: o recebimento mais novo aparece primeiro.
+    tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).offset((pagina-1)*40).limit(40).all()
     return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores, pagina=pagina)
 
 

@@ -66,15 +66,26 @@ def _headers(cfg: dict[str, Any]) -> dict[str, str]:
 
 
 def buscar_localizacao_produto_grv(codigo_interno: str) -> str:
-    """Consulta direta, sem cache e inclusive para produtos sem saldo."""
+    """Consulta direta, sem cache e inclusive para produtos sem saldo.
+
+    Falhas viram ValueError com a causa real para o operador/suporte, em vez
+    de um 502 genérico na tela de endereçamento."""
     cfg = _bridge_config()
     if not cfg["api_url"]:
-        raise RuntimeError("Consulta ao GRV não configurada.")
-    response = requests.post(
-        f"{cfg['api_url']}/api/erp/produto-localizacao",
-        json={"codigo_interno": codigo_interno}, headers=_headers(cfg), timeout=cfg["timeout"],
-    )
-    response.raise_for_status()
+        raise ValueError("Consulta ao GRV não configurada (ERP_LANCAMENTO_API_URL ausente).")
+    try:
+        response = requests.post(
+            f"{cfg['api_url']}/api/erp/produto-localizacao",
+            json={"codigo_interno": codigo_interno}, headers=_headers(cfg), timeout=cfg["timeout"],
+        )
+    except requests.RequestException:
+        raise ValueError("Bridge do ERP inacessível para consultar o endereço. Verifique se a bridge está no ar e tente novamente.")
+    if response.status_code == 404:
+        raise ValueError("Bridge do ERP desatualizada: falta o endpoint de localização. Atualize (git pull) e reinicie a bridge na VM.")
+    if response.status_code == 401:
+        raise ValueError("Bridge do ERP recusou o acesso (token). Confira o ERP_LANCAMENTO_API_TOKEN.")
+    if response.status_code >= 400:
+        raise ValueError(f"Consulta de endereço no GRV falhou (HTTP {response.status_code}). Tente novamente.")
     dados = response.json()
     if dados.get("sucesso") is not True or not dados.get("encontrado"):
         raise ValueError("SKU não encontrado no GRV ou consulta indisponível.")

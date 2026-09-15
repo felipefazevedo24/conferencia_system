@@ -2325,7 +2325,7 @@ def create_app() -> Flask:
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT localizacao_estoque FROM tproduto WHERE codigo_interno = %s LIMIT 2",
+                        "SELECT localizacao_estoque FROM tproduto WHERE btrim(codigo_interno) = btrim(%s) LIMIT 2",
                         (codigo,),
                     )
                     rows = cur.fetchall()

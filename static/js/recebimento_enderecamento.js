@@ -74,6 +74,7 @@
   selected = item; skuToken = null; allocations = []; $('pa-title').textContent = `NF ${item.nota} · ${item.sku || 'Sem SKU GRV'}`;
   $('pa-description').textContent = `${item.descricao} · ${item.quantidade} ${item.unidade || ''}`;
   $('pa-sku-result').textContent = ''; $('pa-reason').value = 'normal'; $('pa-justification').value = ''; $('pa-justification-label').hidden = true;
+  $('pa-reason-wrap').hidden = true;
   $('pa-address').disabled = true; feedback('Bipe o SKU para consultar o endereço atual no GRV.', true); renderAllocations(); $('pa-work').showModal();
  }
  function renderAllocations() {
@@ -97,7 +98,7 @@
  }
  async function scan(tipo) {
   if (busy || scanner) return;
-  if (tipo === 'sku') { skuToken=null; allocations=[]; $('pa-address').disabled=true; $('pa-sku-result').textContent=''; renderAllocations(); }
+  if (tipo === 'sku') { skuToken=null; allocations=[]; $('pa-address').disabled=true; $('pa-sku-result').textContent=''; $('pa-reason-wrap').hidden=true; renderAllocations(); }
   if (!window.isSecureContext || !navigator.mediaDevices || typeof Html5Qrcode === 'undefined') { feedback('Câmera indisponível. Acesse por HTTPS, permita a câmera e atualize a página.', true); return; }
   $('pa-camera-title').textContent = tipo === 'sku' ? 'Bipe o SKU do material' : 'Bipe a etiqueta do endereço';
   $('pa-camera').showModal(); scanning = true;
@@ -111,7 +112,8 @@
      if (tipo === 'sku') {
       skuToken = data.token; allocations = []; $('pa-address').disabled = false;
       $('pa-sku-result').textContent = `SKU validado: ${data.codigo}`;
-      feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Bipe o local. Se estiver lotado, marque a opção de endereço adicional.` : 'Material sem endereço no GRV. Bipe um local cadastrado e ativo.', true);
+      $('pa-reason-wrap').hidden = !data.enderecos.length;
+      feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Bipe o local. Se estiver lotado, marque a opção de endereço adicional.` : 'Material sem endereço no GRV. Bipe a etiqueta do local onde vai guardar.', true);
      } else {
       const sum = allocations.reduce((n,a) => n + Number(a.quantidade || 0),0);
       allocations.push({...data, quantidade:Math.max(0,selected.quantidade-sum), lote:''});
