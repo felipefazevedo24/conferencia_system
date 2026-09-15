@@ -392,6 +392,323 @@ def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     assert generate.call_count == 2
 
 
+def test_preview_pronto_da_bridge_dispensa_download_do_pdf_e_renderizacao_local():
+    expected = {"thumbnail": b"thumb-bridge", "detail": b"detail-bridge"}
+    with (
+        patch.object(producao_service, "_gerar_previews") as render,
+        patch.object(producao_service, "obter_arquivo") as download,
+        patch.object(producao_service, "_PREVIEW_CACHE", OrderedDict()),
+    ):
+        from unittest.mock import Mock
+
+        bridge_preview = Mock(return_value=expected)
+        first = producao_service._previews_em_cache("bridge-ready", document_loader=download, preview_loader=bridge_preview)
+        second = producao_service._previews_em_cache("bridge-ready", document_loader=download, preview_loader=bridge_preview)
+        assert first == second == expected
+        bridge_preview.assert_called_once_with()
+        download.assert_not_called()
+        render.assert_not_called()
+
+
+def test_preview_da_bridge_nao_disponivel_preserva_renderizador_local():
+    expected = {"thumbnail": b"thumb-local", "detail": b"detail-local"}
+    with (
+        patch.object(producao_service, "_gerar_previews", return_value=expected) as render,
+        patch.object(producao_service, "obter_arquivo", return_value=(b"pdf", "drawing.pdf")) as download,
+        patch.object(producao_service, "_PREVIEW_CACHE", OrderedDict()),
+    ):
+        result = producao_service._previews_em_cache("bridge-fallback", document_loader=download, preview_loader=lambda: None)
+        assert result == expected
+        download.assert_called_once_with()
+        render.assert_called_once_with(b"pdf", "drawing.pdf")
+
+
+@pytest.fixture
+def bridge_preview_client(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from scripts import erp_lancamento_api_bridge as bridge
+    from conferencia_app.services import producao_service as bridge_service
+
+    monkeypatch.setattr(bridge, "_registrar_facilities_na_bridge", lambda _app: None)
+    monkeypatch.setattr(bridge, "_config", lambda: {
+        "host": "erp-test", "database": "test", "user": "readonly",
+        "token": "test-only-token", "port": 5432,
+    })
+    monkeypatch.setattr(bridge_service, "_PREVIEW_CACHE", OrderedDict())
+    monkeypatch.setattr(bridge_service, "_PREVIEW_FAILURES", OrderedDict())
+    metadata_connection = MagicMock()
+    metadata = metadata_connection.cursor.return_value.__enter__.return_value
+    metadata.description = [(name,) for name in ("document_id", "kind", "size_bytes", "content_revision")]
+    metadata.fetchall.return_value = [(31, "attachment", 1000000, "revision-1")]
+    content_connection = MagicMock()
+    content = content_connection.cursor.return_value.__enter__.return_value
+    content.description = [(name,) for name in ("document_id", "nome_arquivo", "content_revision", "anexo")]
+    content.fetchone.return_value = (31, "drawing.pdf", "revision-1", memoryview(b"pdf"))
+    connections = []
+
+    def connect(_cfg, *, readonly=False):
+        assert readonly is True
+        connection = content_connection if len(connections) == 1 else metadata_connection
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(bridge, "_conectar", connect)
+    expected = {"thumbnail": b"\x89PNG\r\n\x1a\nthumb", "detail": b"\x89PNG\r\n\x1a\ndetail"}
+    render = MagicMock(return_value=expected)
+    monkeypatch.setattr(bridge_service, "_gerar_previews", render)
+    payload = {
+        "cod_empresa": 1, "cod_os": 9959, "cod_os_aux": 4, "document_id": 31,
+        "kind": "attachment", "content_revision": "revision-1",
+        "renderer_version": bridge_service._PREVIEW_CACHE_VERSION,
+    }
+    return bridge.create_app().test_client(), payload, expected, render, metadata, content, connections, bridge_service
+
+
+def test_bridge_preview_entrega_so_pngs_reutiliza_render_e_fecha_conexoes(bridge_preview_client):
+    import zipfile
+
+    client, payload, expected, render, metadata, content, connections, _service = bridge_preview_client
+    headers = {"Authorization": "Bearer test-only-token"}
+    first = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    second = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    assert first.status_code == second.status_code == 200
+    assert first.headers["X-ERP-Read-Only"] == "true"
+    assert first.headers["X-Production-Preview-Version"] == payload["renderer_version"]
+    assert first.headers["ETag"] == second.headers["ETag"]
+    with zipfile.ZipFile(io.BytesIO(first.data)) as archive:
+        assert set(archive.namelist()) == {"thumbnail.png", "detail.png"}
+        assert archive.read("thumbnail.png") == expected["thumbnail"]
+        assert archive.read("detail.png") == expected["detail"]
+    render.assert_called_once_with(b"pdf", "drawing.pdf")
+    assert len(connections) == 3
+    assert connections[0].close.call_count == 2
+    connections[1].close.assert_called_once_with()
+    assert metadata.execute.call_args.args[1]["cod_empresa"] == 1
+    assert content.execute.call_args.args[1]["cod_os"] == 9959
+    assert content.execute.call_args.args[1]["cod_os_aux"] == 4
+    assert content.execute.call_args.args[1]["document_id"] == 31
+    assert "tos_aux_anexos" in content.execute.call_args.args[0]
+    assert len(first.data) < int(first.headers["X-Original-Bytes"])
+
+
+@pytest.mark.parametrize("case, status", [("auth", 401), ("company", 403), ("invalid", 400), ("version", 409), ("missing-renderer", 501)])
+def test_bridge_preview_rejeita_acesso_e_parametros_antes_do_banco(bridge_preview_client, monkeypatch, case, status):
+    client, payload, _expected, render, _metadata, _content, connections, service = bridge_preview_client
+    headers = {"Authorization": "Bearer test-only-token"}
+    if case == "auth":
+        headers.clear()
+    elif case == "company":
+        payload["cod_empresa"] = 2
+    elif case == "invalid":
+        payload["cod_os"] = "9959 OR 1=1"
+    elif case == "version":
+        payload["renderer_version"] = "old-renderer"
+    else:
+        monkeypatch.setattr(service, "fitz", None)
+    response = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    assert response.status_code == status
+    assert not connections
+    render.assert_not_called()
+
+
+@pytest.mark.parametrize("case, status", [("missing", 404), ("changed", 409), ("oversized", 413), ("changed-during-read", 422)])
+def test_bridge_preview_nao_retorna_documento_incorreto(bridge_preview_client, case, status):
+    client, payload, _expected, render, metadata, content, connections, _service = bridge_preview_client
+    if case == "missing":
+        metadata.fetchall.return_value = []
+    elif case == "changed":
+        payload["content_revision"] = "revision-old"
+    elif case == "oversized":
+        metadata.fetchall.return_value = [(31, "attachment", 26 * 1024 * 1024, "revision-1")]
+    else:
+        content.fetchone.return_value = (31, "drawing.pdf", "revision-2", b"changed-pdf")
+    response = client.post("/api/erp/producao/preview", json=payload, headers={"Authorization": "Bearer test-only-token"})
+    assert response.status_code == status
+    render.assert_not_called()
+    assert len(connections) == (2 if case == "changed-during-read" else 1)
+
+
+@pytest.fixture
+def preview_transport(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    import zipfile
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from conferencia_app.services import producao_bridge
+
+    settings = SimpleNamespace(API_URL="https://bridge.invalid", API_TOKEN="test-only-token", API_TIMEOUT=60, USE_API_BRIDGE=True)
+    monkeypatch.setattr(producao_bridge, "get_settings", lambda: settings)
+    monkeypatch.setattr(producao_bridge, "_UNAVAILABLE", OrderedDict())
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w") as archive:
+        for variant in ("thumbnail", "detail"):
+            archive.writestr(f"{variant}.png", b"\x89PNG\r\n\x1a\n" + variant.encode())
+    response = Mock(status_code=200, headers={
+        "X-ERP-Read-Only": "true", "X-Production-Preview-Version": "renderer-test", "X-Original-Bytes": "1000000",
+    })
+    response.iter_content.return_value = [archive_bytes.getvalue()]
+    session = Mock()
+    session.post.return_value = response
+    monkeypatch.setattr(producao_bridge, "_session", lambda: session)
+    document_data = {"source_cod_os": 9959, "source_aux_code": 4, "id": 31, "source_kind": "attachment", "content_revision": "revision-1"}
+    return producao_bridge, document_data, settings, session, response
+
+
+def test_transporte_bridge_usa_conexao_configurada_e_retorna_variantes(preview_transport):
+    transport, document_data, _settings, session, response = preview_transport
+    result = transport.obter_previews_bridge(document_data, "renderer-test")
+    assert result["thumbnail"].endswith(b"thumbnail")
+    assert result["detail"].endswith(b"detail")
+    args, kwargs = session.post.call_args
+    assert args == ("https://bridge.invalid/api/erp/producao/preview",)
+    assert kwargs["headers"]["Authorization"] == "Bearer test-only-token"
+    assert kwargs["json"]["cod_empresa"] == 1
+    assert kwargs["json"]["cod_os"] == 9959
+    assert kwargs["json"]["cod_os_aux"] == 4
+    assert kwargs["json"]["content_revision"] == "revision-1"
+    assert kwargs["timeout"] == (5, 30)
+    assert kwargs["stream"] is True
+    assert kwargs["allow_redirects"] is False
+    response.close.assert_called_once_with()
+
+
+def test_transporte_bridge_antiga_e_detectada_sem_tentativa_por_imagem(preview_transport, monkeypatch):
+    transport, document_data, _settings, session, response = preview_transport
+    response.status_code = 404
+    response.json.return_value = {"erro": "not_found"}
+    with patch.object(transport.time, "monotonic", return_value=0) as clock:
+        assert transport.obter_previews_bridge(document_data, "renderer-test") is None
+        clock.return_value = 20
+        assert transport.obter_previews_bridge({**document_data, "id": 32}, "renderer-test") is None
+        assert session.post.call_count == 1
+        clock.return_value = 301
+        response.status_code = 200
+        assert transport.obter_previews_bridge(document_data, "renderer-test")["thumbnail"]
+        assert session.post.call_count == 2
+
+
+@pytest.mark.parametrize("case", ["auth", "readonly", "revision", "invalid-zip", "oversized", "timeout", "no-bridge"])
+def test_transporte_bridge_valida_resposta_e_fallback(preview_transport, monkeypatch, case):
+    import requests
+    from conferencia_app.compras.db import ProducaoSourceError
+
+    transport, document_data, settings, session, response = preview_transport
+    if case == "auth":
+        response.status_code = 403
+    elif case == "readonly":
+        response.headers.pop("X-ERP-Read-Only")
+    elif case == "revision":
+        response.status_code = 409
+        response.json.return_value = {"erro": "documento_alterado"}
+    elif case == "invalid-zip":
+        response.iter_content.return_value = [b"not a zip"]
+    elif case == "oversized":
+        response.headers["Content-Length"] = str(transport._MAX_RESPONSE_BYTES + 1)
+    elif case == "timeout":
+        session.post.side_effect = requests.Timeout()
+    else:
+        settings.USE_API_BRIDGE = False
+    if case in {"auth", "readonly"}:
+        with pytest.raises(ProducaoSourceError):
+            transport.obter_previews_bridge(document_data, "renderer-test")
+    elif case == "revision":
+        with pytest.raises(LookupError):
+            transport.obter_previews_bridge(document_data, "renderer-test")
+    else:
+        assert transport.obter_previews_bridge(document_data, "renderer-test") is None
+    if case == "no-bridge":
+        session.post.assert_not_called()
+    elif case != "timeout":
+        response.close.assert_called_once_with()
+
+
+def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from flask import Flask
+    from PIL import Image, ImageDraw
+    import requests
+    from werkzeug.serving import make_server
+    from conferencia_app.services import producao_bridge
+
+    client, payload, _expected, _render, metadata, content, _connections, service = bridge_preview_client
+    image = Image.new("RGB", (640, 800), "white")
+    drawing = ImageDraw.Draw(image)
+    drawing.polygon([(130, 250), (320, 100), (510, 250), (510, 550), (320, 700), (130, 550)], fill=(100, 115, 125))
+    drawing.ellipse((250, 320, 390, 480), fill="white")
+    embedded = io.BytesIO()
+    image.save(embedded, format="PNG")
+    with service.fitz.open() as pdf:
+        page = pdf.new_page()
+        page.insert_image(service.fitz.Rect(50, 50, 545, 792), stream=embedded.getvalue())
+        original = pdf.tobytes(deflate=False)
+    metadata.fetchall.return_value = [(31, "attachment", len(original), "revision-1")]
+    content.fetchone.return_value = (31, "drawing.pdf", "revision-1", memoryview(original))
+    renderer = Mock(wraps=producao_service._gerar_previews)
+    monkeypatch.setattr(service, "_gerar_previews", renderer)
+    document_data = {
+        "id": 31, "source_kind": "attachment", "source_cod_os": 9959,
+        "source_aux_code": 4, "content_revision": "revision-1",
+    }
+    monkeypatch.setattr(service, "_obter_ordem", lambda _number: {"codigo": 9959})
+    monkeypatch.setattr(service, "_contexto_previa", lambda *_args: {"revisao_desenho": "A"})
+    monkeypatch.setattr(service, "_resolver_documento_previa", lambda *_args: (document_data, []))
+    raw_download = Mock(side_effect=AssertionError("Nao deve baixar o PDF pela API generica"))
+    monkeypatch.setattr(service, "obter_arquivo", raw_download)
+    monkeypatch.setattr(producao_bridge, "_UNAVAILABLE", OrderedDict())
+    server = make_server("127.0.0.1", 0, client.application, threaded=True)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    settings = SimpleNamespace(API_URL=f"http://127.0.0.1:{server.server_port}", API_TOKEN="test-only-token", API_TIMEOUT=10, USE_API_BRIDGE=True)
+    monkeypatch.setattr(producao_bridge, "get_settings", lambda: settings)
+    session = requests.Session()
+    sizes = []
+    session.hooks["response"].append(lambda response, **_kwargs: sizes.append(int(response.headers["Content-Length"])))
+    monkeypatch.setattr(producao_bridge, "_session", lambda: session)
+    web_app = Flask("preview_web_http_test")
+    worker.start()
+    try:
+        with web_app.app_context():
+            started = time.perf_counter()
+            thumbnail = service.obter_preview("9959", 4)
+            first_seconds = time.perf_counter() - started
+            started = time.perf_counter()
+            detail = service.obter_preview("9959", 4, "detail")
+            warm_seconds = time.perf_counter() - started
+        for result in (thumbnail, detail):
+            with Image.open(io.BytesIO(result[0])) as preview:
+                assert preview.format == "PNG"
+                assert preview.mode == "RGBA"
+                assert min(preview.size) > 1
+        assert thumbnail[2] == detail[2]
+        assert renderer.call_count == len(sizes) == 1
+        assert sizes[0] < len(original) // 10
+        raw_download.assert_not_called()
+        print(f"\nBRIDGE_HTTP original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
+        session.close()
+    assert not worker.is_alive()
+
+
+def test_conexao_http_da_bridge_e_reutilizada_por_trabalhador(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from conferencia_app.services import producao_bridge
+
+    monkeypatch.setattr(producao_bridge, "_HTTP", threading.local())
+    factory = Mock()
+    monkeypatch.setattr(producao_bridge.requests, "Session", factory)
+    assert producao_bridge._session() is producao_bridge._session()
+    factory.assert_called_once_with()
+    assert factory.return_value.mount.call_count == 2
+
+
 def test_cache_assincrono_reutiliza_o_mesmo_processamento():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()

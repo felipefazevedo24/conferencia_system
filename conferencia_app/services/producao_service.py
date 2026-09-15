@@ -22,6 +22,7 @@ from werkzeug.local import LocalProxy
 
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
+from .producao_bridge import obter_previews_bridge
 
 try:
     import pymupdf as fitz
@@ -744,6 +745,7 @@ def _previews_em_cache(
     wait: bool = True,
     *,
     document_loader: Callable[[], tuple[bytes, str]] | None = None,
+    preview_loader: Callable[[], dict[str, bytes] | None] | None = None,
 ) -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
@@ -765,8 +767,10 @@ def _previews_em_cache(
     if owner:
         def render():
             try:
-                payload, name = document_loader() if document_loader is not None else (content, filename)
-                result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
+                result = preview_loader() if preview_loader is not None else None
+                if result is None:
+                    payload, name = document_loader() if document_loader is not None else (content, filename)
+                    result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
                 future.set_result(result)
             except BaseException as exc:
                 future.set_exception(exc)
@@ -850,7 +854,10 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
     )
     if document.get("content_revision"):
         cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
-        previews = _previews_em_cache(cache_key, document_loader=load_document)
+        previews = _previews_em_cache(
+            cache_key, document_loader=load_document,
+            preview_loader=lambda: obter_previews_bridge(document, _PREVIEW_CACHE_VERSION),
+        )
     else:
         content, filename = load_document()
         identity += (hashlib.sha256(content).hexdigest(),)

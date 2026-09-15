@@ -257,6 +257,7 @@ LIMIT 1
 
 SQL_PRODUCAO_DESENHO_ARQUIVO = """
 SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes,
+    xmin::text AS content_revision,
     CASE WHEN octet_length(anexo) <= %(max_bytes)s THEN anexo END AS anexo
 FROM public.tos_aux_desenhos
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
