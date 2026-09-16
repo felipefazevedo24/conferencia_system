@@ -6,9 +6,9 @@ Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparec
 
 - A confirmação do recebimento oferece endereçar agora ou deixar na fila. Ao aceitar, abre a etapa dentro de `/conferencia?etapa=enderecamento`, filtrada pelos itens recém-conferidos.
 - Filtros por NF, SKU, descrição e fornecedor; filas Pendente, Aguardando sincronização e Concluído.
-- Câmera do celular lê SKU e local. Não há entrada manual, colagem, upload de fotografia ou alternativa de teclado para esses campos. Quantidade e lote podem ser digitados.
+- Câmera do celular lê SKU e local; também é possível digitar o código exatamente como está na etiqueta (a digitação fica registrada no histórico da tarefa). Quantidade e lote são digitados.
 - SKU deve ser o `codigo_grv` vinculado ao item; um vínculo ausente precisa ser corrigido no recebimento. O próximo scan atualiza o vínculo da tarefa pendente.
-- Local precisa existir e estar ativo em `LocalizacaoArmazem`. O responsável pode cadastrar/ativar/desativar locais na própria tela; deve usar exatamente o código da etiqueta.
+- Não há cadastro prévio de locais: o código da etiqueta física é aceito diretamente e registrado de forma automática no primeiro uso. Endereços desativados anteriormente continuam bloqueados.
 - Endereço existente é apresentado após bipar o SKU. A operação normal só aceita esses locais; se não houver endereço, aceita qualquer local cadastrado e ativo.
 - “Endereço lotado” acrescenta o destino bipado, mantendo todos os endereços anteriores, sem duplicatas: `A;B;C`.
 - Destino alternativo exige permissão de gestão e justificativa. Também preserva os endereços anteriores: esta operação não transfere saldos antigos nem apaga endereços de produtos que ainda possam conter estoque.
@@ -21,7 +21,7 @@ Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparec
 As duas permissões aparecem na Gestão de Acessos:
 
 - `PAGE_RECEBIMENTO_ENDERECAMENTO`: Recebimento > Endereçamento. Padrão para Admin, Conferente, Fiscal e Logística; respeita personalizações de acesso existentes.
-- `MANAGE_RECEBIMENTO_ENDERECAMENTO`: Recebimento > Gerenciar locais e autorizar destino alternativo. Padrão apenas Admin; conceder junto da permissão de página quando necessário.
+- `MANAGE_RECEBIMENTO_ENDERECAMENTO`: Recebimento > Autorizar destino alternativo e revisar leituras. Padrão apenas Admin; conceder junto da permissão de página quando necessário.
 
 ## Publicação
 

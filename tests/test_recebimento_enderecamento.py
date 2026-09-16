@@ -82,17 +82,36 @@ def test_without_existing_address(state):
     update.assert_called_once_with('SKU-1', 'B')
 
 
-@pytest.mark.parametrize('kind,code', [('sku','OTHER'),('local','UNKNOWN'),('local','A;B'),('invalid','A')])
+@pytest.mark.parametrize('kind,code', [('sku','OTHER'),('local','A;B'),('invalid','A')])
 def test_invalid_scan(state, kind, code):
     with pytest.raises(ValueError):
         svc.registrar_leitura(state[0], kind, code)
     state[2].assert_not_called()
 
 
+def test_local_sem_cadastro_e_registrado_no_primeiro_uso(state):
+    task, lookup, update = state
+    lookup.return_value = ''
+    data = payload(task, 'NOVO-01')
+    local = LocalizacaoArmazem.query.filter_by(codigo='NOVO-01').first()
+    assert local and local.ativo
+    assert Evento.query.filter_by(tipo='Endereço registrado pela etiqueta').count() == 1
+    svc.confirmar(task, data)
+    svc.sincronizar(task)
+    update.assert_called_once_with('SKU-1', 'NOVO-01')
+
+
+def test_leitura_manual_fica_no_historico(state):
+    task, _, _ = state
+    svc.registrar_leitura(task, 'sku', task.sku, manual=True)
+    svc.registrar_leitura(task, 'local', 'B', manual=True)
+    assert Evento.query.filter_by(tipo='Leitura digitada').count() == 2
+
+
 def test_inactive_address(state):
     LocalizacaoArmazem.query.filter_by(codigo='A').first().ativo = False
     db.session.commit()
-    with pytest.raises(ValueError, match='inativo'):
+    with pytest.raises(ValueError, match='desativado'):
         payload(state[0])
 
 

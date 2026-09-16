@@ -1,4 +1,4 @@
-/* SKU e local são preenchidos apenas pelo callback do decodificador da câmera. */
+/* SKU e local entram pela câmera ou por digitação (registrada no histórico). */
 (() => {
  'use strict';
  const $ = id => document.getElementById(id);
@@ -106,12 +106,14 @@
    $('pa-history').showModal();
   } catch (err) { feedback(err.message); }
  }
+ function setAddressEnabled(on) { ['pa-address','pa-address-manual','pa-address-manual-btn'].forEach(id => $(id).disabled = !on); }
+ function resetSkuFlow() { skuToken = null; allocations = []; setAddressEnabled(false); $('pa-sku-result').textContent = ''; $('pa-reason-wrap').hidden = true; renderAllocations(); }
  function openWork(item) {
   selected = item; skuToken = null; allocations = []; $('pa-title').textContent = `NF ${item.nota} · ${item.sku || 'Sem SKU GRV'}`;
   $('pa-description').textContent = `${item.descricao} · ${item.quantidade} ${item.unidade || ''}`;
   $('pa-sku-result').textContent = ''; $('pa-reason').value = 'normal'; $('pa-justification').value = ''; $('pa-justification-label').hidden = true;
-  $('pa-reason-wrap').hidden = true;
-  $('pa-address').disabled = true; feedback('Bipe o SKU para consultar o endereço atual no GRV.', true); renderAllocations(); $('pa-work').showModal();
+  $('pa-reason-wrap').hidden = true; $('pa-sku-manual').value = ''; $('pa-address-manual').value = '';
+  setAddressEnabled(false); feedback('Bipe ou digite o SKU para consultar o endereço atual no GRV.', true); renderAllocations(); $('pa-work').showModal();
  }
  function renderAllocations() {
   $('pa-allocations').replaceChildren();
@@ -132,32 +134,44 @@
   if (scanner) { try { if (scanner.isScanning) await scanner.stop(); scanner.clear(); } catch (_) {} scanner = null; }
   if ($('pa-camera').open) $('pa-camera').close();
  }
+ async function processarLeitura(tipo, codigo, manual) {
+  busy = true; total();
+  try {
+   const data = await request(`${api}/${selected.id}/leitura`, {tipo, codigo, manual: !!manual});
+   if (tipo === 'sku') {
+    skuToken = data.token; allocations = []; setAddressEnabled(true);
+    $('pa-sku-result').textContent = `SKU validado: ${data.codigo}`;
+    $('pa-reason-wrap').hidden = !data.enderecos.length;
+    feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Informe o local. Se estiver lotado, marque a opção de endereço adicional.` : 'Material sem endereço no GRV. Informe a etiqueta do local onde vai guardar.', true);
+   } else {
+    const sum = allocations.reduce((n,a) => n + Number(a.quantidade || 0),0);
+    allocations.push({...data, quantidade:Math.max(0,selected.quantidade-sum), lote:''});
+   }
+   renderAllocations();
+  } catch (err) { feedback(err.message, true); } finally { busy = false; total(); }
+ }
  async function scan(tipo) {
   if (busy || scanner) return;
-  if (tipo === 'sku') { skuToken=null; allocations=[]; $('pa-address').disabled=true; $('pa-sku-result').textContent=''; $('pa-reason-wrap').hidden=true; renderAllocations(); }
-  if (!window.isSecureContext || !navigator.mediaDevices || typeof Html5Qrcode === 'undefined') { feedback('Câmera indisponível. Acesse por HTTPS, permita a câmera e atualize a página.', true); return; }
+  if (tipo === 'sku') resetSkuFlow();
+  if (!window.isSecureContext || !navigator.mediaDevices || typeof Html5Qrcode === 'undefined') { feedback('Câmera indisponível. Acesse por HTTPS, permita a câmera ou digite o código da etiqueta.', true); return; }
   $('pa-camera-title').textContent = tipo === 'sku' ? 'Bipe o SKU do material' : 'Bipe a etiqueta do endereço';
   $('pa-camera').showModal(); scanning = true;
   scanner = new Html5Qrcode('reader');
   try {
    await scanner.start({facingMode:'environment'}, {fps:10, disableFlip:false}, async codigo => {
     if (!scanning) return; scanning = false; await stopCamera();
-    busy = true; total();
-    try {
-     const data = await request(`${api}/${selected.id}/leitura`, {tipo,codigo});
-     if (tipo === 'sku') {
-      skuToken = data.token; allocations = []; $('pa-address').disabled = false;
-      $('pa-sku-result').textContent = `SKU validado: ${data.codigo}`;
-      $('pa-reason-wrap').hidden = !data.enderecos.length;
-      feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Bipe o local. Se estiver lotado, marque a opção de endereço adicional.` : 'Material sem endereço no GRV. Bipe a etiqueta do local onde vai guardar.', true);
-     } else {
-      const sum = allocations.reduce((n,a) => n + Number(a.quantidade || 0),0);
-      allocations.push({...data, quantidade:Math.max(0,selected.quantidade-sum), lote:''});
-     }
-     renderAllocations();
-    } catch (err) { feedback(err.message, true); } finally { busy = false; total(); }
+    await processarLeitura(tipo, codigo, false);
    });
-  } catch (err) { await stopCamera(); feedback('Não foi possível abrir a câmera. Confira a permissão de câmera no navegador e tente novamente.', true); }
+  } catch (err) { await stopCamera(); feedback('Não foi possível abrir a câmera. Confira a permissão no navegador ou digite o código da etiqueta.', true); }
+ }
+ async function entradaManual(tipo) {
+  if (busy || scanner) return;
+  const input = $(tipo === 'sku' ? 'pa-sku-manual' : 'pa-address-manual');
+  const codigo = input.value.trim();
+  if (!codigo) { feedback('Digite o código exatamente como está na etiqueta.', true); return; }
+  if (tipo === 'sku') resetSkuFlow();
+  await processarLeitura(tipo, codigo, true);
+  input.value = '';
  }
  $('pa-submit').onclick = async () => {
   if (busy) return; busy = true; total(); $('pa-close').disabled = true;
@@ -168,6 +182,9 @@
   } catch (err) { feedback(err.message, true); } finally { busy = false; $('pa-close').disabled = false; total(); }
  };
  $('pa-sku').onclick = () => scan('sku'); $('pa-address').onclick = () => scan('local');
+ $('pa-sku-manual-btn').onclick = () => entradaManual('sku'); $('pa-address-manual-btn').onclick = () => entradaManual('local');
+ $('pa-sku-manual').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); entradaManual('sku'); } };
+ $('pa-address-manual').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); entradaManual('local'); } };
  $('pa-camera-close').onclick = stopCamera; $('pa-camera').addEventListener('cancel', e => {e.preventDefault(); stopCamera();});
  $('pa-work').addEventListener('cancel', e => { if (busy) e.preventDefault(); });
  $('pa-close').onclick = () => { if (!busy) $('pa-work').close(); };
@@ -176,11 +193,6 @@
  $('pa-refresh').onclick = refresh; $('pa-search').onchange = () => {page=1; refresh();};
  $('pa-prev').onclick = () => {page--; refresh();}; $('pa-next').onclick = () => {page++; refresh();};
  document.querySelectorAll('#pa-tabs button').forEach(b => b.onclick = () => {status=b.dataset.status; page=1; refresh();});
- if ($('pa-locals')) {
-  const showLocals = data => { $('pa-local-list').replaceChildren(); data.locais.forEach(l => $('pa-local-list').append(el('p', `${l.codigo} · ${l.ativo ? 'Ativo':'Inativo'}`))); };
-  $('pa-locals').onsubmit = async e => { e.preventDefault(); try { showLocals(await request(`${api}/locais`, {codigo:$('pa-local-code').value, ativo:$('pa-local-active').checked})); feedback('Cadastro de endereço salvo.'); } catch(err) {feedback(err.message);} };
-  $('pa-show-locals').onclick = async () => {try {showLocals(await request(`${api}/locais`));} catch(err) {feedback(err.message);}};
- }
  document.addEventListener('visibilitychange', () => {if (document.hidden) stopCamera();});
  window.addEventListener('pagehide', stopCamera);
  document.addEventListener('recebimento:abrir-enderecamento', refresh);

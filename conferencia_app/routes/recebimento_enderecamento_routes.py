@@ -67,7 +67,8 @@ def operar(tarefa_id, acao):
         return jsonify(erro="Dados inválidos."), 400
     try:
         if acao == "leitura":
-            return jsonify(svc.registrar_leitura(tarefa, dados.get("tipo"), dados.get("codigo")))
+            return jsonify(svc.registrar_leitura(tarefa, dados.get("tipo"), dados.get("codigo"),
+                                                 manual=bool(dados.get("manual"))))
         if acao == "confirmar":
             svc.confirmar(tarefa, dados, has_permission(MANAGE))
             svc.sincronizar(tarefa)

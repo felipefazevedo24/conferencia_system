@@ -55,7 +55,7 @@ def assinador():
     return URLSafeTimedSerializer(current_app.secret_key, salt="recebimento-camera-v1")
 
 
-def registrar_leitura(tarefa, tipo, codigo):
+def registrar_leitura(tarefa, tipo, codigo, manual=False):
     if tarefa.status != "Pendente":
         raise ValueError("Este item já foi confirmado. Atualize a lista.")
     codigo = str(codigo or "").strip()
@@ -74,12 +74,24 @@ def registrar_leitura(tarefa, tipo, codigo):
         atuais = enderecos(buscar_localizacao_produto_grv(tarefa.sku))
     elif tipo == "local":
         if not codigo or ";" in codigo or len(codigo) > 80:
-            raise ValueError("Bipe a etiqueta de um único endereço.")
-        if not LocalizacaoArmazem.query.filter_by(codigo=codigo, ativo=True).first():
-            raise ValueError("Endereço não cadastrado ou inativo. Solicite a regularização ao responsável.")
+            raise ValueError("Bipe ou digite a etiqueta de um único endereço.")
+        local = LocalizacaoArmazem.query.filter_by(codigo=codigo).first()
+        if local and not local.ativo:
+            raise ValueError("Endereço desativado. Solicite a regularização ao responsável.")
+        if not local:
+            # Sem cadastro prévio: a etiqueta física é a fonte da verdade.
+            try:
+                db.session.add(LocalizacaoArmazem(codigo=codigo, corredor="", prateleira="", posicao=""))
+                evento(tarefa, "Endereço registrado pela etiqueta", {"endereco": codigo})
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
         atuais = None
     else:
         raise ValueError("Tipo de leitura inválido.")
+    if manual:
+        evento(tarefa, "Leitura digitada", {"tipo": tipo, "codigo": codigo})
+        db.session.commit()
     dados = {"tarefa": tarefa.id, "usuario": session["username"], "tipo": tipo,
              "codigo": codigo, "atuais": atuais, "versao": tarefa.versao_leitura}
     return {"token": assinador().dumps(dados), "codigo": codigo, "enderecos": atuais}
