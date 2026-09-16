@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template
 from sqlalchemy import desc, func
+from sqlalchemy.exc import DBAPIError
 
 from ..extensions import db
 from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemST, ItemNota, PlannerBoard
@@ -667,32 +668,34 @@ def painel_tv_comex_page():
 
 @painel_tv_bp.route("/api/painel/indicadores")
 def painel_tv_indicadores():
-    try:
-        dados = _coletar_indicadores()
-    except Exception:
-        db.session.rollback()
-        raise
-    return jsonify(dados)
+    return _responder_consulta(_coletar_indicadores)
+
+
+def _responder_consulta(coletar):
+    # Somente consultas: nunca repetir automaticamente confirmações/gravações.
+    for tentativa in range(2):
+        try:
+            return jsonify(coletar())
+        except DBAPIError as erro:
+            db.session.invalidate()
+            if not erro.connection_invalidated:
+                raise
+            if tentativa:
+                current_app.logger.exception("Conexão indisponível ao consultar painel")
+                return jsonify(erro="Painel temporariamente indisponível. Tentaremos atualizar novamente."), 503
+        except Exception:
+            db.session.invalidate()
+            raise
 
 
 @painel_tv_bp.route("/api/painel/planejamento")
 def painel_tv_planejamento():
-    try:
-        dados = _coletar_planejamento()
-    except Exception:
-        db.session.rollback()
-        raise
-    return jsonify(dados)
+    return _responder_consulta(_coletar_planejamento)
 
 
 @painel_tv_bp.route("/api/painel/comex")
 def painel_tv_comex():
-    try:
-        dados = _coletar_comex()
-    except Exception:
-        db.session.rollback()
-        raise
-    return jsonify(dados)
+    return _responder_consulta(_coletar_comex)
 
 
 @painel_tv_bp.route("/api/painel/comex/<int:processo_id>/itens")

@@ -175,6 +175,12 @@ class Config:
     EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS", "240"))
     EXPEDICAO_SYNC_ST_ENABLED = os.environ.get("EXPEDICAO_SYNC_ST_ENABLED", "1") not in ("0", "false", "False", "")
 
+    # Retry automatico da sincronizacao de enderecamentos (recebimento) com o
+    # GRV: tarefas "Aguardando sincronizacao" que falharam sao re-tentadas em
+    # background em vez de esperar clique manual.
+    ENDERECAMENTO_RETRY_AUTO_ENABLED = os.environ.get("ENDERECAMENTO_RETRY_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    ENDERECAMENTO_RETRY_POLL_INTERVAL_SECONDS = int(os.environ.get("ENDERECAMENTO_RETRY_POLL_INTERVAL_SECONDS", "600"))
+
     # Automacao de Solicitacoes Logisticas por modalidade de frete CIF.
     #   Regra 1 (Coleta): Pedido de Compra (OC) com frete CIF -> gera Solicitacao
     #     de Coleta com data programada = N dias antes da previsao de entrega.

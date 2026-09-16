@@ -37,9 +37,12 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
 
     with app.app_context():
         db.create_all()
-        item = ItemNota(numero_nota='321',codigo_grv='SKU-1',descricao='Peça recebida',status='Concluído',qtd_real=10)
+        item = ItemNota(numero_nota='321',chave_acesso='1'*44,codigo_grv='SKU-1',descricao='Peça recebida',status='Concluído',qtd_real=10)
         db.session.add(item); db.session.flush()
         db.session.add(RecebimentoEnderecamento(item_nota_id=item.id,sku='SKU-1',quantidade=10,criado_por='tester'))
+        segundo = ItemNota(numero_nota='321',chave_acesso='1'*44,codigo_grv='SKU-1',descricao='Segundo material',status='Concluído',qtd_real=10)
+        db.session.add(segundo); db.session.flush()
+        db.session.add(RecebimentoEnderecamento(item_nota_id=segundo.id,sku='SKU-1',quantidade=10,criado_por='tester'))
         for local in ('A','B'):
             db.session.add(LocalizacaoArmazem(codigo=local,corredor='',prateleira='',posicao=''))
         db.session.commit()
@@ -54,17 +57,57 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
                 pytest.skip('Instale o Chromium do Playwright para executar o teste mobile.')
             browser = playwright.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
+            erros_js, popups = [], []
+            page.on('pageerror', lambda error: erros_js.append(str(error)))
+            page.on('dialog', lambda dialog: (popups.append(dialog.type), dialog.dismiss()))
             page.goto(f'http://127.0.0.1:{server.server_port}/conferencia')
             expect(page.locator('#receb-enderecamento-painel')).to_be_hidden()
             cards = page.locator('#dashboard-resumo [data-filter]').evaluate_all('(els) => els.map(e => e.dataset.filter)')
             assert cards.index('enderecamento') == cards.index('conferido') + 1
             assert page.locator('a[href="/recebimento/enderecamento"]').count() == 0
-            page.locator('[data-filter="enderecamento"]').click()
+            page.evaluate("""() => {
+                document.getElementById('lista-view').classList.add('hidden');
+                document.getElementById('conf-view').classList.remove('hidden');
+                renderItensConferencia([{id:99,codigo:'CH-99',descricao:'Chapa teste',unidade:'KG',qtd_real:314}]);
+            }""")
+            page.locator('#chapa-btn-99').click()
+            page.locator('#chapa-modal-switch').check()
+            page.locator('#chapa-modal-input').fill('2')
+            page.locator('[data-chapa-medida="espessura"]').fill('10')
+            page.locator('[data-chapa-medida="largura"]').fill('1000')
+            page.locator('[data-chapa-medida="comprimento"]').fill('2000')
+            expect(page.locator('#chapa-modal-preview')).to_contain_text('157 kg/peça')
+            page.locator('#btn-salvar-chapa').click()
+            chapa_payload = page.evaluate('() => coletarChapas()["99"]')
+            assert chapa_payload == {'quantidade':'2','material':'aco_carbono','formato':'chapa','dimensoes':{'espessura':10,'largura':1000,'comprimento':2000}}
+            page.evaluate("""() => { document.getElementById('conf-view').classList.add('hidden'); document.getElementById('lista-view').classList.remove('hidden'); }""")
+            await_url = page.url
+            page.evaluate('() => { void oferecerEnderecamento([1, 2]); }')
+            expect(page.locator('#receb-dialog-title')).to_have_text('Recebimento concluído')
+            page.get_by_role('button', name='Deixar para depois', exact=True).click()
+            expect(page.locator('#receb-dialog')).not_to_be_visible()
+            expect(page.locator('#receb-enderecamento-painel')).to_be_hidden()
+            page.route('**/validar', lambda route: route.fulfill(json={'enderecamento_ids': [1, 2]}))
+            page.evaluate("""() => {
+                document.getElementById('conf-view').classList.remove('hidden');
+                document.getElementById('lista-view').classList.add('hidden');
+            }""")
+            page.evaluate('() => { void efetivarGravacaoFinal(); }')
+            expect(page.locator('#receb-dialog')).to_be_visible()
+            dialog_box = page.locator('#receb-dialog').bounding_box()
+            assert dialog_box and abs((dialog_box['y'] + dialog_box['height'] / 2) - 422) < 3
+            assert dialog_box['y'] >= 12 and dialog_box['y'] + dialog_box['height'] <= 832
+            page.get_by_role('button', name='Endereçar agora', exact=True).click()
+            assert page.url == await_url
+            expect(page.locator('#conf-view')).to_be_hidden()
+            expect(page.locator('#lista-view')).to_be_visible()
             expect(page.locator('#receb-notas-painel')).to_be_hidden()
-            expect(page.get_by_role('button',name='Endereçar material',exact=True)).to_be_visible()
+            expect(page.get_by_role('button',name='Endereçar material',exact=True).first).to_be_visible()
+            assert page.locator('.pa-table thead').evaluate('(e) => getComputedStyle(e).display') == 'none'
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             assert page.evaluate('typeof Html5Qrcode') == 'function'
-            page.screenshot(path=str(tmp_path/'enderecamento-mobile.png'),full_page=True)
-            page.get_by_role('button',name='Endereçar material',exact=True).click()
+            page.locator('#putaway').screenshot(path=str(tmp_path/'enderecamento-mobile.png'))
+            page.get_by_role('button',name='Endereçar material',exact=True).first.click()
             expect(page.locator('#pa-submit')).to_be_disabled()
             assert page.locator('#pa-work input[name="sku"], #pa-work input[name="endereco"]').count() == 0
             page.evaluate('''() => {
@@ -86,9 +129,32 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
             page.locator('#pa-address').click()
             expect(page.locator('#pa-submit')).to_be_enabled()
             page.locator('#pa-submit').click()
+            expect(page.locator('#pa-work-feedback')).to_contain_text('Próximo item carregado')
+            expect(page.locator('#pa-sku-manual')).to_be_focused()
+            expect(page.locator('#pa-submit')).to_be_disabled()
+            page.locator('#pa-sku-manual').fill('ERRADO')
+            page.locator('#pa-sku-manual').press('Enter')
+            expect(page.locator('#pa-work-feedback')).to_contain_text('não corresponde')
+            expect(page.locator('#pa-sku-manual')).to_have_value('')
+            expect(page.locator('#pa-sku-manual')).to_be_focused()
+            page.locator('#pa-sku-manual').fill('SKU-1')
+            page.locator('#pa-sku-manual').press('Enter')
+            expect(page.locator('#pa-address-manual')).to_be_focused()
+            page.locator('#pa-address-manual').fill('A')
+            page.locator('#pa-address-manual').press('Enter')
+            expect(page.locator('#pa-submit')).to_be_enabled()
+            expect(page.locator('#pa-address-manual')).to_have_value('')
+            expect(page.locator('#pa-address-manual')).to_be_focused()
+            expect(page.locator('.pa-progress')).to_have_attribute('aria-valuenow', '10')
+            page.evaluate("document.documentElement.dataset.theme='escuro'")
+            assert page.locator('#pa-sku-manual').evaluate('(e) => getComputedStyle(e).backgroundColor') != 'rgb(255, 255, 255)'
+            page.screenshot(path=str(tmp_path/'enderecamento-wizard-dark.png'),full_page=True)
+            page.locator('#pa-submit').click()
             expect(page.locator('#pa-feedback')).to_contain_text('sincronizado com o GRV')
-            update.assert_called_once_with('SKU-1','A;B')
-            page.get_by_role('button',name='Mais ações').click()
+            assert update.call_count == 2
+            assert update.call_args_list[0].args == ('SKU-1', 'A;B')
+            expect(page.locator('#pa-work')).not_to_be_visible()
+            page.get_by_role('button',name='Mais ações').first.click()
             page.get_by_role('button',name='Ver histórico e origem').click()
             expect(page.locator('#pa-history-body')).to_contain_text('A;B')
             page.locator('#pa-history-close').click()
@@ -97,6 +163,8 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
             expect(page.locator('#receb-notas-painel')).to_be_visible()
             page.goto(f'http://127.0.0.1:{server.server_port}/conferencia?etapa=enderecamento&ids=1')
             expect(page.locator('#receb-enderecamento-painel')).to_be_visible()
+            assert popups == []
+            assert erros_js == []
             browser.close()
     finally:
         server.shutdown(); thread.join(timeout=5)

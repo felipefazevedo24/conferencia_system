@@ -16,6 +16,8 @@ from conferencia_app.bootstrap import initialize_database
 from conferencia_app.auth import check_active_session
 from conferencia_app.extensions import db
 from conferencia_app.models import (
+    ChapaCalculo,
+    ChapaCalculoLog,
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesEstorno,
     ExpedicaoConferenciaSimplesFoto,
@@ -2520,6 +2522,45 @@ def test_validar_aceita_tolerancia_de_2_porcento_para_kg(tmp_path):
     assert data["sucesso"] is True
     assert data["resumo"]["ok"] == 1
     assert data["resumo"]["divergencias"] == 0
+
+
+def test_validar_chapa_grava_medidas_direto_no_controle(tmp_path):
+    import json
+    import pytest
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        item = ItemNota(numero_nota="322C", fornecedor="Aços", codigo="CH-1",
+                        descricao="Chapa aço", qtd_real=314, unidade_comercial="KG", status="Pendente")
+        db.session.add(item); db.session.commit(); item_id = item.id
+    chapa = {"quantidade": "2", "material": "aco_carbono", "formato": "chapa",
+             "dimensoes": {"espessura": 10, "largura": 1000, "comprimento": 2000}}
+    corpo = {"nota": "322C", "contagens": {str(item_id): "310"}, "chapas_itens": {str(item_id): chapa}}
+    assert client.post("/validar", json=corpo).status_code == 200
+    assert client.post("/validar", json=corpo).status_code == 200
+    with app.app_context():
+        item = db.session.get(ItemNota, item_id)
+        calc = ChapaCalculo.query.filter_by(item_nota_id=item_id).one()
+        assert item.qtd_chapas_und == 2
+        assert calc.material == "aco_carbono" and calc.formato == "chapa"
+        assert json.loads(calc.dimensoes) == {"espessura": 10.0, "largura": 1000.0, "comprimento": 2000.0}
+        assert calc.peso_por_peca == pytest.approx(157.0)
+        assert ChapaCalculoLog.query.filter_by(chapa_calculo_id=calc.id).count() == 1
+
+
+def test_validar_chapa_rejeita_medidas_incompletas(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client(); login_admin(client)
+    with app.app_context():
+        item = ItemNota(numero_nota="322D", codigo="CH-2", descricao="Chapa",
+                        qtd_real=100, unidade_comercial="KG", status="Pendente")
+        db.session.add(item); db.session.commit(); item_id = item.id
+    response = client.post("/validar", json={"nota":"322D", "contagens":{str(item_id):"100"},
+        "chapas_itens":{str(item_id):{"quantidade":1,"material":"aco_carbono","formato":"chapa",
+        "dimensoes":{"espessura":10,"largura":1000}}}})
+    assert response.status_code == 400
+    assert "comprimento" in response.get_json()["msg"]
 
 
 def test_validar_aceita_tolerancia_de_2_porcento_para_mm(tmp_path):

@@ -1,0 +1,54 @@
+<style>
+ .receb-dialog{position:fixed;inset:0;margin:auto;width:calc(100% - 32px);max-width:480px;max-height:min(720px,calc(100dvh - 32px));overflow:auto;padding:0;border:1px solid var(--eui-border);border-radius:16px;background:var(--eui-surface);color:var(--eui-text);box-shadow:var(--eui-shadow-md)}
+ .receb-dialog::backdrop{background:rgba(8,20,36,.65);backdrop-filter:blur(3px)}
+ .receb-dialog-body{padding:24px}.receb-dialog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--eui-primary-soft);color:var(--eui-primary);font-size:22px;margin-bottom:16px}
+ .receb-dialog h3{margin:0 0 10px;font-size:20px;color:var(--eui-text)}
+ .receb-dialog p{white-space:pre-line;line-height:1.6;color:var(--eui-text-soft);margin:0}
+ .receb-dialog label{display:block;margin-top:16px;font-weight:600}.receb-dialog textarea{display:block;box-sizing:border-box;width:100%;margin-top:8px;padding:12px;border:1px solid var(--eui-border-strong);border-radius:8px;background:var(--eui-surface-2);color:var(--eui-text);font:inherit;resize:vertical}
+ .receb-dialog-foot{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--eui-border);background:var(--eui-surface-2)}
+ .receb-dialog-foot button{min-height:44px}.receb-dialog [hidden]{display:none!important}
+ [data-theme="escuro"] .receb-dialog{color-scheme:dark}
+ @media(max-width:500px){.receb-dialog{width:calc(100% - 24px);max-height:calc(100dvh - 24px)}.receb-dialog-body{padding:20px}.receb-dialog-foot{position:sticky;bottom:0;flex-direction:column-reverse;padding:14px 20px calc(14px + env(safe-area-inset-bottom))}.receb-dialog-foot button{width:100%}.receb-dialog textarea{font-size:16px}}
+</style>
+<dialog id="receb-dialog" class="receb-dialog" aria-labelledby="receb-dialog-title" aria-describedby="receb-dialog-message">
+ <form id="receb-dialog-form">
+  <div class="receb-dialog-body">
+   <div class="receb-dialog-icon"><i class="fas fa-box-open" aria-hidden="true"></i></div>
+   <h3 id="receb-dialog-title"></h3><p id="receb-dialog-message"></p>
+   <label id="receb-dialog-field" hidden>Justificativa<textarea id="receb-dialog-input" rows="3" minlength="5" maxlength="500" placeholder="Explique o motivo"></textarea></label>
+  </div>
+  <div class="receb-dialog-foot"><button type="button" id="receb-dialog-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="receb-dialog-ok" class="eui-btn eui-btn--primary">Entendi</button></div>
+ </form>
+</dialog>
+<script>
+ // Fila evita sobrescrever um aviso ainda aberto. Texto recebido nunca vira HTML.
+ let filaDialogReceb = Promise.resolve();
+ function dialogRecebimento({titulo='Conferência de recebimento', mensagem, confirmar='Entendi', cancelar=null, justificativa=false}) {
+  const abrir = () => new Promise(resolve => {
+   const dialog = document.getElementById('receb-dialog');
+   const input = document.getElementById('receb-dialog-input');
+   const cancel = document.getElementById('receb-dialog-cancel');
+   document.getElementById('receb-dialog-title').textContent = titulo;
+   document.getElementById('receb-dialog-message').textContent = mensagem;
+   document.getElementById('receb-dialog-ok').textContent = confirmar;
+   document.getElementById('receb-dialog-field').hidden = !justificativa;
+   input.value = ''; input.required = justificativa; input.disabled = !justificativa;
+   cancel.hidden = !cancelar; cancel.textContent = cancelar || 'Cancelar';
+   let resultado = null;
+   dialog.onclose = () => resolve(resultado);
+   cancel.onclick = () => dialog.close();
+   document.getElementById('receb-dialog-form').onsubmit = e => {
+    e.preventDefault();
+    if (justificativa && input.value.trim().length < 5) { input.setCustomValidity('Informe pelo menos 5 caracteres.'); input.reportValidity(); return; }
+    resultado = justificativa ? input.value.trim() : true; dialog.close();
+   };
+   input.setCustomValidity(''); input.oninput = () => input.setCustomValidity('');
+   dialog.showModal();
+   (justificativa ? input : document.getElementById('receb-dialog-ok')).focus();
+  });
+  const resultado = filaDialogReceb.then(abrir);
+  filaDialogReceb = resultado.catch(() => {});
+  return resultado;
+ }
+ function avisarRecebimento(mensagem) { return dialogRecebimento({mensagem}); }
+</script>

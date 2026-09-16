@@ -4,7 +4,13 @@ Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparec
 
 ## Operação
 
-- A confirmação do recebimento oferece endereçar agora ou deixar na fila. Ao aceitar, abre a etapa dentro de `/conferencia?etapa=enderecamento`, filtrada pelos itens recém-conferidos.
+- No celular, a fila aparece em cards. Os indicadores mostram pendentes, aguardando sincronização e concluídos hoje (ao clicar no último, abre o histórico completo de concluídos).
+- Coletores Bluetooth que emulam teclado usam os campos de SKU/local com Enter. Após cada leitura o campo é limpo e o foco segue para o endereço, ou permanece no campo que falhou. Acertos e erros emitem sinais sonoros e vibração quando suportados pelo navegador/aparelho.
+- O modal mostra três etapas e uma barra da quantidade distribuída. Ao confirmar, abre o próximo pendente da mesma NF, inclusive fora da página/filtro atual. A identificação usa a chave da NF; quando ausente, número e fornecedor. Sem identificação suficiente, retorna à lista.
+- O retry do GRV roda no servidor, mesmo sem a tela aberta: inicia após 90 segundos e repete a cada 10 minutos por padrão. Configure `ENDERECAMENTO_RETRY_AUTO_ENABLED` e `ENDERECAMENTO_RETRY_POLL_INTERVAL_SECONDS` (mínimo de 120 segundos). Envios interrompidos são retomados após expirar a trava de 10 minutos. Regras de negócio continuam bloqueando destinos inválidos; o erro e a tentativa manual ficam visíveis juntos. A tela atualiza a fila a cada 30 segundos enquanto não há uma operação aberta.
+
+- A confirmação do recebimento oferece **Endereçar agora** ou **Deixar para depois** em um modal do sistema. Ao aceitar, abre a etapa na própria página, sem recarregar, filtrada pelos itens recém-conferidos. O link `/conferencia?etapa=enderecamento` continua disponível. Avisos e justificativas do recebimento também usam modais internos.
+- Ao marcar um item recebido em peso como chapa, o conferente informa quantidade em UND, material, formato e medidas em milímetros. A tela apresenta o peso calculado por peça e total; o servidor recalcula e valida antes de gravar. Os dados alimentam diretamente o mesmo registro exibido no **Controle de Chapas**, onde ainda podem ser revisados com histórico.
 - Filtros por NF, SKU, descrição e fornecedor; filas Pendente, Aguardando sincronização e Concluído.
 - Câmera do celular lê SKU e local; também é possível digitar o código exatamente como está na etiqueta (a digitação fica registrada no histórico da tarefa). Quantidade e lote são digitados.
 - SKU deve ser o `codigo_grv` vinculado ao item; um vínculo ausente precisa ser corrigido no recebimento. O próximo scan atualiza o vínculo da tarefa pendente.
