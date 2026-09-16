@@ -132,11 +132,79 @@ def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[Lo
     return query.order_by(LogisticaInventarioAjuste.criado_em.desc()).all()
 
 
+# ── Recontagem no dia da validacao ──────────────────────────────────────
+# O gestor valida dias depois da contagem e o item continua se movimentando
+# nesse meio tempo. Recontar prova que a apuracao original estava certa: se
+# o saldo sistemico e o fisico andaram JUNTOS, a diferenca se mantem.
+#   01/07 -> sistemico 10, fisico 7, diferenca 3
+#   04/07 -> sistemico  8, fisico 5, diferenca 3  -> inventario confirmado
+# Tolerancia pequena so' pra absorver arredondamento de fracionado (ex.: KG).
+TOLERANCIA_DIFERENCA = 0.001
+
+
+def saldo_sistemico_atual(ajuste: LogisticaInventarioAjuste) -> float | None:
+    """Saldo do item no GRV AGORA, pra pre-preencher a recontagem. Nunca
+    estoura: se o ERP estiver fora do ar devolve None e o gestor digita."""
+    try:
+        from . import erp_estoque_service
+
+        estoque = erp_estoque_service.buscar_estoque_grv()
+        return erp_estoque_service.qtde_grv_para(
+            ajuste.codigo_produto, ajuste.local_codigo, estoque
+        )
+    except Exception:
+        return None
+
+
+def registrar_recontagem(
+    ajuste: LogisticaInventarioAjuste,
+    qtde_recontada,
+    usuario: str,
+    qtde_estoque_atual=None,
+) -> LogisticaInventarioAjuste:
+    """Registra a contagem física do dia da validação + o saldo sistêmico
+    do momento, e compara a diferença com a apurada originalmente.
+
+    `qtde_estoque_atual` vem do GRV quando disponível; se vier None, tenta
+    buscar sozinho - e o gestor pode sobrescrever informando o valor."""
+    if ajuste.status_modulo != "Validacao":
+        raise ValueError("Só dá pra recontar enquanto o item está aguardando validação do gestor.")
+
+    try:
+        recontada = float(qtde_recontada)
+    except (TypeError, ValueError):
+        raise ValueError("Informe a quantidade física recontada.")
+
+    if qtde_estoque_atual in (None, ""):
+        qtde_estoque_atual = saldo_sistemico_atual(ajuste)
+    if qtde_estoque_atual in (None, ""):
+        raise ValueError(
+            "Não foi possível obter o saldo sistêmico atual do ERP - informe o valor manualmente."
+        )
+    try:
+        estoque = float(qtde_estoque_atual)
+    except (TypeError, ValueError):
+        raise ValueError("Saldo sistêmico atual inválido.")
+
+    ajuste.recontagem_qtde = recontada
+    ajuste.recontagem_estoque = estoque
+    ajuste.recontagem_diferenca = recontada - estoque
+    ajuste.recontagem_em = datetime.now()
+    ajuste.recontagem_por = usuario
+    # A diferenca se manteve? E' isso que valida a contagem original.
+    ajuste.recontagem_divergente = (
+        abs((ajuste.recontagem_diferenca or 0) - (ajuste.diferenca or 0)) > TOLERANCIA_DIFERENCA
+    )
+    db.session.commit()
+    return ajuste
+
+
 def confirmar_divergencia(
     ajuste: LogisticaInventarioAjuste,
     usuario: str,
     justificativa: str | None = None,
     solicitar_analise_causa: bool = False,
+    recontagem_justificativa: str | None = None,
 ) -> LogisticaInventarioAjuste:
     """Modulo 02 -> Modulo 03. Gestor confirma que a diferenca e' real -
     NAO manda direto pro Finance: entra na fila de "Relatorio", aguardando
@@ -151,6 +219,30 @@ def confirmar_divergencia(
     tela, no ritmo deles, sem competir com Relatorio/Finance/Fiscal."""
     if ajuste.status_modulo != "Validacao":
         raise ValueError("Este ajuste não está aguardando validação do gestor.")
+
+    # Sem recontar, nao da' pra afirmar que a diferenca se manteve - e e'
+    # isso que valida a contagem original (ver registrar_recontagem).
+    if not ajuste.recontagem_em:
+        raise ValueError(
+            "Faça a recontagem física antes de confirmar a divergência - "
+            "é ela que comprova que a diferença apurada se manteve."
+        )
+
+    # Diferenca mudou: a contagem original pode ter errado, ou aconteceu
+    # outra coisa no meio do caminho. Nao passa no automatico - o gestor
+    # tem que assumir a nova diferenca por escrito (ou descartar o item
+    # pra recontagem, ver descartar_divergencia).
+    if ajuste.recontagem_divergente:
+        texto = (recontagem_justificativa or "").strip()
+        if not texto:
+            raise ValueError(
+                "A diferença da recontagem "
+                f"({ajuste.recontagem_diferenca:g}) não bate com a apurada "
+                f"({ajuste.diferenca:g}). Justifique para adotar a diferença nova "
+                "ou descarte o item para recontagem."
+            )
+        ajuste.recontagem_justificativa = texto[:500]
+
     ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
     ajuste.gestor_confirmado_em = datetime.now()
     ajuste.gestor_confirmado_por = usuario

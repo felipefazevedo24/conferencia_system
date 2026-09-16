@@ -684,6 +684,18 @@ def _fmt_ajuste(a) -> dict:
         "diferenca": a.diferenca,
         "custo_medio": a.custo_medio,
         "diferenca_valor": diferenca_valor,
+        # Recontagem no dia da validacao (ver ajuste_svc.registrar_recontagem).
+        "recontagem_qtde": a.recontagem_qtde,
+        "recontagem_estoque": a.recontagem_estoque,
+        "recontagem_diferenca": a.recontagem_diferenca,
+        "recontagem_em": a.recontagem_em.strftime("%d/%m/%Y %H:%M") if a.recontagem_em else None,
+        "recontagem_por": a.recontagem_por,
+        "recontagem_divergente": bool(a.recontagem_divergente),
+        "recontagem_justificativa": a.recontagem_justificativa,
+        # O mais atual que se sabe do item - e' o que vai pro relatorio.
+        "qtde_contada_vigente": a.qtde_contada_vigente,
+        "qtde_estoque_vigente": a.qtde_estoque_vigente,
+        "diferenca_vigente": a.diferenca_vigente,
         "status_modulo": a.status_modulo,
         "status_slug": a.status_slug,
         "criado_em": a.criado_em.strftime("%d/%m/%Y %H:%M") if a.criado_em else None,
@@ -863,12 +875,59 @@ def api_confirmar_ajuste(ajuste_id):
             session.get("username", "desconhecido"),
             payload.get("justificativa"),
             solicitar_analise_causa=bool(payload.get("solicitar_analise_causa")),
+            recontagem_justificativa=payload.get("recontagem_justificativa"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     mensagem = "Divergência confirmada - aguardando entrar no relatório (FORM-08.52) pro Finance."
     if payload.get("solicitar_analise_causa"):
         mensagem += " Análise de causa raiz solicitada."
+    return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/saldo-atual", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO)
+def api_saldo_atual_ajuste(ajuste_id):
+    """Saldo do item no GRV agora - pre-preenche a recontagem. Devolve
+    null (sem erro) quando o ERP nao responde: o gestor digita na mao."""
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    return jsonify({"saldo_sistemico_atual": ajuste_svc.saldo_sistemico_atual(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/recontagem", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO)
+def api_registrar_recontagem(ajuste_id):
+    """Recontagem fisica no dia da validacao + saldo sistemico do momento.
+    Compara a diferenca com a apurada originalmente: se bater, comprova que
+    a contagem original estava certa."""
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = ajuste_svc.registrar_recontagem(
+            ajuste,
+            payload.get("qtde_recontada"),
+            session.get("username", "desconhecido"),
+            qtde_estoque_atual=payload.get("qtde_estoque_atual"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if ajuste.recontagem_divergente:
+        mensagem = (
+            f"Recontagem registrada, mas a diferença mudou: apurada {ajuste.diferenca:g}, "
+            f"recontada {ajuste.recontagem_diferenca:g}. Justifique para adotar a nova ou descarte o item."
+        )
+    else:
+        mensagem = (
+            f"Recontagem confere - a diferença de {ajuste.diferenca:g} se manteve. "
+            "Pode confirmar a divergência."
+        )
     return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
 
 

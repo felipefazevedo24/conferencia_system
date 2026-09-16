@@ -1687,6 +1687,40 @@ class LogisticaInventarioAjuste(db.Model):
 
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
+    # ── Recontagem no dia da validacao ──────────────────────────────────
+    # A validacao acontece dias depois da contagem, e nesse meio tempo o
+    # item continua se movimentando. Recontar confirma que a apuracao
+    # original estava certa: se o saldo sistemico e o fisico andaram JUNTOS,
+    # a diferenca se mantem e o inventario do dia 01 estava correto.
+    #   ex.: 01/07 -> sistemico 10, fisico 7, diferenca 3
+    #        04/07 -> sistemico  8, fisico 5, diferenca 3  (confere)
+    # Os campos do snapshot acima continuam intactos (historico do que
+    # gerou o alerta); estes guardam o dia da validacao.
+    recontagem_qtde = db.Column(db.Float)
+    recontagem_estoque = db.Column(db.Float)
+    recontagem_diferenca = db.Column(db.Float)
+    recontagem_em = db.Column(db.DateTime)
+    recontagem_por = db.Column(db.String(100))
+    # True quando a diferenca NAO se manteve - nesse caso a confirmacao
+    # exige justificativa explicita (ver confirmar_divergencia).
+    recontagem_divergente = db.Column(db.Boolean, nullable=False, default=False)
+    recontagem_justificativa = db.Column(db.String(500))
+
+    # Valores "vigentes": o mais atual que se sabe do item. Quando houve
+    # recontagem, e' ela que vale (relatorio/Finance usam o estoque mais
+    # recente); sem recontagem, cai no snapshot original.
+    @property
+    def qtde_estoque_vigente(self) -> float:
+        return self.recontagem_estoque if self.recontagem_em else self.qtde_estoque_no_momento
+
+    @property
+    def qtde_contada_vigente(self) -> float:
+        return self.recontagem_qtde if self.recontagem_em else self.qtde_contada
+
+    @property
+    def diferenca_vigente(self) -> float:
+        return self.recontagem_diferenca if self.recontagem_em else self.diferenca
+
     gestor_justificativa = db.Column(db.String(500))
     gestor_confirmado_em = db.Column(db.DateTime)
     gestor_confirmado_por = db.Column(db.String(100))

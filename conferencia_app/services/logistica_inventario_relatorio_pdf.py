@@ -262,7 +262,10 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     valor_total_geral = 0.0
     largura_max_imagem = largura * 0.35
     for idx, a in enumerate(ajustes, start=1):
-        valor_total_item = (a.diferenca or 0) * a.custo_medio if a.custo_medio is not None else None
+        # Usa os valores VIGENTES: quando houve recontagem na validacao, e'
+        # ela que vale - o relatorio sai com o estoque mais atual, nao com o
+        # do dia da contagem (que pode ter dias de diferenca).
+        valor_total_item = (a.diferenca_vigente or 0) * a.custo_medio if a.custo_medio is not None else None
         if valor_total_item is not None:
             valor_total_geral += valor_total_item
         linha_inicio = len(linhas)
@@ -271,9 +274,9 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
             _p(a.codigo_produto, size=8),
             _p(a.local_codigo, size=8),
             _p(a.unidade_medida, size=8, align=TA_CENTER),
-            _p(_fmt_qtd(a.qtde_estoque_no_momento), size=8, align=TA_RIGHT),
-            _p(_fmt_qtd(a.qtde_contada), size=8, align=TA_RIGHT),
-            _p(_fmt_qtd(a.diferenca), size=8, align=TA_RIGHT),
+            _p(_fmt_qtd(a.qtde_estoque_vigente), size=8, align=TA_RIGHT),
+            _p(_fmt_qtd(a.qtde_contada_vigente), size=8, align=TA_RIGHT),
+            _p(_fmt_qtd(a.diferenca_vigente), size=8, align=TA_RIGHT),
             _p(_fmt_valor(a.custo_medio), size=8, align=TA_RIGHT),
             _p(_fmt_valor(valor_total_item), size=8, align=TA_RIGHT),
         ])
