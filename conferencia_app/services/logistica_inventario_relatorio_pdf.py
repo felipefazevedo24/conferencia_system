@@ -6,8 +6,7 @@ Layout replica o modelo em Excel usado ate hoje pela empresa
 (DOC_INVENT_2025_Rev_00): cabecalho com numero do documento, blocos de
 Tipo de Ajuste / Motivo do Ajuste / Deposito-Local (com as opcoes fixas
 impressas e a escolhida marcada, igual as caixinhas "( X )" do modelo),
-tabela de itens ajustados, e rodape com as tres assinaturas (Solicitado
-por / Aprovador Producao / Aprovador Contabil-Financeiro).
+tabela de itens ajustados, e rodape com as assinaturas (ver ASSINATURAS).
 
 Mesmo padrao de biblioteca usado em comex_po_pdf.py: SimpleDocTemplate +
 Table/Paragraph -> bytes, servido via send_file."""
@@ -21,6 +20,14 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+# Assinaturas do rodape do formulario. Ficam aqui (e nao no banco) porque
+# sao os responsaveis fixos do processo - trocou a pessoa, troca aqui.
+# Producao saiu: o ajuste de inventario nao passa por aprovacao dela.
+ASSINATURAS = (
+    ("Responsável Supply Chain", "Filipe Oliveira"),
+    ("Responsável Finanças", "Ricardo Serrano"),
+)
 
 COR_AZUL_ESCURA = colors.HexColor("#1B3B6F")
 COR_AZUL_TABELA = colors.HexColor("#3E6D93")
@@ -350,13 +357,11 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     linha_assinatura = "_" * 38
     rodape = Table(
         [
-            [_p(linha_assinatura, size=9, align=TA_CENTER), _p(linha_assinatura, size=9, align=TA_CENTER), _p(linha_assinatura, size=9, align=TA_CENTER)],
-            [_p(relatorio.criado_por or "", size=8.5, align=TA_CENTER), _p("", size=8.5, align=TA_CENTER), _p("", size=8.5, align=TA_CENTER)],
-            [_p("Solicitado por", size=7.5, color=COR_MUTED, align=TA_CENTER),
-             _p("Aprovador Produção", size=7.5, color=COR_MUTED, align=TA_CENTER),
-             _p("Aprovador Contábil/Financeiro", size=7.5, color=COR_MUTED, align=TA_CENTER)],
+            [_p(linha_assinatura, size=9, align=TA_CENTER) for _ in ASSINATURAS],
+            [_p(nome, size=8.5, align=TA_CENTER) for _cargo, nome in ASSINATURAS],
+            [_p(cargo, size=7.5, color=COR_MUTED, align=TA_CENTER) for cargo, _nome in ASSINATURAS],
         ],
-        colWidths=[largura / 3.0] * 3,
+        colWidths=[largura / len(ASSINATURAS)] * len(ASSINATURAS),
     )
     rodape.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 2),
@@ -364,7 +369,13 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     ]))
     el.append(rodape)
     el.append(Spacer(1, 6))
-    el.append(_p(f"Data: {relatorio.criado_em.strftime('%d/%m/%Y %H:%M') if relatorio.criado_em else ''}", size=8, color=COR_MUTED))
+    # Quem gerou o documento deixa de ser uma das assinaturas, mas continua
+    # registrado aqui - e' a rastreabilidade de quem solicitou o ajuste.
+    solicitado_por = f" · Solicitado por: {relatorio.criado_por}" if relatorio.criado_por else ""
+    el.append(_p(
+        f"Data: {relatorio.criado_em.strftime('%d/%m/%Y %H:%M') if relatorio.criado_em else ''}{solicitado_por}",
+        size=8, color=COR_MUTED,
+    ))
 
     doc.build(el)
     return buf.getvalue()

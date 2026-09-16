@@ -6829,3 +6829,47 @@ def test_inventario_pdf_do_relatorio_acessivel_em_finance_fiscal_e_concluido(tmp
         assert pdf.data[:4] == b"%PDF"
 
     assert client.get("/api/logistica/inventario-ajustes/relatorio/999999.pdf").status_code == 404
+
+
+def test_inventario_pdf_tem_apenas_duas_assinaturas_nomeadas(tmp_path):
+    """Rodape do FORM-08.52: so' duas assinaturas, ja com o nome impresso -
+    Responsavel Supply Chain e Responsavel Financas. A aprovacao de
+    Producao saiu (ajuste de inventario nao passa por ela) e "Solicitado
+    por" deixou de ser assinatura, virando linha de rastreabilidade."""
+    from conferencia_app.models import LogisticaInventarioAjuste
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+    from conferencia_app.services.logistica_inventario_relatorio_pdf import ASSINATURAS
+
+    # A fonte da verdade e' a constante - duas, com cargo e nome.
+    assert len(ASSINATURAS) == 2
+    assert ASSINATURAS[0] == ("Responsável Supply Chain", "Filipe Oliveira")
+    assert ASSINATURAS[1] == ("Responsável Finanças", "Ricardo Serrano")
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-ASSIN")
+        ajuste_id = ajuste.id
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+
+    gerado = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Cíclico",
+        "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+        "responsavel": "Responsável", "solicitante": "Solicitante", "depto": "LOGÍSTICA",
+    })
+    relatorio_id = gerado.get_json()["relatorio_id"]
+    pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf").data
+
+    # PDF sai sem compressao (pageCompression=0), da' pra conferir nos bytes.
+    assert b"Filipe Oliveira" in pdf
+    assert b"Ricardo Serrano" in pdf
+    assert b"Supply Chain" in pdf
+    # Os rotulos antigos de aprovador sairam de vez.
+    assert b"Aprovador" not in pdf
+    # Quem gerou continua registrado, mas fora do bloco de assinatura.
+    assert b"Solicitado por" in pdf
