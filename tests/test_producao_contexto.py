@@ -166,6 +166,39 @@ def test_corte_iniciado_nao_significa_montagem_iniciada():
     assert data["nos"][0]["estado"] == "fabricacao"
 
 
+@pytest.mark.parametrize("hours", [None, 0, "0", "0.0000", "0,00"])
+def test_todas_etapas_pendentes_nao_iniciam_fabricacao(hours):
+    items = pieces()
+    items[0]["status"] = "EM PRODUCAO"
+    operations = [dict(cod_os_aux=5, tiposervico=name, codigo=i, hs_realizadas=hours)
+                  for i, name in enumerate(["SOLDA 2", "USINAGEM 4", "SOLDA 2", "CONFERENCIA PECAS E MOLDES"])]
+    data = service._estrutura_payload(order("9958"), items, operations)
+    assert data["nos"][0]["estado"] == "nao_iniciado"
+
+
+@pytest.mark.parametrize("finished_field", ["finalizado", "concluido", "dt_finalizacao"])
+@pytest.mark.parametrize("all_finished, expected", [(False, "manufacturing"), (True, "available")])
+def test_etapas_finalizadas_preservam_progresso_no_mapa_e_detalhes(api, finished_field, all_finished, expected):
+    operations = [dict(cod_os_aux=3, tiposervico=name, codigo=i,
+                       **({finished_field: "2026-09-15" if finished_field == "dt_finalizacao" else True}
+                          if i < 3 or all_finished else {}))
+                  for i, name in enumerate(["CORTE", "DOBRA", "SOLDA", "CONFERENCIA"])]
+    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    with (patch.object(service, "obter_estrutura", return_value=data),
+          patch.object(service, "obter_documentos", return_value=[])):
+        structure = api[0].get("/api/v1/orders/9958/structure").get_json()
+        detail = api[0].get("/api/v1/orders/9958/items/3").get_json()
+    assert next(n for n in structure["nodes"] if n["id"] == "3")["state"] == expected
+    assert detail["node"]["state"] == expected
+
+
+@pytest.mark.parametrize("evidence", [{"hs_realizadas": "0.5"}, {"pcp_dt_primeiro_apont": "2026-09-15"}])
+def test_evidencia_real_de_execucao_inicia_fabricacao(evidence):
+    operations = [dict(cod_os_aux=3, tiposervico="CORTE", codigo=1, **evidence)]
+    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    assert next(n for n in data["nos"] if n["id"] == "3")["estado"] == "fabricacao"
+
+
 def test_ciclo_na_hierarquia_nao_trava_a_serializacao(api):
     nodes = [dict(id="1", aux_code=1, parent_id="2"), dict(id="2", aux_code=2, parent_id="1")]
     assert api[1]._original_node(nodes[0], nodes, "9958")["path_ids"] == ["2", "1"]
