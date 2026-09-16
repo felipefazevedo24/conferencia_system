@@ -1,5 +1,5 @@
 <style>
- .receb-dialog{width:calc(100% - 32px);max-width:480px;max-height:90dvh;overflow:auto;padding:0;border:1px solid var(--eui-border);border-radius:16px;background:var(--eui-surface);color:var(--eui-text);box-shadow:var(--eui-shadow-md)}
+ .receb-dialog{position:fixed;inset:0;margin:auto;width:calc(100% - 32px);max-width:480px;max-height:min(720px,calc(100dvh - 32px));overflow:auto;padding:0;border:1px solid var(--eui-border);border-radius:16px;background:var(--eui-surface);color:var(--eui-text);box-shadow:var(--eui-shadow-md)}
  .receb-dialog::backdrop{background:rgba(8,20,36,.65);backdrop-filter:blur(3px)}
  .receb-dialog-body{padding:24px}.receb-dialog-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--eui-primary-soft);color:var(--eui-primary);font-size:22px;margin-bottom:16px}
  .receb-dialog h3{margin:0 0 10px;font-size:20px;color:var(--eui-text)}
@@ -8,7 +8,7 @@
  .receb-dialog-foot{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--eui-border);background:var(--eui-surface-2)}
  .receb-dialog-foot button{min-height:44px}.receb-dialog [hidden]{display:none!important}
  [data-theme="escuro"] .receb-dialog{color-scheme:dark}
- @media(max-width:500px){.receb-dialog-foot{flex-direction:column-reverse}.receb-dialog-foot button{width:100%}.receb-dialog textarea{font-size:16px}}
+ @media(max-width:500px){.receb-dialog{width:calc(100% - 24px);max-height:calc(100dvh - 24px)}.receb-dialog-body{padding:20px}.receb-dialog-foot{position:sticky;bottom:0;flex-direction:column-reverse;padding:14px 20px calc(14px + env(safe-area-inset-bottom))}.receb-dialog-foot button{width:100%}.receb-dialog textarea{font-size:16px}}
 </style>
 <dialog id="receb-dialog" class="receb-dialog" aria-labelledby="receb-dialog-title" aria-describedby="receb-dialog-message">
  <form id="receb-dialog-form">

@@ -646,6 +646,8 @@ def _peso_identico_ao_nf(item: ItemNota, quantidade_convertida: float) -> bool:
 
 def _formatar_chapas(valor) -> str:
     """Formata a quantidade de chapas (UND) informada para o log/resultado."""
+    if isinstance(valor, dict):
+        valor = valor.get("quantidade")
     if valor is None or str(valor).strip() == "":
         return ""
     try:
@@ -661,6 +663,8 @@ def _formatar_chapas(valor) -> str:
 
 def _parse_chapas_und(valor) -> float | None:
     """Converte a quantidade de chapas (UND) informada para número, ou None."""
+    if isinstance(valor, dict):
+        valor = valor.get("quantidade")
     if valor is None or str(valor).strip() == "":
         return None
     try:
@@ -5751,9 +5755,15 @@ def validar():
         # entrada de chapa. Só grava quando um valor é informado (nunca limpa),
         # para sobreviver às múltiplas chamadas de /validar do fluxo.
         if _unidade_eh_chapa(item.unidade_comercial):
-            chapa_und = _parse_chapas_und(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
+            chapa_dados = chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None
+            chapa_und = _parse_chapas_und(chapa_dados)
             if chapa_und is not None:
                 item.qtd_chapas_und = chapa_und
+                try:
+                    from ..services.chapa_calculo_service import salvar_calculo_item
+                    salvar_calculo_item(item, chapa_dados, user)
+                except ValueError as exc:
+                    return jsonify({"sucesso": False, "msg": str(exc), "item_id": item.id}), 400
 
         valor_bruto = contagens.get(str(item.id))
         if valor_bruto is None or str(valor_bruto).strip() == "":

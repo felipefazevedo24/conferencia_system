@@ -65,6 +65,22 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
             cards = page.locator('#dashboard-resumo [data-filter]').evaluate_all('(els) => els.map(e => e.dataset.filter)')
             assert cards.index('enderecamento') == cards.index('conferido') + 1
             assert page.locator('a[href="/recebimento/enderecamento"]').count() == 0
+            page.evaluate("""() => {
+                document.getElementById('lista-view').classList.add('hidden');
+                document.getElementById('conf-view').classList.remove('hidden');
+                renderItensConferencia([{id:99,codigo:'CH-99',descricao:'Chapa teste',unidade:'KG',qtd_real:314}]);
+            }""")
+            page.locator('#chapa-btn-99').click()
+            page.locator('#chapa-modal-switch').check()
+            page.locator('#chapa-modal-input').fill('2')
+            page.locator('[data-chapa-medida="espessura"]').fill('10')
+            page.locator('[data-chapa-medida="largura"]').fill('1000')
+            page.locator('[data-chapa-medida="comprimento"]').fill('2000')
+            expect(page.locator('#chapa-modal-preview')).to_contain_text('157 kg/peça')
+            page.locator('#btn-salvar-chapa').click()
+            chapa_payload = page.evaluate('() => coletarChapas()["99"]')
+            assert chapa_payload == {'quantidade':'2','material':'aco_carbono','formato':'chapa','dimensoes':{'espessura':10,'largura':1000,'comprimento':2000}}
+            page.evaluate("""() => { document.getElementById('conf-view').classList.add('hidden'); document.getElementById('lista-view').classList.remove('hidden'); }""")
             await_url = page.url
             page.evaluate('() => { void oferecerEnderecamento([1, 2]); }')
             expect(page.locator('#receb-dialog-title')).to_have_text('Recebimento concluído')
@@ -78,6 +94,9 @@ def test_mobile_camera_workflow(tmp_path, monkeypatch):
             }""")
             page.evaluate('() => { void efetivarGravacaoFinal(); }')
             expect(page.locator('#receb-dialog')).to_be_visible()
+            dialog_box = page.locator('#receb-dialog').bounding_box()
+            assert dialog_box and abs((dialog_box['y'] + dialog_box['height'] / 2) - 422) < 3
+            assert dialog_box['y'] >= 12 and dialog_box['y'] + dialog_box['height'] <= 832
             page.get_by_role('button', name='Endereçar agora', exact=True).click()
             assert page.url == await_url
             expect(page.locator('#conf-view')).to_be_hidden()
