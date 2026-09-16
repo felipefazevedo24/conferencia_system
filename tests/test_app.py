@@ -4844,6 +4844,14 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
         db.session.commit()
         ajuste_id = ajuste.id
 
+    # Confirmar passou a exigir a recontagem do dia da validacao (ver
+    # test_inventario_recontagem_confirma_contagem_quando_diferenca_se_mantem).
+    # Aqui a diferenca de 4 se mantem: sistemico 6->4, fisico 10->8.
+    client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/recontagem",
+        json={"qtde_recontada": 8, "qtde_estoque_atual": 4},
+    )
+
     # Confirma a divergencia solicitando analise de causa raiz.
     resp = client.post(
         f"/api/logistica/inventario-ajustes/{ajuste_id}/confirmar",
@@ -6556,3 +6564,176 @@ def test_comex_editar_dados_disponivel_em_todo_status_a_partir_da_instrucao(tmp_
     payload = client.get(f"/api/comex/processos/{processo_id}").get_json()
     payload = payload.get("processo") or payload
     assert payload["pode_editar_dados"] is True
+
+
+def _ajuste_divergente(codigo="SKU-X", contada=7, estoque=10, custo=2.0):
+    """Divergencia apurada na contagem: sistemico 10, fisico 7 -> -3."""
+    from conferencia_app.models import LogisticaInventarioAjuste
+
+    ajuste = LogisticaInventarioAjuste(
+        codigo_produto=codigo, local_codigo="A01", unidade_medida="UN",
+        qtde_contada=contada, qtde_estoque_no_momento=estoque,
+        diferenca=contada - estoque, custo_medio=custo,
+        status_modulo="Validacao", status_slug="validacao",
+    )
+    db.session.add(ajuste)
+    db.session.commit()
+    return ajuste
+
+
+def test_inventario_recontagem_confirma_contagem_quando_diferenca_se_mantem(tmp_path):
+    """A validacao acontece dias depois da contagem e o item continua se
+    movimentando. Recontar comprova que a apuracao original estava certa:
+    se o sistemico e o fisico andaram JUNTOS, a diferenca se mantem.
+
+        01/07 -> sistemico 10, fisico 7, diferenca -3
+        04/07 -> sistemico  8, fisico 5, diferenca -3  (confere)
+
+    A partir dai o relatorio sai com o estoque MAIS ATUAL (8/5), nao com o
+    do dia da contagem."""
+    import pytest
+
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        ajuste = _ajuste_divergente()
+        assert ajuste.diferenca == -3
+
+        # Sem recontar nao da' pra confirmar - e' a recontagem que valida.
+        with pytest.raises(ValueError) as erro:
+            svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+        assert "recontagem" in str(erro.value).lower()
+
+        # Antes de recontar, o "vigente" e' o proprio snapshot.
+        assert ajuste.qtde_estoque_vigente == 10
+        assert ajuste.qtde_contada_vigente == 7
+        assert ajuste.diferenca_vigente == -3
+
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        assert ajuste.recontagem_diferenca == -3
+        assert ajuste.recontagem_divergente is False
+        assert ajuste.recontagem_por == "GESTOR"
+        assert ajuste.recontagem_em is not None
+
+        # O snapshot original NAO e' reescrito (historico do alerta)...
+        assert ajuste.qtde_estoque_no_momento == 10
+        assert ajuste.qtde_contada == 7
+        # ...mas o vigente (o que vai pro relatorio) passa a ser o de hoje.
+        assert ajuste.qtde_estoque_vigente == 8
+        assert ajuste.qtde_contada_vigente == 5
+        assert ajuste.diferenca_vigente == -3
+
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria confirmada")
+        assert ajuste.status_modulo == "Relatorio"
+
+
+def test_inventario_recontagem_divergente_exige_justificativa(tmp_path):
+    """Diferenca que NAO se manteve significa que a contagem original pode
+    ter errado. Nao passa no automatico: o gestor tem que assumir a nova
+    diferenca por escrito - e ai' e' ela que vale pro relatorio."""
+    import pytest
+
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-Y")
+
+        # Recontou 3 contra sistemico 8 -> diferenca -5 (era -3).
+        svc.registrar_recontagem(ajuste, 3, "GESTOR", qtde_estoque_atual=8)
+        assert ajuste.recontagem_diferenca == -5
+        assert ajuste.recontagem_divergente is True
+
+        with pytest.raises(ValueError) as erro:
+            svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+        assert "não bate" in str(erro.value)
+        assert ajuste.status_modulo == "Validacao"
+
+        svc.confirmar_divergencia(
+            ajuste, "GESTOR", "avaria",
+            recontagem_justificativa="contagem de 01/07 errou, adoto a nova",
+        )
+        assert ajuste.status_modulo == "Relatorio"
+        assert ajuste.recontagem_justificativa.startswith("contagem de 01/07")
+        # A diferenca que vale agora e' a recontada.
+        assert ajuste.diferenca_vigente == -5
+
+
+def test_inventario_recontagem_so_na_validacao_e_tolera_erp_fora(tmp_path):
+    """Recontagem so' existe enquanto o item esta em Validacao. E o saldo
+    sistemico vem do GRV quando da' - se o ERP nao responder, o gestor
+    informa na mao (a tela nao pode travar por causa do ERP)."""
+    import pytest
+
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-Z")
+
+        # ERP indisponivel: saldo_sistemico_atual devolve None em vez de estourar.
+        assert svc.saldo_sistemico_atual(ajuste) is None
+        # ...e sem saldo informado, a recontagem pede o valor em vez de quebrar.
+        with pytest.raises(ValueError) as erro:
+            svc.registrar_recontagem(ajuste, 5, "GESTOR")
+        assert "manualmente" in str(erro.value)
+
+        # Quantidade fisica invalida tambem e' recusada com mensagem clara.
+        with pytest.raises(ValueError):
+            svc.registrar_recontagem(ajuste, "", "GESTOR", qtde_estoque_atual=8)
+
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "ok")
+
+        # Fora da Validacao, nao reconta mais.
+        with pytest.raises(ValueError) as erro:
+            svc.registrar_recontagem(ajuste, 4, "GESTOR", qtde_estoque_atual=8)
+        assert "aguardando validação" in str(erro.value)
+
+
+def test_inventario_recontagem_api_http(tmp_path):
+    """Rotas da recontagem + o payload que a tela usa."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-API")
+        ajuste_id = ajuste.id
+
+    # ERP fora do ar nos testes -> devolve null, sem erro (a tela segue).
+    saldo = client.get(f"/api/logistica/inventario-ajustes/{ajuste_id}/saldo-atual")
+    assert saldo.status_code == 200
+    assert saldo.get_json()["saldo_sistemico_atual"] is None
+
+    bloqueado = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/confirmar", json={"justificativa": "x"}
+    )
+    assert bloqueado.status_code == 400
+
+    recontagem = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/recontagem",
+        json={"qtde_recontada": 5, "qtde_estoque_atual": 8},
+    )
+    assert recontagem.status_code == 200
+    payload = recontagem.get_json()["ajuste"]
+    assert payload["recontagem_divergente"] is False
+    assert payload["recontagem_diferenca"] == -3
+    assert payload["qtde_estoque_vigente"] == 8
+    assert payload["qtde_contada_vigente"] == 5
+    assert payload["diferenca_vigente"] == -3
+    # O snapshot original continua no payload, pra tela mostrar os dois.
+    assert payload["qtde_estoque_no_momento"] == 10
+    assert payload["qtde_contada"] == 7
+    assert "se manteve" in recontagem.get_json()["message"]
+
+    confirmado = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/confirmar", json={"justificativa": "avaria"}
+    )
+    assert confirmado.status_code == 200
+    assert confirmado.get_json()["ajuste"]["status_modulo"] == "Relatorio"
+
+    assert client.post(
+        "/api/logistica/inventario-ajustes/999999/recontagem", json={"qtde_recontada": 1}
+    ).status_code == 404

@@ -136,6 +136,36 @@
             Confirma que essa diferença é real. O item vai pra fila de "Aguardando relatório" —
             depois você seleciona vários de uma vez (checkbox) pra gerar o FORM-08.52 e mandar pro Finance.
         </p>
+        <!-- Recontagem do dia da validacao: a diferenca so' se confirma se
+             o sistemico e o fisico tiverem andado juntos desde a contagem. -->
+        <div id="ia-recontagem-box" style="border:1px solid var(--eui-border,#e5e7eb); border-radius:8px; padding:12px 14px; margin-bottom:14px; background:var(--eui-surface-2,#f8fafc);">
+            <div style="font-weight:700; font-size:13px; margin-bottom:8px;">
+                <i class="fas fa-scale-balanced"></i> Recontagem de hoje
+            </div>
+            <div id="ia-recontagem-apurada" style="font-size:12px; color:var(--eui-muted); margin-bottom:10px;"></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="ia-recontagem-fisico" style="font-size:11px;">Contagem física de hoje *</label>
+                    <input type="number" step="any" id="ia-recontagem-fisico" class="eui-input" placeholder="ex.: 5">
+                </div>
+                <div>
+                    <label for="ia-recontagem-sistemico" style="font-size:11px;">Saldo sistêmico de hoje *</label>
+                    <input type="number" step="any" id="ia-recontagem-sistemico" class="eui-input" placeholder="buscando no ERP…">
+                </div>
+            </div>
+            <div style="margin-top:8px;">
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-recontagem-salvar">
+                    <i class="fas fa-calculator"></i> Conferir diferença
+                </button>
+            </div>
+            <div id="ia-recontagem-resultado" style="margin-top:10px;"></div>
+        </div>
+
+        <div id="ia-recontagem-just-wrap" class="hidden">
+            <label for="ia-recontagem-justificativa">Justificativa da mudança de diferença *</label>
+            <textarea id="ia-recontagem-justificativa" placeholder="Ex.: contagem de 01/07 errou, adoto a diferença nova..."></textarea>
+        </div>
+
         <label for="ia-confirmar-justificativa">Justificativa (opcional)</label>
         <textarea id="ia-confirmar-justificativa" placeholder="Ex.: contagem conferida, avaria constatada..."></textarea>
         <div class="ia-modal-check">
@@ -492,12 +522,82 @@
     // a diferenca como real; o FORM-08.52/envio pro Finance acontece
     // depois, em lote, no modal de Relatorio (ver mais abaixo).
     let confirmarAjusteId = null;
-    function abrirModalConfirmar(id) {
+    async function abrirModalConfirmar(id) {
         confirmarAjusteId = id;
         $("ia-confirmar-justificativa").value = "";
         $("ia-confirmar-causa-raiz").checked = false;
+        $("ia-recontagem-fisico").value = "";
+        $("ia-recontagem-sistemico").value = "";
+        $("ia-recontagem-justificativa").value = "";
+        $("ia-recontagem-just-wrap").classList.add("hidden");
+
+        const a = (ajustesCache || []).find((x) => String(x.id) === String(id)) || {};
+        $("ia-recontagem-apurada").innerHTML =
+            `Apurado em ${escapeHtml(a.criado_em || "—")}: sistêmico <b>${fmtQtd(a.qtde_estoque_no_momento)}</b>, ` +
+            `físico <b>${fmtQtd(a.qtde_contada)}</b>, diferença <b>${fmtQtd(a.diferenca)}</b>. ` +
+            `Reconte hoje para comprovar que ela se manteve.`;
+        // Recontagem ja feita? Mostra e mantem o estado.
+        if (a.recontagem_em) {
+            $("ia-recontagem-fisico").value = a.recontagem_qtde ?? "";
+            $("ia-recontagem-sistemico").value = a.recontagem_estoque ?? "";
+            mostrarResultadoRecontagem(a);
+        } else {
+            $("ia-recontagem-resultado").innerHTML = "";
+        }
         $("ia-confirmar-modal").classList.add("open");
+
+        // Pre-preenche o sistemico com o saldo atual do GRV (best-effort:
+        // ERP fora do ar = campo continua editavel, sem travar a tela).
+        if (!a.recontagem_em) {
+            try {
+                const r = await api(`/api/logistica/inventario-ajustes/${id}/saldo-atual`);
+                if (r.saldo_sistemico_atual != null && !$("ia-recontagem-sistemico").value) {
+                    $("ia-recontagem-sistemico").value = r.saldo_sistemico_atual;
+                }
+            } catch (_) { /* silencioso - o gestor digita */ }
+            $("ia-recontagem-sistemico").placeholder = "informe o saldo";
+        }
     }
+
+    function mostrarResultadoRecontagem(a) {
+        const bate = !a.recontagem_divergente;
+        const cor = bate ? "#166534" : "#991b1b";
+        const fundo = bate ? "#dcfce7" : "#fee2e2";
+        const borda = bate ? "#bbf7d0" : "#fecaca";
+        const texto = bate
+            ? `Confere — a diferença de <b>${fmtQtd(a.diferenca)}</b> se manteve. A contagem original está validada.`
+            : `Não confere — apurada <b>${fmtQtd(a.diferenca)}</b>, recontada <b>${fmtQtd(a.recontagem_diferenca)}</b>. ` +
+              `Justifique abaixo para adotar a diferença nova, ou feche e use "Dif. Improcedente".`;
+        $("ia-recontagem-resultado").innerHTML =
+            `<div style="background:${fundo}; border:1px solid ${borda}; color:${cor}; border-radius:6px; padding:9px 11px; font-size:12.5px;">
+                <i class="fas ${bate ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
+             </div>`;
+        $("ia-recontagem-just-wrap").classList.toggle("hidden", bate);
+        if (a.recontagem_justificativa) $("ia-recontagem-justificativa").value = a.recontagem_justificativa;
+    }
+
+    $("ia-recontagem-salvar").addEventListener("click", async () => {
+        const id = confirmarAjusteId;
+        if (!id) return;
+        const fisico = $("ia-recontagem-fisico").value.trim();
+        if (fisico === "") { toast("Informe a contagem física de hoje.", "error"); return; }
+        try {
+            const r = await api(`/api/logistica/inventario-ajustes/${id}/recontagem`, {
+                method: "POST",
+                body: JSON.stringify({
+                    qtde_recontada: fisico,
+                    qtde_estoque_atual: $("ia-recontagem-sistemico").value.trim() || null,
+                }),
+            });
+            mostrarResultadoRecontagem(r.ajuste);
+            // Atualiza o cache pro modal nao perder o estado se reabrir.
+            const i = (ajustesCache || []).findIndex((x) => String(x.id) === String(id));
+            if (i >= 0) ajustesCache[i] = r.ajuste;
+            toast(r.message, r.ajuste.recontagem_divergente ? "error" : "success");
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
     function fecharModalConfirmar() {
         $("ia-confirmar-modal").classList.remove("open");
         confirmarAjusteId = null;
@@ -510,7 +610,13 @@
         const justificativa = $("ia-confirmar-justificativa").value.trim();
         const solicitar_analise_causa = $("ia-confirmar-causa-raiz").checked;
         try {
-            await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa, solicitar_analise_causa }) });
+            await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, {
+                method: "POST",
+                body: JSON.stringify({
+                    justificativa, solicitar_analise_causa,
+                    recontagem_justificativa: $("ia-recontagem-justificativa").value.trim(),
+                }),
+            });
             fecharModalConfirmar();
             toast("Atualizado!", "success");
             carregar();
