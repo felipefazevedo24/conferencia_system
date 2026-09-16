@@ -108,11 +108,76 @@ def test_leitura_manual_fica_no_historico(state):
     assert Evento.query.filter_by(tipo='Leitura digitada').count() == 2
 
 
+def test_retry_automatico_sincroniza_tarefas_com_falha(app, state):
+    task, lookup, update = state
+    svc.confirmar(task, payload(task))
+    update.side_effect = TimeoutError('boom')
+    svc.sincronizar(task)
+    assert task.status == 'Aguardando sincronização' and task.erro
+    update.side_effect = None
+    from conferencia_app.services import recebimento_enderecamento_scheduler as sched
+    resultado = sched.executar_ciclo(app)
+    assert resultado['sincronizadas'] == 1
+    db.session.refresh(task)
+    assert task.status == 'Concluído' and task.erro is None
+
+
 def test_inactive_address(state):
     LocalizacaoArmazem.query.filter_by(codigo='A').first().ativo = False
     db.session.commit()
     with pytest.raises(ValueError, match='desativado'):
         payload(state[0])
+
+
+@pytest.mark.parametrize('interrompida', [False, True])
+def test_retry_recupera_confirmacao_sem_erro(app, state, interrompida):
+    task, _, update = state
+    svc.confirmar(task, payload(task))
+    if interrompida:
+        task.executando_em = datetime.now() - timedelta(minutes=11)
+        db.session.add(Trava(sku=task.sku, token='interrompido', expira_em=task.executando_em))
+        db.session.commit()
+    from conferencia_app.services.recebimento_enderecamento_scheduler import executar_ciclo
+    assert executar_ciclo(app)['sincronizadas'] == 1
+    update.assert_called_once_with('SKU-1', 'A')
+
+
+def test_proximo_mesma_nf_fora_da_pagina_e_sem_misturar_fornecedor(app, state):
+    from conferencia_app.routes.recebimento_enderecamento_routes import proximo_da_nota
+    task = state[0]
+    task.item.fornecedor = 'Fornecedor A'
+    for n in range(42):
+        item = ItemNota(numero_nota='123', fornecedor='Fornecedor A' if n == 0 else 'Fornecedor B',
+                        codigo_grv='SKU-2', status='Concluído')
+        db.session.add(item)
+        db.session.flush()
+        outra = Tarefa(item_nota_id=item.id, sku='SKU-2', quantidade=1, criado_por='teste')
+        db.session.add(outra)
+        db.session.flush()
+        if n == 0:
+            esperado = outra.id
+    db.session.commit()
+    assert proximo_da_nota(task)['id'] == esperado
+    db.session.get(Tarefa, esperado).status = 'Concluído'
+    db.session.commit()
+    assert proximo_da_nota(task) is None
+
+
+def test_kpi_concluidos_hoje_preserva_total_historico(app, state):
+    task = state[0]
+    task.status = 'Concluído'
+    task.concluido_em = datetime.now() - timedelta(days=1)
+    db.session.commit()
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess['username'] = 'admin'
+        sess['role'] = 'Admin'
+    result = client.get('/api/recebimento/enderecamento').get_json()
+    assert result['contadores']['Concluído'] == 1
+    assert result['concluidos_hoje'] == 0
+    task.concluido_em = datetime.now()
+    db.session.commit()
+    assert client.get('/api/recebimento/enderecamento').get_json()['concluidos_hoje'] == 1
 
 
 @pytest.mark.parametrize('quantity', [9, 11, -1, 'NaN', 'Infinity', 'bad'])

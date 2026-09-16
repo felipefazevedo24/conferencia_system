@@ -91,6 +91,10 @@ def create_app(test_config=None) -> Flask:
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
+    from .extensions import proteger_pool_entre_processos
+    with app.app_context():
+        for engine in db.engines.values():
+            proteger_pool_entre_processos(engine)
     migrate.init_app(app, db)
 
     app.register_blueprint(auth_bp)
@@ -306,5 +310,13 @@ def create_app(test_config=None) -> Flask:
             iniciar_solicitacao_cif(app)
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler Solicitacoes CIF")
+
+    # Retry automatico da sincronizacao de enderecamentos com o GRV.
+    if app.config.get("ENDERECAMENTO_RETRY_AUTO_ENABLED") and not app.config.get("TESTING"):
+        try:
+            from .services.recebimento_enderecamento_scheduler import iniciar_scheduler as iniciar_enderecamento_retry
+            iniciar_enderecamento_retry(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Enderecamento Retry")
 
     return app

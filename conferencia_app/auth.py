@@ -5,25 +5,34 @@ from sqlalchemy.exc import OperationalError
 import datetime
 import unicodedata
 # Middleware para atualizar sessão ativa e forçar logout se necessário
+def _recover_db_connection():
+    # Invalida a conexão defeituosa sem tentar rollback no socket fora de sincronia.
+    db.session.invalidate()
+
+
+def _load_and_touch_active_session(session_id):
+    sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+    if sessao and sessao.is_active:
+        sessao.last_activity = datetime.datetime.now()
+        db.session.commit()
+    return sessao
+
+
 def check_active_session():
     session_id = session.get("session_id")
     if not session_id:
         return
     try:
-        sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+        sessao = _load_and_touch_active_session(session_id)
     except OperationalError:
         # PythonAnywhere/MySQL pode fechar uma conexão ociosa entre o
-        # checkout e a primeira consulta. Descarta o pool e tenta uma vez
+        # checkout e a primeira consulta. Descarta a conexão e tenta uma vez
         # com uma conexão nova, sem derrubar a requisição inteira.
-        db.session.rollback()
-        db.engine.dispose()
-        sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+        _recover_db_connection()
+        sessao = _load_and_touch_active_session(session_id)
     if not sessao or not sessao.is_active:
         session.clear()
         abort(401, description="Sessão expirada ou removida pelo administrador.")
-    # Atualiza last_activity
-    sessao.last_activity = datetime.datetime.now()
-    db.session.commit()
 
 from functools import wraps
 

@@ -1,4 +1,6 @@
 """Fila de endereçamento do recebimento e leituras pela câmera."""
+from datetime import datetime, timedelta
+
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy import or_
 
@@ -43,10 +45,29 @@ def listar():
         return jsonify(erro="Status inválido."), 400
     contadores = {s: query.filter(Tarefa.status == s).count() for s in (
         "Pendente", "Aguardando sincronização", "Concluído")}
+    inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    concluidos_hoje = query.filter(Tarefa.status == "Concluído",
+        Tarefa.concluido_em >= inicio, Tarefa.concluido_em < inicio + timedelta(days=1)).count()
     pagina = max(1, request.args.get("pagina", 1, type=int))
     # Fila operacional: o recebimento mais novo aparece primeiro.
     tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).offset((pagina-1)*40).limit(40).all()
-    return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores, pagina=pagina)
+    return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores,
+                   concluidos_hoje=concluidos_hoje, pagina=pagina)
+
+
+def proximo_da_nota(tarefa):
+    item = tarefa.item
+    query = Tarefa.query.join(ItemNota).filter(Tarefa.status == "Pendente", Tarefa.id != tarefa.id)
+    if item.chave_acesso:
+        query = query.filter(ItemNota.chave_acesso == item.chave_acesso)
+    elif item.fornecedor:
+        query = query.filter(ItemNota.numero_nota == item.numero_nota,
+                             ItemNota.fornecedor == item.fornecedor,
+                             or_(ItemNota.chave_acesso.is_(None), ItemNota.chave_acesso == ""))
+    else:
+        return None  # Sem identidade suficiente para avançar com segurança.
+    proximo = query.order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).first()
+    return serializar(proximo) if proximo else None
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento/<int:tarefa_id>/historico")
@@ -80,7 +101,8 @@ def operar(tarefa_id, acao):
             svc.reabrir(tarefa, dados.get("justificativa"))
         else:
             return jsonify(erro="Ação inválida."), 404
-        return jsonify(item=serializar(tarefa))
+        return jsonify(item=serializar(tarefa),
+                       proximo=proximo_da_nota(tarefa) if acao == "confirmar" else None)
     except ValueError as exc:
         db.session.rollback()
         return jsonify(erro=str(exc)), 409

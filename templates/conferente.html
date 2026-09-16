@@ -1031,6 +1031,7 @@
     </div>
 </div>
 
+{% include 'recebimento_dialog.html' %}
 <div class="modal-overlay" id="modal-resultado">
     <div class="modal-sap">
         <div class="modal-head"><span>Resultado da validação</span></div>
@@ -1518,7 +1519,7 @@
                 fecharModalReversao(); 
                 document.getElementById('modal-consulta').style.display = 'none';
                 await carregarNotas(); 
-                alert(`NF ${notaReversaoSelecionada} revertida com sucesso.`);
+                avisarRecebimento(`NF ${notaReversaoSelecionada} revertida com sucesso.`);
             } else { 
                 feedback.innerText = data.msg || 'Erro na reversão.'; 
             }
@@ -1935,7 +1936,7 @@
                 if (bloco) bloco.style.display = 'flex';
                 atualizarChapa(id);
             });
-            alert('Você marcou item(ns) como chapa. Informe a quantidade de chapas (UND) ou desmarque o botão "É chapa?" antes de validar.');
+            avisarRecebimento('Você marcou item(ns) como chapa. Informe a quantidade de chapas (UND) ou desmarque o botão "É chapa?" antes de validar.');
             document.getElementById(`chapa-fields-${pendentesChapa[0]}`)?.querySelector('.chapa-input')?.focus();
             return;
         }
@@ -2011,13 +2012,24 @@
     }
 
     let enderecamentoAposRecebimento = [];
-    function oferecerEnderecamento(ids) {
+    async function oferecerEnderecamento(ids) {
         pararHeartbeat();
-        if ({{ 'true' if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }} && ids?.length && confirm('Recebimento concluído. Deseja endereçar os materiais conformes agora?\nSe deixar para depois, eles ficarão em Conferência de Recebimento → Endereçamento.')) {
-            location.href = '/conferencia?etapa=enderecamento&ids=' + ids.join(',');
-        } else {
-            location.reload();
+        notaSel = ''; documentoRefSel = ''; chaveSel = ''; cnpjSel = ''; fornecedorSel = '';
+        lockAtivo = false;
+        aplicarModoConferenciaVisualizacao(false);
+        document.getElementById('conf-view').classList.add('hidden');
+        document.getElementById('lista-view').classList.remove('hidden');
+        document.querySelectorAll('.modal-overlay').forEach(modal => modal.style.display = 'none');
+        if ({{ 'true' if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }} && ids?.length) {
+            const agora = await dialogRecebimento({titulo:'Recebimento concluído', mensagem:'Os materiais conformes já estão na fila de endereçamento. Deseja endereçar agora?\nVocê também pode continuar depois em Recebimento → Endereçamento.', confirmar:'Endereçar agora', cancelar:'Deixar para depois'});
+            if (agora) {
+                document.dispatchEvent(new CustomEvent('recebimento:abrir-enderecamento', {detail:{ids}}));
+                if (filtroReceb !== 'enderecamento') aplicarFiltroReceb('enderecamento');
+                document.getElementById('receb-enderecamento-painel').scrollIntoView({behavior:'smooth', block:'start'});
+                return;
+            }
         }
+        await carregarNotas();
     }
     async function efetivarGravacaoFinal() {
         const btn = document.getElementById('btn-efetivar-ok');
@@ -2043,9 +2055,9 @@
                 return;
             }
             const d = await r.json().catch(() => ({}));
-            alert(d.msg || 'Não foi possível concluir o recebimento. Tente novamente.');
+            avisarRecebimento(d.msg || 'Não foi possível concluir o recebimento. Tente novamente.');
         } catch (e) {
-            alert('Erro de conexão ao concluir o recebimento.');
+            avisarRecebimento('Erro de conexão ao concluir o recebimento.');
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = 'Confirmar recebimento'; }
         }
@@ -2053,13 +2065,13 @@
 
     function prepararModalJustificativa() {
         if (!ultimosDadosValidacao || !Array.isArray(ultimosDadosValidacao.itens)) {
-            alert('Faça a validação da conferência antes de registrar a pendência.');
+            avisarRecebimento('Faça a validação da conferência antes de registrar a pendência.');
             return;
         }
 
         const itensDivergentes = ultimosDadosValidacao.itens.filter((item) => item.status !== 'OK');
         if (itensDivergentes.length === 0) {
-            alert('Nenhum item divergente encontrado para registrar pendência.');
+            avisarRecebimento('Nenhum item divergente encontrado para registrar pendência.');
             return;
         }
 
@@ -2288,7 +2300,7 @@
 
     function abrirModalDevolucao() {
         if (!notaSel) {
-            alert('Abra uma NF antes de solicitar a devolução.');
+            avisarRecebimento('Abra uma NF antes de solicitar a devolução.');
             return;
         }
         document.getElementById('devolucao-nf-ref').innerText = notaSel;
@@ -2304,7 +2316,7 @@
 
     function abrirModalSemConferencia() {
         if (!notaSel) {
-            alert('Abra uma NF antes de sinalizar a não conferência.');
+            avisarRecebimento('Abra uma NF antes de sinalizar a não conferência.');
             return;
         }
         document.getElementById('sem-conf-nf-ref').innerText = notaSel;
@@ -2353,7 +2365,7 @@
             }
             fecharModalSemConferencia();
             pararHeartbeat();
-            alert(data.msg || 'Recebimento concluído sem conferência logística.');
+            await avisarRecebimento(data.msg || 'Recebimento concluído sem conferência logística.');
             location.reload();
         } catch (e) {
             feedback.innerText = 'Erro de rede.';
@@ -2388,7 +2400,7 @@
         }
 
         pararHeartbeat();
-        alert(data.msg || 'Solicitação enviada para aprovação admin.');
+        await avisarRecebimento(data.msg || 'Solicitação enviada para aprovação admin.');
         location.reload();
     }
 
@@ -2478,7 +2490,7 @@
             await carregarDevolucoesPendentes();
             renderDevolucoesPendentes();
             await carregarNotas();
-            alert(data.msg || mensagemPadrao);
+            avisarRecebimento(data.msg || mensagemPadrao);
         } catch (e) {
             feedback.innerText = 'Erro de rede.';
         } finally {
