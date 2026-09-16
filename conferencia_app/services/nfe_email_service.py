@@ -1243,6 +1243,96 @@ def _montar_texto_whatsapp_aviso_pronto(
     )
 
 
+def _montar_corpo_html_saiu_entrega_dap(
+    *,
+    numero_nf: str,
+    nome_cliente: str,
+    data_saida: str,
+    modo_teste: bool,
+    destino_real: str,
+) -> str:
+    """Aviso DAP disparado quando a viagem com a NF e INICIADA: a mercadoria
+    saiu para entrega."""
+    aviso_teste = ""
+    if modo_teste:
+        aviso_teste = f"""
+        <tr><td style=\"padding:0 32px\">
+            <div style=\"margin-top:8px;padding:12px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-family:Arial,Helvetica,sans-serif\">
+                <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatário)'}</strong>.
+            </div>
+        </td></tr>"""
+
+    cliente = (nome_cliente or "Cliente").strip()
+
+    return f"""\
+        <!DOCTYPE html>
+        <html lang=\"pt-BR\">
+        <head>
+            <meta charset=\"UTF-8\"/>
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>
+            <title>Mercadoria em Rota de Entrega</title>
+        </head>
+        <body style=\"margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">
+            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f1f5f9\" style=\"background:#f1f5f9;padding:28px 12px\">
+                <tr><td align=\"center\">
+                    <table role=\"presentation\" width=\"640\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#ffffff\" style=\"max-width:640px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px\">
+                        <tr>
+                            <td bgcolor=\"#166534\" style=\"background-color:#166534;padding:20px 28px;border-top-left-radius:10px;border-top-right-radius:10px;font-size:22px;font-weight:700;color:#ffffff\">
+                                Mercadoria em Rota de Entrega
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:24px 28px 10px;font-size:14px;line-height:1.6;color:#1e293b\">
+                                Prezado(a) Sr.(a) <strong>{cliente}</strong>,
+                                <br><br>
+                                Informamos que a mercadoria referente à nota fiscal n&ordm; <strong>{numero_nf}</strong>
+                                <strong>saiu para entrega</strong> em {data_saida}.
+                                <br><br>
+                                Conforme acordado na modalidade <strong>DAP (Delivered at Place)</strong>,
+                                o transporte está sendo realizado por nossa equipe e a entrega será feita
+                                no endereço combinado.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:14px 28px 0;font-size:14px;line-height:1.7;color:#1e293b\">
+                                Pedimos a gentileza de garantir que haja um responsável para o recebimento da mercadoria.
+                                <br><br>
+                                Em caso de dúvidas, permanecemos à disposição.
+                                <br><br>
+                                Atenciosamente,
+                                <br><br>
+                                Equipe de Logística<br>
+                                Columbia Machine Brasil<br>
+                                Cel./WhatsApp: (19) 99996-5208<br>
+                                logistica@colmac.com
+                            </td>
+                        </tr>
+
+                        {aviso_teste}
+
+                        <tr>
+                            <td style=\"padding:20px 28px 24px;font-size:11px;color:#64748b\">
+                                powered by <strong style=\"color:#1e3a8a\">Columbia Sync</strong>
+                            </td>
+                        </tr>
+                    </table>
+                </td></tr>
+            </table>
+        </body>
+        </html>"""
+
+
+def _montar_texto_whatsapp_saiu_entrega_dap(*, numero_nf: str, nome_cliente: str, data_saida: str) -> str:
+    cliente = (nome_cliente or "Cliente").strip()
+    return (
+        f"Prezado(a) {cliente},\n\n"
+        f"A mercadoria da NF {numero_nf} saiu para entrega em {data_saida} (DAP).\n"
+        "O transporte esta sendo realizado por nossa equipe.\n\n"
+        "Pedimos que haja um responsavel para o recebimento.\n\n"
+        "Logistica Columbia Machine Brasil"
+    )
+
+
 def _montar_texto_whatsapp_aviso_fob(
     *,
     numero_nf: str,
@@ -1743,6 +1833,175 @@ def enviar_lembrete_coleta_fob(
         telefone_real=telefone_real,
         texto=wa_texto,
         contexto=f"FOB lembrete NF {nota.numero}",
+    )
+
+    return {
+        "sucesso": bool(log.status == "Enviado") if not envio_assincrono else True,
+        "log_id": log.id,
+        "numero_nf": nota.numero,
+        "chave": nota.chave,
+        "destinatario": destino_efetivo,
+        "destinatario_real": destino_real,
+        "modo_teste": modo_teste,
+        "fonte_email": fonte,
+        "whatsapp": wa_resultado,
+        "status": log.status,
+        "erro": log.erro_mensagem if log.status == "Falha" else None,
+    }
+
+
+def enviar_aviso_saida_entrega_dap(
+    numero_nf: str,
+    *,
+    nome_cliente: str = "",
+    disparado_por: str = "sistema",
+    origem: str = "RomaneioDAP-SaiuEntrega",
+    envio_assincrono: bool = True,
+) -> dict:
+    """Avisa o cliente que a mercadoria DAP saiu para entrega (viagem
+    iniciada). Um unico aviso por NF (dedup por origem)."""
+    app = current_app._get_current_object()
+    numero_nf_limpo = str(numero_nf or "").strip()
+    if not numero_nf_limpo:
+        return {"sucesso": False, "erro": "numero_nf e obrigatorio."}
+
+    existente = (
+        EmailNFEnviado.query
+        .filter_by(numero_nf=numero_nf_limpo, origem=origem)
+        .filter(EmailNFEnviado.status.in_(["Pendente", "Enviado"]))
+        .order_by(EmailNFEnviado.id.desc())
+        .first()
+    )
+    if existente:
+        return {
+            "sucesso": True,
+            "ignorado": True,
+            "motivo": "Aviso de saida para entrega ja enviado para esta NF.",
+            "numero_nf": numero_nf_limpo,
+            "log_id": existente.id,
+        }
+
+    nota = _resolver_nota(numero_nf_limpo, None)
+    if not nota:
+        return {
+            "sucesso": False,
+            "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.",
+            "numero_nf": numero_nf_limpo,
+        }
+
+    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
+    resolvido = _resolver_destinatario_da_nota(nota, None)
+    destino_real = resolvido["email"]
+    fonte = resolvido["fonte_email"]
+    telefone_real = str(resolvido.get("telefone") or "")
+    destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
+
+    cc_final: list[str] = []
+    if not modo_teste:
+        cc_config_raw = str(app.config.get("NFE_EMAIL_CC") or "")
+        for e in re.split(r"[,;\s]+", cc_config_raw):
+            e = e.strip()
+            if _valido_email(e) and e not in cc_final:
+                cc_final.append(e)
+
+    if not destino_real and cc_final:
+        destino_real = cc_final.pop(0)
+        fonte = "CC"
+        app.logger.warning(
+            "Aviso saida DAP NF-e %s: sem e-mail do cliente, enviando para CC %s.",
+            nota.numero,
+            destino_real,
+        )
+
+    if not destino_real:
+        log = EmailNFEnviado(
+            numero_nf=nota.numero,
+            chave_acesso=nota.chave,
+            destinatario_email="",
+            destinatario_nome=nota.dest_nome,
+            destinatario_cnpj=nota.dest_cnpj,
+            fonte_email="",
+            origem=origem,
+            status="Falha",
+            erro_mensagem="Sem e-mail no cadastro/XML para aviso de saida DAP.",
+            disparado_por=disparado_por,
+        )
+        db.session.add(log)
+        db.session.commit()
+        return {"sucesso": False, "erro": "Nenhum e-mail disponivel.", "log_id": log.id, "numero_nf": nota.numero}
+
+    destino_efetivo = destino_teste if (modo_teste and _valido_email(destino_teste)) else destino_real
+
+    smtp_server = app.config.get("MAIL_SMTP_SERVER")
+    smtp_port = int(app.config.get("MAIL_SMTP_PORT", 587))
+    sender = app.config.get("MAIL_SENDER") or ""
+    password = app.config.get("MAIL_PASSWORD") or ""
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+    if not sender or not password:
+        return {"sucesso": False, "erro": "SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD)."}
+
+    data_saida = datetime.now().strftime("%d/%m/%Y")
+
+    assunto_base = f"Mercadoria em Rota de Entrega - Nota Fiscal n\u00ba {nota.numero}"
+    assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = assunto
+    msg["From"] = f"{sender_name} <{sender}>"
+    msg["To"] = destino_efetivo
+    if cc_final:
+        msg["Cc"] = ", ".join(cc_final)
+
+    corpo_html = _montar_corpo_html_saiu_entrega_dap(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+        data_saida=data_saida,
+        modo_teste=modo_teste,
+        destino_real=destino_real,
+    )
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(f"Mercadoria em rota de entrega - Nota Fiscal {nota.numero}", "plain", "utf-8"))
+    alt.attach(MIMEText(corpo_html, "html", "utf-8"))
+    msg.attach(alt)
+
+    log = EmailNFEnviado(
+        numero_nf=nota.numero,
+        chave_acesso=nota.chave,
+        destinatario_email=destino_efetivo,
+        destinatario_nome=nota.dest_nome,
+        destinatario_cnpj=nota.dest_cnpj,
+        cc_emails=(", ".join(cc_final) if cc_final else None),
+        assunto=assunto,
+        fonte_email=fonte,
+        origem=origem,
+        status="Pendente",
+        anexou_xml=False,
+        anexou_pdf=False,
+        disparado_por=disparado_por,
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    if envio_assincrono:
+        thread = threading.Thread(
+            target=_send_async,
+            args=(app, msg, smtp_server, smtp_port, sender, password, log.id),
+            daemon=True,
+        )
+        thread.start()
+    else:
+        _send_async(app, msg, smtp_server, smtp_port, sender, password, log.id)
+        db.session.refresh(log)
+
+    wa_texto = _montar_texto_whatsapp_saiu_entrega_dap(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+        data_saida=data_saida,
+    )
+    wa_resultado = _enviar_whatsapp_fob(
+        telefone_real=telefone_real,
+        texto=wa_texto,
+        contexto=f"DAP saida entrega NF {nota.numero}",
     )
 
     return {

@@ -107,6 +107,38 @@ def _integrar_comprovante_entrega(parada) -> None:
         )
 
 
+def _avisar_saida_entrega_dap(viagem) -> None:
+    """Ao INICIAR a viagem, avisa o cliente de cada NF DAP embarcada (parada de
+    ENTREGA vinda de Solicitacao AutoDAP) que a mercadoria saiu para entrega.
+    Best-effort: nunca interrompe o inicio da viagem."""
+    try:
+        from ..services.nfe_email_service import enviar_aviso_saida_entrega_dap
+
+        paradas = ViagemParada.query.filter_by(viagem_id=viagem.id, tipo="ENTREGA").all()
+        for parada in paradas:
+            if not parada.solicitacao_id:
+                continue
+            sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
+            if not sol or str(sol.origem_documento or "") != "AutoDAP":
+                continue
+            numero_nf = str(sol.numero_nf or "").strip()
+            if not numero_nf:
+                continue
+            resultado = enviar_aviso_saida_entrega_dap(
+                numero_nf,
+                nome_cliente=sol.parceiro_nome or "",
+                disparado_por=viagem.iniciado_por or "sistema",
+            )
+            current_app.logger.info(
+                "[dap->rota] viagem %s NF %s: aviso de saida p/ entrega -> %s",
+                viagem.id, numero_nf, resultado,
+            )
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao avisar saida para entrega DAP (viagem %s).", getattr(viagem, "id", None)
+        )
+
+
 
 def _proximo_codigo() -> str:
     ano = datetime.now().year
@@ -1273,6 +1305,7 @@ def iniciar(vid: int):
                 descricao=f"KM inicial: {v.km_inicial or '—'}",
                 latitude=lat, longitude=lng, km=v.km_inicial, severidade="success")
     db.session.commit()
+    _avisar_saida_entrega_dap(v)
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
 
 
@@ -2938,6 +2971,7 @@ def motorista_iniciar_publico(vid: int, token: str):
             severidade="success",
         )
         db.session.commit()
+        _avisar_saida_entrega_dap(v)
     return jsonify({"sucesso": True, "status": v.status})
 
 
