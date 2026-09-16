@@ -1,9 +1,10 @@
-"""Geracao do PDF do FORM-08.52 (Ajuste para Faturamento / Formulario para
-Ajuste de Inventario) em ReportLab - documento formal gerado antes de
-mandar um lote de divergencias do Inventario pro Finance.
+"""Geracao do PDF do FORM-08.52 (Ajuste de Inventario) em ReportLab -
+documento formal gerado antes de mandar um lote de divergencias do
+Inventario pro Finance.
 
-Layout replica o modelo em Excel usado ate hoje pela empresa
-(DOC_INVENT_2025_Rev_00): cabecalho com numero do documento, blocos de
+Layout baseado no modelo em Excel usado ate hoje pela empresa
+(DOC_INVENT_2025_Rev_00), com o titulo "AJUSTE DE INVENTARIO" na mesma
+linha do logo: cabecalho com numero do documento, blocos de
 Tipo de Ajuste / Motivo do Ajuste / Deposito-Local (com as opcoes fixas
 impressas e a escolhida marcada, igual as caixinhas "( X )" do modelo),
 tabela de itens ajustados, e rodape com as assinaturas (ver ASSINATURAS).
@@ -158,10 +159,21 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
 
-    cabecalho = Table([[logo_cell, caixa_form]], colWidths=[largura - 38 * mm, 38 * mm])
+    # Titulo na MESMA linha do logo (antes ficava abaixo da barra azul):
+    # logo a esquerda, titulo no meio, caixa FORM-08.52 a direita.
+    largura_caixa = 38 * mm
+    largura_logo = 48 * mm
+    titulo_cell = _p(
+        "AJUSTE DE INVENTÁRIO", size=15, bold=True, color=COR_AZUL_ESCURA, align=TA_CENTER
+    )
+
+    cabecalho = Table(
+        [[logo_cell, titulo_cell, caixa_form]],
+        colWidths=[largura_logo, largura - largura_logo - largura_caixa, largura_caixa],
+    )
     cabecalho.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
     ]))
@@ -173,9 +185,6 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     el.append(barra)
     el.append(Spacer(1, 8))
 
-    el.append(_p("AJUSTE PARA FATURAMENTO", size=15, bold=True, color=COR_AZUL_ESCURA, align=TA_CENTER))
-    el.append(_p("Formulário para Ajuste de Inventário", size=9.5, color=COR_MUTED, align=TA_CENTER))
-    el.append(Spacer(1, 4))
     el.append(_p(f"Documento: <b>{relatorio.numero_documento}</b>", size=10, align=TA_CENTER))
     el.append(Spacer(1, 12))
 

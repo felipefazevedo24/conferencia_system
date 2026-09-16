@@ -6873,3 +6873,49 @@ def test_inventario_pdf_tem_apenas_duas_assinaturas_nomeadas(tmp_path):
     assert b"Aprovador" not in pdf
     # Quem gerou continua registrado, mas fora do bloco de assinatura.
     assert b"Solicitado por" in pdf
+
+
+def test_inventario_pdf_titulo_ajuste_de_inventario_na_linha_do_logo(tmp_path):
+    """Cabecalho do FORM-08.52: o titulo virou "AJUSTE DE INVENTARIO" (o
+    antigo era "AJUSTE PARA FATURAMENTO") e subiu pra mesma linha do logo,
+    ao lado da caixa FORM-08.52 - antes ficava solto abaixo da barra."""
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-TITULO")
+        ajuste_id = ajuste.id
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+
+    gerado = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Cíclico",
+        "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+        "responsavel": "Responsável", "solicitante": "Solicitante", "depto": "LOGÍSTICA",
+    })
+    relatorio_id = gerado.get_json()["relatorio_id"]
+    pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf").data
+
+    # Acentuado vira escape nos bytes crus do PDF - compara o trecho sem acento.
+    assert b"AJUSTE DE INVENT" in pdf
+    assert b"AJUSTE PARA FATURAMENTO" not in pdf
+    # O subtitulo antigo repetia o titulo novo, entao saiu.
+    assert b"rio para Ajuste de Invent" not in pdf
+
+    # Titulo e logo na MESMA linha: o texto do titulo fica na altura do topo
+    # da pagina, acima do "Documento:" (que continua centralizado abaixo).
+    import pymupdf
+
+    with pymupdf.open(stream=pdf, filetype="pdf") as doc:
+        blocos = doc[0].get_text("blocks")
+    def topo(trecho):
+        return min(b[1] for b in blocos if trecho in b[4])
+    # y menor = mais no topo. Titulo acima do numero do documento.
+    assert topo("AJUSTE DE INVENT") < topo("Documento:")
+    # E na mesma faixa vertical da caixa FORM-08.52 (tolerancia de 1 linha).
+    assert abs(topo("AJUSTE DE INVENT") - topo("FORM-08.52")) < 30
