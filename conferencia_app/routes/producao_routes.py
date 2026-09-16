@@ -17,6 +17,13 @@ _PREVIEW_PENDING_PNG = base64.b64decode(
 )
 
 
+def _original_static_directory() -> str:
+    static_folder = current_app.static_folder
+    if static_folder is None:
+        raise RuntimeError("Pasta de arquivos estaticos nao configurada.")
+    return static_folder + "/producao_original"
+
+
 @producao_bp.get("/producao")
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
@@ -27,7 +34,7 @@ def producao_page():
 @permission_required("PAGE_PRODUCAO")
 def producao_original_page():
     return send_from_directory(
-        current_app.static_folder + "/producao_original",
+        _original_static_directory(),
         "index.html",
     )
 
@@ -35,19 +42,19 @@ def producao_original_page():
 @producao_bp.get("/columbia-logo.png")
 @permission_required("PAGE_PRODUCAO")
 def producao_logo():
-    return send_from_directory(current_app.static_folder + "/producao_original", "columbia-logo.png")
+    return send_from_directory(_original_static_directory(), "columbia-logo.png")
 
 
 @producao_bp.get("/producao-original/assets/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_asset(filename: str):
-    return send_from_directory(current_app.static_folder + "/producao_original/assets", filename)
+    return send_from_directory(_original_static_directory() + "/assets", filename)
 
 
 @producao_bp.get("/producao-original/<path:filename>")
 @permission_required("PAGE_PRODUCAO")
 def producao_static(filename: str):
-    return send_from_directory(current_app.static_folder + "/producao_original", filename)
+    return send_from_directory(_original_static_directory(), filename)
 
 
 @producao_bp.get("/api/producao/os")
@@ -117,7 +124,11 @@ def criar_observacao(numero_os: str, aux_code: int):
     texto = str((request.get_json(silent=True) or {}).get("texto") or "").strip()
     if not texto:
         return jsonify({"error": "Informe a observacao."}), 400
-    row = ProducaoObservacao(numero_os=numero_os, aux_code=aux_code, texto=texto[:4000], autor=session.get("username", "desconhecido"))
+    row = ProducaoObservacao()
+    row.numero_os = numero_os
+    row.aux_code = aux_code
+    row.texto = texto[:4000]
+    row.autor = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": row.id, "texto": row.texto, "autor": row.autor, "criado_em": row.criado_em.isoformat()}), 201
@@ -127,7 +138,9 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
     parent = next((item for item in all_nodes if item["id"] == node.get("parent_id")), None)
     path = []
     cursor = parent
-    while cursor:
+    visited = {node["id"]}
+    while cursor and cursor["id"] not in visited:
+        visited.add(cursor["id"])
         path.insert(0, cursor)
         cursor = next((item for item in all_nodes if item["id"] == cursor.get("parent_id")), None)
     return {
@@ -142,10 +155,10 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
         "parent_id": node.get("parent_id"),
         "child_ids": node.get("child_ids") or [],
         "has_children": bool(node.get("child_ids")),
-        "predecessor_ids": [],
-        "path_ids": [item["id"] for item in path],
-        "path_labels": [item.get("codigo") or item["id"] for item in path],
-        "state": {"bloqueado": "blocked", "concluido": "completed", "disponivel": "available", "montagem": "assembling", "fabricacao": "manufacturing", "nao_iniciado": "not_started"}.get(node.get("estado"), "not_started"),
+        "predecessor_ids": node.get("predecessor_ids") or [],
+        "path_ids": [item["id"] for item in path] + [node["id"]],
+        "path_labels": [item.get("codigo") or item["id"] for item in path] + [node.get("codigo") or node["id"]],
+        "state": {"bloqueado": "blocked", "concluido": "completed", "disponivel": "available", "montagem": "assembling", "fabricacao": "manufacturing", "nao_iniciado": "not_started"}.get(node.get("estado") or "nao_iniciado", "not_started"),
         "state_reason_code": "process_locked" if node.get("estado") == "bloqueado" else "no_execution_evidence",
         "state_reason": node.get("estado_motivo") or "Sem informacao",
         "operations_total": node.get("operacoes_total", 0),
@@ -185,7 +198,7 @@ def original_search_orders():
 
 
 def _original_node_result(item: dict) -> dict:
-    return {"number": item.get("numero"), "title": item.get("titulo"), "source_status": item.get("status_origem") or None, "due_date": item.get("data_prevista"), "drawing_number": item.get("desenho") or None, "matched_item_code": None, "matched_item_description": None, "matched_budget_number": None}
+    return {"number": item.get("numero"), "title": item.get("titulo"), "source_status": item.get("status_origem") or None, "due_date": item.get("data_prevista"), "drawing_number": item.get("desenho") or None, "matched_item_code": item.get("matched_item_code"), "matched_item_description": item.get("matched_item_description"), "matched_budget_number": item.get("matched_budget_number")}
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/structure")
@@ -203,8 +216,9 @@ def original_structure(numero_os: str):
 @permission_required("PAGE_PRODUCAO")
 def original_dependencies(numero_os: str):
     try:
-        data = producao_service.obter_estrutura(numero_os)
-        return jsonify({"selected_order_number": numero_os, "budget_number": None, "nodes": [{"number": data["ordem"]["numero"], "title": data["ordem"].get("titulo", ""), "source_status": data["ordem"].get("status_origem"), "due_date": data["ordem"].get("data_prevista"), "drawing_number": data["ordem"].get("desenho"), "is_budget_order": False}], "edges": [], "source": {"calculated_at": datetime.now().isoformat()}})
+        return jsonify(producao_service.obter_dependencias(numero_os))
+    except LookupError as exc:
+        return jsonify({"detail": str(exc)}), 404
     except Exception:
         return jsonify({"detail": "Falha ao consultar as dependencias da OS"}), 503
 
@@ -237,7 +251,8 @@ def original_item(numero_os: str, aux_code: int):
         documents = []
     drawings = [item for item in documents if item["kind"] == "drawing"]
     primary_document = next((item for item in documents if item.get("is_primary")), None)
-    return jsonify({"node": original, "parent": None, "path": [], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
+    related = {item["id"]: _original_node(item, data["nos"], numero_os) for item in data["nos"]}
+    return jsonify({"node": original, "parent": related.get(original["parent_id"]), "path": [related[item_id] for item_id in original["path_ids"] if item_id in related], "operations": operations, "categories": {"ph": 0, "lm": 0, "st": 0, "pp": 0}, "predecessors": [related[item_id] for item_id in original["predecessor_ids"] if item_id in related], "drawings": drawings, "documents": [item for item in documents if item["kind"] != "drawing"], "observations_count": 0, "information_origin": "GRV", "document_path": primary_document["filename"] if primary_document else None})
 
 
 @producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/operations/live")
@@ -354,7 +369,11 @@ def original_create_observation(numero_os: str, aux_code: int):
     text = str(payload.get("text") or "").strip()
     if not text:
         return jsonify({"detail": "Informe a observacao."}), 400
-    row = ProducaoObservacao(numero_os=numero_os, aux_code=aux_code, texto=text[:4000], autor=session.get("username", "desconhecido"))
+    row = ProducaoObservacao()
+    row.numero_os = numero_os
+    row.aux_code = aux_code
+    row.texto = text[:4000]
+    row.autor = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": str(row.id), "order_number": numero_os, "item_aux_code": aux_code, "text": row.texto, "author": row.autor, "created_at": row.criado_em.isoformat()}), 201
@@ -375,7 +394,13 @@ def original_create_sequence(numero_os: str):
     if not title:
         return jsonify({"detail": "Informe o titulo da etapa."}), 400
     last = ProducaoSequencia.query.filter_by(numero_os=numero_os).order_by(ProducaoSequencia.posicao.desc()).first()
-    row = ProducaoSequencia(numero_os=numero_os, aux_code=payload.get("item_aux_code"), posicao=(last.posicao + 1 if last else 1), titulo=title[:240], instrucoes=str(payload.get("instructions") or "").strip() or None, criado_por=session.get("username", "desconhecido"))
+    row = ProducaoSequencia()
+    row.numero_os = numero_os
+    row.aux_code = payload.get("item_aux_code")
+    row.posicao = last.posicao + 1 if last else 1
+    row.titulo = title[:240]
+    row.instrucoes = str(payload.get("instructions") or "").strip() or None
+    row.criado_por = session.get("username", "desconhecido")
     db.session.add(row)
     db.session.commit()
     return jsonify({"id": str(row.id), "order_number": row.numero_os, "item_aux_code": row.aux_code, "position": row.posicao, "title": row.titulo, "instructions": row.instrucoes, "source": "application", "created_by": row.criado_por, "created_at": row.criado_em.isoformat()}), 201

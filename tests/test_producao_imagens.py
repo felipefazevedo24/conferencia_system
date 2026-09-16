@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import threading
 import time
@@ -201,6 +202,329 @@ def test_revisao_conflitante_nao_e_associada_mesmo_com_um_documento():
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_quadrilatero_do_pdf_mantem_arestas_e_direcoes_da_perspectiva():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.draw_polyline([(80, 180), (190, 120), (300, 180), (190, 240), (80, 180)])
+        items = page.get_drawings()[0]["items"]
+        assert items[0][0] == "qu"
+        assert producao_service._line_stats(items) == (4, 4, 0)
+        assert len(producao_service._projection_axes(items)) == 2
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_agrupamento_espacial_preserva_ordem_limites_e_estatisticas():
+    import random
+
+    fitz = producao_service.fitz
+    bounds = fitz.Rect(0, 0, 500, 500)
+
+    def reference(records, margin):
+        groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
+        changed = True
+        while changed:
+            changed = False
+            for index, group in enumerate(groups):
+                for other_index in range(index + 1, len(groups)):
+                    other = groups[other_index]
+                    if not producao_service._expand_rect(group["rect"], margin, bounds).intersects(other["rect"]):
+                        continue
+                    group["rect"] |= other["rect"]
+                    for key in ("lines", "diagonals", "curves", "paths"):
+                        group[key] += other[key]
+                    groups.pop(other_index)
+                    changed = True
+                    break
+                if changed:
+                    break
+        return groups
+
+    generator = random.Random(14794)
+    for _case in range(60):
+        records = []
+        for index in range(generator.randrange(1, 60)):
+            left, top = generator.randrange(430), generator.randrange(430)
+            records.append({
+                "rect": fitz.Rect(left, top, left + generator.randrange(1, 70), top + generator.randrange(1, 70)),
+                "lines": index, "diagonals": index % 3, "curves": index % 5, "paths": 1,
+            })
+        margin = generator.randrange(0, 25)
+        assert producao_service._merge_drawing_records(records, bounds, margin) == reference(records, margin)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_agrupamento_espacial_nao_compara_todos_os_tracos_separados():
+    fitz = producao_service.fitz
+    records = [
+        {"rect": fitz.Rect(20 + column * 100, 20 + row * 100, 32 + column * 100, 32 + row * 100),
+         "lines": 4, "diagonals": 0, "curves": 0, "paths": 1}
+        for row in range(25) for column in range(25)
+    ]
+    with patch.object(producao_service, "_expand_rect", wraps=producao_service._expand_rect) as expand:
+        groups = producao_service._merge_drawing_records(records, fitz.Rect(0, 0, 2600, 2600), 5)
+    assert groups == records
+    assert expand.call_count <= len(records) * 2
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("angle", [-30, 30])
+@pytest.mark.parametrize("combined_paths", [False, True])
+def test_perspectiva_cilindrica_tem_prioridade_sobre_frontal_com_cotas(angle, combined_paths):
+    import math
+
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=900)
+        radians = math.radians(angle)
+
+        def point(horizontal, vertical):
+            return fitz.Point(300 + horizontal * math.cos(radians) - vertical * math.sin(radians),
+                             220 + horizontal * math.sin(radians) + vertical * math.cos(radians))
+
+        cylinder = page.new_shape()
+
+        def finish_path():
+            if not combined_paths:
+                cylinder.finish(color=(0, 0, 0), width=1, closePath=False)
+                cylinder.commit()
+
+        for radius_x, radius_y in ((35, 70), (18, 37)):
+            control = 0.5522847498
+            for points in (
+                ((0, -radius_y), (control * radius_x, -radius_y), (radius_x, -control * radius_y), (radius_x, 0)),
+                ((radius_x, 0), (radius_x, control * radius_y), (control * radius_x, radius_y), (0, radius_y)),
+                ((0, radius_y), (-control * radius_x, radius_y), (-radius_x, control * radius_y), (-radius_x, 0)),
+                ((-radius_x, 0), (-radius_x, -control * radius_y), (-control * radius_x, -radius_y), (0, -radius_y)),
+            ):
+                cylinder.draw_bezier(*(point(*coordinates) for coordinates in points))
+            finish_path()
+        cylinder.draw_bezier(point(190, -70), point(209.32996624, -70), point(225, -38.65993249), point(225, 0))
+        cylinder.draw_bezier(point(225, 0), point(225, 38.65993249), point(209.32996624, 70), point(190, 70))
+        finish_path()
+        for vertical in (-70, 70):
+            cylinder.draw_line(point(0, vertical), point(190, vertical))
+            finish_path()
+        if combined_paths:
+            cylinder.finish(color=(0, 0, 0), width=1, closePath=False)
+            cylinder.commit()
+        expected = page.get_drawings()[0]["rect"]
+        for drawing in page.get_drawings()[1:]:
+            expected |= drawing["rect"]
+        items = [item for drawing in page.get_drawings() for item in drawing["items"]]
+        assert len(producao_service._projection_axes(items)) == 1
+        assert producao_service._is_cylindrical_view(producao_service._drawing_segments(items), [item[1:5] for item in items if item[0] == "c"], expected)
+        tangent_endpoint = point(190, -70)
+        nearby_label = fitz.Rect(tangent_endpoint.x - 2, tangent_endpoint.y - 2, tangent_endpoint.x + 2, tangent_endpoint.y + 2)
+        assert not producao_service._dimension_segments(page.get_drawings(), [nearby_label])
+        page.insert_text((315, expected.y1 + 24), "( 2 : 1 )")
+        page.draw_circle((495, 580), 75)
+        page.draw_circle((495, 580), 40)
+        for start, end, label in (((465, 645), (565, 435), "\u00d825"), ((435, 630), (610, 465), "\u00d813")):
+            page.draw_line(start, end)
+            direction = fitz.Point(end) - fitz.Point(start)
+            direction /= abs(direction)
+            normal = fitz.Point(-direction.y, direction.x)
+            tip = fitz.Point(start)
+            page.draw_polyline([tip + direction * 9 + normal * 3, tip, tip + direction * 9 - normal * 3])
+            page.insert_text((end[0] - 5, end[1] - 3), label)
+        page.draw_rect(fitz.Rect(90, 500, 260, 650))
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert clip.contains(expected)
+        assert clip.y1 < 410
+        assert clip.x0 > expected.x0 - 35 and clip.x1 < expected.x1 + 35
+        assert not any(clip.intersects(fitz.Rect(word[:4])) for word in page.get_text("words"))
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Usar a perspectiva cilindrica, nao a folha")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("combined_paths", [False, True])
+def test_cotas_de_diametro_nao_aumentam_pontuacao_da_vista_frontal(combined_paths):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=650, height=880)
+        page.draw_circle((495, 535), 75)
+        page.draw_circle((495, 535), 40)
+        before = producao_service._page_isometric_candidates(page)
+        shape = page.new_shape()
+        if combined_paths:
+            page = pdf.new_page(width=650, height=880)
+            shape = page.new_shape()
+            shape.draw_circle((495, 535), 75)
+            shape.draw_circle((495, 535), 40)
+        shape.draw_line((460, 600), (540, 395))
+        shape.draw_line((435, 585), (575, 445))
+        shape.finish(color=(0, 0, 0), width=1, closePath=False)
+        shape.commit()
+        page.insert_text((535, 392), "\u00d825")
+        page.insert_text((570, 442), "\u00d813")
+        after = producao_service._page_isometric_candidates(page)
+        assert before and after
+        assert after[0][0] <= before[0][0]
+        assert after[0][1] == before[0][1]
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_circulos_com_cotas_nao_sao_evidencia_de_cilindro():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.draw_circle((220, 220), 75)
+        page.draw_circle((220, 220), 40)
+        page.draw_line((185, 285), (270, 80))
+        page.draw_line((160, 270), (300, 130))
+        items = [item for drawing in page.get_drawings() for item in drawing["items"]]
+        assert not producao_service._is_cylindrical_view(producao_service._drawing_segments(items), [item[1:5] for item in items if item[0] == "c"], fitz.Rect(145, 80, 300, 295))
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_perfil_longitudinal_sem_rotulo_e_preferido_a_secao_e_tabela():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_polyline([(180, 280), (205, 255), (230, 280), (230, 350), (205, 375), (180, 350), (180, 280)])
+        for height in (300, 315, 330):
+            page.draw_line((350, height), (920, height))
+        page.draw_line((350, 300), (350, 330))
+        page.draw_line((920, 300), (920, 330))
+        page.draw_line((350, 260), (920, 260))
+        page.insert_text((610, 250), "500")
+        page.draw_rect(fitz.Rect(350, 560, 920, 610))
+        page.insert_text((390, 585), "POSICAO   MATERIAL   QUANTIDADE   DESCRICAO")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert clip.x0 > 300 and clip.x1 >= 920
+        assert 280 < clip.y0 <= 300 and 330 <= clip.y1 < 350
+        assert not candidates[0][2]
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Usar a vista principal, nao a folha inteira")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("perspective_left", [False, True])
+def test_conjunto_sem_legenda_prioriza_perspectiva_sem_depender_da_posicao(perspective_left):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        perspective_x, orthogonal_x = (100, 620) if perspective_left else (620, 100)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_rect(fitz.Rect(orthogonal_x, 130, orthogonal_x + 240, 200))
+        page.draw_circle((orthogonal_x + 120, 285), 65)
+        page.draw_rect(fitz.Rect(orthogonal_x + 65, 190, orthogonal_x + 175, 260))
+        page.draw_line((orthogonal_x - 25, 80), (orthogonal_x + 280, 370), color=(1, 0, 0))
+        page.draw_line((orthogonal_x - 25, 370), (orthogonal_x + 280, 80), color=(0, 1, 0))
+        page.insert_text((orthogonal_x + 90, 95), "210 156 89")
+        board = [(perspective_x, 180), (perspective_x + 170, 95), (perspective_x + 220, 125), (perspective_x + 50, 210), (perspective_x, 180)]
+        page.draw_polyline(board)
+        page.draw_line((perspective_x + 90, 190), (perspective_x + 90, 290))
+        page.draw_line((perspective_x + 160, 155), (perspective_x + 160, 270))
+        page.draw_oval(fitz.Rect(perspective_x + 45, 265, perspective_x + 210, 335))
+        page.draw_circle((perspective_x + 170, 110), 7)
+        page.draw_circle((perspective_x + 55, 170), 7)
+        for row in range(7):
+            page.draw_rect(fitz.Rect(500, 475 + row * 20, 950, 495 + row * 20), color=(0, 0, 1))
+            page.insert_text((520, 490 + row * 20), f"{row + 1} PARAFUSO ACO MATERIAL 2 UNIDADES")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        selected = candidates[0][1]
+        assert selected.x0 <= perspective_x and selected.x1 >= perspective_x + 220
+        assert selected.x0 > perspective_x - 40 and selected.x1 < perspective_x + 260
+        assert 60 < selected.y0 <= 95 and 335 <= selected.y1 < 380
+        assert not candidates[0][2]
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Conjunto deve ser reconhecido sem legenda")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        assert previews["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("labeled", [False, True])
+def test_vista_explodida_preserva_placa_e_fixador_separados_sem_incluir_outra_vista(labeled):
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        page.draw_rect(fitz.Rect(20, 20, 980, 680))
+        page.draw_rect(fitz.Rect(100, 170, 320, 370))
+        page.draw_circle((210, 270), 40)
+        body = [(650, 350), (760, 290), (875, 350), (765, 415), (650, 350), (650, 415), (765, 480), (875, 415), (875, 350)]
+        page.draw_polyline(body)
+        page.draw_line((765, 415), (765, 480))
+        plate = [(650, 185), (760, 130), (875, 185), (765, 240), (650, 185)]
+        page.draw_polyline(plate)
+        page.draw_circle((760, 83), 9)
+        page.draw_circle((940, 185), 15)
+        page.insert_text((935, 190), "7")
+        page.draw_rect(fitz.Rect(550, 560, 950, 640))
+        page.insert_text((565, 590), "POSICAO MATERIAL QUANTIDADE DESCRICAO PARAFUSO PORCA ARRUELA ACO")
+        if labeled:
+            page.insert_text((690, 522), "VISTA EXPLODIDA")
+        candidates = producao_service._page_isometric_candidates(page)
+        assert candidates
+        clip = candidates[0][1]
+        assert 610 < clip.x0 <= 650 and 875 <= clip.x1 < 920
+        assert clip.y0 <= 74 and 480 <= clip.y1 < 540
+        assert candidates[0][2] is labeled
+        with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Preservar a vista explodida no recorte")):
+            assert producao_service._render_pdf_previews(pdf.tobytes())["detail"].startswith(b"\x89PNG")
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_perspectivas_independentes_equivalentes_nao_sao_unidas_como_explodida():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=1000, height=700)
+        for offset in (100, 450):
+            page.draw_polyline([(offset, 250), (offset + 90, 200), (offset + 180, 250), (offset + 90, 300), (offset, 250), (offset, 350), (offset + 90, 400), (offset + 180, 350), (offset + 180, 250)])
+            page.draw_line((offset + 90, 300), (offset + 90, 400))
+        candidates = producao_service._page_isometric_candidates(page)
+        assert len(candidates) == 2
+        assert all(candidate[1].width < 220 for candidate in candidates)
+        assert abs(candidates[0][0] - candidates[1][0]) < 0.08
+        with patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma das vistas equivalentes")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+        from PIL import Image
+
+        with Image.open(io.BytesIO(previews["detail"])) as image:
+            assert image.info["preview_kind"] == "original-document"
+
+
+def test_render_de_componentes_separados_preserva_todas_as_pecas():
+    from PIL import Image, ImageDraw
+
+    images = importlib.import_module("production_test_app.services.production_images")
+    source = Image.new("RGB", (360, 600), "white")
+    drawing = ImageDraw.Draw(source)
+    drawing.rectangle((70, 300, 290, 530), fill=(180, 30, 30))
+    drawing.rectangle((80, 140, 280, 200), fill=(30, 30, 180))
+    drawing.ellipse((170, 50, 190, 70), fill=(30, 180, 30))
+    previews = images.render_variants(source, preserve_components=True)
+    for content in previews.values():
+        with Image.open(io.BytesIO(content)) as image:
+            colors = set(image.get_flattened_data())
+            assert (180, 30, 30, 255) in colors
+            assert (30, 30, 180, 255) in colors
+            assert (30, 180, 30, 255) in colors
+            assert image.getchannel("A").getextrema() == (0, 255)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_tabela_nao_e_candidata_a_vista_principal():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=900, height=600)
+        for row in range(8):
+            page.draw_rect(fitz.Rect(250, 150 + row * 20, 750, 170 + row * 20))
+            page.insert_text((270, 165 + row * 20), f"{row + 1} PARAFUSO ACO MATERIAL 2 UNIDADES")
+        assert not producao_service._page_isometric_candidates(page)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
     fitz = producao_service.fitz
     pdf = fitz.open()
@@ -221,7 +545,8 @@ def test_pdf_localiza_vista_isometrica_fora_da_primeira_pagina():
     content = pdf.tobytes()
     pdf.close()
 
-    previews = producao_service._render_pdf_previews(content)
+    with patch.object(producao_service, "_render_document_previews", side_effect=AssertionError("Vista isometrica segura deve continuar tendo prioridade")):
+        previews = producao_service._render_pdf_previews(content)
 
     assert previews["thumbnail"].startswith(b"\x89PNG")
     assert previews["detail"].startswith(b"\x89PNG")
@@ -303,6 +628,111 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
         producao_service._render_pdf_previews(b"nao e pdf")
 
 
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_pdf_sem_recorte_seguro_mostra_desenho_original_identificado(ambiguous):
+    from PIL import Image
+
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        cover = pdf.new_page(width=700, height=600)
+        cover.insert_text((40, 40), "Capa sem desenho")
+        page = pdf.new_page(width=700, height=600)
+        page.draw_rect(fitz.Rect(80, 100, 280, 400), color=(1, 0, 0), width=3)
+        page.draw_rect(fitz.Rect(400, 100, 600, 400), color=(0, 0, 1), width=3)
+        page.insert_text((80, 440), "VISTAS ORTOGONAIS - NAO RECORTAR")
+        content = pdf.tobytes()
+    candidates = [(2.0, fitz.Rect(80, 100, 280, 400), False), (2.0, fitz.Rect(400, 100, 600, 400), False)] if ambiguous else []
+    with (
+        patch.object(producao_service, "_page_isometric_candidates", return_value=candidates),
+        patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma vista ambigua")),
+    ):
+        previews = producao_service._render_pdf_previews(content)
+    for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
+        with Image.open(io.BytesIO(previews[variant])) as image:
+            assert image.info["preview_kind"] == "original-document"
+            assert image.info["page_number"] == "2"
+            assert max(image.size) <= maximum
+            assert image.crop((0, 0, image.width, max(40, round(maximum * 0.06)))).convert("L").getextrema()[0] < 100
+            colors = image.get_flattened_data()
+            assert any(red > 200 and green < 80 and blue < 80 for red, green, blue in colors)
+            assert any(blue > 200 and red < 80 and green < 80 for red, green, blue in image.get_flattened_data())
+
+
+@pytest.mark.parametrize("function_name, args, media_type", [
+    ("_expand_rect", (None, 1.0, None), "PDF"),
+    ("_merge_drawing_records", ([], None, 1.0), "PDF"),
+    ("_page_isometric_candidates", (None,), "PDF"),
+    ("_render_clip_previews", (None, None), "PDF"),
+    ("_render_document_previews", (None,), "PDF"),
+    ("_render_pdf_previews", (b"pdf",), "PDF"),
+    ("_render_raster_previews", (b"png", "png"), "imagem"),
+])
+def test_renderizadores_sem_pymupdf_informam_dependencia_ausente(function_name, args, media_type):
+    with patch.object(producao_service, "fitz", None):
+        with pytest.raises(LookupError, match=f"Renderizador de {media_type} nao instalado"):
+            getattr(producao_service, function_name)(*args)
+
+
+def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (360, 480), "white")
+    ImageDraw.Draw(image).ellipse((70, 40, 280, 440), fill=(120, 80, 60))
+    content = io.BytesIO()
+    image.save(content, format="PNG")
+    with producao_service.fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=600)
+        page.insert_image(producao_service.fitz.Rect(420, 90, 600, 330), stream=content.getvalue())
+        # A dense technical view would otherwise win the geometry score.
+        shape = page.new_shape()
+        for y in range(120, 330, 5):
+            shape.draw_line((40, y), (300, y + 80))
+        shape.finish(color=(0, 0, 0), width=1)
+        shape.commit()
+        with patch.object(producao_service, "_page_isometric_candidates", side_effect=AssertionError("Imagem incorporada nao deve analisar a geometria sem rotulo")):
+            previews = producao_service._render_pdf_previews(pdf.tobytes())
+
+    thumb = Image.open(io.BytesIO(previews["thumbnail"]))
+    detail = Image.open(io.BytesIO(previews["detail"]))
+    assert thumb.mode == detail.mode == "RGBA"
+    assert max(thumb.size) <= 720
+    assert detail.getpixel((detail.width // 2, detail.height // 2)) == (120, 80, 60, 255)
+    assert detail.getchannel("A").getextrema() == (0, 255)
+    assert abs(thumb.width / thumb.height - detail.width / detail.height) < 0.01
+
+
+def test_alpha_otimizado_preserva_pixels_e_limiar_original():
+    from PIL import Image, ImageChops, ImageFilter
+
+    images = importlib.import_module("production_test_app.services.production_images")
+    source = Image.new("RGB", (32, 32))
+    source.putdata([((offset * 7) % 256, (offset * 13) % 256, (offset * 19) % 256) for offset in range(1024)])
+    selection = Image.new("L", source.size)
+    selection.putdata([(offset * 17) % 256 for offset in range(1024)])
+    background = images._estimate_background_color(source)
+    channels = ImageChops.difference(source, Image.new("RGB", source.size, background)).split()
+    maximum = ImageChops.lighter(ImageChops.lighter(channels[0], channels[1]), channels[2])
+    samples = sorted(value for value, selected in zip(maximum.tobytes(), selection.tobytes()) if selected >= 128 and value > 6)
+    opaque_limit = max(30, samples[round((len(samples) - 1) * 0.7)]) if samples else 96
+    alpha = maximum.point([images._background_difference_to_alpha(value, opaque_limit) for value in range(256)])
+    interior = maximum.point([255 if value > 6 else 0 for value in range(256)]).filter(ImageFilter.MinFilter(3))
+    alpha = ImageChops.multiply(ImageChops.lighter(alpha, ImageChops.multiply(interior, selection)), selection)
+    expected_pixels = []
+    for offset, opacity in enumerate(alpha.tobytes()):
+        pixel = source.getpixel((offset % source.width, offset // source.width))
+        if opacity <= 2:
+            expected_pixels.append((0, 0, 0, 0))
+        elif opacity >= 252:
+            expected_pixels.append((*pixel, 255))
+        else:
+            corrected = tuple(max(0, min(255, round((channel * 255 - background_channel * (255 - opacity)) / opacity))) for channel, background_channel in zip(pixel, background))
+            expected_pixels.append((*corrected, opacity))
+    expected = Image.new("RGBA", source.size)
+    expected.putdata(expected_pixels)
+    assert images._background_to_alpha(source, selection).tobytes() == expected.tobytes()
+
+
 def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
@@ -319,6 +749,468 @@ def test_cache_reutiliza_derivadas_e_muda_com_identidade():
     assert generate.call_count == 2
 
 
+def test_preview_pronto_da_bridge_dispensa_download_do_pdf_e_renderizacao_local():
+    expected = {"thumbnail": b"thumb-bridge", "detail": b"detail-bridge"}
+    with (
+        patch.object(producao_service, "_gerar_previews") as render,
+        patch.object(producao_service, "obter_arquivo") as download,
+        patch.object(producao_service, "_PREVIEW_CACHE", OrderedDict()),
+    ):
+        from unittest.mock import Mock
+
+        bridge_preview = Mock(return_value=expected)
+        first = producao_service._previews_em_cache("bridge-ready", document_loader=download, preview_loader=bridge_preview)
+        second = producao_service._previews_em_cache("bridge-ready", document_loader=download, preview_loader=bridge_preview)
+        assert first == second == expected
+        bridge_preview.assert_called_once_with()
+        download.assert_not_called()
+        render.assert_not_called()
+
+
+def test_preview_da_bridge_nao_disponivel_preserva_renderizador_local():
+    expected = {"thumbnail": b"thumb-local", "detail": b"detail-local"}
+    with (
+        patch.object(producao_service, "_gerar_previews", return_value=expected) as render,
+        patch.object(producao_service, "obter_arquivo", return_value=(b"pdf", "drawing.pdf")) as download,
+        patch.object(producao_service, "_PREVIEW_CACHE", OrderedDict()),
+    ):
+        result = producao_service._previews_em_cache("bridge-fallback", document_loader=download, preview_loader=lambda: None)
+        assert result == expected
+        download.assert_called_once_with()
+        render.assert_called_once_with(b"pdf", "drawing.pdf")
+
+
+@pytest.fixture
+def bridge_preview_client(monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from scripts import erp_lancamento_api_bridge as bridge
+    from conferencia_app.services import producao_service as bridge_service
+
+    monkeypatch.setattr(bridge, "_registrar_facilities_na_bridge", lambda _app: None)
+    monkeypatch.setattr(bridge, "_config", lambda: {
+        "host": "erp-test", "database": "test", "user": "readonly",
+        "token": "test-only-token", "port": 5432,
+    })
+    monkeypatch.setattr(bridge_service, "_PREVIEW_CACHE", OrderedDict())
+    monkeypatch.setattr(bridge_service, "_PREVIEW_FAILURES", OrderedDict())
+    metadata_connection = MagicMock()
+    metadata = metadata_connection.cursor.return_value.__enter__.return_value
+    metadata.description = [(name,) for name in ("document_id", "kind", "size_bytes", "content_revision")]
+    metadata.fetchall.return_value = [(31, "attachment", 1000000, "revision-1")]
+    content_connection = MagicMock()
+    content = content_connection.cursor.return_value.__enter__.return_value
+    content.description = [(name,) for name in ("document_id", "nome_arquivo", "content_revision", "anexo")]
+    content.fetchone.return_value = (31, "drawing.pdf", "revision-1", memoryview(b"pdf"))
+    connections = []
+
+    def connect(_cfg, *, readonly=False):
+        assert readonly is True
+        connection = content_connection if len(connections) == 1 else metadata_connection
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(bridge, "_conectar", connect)
+    expected = {"thumbnail": b"\x89PNG\r\n\x1a\nthumb", "detail": b"\x89PNG\r\n\x1a\ndetail"}
+    render = MagicMock(return_value=expected)
+    monkeypatch.setattr(bridge_service, "_gerar_previews", render)
+    payload = {
+        "cod_empresa": 1, "cod_os": 9959, "cod_os_aux": 4, "document_id": 31,
+        "kind": "attachment", "content_revision": "revision-1",
+        "renderer_version": bridge_service._PREVIEW_CACHE_VERSION,
+    }
+    return bridge.create_app().test_client(), payload, expected, render, metadata, content, connections, bridge_service
+
+
+def test_bridge_preview_entrega_so_pngs_reutiliza_render_e_fecha_conexoes(bridge_preview_client):
+    import zipfile
+
+    client, payload, expected, render, metadata, content, connections, _service = bridge_preview_client
+    headers = {"Authorization": "Bearer test-only-token"}
+    availability = client.options("/api/erp/producao/preview")
+    assert availability.status_code == 200
+    assert "POST" in availability.headers["Allow"]
+    assert not connections
+    first = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    second = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    assert first.status_code == second.status_code == 200
+    assert first.headers["X-ERP-Read-Only"] == "true"
+    assert first.headers["X-Production-Preview-Version"] == payload["renderer_version"]
+    assert first.headers["ETag"] == second.headers["ETag"]
+    with zipfile.ZipFile(io.BytesIO(first.data)) as archive:
+        assert set(archive.namelist()) == {"thumbnail.png", "detail.png"}
+        assert archive.read("thumbnail.png") == expected["thumbnail"]
+        assert archive.read("detail.png") == expected["detail"]
+    render.assert_called_once_with(b"pdf", "drawing.pdf")
+    assert len(connections) == 3
+    assert connections[0].close.call_count == 2
+    connections[1].close.assert_called_once_with()
+    assert metadata.execute.call_args.args[1]["cod_empresa"] == 1
+    assert content.execute.call_args.args[1]["cod_os"] == 9959
+    assert content.execute.call_args.args[1]["cod_os_aux"] == 4
+    assert content.execute.call_args.args[1]["document_id"] == 31
+    assert "tos_aux_anexos" in content.execute.call_args.args[0]
+    assert len(first.data) < int(first.headers["X-Original-Bytes"])
+
+
+@pytest.mark.parametrize("case, status", [("auth", 401), ("company", 403), ("invalid", 400), ("version", 409), ("missing-renderer", 501)])
+def test_bridge_preview_rejeita_acesso_e_parametros_antes_do_banco(bridge_preview_client, monkeypatch, case, status):
+    client, payload, _expected, render, _metadata, _content, connections, service = bridge_preview_client
+    headers = {"Authorization": "Bearer test-only-token"}
+    if case == "auth":
+        headers.clear()
+    elif case == "company":
+        payload["cod_empresa"] = 2
+    elif case == "invalid":
+        payload["cod_os"] = "9959 OR 1=1"
+    elif case == "version":
+        payload["renderer_version"] = "old-renderer"
+    else:
+        monkeypatch.setattr(service, "fitz", None)
+    response = client.post("/api/erp/producao/preview", json=payload, headers=headers)
+    assert response.status_code == status
+    assert not connections
+    render.assert_not_called()
+
+
+@pytest.mark.parametrize("case, status", [("missing", 404), ("changed", 409), ("oversized", 413), ("changed-during-read", 422)])
+def test_bridge_preview_nao_retorna_documento_incorreto(bridge_preview_client, case, status):
+    client, payload, _expected, render, metadata, content, connections, _service = bridge_preview_client
+    if case == "missing":
+        metadata.fetchall.return_value = []
+    elif case == "changed":
+        payload["content_revision"] = "revision-old"
+    elif case == "oversized":
+        metadata.fetchall.return_value = [(31, "attachment", 26 * 1024 * 1024, "revision-1")]
+    else:
+        content.fetchone.return_value = (31, "drawing.pdf", "revision-2", b"changed-pdf")
+    response = client.post("/api/erp/producao/preview", json=payload, headers={"Authorization": "Bearer test-only-token"})
+    assert response.status_code == status
+    render.assert_not_called()
+    assert len(connections) == (2 if case == "changed-during-read" else 1)
+    if case == "changed-during-read":
+        assert response.get_json()["motivo"] == "documento_alterado"
+
+
+@pytest.mark.parametrize("message, reason", [
+    ("Vista isometrica nao identificada com confianca", "vista_isometrica_nao_identificada"),
+    ("Documento PDF invalido ou ilegivel", "pdf_invalido_ou_ilegivel"),
+    ("Documento sem paginas", "documento_sem_paginas"),
+    ("Imagem invalida ou ilegivel", "imagem_invalida_ou_ilegivel"),
+    ("Formato sem suporte para previa isometrica", "formato_nao_suportado"),
+    ("Documento sem conteudo disponivel", "documento_sem_conteudo"),
+    ("Documento excede o limite da previa", "documento_muito_grande"),
+    ("detalhe-interno-nao-deve-ser-exposto", "falha_ao_processar_documento"),
+])
+def test_bridge_preview_422_informa_causa_segura_e_identifica_documento(bridge_preview_client, caplog, message, reason):
+    client, payload, _expected, render, _metadata, _content, _connections, _service = bridge_preview_client
+    render.side_effect = LookupError(message)
+    for _attempt in range(2):
+        response = client.post("/api/erp/producao/preview", json=payload, headers={"Authorization": "Bearer test-only-token"})
+        assert response.status_code == 422
+        assert response.get_json() == {"erro": "previa_indisponivel", "motivo": reason}
+    assert render.call_count == 1
+    diagnostics = [record.getMessage() for record in caplog.records if "producao_preview_indisponivel" in record.getMessage()]
+    assert len(diagnostics) == 2
+    for diagnostic in diagnostics:
+        assert "os=9959 item=4 documento=31 tipo=attachment" in diagnostic
+        assert f"motivo={reason}" in diagnostic
+        assert "elapsed_ms=" in diagnostic
+        assert message not in diagnostic
+        assert "test-only-token" not in diagnostic
+
+
+@pytest.fixture
+def preview_transport(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    import zipfile
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from conferencia_app.services import producao_bridge
+
+    settings = SimpleNamespace(API_URL="https://bridge.invalid", API_TOKEN="test-only-token", API_TIMEOUT=60, USE_API_BRIDGE=True)
+    monkeypatch.setattr(producao_bridge, "get_settings", lambda: settings)
+    monkeypatch.setattr(producao_bridge, "_UNAVAILABLE", OrderedDict())
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w") as archive:
+        for variant in ("thumbnail", "detail"):
+            archive.writestr(f"{variant}.png", b"\x89PNG\r\n\x1a\n" + variant.encode())
+    response = Mock(status_code=200, headers={
+        "X-ERP-Read-Only": "true", "X-Production-Preview-Version": "renderer-test", "X-Original-Bytes": "1000000",
+    })
+    response.iter_content.return_value = [archive_bytes.getvalue()]
+    session = Mock()
+    session.post.return_value = response
+    monkeypatch.setattr(producao_bridge, "_session", lambda: session)
+    document_data = {"source_cod_os": 9959, "source_aux_code": 4, "id": 31, "source_kind": "attachment", "content_revision": "revision-1"}
+    return producao_bridge, document_data, settings, session, response
+
+
+def test_transporte_bridge_usa_conexao_configurada_e_retorna_variantes(preview_transport):
+    transport, document_data, _settings, session, response = preview_transport
+    result = transport.obter_previews_bridge(document_data, "renderer-test")
+    assert result["thumbnail"].endswith(b"thumbnail")
+    assert result["detail"].endswith(b"detail")
+    args, kwargs = session.post.call_args
+    assert args == ("https://bridge.invalid/api/erp/producao/preview",)
+    assert kwargs["headers"]["Authorization"] == "Bearer test-only-token"
+    assert kwargs["json"]["cod_empresa"] == 1
+    assert kwargs["json"]["cod_os"] == 9959
+    assert kwargs["json"]["cod_os_aux"] == 4
+    assert kwargs["json"]["content_revision"] == "revision-1"
+    assert kwargs["timeout"] == (5, 30)
+    assert kwargs["stream"] is True
+    assert kwargs["allow_redirects"] is False
+    response.close.assert_called_once_with()
+
+
+def test_previa_em_disco_e_compartilhada_entre_processos_e_revisao_invalida_cache(preview_transport, tmp_path):
+    import json
+    import subprocess
+    from flask import Flask
+
+    transport, document_data, settings, session, _response = preview_transport
+    first_worker = Flask("web_worker_1", instance_path=str(tmp_path))
+    second_worker = Flask("web_worker_2", instance_path=str(tmp_path))
+    with first_worker.app_context():
+        first = transport.obter_previews_bridge(document_data, "renderer-test")
+    independent_worker = subprocess.run(
+        [sys.executable, "-c", """
+import json
+import sys
+from types import SimpleNamespace
+from unittest.mock import patch
+from flask import Flask
+from conferencia_app.services import producao_bridge
+
+data = json.load(sys.stdin)
+settings = SimpleNamespace(**data['settings'])
+app = Flask('independent_worker', instance_path=data['instance_path'])
+with app.app_context(), patch.object(producao_bridge, 'get_settings', return_value=settings), patch.object(producao_bridge, '_session', side_effect=AssertionError('Cache deve dispensar HTTP')):
+    result = producao_bridge.obter_previews_bridge(data['document'], 'renderer-test')
+    assert result['thumbnail'].endswith(b'thumbnail')
+    assert result['detail'].endswith(b'detail')
+print('CACHE_SHARED_PROCESS_OK')
+"""],
+        input=json.dumps({"settings": vars(settings), "document": document_data, "instance_path": str(tmp_path)}),
+        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30,
+    )
+    assert independent_worker.returncode == 0, independent_worker.stderr
+    assert "CACHE_SHARED_PROCESS_OK" in independent_worker.stdout
+    with second_worker.app_context():
+        second = transport.obter_previews_bridge(document_data, "renderer-test")
+        assert second == first
+        assert session.post.call_count == 1
+        transport.obter_previews_bridge({**document_data, "content_revision": "revision-2"}, "renderer-test")
+        assert session.post.call_count == 2
+    files = list((tmp_path / "producao_previews").glob("*.zip"))
+    assert len(files) == 2
+    assert not list((tmp_path / "producao_previews").glob("*.tmp"))
+
+
+def test_previa_em_disco_isola_bridge_credenciais_e_renderizador(preview_transport, tmp_path):
+    from flask import Flask
+
+    transport, document_data, settings, session, response = preview_transport
+    app = Flask("cache_isolado", instance_path=str(tmp_path))
+    with app.app_context():
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        settings.API_URL = "https://other-bridge.invalid"
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        settings.API_TOKEN = "other-test-token"
+        transport.obter_previews_bridge(document_data, "renderer-test")
+        response.headers["X-Production-Preview-Version"] = "renderer-updated"
+        transport.obter_previews_bridge(document_data, "renderer-updated")
+    assert session.post.call_count == 4
+
+
+def test_cache_disco_corrompido_ou_sem_permissao_nao_impede_imagem(preview_transport, tmp_path):
+    from flask import Flask
+
+    transport, document_data, _settings, session, _response = preview_transport
+    app = Flask("cache_fallback", instance_path=str(tmp_path))
+    with app.app_context():
+        expected = transport.obter_previews_bridge(document_data, "renderer-test")
+        archive = next((tmp_path / "producao_previews").glob("*.zip"))
+        archive.write_bytes(b"invalid archive")
+        assert transport.obter_previews_bridge(document_data, "renderer-test") == expected
+        archive.unlink()
+        with patch.object(transport.tempfile, "NamedTemporaryFile", side_effect=PermissionError()):
+            assert transport.obter_previews_bridge(document_data, "renderer-test") == expected
+    assert session.post.call_count == 3
+
+
+def test_cache_disco_tem_limite_e_expiracao(preview_transport, tmp_path, monkeypatch):
+    import os
+    from flask import Flask
+
+    transport, document_data, _settings, session, _response = preview_transport
+    app = Flask("cache_limitado", instance_path=str(tmp_path))
+    monkeypatch.setattr(transport, "_DISK_CACHE_LIMIT", 2)
+    with app.app_context():
+        for document_id in range(3):
+            transport.obter_previews_bridge({**document_data, "id": document_id}, "renderer-test")
+        archives = list((tmp_path / "producao_previews").glob("*.zip"))
+        assert len(archives) == 2
+        for archive in archives:
+            os.utime(archive, (0, 0))
+        transport.obter_previews_bridge({**document_data, "id": 2}, "renderer-test")
+    assert session.post.call_count == 4
+    assert len(list((tmp_path / "producao_previews").glob("*.zip"))) == 1
+
+
+def test_transporte_bridge_antiga_e_detectada_sem_tentativa_por_imagem(preview_transport, monkeypatch):
+    transport, document_data, _settings, session, response = preview_transport
+    response.status_code = 404
+    response.json.return_value = {"erro": "not_found"}
+    with patch.object(transport.time, "monotonic", return_value=0) as clock:
+        assert transport.obter_previews_bridge(document_data, "renderer-test") is None
+        clock.return_value = 20
+        assert transport.obter_previews_bridge({**document_data, "id": 32}, "renderer-test") is None
+        assert session.post.call_count == 1
+        clock.return_value = 301
+        response.status_code = 200
+        assert transport.obter_previews_bridge(document_data, "renderer-test")["thumbnail"]
+        assert session.post.call_count == 2
+
+
+@pytest.mark.parametrize("case", ["auth", "readonly", "revision", "invalid-zip", "oversized", "timeout", "no-bridge"])
+def test_transporte_bridge_valida_resposta_e_fallback(preview_transport, monkeypatch, case):
+    import requests
+    from conferencia_app.compras.db import ProducaoSourceError
+
+    transport, document_data, settings, session, response = preview_transport
+    if case == "auth":
+        response.status_code = 403
+    elif case == "readonly":
+        response.headers.pop("X-ERP-Read-Only")
+    elif case == "revision":
+        response.status_code = 409
+        response.json.return_value = {"erro": "documento_alterado"}
+    elif case == "invalid-zip":
+        response.iter_content.return_value = [b"not a zip"]
+    elif case == "oversized":
+        response.headers["Content-Length"] = str(transport._MAX_RESPONSE_BYTES + 1)
+    elif case == "timeout":
+        session.post.side_effect = requests.Timeout()
+    else:
+        settings.USE_API_BRIDGE = False
+    if case in {"auth", "readonly"}:
+        with pytest.raises(ProducaoSourceError):
+            transport.obter_previews_bridge(document_data, "renderer-test")
+    elif case == "revision":
+        with pytest.raises(LookupError):
+            transport.obter_previews_bridge(document_data, "renderer-test")
+    else:
+        assert transport.obter_previews_bridge(document_data, "renderer-test") is None
+    if case == "no-bridge":
+        session.post.assert_not_called()
+    elif case != "timeout":
+        response.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("document_kind", ["embedded", "orthogonal"])
+def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_client, monkeypatch, tmp_path, document_kind):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from flask import Flask
+    from PIL import Image, ImageDraw
+    import requests
+    from werkzeug.serving import make_server
+    from conferencia_app.services import producao_bridge
+
+    client, payload, _expected, _render, metadata, content, _connections, service = bridge_preview_client
+    image = Image.new("RGB", (640, 800), "white")
+    drawing = ImageDraw.Draw(image)
+    drawing.polygon([(130, 250), (320, 100), (510, 250), (510, 550), (320, 700), (130, 550)], fill=(100, 115, 125))
+    drawing.ellipse((250, 320, 390, 480), fill="white")
+    embedded = io.BytesIO()
+    image.save(embedded, format="PNG")
+    with service.fitz.open() as pdf:
+        page = pdf.new_page()
+        if document_kind == "embedded":
+            page.insert_image(service.fitz.Rect(50, 50, 545, 792), stream=embedded.getvalue())
+        else:
+            page.draw_rect(service.fitz.Rect(70, 80, 240, 400), color=(0, 0, 0), width=2)
+            page.draw_rect(service.fitz.Rect(320, 80, 490, 400), color=(0, 0, 0), width=2)
+            page.insert_text((70, 450), "DESENHO COM VISTAS ORTOGONAIS")
+        original = pdf.tobytes(deflate=False)
+    source_kind = "attachment" if document_kind == "embedded" else "drawing"
+    metadata.fetchall.return_value = [(31, source_kind, len(original), "revision-1")]
+    content.fetchone.return_value = (31, "drawing.pdf", "revision-1", memoryview(original))
+    renderer = Mock(wraps=producao_service._gerar_previews)
+    monkeypatch.setattr(service, "_gerar_previews", renderer)
+    document_data = {
+        "id": 31, "source_kind": source_kind, "source_cod_os": 9959,
+        "source_aux_code": 4, "content_revision": "revision-1",
+    }
+    monkeypatch.setattr(service, "_obter_ordem", lambda _number: {"codigo": 9959})
+    monkeypatch.setattr(service, "_contexto_previa", lambda *_args: {"revisao_desenho": "A"})
+    monkeypatch.setattr(service, "_resolver_documento_previa", lambda *_args: (document_data, []))
+    raw_download = Mock(side_effect=AssertionError("Nao deve baixar o PDF pela API generica"))
+    monkeypatch.setattr(service, "obter_arquivo", raw_download)
+    monkeypatch.setattr(producao_bridge, "_UNAVAILABLE", OrderedDict())
+    server = make_server("127.0.0.1", 0, client.application, threaded=True)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    settings = SimpleNamespace(API_URL=f"http://127.0.0.1:{server.server_port}", API_TOKEN="test-only-token", API_TIMEOUT=10, USE_API_BRIDGE=True)
+    monkeypatch.setattr(producao_bridge, "get_settings", lambda: settings)
+    session = requests.Session()
+    sizes = []
+    session.hooks["response"].append(lambda response, **_kwargs: sizes.append(int(response.headers["Content-Length"])))
+    monkeypatch.setattr(producao_bridge, "_session", lambda: session)
+    web_app = Flask("preview_web_http_test", instance_path=str(tmp_path))
+    worker.start()
+    try:
+        with web_app.app_context():
+            started = time.perf_counter()
+            thumbnail = service.obter_preview("9959", 4)
+            first_seconds = time.perf_counter() - started
+            started = time.perf_counter()
+            detail = service.obter_preview("9959", 4, "detail")
+            warm_seconds = time.perf_counter() - started
+        with Flask("preview_web_other_worker", instance_path=str(tmp_path)).app_context():
+            started = time.perf_counter()
+            shared_detail = service.obter_preview("9959", 4, "detail")
+            shared_seconds = time.perf_counter() - started
+            assert shared_detail[0] == detail[0]
+        for result in (thumbnail, detail):
+            with Image.open(io.BytesIO(result[0])) as preview:
+                assert preview.format == "PNG"
+                assert preview.mode == ("RGBA" if document_kind == "embedded" else "RGB")
+                if document_kind == "orthogonal":
+                    assert preview.info["preview_kind"] == "original-document"
+                    assert preview.info["page_number"] == "1"
+                assert min(preview.size) > 1
+        assert thumbnail[2] == detail[2]
+        assert renderer.call_count == len(sizes) == 1
+        if document_kind == "embedded":
+            assert sizes[0] < len(original) // 10
+        raw_download.assert_not_called()
+        print(f"\nBRIDGE_HTTP kind={document_kind} original_pdf_bytes={len(original)} previews_bytes={sizes[0]} first_seconds={first_seconds:.3f} cached_detail_seconds={warm_seconds:.5f} other_worker_seconds={shared_seconds:.5f}")
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
+        session.close()
+    assert not worker.is_alive()
+
+
+def test_conexao_http_da_bridge_e_reutilizada_por_trabalhador(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    from conferencia_app.services import producao_bridge
+
+    monkeypatch.setattr(producao_bridge, "_HTTP", threading.local())
+    factory = Mock()
+    monkeypatch.setattr(producao_bridge.requests, "Session", factory)
+    assert producao_bridge._session() is producao_bridge._session()
+    factory.assert_called_once_with()
+    assert factory.return_value.mount.call_count == 2
+
+
 def test_cache_assincrono_reutiliza_o_mesmo_processamento():
     producao_service._PREVIEW_CACHE.clear()
     producao_service._PREVIEW_JOBS.clear()
@@ -332,6 +1224,75 @@ def test_cache_assincrono_reutiliza_o_mesmo_processamento():
     assert pending is None
     assert completed == generated
     assert generate.call_count == 1
+
+
+def test_preview_revisado_reutiliza_download_entre_variantes_e_revalida_mudancas():
+    producao_service._PREVIEW_CACHE.clear()
+    document_data = {
+        "source_kind": "drawing", "id": 31, "source_cod_os": 9,
+        "source_aux_code": 7, "content_revision": "rev-1",
+    }
+    with (
+        patch.object(producao_service, "_obter_ordem", return_value={"codigo": 9}),
+        patch.object(producao_service, "_contexto_previa", return_value={"revisao_desenho": "A"}),
+        patch.object(producao_service, "_resolver_documento_previa", return_value=(document_data, [])),
+        patch.object(producao_service, "obter_arquivo", return_value=(b"pdf", "drawing.pdf")) as download,
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+    ):
+        first = producao_service.obter_preview("7807", 7)
+        detail = producao_service.obter_preview("7807", 7, "detail")
+        assert first[0] == b"thumb"
+        assert detail[0] == b"detail"
+        assert first[2] == detail[2]
+        assert download.call_count == render.call_count == 1
+        document_data["content_revision"] = "rev-2"
+        changed = producao_service.obter_preview("7807", 7)
+        assert changed[2] != first[2]
+        assert download.call_count == render.call_count == 2
+
+
+def test_preview_sem_revisao_confere_conteudo_antes_de_reutilizar():
+    producao_service._PREVIEW_CACHE.clear()
+    document_data = {"source_kind": "drawing", "id": 32, "source_cod_os": 9, "source_aux_code": 7}
+    with (
+        patch.object(producao_service, "_obter_ordem", return_value={"codigo": 9}),
+        patch.object(producao_service, "_contexto_previa", return_value={"revisao_desenho": "A"}),
+        patch.object(producao_service, "_resolver_documento_previa", return_value=(document_data, [])),
+        patch.object(producao_service, "obter_arquivo", side_effect=[(b"pdf1", "drawing.pdf"), (b"pdf2", "drawing.pdf")]) as download,
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+    ):
+        first = producao_service.obter_preview("7807", 7)
+        second = producao_service.obter_preview("7807", 7)
+    assert first[2] != second[2]
+    assert download.call_count == render.call_count == 2
+
+
+def test_preview_simultaneo_compartilha_download_e_contexto_flask():
+    from flask import Flask, current_app
+
+    producao_service._PREVIEW_CACHE.clear()
+    started, release = threading.Event(), threading.Event()
+    app = Flask("preview_download")
+
+    def load_document():
+        assert current_app.name == app.name
+        started.set()
+        assert release.wait(timeout=2)
+        return b"pdf", "drawing.pdf"
+
+    with (
+        patch.object(producao_service, "_gerar_previews", return_value={"thumbnail": b"thumb", "detail": b"detail"}) as render,
+        patch.object(producao_service, "obter_arquivo", side_effect=load_document) as download,
+        app.app_context(),
+    ):
+        try:
+            assert producao_service._previews_em_cache("shared-download", wait=False, document_loader=download) is None
+            assert started.wait(timeout=1)
+            assert producao_service._previews_em_cache("shared-download", wait=False, document_loader=download) is None
+        finally:
+            release.set()
+        assert producao_service._previews_em_cache("shared-download", document_loader=download)["thumbnail"] == b"thumb"
+    assert download.call_count == render.call_count == 1
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
@@ -450,12 +1411,91 @@ def test_requisicao_assincrona_nao_bloqueia_enquanto_busca_documento():
     assert completed == expected
 
 
+def test_detalhe_nao_espera_fila_de_consultas_das_miniaturas():
+    from concurrent.futures import Future
+
+    producao_service._PREVIEW_REQUEST_CACHE.clear()
+    producao_service._PREVIEW_REQUEST_JOBS.clear()
+    thumbnail_job, detail_job = Future(), Future()
+    with (
+        patch.object(producao_service._PREVIEW_REQUEST_EXECUTOR, "submit", return_value=thumbnail_job) as thumbnails,
+        patch.object(producao_service._PREVIEW_DETAIL_EXECUTOR, "submit", return_value=detail_job) as details,
+    ):
+        assert producao_service._obter_preview_assincrono("priority", 7, "thumbnail")[0] is None
+        assert producao_service._obter_preview_assincrono("priority", 7, "detail")[0] is None
+        assert thumbnails.call_count == details.call_count == 1
+        detail_job.set_result((b"detail", "image/png", "etag"))
+        assert producao_service._obter_preview_assincrono("priority", 7, "detail")[0] == b"detail"
+        thumbnail_job.set_result((b"thumb", "image/png", "etag"))
+
+
+@pytest.mark.parametrize("variant, executor_name, limit", [
+    ("thumbnail", "_PREVIEW_REQUEST_EXECUTOR", 4),
+    ("detail", "_PREVIEW_DETAIL_EXECUTOR", 2),
+])
+def test_requisicoes_de_preview_nao_acumulam_fila_de_itens_antigos(variant, executor_name, limit):
+    from concurrent.futures import Future
+
+    jobs = [Future() for _index in range(limit + 1)]
+    with (
+        patch.object(producao_service, "_PREVIEW_REQUEST_JOBS", {}),
+        patch.object(producao_service, "_PREVIEW_REQUEST_CACHE", OrderedDict()),
+        patch.object(getattr(producao_service, executor_name), "submit", side_effect=jobs) as submit,
+    ):
+        for aux_code in range(1, 51):
+            assert producao_service._obter_preview_assincrono("large-order", aux_code, variant)[0] is None
+        assert submit.call_count == limit
+        assert len(producao_service._PREVIEW_REQUEST_JOBS) == limit
+        jobs[0].set_result((b"preview", "image/png", "ready"))
+        assert producao_service._obter_preview_assincrono("large-order", 42, variant)[0] is None
+        assert submit.call_count == limit + 1
+        assert submit.call_args.args[4] == 42
+        for job in jobs[1:]:
+            job.set_result((b"preview", "image/png", "ready"))
+        assert not producao_service._PREVIEW_REQUEST_JOBS
+
+
+def test_preview_que_termina_imediatamente_nao_exige_outra_requisicao():
+    from concurrent.futures import Future
+
+    job = Future()
+    expected = (b"preview", "image/png", "ready")
+    job.set_result(expected)
+    with (
+        patch.object(producao_service, "_PREVIEW_REQUEST_JOBS", {}),
+        patch.object(producao_service, "_PREVIEW_REQUEST_CACHE", OrderedDict()),
+        patch.object(producao_service._PREVIEW_DETAIL_EXECUTOR, "submit", return_value=job),
+    ):
+        assert producao_service._obter_preview_assincrono("cached-order", 42, "detail") == expected
+
+
+def test_falha_temporaria_da_imagem_expira_e_permite_nova_tentativa():
+    producao_service._PREVIEW_FAILURES.clear()
+    with (
+        patch.object(producao_service, "_gerar_previews", side_effect=[LookupError("bridge indisponivel"), {"thumbnail": b"thumb"}]) as render,
+        patch.object(producao_service.time, "monotonic", return_value=0) as clock,
+    ):
+        with pytest.raises(LookupError, match="bridge indisponivel"):
+            producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")
+        with pytest.raises(LookupError, match="bridge indisponivel"):
+            producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")
+        assert render.call_count == 1
+        clock.return_value = 11
+        assert producao_service._previews_em_cache("retry-preview", b"pdf", "drawing.pdf")["thumbnail"] == b"thumb"
+        assert render.call_count == 2
+
+
 def test_aviso_de_previa_fica_limitado_a_miniatura():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
     assert ".node-thumbnail {" in css
     assert "position: relative;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
     assert "width: 54px;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+
+
+def test_versao_do_renderizador_no_navegador_acompanha_o_servico():
+    script = (PROJECT_ROOT / "static" / "js" / "producao_panel.js").read_text(encoding="utf-8")
+    assert f"source.searchParams.set('renderer', '{producao_service._PREVIEW_CACHE_VERSION}')" in script
 
 
 def test_controles_solicitados_nao_sao_criados_na_producao():
@@ -466,13 +1506,12 @@ def test_controles_solicitados_nao_sao_criados_na_producao():
     assert "^Ampliar(?: imagem)?$" in script
 
 
-def test_detalhes_identifica_e_limita_a_miniatura_isometrica():
+def test_detalhes_exibe_a_peca_no_tamanho_da_referencia():
     css = (PROJECT_ROOT / "static" / "css" / "producao_panel.css").read_text(encoding="utf-8")
 
-    assert 'content: "Visão isométrica";' in css
     detail_rule = css.split(".detail-preview {", 1)[1].split("}", 1)[0]
-    assert "width: 160px;" in detail_rule
-    assert "height: 160px;" in detail_rule
+    assert "width: calc(100% - 24px);" in detail_rule
+    assert "height: clamp(280px, 36vh, 360px);" in detail_rule
 
 
 def test_arvore_exibe_somente_numero_da_os():
@@ -499,6 +1538,42 @@ def test_busca_reutiliza_resultado_sem_misturar_termos():
         first.clear()
         assert len(producao_service.buscar_os("7807")) == 1
         producao_service.buscar_os("9959")
+    assert query.call_count == 2
+
+
+def test_selecionar_os_encontrada_nao_repete_busca_no_grv():
+    with (
+        patch.object(producao_service, "fetch_all", return_value=[{"codigo": 9, "n_os": "7807"}]),
+        patch.object(producao_service, "fetch_one") as lookup,
+    ):
+        producao_service.buscar_os("780")
+        assert producao_service._obter_ordem("7807")["codigo"] == 9
+        lookup.assert_not_called()
+
+
+def test_miniaturas_da_os_compartilham_contexto_e_catalogo_de_documentos():
+    order = {"codigo": 9, "n_os": "7807", "u_classificacao": "CMS"}
+    rows = {
+        producao_service.queries.SQL_PRODUCAO_ESTRUTURA_OS: [
+            {"aux_code": 1, "n_desenho": "ABC", "revisao_desenho": "A"},
+            {"aux_code": 2, "n_desenho": "XYZ", "revisao_desenho": "B"},
+        ],
+        producao_service.queries.SQL_PRODUCAO_DOCUMENTOS_OS: [
+            {"document_id": 31, "cod_os_aux": 1, "kind": "attachment", "nome_arquivo": "ABC.pdf"},
+            {"document_id": 32, "cod_os_aux": 2, "kind": "attachment", "nome_arquivo": "XYZ.pdf"},
+            {"document_id": 33, "cod_os_aux": None, "kind": "attachment", "nome_arquivo": "OS.pdf"},
+        ],
+    }
+    with patch.object(producao_service, "fetch_all", side_effect=lambda sql, _params: rows[sql]) as query:
+        for aux_code, drawing in ((1, "ABC"), (2, "XYZ")):
+            context = producao_service._contexto_previa(order, aux_code)
+            assert context["n_desenho"] == drawing
+            assert context["segmento"] == "CMS"
+            documents = producao_service._obter_documentos_ordem(order, "7807", aux_code)
+            assert len(documents) == 1
+            assert documents[0]["source_aux_code"] == aux_code
+        assert producao_service._contexto_previa(order, 999) is None
+        assert producao_service._obter_documentos_ordem(order, "7807", 0) == []
     assert query.call_count == 2
 
 

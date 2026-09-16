@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Inventário{% endblock %}
+{% block shell_title %}Logística — Inventário{% endblock %}
+
+{% block extra_head %}
+<style>
+    .invu-wrap { display: grid; gap: 18px; }
+    .invu-tabs { display: flex; gap: 3px; padding: 4px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface-2); overflow-x: auto; }
+    .invu-tabs button { flex: 1; min-width: max-content; padding: 9px 14px; border: 0; border-radius: var(--eui-radius-sm); background: transparent; color: var(--eui-muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+    .invu-tabs button i { font-size: 12px; }
+    .invu-tabs button.active { background: var(--eui-surface); box-shadow: var(--eui-shadow-xs); color: var(--eui-primary); }
+    .invu-panel { display: none; }
+    .invu-panel.active { display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="invu-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-list"></i> Inventário</h1>
+            <p class="eui-page-header__sub">Contagem, consulta e tratamento de divergências num só lugar.</p>
+        </div>
+    </header>
+
+    <nav class="invu-tabs" id="invu-tabs" aria-label="Seções do inventário">
+        {% if pode_inventariar %}<button type="button" data-aba="inventariar"><i class="fas fa-plus-circle"></i> Inventariar</button>{% endif %}
+        {% if pode_analisar %}
+        <button type="button" data-aba="realizados"><i class="fas fa-magnifying-glass"></i> Realizados</button>
+        <button type="button" data-aba="ajustes"><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</button>
+        <button type="button" data-aba="analise"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</button>
+        {% endif %}
+    </nav>
+
+    {% if pode_inventariar %}<section class="invu-panel" data-panel="inventariar">{% include "logistica_inventario_tab_contagem.html" %}</section>{% endif %}
+    {% if pode_analisar %}
+    <section class="invu-panel" data-panel="realizados">{% include "logistica_inventario_tab_realizados.html" %}</section>
+    <section class="invu-panel" data-panel="ajustes">{% include "logistica_inventario_ajustes.html" %}</section>
+    <section class="invu-panel" data-panel="analise">{% include "logistica_inventario_analise_causa.html" %}</section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const botoes = Array.from(document.querySelectorAll('#invu-tabs [data-aba]'));
+    const paineis = Array.from(document.querySelectorAll('.invu-panel'));
+    function mostrar(aba) {
+        if (!botoes.some((b) => b.dataset.aba === aba)) aba = botoes.length ? botoes[0].dataset.aba : '';
+        botoes.forEach((b) => b.classList.toggle('active', b.dataset.aba === aba));
+        paineis.forEach((p) => p.classList.toggle('active', p.dataset.panel === aba));
+        if (aba) history.replaceState(null, '', '/logistica/inventario?aba=' + aba);
+    }
+    botoes.forEach((b) => b.addEventListener('click', () => mostrar(b.dataset.aba)));
+    mostrar({{ aba_inicial | tojson }});
+})();
+</script>
+{% endblock %}

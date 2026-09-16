@@ -151,6 +151,124 @@ os caminhos que a bridge realmente usa:
    ERP" no módulo Comex) e confirma no inspetor (`http://127.0.0.1:4040`) que
    a requisição apareceu com `200 OK`.
 
+## Previas de Producao Processadas na Bridge
+
+A melhoria de 15/09/2026 adiciona `POST /api/erp/producao/preview`. O documento
+permanece na VM; o servidor web recebe somente as duas imagens PNG prontas.
+O endpoint usa o mesmo Bearer token e o mesmo PostgreSQL ja configurados,
+sempre em modo somente leitura e restrito a empresa 1.
+
+**Esta melhoria precisa ser publicada nos dois lados.** Atualizar somente o
+PythonAnywhere nao instala o endpoint na VM. Enquanto a bridge estiver antiga,
+o servidor web continua gerando as previas pelo caminho anterior.
+
+Os comandos abaixo pressupõem que a versao corrigida ja esteja publicada no
+repositorio. Antes de substituir arquivos, faca backup das alteracoes locais
+da VM. Nao use `git pull` completo nessa pasta.
+
+```powershell
+cd C:\Users\cmb-dev\Desktop\conferencia_system
+$arquivos = @(
+   "scripts/erp_lancamento_api_bridge.py"
+   "conferencia_app/compras/queries.py"
+   "conferencia_app/services/producao_service.py"
+   "conferencia_app/services/production_images.py"
+   "conferencia_app/services/producao_bridge.py"
+)
+git diff -- $arquivos
+git fetch origin
+git checkout origin/main -- $arquivos
+.\.venv\Scripts\python.exe -m pip install --upgrade pymupdf Pillow
+.\start_erp_bridge_tailscale.bat
+```
+
+Use o launcher Tailscale ja existente; nao altere o token nem a senha. Depois,
+atualize o servidor web e faca Reload (Parte 1, sem migration/Parte 2).
+A deteccao do endpoint e automatica, sem cadastrar outra URL no sistema.
+
+### Atualizacao de reconhecimento, cache e fila
+
+Se o endpoint de previas ja responde, o cache compartilhado entre processos
+fica no servidor web, nao no tunel. Publicar o codigo apenas na VM nao ativa
+esse cache no PythonAnywhere: atualizar tambem o web app e fazer Reload.
+
+Depois de publicar esta versao em `origin/main`, os tres arquivos de servico
+podem ser atualizados seletivamente na VM. Execute no CMD, uma linha por vez,
+e pare diante de qualquer erro. Confirme as copias antes da substituicao:
+
+```bat
+cd /d "C:\Users\cmb-dev\Desktop\conferencia_system"
+set "BACKUP=%TEMP%\bridge-producao-%RANDOM%-%RANDOM%"
+mkdir "%BACKUP%"
+copy conferencia_app\services\producao_service.py "%BACKUP%\producao_service.py"
+copy conferencia_app\services\producao_bridge.py "%BACKUP%\producao_bridge.py"
+copy conferencia_app\services\production_images.py "%BACKUP%\production_images.py"
+git fetch origin
+git checkout origin/main -- conferencia_app/services/producao_service.py conferencia_app/services/producao_bridge.py conferencia_app/services/production_images.py
+.venv\Scripts\python.exe -m py_compile conferencia_app\services\producao_service.py conferencia_app\services\producao_bridge.py conferencia_app\services\production_images.py
+findstr /C:"_PREVIEW_CACHE_VERSION =" conferencia_app\services\producao_service.py
+start_erp_bridge_tailscale.bat
+```
+
+O comando findstr deve mostrar `isometric-cutout-v8`. Essa versao considera
+vistas principais alongadas, perspectivas cilindricas e montadas sem legenda,
+separacao de cotas e partes separadas de vistas explodidas, preservando os componentes do recorte. Os arquivos de
+servico devem ser atualizados juntos, pois o tratamento de imagens possui
+um novo parametro opcional usado pelo servico de Producao.
+
+No PythonAnywhere, publicar tambem o adaptador `static/js/producao_panel.js`
+e a pagina `static/producao_original/index.html`, alem dos servicos. Fazer
+Reload e reabrir a tela. A chave v8 invalida automaticamente as previas antigas.
+Nao ha mudanca de credenciais, dependencias ou esquema do banco. Manter a
+janela do servidor da VM aberta e testar a peca na Producao apos o Reload;
+`OPTIONS` verifica apenas a existencia da rota, nao a qualidade do recorte.
+
+Verificacao local da rota, sem enviar segredos e sem consultar o banco:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing -Method Options -Uri http://127.0.0.1:8088/api/erp/producao/preview
+```
+
+Deve retornar HTTP 200 com POST no cabecalho Allow. HTTP 404 indica que o
+processo em execucao ainda nao tem o endpoint. Esse teste verifica a rota,
+nao a geracao de imagens nem a conexao ao GRV; para isso, abra uma OS na
+Producao apos publicar ambos os lados. Os tempos e bytes ficam nos registros
+`producao_bridge_preview` do web app e `producao_preview_bridge` da VM em
+nivel INFO. Nao envie tokens ou senhas em capturas ou mensagens.
+
+O servidor web rejeita autenticacao invalida, respostas sem confirmacao de
+somente leitura e revisoes divergentes. Ausencia do endpoint, falta das
+bibliotecas de imagem ou versao de renderizador incompatível usam o caminho
+anterior; a disponibilidade e verificada novamente em cinco minutos.
+
+### Quando a previa retorna HTTP 422
+
+POST com HTTP 200 confirma a geracao das duas imagens. HTTP 422 indica que
+uma consulta foi aceita, mas a previa daquele documento nao foi gerada;
+nao significa que o tunel esteja desconectado.
+
+A bridge registra em nivel WARNING uma linha `producao_preview_indisponivel`
+com os codigos da OS, do item, do documento, o tipo, o motivo e o tempo gasto.
+A resposta JSON mantem `erro=previa_indisponivel` e inclui `motivo`.
+Somente motivos conhecidos sao expostos, sem nome/conteudo do arquivo,
+credenciais ou mensagens internas arbitrarias.
+
+| Motivo | O que verificar |
+|---|---|
+| `vista_isometrica_nao_identificada` | A vista da peca nao foi identificada com confianca no documento. |
+| `pdf_invalido_ou_ilegivel` / `imagem_invalida_ou_ilegivel` | Falha ao abrir ou processar o arquivo; examinar o documento original. |
+| `formato_nao_suportado` | A extensao do documento nao esta entre PDF, PNG, JPG, JPEG e WebP. |
+| `documento_sem_paginas` / `documento_sem_conteudo` | O documento nao tem conteudo que possa ser renderizado. |
+| `documento_alterado` | A revisao mudou durante a leitura; repetir com metadados atualizados. |
+| `documento_muito_grande` | O arquivo excede o limite de 25 MiB. |
+| `falha_ao_processar_documento` | Falha sem motivo conhecido; investigar com o documento correspondente. |
+
+Se aparecer apenas a linha de acesso com status 422, sem esse diagnostico,
+publicar o ajuste de `scripts/erp_lancamento_api_bridge.py` na VM e reiniciar
+a bridge. Nao e necessario reinstalar bibliotecas nem mudar o banco para
+ativar esse registro. Identificar o motivo antes de alterar a selecao ou o
+recorte do desenho; um status 422 sozinho nao comprova arquivo corrompido.
+
 ## Como diagnosticar quando der erro
 
 - **Produção mostra "Falha ao consultar o ERP: connection to server at

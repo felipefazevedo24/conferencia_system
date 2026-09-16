@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 import base64
 import copy
 from difflib import SequenceMatcher
 import hashlib
+import heapq
 import io
 import math
 import re
@@ -14,15 +16,17 @@ import threading
 import time
 import unicodedata
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 
-from flask import current_app, has_app_context
+from flask import Flask, current_app, has_app_context
+from werkzeug.local import LocalProxy
 
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
+from .producao_bridge import obter_previews_bridge
 
 try:
-    import fitz
+    import pymupdf as fitz
 except ImportError:  # pragma: no cover
     fitz = None
 
@@ -35,12 +39,13 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "isometric-v4"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v8"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
 _PREVIEW_JOBS: dict[str, Future[dict[str, bytes]]] = {}
-_PREVIEW_FAILURES: dict[str, str] = {}
+_PREVIEW_FAILURES: OrderedDict[str, tuple[float, str]] = OrderedDict()
+_PREVIEW_FAILURE_TTL_SECONDS = 10.0
 _PREVIEW_LOCK = threading.RLock()
 _PREVIEW_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="production-preview")
 _PREVIEW_REQUEST_CACHE_TTL_SECONDS = 10.0
@@ -48,7 +53,10 @@ _PREVIEW_REQUEST_CACHE_LIMIT = 128
 _PREVIEW_REQUEST_CACHE: OrderedDict[str, tuple[float, tuple[bytes, str, str] | Exception]] = OrderedDict()
 _PREVIEW_REQUEST_JOBS: dict[str, Future[tuple[bytes, str, str]]] = {}
 _PREVIEW_REQUEST_LOCK = threading.RLock()
-_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="production-preview-request")
+_PREVIEW_REQUEST_CONCURRENCY = 4
+_PREVIEW_DETAIL_CONCURRENCY = 2
+_PREVIEW_REQUEST_EXECUTOR = ThreadPoolExecutor(max_workers=_PREVIEW_REQUEST_CONCURRENCY, thread_name_prefix="production-preview-request")
+_PREVIEW_DETAIL_EXECUTOR = ThreadPoolExecutor(max_workers=_PREVIEW_DETAIL_CONCURRENCY, thread_name_prefix="production-preview-detail")
 _STRUCTURE_CACHE_TTL_SECONDS = 10.0
 _STRUCTURE_CACHE_LIMIT = 16
 _STRUCTURE_CACHE: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
@@ -60,8 +68,8 @@ _QUERY_LOCK = threading.RLock()
 _STRUCTURE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="production-structure")
 
 
-def _scope():
-    return current_app._get_current_object() if has_app_context() else None
+def _scope() -> Flask | None:
+    return cast(LocalProxy[Flask], current_app)._get_current_object() if has_app_context() else None
 
 
 def _cached_read(cache, jobs, lock, key, loader, ttl=10.0, limit=128):
@@ -102,6 +110,19 @@ def _metadata_read(fetch, sql, params):
                         lambda: fetch(sql, params))
 
 
+def _remember_order(row):
+    numero_os = _texto(row.get("n_os"))
+    if not numero_os:
+        return
+    params = {"cod_empresa": 1, "numero_os": numero_os}
+    key = (_scope(), (queries.SQL_PRODUCAO_OBTER_OS, tuple(sorted(params.items()))))
+    with _QUERY_LOCK:
+        _QUERY_CACHE[key] = (time.monotonic(), copy.deepcopy(row))
+        _QUERY_CACHE.move_to_end(key)
+        while len(_QUERY_CACHE) > 128:
+            _QUERY_CACHE.popitem(last=False)
+
+
 def _run_with_app(app, function, *args):
     if app is None:
         return function(*args)
@@ -130,7 +151,58 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
             "limite": max(1, min(int(limite or 20), 50)),
         },
     )
-    return [_os_payload(row) for row in rows]
+    for row in rows:
+        _remember_order(row)
+    results = []
+    for row in rows:
+        result = _os_payload(row)
+        exact_order = result["numero"].casefold() == termo.casefold()
+        item_code = None if exact_order else row.get("matched_item_code")
+        result.update(
+            matched_item_code=item_code,
+            matched_item_description=row.get("matched_item_description") if item_code else None,
+            matched_budget_number=None if exact_order else row.get("matched_budget_number"),
+        )
+        results.append(result)
+    return results
+
+
+def obter_dependencias(numero_os: str) -> dict[str, Any]:
+    """Rastreia o orcamento e as OS geradas por solicitacoes reais do GRV."""
+    ordem = _obter_ordem(_texto(numero_os))
+    params = {"cod_empresa": 1, "cod_os": ordem["codigo"]}
+    budget = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ORCAMENTO_OS, params)
+    budget_number = budget.get("budget_number") if budget else None
+    rows = [dict(ordem, is_budget_order=False)]
+    if budget_number is not None:
+        rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DEPENDENCIAS_OS,
+                              {"cod_empresa": 1, "numero_orcamento": budget_number})
+    nodes = {}
+    links = set()
+    for row in rows:
+        code = int(row["codigo"])
+        is_budget_order = bool(row.get("is_budget_order"))
+        if code not in nodes or is_budget_order:
+            nodes[code] = {
+                "number": _texto(row.get("n_os")), "title": _texto(row.get("titulo")),
+                "source_status": row.get("status_servico"), "due_date": _iso(row.get("dt_prevista")),
+                "drawing_number": row.get("n_desenho"), "is_budget_order": is_budget_order,
+            }
+        dependent = row.get("dependent_cod_os")
+        if dependent is not None and int(dependent) != code:
+            links.add((int(dependent), code))
+    return {
+        "selected_order_number": _texto(ordem.get("n_os")),
+        "budget_number": budget_number,
+        "nodes": list(nodes.values()),
+        "edges": [
+            {"dependent_order_number": nodes[dependent]["number"],
+             "prerequisite_order_number": nodes[prerequisite]["number"]}
+            for dependent, prerequisite in sorted(links)
+            if dependent in nodes and prerequisite in nodes
+        ],
+        "source": {"calculated_at": datetime.now().isoformat()},
+    }
 
 
 def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
@@ -138,6 +210,8 @@ def listar_os_abertas(limite: int = 100) -> list[dict[str, Any]]:
         queries.SQL_PRODUCAO_OS_ABERTAS,
         {"cod_empresa": 1, "limite": max(1, min(int(limite or 100), 200))},
     )
+    for row in rows:
+        _remember_order(row)
     return [_os_payload(row) for row in rows]
 
 
@@ -213,10 +287,7 @@ def obter_documentos(
 ) -> list[dict[str, Any]]:
     ordem = ordem or _obter_ordem(numero_os)
     if context is None:
-        context = _metadata_read(fetch_one,
-            queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT,
-            {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
-        )
+        context = _contexto_previa(ordem, aux_code)
     if not context:
         raise LookupError("Item nao encontrado")
     selected, documents = _resolver_documento_previa(ordem, numero_os, aux_code, context)
@@ -232,8 +303,19 @@ def obter_documentos(
 
 
 def _obter_documentos_ordem(ordem: dict[str, Any], numero_os: str, aux_code: int) -> list[dict[str, Any]]:
-    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DOCUMENTOS_ITEM, {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code})
-    return [_documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code) for row in rows]
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_DOCUMENTOS_OS, {"cod_empresa": 1, "cod_os": ordem["codigo"]})
+    return [
+        _documento_payload(row, numero_os, aux_code, int(ordem["codigo"]), aux_code)
+        for row in rows if row.get("cod_os_aux") is not None and int(row["cod_os_aux"]) == aux_code
+    ]
+
+
+def _contexto_previa(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | None:
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_ESTRUTURA_OS, {"cod_empresa": 1, "cod_os": ordem["codigo"]})
+    item = next((row for row in rows if int(row["aux_code"]) == aux_code), None)
+    if item is None:
+        return None
+    return {**item, "segmento": ordem.get("u_classificacao") or ordem.get("classificacao")}
 
 
 def _documento_payload(
@@ -460,23 +542,30 @@ def _origem_documento(ordem: dict[str, Any], aux_code: int) -> dict[str, Any] | 
     )
 
 
-def _line_stats(items: list[Any]) -> tuple[int, int, int]:
-    lines = diagonals = curves = 0
+def _drawing_segments(items: list[Any]) -> list[tuple[Any, Any]]:
+    segments = []
     for item in items:
         if not item:
             continue
         if item[0] == "l" and len(item) >= 3:
-            lines += 1
-            delta_x = abs(float(item[2].x) - float(item[1].x))
-            delta_y = abs(float(item[2].y) - float(item[1].y))
-            if delta_x > 1 and delta_y > 1:
-                diagonals += 1
-        elif item[0] in {"c", "qu"}:
-            curves += 1
-    return lines, diagonals, curves
+            segments.append((item[1], item[2]))
+        elif item[0] in {"re", "qu"} and len(item) >= 2:
+            shape = item[1]
+            vertices = (shape.tl, shape.tr, shape.br, shape.bl) if item[0] == "re" else (shape.ul, shape.ur, shape.lr, shape.ll)
+            segments.extend(zip(vertices, vertices[1:] + vertices[:1]))
+    return segments
+
+
+def _line_stats(items: list[Any]) -> tuple[int, int, int]:
+    segments = _drawing_segments(items)
+    diagonals = sum(abs(float(end.x) - float(start.x)) > 1 and abs(float(end.y) - float(start.y)) > 1 for start, end in segments)
+    curves = sum(bool(item) and item[0] == "c" for item in items)
+    return len(segments), diagonals, curves
 
 
 def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     return fitz.Rect(
         max(bounds.x0, rect.x0 - margin),
         max(bounds.y0, rect.y0 - margin),
@@ -485,25 +574,192 @@ def _expand_rect(rect: Any, margin: float, bounds: Any) -> Any:
     )
 
 
+def _projection_axes(items: list[Any]) -> set[int]:
+    axes = set()
+    for start, end in _drawing_segments(items):
+        delta_x = float(end.x) - float(start.x)
+        delta_y = float(end.y) - float(start.y)
+        if math.hypot(delta_x, delta_y) < 8:
+            continue
+        direction = round((math.atan2(delta_y, delta_x) % math.pi) * 12 / math.pi) % 12
+        if direction not in {0, 6}:
+            axes.add(direction)
+    return axes
+
+
+def _curve_tangent_at(point: Any, direction: Any, curves: list[Any], tolerance: float) -> bool:
+    length = abs(direction)
+    if length == 0:
+        return False
+    for curve in curves:
+        for endpoint, handle in ((curve[0], curve[1]), (curve[3], curve[2])):
+            tangent = handle - endpoint
+            tangent_length = abs(tangent)
+            if abs(point - endpoint) <= tolerance and tangent_length > 0:
+                alignment = abs(direction.x * tangent.x + direction.y * tangent.y) / (length * tangent_length)
+                if alignment >= 0.97:
+                    return True
+    return False
+
+
+def _is_cylindrical_view(segments: list[Any], curves: list[Any], bounds: Any) -> bool:
+    if len(segments) < 2 or len(curves) < 4:
+        return False
+    tolerance = max(1, min(bounds.width, bounds.height) * 0.01)
+    remaining = set(range(len(curves)))
+    rims = []
+    while remaining:
+        initial = curves[remaining.pop()]
+        vertices = [initial[0]]
+        endpoint = initial[3]
+        while abs(endpoint - vertices[0]) > tolerance:
+            vertices.append(endpoint)
+            following = next((index for index in remaining if min(abs(curves[index][0] - endpoint), abs(curves[index][3] - endpoint)) <= tolerance), None)
+            if following is None:
+                break
+            curve = curves[following]
+            remaining.remove(following)
+            endpoint = curve[3] if abs(curve[0] - endpoint) <= tolerance else curve[0]
+        if abs(endpoint - vertices[0]) > tolerance or len(vertices) < 4:
+            continue
+        center_x = sum(vertex.x for vertex in vertices) / len(vertices)
+        center_y = sum(vertex.y for vertex in vertices) / len(vertices)
+        spread_x = sum((vertex.x - center_x) ** 2 for vertex in vertices)
+        spread_y = sum((vertex.y - center_y) ** 2 for vertex in vertices)
+        covariance = sum((vertex.x - center_x) * (vertex.y - center_y) for vertex in vertices)
+        if math.hypot(spread_x - spread_y, 2 * covariance) > (spread_x + spread_y) * 0.2:
+            rims.append(vertices)
+    if not rims:
+        return False
+    generators = []
+    for start, end in segments:
+        direction = end - start
+        length = abs(direction)
+        if length < max(16, max(bounds.width, bounds.height) * 0.2):
+            continue
+        if not all(_curve_tangent_at(endpoint, direction, curves, tolerance) for endpoint in (start, end)):
+            continue
+        touched_rims = {index for index, rim in enumerate(rims) if any(min(abs(start - vertex), abs(end - vertex)) <= tolerance for vertex in rim)}
+        if not touched_rims:
+            continue
+        axis = direction / length
+        for previous_start, previous_end, previous_rims in generators:
+            previous = previous_end - previous_start
+            previous_length = abs(previous)
+            if not touched_rims.intersection(previous_rims) or min(length, previous_length) < max(length, previous_length) * 0.6:
+                continue
+            if abs(axis.x * previous.y - axis.y * previous.x) > previous_length * 0.05:
+                continue
+            offset = previous_start - start
+            separation = abs(axis.x * offset.y - axis.y * offset.x)
+            if separation < max(4, min(bounds.width, bounds.height) * 0.15):
+                continue
+            projections = [axis.x * (point.x - start.x) + axis.y * (point.y - start.y) for point in (previous_start, previous_end)]
+            overlap = min(length, max(projections)) - max(0, min(projections))
+            if overlap >= min(length, previous_length) * 0.7:
+                return True
+        generators.append((start, end, touched_rims))
+    return False
+
+
+def _dimension_segments(drawings: list[dict[str, Any]], labels: list[Any]) -> list[tuple[Any, Any]]:
+    curves = [item[1:5] for drawing in drawings for item in drawing.get("items") or [] if item[0] == "c"]
+    segments = []
+    for drawing in drawings:
+        for item in drawing.get("items") or []:
+            if item[0] != "l":
+                continue
+            start, end = item[1:3]
+            if abs(end - start) >= 12 and any(label.contains(start) or label.contains(end) for label in labels):
+                if not all(_curve_tangent_at(endpoint, end - start, curves, 1.5) for endpoint in (start, end)):
+                    segments.append((start, end))
+    return segments
+
+
+def _without_dimension_items(items: list[Any], dimensions: list[tuple[Any, Any]]) -> list[Any]:
+    filtered = []
+    for item in items:
+        if item[0] == "l":
+            start, end = item[1:3]
+            dimension = any(
+                (start == first and end == last)
+                or (abs(end - start) <= 12 and min(abs(start - first), abs(start - last), abs(end - first), abs(end - last)) <= 1)
+                for first, last in dimensions
+            )
+            if dimension:
+                continue
+        filtered.append(item)
+    return filtered
+
+
 def _merge_drawing_records(records: list[dict[str, Any]], page_rect: Any, margin: float) -> list[dict[str, Any]]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     groups = [{**record, "rect": fitz.Rect(record["rect"])} for record in records]
-    changed = True
-    while changed:
-        changed = False
-        for index, group in enumerate(groups):
-            for other_index in range(index + 1, len(groups)):
-                other = groups[other_index]
-                if not _expand_rect(group["rect"], margin, page_rect).intersects(other["rect"]):
-                    continue
-                group["rect"] |= other["rect"]
-                for key in ("lines", "diagonals", "curves", "paths"):
-                    group[key] += other[key]
-                groups.pop(other_index)
-                changed = True
-                break
-            if changed:
-                break
-    return groups
+    if len(groups) < 2:
+        return groups
+    cell_size = max(1.0, margin * 2, min(page_rect.width, page_rect.height) / math.sqrt(len(groups)))
+    cells = defaultdict(set)
+    occupied = {}
+    active = set(range(len(groups)))
+    pending = list(range(len(groups)))
+    queued = set(pending)
+
+    def cell_keys(rect):
+        return {
+            (cell_x, cell_y)
+            for cell_x in range(math.floor(rect.x0 / cell_size), math.floor(rect.x1 / cell_size) + 1)
+            for cell_y in range(math.floor(rect.y0 / cell_size), math.floor(rect.y1 / cell_size) + 1)
+        }
+
+    def register(index):
+        occupied[index] = cell_keys(groups[index]["rect"])
+        for cell in occupied[index]:
+            cells[cell].add(index)
+
+    def remove(index):
+        for cell in occupied.pop(index):
+            cells[cell].discard(index)
+            if not cells[cell]:
+                del cells[cell]
+
+    def neighbors(rect):
+        return {index for cell in cell_keys(rect) for index in cells.get(cell, ())}
+
+    for index in pending:
+        register(index)
+    while pending:
+        index = heapq.heappop(pending)
+        queued.remove(index)
+        if index not in active:
+            continue
+        group = groups[index]
+        expanded = _expand_rect(group["rect"], margin, page_rect)
+        other_index = next((
+            candidate for candidate in sorted(neighbors(expanded))
+            if candidate > index and expanded.intersects(groups[candidate]["rect"])
+        ), None)
+        if other_index is None:
+            continue
+        other = groups[other_index]
+        remove(index)
+        remove(other_index)
+        active.remove(other_index)
+        group["rect"] |= other["rect"]
+        for key in ("lines", "diagonals", "curves", "paths"):
+            group[key] += other[key]
+        if "axes" in group:
+            group["axes"] = group["axes"] | other["axes"]
+        if "segments" in group:
+            group["segments"] = group["segments"] + other["segments"]
+            group["beziers"] = group["beziers"] + other["beziers"]
+        register(index)
+        expanded = _expand_rect(group["rect"], margin, page_rect)
+        for candidate in neighbors(expanded) | {index}:
+            if candidate <= index and candidate not in queued:
+                heapq.heappush(pending, candidate)
+                queued.add(candidate)
+    return [groups[index] for index in sorted(active)]
 
 
 def _isometric_label_score(rect: Any, labels: list[Any], page_rect: Any) -> tuple[float, bool]:
@@ -529,39 +785,163 @@ def _overlap_ratio(first: Any, second: Any) -> float:
     return intersection_area / max(smaller_area, 1)
 
 
+def _projection_label(value: Any) -> bool:
+    normalized = _normalizar_identificador(value)
+    return "ISOMETR" in normalized or "EXPLOD" in normalized
+
+
+def _assembly_view_rect(group: dict[str, Any], groups: list[dict[str, Any]], page_rect: Any) -> tuple[Any, int]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
+    bounds = group["rect"]
+    if len(group["axes"]) < 2 or group["diagonals"] < 3:
+        return bounds, 0
+    combined = fitz.Rect(bounds)
+    area = bounds.width * bounds.height
+    included = set()
+    changed = True
+    while changed:
+        changed = False
+        for index, other in enumerate(groups):
+            if other is group or index in included or other["word_count"]:
+                continue
+            rect = other["rect"]
+            other_area = rect.width * rect.height
+            if other_area > area * 0.65:
+                continue
+            compatible_axes = len(group["axes"] & other["axes"]) >= 2 and other["diagonals"] >= 2
+            small_component = other["curves"] >= 1 and other_area <= area * 0.1
+            if not compatible_axes and not small_component:
+                continue
+            overlap_x = max(0, min(combined.x1, rect.x1) - max(combined.x0, rect.x0))
+            overlap_y = max(0, min(combined.y1, rect.y1) - max(combined.y0, rect.y0))
+            gap_x = max(rect.x0 - combined.x1, combined.x0 - rect.x1, 0)
+            gap_y = max(rect.y0 - combined.y1, combined.y0 - rect.y1, 0)
+            aligned = (
+                overlap_x >= min(bounds.width, rect.width) * 0.7 and gap_y <= max(bounds.width, bounds.height) * 0.55
+            ) or (
+                overlap_y >= min(bounds.height, rect.height) * 0.7 and gap_x <= max(bounds.width, bounds.height) * 0.55
+            )
+            joined = combined | rect
+            if not aligned or max(joined.width, joined.height) > max(bounds.width, bounds.height) * 2.5:
+                continue
+            if joined.width * joined.height > page_rect.width * page_rect.height * 0.55:
+                continue
+            combined = joined
+            included.add(index)
+            changed = True
+    return combined, len(included)
+
+
 def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
     page_rect = page.rect
     page_area = max(page_rect.width * page_rect.height, 1)
+    text_blocks = page.get_text("blocks")
+    text_words = page.get_text("words")
+    dimension_labels = [
+        _expand_rect(fitz.Rect(word[:4]), max(4, (word[3] - word[1]) * 0.35), page_rect)
+        for word in text_words
+        if re.fullmatch(r"(?:[\u00d8\u00f8\u2300\u2205RrDdMm]\s*)?\d+(?:[.,]\d+)?(?:mm|\u00b0)?", str(word[4]).strip())
+    ]
+    drawings = page.get_drawings()
+    dimensions = _dimension_segments(drawings, dimension_labels)
     records = []
-    for drawing in page.get_drawings():
-        rect = fitz.Rect(drawing.get("rect")) & page_rect
-        coverage = (rect.width * rect.height) / page_area
-        if rect.is_empty or coverage < 0.00002 or coverage > 0.82:
+    for drawing in drawings:
+        original_items = drawing.get("items") or []
+        items = _without_dimension_items(original_items, dimensions)
+        if not items:
             continue
-        lines, diagonals, curves = _line_stats(drawing.get("items") or [])
-        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1})
+        rect = fitz.Rect(drawing.get("rect"))
+        if len(items) != len(original_items):
+            points = [point for segment in _drawing_segments(items) for point in segment]
+            points.extend(point for item in items if item[0] == "c" for point in item[1:5])
+            if not points:
+                continue
+            rect = fitz.Rect(min(point.x for point in points), min(point.y for point in points),
+                             max(point.x for point in points), max(point.y for point in points))
+        if rect.width == 0 or rect.height == 0:
+            rect = _expand_rect(rect, max(0.5, float(drawing.get("width") or 0) / 2), page_rect)
+        rect &= page_rect
+        coverage = (rect.width * rect.height) / page_area
+        sheet_rule = (
+            rect.width > page_rect.width * 0.8 and rect.height < 2
+            and (rect.y0 < page_rect.y0 + page_rect.height * 0.1 or rect.y1 > page_rect.y1 - page_rect.height * 0.1)
+        ) or (
+            rect.height > page_rect.height * 0.8 and rect.width < 2
+            and (rect.x0 < page_rect.x0 + page_rect.width * 0.1 or rect.x1 > page_rect.x1 - page_rect.width * 0.1)
+        )
+        if rect.is_empty or coverage < 0.00002 or coverage > 0.82 or sheet_rule:
+            continue
+        lines, diagonals, curves = _line_stats(items)
+        color = drawing.get("color") or drawing.get("fill") or (0, 0, 0)
+        annotation = (max(color) - min(color) > 0.3) or bool(re.search(r"\[\s*\d", str(drawing.get("dashes") or "")))
+        records.append({"rect": rect, "lines": lines, "diagonals": diagonals, "curves": curves, "paths": 1,
+                "axes": _projection_axes(items), "annotation": annotation,
+                "segments": _drawing_segments(items), "beziers": [item[1:5] for item in items if item[0] == "c"]})
 
+    neutral_records = [record for record in records if not record["annotation"]]
+    if len(neutral_records) >= 3:
+        records = neutral_records
     join_margin = max(7.0, min(page_rect.width, page_rect.height) * 0.02)
     groups = _merge_drawing_records(records, page_rect, join_margin)
     labels = [
         fitz.Rect(block[:4])
-        for block in page.get_text("blocks")
-        if len(block) > 4 and "ISOMETR" in _normalizar_identificador(block[4])
+        for block in text_blocks
+        if len(block) > 4 and _projection_label(block[4])
     ]
+    for group in groups:
+        group["word_count"] = sum(
+            group["rect"].x0 <= (word[0] + word[2]) / 2 <= group["rect"].x1
+            and group["rect"].y0 <= (word[1] + word[3]) / 2 <= group["rect"].y1
+            for word in text_words
+        )
     candidates = []
     for group in groups:
         rect = group["rect"]
         coverage = (rect.width * rect.height) / page_area
         diagonal_ratio = group["diagonals"] / max(group["lines"], 1)
+        aspect_ratio = max(rect.width, rect.height) / max(min(rect.width, rect.height), 1)
+        word_count = group["word_count"]
+        if word_count >= 8 and group["diagonals"] < 3 and group["curves"] < 2:
+            continue
+        contains_text = word_count > 0
+        main_profile = (
+            aspect_ratio >= 4 and max(rect.width, rect.height) >= max(page_rect.width, page_rect.height) * 0.3
+            and group["lines"] >= 3 and not contains_text
+        )
         if coverage < 0.008 or coverage > 0.72:
             continue
-        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6:
+        if group["diagonals"] < 2 and group["curves"] < 1 and group["paths"] < 6 and not main_profile:
             continue
         label_score, labeled = _isometric_label_score(rect, labels, page_rect)
         score = diagonal_ratio * 8 + min(group["paths"], 40) / 12 + min(group["curves"], 8) * 0.35 + min(coverage, 0.35) * 4 + label_score
+        if len(group["axes"]) >= 2 and group["diagonals"] >= 3:
+            score += 3
+        if _is_cylindrical_view(group["segments"], group["beziers"], rect):
+            score += 4
+        score -= min(word_count / 4, 4)
+        if main_profile:
+            score += 5 + min(aspect_ratio, 20) / 5
         if rect.y0 > page_rect.height * 0.72 and rect.x0 > page_rect.width * 0.55:
             score -= 4
-        candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.06, page_rect), labeled))
+        rect, joined_components = _assembly_view_rect(group, groups, page_rect)
+        score += min(joined_components * 3, 9)
+        padding = max(2, min(rect.width, rect.height) * 0.1) if main_profile else max(rect.width, rect.height) * 0.06
+        clip = _expand_rect(rect, padding, page_rect)
+        for word in text_words:
+            if not clip.intersects(fitz.Rect(word[:4])):
+                continue
+            if word[1] > rect.y1 + 1:
+                clip.y1 = min(clip.y1, word[1] - 1)
+            elif word[3] < rect.y0 - 1:
+                clip.y0 = max(clip.y0, word[3] + 1)
+            elif word[0] > rect.x1 + 1:
+                clip.x1 = min(clip.x1, word[0] - 1)
+            elif word[2] < rect.x0 - 1:
+                clip.x0 = max(clip.x0, word[2] + 1)
+        candidates.append((score, clip, labeled))
 
     for image in page.get_image_info():
         rect = fitz.Rect(image.get("bbox")) & page_rect
@@ -586,13 +966,36 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
         with fitz.open(stream=content, filetype="pdf") as pdf:
             if pdf.page_count == 0:
                 raise LookupError("Documento sem paginas")
-            candidates = []
+            from .production_images import _largest_placed_image, render_variants
+
+            analyzed_pages = {}
+            labeled = []
             for page_index in range(pdf.page_count):
                 page = pdf.load_page(page_index)
-                candidates.extend((score, page_index, rect, labeled) for score, rect, labeled in _page_isometric_candidates(page))
-            candidates.sort(key=lambda item: item[0], reverse=True)
+                if any(len(block) > 4 and _projection_label(block[4]) for block in page.get_text("blocks")):
+                    analyzed_pages[page_index] = _page_isometric_candidates(page)
+                    labeled.extend((score, page_index, rect) for score, rect, is_labeled in analyzed_pages[page_index] if is_labeled)
+            # CAD PDFs can contain a shaded rendering alongside vector dimensions.
+            # Match Estrutura: an explicit isometric view takes priority, then the
+            # embedded rendering, before scoring unlabelled technical linework.
+            if labeled:
+                _, page_index, clip = max(labeled, key=lambda candidate: candidate[0])
+                return _render_clip_previews(pdf.load_page(page_index), clip)
+            for page in pdf:
+                image = _largest_placed_image(pdf, page)
+                if image is not None:
+                    return render_variants(image)
+            candidates = []
+            for page_index in range(pdf.page_count):
+                if page_index not in analyzed_pages:
+                    analyzed_pages[page_index] = _page_isometric_candidates(pdf.load_page(page_index))
+                candidates.extend((score, page_index, rect, is_labeled) for score, rect, is_labeled in analyzed_pages[page_index])
+            candidates.sort(key=lambda candidate: candidate[0], reverse=True)
             ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
             if not candidates or candidates[0][0] < 1.5 or ambiguous:
+                for page in pdf:
+                    if any(drawing.get("items") for drawing in (page.get_cdrawings() or [])):
+                        return _render_document_previews(page)
                 raise LookupError("Vista isometrica nao identificada com confianca")
             _, page_index, clip, _ = candidates[0]
             page = pdf.load_page(page_index)
@@ -603,13 +1006,47 @@ def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
         raise LookupError("Documento PDF invalido ou ilegivel") from exc
 
 
+def _render_document_previews(page: Any) -> dict[str, bytes]:
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
+    from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
+
+    scale = min(2.0, 1568 / max(page.rect.width, page.rect.height))
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+    source = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+    label = f"DESENHO ORIGINAL - PAGINA {page.number + 1}"
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("preview_kind", "original-document")
+    metadata.add_text("page_number", str(page.number + 1))
+    previews = {}
+    for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
+        header_height = max(40, round(maximum * 0.06))
+        font_size = max(16, round(maximum * 0.032))
+        font = ImageFont.load_default(size=font_size)
+        image = source.copy()
+        image.thumbnail((maximum, maximum - header_height), Image.Resampling.LANCZOS)
+        label_width = math.ceil(font.getlength(label)) + 16
+        canvas = Image.new("RGB", (max(image.width, label_width), image.height + header_height), "white")
+        canvas.paste(image, ((canvas.width - image.width) // 2, header_height))
+        drawing = ImageDraw.Draw(canvas)
+        drawing.text((8, (header_height - font_size) // 2), label, fill=(40, 50, 60), font=font)
+        drawing.line((0, header_height - 1, canvas.width, header_height - 1), fill=(210, 215, 220))
+        output = io.BytesIO()
+        canvas.save(output, format="PNG", pnginfo=metadata)
+        previews[variant] = output.getvalue()
+    return previews
+
+
 def _render_clip_previews(page: Any, clip: Any) -> dict[str, bytes]:
-    rendered = {}
-    for variant, max_pixels in (("thumbnail", 720), ("detail", 1600)):
-        scale = max(1.5, min(4.0, max_pixels / max(clip.width, clip.height)))
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
-        rendered[variant] = pixmap.tobytes("png")
-    return rendered
+    if fitz is None:
+        raise LookupError("Renderizador de PDF nao instalado")
+    from PIL import Image
+    from .production_images import render_variants
+
+    scale = max(1.5, min(300 / 72, 1800 / max(clip.width, clip.height)))
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+    image = Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+    return render_variants(image, preserve_components=True)
 
 
 def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
@@ -672,7 +1109,10 @@ def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None
     except Exception as exc:
         with _PREVIEW_LOCK:
             _PREVIEW_JOBS.pop(cache_key, None)
-            _PREVIEW_FAILURES[cache_key] = str(exc)
+            _PREVIEW_FAILURES[cache_key] = (time.monotonic(), str(exc))
+            _PREVIEW_FAILURES.move_to_end(cache_key)
+            while len(_PREVIEW_FAILURES) > _PREVIEW_CACHE_LIMIT:
+                _PREVIEW_FAILURES.popitem(last=False)
         return
     with _PREVIEW_LOCK:
         _PREVIEW_JOBS.pop(cache_key, None)
@@ -683,7 +1123,15 @@ def _finalizar_preview(cache_key: str, future: Future[dict[str, bytes]]) -> None
             _PREVIEW_CACHE.popitem(last=False)
 
 
-def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool = True) -> dict[str, bytes] | None:
+def _previews_em_cache(
+    cache_key: str,
+    content: bytes = b"",
+    filename: str = "",
+    wait: bool = True,
+    *,
+    document_loader: Callable[[], tuple[bytes, str]] | None = None,
+    preview_loader: Callable[[], dict[str, bytes] | None] | None = None,
+) -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
         if cached is not None:
@@ -691,12 +1139,31 @@ def _previews_em_cache(cache_key: str, content: bytes, filename: str, wait: bool
             return cached
         failure = _PREVIEW_FAILURES.get(cache_key)
         if failure:
-            raise LookupError(failure)
+            if time.monotonic() - failure[0] <= _PREVIEW_FAILURE_TTL_SECONDS:
+                raise LookupError(failure[1])
+            _PREVIEW_FAILURES.pop(cache_key, None)
         future = _PREVIEW_JOBS.get(cache_key)
+        owner = future is None
         if future is None:
-            future = _PREVIEW_EXECUTOR.submit(_gerar_previews, content, filename)
+            future = Future()
             _PREVIEW_JOBS[cache_key] = future
             future.add_done_callback(lambda completed: _finalizar_preview(cache_key, completed))
+
+    if owner:
+        def render():
+            try:
+                result = preview_loader() if preview_loader is not None else None
+                if result is None:
+                    payload, name = document_loader() if document_loader is not None else (content, filename)
+                    result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
+                future.set_result(result)
+            except BaseException as exc:
+                future.set_exception(exc)
+
+        if wait:
+            render()
+        else:
+            _PREVIEW_REQUEST_EXECUTOR.submit(_run_with_app, _scope(), render)
     return future.result() if wait else None
 
 
@@ -725,12 +1192,19 @@ def _obter_preview_assincrono(numero_os: str, aux_code: int, variant: str) -> tu
             return cached[1]
         if cached:
             _PREVIEW_REQUEST_CACHE.pop(request_key, None)
-        if request_key not in _PREVIEW_REQUEST_JOBS:
-            future = _PREVIEW_REQUEST_EXECUTOR.submit(
-                _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
-            )
-            _PREVIEW_REQUEST_JOBS[request_key] = future
-            future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+        future = _PREVIEW_REQUEST_JOBS.get(request_key)
+        if future is None:
+            limit = _PREVIEW_DETAIL_CONCURRENCY if variant == "detail" else _PREVIEW_REQUEST_CONCURRENCY
+            active = sum(key.endswith(f"|{variant}") for key in _PREVIEW_REQUEST_JOBS)
+            if active < limit:
+                executor = _PREVIEW_DETAIL_EXECUTOR if variant == "detail" else _PREVIEW_REQUEST_EXECUTOR
+                future = executor.submit(
+                    _run_with_app, _scope(), obter_preview, numero_os, aux_code, variant, True
+                )
+                _PREVIEW_REQUEST_JOBS[request_key] = future
+                future.add_done_callback(lambda completed: _finalizar_requisicao_preview(request_key, completed))
+    if future is not None and future.done():
+        return future.result()
     pending_etag = hashlib.sha256(request_key.encode("utf-8")).hexdigest()
     return None, "image/png", pending_etag
 
@@ -741,34 +1215,45 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
     if not wait:
         return _obter_preview_assincrono(numero_os, aux_code, variant)
     ordem = _obter_ordem(numero_os)
-    params = {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code}
-    context = _metadata_read(fetch_one, queries.SQL_PRODUCAO_ITEM_PREVIEW_CONTEXT, params)
+    context = _contexto_previa(ordem, aux_code)
     if not context:
         raise LookupError("Item nao encontrado")
     document, _ = _resolver_documento_previa(ordem, numero_os, aux_code, context)
     if not document:
         raise LookupError("Previa indisponivel: documento esperado ausente ou ambiguo")
-    content, filename = obter_arquivo(
-        numero_os,
-        aux_code,
-        str(document["source_kind"]),
-        int(document["id"]),
-        ordem=ordem,
-        source_cod_os=int(document["source_cod_os"]),
-        source_aux_code=int(document["source_aux_code"]),
-    )
-    identity = "|".join((
+
+    def load_document():
+        return obter_arquivo(
+            numero_os,
+            aux_code,
+            str(document["source_kind"]),
+            int(document["id"]),
+            ordem=ordem,
+            source_cod_os=int(document["source_cod_os"]),
+            source_aux_code=int(document["source_aux_code"]),
+        )
+
+    identity = (
         _PREVIEW_CACHE_VERSION,
+        str(id(_scope())),
         str(document.get("source_kind")),
         str(document.get("id")),
         str(document.get("source_cod_os")),
         str(document.get("source_aux_code")),
         str(document.get("content_revision") or "unknown"),
         _texto(context.get("revisao_desenho")),
-        hashlib.sha256(content).hexdigest(),
-    ))
-    cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-    previews = _previews_em_cache(cache_key, content, filename, wait=wait)
+    )
+    if document.get("content_revision"):
+        cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
+        previews = _previews_em_cache(
+            cache_key, document_loader=load_document,
+            preview_loader=lambda: obter_previews_bridge(document, _PREVIEW_CACHE_VERSION),
+        )
+    else:
+        content, filename = load_document()
+        identity += (hashlib.sha256(content).hexdigest(),)
+        cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
+        previews = _previews_em_cache(cache_key, content, filename)
     return previews[variant] if previews else None, "image/png", cache_key
 
 
@@ -780,7 +1265,7 @@ def obter_thumbnail(numero_os: str, aux_code: int) -> tuple[bytes, str]:
 
 
 def _obter_ordem(numero_os: str) -> dict[str, Any]:
-    ordem = _metadata_read(fetch_one, queries.SQL_PRODUCAO_BUSCAR_OS, {"cod_empresa": 1, "busca": numero_os, "termo": numero_os, "limite": 1})
+    ordem = _metadata_read(fetch_one, queries.SQL_PRODUCAO_OBTER_OS, {"cod_empresa": 1, "numero_os": numero_os})
     if not ordem:
         raise LookupError(f"OS {numero_os} nao encontrada.")
     return ordem
@@ -825,23 +1310,36 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             states[item_id] = "bloqueado"
             return states[item_id]
         visiting.add(item_id)
+        item = itens_por_id[item_id]
         item_ops = ops_por_item.get(item_id, [])
         finished = sum(bool(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops)
-        started = sum(bool(op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or op.get("hs_realizadas")) for op in item_ops)
         children = [derive(child_id) for child_id in filhos.get(item_id, [])]
-        has_assembly = any("MONTAGEM" in _texto(op.get("tiposervico")).upper().split() for op in item_ops)
+        assembly_ops = [op for op in item_ops if "MONTAGEM" in re.sub(r"[^\w]+", " ", _texto(op.get("tiposervico")).upper()).split()]
+        productive_ops = [op for op in item_ops if op not in assembly_ops]
+        has_assembly = bool(assembly_ops)
+        productive_finished = all(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao") for op in productive_ops)
+        def running(operations):
+            return any((op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or _horas_positivas(op.get("hs_realizadas")))
+                       and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao"))
+                       for op in operations)
         if item_ops and finished == len(item_ops):
             state = "concluido" if has_assembly else "disponivel"
-        elif any(bool(op.get("processo_travado")) for op in item_ops):
+        elif any(op.get("processo_travado") and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops):
             state = "bloqueado"
-        elif started:
-            state = "montagem" if has_assembly else "fabricacao"
-        elif has_assembly and children and all(child in {"disponivel", "concluido"} for child in children):
+        elif running(assembly_ops):
+            state = "montagem"
+        elif running(productive_ops):
+            state = "fabricacao"
+        elif has_assembly and productive_finished and children and all(child in {"disponivel", "concluido"} for child in children):
             state = "disponivel"
+        elif finished:
+            # Uma pausa entre etapas nao apaga o progresso da peca.
+            state = "montagem" if any(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao") for op in assembly_ops) else "fabricacao"
         elif item_ops:
             state = "nao_iniciado"
         else:
-            state = "disponivel" if _texto(item.get("status")).upper() in {"CONCLUIDO", "FINALIZADO"} else "nao_iniciado"
+            source_finished = any(word in _texto(item.get("status")).upper() for word in ("CONCLU", "FINALIZ"))
+            state = ("concluido" if children and item.get("os_pai") is None else "disponivel") if source_finished else "nao_iniciado"
         visiting.remove(item_id)
         states[item_id] = state
         return state
@@ -862,6 +1360,8 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             "quantidade": item.get("qtde_pecas") or 0,
             "parent_id": str(parent_id) if parent_id is not None else None,
             "child_ids": [str(child_id) for child_id in filhos.get(item_id, [])],
+            "predecessor_ids": list(dict.fromkeys(str(item[key]) for key in ("predecessora1", "predecessora2")
+                                                  if item.get(key) is not None and int(item[key]) in itens_por_id and int(item[key]) != item_id)),
             "estado": state,
             "estado_label": STATUS_LABELS[state],
             "estado_motivo": _motivo(state, item_operations),
@@ -882,6 +1382,13 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         "operacoes_total": total,
         "bloqueados": sum(state == "bloqueado" for state in states.values()),
     }
+
+
+def _horas_positivas(value: Any) -> bool:
+    try:
+        return float(str(value).replace(",", ".")) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _operacao_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -907,5 +1414,5 @@ def _motivo(state: str, operations: list[dict[str, Any]]) -> str:
     if state == "montagem":
         return "Operacao de montagem em andamento"
     if state == "fabricacao":
-        return "Operacao produtiva em andamento"
+        return "Fabricacao iniciada, com etapas ainda pendentes"
     return "Processo cadastrado, mas ainda nao iniciado"

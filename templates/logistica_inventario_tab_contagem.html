@@ -1,0 +1,280 @@
+<style>
+    .invc-grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; }
+    .invc-field { display: grid; gap: 6px; }
+    .invc-field label { font-size: 12px; font-weight: 600; color: var(--eui-text-soft); }
+    .invc-scan { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .invc-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .inv-status { display: none; margin-top: 12px; padding: 10px 12px; border-radius: var(--eui-radius-sm); font-size: 13px; font-weight: 600; }
+    .inv-status.show { display: block; }
+    .inv-status.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .inv-status.err { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .inv-status.info { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+
+    .scan-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .72); z-index: 11000; align-items: center; justify-content: center; padding: 14px; }
+    .scan-modal.open { display: flex; }
+    .scan-box { width: min(680px, 100%); background: var(--eui-surface); border-radius: var(--eui-radius-lg); border: 1px solid var(--eui-border); padding: 14px; color: var(--eui-text); }
+    .scan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .scan-head h3 { margin: 0; font-size: 16px; }
+    .scan-video-wrap { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: #0b1320; overflow: hidden; position: relative; }
+    .scan-video { width: 100%; display: block; max-height: 62vh; object-fit: cover; }
+    .scan-tip { margin-top: 8px; color: var(--eui-muted); font-size: 12px; }
+
+    @media (max-width: 760px) {
+        .invc-grid { grid-template-columns: 1fr; }
+        .invc-scan { grid-template-columns: 1fr; }
+        .invc-actions { flex-direction: column; }
+        .invc-actions .eui-btn { width: 100%; }
+    }
+</style>
+
+<div class="eui-card" style="margin-bottom: 18px;">
+    <div class="eui-card__head">
+        <div>
+            <h2 class="eui-card__title"><i class="fas fa-plus-circle"></i> Nova contagem</h2>
+            <p class="eui-card__sub">Registre local, produto e quantidade. Leitura por câmera disponível no tablet.</p>
+        </div>
+    </div>
+    <div class="eui-card__body">
+        <div class="invc-grid">
+            <div class="invc-field">
+                <label for="inv-local">Local</label>
+                <div class="invc-scan">
+                    <input id="inv-local" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o local" />
+                    <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
+                </div>
+            </div>
+            <div class="invc-field">
+                <label for="inv-codigo">Cód. Produto</label>
+                <div class="invc-scan">
+                    <input id="inv-codigo" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o código" />
+                    <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-codigo"><i class="fas fa-camera"></i> Ler</button>
+                </div>
+            </div>
+            <div class="invc-field">
+                <label for="inv-unidade">Unidade de medida</label>
+                <select id="inv-unidade" class="eui-input"></select>
+            </div>
+            <div class="invc-field">
+                <label for="inv-quantidade">Quantidade</label>
+                <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+            </div>
+            <div class="invc-field">
+                <label for="inv-lote">Lote</label>
+                <input id="inv-lote" class="eui-input" autocomplete="off" placeholder="Informe o lote (opcional)" />
+            </div>
+            <div class="invc-field" style="grid-column: 1 / -1;">
+                <label for="inv-obs">Observações</label>
+                <textarea id="inv-obs" class="eui-input" rows="3" placeholder="Comentários livres"></textarea>
+            </div>
+        </div>
+        <div class="invc-actions">
+            <button type="button" class="eui-btn eui-btn--subtle" id="inv-limpar"><i class="fas fa-eraser"></i> Limpar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="inv-salvar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
+        </div>
+        <div id="inv-status" class="inv-status"></div>
+    </div>
+</div>
+
+<div class="scan-modal" id="scan-modal">
+    <div class="scan-box">
+        <div class="scan-head">
+            <h3><i class="fas fa-camera"></i> Leitura de código de barras</h3>
+            <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="scan-fechar"><i class="fas fa-xmark"></i> Fechar</button>
+        </div>
+        <div class="scan-video-wrap">
+            <video id="scan-video" class="scan-video" autoplay playsinline muted></video>
+        </div>
+        <div class="scan-tip" id="scan-tip">Aponte a câmera para o código. Se seu navegador não suportar leitura nativa, use digitação manual.</div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const unidadeSel = document.getElementById('inv-unidade');
+    const statusBox = document.getElementById('inv-status');
+    const modal = document.getElementById('scan-modal');
+    const video = document.getElementById('scan-video');
+    const tip = document.getElementById('scan-tip');
+
+    let scanTargetId = null;
+    let scanStream = null;
+    let rafId = null;
+    let detector = null;
+
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function showStatus(msg, kind = 'info') {
+        statusBox.textContent = msg;
+        statusBox.className = `inv-status show ${kind === 'ok' ? 'ok' : (kind === 'err' ? 'err' : 'info')}`;
+    }
+
+    async function api(url, opts = {}) {
+        const resp = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || data.msg || `HTTP ${resp.status}`);
+        return data;
+    }
+
+    function preencherUnidades(unidades) {
+        const lista = Array.isArray(unidades) && unidades.length ? unidades : ['UN'];
+        unidadeSel.innerHTML = lista.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+    }
+
+    function limparFormulario() {
+        document.getElementById('inv-local').value = '';
+        document.getElementById('inv-codigo').value = '';
+        document.getElementById('inv-quantidade').value = '';
+        document.getElementById('inv-lote').value = '';
+        document.getElementById('inv-obs').value = '';
+        document.getElementById('inv-local').focus();
+    }
+
+    async function carregarUnidades() {
+        try {
+            const data = await api('/api/logistica/inventario-inicial/unidades');
+            preencherUnidades(data.unidades || []);
+        } catch (err) {
+            preencherUnidades(['UN', 'KG', 'L', 'M']);
+            showStatus(`Falha ao carregar unidades: ${err.message}`, 'err');
+        }
+    }
+
+    async function salvarRegistro() {
+        const localCodigo = (document.getElementById('inv-local').value || '').trim();
+        const codigoProduto = (document.getElementById('inv-codigo').value || '').trim();
+        const unidade = (unidadeSel.value || 'UN').trim();
+        const quantidadeTxt = (document.getElementById('inv-quantidade').value || '').trim();
+        const lote = (document.getElementById('inv-lote').value || '').trim();
+        const observacao = (document.getElementById('inv-obs').value || '').trim();
+
+        if (!localCodigo) { showStatus('Informe o Local.', 'err'); return; }
+        if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
+        if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }
+
+        const quantidade = Number(String(quantidadeTxt).replace(',', '.'));
+        if (!Number.isFinite(quantidade) || quantidade <= 0) {
+            showStatus('Quantidade invalida.', 'err');
+            return;
+        }
+
+        const btnSalvar = document.getElementById('inv-salvar');
+        btnSalvar.disabled = true;
+        try {
+            await api('/api/logistica/inventario-inicial', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    local_codigo: localCodigo,
+                    codigo_produto: codigoProduto,
+                    unidade_medida: unidade,
+                    quantidade,
+                    lote,
+                    observacao,
+                }),
+            });
+            showStatus('Registro salvo com sucesso.', 'ok');
+            limparFormulario();
+        } catch (err) {
+            showStatus(`Falha ao salvar: ${err.message}`, 'err');
+        } finally {
+            btnSalvar.disabled = false;
+        }
+    }
+
+    async function abrirScanner(targetId) {
+        scanTargetId = targetId;
+
+        if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
+            showStatus('Leitura por camera indisponivel neste navegador.', 'err');
+            return;
+        }
+
+        if (!('BarcodeDetector' in window)) {
+            showStatus('Seu navegador nao suporta leitura nativa. Use digitacao manual.', 'info');
+            return;
+        }
+
+        try {
+            detector = new window.BarcodeDetector({ formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'] });
+        } catch (_) {
+            showStatus('Falha ao iniciar leitor de codigo. Use digitacao manual.', 'err');
+            return;
+        }
+
+        try {
+            scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            video.srcObject = scanStream;
+            modal.classList.add('open');
+            tip.textContent = 'Aponte a camera para o codigo de barras.';
+            iniciarLoopScanner();
+        } catch (err) {
+            showStatus(`Nao foi possivel abrir a camera: ${err.message}`, 'err');
+        }
+    }
+
+    function pararScanner() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        if (scanStream) {
+            scanStream.getTracks().forEach((t) => t.stop());
+            scanStream = null;
+        }
+        video.srcObject = null;
+        modal.classList.remove('open');
+    }
+
+    function iniciarLoopScanner() {
+        const loop = async () => {
+            if (!detector || !video || video.readyState < 2) {
+                rafId = requestAnimationFrame(loop);
+                return;
+            }
+            try {
+                const codes = await detector.detect(video);
+                if (codes && codes.length) {
+                    const code = (codes[0].rawValue || '').trim();
+                    if (code && scanTargetId) {
+                        const input = document.getElementById(scanTargetId);
+                        if (input) {
+                            input.value = code;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            showStatus(`Codigo lido para ${scanTargetId === 'inv-local' ? 'Local' : 'Cod. Produto'}.`, 'ok');
+                        }
+                        pararScanner();
+                        return;
+                    }
+                }
+            } catch (_) {
+                // Mantem loop silencioso para nao gerar ruido.
+            }
+            rafId = requestAnimationFrame(loop);
+        };
+        rafId = requestAnimationFrame(loop);
+    }
+
+    document.querySelectorAll('[data-scan-target]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirScanner(btn.getAttribute('data-scan-target')));
+    });
+
+    document.getElementById('scan-fechar').addEventListener('click', pararScanner);
+    modal.addEventListener('click', (ev) => {
+        if (ev.target === modal) pararScanner();
+    });
+
+    document.getElementById('inv-salvar').addEventListener('click', salvarRegistro);
+    document.getElementById('inv-limpar').addEventListener('click', () => {
+        limparFormulario();
+        showStatus('Formulario limpo.', 'info');
+    });
+
+    document.getElementById('inv-obs').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) salvarRegistro();
+    });
+
+    carregarUnidades();
+})();
+</script>

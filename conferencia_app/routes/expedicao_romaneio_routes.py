@@ -60,35 +60,39 @@ def _parse_int(valor, default=0) -> int:
     return int(_parse_float(valor, default))
 
 
-def _gerar_solicitacao_entrega_cif(romaneio) -> None:
+def _gerar_solicitacao_entrega_cif(romaneio) -> tuple[bool, str]:
     """Gatilho imediato da Regra 2: gera a Solicitacao de Entrega de um
-    romaneio CIF assim que ele fica Pronto ou Expedido. Best-effort: nunca
+    romaneio CIF/DAP assim que ele fica Pronto ou Expedido. Best-effort: nunca
     interrompe o fluxo do romaneio (o scheduler cobre eventuais falhas)."""
     try:
         if not current_app.config.get("SOLICITACAO_CIF_AUTO_ENABLED", True):
-            return
+            return False, "Automação de entregas está desabilitada."
         if not current_app.config.get("SOLICITACAO_CIF_ENTREGA_ENABLED", True):
-            return
-        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
-            return
+            return False, "Automação de entregas está desabilitada."
+        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) not in ("CIF", "PROP_REM"):
+            return False, "Romaneio sem entrega automática para esta modalidade de frete."
         from ..services.solicitacao_logistica_cif_service import (
             gerar_solicitacao_entrega_para_romaneio,
         )
 
         solicitante = session.get("username", "sistema")
-        gerar_solicitacao_entrega_para_romaneio(romaneio, solicitante=solicitante, commit=True)
+        ok, _criadas, mensagem = gerar_solicitacao_entrega_para_romaneio(
+            romaneio, solicitante=solicitante, commit=True
+        )
+        return ok, mensagem
     except Exception:
         current_app.logger.exception(
             "Falha ao gerar Solicitacao de Entrega CIF para o romaneio %s.",
             getattr(romaneio, "numero_romaneio", None),
         )
+        return False, "Falha ao criar a solicitação automática de entrega."
 
 
 def _cancelar_solicitacao_entrega_cif(romaneio, motivo: str = "") -> None:
     """Estorna a Solicitacao de Entrega CIF gerada automaticamente quando o
     romaneio e estornado/excluido. Best-effort: nunca interrompe o fluxo."""
     try:
-        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
+        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) not in ("CIF", "PROP_REM"):
             return
         from ..services.solicitacao_logistica_cif_service import (
             cancelar_solicitacao_entrega_para_romaneio,
@@ -838,7 +842,7 @@ def atualizar_romaneio(romaneio_id):
             frete = _normalizar_tipo_frete(payload["tipo_frete"])
             if frete not in _TIPOS_FRETE_VALIDOS:
                 return jsonify({"error": "Tipo de frete inválido."}), 400
-            disparar_aviso_fob = frete in ("FOB", "PROP_REM", "PROP_DEST")
+            disparar_aviso_fob = frete in _TIPOS_FRETE_VALIDOS
             romaneio.tipo_frete = frete
     if "transportadora" in payload:
         romaneio.transportadora = str(payload["transportadora"]).strip()
@@ -880,8 +884,11 @@ def atualizar_romaneio(romaneio_id):
 
 
 def _avisar_coleta_romaneio_fob(romaneio):
+    # FOB/FCA: aviso de coleta pelo cliente. DAP/CIF: aviso de mercadoria
+    # pronta com entrega/envio programado por nos (o service desvia o texto
+    # pela modalidade).
     tipo_frete = _normalizar_tipo_frete(romaneio.tipo_frete)
-    if tipo_frete not in ("FOB", "PROP_REM", "PROP_DEST"):
+    if tipo_frete not in _TIPOS_FRETE_VALIDOS:
         return
     modalidade = _incoterm_frete(tipo_frete)
     for nf in romaneio.nfs or []:
@@ -1212,7 +1219,7 @@ def finalizar_romaneio(romaneio_id):
     if divergentes and aprovar:
         _notificar_cce_modalidade_faturamento(romaneio, divergentes)
 
-    _gerar_solicitacao_entrega_cif(romaneio)
+    entrega_criada, entrega_mensagem = _gerar_solicitacao_entrega_cif(romaneio)
     _gerar_viagem_automatica_st(romaneio)
 
     if divergentes and aprovar:
@@ -1226,6 +1233,8 @@ def finalizar_romaneio(romaneio_id):
     return jsonify({
         "message": mensagem,
         "cce_modalidade_pendente": bool(romaneio.cce_modalidade_pendente),
+        "entrega_automatica_criada": entrega_criada,
+        "entrega_automatica_mensagem": entrega_mensagem,
     })
 
 
@@ -1393,7 +1402,7 @@ def editar_romaneio_campos(romaneio, alteracoes, autor):
         frete = _normalizar_tipo_frete(alteracoes["tipo_frete"])
         if frete not in _TIPOS_FRETE_VALIDOS:
             return False, "Tipo de frete inválido."
-        disparar_aviso_fob = frete in ("FOB", "PROP_REM", "PROP_DEST")
+        disparar_aviso_fob = frete in _TIPOS_FRETE_VALIDOS
         romaneio.tipo_frete = frete
 
     romaneio.atualizado_por = autor

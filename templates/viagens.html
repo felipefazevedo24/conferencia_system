@@ -1308,7 +1308,7 @@
                 <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option><option value="AVULSA">Avulsa</option></select>
                 <select id="boardStatus" class="form-select" style="max-width:170px"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Alocada">Alocada</option><option value="EmAndamento">Em andamento</option><option value="EmRota">Em rota</option><option value="Concluida">Concluída</option></select>
                 <select id="boardPrioridade" class="form-select" style="max-width:150px"><option value="">Prioridade</option><option value="Critica">Crítica</option><option value="Alta">Alta</option><option value="Media">Média</option><option value="Baixa">Baixa</option></select>
-                <select id="boardOrigem" class="form-select" style="max-width:170px" onchange="renderTable(rtState.allCards||[])"><option value="">Todas as origens</option><option value="AutoCIF">Automático (CIF)</option><option value="Manual">Manual</option></select>
+                <select id="boardOrigem" class="form-select" style="max-width:170px" onchange="renderTable(rtState.allCards||[])"><option value="">Todas as origens</option><option value="AutoCIF">Automático (CIF)</option><option value="AutoDAP">Automático (DAP)</option><option value="Manual">Manual</option></select>
                 <button class="btn btn-outline-secondary" type="button" onclick="loadDashboard()"><i class="fas fa-filter"></i></button>
             </div>
         </div>
@@ -2553,8 +2553,8 @@ function renderTable(cards){
     const origem=(document.getElementById('boardOrigem')?.value)||'';
     const filtered=cards.filter(filterTab).filter(c=>{
         if(!origem)return true;
-        if(origem==='AutoCIF')return c.origem_documento==='AutoCIF';
-        if(origem==='Manual')return c.origem_documento!=='AutoCIF';
+        if(origem==='AutoCIF'||origem==='AutoDAP')return c.origem_documento===origem;
+        if(origem==='Manual')return !['AutoCIF','AutoDAP'].includes(c.origem_documento);
         return true;
     });
     const sorted=sortCards(filtered);
@@ -2570,7 +2570,7 @@ function renderTable(cards){
         const canConcluir=c.status==='EmRota'||c.status==='EmAndamento'||c.status==='Alocada';
         const st=statusOperacional(c);
         return `<tr onclick="openDetalhe(${c.id})">
-            <td data-label="Código"><strong>${c.codigo}</strong>${c.origem_documento==='AutoCIF'?'<span class="rt-badge b-cif" style="margin-left:6px;font-size:9px" title="Gerada automaticamente (CIF)"><i class="fas fa-robot" style="margin-right:3px"></i>Auto CIF</span>':''}</td>
+            <td data-label="Código"><strong>${c.codigo}</strong>${['AutoCIF','AutoDAP'].includes(c.origem_documento)?'<span class="rt-badge b-cif" style="margin-left:6px;font-size:9px" title="Gerada automaticamente"><i class="fas fa-robot" style="margin-right:3px"></i>Auto '+(c.origem_documento==='AutoDAP'?'DAP':'CIF')+'</span>':''}</td>
             <td data-label="Tipo"><span class="rt-badge b-blue">${c.tipo_label}</span></td>
             <td data-label="Status"><span class="rt-badge ${st.cls}">${st.label}</span>${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
             <td data-label="Prior."><span class="rt-badge ${rtBadge('priority',c.prioridade)}">${c.prioridade_label}</span></td>

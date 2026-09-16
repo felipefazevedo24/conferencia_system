@@ -49,14 +49,32 @@
     .ua-perm-search { margin-bottom: 10px; }
     .ua-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 
-    .perm-section { margin-bottom: var(--eui-space-6); }
+    .perm-section { margin-bottom: 10px; }
     .perm-section:last-child { margin-bottom: 0; }
-    .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--eui-border); }
+    .perm-section-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); background: var(--eui-surface-2); cursor: pointer; font: inherit; text-align: left; }
+    .perm-section-head:hover { border-color: var(--eui-border-strong); }
+    .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0; display: inline-flex; align-items: center; gap: 8px; }
+    .perm-chevron { font-size: 10px; transition: transform .15s ease; }
+    .perm-section.open .perm-chevron { transform: rotate(90deg); }
+    .perm-section-count { font-weight: 600; color: var(--eui-muted); letter-spacing: 0; }
+    .perm-section-toggle { border: 1px solid var(--eui-border-strong); border-radius: var(--eui-radius-sm); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 11px; font-weight: 600; padding: 4px 9px; cursor: pointer; }
+    .perm-section-toggle:hover { border-color: var(--eui-primary); color: var(--eui-primary); background: var(--eui-primary-soft); }
+    .perm-section-body { display: none; padding: 12px 2px 4px; }
+    .perm-section.open .perm-section-body { display: block; }
+    .perm-subtitle { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin: 14px 0 8px; }
+    .perm-subtitle:first-child { margin-top: 0; }
     .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 10px; }
     @media (max-width: 960px) { .permissions-grid { grid-template-columns: 1fr; } }
-    .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 9px 10px; background: var(--eui-surface-2); }
-    .perm-item strong { display: block; font-size: 12px; font-weight: 700; color: var(--eui-text); }
+    .perm-item { display: flex; gap: 10px; align-items: center; justify-content: space-between; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 9px 12px; background: var(--eui-surface); cursor: pointer; }
+    .perm-item:hover { border-color: var(--eui-border-strong); }
+    .perm-item strong { display: block; font-size: 12px; font-weight: 600; color: var(--eui-text); }
     .perm-item small { color: var(--eui-muted); font-size: 10px; }
+    .perm-switch { position: relative; flex-shrink: 0; width: 36px; height: 20px; }
+    .perm-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .perm-switch-track { display: block; width: 36px; height: 20px; border-radius: 999px; background: var(--eui-border-strong); transition: background .15s ease; pointer-events: none; position: relative; }
+    .perm-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.28); transition: left .15s ease; }
+    .perm-switch input:checked + .perm-switch-track { background: var(--eui-primary); }
+    .perm-switch input:checked + .perm-switch-track::after { left: 18px; }
 
     .ua-drawer { position: fixed; top: 0; right: -720px; width: min(720px, 100%); height: 100vh; background: #fff; z-index: 3300; box-shadow: -18px 0 40px rgba(15, 23, 42, 0.2); transition: right .2s ease; display: grid; grid-template-rows: auto 1fr; }
     .ua-drawer.open { right: 0; }
@@ -289,7 +307,8 @@
                     </div>
                     <div class="eui-field" id="wrap-user" style="margin-bottom:0; display:none;">
                         <label class="eui-field__label">Usuário</label>
-                        <select id="perm-user" class="eui-select"></select>
+                        <input id="perm-user" class="eui-input" list="perm-user-list" placeholder="Digite para buscar…" autocomplete="off">
+                        <datalist id="perm-user-list"></datalist>
                     </div>
                     <button class="eui-btn eui-btn--ghost" onclick="carregarPermissoesAlvo()"><i class="fas fa-filter"></i> Carregar</button>
                     <button class="eui-btn eui-btn--primary" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar permissões</button>
@@ -343,6 +362,7 @@
 {% block extra_js %}
 <script>
     let usuariosCache = [];
+    const permSecoesAbertas = new Set();
     let catalogoPermissoes = [];
     let permissoesEditando = {};
     let currentFilterUsuarios = '';
@@ -681,10 +701,24 @@
     }
 
     function atualizarSelectUsuarios() {
-        const select = document.getElementById('perm-user');
-        select.innerHTML = usuariosCache
+        const lista = document.getElementById('perm-user-list');
+        lista.innerHTML = usuariosCache
             .map(u => `<option value="${u.username}">${u.username} (${u.role})</option>`)
             .join('');
+    }
+
+    function usuarioSelecionadoPermissao() {
+        const digitado = (document.getElementById('perm-user').value || '').trim();
+        if (!digitado) {
+            notify('Digite o usuário para configurar.', 'error');
+            return null;
+        }
+        const u = usuariosCache.find((x) => String(x.username).toLowerCase() === digitado.toLowerCase());
+        if (!u) {
+            notify(`Usuário "${digitado}" não encontrado - escolha um da lista.`, 'error');
+            return null;
+        }
+        return u.username;
     }
 
     function alternarEscopoPermissao() {
@@ -715,11 +749,13 @@
         catalogoPermissoes.forEach((p) => {
             const partes = p.label.split(' > ');
             const secao = partes[0];
-            const nomeCurto = partes.slice(1).join(' > ') || p.label;
-            const searchable = `${p.key} ${p.label} ${nomeCurto}`.toLowerCase();
+            const sub = partes.length > 2 ? partes[1] : '';
+            const nomeCurto = partes.slice(partes.length > 2 ? 2 : 1).join(' > ') || p.label;
+            const searchable = `${p.key} ${p.label}`.toLowerCase();
             if (termo && !searchable.includes(termo)) return;
-            if (!grupos[secao]) grupos[secao] = [];
-            grupos[secao].push({ ...p, nomeCurto });
+            if (!grupos[secao]) grupos[secao] = {};
+            if (!grupos[secao][sub]) grupos[secao][sub] = [];
+            grupos[secao][sub].push({ ...p, nomeCurto });
         });
 
         if (!Object.keys(grupos).length) {
@@ -727,29 +763,55 @@
             return;
         }
 
-        wrap.innerHTML = Object.keys(grupos).sort().map((secao) => {
-            const itensHtml = grupos[secao].map((p) => {
-                const checked = !!efetivo[p.key] ? 'checked' : '';
-                const baseVal = !!base[p.key];
-                const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
-                const origem = hasOverride ? 'customizado' : (baseVal ? 'padrão do cargo: permitido' : 'padrão do cargo: bloqueado');
-                return `
-                    <label class="perm-item">
-                        <input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)">
-                        <div>
-                            <strong>${escapeHtml(p.nomeCurto)}</strong>
-                            <small>${escapeHtml(p.key)} | ${origem}</small>
-                        </div>
-                    </label>
-                `;
+        wrap.innerHTML = Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((secao) => {
+            const subs = grupos[secao];
+            const todosItens = Object.values(subs).flat();
+            const marcadas = todosItens.filter((p) => !!efetivo[p.key]).length;
+            // Busca ativa mantem tudo aberto pra mostrar os resultados.
+            const aberta = termo ? true : permSecoesAbertas.has(secao);
+            const corpo = Object.keys(subs).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((sub) => {
+                const itens = subs[sub].slice().sort((a, b) => a.nomeCurto.localeCompare(b.nomeCurto, 'pt-BR'));
+                const itensHtml = itens.map((p) => {
+                    const checked = !!efetivo[p.key] ? 'checked' : '';
+                    const baseVal = !!base[p.key];
+                    const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
+                    const origem = hasOverride ? 'customizado' : (baseVal ? 'padrão do cargo: permitido' : 'padrão do cargo: bloqueado');
+                    return `
+                        <label class="perm-item">
+                            <div>
+                                <strong>${escapeHtml(p.nomeCurto)}</strong>
+                                <small>${escapeHtml(p.key)} | ${origem}</small>
+                            </div>
+                            <span class="perm-switch"><input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)"><span class="perm-switch-track"></span></span>
+                        </label>
+                    `;
+                }).join('');
+                const subHead = sub ? `<div class="perm-subtitle">${escapeHtml(sub)}</div>` : '';
+                return `${subHead}<div class="permissions-grid">${itensHtml}</div>`;
             }).join('');
             return `
-                <div class="perm-section">
-                    <h4 class="perm-section-title">${escapeHtml(secao)}</h4>
-                    <div class="permissions-grid">${itensHtml}</div>
+                <div class="perm-section${aberta ? ' open' : ''}">
+                    <button type="button" class="perm-section-head" onclick="alternarSecaoAberta('${escapeHtml(secao)}')">
+                        <span class="perm-section-title"><i class="fas fa-chevron-right perm-chevron"></i> ${escapeHtml(secao)} <span class="perm-section-count">${marcadas}/${todosItens.length} liberadas</span></span>
+                        <span class="perm-section-toggle" role="button" onclick="event.stopPropagation(); alternarSecaoPermissoes('${escapeHtml(secao)}', ${marcadas < todosItens.length})">${marcadas < todosItens.length ? 'Liberar todas' : 'Bloquear todas'}</span>
+                    </button>
+                    <div class="perm-section-body">${corpo}</div>
                 </div>
             `;
         }).join('');
+    }
+
+    function alternarSecaoAberta(secao) {
+        if (permSecoesAbertas.has(secao)) permSecoesAbertas.delete(secao); else permSecoesAbertas.add(secao);
+        renderPermissoesGrid(permissoesEditando, window._permBaseAtual || {}, window._permOverridesAtual || {});
+    }
+
+    function alternarSecaoPermissoes(secao, valor) {
+        catalogoPermissoes.forEach((p) => {
+            if (p.label.split(' > ')[0] === secao) permissoesEditando[p.key] = !!valor;
+        });
+        permSecoesAbertas.add(secao);
+        renderPermissoesGrid(permissoesEditando, window._permBaseAtual || {}, window._permOverridesAtual || {});
     }
 
     function alterarPermissaoChave(chave, valor) {
@@ -781,11 +843,8 @@
             const role = document.getElementById('perm-role').value;
             url = `/api/permissoes/role/${encodeURIComponent(role)}`;
         } else {
-            const username = document.getElementById('perm-user').value;
-            if (!username) {
-                notify('Selecione um usuário para configurar.', 'error');
-                return;
-            }
+            const username = usuarioSelecionadoPermissao();
+            if (!username) return;
             url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
         }
 
@@ -808,11 +867,8 @@
             const role = document.getElementById('perm-role').value;
             url = `/api/permissoes/role/${encodeURIComponent(role)}`;
         } else {
-            const username = document.getElementById('perm-user').value;
-            if (!username) {
-                notify('Selecione um usuário para configurar.', 'error');
-                return;
-            }
+            const username = usuarioSelecionadoPermissao();
+            if (!username) return;
             url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
         }
 

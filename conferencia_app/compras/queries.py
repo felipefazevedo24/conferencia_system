@@ -85,24 +85,177 @@ LIMIT %(limite)s;
 # -------------------------------------------------------------------
 # Produção: estrutura e processos da OS (somente leitura no GRV).
 # -------------------------------------------------------------------
+# Consultas de rastreio do projeto Estrutura, adaptadas para o catalogo da bridge.
 SQL_PRODUCAO_BUSCAR_OS = """
-SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
-             n_desenho, u_classificacao
-FROM public.tos
-WHERE cod_empresa = %(cod_empresa)s
-    AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
-    AND (
-            n_os ILIKE %(busca)s OR titulo ILIKE %(busca)s OR n_desenho ILIKE %(busca)s
-            OR codigo::text IN (
-                    SELECT cod_os::text FROM public.tos_aux
-                    WHERE cod_empresa = %(cod_empresa)s
-                        AND (cod_os_completo ILIKE %(busca)s OR subtitulo ILIKE %(busca)s
-                                 OR n_desenho ILIKE %(busca)s OR posicao_desenho ILIKE %(busca)s)
-            )
-    )
-ORDER BY CASE WHEN LOWER(BTRIM(n_os)) = LOWER(BTRIM(%(termo)s)) THEN 0 ELSE 1 END,
-                 n_os DESC
+WITH budget_order_links AS (
+    SELECT DISTINCT
+        budget.cod_empresa,
+        necessity.cod_os,
+        budget.numero_orcamento AS n_orcamento
+    FROM public.tsol_max_os budget
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = budget.cod_empresa
+     AND necessity.guid_solicitacao = budget.guid_pai
+    WHERE budget.cod_empresa = %(cod_empresa)s
+      AND budget.numero_orcamento::text LIKE %(busca)s
+),
+matched_budgets AS (
+    SELECT
+        cod_empresa,
+        cod_os,
+        MIN(n_orcamento) AS n_orcamento
+    FROM budget_order_links
+    GROUP BY cod_empresa, cod_os
+)
+SELECT
+    o.cod_empresa,
+    o.codigo,
+    o.n_os,
+    o.titulo,
+    o.status_servico,
+    o.dt_prevista,
+    o.n_desenho,
+    o.u_classificacao,
+    matched_item.cod_os_completo AS matched_item_code,
+    matched_item.subtitulo AS matched_item_description,
+    matched_budget.n_orcamento AS matched_budget_number
+FROM public.tos o
+LEFT JOIN LATERAL (
+    SELECT
+        a.codigo,
+        a.cod_os_completo,
+        a.subtitulo
+    FROM public.tos_aux a
+    WHERE a.cod_empresa = o.cod_empresa
+      AND a.cod_os = o.codigo
+      AND (
+        a.cod_os_completo ILIKE %(busca)s
+        OR a.subtitulo ILIKE %(busca)s
+        OR a.n_desenho ILIKE %(busca)s
+        OR a.posicao_desenho ILIKE %(busca)s
+      )
+    ORDER BY
+        CASE
+            WHEN LOWER(BTRIM(a.cod_os_completo)) = LOWER(BTRIM(%(termo)s))
+            THEN 0
+            ELSE 1
+        END,
+        a.codigo
+    LIMIT 1
+) matched_item ON TRUE
+LEFT JOIN matched_budgets matched_budget
+  ON matched_budget.cod_empresa = o.cod_empresa
+ AND matched_budget.cod_os = o.codigo
+WHERE o.cod_empresa = %(cod_empresa)s
+  AND UPPER(BTRIM(o.n_os)) NOT LIKE 'E%%'
+  AND (
+    o.n_os ILIKE %(busca)s
+    OR o.titulo ILIKE %(busca)s
+    OR o.n_desenho ILIKE %(busca)s
+    OR matched_item.codigo IS NOT NULL
+    OR matched_budget.n_orcamento IS NOT NULL
+  )
+ORDER BY
+    CASE
+        WHEN LOWER(BTRIM(o.n_os)) = LOWER(BTRIM(%(termo)s)) THEN 0
+        WHEN LOWER(BTRIM(matched_item.cod_os_completo)) = LOWER(BTRIM(%(termo)s))
+        THEN 1
+        WHEN BTRIM(matched_budget.n_orcamento::text) = BTRIM(%(termo)s)
+        THEN 2
+        ELSE 3
+    END,
+    o.n_os DESC
 LIMIT %(limite)s
+"""
+
+SQL_PRODUCAO_OBTER_OS = """
+SELECT
+    cod_empresa,
+    codigo,
+    n_os,
+    titulo,
+    status_servico,
+    dt_prevista,
+    n_desenho,
+    u_classificacao
+FROM public.tos
+WHERE cod_empresa = %(cod_empresa)s AND n_os = %(numero_os)s
+ORDER BY codigo DESC
+LIMIT 1
+"""
+
+SQL_PRODUCAO_ORCAMENTO_OS = """
+WITH RECURSIVE origin_orders AS (
+    SELECT %(cod_os)s::integer AS cod_os
+    UNION
+    SELECT request.cod_os
+    FROM origin_orders origin
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = %(cod_empresa)s AND necessity.cod_os = origin.cod_os
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = necessity.cod_empresa
+     AND request.guid_pai = necessity.guid_solicitacao
+    WHERE request.cod_os IS NOT NULL
+)
+SELECT DISTINCT budget.numero_orcamento AS budget_number
+FROM public.tsol_max_os budget
+JOIN public.tos_solicitacao_necessidade necessity
+  ON necessity.cod_empresa = budget.cod_empresa
+ AND necessity.guid_solicitacao = budget.guid_pai
+WHERE budget.cod_empresa = %(cod_empresa)s
+  AND necessity.cod_os IN (SELECT cod_os FROM origin_orders)
+  AND budget.numero_orcamento > 0
+ORDER BY budget.numero_orcamento DESC
+LIMIT 1
+"""
+
+SQL_PRODUCAO_DEPENDENCIAS_OS = """
+WITH RECURSIVE budget_roots AS (
+    SELECT DISTINCT necessity.cod_os
+    FROM public.tsol_max_os budget
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = budget.cod_empresa
+     AND necessity.guid_solicitacao = budget.guid_pai
+    WHERE budget.cod_empresa = %(cod_empresa)s
+      AND budget.numero_orcamento = %(numero_orcamento)s
+),
+dependency_walk AS (
+    SELECT
+        root.cod_os AS node_cod_os,
+        NULL::integer AS dependent_cod_os
+    FROM budget_roots root
+
+    UNION
+
+    SELECT
+        generated_order.cod_os,
+        dependency_walk.node_cod_os
+    FROM dependency_walk
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s
+     AND request.cod_os = dependency_walk.node_cod_os
+    JOIN public.tos_solicitacao_necessidade generated_order
+      ON generated_order.cod_empresa = request.cod_empresa
+     AND generated_order.guid_solicitacao = request.guid_pai
+    WHERE generated_order.cod_os <> dependency_walk.node_cod_os
+)
+SELECT DISTINCT
+    service.cod_empresa,
+    service.codigo,
+    service.n_os,
+    service.titulo,
+    service.status_servico,
+    service.dt_prevista,
+    service.n_desenho,
+    service.u_classificacao,
+    dependency_walk.dependent_cod_os,
+    service.codigo IN (SELECT cod_os FROM budget_roots) AS is_budget_order
+FROM dependency_walk
+JOIN public.tos service
+  ON service.cod_empresa = %(cod_empresa)s
+ AND service.codigo = dependency_walk.node_cod_os
+WHERE UPPER(BTRIM(service.n_os)) NOT LIKE 'E%%'
+ORDER BY service.n_os, dependency_walk.dependent_cod_os NULLS FIRST
 """
 
 SQL_PRODUCAO_OS_ABERTAS = """
@@ -257,6 +410,7 @@ LIMIT 1
 
 SQL_PRODUCAO_DESENHO_ARQUIVO = """
 SELECT codigo AS document_id, nome_arquivo, octet_length(anexo) AS size_bytes,
+    xmin::text AS content_revision,
     CASE WHEN octet_length(anexo) <= %(max_bytes)s THEN anexo END AS anexo
 FROM public.tos_aux_desenhos
 WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s

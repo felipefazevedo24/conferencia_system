@@ -15,13 +15,16 @@ Endpoint:
 from __future__ import annotations
 
 import base64
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
+import hashlib
+import io
 import os
 import re
 import sys
 import threading
 import time
 import unicodedata
+import zipfile
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -1613,6 +1616,127 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar lancamentos no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/producao/preview")
+    def producao_preview():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 503
+
+        from conferencia_app.services import producao_service
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"erro": "parametros_invalidos"}), 400
+        queries_by_kind = {
+            "drawing": "SQL_PRODUCAO_DESENHO_ARQUIVO",
+            "attachment": "SQL_PRODUCAO_ANEXO_ARQUIVO",
+            "image": "SQL_PRODUCAO_IMAGEM_ARQUIVO",
+        }
+        try:
+            params = {name: int(payload[name]) for name in ("cod_empresa", "cod_os", "cod_os_aux", "document_id")}
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return jsonify({"erro": "parametros_invalidos"}), 400
+        if params["cod_empresa"] != 1:
+            return jsonify({"erro": "empresa_nao_permitida"}), 403
+        kind = str(payload.get("kind") or "")
+        revision = str(payload.get("content_revision") or "")
+        if kind not in queries_by_kind or not revision or any(value < 0 for value in params.values()):
+            return jsonify({"erro": "parametros_invalidos"}), 400
+        if payload.get("renderer_version") != producao_service._PREVIEW_CACHE_VERSION:
+            return jsonify({"erro": "renderizador_incompativel"}), 409
+        if producao_service.fitz is None:
+            return jsonify({"erro": "renderizador_nao_instalado"}), 501
+        try:
+            from conferencia_app.services import production_images
+        except ImportError:
+            return jsonify({"erro": "renderizador_nao_instalado"}), 501
+        if not callable(getattr(production_images, "render_variants", None)):
+            return jsonify({"erro": "renderizador_nao_instalado"}), 501
+
+        started = time.perf_counter()
+        catalog = _compras_query_catalog()
+
+        def read_rows(query_name, *, one=False):
+            with _PRODUCAO_QUERY_SLOTS:
+                with closing(_conectar(cfg, readonly=True)) as conn, conn, conn.cursor() as cur:
+                    cur.execute(catalog[query_name], {**params, "max_bytes": producao_service._MAX_DOCUMENT_BYTES})
+                    columns = [column[0] for column in cur.description]
+                    if one:
+                        row = cur.fetchone()
+                        return dict(zip(columns, row)) if row else None
+                    return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+        try:
+            rows = read_rows("SQL_PRODUCAO_DOCUMENTOS_ITEM")
+            document = next((row for row in rows if row["kind"] == kind and int(row["document_id"]) == params["document_id"]), None)
+            if document is None:
+                return jsonify({"erro": "documento_nao_encontrado"}), 404
+            if str(document.get("content_revision")) != revision:
+                return jsonify({"erro": "documento_alterado"}), 409
+            if int(document.get("size_bytes") or 0) > producao_service._MAX_DOCUMENT_BYTES:
+                return jsonify({"erro": "documento_muito_grande"}), 413
+            identity = "|".join((
+                "bridge", str(id(app)), str(cfg["host"]), str(cfg["database"]),
+                kind, *(str(params[name]) for name in ("cod_empresa", "cod_os", "cod_os_aux", "document_id")),
+                revision, producao_service._PREVIEW_CACHE_VERSION,
+            ))
+            cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+            def load_document():
+                row = read_rows(queries_by_kind[kind], one=True)
+                if row is None or str(row.get("content_revision")) != revision:
+                    raise LookupError("Documento alterado durante o carregamento")
+                content = row.get("anexo")
+                if not isinstance(content, (bytes, bytearray, memoryview)) or not content:
+                    raise LookupError("Documento sem conteudo disponivel")
+                if len(content) > producao_service._MAX_DOCUMENT_BYTES:
+                    raise LookupError("Documento excede o limite da previa")
+                return bytes(content), str(row.get("nome_arquivo") or "documento")
+
+            previews = producao_service._previews_em_cache(cache_key, document_loader=load_document)
+            if previews is None:
+                return jsonify({"erro": "previa_em_processamento"}), 503
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+                for variant in ("thumbnail", "detail"):
+                    archive.writestr(f"{variant}.png", previews[variant])
+            body = output.getvalue()
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            app.logger.info("producao_preview_bridge elapsed_ms=%.2f original_bytes=%s preview_bytes=%s", elapsed_ms, document["size_bytes"], len(body))
+            response = app.response_class(body, mimetype="application/zip", headers={
+                "Cache-Control": "private, no-store",
+                "X-ERP-Read-Only": "true",
+                "X-Production-Preview-Version": producao_service._PREVIEW_CACHE_VERSION,
+                "X-Original-Bytes": str(document["size_bytes"]),
+                "Server-Timing": f"preview;dur={elapsed_ms:.1f}",
+            })
+            response.set_etag(cache_key)
+            return response
+        except LookupError as exc:
+            reason = {
+                "Vista isometrica nao identificada com confianca": "vista_isometrica_nao_identificada",
+                "Documento PDF invalido ou ilegivel": "pdf_invalido_ou_ilegivel",
+                "Documento sem paginas": "documento_sem_paginas",
+                "Imagem invalida ou ilegivel": "imagem_invalida_ou_ilegivel",
+                "Formato sem suporte para previa isometrica": "formato_nao_suportado",
+                "Documento alterado durante o carregamento": "documento_alterado",
+                "Documento sem conteudo disponivel": "documento_sem_conteudo",
+                "Documento excede o limite da previa": "documento_muito_grande",
+                "Renderizador de PDF nao instalado": "renderizador_nao_instalado",
+                "Renderizador de imagem nao instalado": "renderizador_nao_instalado",
+            }.get(str(exc), "falha_ao_processar_documento")
+            app.logger.warning(
+                "producao_preview_indisponivel os=%s item=%s documento=%s tipo=%s motivo=%s elapsed_ms=%.2f error_type=%s",
+                params["cod_os"], params["cod_os_aux"], params["document_id"], kind, reason,
+                (time.perf_counter() - started) * 1000, type(exc).__name__,
+            )
+            return jsonify({"erro": "previa_indisponivel", "motivo": reason}), 422
+        except Exception:
+            app.logger.exception("Falha ao gerar previa de Producao na bridge")
+            return jsonify({"erro": "previa_bridge_indisponivel"}), 503
+
     @app.post("/api/erp/compras/query")
     def compras_query():
         cfg = _config()
@@ -2188,6 +2312,36 @@ def create_app() -> Flask:
         except Exception as exc:
             app.logger.exception("Falha ao consultar NF-e emitidas no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/produto-localizacao")
+    def consultar_produto_localizacao():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        payload = request.get_json(silent=True) or {}
+        codigo = str(payload.get("codigo_interno") or "").strip()
+        try:
+            empresa = int(payload.get("empresa") or 1)
+        except (TypeError, ValueError):
+            empresa = 1
+        if not codigo or len(codigo) > 80:
+            return jsonify({"erro": "codigo_interno_invalido"}), 400
+        try:
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT localizacao_estoque FROM tproduto"
+                        " WHERE cod_empresa = %s AND btrim(codigo_interno) = btrim(%s) LIMIT 2",
+                        (empresa, codigo),
+                    )
+                    rows = cur.fetchall()
+            if len(rows) > 1:
+                return jsonify({"sucesso": False, "erro": "codigo_ambiguo"}), 409
+            return jsonify({"sucesso": True, "encontrado": bool(rows),
+                            "localizacao_estoque": (rows[0][0] or "") if rows else ""})
+        except Exception:
+            app.logger.exception("Falha ao consultar localização do produto")
+            return jsonify({"sucesso": False, "erro": "consulta_indisponivel"}), 502
 
     @app.post("/api/erp/nfe-emitida")
     def consultar_nfe_emitida():
