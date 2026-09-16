@@ -1319,7 +1319,7 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         has_assembly = bool(assembly_ops)
         productive_finished = all(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao") for op in productive_ops)
         def running(operations):
-            return any((op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or op.get("hs_realizadas"))
+            return any((op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or _horas_positivas(op.get("hs_realizadas")))
                        and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao"))
                        for op in operations)
         if item_ops and finished == len(item_ops):
@@ -1332,6 +1332,9 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             state = "fabricacao"
         elif has_assembly and productive_finished and children and all(child in {"disponivel", "concluido"} for child in children):
             state = "disponivel"
+        elif finished:
+            # Uma pausa entre etapas nao apaga o progresso da peca.
+            state = "montagem" if any(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao") for op in assembly_ops) else "fabricacao"
         elif item_ops:
             state = "nao_iniciado"
         else:
@@ -1381,6 +1384,13 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
     }
 
 
+def _horas_positivas(value: Any) -> bool:
+    try:
+        return float(str(value).replace(",", ".")) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _operacao_payload(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "codigo": _texto(row.get("codigo")),
@@ -1404,5 +1414,5 @@ def _motivo(state: str, operations: list[dict[str, Any]]) -> str:
     if state == "montagem":
         return "Operacao de montagem em andamento"
     if state == "fabricacao":
-        return "Operacao produtiva em andamento"
+        return "Fabricacao iniciada, com etapas ainda pendentes"
     return "Processo cadastrado, mas ainda nao iniciado"
