@@ -484,6 +484,15 @@
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
             itens += it("fiscal", "fa-file-invoice-dollar", "Confirmar NF emitida");
         }
+        // FORM-08.52 do lote em que esse item entrou. Fica disponivel em
+        // QUALQUER etapa depois de gerado (Relatorio, Finance, Fiscal e
+        // Concluido) - antes o PDF so' abria no instante em que era gerado
+        // e depois nao tinha como voltar nele.
+        if (a.relatorio_id) {
+            const doc = a.relatorio_numero_documento ? ` ${a.relatorio_numero_documento}` : "";
+            itens += (itens ? "<hr>" : "") + it("ver-pdf", "fa-file-pdf", `Ver PDF (FORM-08.52${doc})`);
+        }
+
         const pular = btnPularEtapa();
         if (pular) itens += (itens ? "<hr>" : "") + pular;
         if (PODE_ADMIN) {
@@ -634,6 +643,13 @@
         try {
             if (act === "confirmar") {
                 abrirModalConfirmar(id);
+                return;
+            } else if (act === "ver-pdf") {
+                // PDF e' gerado sob demanda a partir do registro do lote -
+                // nao fica armazenado, entao sempre sai atualizado.
+                const a = (ajustesCache || []).find((x) => String(x.id) === String(id));
+                if (!a || !a.relatorio_id) { toast("Esse item ainda não entrou num relatório.", "error"); return; }
+                window.open(`/api/logistica/inventario-ajustes/relatorio/${a.relatorio_id}.pdf`, "_blank");
                 return;
             } else if (act === "descartar") {
                 const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";

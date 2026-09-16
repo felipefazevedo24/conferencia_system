@@ -6737,3 +6737,54 @@ def test_inventario_recontagem_api_http(tmp_path):
     assert client.post(
         "/api/logistica/inventario-ajustes/999999/recontagem", json={"qtde_recontada": 1}
     ).status_code == 404
+
+
+def test_inventario_pdf_do_relatorio_acessivel_em_finance_fiscal_e_concluido(tmp_path):
+    """O FORM-08.52 e' gerado sob demanda a partir do registro do lote (nao
+    fica armazenado), entao pode ser reaberto a qualquer momento depois de
+    gerado. O item carrega o vinculo com o relatorio em TODAS as etapas
+    seguintes - Finance, Fiscal e Concluido - pra a tela poder oferecer o
+    "Ver PDF" nelas (antes o PDF so' abria no instante da geracao)."""
+    from conferencia_app.models import LogisticaInventarioAjuste
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-PDF")
+        ajuste_id = ajuste.id
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+
+    gerado = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Cíclico",
+        "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+        "responsavel": "Responsável", "solicitante": "Solicitante", "depto": "LOGÍSTICA",
+    })
+    assert gerado.status_code == 200
+    numero_documento = gerado.get_json()["numero_documento"]
+    relatorio_id = gerado.get_json()["relatorio_id"]
+
+    for etapa in ("Finance", "Fiscal", "Concluido"):
+        with app.app_context():
+            ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+            ajuste.status_modulo = etapa
+            ajuste.status_slug = svc.status_slug(etapa)
+            db.session.commit()
+
+        # O payload leva o vinculo - e' o que habilita o "Ver PDF" no menu.
+        item = client.get("/api/logistica/inventario-ajustes").get_json()["ajustes"][0]
+        assert item["status_modulo"] == etapa
+        assert item["relatorio_id"] == relatorio_id
+        assert item["relatorio_numero_documento"] == numero_documento
+
+        pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf")
+        assert pdf.status_code == 200, etapa
+        assert pdf.headers["Content-Type"] == "application/pdf"
+        assert pdf.data[:4] == b"%PDF"
+
+    assert client.get("/api/logistica/inventario-ajustes/relatorio/999999.pdf").status_code == 404
