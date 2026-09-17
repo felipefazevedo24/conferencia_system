@@ -271,6 +271,13 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
             });
     }
 
+    function statusResumoOrcamento(ordens) {
+        ordens = ordens || [];
+        if (!ordens.length) return "—";
+        var pendente = ordens.find(function (os) { return os.status_origem !== "Concluído"; });
+        return (pendente || ordens[0]).status_origem || "—";
+    }
+
     function renderLista() {
         els.listaCount.textContent = String(state.orcamentos.length);
         if (!state.orcamentos.length) {
@@ -278,7 +285,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
             return;
         }
         var html = state.orcamentos.map(function (orc, index) {
-            var statusPrincipal = (orc.ordens && orc.ordens[0] && orc.ordens[0].status_origem) || "—";
+            var statusPrincipal = statusResumoOrcamento(orc.ordens);
             return '<button type="button" class="ce-item" data-index="' + index + '">' +
                 '<div class="ce-item-top"><span class="ce-item-orc">Orç. ' + escapeHtml(orc.numero_orcamento) + (orc.versao ? " · v" + escapeHtml(orc.versao) : "") + '</span>' +
                 '<span class="eui-badge eui-badge--neutral">' + escapeHtml(statusPrincipal) + '</span></div>' +

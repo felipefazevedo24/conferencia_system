@@ -426,6 +426,11 @@ SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_dese
 # torcamento_servico_gerados: mesmo padrao usado nas demais queries de
 # Producao neste arquivo. Comecar de torcamento_servico_gerados (como esta
 # query fazia antes) perde OS cujo vinculo so existe em os.cod_orcamento.
+#
+# O mes do cronograma e definido pela data prevista de CADA OS (os.dt_prevista),
+# nao pela data do orcamento (torcamento.dt_previsao_entrega): essa ultima e
+# fixada na aprovacao do orcamento e pode ficar desatualizada; os.dt_prevista
+# e o campo que o GRV recalcula e mostra como "Data de Entrega" na propria OS.
 SQL_PRODUCAO_ORCAMENTOS_MES = """
 WITH orc_link AS (
     SELECT DISTINCT ON (sg.cod_empresa, sg.cod_os)
@@ -438,7 +443,7 @@ SELECT
     orc.codigo AS cod_orcamento,
     COALESCE(os.n_orcamento, orc.n_orcamento) AS n_orcamento,
     COALESCE(NULLIF(os.versao_orcamento, ''), orc.versao) AS versao,
-    orc.dt_previsao_entrega,
+    os.dt_prevista AS dt_previsao_entrega,
     os.n_os,
     os.titulo,
     os.status_servico,
@@ -456,8 +461,8 @@ JOIN public.torcamento orc
     ON orc.cod_empresa = os.cod_empresa
    AND orc.codigo = COALESCE(os.cod_orcamento, ol.cod_orcamento)
 WHERE os.cod_empresa = %(cod_empresa)s
-  AND orc.dt_previsao_entrega >= %(data_de)s::date
-  AND orc.dt_previsao_entrega < %(data_ate)s::date
+  AND os.dt_prevista >= %(data_de)s::date
+  AND os.dt_prevista < %(data_ate)s::date
   AND UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
   AND (%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text)
   AND (
@@ -466,7 +471,7 @@ WHERE os.cod_empresa = %(cod_empresa)s
     OR os.cliente ILIKE %(busca)s
     OR orc.n_orcamento::text ILIKE %(busca)s
 )
-ORDER BY orc.dt_previsao_entrega, orc.n_orcamento DESC, os.n_os
+ORDER BY os.dt_prevista, orc.n_orcamento DESC, os.n_os
 """
 
 SQL_PRODUCAO_ORIGEM_SCHEMA = """
