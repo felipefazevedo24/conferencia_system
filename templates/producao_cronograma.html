@@ -63,27 +63,30 @@
     .ce-mapa-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .ce-mapa-panel-title h3 { margin: 0; font-size: 14px; color: var(--po-ink); }
     .ce-mapa-source-label { padding: 3px 7px; color: var(--po-muted); font-size: 10px; background: var(--po-surface-strong); border-radius: 4px; }
-    .ce-mapa-flow { height: 460px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: #fbfcfd; }
+    .ce-mapa-flow { height: 560px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: #fbfcfd; }
 
-    .assembly-node { position: relative; display: grid; width: 218px; min-height: 130px; gap: 10px; padding: 13px; text-align: left; overflow: hidden; background: linear-gradient(150deg, #fff, #f8fbfe); border: 1px solid var(--po-border-strong); border-radius: var(--po-radius); box-shadow: var(--po-shadow-soft); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; font-family: inherit; }
+    .assembly-node { position: relative; display: grid; width: 305px; min-height: 182px; gap: 14px; padding: 18px; text-align: left; overflow: hidden; background: linear-gradient(150deg, #fff, #f8fbfe); border: 1px solid var(--po-border-strong); border-radius: var(--po-radius); box-shadow: var(--po-shadow-soft); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; font-family: inherit; }
     .assembly-node:hover { border-color: var(--po-blue-500); box-shadow: 0 14px 28px #1769d224; transform: translateY(-2px); }
     .assembly-node.selected { border: 2px solid var(--po-blue-600); background: linear-gradient(150deg, #fff, #1769d20e); box-shadow: 0 0 0 3px #1769d21a, var(--po-shadow-soft); }
-    .node-main { display: grid; grid-template-columns: 54px 1fr; align-items: center; gap: 10px; }
-    .node-main > div:last-child { display: grid; min-width: 0; gap: 4px; }
-    .node-main strong { color: var(--po-ink); font-size: 14px; }
-    .node-main span { display: -webkit-box; overflow: hidden; color: var(--po-ink-soft); font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-    .node-thumbnail { display: flex; flex: 0 0 54px; align-items: center; justify-content: center; width: 54px; height: 54px; padding: 4px; overflow: hidden; color: #8995a5; background: var(--po-surface-strong); border-radius: 6px; }
+    .node-main { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 14px; }
+    .node-main > div:last-child { display: grid; min-width: 0; gap: 6px; }
+    .node-main strong { color: var(--po-ink); font-size: 19px; }
+    .node-main span { display: -webkit-box; overflow: hidden; color: var(--po-ink-soft); font-size: 15px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+    .node-thumbnail { display: flex; flex: 0 0 76px; align-items: center; justify-content: center; width: 76px; height: 76px; padding: 5px; overflow: hidden; color: #8995a5; background: var(--po-surface-strong); border-radius: 8px; }
     .node-thumbnail img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center; }
-    .node-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .node-meta small { color: var(--po-muted); }
-    .status-badge { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: var(--po-ink-soft); font-size: 12px; white-space: nowrap; }
-    .status-dot { display: inline-block; width: 10px; height: 10px; flex: 0 0 auto; background: currentColor; border-radius: 50%; }
+    .node-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .node-meta small { color: var(--po-muted); font-size: 14px; }
+    .status-badge { display: inline-flex; align-items: center; gap: 7px; width: fit-content; color: var(--po-ink-soft); font-size: 15px; white-space: nowrap; }
+    .status-dot { display: inline-block; width: 12px; height: 12px; flex: 0 0 auto; background: currentColor; border-radius: 50%; }
     .status-not_started { color: var(--po-not-started); }
     .status-available { color: var(--po-available); }
     .status-manufacturing { color: var(--po-manufacturing); }
     .status-assembling { color: var(--po-assembling); }
     .status-blocked { color: var(--po-blocked); }
     .status-completed { color: var(--po-completed); }
+
+    .ce-seq-conector { display: flex; justify-content: center; align-items: center; margin: -10px 0; }
+    .ce-seq-conector i { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--eui-primary); background: var(--eui-surface); border: 1px solid var(--eui-border-strong); border-radius: 999px; box-shadow: var(--eui-shadow-sm); font-size: 11px; }
 
     .ce-seq-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
     .ce-seq-atual { font-size: 12px; font-weight: 700; }
@@ -347,6 +350,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 '<div class="ce-mapa-panel-title"><h3>Estrutura da OS</h3><span class="ce-mapa-source-label">Fonte: GRV</span></div>' +
                 '<div id="ce-mapa">' + '<div class="ce-loading">Carregando estrutura…</div>' + '</div>' +
             '</div></div>' +
+            '<div class="ce-seq-conector" id="ce-seq-conector" style="display:none;"><i class="fas fa-arrow-down"></i></div>' +
             '<div class="eui-card" id="ce-seq-card" style="display:none;"><div class="eui-card__body eui-card__body--tight">' +
                 '<div class="ce-seq-header"><h3 style="margin:0;font-size:14px;" id="ce-seq-titulo">Sequência de Montagem</h3>' +
                 '<span class="ce-seq-atual" id="ce-seq-atual"></span></div>' +
@@ -368,6 +372,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
 
     function mapaEl() { return document.getElementById("ce-mapa"); }
     function seqCardEl() { return document.getElementById("ce-seq-card"); }
+    function seqConectorEl() { return document.getElementById("ce-seq-conector"); }
     function seqBodyEl() { return document.getElementById("ce-seq-body"); }
     function seqTituloEl() { return document.getElementById("ce-seq-titulo"); }
     function seqAtualEl() { return document.getElementById("ce-seq-atual"); }
@@ -409,9 +414,9 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         not_started: "Não iniciado",
     };
 
-    var NODE_W = 218;
-    var GAP_X = 24;
-    var GAP_Y = 130;
+    var NODE_W = 305;
+    var GAP_X = 28;
+    var GAP_Y = 182;
 
     function calcularLayoutArvore(data) {
         var porId = {};
@@ -467,7 +472,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
 
     function EstruturaNodeCard(props) {
         var node = props.data;
-        var imagem = node.has_drawing
+        var imagem = node.thumbnail_url
             ? React.createElement("img", {
                 src: node.thumbnail_url, alt: "", loading: "lazy",
                 onError: function (event) { event.target.style.display = "none"; },
@@ -561,6 +566,8 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         renderMapa();
         var card = seqCardEl();
         if (card) card.style.display = "";
+        var conector = seqConectorEl();
+        if (conector) conector.style.display = "";
         var body = seqBodyEl();
         if (body) body.innerHTML = '<div class="ce-loading">Carregando sequência…</div>';
         var atualEl = seqAtualEl();
