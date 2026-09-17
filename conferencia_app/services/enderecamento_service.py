@@ -1,4 +1,8 @@
-"""Saldos físicos, transferências atômicas e fila de atualização de locais no GRV."""
+"""Endereço dos materiais no GRV: movimentação, catálogo de locais e fila de envio.
+
+O saldo é do GRV. O que o Sync grava aqui é em qual endereço cada material
+está, mais o histórico de quem mudou o quê."""
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
@@ -29,6 +33,45 @@ def quantidade(valor):
         return q
     except (InvalidOperation, ValueError, TypeError):
         raise ValueError('Informe uma quantidade válida, com até seis casas decimais.')
+
+
+# Serviço e uso-e-consumo sem estoque entram no recebimento mas não têm
+# endereço. O padrão fica aqui, não só no config, para a regra não virar
+# inócua em silêncio onde a configuração não estiver carregada.
+FAMILIAS_SEM_ENDERECO = ('09', '41')
+
+# Exclusões que valem só no cruzamento família+grupo: produto em processo
+# (família 03) não é endereçado quando é produção por terceiros, mas o que é
+# feito aqui dentro continua sendo. O GRV manda o grupo como CÓDIGO numérico
+# (p.cod_grupo), não como nome, então os pares esperam o código do grupo.
+# Vazio = regra inativa: um cruzamento sem grupo conhecido não casa com nada.
+FAMILIA_GRUPO_SEM_ENDERECO = ()  # ex.: (('03', '12'),)
+
+
+def codigo_familia(familia):
+    """'N - 09 - SERVIÇOS' → '09'."""
+    achado = re.search(r'\d{1,3}', str(familia or ''))
+    return achado.group(0).lstrip('0').zfill(2) if achado else None
+
+
+def sem_enderecamento(familia, grupo=None):
+    """Material que não controla estoque nem tem endereço.
+
+    Vale pela família sozinha (serviço, uso e consumo sem estoque) ou pelo
+    cruzamento família+grupo, quando a família só é excluída em parte dos
+    casos."""
+    codigo = codigo_familia(familia)
+    if not codigo:
+        return False
+    familias = current_app.config.get('ENDERECAMENTO_FAMILIAS_SEM_ENDERECO', FAMILIAS_SEM_ENDERECO)
+    if codigo in {str(c).lstrip('0').zfill(2) for c in familias}:
+        return True
+    alvo = str(grupo or '').strip()
+    if not alvo:
+        return False
+    pares = current_app.config.get('ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO', FAMILIA_GRUPO_SEM_ENDERECO)
+    return any(codigo == str(fam).lstrip('0').zfill(2) and alvo == str(grp).strip()
+               for fam, grp in pares)
 
 
 def normalizar(codigo):
@@ -169,6 +212,64 @@ def registrar(dados, usuario):
     finally:
         Trava.query.filter_by(sku=sku, token=token).update({'token': None, 'expira_em': None})
         db.session.commit()
+
+
+def materiais_no_endereco(endereco, atualizar=True):
+    """SKUs que estão no endereço, segundo o GRV. Sem cache por padrão: quem
+    chama está prestes a escrever, e agir sobre lista velha mexeria no material
+    errado."""
+    from .erp_estoque_service import buscar_estoque_grv
+    alvo = normalizar(endereco)
+    achados = []
+    for sku, agregado in (buscar_estoque_grv(forcar_atualizacao=atualizar).get('por_codigo') or {}).items():
+        locais = [normalizar(e) for bruto in (agregado.get('localizacoes') or [])
+                  for e in str(bruto).split(';')]
+        if alvo in locais:
+            achados.append(sku)
+    return sorted(achados)
+
+
+def esvaziar(endereco, usuario):
+    """Tira o endereço de todos os materiais que estão nele.
+
+    Usado ao desativar um endereço: o lugar sai de circulação e nada mais deve
+    apontar para ele. Material que ficaria sem endereço nenhum não é tocado —
+    a integração do GRV recusa localização vazia (HTTP 422) — e volta no
+    relatório para o responsável decidir o destino."""
+    endereco = normalizar(texto(endereco, 'um endereço', 80))
+    relatorio = {'endereco': endereco, 'limpos': [], 'sem_outro_endereco': [], 'falhas': []}
+    for sku in materiais_no_endereco(endereco):
+        token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+        try:
+            atuais = enderecos_atuais(sku)
+            depois = [e for e in atuais if normalizar(e) != endereco]
+            if not any(normalizar(e) == endereco for e in atuais):
+                continue  # saiu de lá entre a consulta e agora
+            if not depois:
+                relatorio['sem_outro_endereco'].append(sku)
+                continue
+            db.session.add(Movimento(
+                chave=f'desativacao:{endereco}:{sku}:{datetime.now().isoformat()}',
+                sku=sku, unidade='', tipo='Endereço desativado', origem=endereco,
+                destino=None, quantidade=0, usuario=usuario,
+                motivo=f'Endereço {endereco} desativado',
+                detalhes={'antes': atuais, 'depois': depois}))
+            db.session.commit()
+            relatorio['limpos'].append(sku)
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.exception('Falha ao tirar o endereço %s do SKU %s', endereco, sku)
+            relatorio['falhas'].append({'sku': sku, 'erro': str(exc)[:200]})
+        finally:
+            Trava.query.filter_by(sku=sku, token=token).update({'token': None, 'expira_em': None})
+            db.session.commit()
+    # O envio ao GRV vai por fora da trava, como no resto do módulo.
+    for sku in relatorio['limpos']:
+        try:
+            sincronizar(sku)
+        except Exception:
+            current_app.logger.exception('Envio ao GRV pendente após desativar %s (SKU %s)', endereco, sku)
+    return relatorio
 
 
 def sincronizar(sku):

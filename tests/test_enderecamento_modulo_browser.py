@@ -81,8 +81,15 @@ def test_modulo_desktop_mobile_movimentacoes_e_retry(tmp_path, monkeypatch):
             pw.expect(page.locator('#end-places')).to_contain_text('B')
             linha=page.locator('#end-places tr').filter(has_text='C').first
             pw.expect(linha).to_contain_text('1 material(is)')
+            # Desativar escreve em vários materiais no GRV: tem que confirmar antes.
+            avisos=[]
+            page.on('dialog', lambda d: (avisos.append(d.message), d.accept()))
             linha.get_by_role('button',name='Desativar',exact=True).click()
             pw.expect(page.locator('#end-places')).to_contain_text('Desativado')
+            assert any('tirar este endereço de 1 material' in a for a in avisos), avisos
+            # C saiu do material, que continua em B.
+            assert erp['local']=='B'
+            pw.expect(page.locator('#end-feedback')).to_contain_text('deixaram de apontar')
             page.locator('[data-panel="saldos"]').click()
             page.screenshot(path=str(tmp_path/'enderecamento-desktop.png'),full_page=True)
             page.set_viewport_size({'width':390,'height':844})
@@ -111,9 +118,11 @@ def test_modulo_desktop_mobile_movimentacoes_e_retry(tmp_path, monkeypatch):
             patch.side_effect=update
             page.get_by_role('button',name='Tentar sincronizar',exact=True).click()
             pw.expect(page.locator('#end-history')).to_contain_text('Nenhuma movimentação')
-            assert erp['local']=='C;D'
+            assert erp['local']=='D'
             with app.app_context():
-                assert EnderecoMovimento.query.count()==3
+                # 2 movimentações + a limpeza da desativação + a última movimentação
+                assert EnderecoMovimento.query.count()==4
+                assert EnderecoMovimento.query.filter_by(tipo='Endereço desativado').count()==1
                 assert EnderecoSaldo.query.count()==0  # o Sync não controla saldo
             page.locator('[data-panel="receber"]').click()
             pw.expect(page.locator('#pa-list')).to_contain_text('Nenhum material')
