@@ -19,10 +19,10 @@ def texto(valor, nome, limite):
     return valor
 
 
-def quantidade(valor, zero=False):
+def quantidade(valor):
     try:
         q = Decimal(str(valor).replace(',', '.'))
-        if not q.is_finite() or q < 0 or (not zero and q == 0) or q >= Decimal('1000000000000'):
+        if not q.is_finite() or q <= 0 or q >= Decimal('1000000000000'):
             raise ValueError()
         if q != q.quantize(Decimal('.000001')):
             raise ValueError()
@@ -31,10 +31,18 @@ def quantidade(valor, zero=False):
         raise ValueError('Informe uma quantidade válida, com até seis casas decimais.')
 
 
-def local(codigo):
-    codigo = texto(codigo, 'um endereço', 80)
+def normalizar(codigo):
+    """A etiqueta é a fonte da verdade, mas 'R1 PD1', 'r1-pd1' e 'R1-PD1' não
+    podem virar três endereços diferentes no catálogo."""
+    return ' '.join(str(codigo or '').split()).upper()
+
+
+def local(codigo, recebe=True):
+    codigo = normalizar(texto(codigo, 'um endereço', 80))
     registro = LocalizacaoArmazem.query.filter_by(codigo=codigo).first()
-    if registro and not registro.ativo:
+    # Endereço desativado não recebe material, mas o que já está lá precisa
+    # poder sair — senão desativar um endereço prende o conteúdo dele.
+    if registro and not registro.ativo and recebe:
         raise ValueError('Endereço desativado. Solicite a regularização ao responsável.')
     if not registro:
         db.session.add(LocalizacaoArmazem(codigo=codigo, corredor='', prateleira='', posicao=''))
@@ -84,22 +92,51 @@ def creditar_recebimento(tarefa, enderecos_anteriores):
         sincronizado_em=datetime.now()))
 
 
-def registrar(dados, usuario, pode_ajustar=False):
+def enderecos_atuais(sku):
+    """Endereços vigentes do material.
+
+    Enquanto uma operação não foi sincronizada, é ela que descreve onde o
+    material está: consultar o GRV nesse intervalo devolveria a lista velha e
+    a operação seguinte seria recusada sem motivo."""
+    pendente = (Movimento.query.filter_by(sku=sku, sincronizado_em=None)
+                .order_by(Movimento.id.desc()).first())
+    if isinstance(pendente.detalhes if pendente else None, dict) and pendente.detalhes.get('depois'):
+        return list(pendente.detalhes['depois'])
+    return receb.enderecos(receb.buscar_localizacao_produto_grv(sku))
+
+
+def resultado(atuais, origem, destino):
+    """Lista de endereços que passa a valer depois da operação.
+
+    Com origem, o material sai dela — mover é substituir. Sem origem, ele passa
+    a constar também no destino, que é o caso de guardar em dois lugares. A
+    grafia que já está no GRV é preservada para não duplicar endereço por
+    diferença de maiúscula ou espaço."""
+    depois = [e for e in atuais if not (origem and normalizar(e) == origem)]
+    if destino not in {normalizar(e) for e in depois}:
+        depois.append(destino)
+    return depois
+
+
+def registrar(dados, usuario):
+    """Muda o material de endereço no GRV.
+
+    O Sync não controla saldo — isso é do GRV. O que sai daqui é só a lista de
+    endereços do SKU; a quantidade é anotação do histórico e não entra em
+    cálculo nenhum."""
     sku = texto(dados.get('sku'), 'o SKU', 80)
     chave = 'operacao:' + texto(dados.get('chave'), 'a identificação da operação', 64)
-    tipo = dados.get('tipo')
-    if tipo not in ('Transferência', 'Conferência de saldo'):
-        raise ValueError('Operação inválida.')
-    if tipo == 'Conferência de saldo' and not pode_ajustar:
-        raise PermissionError('Somente responsáveis autorizados podem conferir saldos.')
     unidade = texto(dados.get('unidade'), 'a unidade', 20).upper()
-    q = quantidade(dados.get('quantidade'), zero=tipo == 'Conferência de saldo')
-    destino = texto(dados.get('destino'), 'o destino', 80)
-    origem = texto(dados.get('origem'), 'a origem', 80) if tipo == 'Transferência' else None
-    motivo = str(dados.get('motivo') or '').strip()
-    if len(motivo) < 5 or len(motivo) > 500:
-        raise ValueError('Informe um motivo com 5 a 500 caracteres.')
-    assinatura = dict(sku=sku, tipo=tipo, unidade=unidade, quantidade=str(q),
+    q = quantidade(dados.get('quantidade'))
+    destino = normalizar(texto(dados.get('destino'), 'o destino', 80))
+    informada = str(dados.get('origem') or '').strip()
+    # Sem origem o material passa a constar também no destino, sem sair de onde está.
+    origem = normalizar(texto(informada, 'a origem', 80)) if informada else None
+    if origem == destino:
+        raise ValueError('Origem e destino devem ser diferentes.')
+    # Motivo é opcional: exigir texto a cada operação trava o operador no chão.
+    motivo = str(dados.get('motivo') or '').strip()[:500]
+    assinatura = dict(sku=sku, unidade=unidade, quantidade=str(q),
                       origem=origem, destino=destino, motivo=motivo)
     token = receb.adquirir_trava(SimpleNamespace(sku=sku))
     try:
@@ -108,35 +145,19 @@ def registrar(dados, usuario, pode_ajustar=False):
             if anterior.usuario != usuario or anterior.detalhes.get('pedido') != assinatura:
                 raise ValueError('Esta identificação já pertence a outra operação. Atualize a tela.')
             return anterior.id
-        # Uma entrada já confirmada deve terminar antes de conferir/mover seu saldo.
+        # Uma entrada já confirmada deve terminar antes de mover o mesmo material.
         if Tarefa.query.filter_by(sku=sku, status='Aguardando sincronização').first():
             raise ValueError('Há um recebimento deste SKU aguardando sincronização. Sincronize-o primeiro.')
-        atuais = receb.enderecos(receb.buscar_localizacao_produto_grv(sku))
+        atuais = enderecos_atuais(sku)
+        if origem and origem not in {normalizar(e) for e in atuais}:
+            raise ValueError('A origem não consta nos endereços atuais do material. Atualize a consulta.')
         destino = local(destino)
-        alvo = saldo(sku, destino, unidade, conferido=destino not in atuais)
-        detalhes = {'pedido': assinatura, 'destino_antes': str(alvo.quantidade)}
-        if tipo == 'Transferência':
-            if origem == destino:
-                raise ValueError('Origem e destino devem ser diferentes.')
-            local(origem)
-            fonte = Saldo.query.filter_by(sku=sku, endereco=origem).first()
-            if not fonte or not fonte.conferido or not alvo.conferido:
-                raise ValueError('Confira o saldo inicial dos endereços antes de movimentar este material.')
-            if fonte.quantidade < q:
-                raise ValueError('Quantidade maior que o saldo disponível na origem. Atualize a consulta.')
-            detalhes['origem_antes'] = str(fonte.quantidade)
-            fonte.quantidade -= q
-            fonte.atualizado_em = datetime.now()
-            alvo.quantidade += q
-        else:
-            # Contagem física substitui o saldo, incluindo zero; diferença permanece no histórico.
-            detalhes['diferenca'] = str(q - alvo.quantidade)
-            alvo.quantidade = q
-            alvo.conferido = True
-        alvo.atualizado_em = datetime.now()
-        mov = Movimento(chave=chave, sku=sku, unidade=unidade, tipo=tipo,
-            origem=origem, destino=destino, quantidade=q, usuario=usuario,
-            motivo=motivo, detalhes=detalhes)
+        if origem:
+            local(origem, recebe=False)
+        depois = resultado(atuais, origem, destino)
+        mov = Movimento(chave=chave, sku=sku, unidade=unidade, tipo='Movimentação',
+            origem=origem, destino=destino, quantidade=q, usuario=usuario, motivo=motivo,
+            detalhes={'pedido': assinatura, 'antes': atuais, 'depois': depois})
         db.session.add(mov)
         db.session.flush()
         mov_id = mov.id
@@ -153,18 +174,19 @@ def registrar(dados, usuario, pode_ajustar=False):
 def sincronizar(sku):
     token = receb.adquirir_trava(SimpleNamespace(sku=sku))
     try:
-        pendentes = Movimento.query.filter_by(sku=sku, sincronizado_em=None).all()
+        pendentes = (Movimento.query.filter_by(sku=sku, sincronizado_em=None)
+                     .order_by(Movimento.id).all())
         if not pendentes:
             return
-        atuais = receb.enderecos(receb.buscar_localizacao_produto_grv(sku))
-        saldos = Saldo.query.filter_by(sku=sku).all()
-        tocados = {e for m in pendentes for e in (m.origem, m.destino) if e}
-        zerados = {s.endereco for s in saldos if s.conferido and s.quantidade == 0 and s.endereco in tocados}
-        locais = list(dict.fromkeys([e for e in atuais if e not in zerados] +
-                                   [s.endereco for s in saldos if s.quantidade > 0]))
+        # Cada operação guardou a lista completa que deve valer depois dela, e
+        # encadeia a anterior — um envio só resolve a fila inteira.
+        locais = []
+        for mov in pendentes:
+            if isinstance(mov.detalhes, dict) and mov.detalhes.get('depois'):
+                locais = list(mov.detalhes['depois'])
         # A integração existente não aceita localização vazia; não registrar sucesso fictício.
         if not locais:
-            raise ValueError('Saldo zerado no Sync. O GRV não permite limpar a última localização por esta integração.')
+            raise ValueError('O GRV não permite limpar a última localização por esta integração.')
         resposta = receb.atualizar_localizacao_estoque(sku, ';'.join(locais))
         if isinstance(resposta, dict) and (resposta.get('sucesso') is False or resposta.get('success') is False):
             raise ValueError('GRV recusou a atualização. Tente sincronizar novamente.')
