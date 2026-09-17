@@ -722,6 +722,7 @@ def _fmt_ajuste(a) -> dict:
         "gestor_confirmado_em": a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M") if a.gestor_confirmado_em else None,
         "gestor_confirmado_por": a.gestor_confirmado_por,
         "finance_observacao": a.finance_observacao,
+        "finance_documento_grv": a.finance_documento_grv,
         "finance_concluido_em": a.finance_concluido_em.strftime("%d/%m/%Y %H:%M") if a.finance_concluido_em else None,
         "finance_concluido_por": a.finance_concluido_por,
         "fiscal_nf_numero": a.fiscal_nf_numero,
@@ -1091,10 +1092,38 @@ def api_finance_concluir_ajuste(ajuste_id):
         return jsonify({"error": "Ajuste não encontrado."}), 404
     payload = request.get_json(silent=True) or {}
     try:
-        ajuste = ajuste_svc.concluir_finance(ajuste, session.get("username", "desconhecido"), payload.get("observacao"))
+        ajuste = ajuste_svc.concluir_finance(
+            ajuste,
+            session.get("username", "desconhecido"),
+            payload.get("documento_grv"),
+            payload.get("observacao"),
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Ajuste de estoque confirmado. Liberado pro Fiscal.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/finance-concluir-lote", methods=["POST"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_finance_concluir_ajuste_lote():
+    """Confirma o ajuste de varios itens de uma vez: na pratica um unico
+    documento do GRV cobre o lote inteiro do FORM-08.52."""
+    if not has_permission(PERMISSION_FINANCE):
+        return jsonify({"error": "Você não tem permissão de Finance nesse fluxo - fale com a gerência."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajustes = ajuste_svc.concluir_finance_em_lote(
+            payload.get("ajuste_ids") or [],
+            session.get("username", "desconhecido"),
+            payload.get("documento_grv"),
+            payload.get("observacao"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({
+        "message": f"{len(ajustes)} item(ns) confirmado(s) com o documento GRV {ajustes[0].finance_documento_grv}. Liberados pro Fiscal.",
+        "ajustes": [_fmt_ajuste(a) for a in ajustes],
+    })
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/fiscal-concluir", methods=["POST"])

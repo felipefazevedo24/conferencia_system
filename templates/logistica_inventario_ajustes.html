@@ -92,10 +92,11 @@
                     <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local ou código do produto…" style="width:100%; padding-left:34px;">
                 </div>
                 <div class="ia-bulkbar" id="ia-bulkbar">
-                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — aguardando relatório</strong>
+                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">aguardando relatório</span></strong>
                     <div style="display:flex; gap:8px;">
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar pro Finance</button>
+                        <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>
                     </div>
                 </div>
             </div>
@@ -129,6 +130,24 @@
 <!-- Modal "Confirmar divergência" (Validacao -> Relatorio) - so' confirma
      que a diferenca e' de verdade; NAO gera o FORM-08.52 ainda (isso
      acontece depois, em lote, no modal de Relatorio abaixo). -->
+<div class="ia-modal-backdrop" id="ia-finance-modal">
+    <div class="ia-modal">
+        <h3><i class="fas fa-coins"></i> Confirmar ajuste executado</h3>
+        <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;" id="ia-finance-sub"></p>
+        <label for="ia-finance-documento">Nº do documento do GRV *</label>
+        <input type="text" id="ia-finance-documento" class="eui-input" maxlength="60"
+               placeholder="Documento gerado no GRV ao lançar o ajuste" style="width:100%;">
+        <div style="margin-top:14px;">
+            <label for="ia-finance-observacao">Observação (opcional)</label>
+            <textarea id="ia-finance-observacao" placeholder="Ex.: ajuste lançado junto com o inventário cíclico de setembro"></textarea>
+        </div>
+        <div class="ia-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="ia-finance-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-finance-salvar"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <div class="ia-modal-backdrop" id="ia-confirmar-modal">
     <div class="ia-modal">
         <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
@@ -362,7 +381,7 @@
     function historicoHtml(a) {
         const linhas = [];
         if (a.gestor_confirmado_em) linhas.push(`Gestor: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
-        if (a.finance_concluido_em) linhas.push(`Finance: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
+        if (a.finance_concluido_em) linhas.push(`Finance: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
         if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${escapeHtml(a.fiscal_concluido_por)} em ${escapeHtml(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? " — NF " + escapeHtml(a.fiscal_nf_numero) : ""}`);
         return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
     }
@@ -391,7 +410,10 @@
             const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
             const valorClasse = temCusto ? (a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg") : "";
             const valorTexto = temCusto ? `${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}` : "—";
-            const podeSelecionar = PODE_VALIDAR && a.status_modulo === "Relatorio";
+            // Selecao em lote serve a duas etapas: gerar o FORM-08.52
+            // (Relatorio) e confirmar o ajuste executado (Finance).
+            const podeSelecionar = (PODE_VALIDAR && a.status_modulo === "Relatorio")
+                || (PODE_FINANCE && a.status_modulo === "Finance");
             const marcado = selecionados.has(a.id);
             const checkboxHtml = podeSelecionar
                 ? `<input type="checkbox" class="ia-select-item" data-id="${a.id}"${marcado ? " checked" : ""}>`
@@ -415,12 +437,32 @@
         atualizarBulkbar();
     }
 
-    // ── Selecao em lote pro Relatorio FORM-08.52 ────────────────────────
+    // ── Selecao em lote: FORM-08.52 (Relatorio) e ajuste executado (Finance) ──
+    // A selecao e de UMA etapa por vez - as duas acoes em lote sao
+    // diferentes, misturar item de Relatorio com item de Finance nao faria
+    // sentido.
+    function statusDoItem(id) {
+        const a = (ajustesCache || []).find((x) => x.id === Number(id));
+        return a ? a.status_modulo : null;
+    }
+
+    function statusDaSelecao() {
+        const primeiro = selecionados.values().next();
+        return primeiro.done ? null : statusDoItem(primeiro.value);
+    }
+
     function atualizarBulkbar() {
+        const etapa = statusDaSelecao();
+        const ehFinance = etapa === "Finance";
         $("ia-bulk-count").textContent = selecionados.size;
+        $("ia-bulk-etapa").textContent = ehFinance ? "aguardando Finance" : "aguardando relatório";
         $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
-        const todasVisiveisSelecionaveis = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
-        $("ia-select-all").checked = todasVisiveisSelecionaveis.length > 0 && todasVisiveisSelecionaveis.every((cb) => cb.checked);
+        $("ia-bulk-gerar").classList.toggle("hidden", ehFinance);
+        $("ia-bulk-finance").classList.toggle("hidden", !ehFinance);
+        // "Selecionar todos" considera apenas o que pode entrar na selecao atual.
+        const elegiveis = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"))
+            .filter((cb) => !etapa || statusDoItem(cb.dataset.id) === etapa);
+        $("ia-select-all").checked = elegiveis.length > 0 && elegiveis.every((cb) => cb.checked);
     }
 
     $("ia-tbody").addEventListener("change", (e) => {
@@ -428,7 +470,16 @@
         if (!cb) return;
         const id = Number(cb.dataset.id);
         if (cb.checked) {
-            if (selecionados.size >= RELATORIO_MAX_ITENS) {
+            const etapa = statusDaSelecao();
+            const etapaDoItem = statusDoItem(id);
+            if (etapa && etapaDoItem !== etapa) {
+                cb.checked = false;
+                toast("Dá pra agir em lote só com itens da mesma etapa - limpe a seleção antes.", "error");
+                return;
+            }
+            // O limite de 13 e do formulario FORM-08.52; confirmar ajuste
+            // executado no Finance nao tem limite.
+            if (etapaDoItem === "Relatorio" && selecionados.size >= RELATORIO_MAX_ITENS) {
                 cb.checked = false;
                 toast(`O formulário FORM-08.52 comporta no máximo ${RELATORIO_MAX_ITENS} itens por documento.`, "error");
                 return;
@@ -442,8 +493,11 @@
 
     $("ia-select-all").addEventListener("change", (e) => {
         const marcar = e.target.checked;
-        const checkboxes = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
-        if (marcar && checkboxes.length > RELATORIO_MAX_ITENS) {
+        const todos = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"));
+        // Sem nada selecionado, "todos" segue a etapa do primeiro elegivel.
+        const etapa = statusDaSelecao() || (todos.length ? statusDoItem(todos[0].dataset.id) : null);
+        const checkboxes = todos.filter((cb) => statusDoItem(cb.dataset.id) === etapa);
+        if (marcar && etapa === "Relatorio" && checkboxes.length > RELATORIO_MAX_ITENS) {
             e.target.checked = false;
             toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando relatório - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
             return;
@@ -454,6 +508,65 @@
             if (marcar) selecionados.add(id); else selecionados.delete(id);
         });
         atualizarBulkbar();
+    });
+
+    // ── Confirmar ajuste executado (Finance): 1 item ou o lote inteiro ──
+    // O numero do documento do GRV e obrigatorio - e a prova de que o
+    // ajuste foi lancado no ERP.
+    let financeAlvo = null;  // id do item, ou "lote"
+
+    function abrirModalFinance(alvo) {
+        financeAlvo = alvo;
+        const qtd = alvo === "lote" ? selecionados.size : 1;
+        $("ia-finance-sub").textContent = qtd > 1
+            ? `${qtd} itens selecionados serão confirmados com o mesmo documento do GRV e liberados pro Fiscal.`
+            : "Confirma que o ajuste foi lançado no ERP. O item segue pro Fiscal.";
+        $("ia-finance-documento").value = "";
+        $("ia-finance-observacao").value = "";
+        $("ia-finance-modal").classList.add("open");
+        $("ia-finance-documento").focus();
+    }
+    function fecharModalFinance() {
+        $("ia-finance-modal").classList.remove("open");
+        financeAlvo = null;
+    }
+    $("ia-finance-cancelar").addEventListener("click", fecharModalFinance);
+    $("ia-finance-modal").addEventListener("click", (e) => { if (e.target.id === "ia-finance-modal") fecharModalFinance(); });
+    $("ia-finance-documento").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ia-finance-salvar").click(); });
+
+    $("ia-finance-salvar").addEventListener("click", async () => {
+        const documento_grv = $("ia-finance-documento").value.trim();
+        if (!documento_grv) { toast("Informe o número do documento do GRV.", "error"); return; }
+        const observacao = $("ia-finance-observacao").value.trim();
+        const alvo = financeAlvo;
+        const btn = $("ia-finance-salvar");
+        btn.disabled = true;
+        try {
+            if (alvo === "lote") {
+                const resp = await api("/api/logistica/inventario-ajustes/finance-concluir-lote", {
+                    method: "POST",
+                    body: JSON.stringify({ ajuste_ids: Array.from(selecionados), documento_grv, observacao }),
+                });
+                selecionados.clear();
+                toast(resp.message, "success");
+            } else {
+                await api(`/api/logistica/inventario-ajustes/${alvo}/finance-concluir`, {
+                    method: "POST", body: JSON.stringify({ documento_grv, observacao }),
+                });
+                toast("Atualizado!", "success");
+            }
+            fecharModalFinance();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    $("ia-bulk-finance").addEventListener("click", () => {
+        if (!selecionados.size) return;
+        abrirModalFinance("lote");
     });
 
     $("ia-bulk-limpar").addEventListener("click", () => {
@@ -656,8 +769,8 @@
                 if (!motivo.trim()) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
             } else if (act === "finance") {
-                const observacao = prompt("Observação (opcional) sobre o ajuste de estoque executado:") || "";
-                await api(`/api/logistica/inventario-ajustes/${id}/finance-concluir`, { method: "POST", body: JSON.stringify({ observacao }) });
+                abrirModalFinance(id);
+                return;
             } else if (act === "fiscal") {
                 const nf_numero = prompt("Número da NF de ajuste emitida (opcional):") || "";
                 await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: "POST", body: JSON.stringify({ nf_numero }) });
