@@ -29,6 +29,32 @@ def serializar(t):
             "recebimento_status": t.item.status}
 
 
+def skus_que_nao_enderecam(query, so_cache=False):
+    """Dos SKUs com tarefa aberta, quais são de família/grupo que não endereça.
+
+    A consulta é restrita aos SKUs que têm tarefa, para o filtro não virar um
+    IN gigante. Falha do GRV não filtra nada: esconder trabalho da fila é pior
+    que deixar passar um item que não seria endereçado. No modo `so_cache`, da
+    atualização automática da tela, não se espera a bridge em nenhum caso."""
+    from ..services import erp_estoque_service
+    from ..services import enderecamento_service as modulo_svc
+    skus = [s for (s,) in query.with_entities(Tarefa.sku).distinct() if s]
+    if not skus:
+        return set()
+    try:
+        estoque = (erp_estoque_service.estoque_grv_em_cache() if so_cache
+                   else erp_estoque_service.buscar_estoque_grv())
+        por_codigo = (estoque or {}).get('por_codigo') or {}
+    except Exception:
+        current_app.logger.warning('Fila de endereçamento sem o GRV: nada foi filtrado por família.',
+                                   exc_info=True)
+        return set()
+    return {sku for sku in skus
+            if modulo_svc.sem_enderecamento(
+                (por_codigo.get(str(sku).strip().upper()) or {}).get('familia'),
+                (por_codigo.get(str(sku).strip().upper()) or {}).get('grupo'))}
+
+
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento")
 @permission_required(PERMISSION)
 def listar():
@@ -45,13 +71,25 @@ def listar():
     status = request.args.get("status", "Pendente")
     if status not in ("Pendente", "Aguardando sincronização", "Concluído"):
         return jsonify(erro="Status inválido."), 400
-    contadores = {s: query.filter(Tarefa.status == s).count() for s in (
-        "Pendente", "Aguardando sincronização", "Concluído")}
+    # Item sem vínculo de SKU não tem como ser endereçado, e material de
+    # família/grupo que não endereça nunca vai ter endereço: nenhum dos dois é
+    # pendência de endereçamento. Os dois voltam sozinhos se o cadastro mudar.
+    excluidos = skus_que_nao_enderecam(query.filter(Tarefa.status == "Pendente"),
+                                       so_cache=request.args.get("auto") == "1")
+
+    def pendencia_real(consulta):
+        consulta = consulta.filter(ItemNota.codigo_grv.isnot(None), ItemNota.codigo_grv != "")
+        return consulta.filter(~Tarefa.sku.in_(excluidos)) if excluidos else consulta
+
+    contadores = {s: (pendencia_real(query) if s == "Pendente" else query)
+                  .filter(Tarefa.status == s).count()
+                  for s in ("Pendente", "Aguardando sincronização", "Concluído")}
     inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     concluidos_hoje = query.filter(Tarefa.status == "Concluído",
         Tarefa.concluido_em >= inicio, Tarefa.concluido_em < inicio + timedelta(days=1)).count()
     pagina = max(1, request.args.get("pagina", 1, type=int))
-    tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
+    listagem = pendencia_real(query) if status == "Pendente" else query
+    tarefas = listagem.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
     return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
@@ -152,10 +190,20 @@ def saldos():
         return jsonify(itens=[], total=0, pagina=pagina, indisponivel=True,
                        metricas=dict(materiais='—', enderecos='—', sincronizar=pendentes),
                        erro='Endereços indisponíveis: a consulta ao GRV falhou. Tente atualizar em instantes.')
-    registros = []
+    from ..services import enderecamento_service as modulo_svc
+    filtro = request.args.get('filtro') or 'todos'
+    so_com_saldo = request.args.get('saldo') == '1'
+    registros, sem_endereco = [], []
     for sku, agregado in (estoque.get('por_codigo') or {}).items():
+        # Serviço e uso-e-consumo sem estoque nunca vão ter endereço: listar
+        # esses itens como pendência seria ruído permanente.
+        if modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo')):
+            continue
         descricao = str(agregado.get('item') or '').strip()
         unidade = str(agregado.get('unidade') or '').strip()
+        saldo = float(agregado.get('qtde_total') or 0)
+        if so_com_saldo and saldo <= 0:
+            continue
         # O GRV guarda os endereços do produto num campo único, separados por ';'.
         vistos = set()
         for bruto in agregado.get('localizacoes') or []:
@@ -163,17 +211,27 @@ def saldos():
                 endereco = endereco.strip()
                 if endereco and endereco not in vistos:
                     vistos.add(endereco)
-                    registros.append((endereco, sku, descricao, unidade))
+                    registros.append((endereco, sku, descricao, unidade, saldo))
+        if not vistos:
+            sem_endereco.append(('', sku, descricao, unidade, saldo))
     materiais = len({r[1] for r in registros})
     enderecos = len({r[0] for r in registros})
+    if filtro == 'sem_endereco':
+        registros = sem_endereco
+    elif filtro == 'com_endereco':
+        pass
+    else:
+        registros = registros + sem_endereco
     if busca:
         registros = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
-    registros.sort()
+    # Sem endereço vai para o fim, como nas outras listagens do sistema.
+    registros.sort(key=lambda r: (r[0] == '', r[0], r[1]))
     total = len(registros)
-    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u)
-                          for e, s, d, u in registros[(pagina-1)*40:pagina*40]],
+    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo)
+                          for e, s, d, u, saldo in registros[(pagina-1)*40:pagina*40]],
                    total=total, pagina=pagina,
-                   metricas=dict(materiais=materiais, enderecos=enderecos, sincronizar=pendentes))
+                   metricas=dict(materiais=materiais, enderecos=enderecos,
+                                 sem_endereco=len(sem_endereco), sincronizar=pendentes))
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/historico')
@@ -287,15 +345,36 @@ def catalogo_de_locais():
 @permission_required(MANAGE)
 def locais():
     if request.method == "POST":
+        # Ativar/desativar é só do administrador: desativar tira o endereço de
+        # todos os materiais que estão nele, direto no GRV.
+        if not is_admin_session():
+            return jsonify(erro="Somente administradores podem ativar ou desativar endereços."), 403
+        from ..services import enderecamento_service as modulo_svc
         dados = request.get_json(silent=True) or {}
         codigo = str(dados.get("codigo") or "").strip()
         if not codigo or len(codigo) > 80 or ";" in codigo:
             return jsonify(erro="Informe um código de endereço de até 80 caracteres, sem ponto e vírgula."), 400
+        ativo = dados.get("ativo") is True
+        codigo = modulo_svc.normalizar(codigo)
         local = LocalizacaoArmazem.query.filter_by(codigo=codigo).first()
         if not local:
             local = LocalizacaoArmazem(codigo=codigo, corredor="", prateleira="", posicao="")
             db.session.add(local)
-        local.ativo = dados.get("ativo") is True
+        local.ativo = ativo
         db.session.commit()
-    return jsonify(locais=[{"codigo": l.codigo, "ativo": l.ativo} for l in
-                          LocalizacaoArmazem.query.order_by(LocalizacaoArmazem.codigo).all()])
+        if not ativo:
+            try:
+                relatorio = modulo_svc.esvaziar(codigo, session["username"])
+            except ValueError as exc:
+                return jsonify(erro=str(exc)), 409
+            except Exception:
+                current_app.logger.exception("Falha ao esvaziar o endereço %s", codigo)
+                return jsonify(erro="Endereço desativado, mas não foi possível consultar o GRV para "
+                                    "limpar os materiais. Tente desativar novamente."), 502
+            return jsonify(relatorio=relatorio, locais=catalogo_simples())
+    return jsonify(locais=catalogo_simples())
+
+
+def catalogo_simples():
+    return [{"codigo": l.codigo, "ativo": l.ativo} for l in
+            LocalizacaoArmazem.query.order_by(LocalizacaoArmazem.codigo).all()]

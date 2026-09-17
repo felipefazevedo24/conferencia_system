@@ -64,10 +64,12 @@
   };
   return b;
  }
- async function refresh() {
+ async function refresh(auto) {
   const version = ++listRequest;
   try {
-   const query = new URLSearchParams({status, pagina:page, busca:$('pa-search').value, ids});
+   // auto: atualizacao no intervalo. O servidor nao espera a bridge do ERP
+   // nesse caso - ver skus_que_nao_enderecam.
+   const query = new URLSearchParams({status, pagina:page, busca:$('pa-search').value, ids, auto:auto?'1':'0'});
    const data = await request(`${api}?${query}`);
    if (version !== listRequest) return;
    items = data.itens; $('pa-list').replaceChildren();
@@ -271,7 +273,7 @@
  document.querySelectorAll('#pa-tabs button').forEach(b => b.onclick = () => {status=b.dataset.status; page=1; refresh();});
  document.addEventListener('visibilitychange', () => {if (document.hidden) stopCamera();});
  // Atualiza a fila após retries do servidor, sem interromper leituras ou menus.
- setInterval(() => { if (!document.hidden && !busy && !menuAberto && !$('pa-work').open && !$('pa-history').open && $('putaway').getClientRects().length) refresh(); }, 30000);
+ setInterval(() => { if (!document.hidden && !busy && !menuAberto && !$('pa-work').open && !$('pa-history').open && $('putaway').getClientRects().length) refresh(true); }, 30000);
  window.addEventListener('pagehide', stopCamera);
  document.addEventListener('recebimento:abrir-enderecamento', e => {
   if (e.detail?.ids) { ids = e.detail.ids.join(','); status = 'Pendente'; page = 1; }

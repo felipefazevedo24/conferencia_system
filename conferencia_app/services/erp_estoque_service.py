@@ -174,6 +174,16 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
     return resultado
 
 
+def estoque_grv_em_cache() -> dict[str, Any] | None:
+    """Snapshot do estoque só se ele já estiver em cache, sem nunca ir na bridge.
+
+    Para tela que se atualiza sozinha em intervalo: esperar a bridge a cada
+    poll arriscaria prender os workers do PythonAnywhere quando o ERP demora."""
+    if _CACHE["dados"] is not None and time.monotonic() < _CACHE["expira_em"]:
+        return _CACHE["dados"]
+    return None
+
+
 def buscar_consumo_kardex_grv(
     codigos: list[str],
     empresa: int = 1,

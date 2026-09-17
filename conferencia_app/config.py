@@ -158,6 +158,27 @@ class Config:
     )
     INVENTARIO_LOCALIZACAO_API_TIMEOUT = int(os.environ.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT", "30"))
 
+    # Familias do GRV que entram no recebimento mas nao controlam estoque nem
+    # tem endereco (servico, uso e consumo sem estoque). Ficam fora das telas
+    # de enderecamento - listar esses itens como "sem endereco" seria ruido
+    # permanente, porque eles nunca vao ter um. Codigo da familia ("N - 09 -
+    # SERVICOS" e' o 09); a lista cresce conforme a Logistica identifica mais.
+    ENDERECAMENTO_FAMILIAS_SEM_ENDERECO = [
+        codigo.strip() for codigo in os.environ.get(
+            "ENDERECAMENTO_FAMILIAS_SEM_ENDERECO", "09,41").split(",") if codigo.strip()
+    ]
+
+    # Exclusoes que valem so no cruzamento familia+grupo: "produto em processo"
+    # (familia 03) fica fora apenas quando e' producao por terceiros; o que e'
+    # feito aqui dentro continua sendo enderecado. Pares "familia:grupo", onde
+    # grupo e' o CODIGO numerico (o GRV manda p.cod_grupo, nao o nome).
+    # Vazio = regra inativa, porque cruzamento sem grupo nao casa com nada.
+    ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO = [
+        tuple(par.split(":", 1)) for par in os.environ.get(
+            "ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO", "").split(",")
+        if ":" in par
+    ]
+
     # Intralog > Picking Almoxarifado: lista de material a separar por
     # OS, lida AO VIVO do ERP (nada e' importado pro banco - o Sync so' guarda
     # a confirmacao de separacao do almoxarifado).

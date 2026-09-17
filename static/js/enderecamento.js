@@ -2,6 +2,7 @@
  'use strict';
  const $ = id => document.getElementById(id), base = '/api/enderecamento';
  const manage = $('end-module').dataset.manage === 'true';
+ const admin = $('end-module').dataset.admin === 'true';
  let page = 1, historyPage = 1, balances = [], busy = false, key, submitted = null, scanner, scanTarget, scanStarting = false;
  let listVersion = 0, historyVersion = 0, placesVersion = 0, atuais = null, atuaisSku = '';
  const norm = value => String(value||'').trim().replace(/\s+/g,' ').toUpperCase();
@@ -21,19 +22,21 @@
  async function refresh() {
   const version=++listVersion;
   try {
-   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page}));
+   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page,filtro:$('end-filter').value,saldo:$('end-only-stock').checked?'1':'0'}));
    if(version!==listVersion)return;
    balances=data.itens; $('end-balances').replaceChildren();
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    if(data.erro)message(data.erro);
    for(const s of balances){
-    const row=node('tr');cell(row,'Endereço',node('span',s.endereco,'end-location'));cell(row,'SKU',s.sku,'end-code');
-    cell(row,'Descrição',s.descricao||'—');
+    const row=node('tr');
+    cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
+    cell(row,'SKU',s.sku,'end-code');cell(row,'Descrição',s.descricao||'—');
+    cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     const actions=node('div',null,'end-actions');actions.append(button('Movimentar',()=>open(s)));
     actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
-   if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=4;tr.append(td);$('end-balances').append(tr);}
+   if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
    $('end-page').textContent=`Página ${page} · ${data.total} registro(s)`;$('end-prev').disabled=page===1;$('end-next').disabled=page*40>=data.total;
   }catch(e){message(e.message);}
  }
@@ -47,7 +50,9 @@
    for(const m of data.itens){
     const card=node('article'),head=node('div',null,'end-history-head');
     head.append(node('strong',`${m.sku} · ${m.tipo}`),node('span',m.sincronizado?'Sincronizado':'Envio pendente','end-badge'+(m.sincronizado?'':' warn')));card.append(head);
-    card.append(node('p',`${number(m.quantidade)} ${m.unidade} · ${m.origem||(m.tipo==='Recebimento'?'Entrada / contagem':'Sem origem')} → ${m.destino||'Endereços do recebimento'}`));
+    card.append(node('p',m.tipo==='Endereço desativado'
+     ?`Endereço ${m.origem} desativado: o material deixou de apontar para ele`
+     :`${number(m.quantidade)} ${m.unidade} · ${m.origem||(m.tipo==='Recebimento'?'Entrada / contagem':'Sem origem')} → ${m.destino||'Endereços do recebimento'}`));
     if(m.detalhes?.depois)card.append(node('p',`Endereços do material após a operação: ${m.detalhes.depois.join(' · ')}`));
     if(m.detalhes?.alocacoes)card.append(node('p',m.detalhes.alocacoes.map(a=>`${a.endereco}: ${number(a.quantidade)} ${m.unidade}`).join(' · ')));
     if(m.detalhes?.diferenca!=null)card.append(node('p',`Saldo anterior: ${number(m.detalhes.destino_antes)} · Ajuste: ${number(m.detalhes.diferenca)} ${m.unidade}`));
@@ -72,12 +77,32 @@
     cell(row,'Situação',node('span',l.ativo?'Ativo':'Desativado','end-badge'+(l.ativo?'':' warn')));
     const actions=node('div',null,'end-actions');
     actions.append(button('Ver materiais',()=>{$('end-search').value=l.codigo;page=1;showPanel('saldos');}));
-    if(manage)actions.append(button(l.ativo?'Desativar':'Ativar',async()=>{
-     try{await requestAbsolute('/api/recebimento/enderecamento/locais',{codigo:l.codigo,ativo:!l.ativo});await places();}
-     catch(e){message(e.message);}}));
+    if(admin)actions.append(button(l.ativo?'Desativar':'Ativar',()=>alternarLocal(l)));
     cell(row,'Ações',actions);$('end-places').append(row);
    }
    if(!data.itens.length){const tr=node('tr'),td=node('td','Nenhum endereço encontrado. Eles passam a existir conforme o operador usa cada local.','end-empty');td.colSpan=4;tr.append(td);$('end-places').append(tr);}
+  }catch(e){message(e.message);}
+ }
+ // Desativar escreve no GRV em vários materiais de uma vez: confirma antes e
+ // conta depois o que saiu e o que não deu.
+ async function alternarLocal(l){
+  if(l.ativo){
+   const aviso=l.materiais
+    ? `Desativar ${l.codigo} vai tirar este endereço de ${l.materiais} material(is) no GRV. Confirmar?`
+    : `Desativar ${l.codigo}? Ele deixa de receber material.`;
+   if(!confirm(aviso))return;
+  }
+  try{
+   const r=await requestAbsolute('/api/recebimento/enderecamento/locais',{codigo:l.codigo,ativo:!l.ativo});
+   const rel=r.relatorio;
+   if(rel){
+    const partes=[`${l.codigo} desativado.`];
+    if(rel.limpos.length)partes.push(`${rel.limpos.length} material(is) deixaram de apontar para ele.`);
+    if(rel.sem_outro_endereco.length)partes.push(`${rel.sem_outro_endereco.length} continuam nele por não terem outro endereço: o GRV não aceita localização vazia. Mova-os para o endereço certo (${rel.sem_outro_endereco.slice(0,5).join(', ')}).`);
+    if(rel.falhas.length)partes.push(`${rel.falhas.length} falharam; veja o histórico.`);
+    message(partes.join(' '));
+   }else message(`${l.codigo} ativado.`);
+   await Promise.all([places(),refresh()]);
   }catch(e){message(e.message);}
  }
  function showPanel(name){
@@ -160,7 +185,8 @@
  $('end-sku').addEventListener('change',consultarMaterial);
  for(const [a,b] of [['end-sku','end-origin'],['end-origin','end-destination'],['end-destination','end-quantity'],['end-quantity','end-unit'],['end-unit','end-reason']])$(a).onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$(b).focus();}};
  $('end-move').onclick=()=>open();
- $('end-refresh').onclick=refresh;$('end-search').onchange=()=>{page=1;refresh();};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
+ $('end-refresh').onclick=refresh;$('end-search').onchange=()=>{page=1;refresh();};
+ $('end-filter').onchange=$('end-only-stock').onchange=()=>{page=1;refresh();};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
  $('end-place-refresh').onclick=places;$('end-place-search').onchange=places;
  $('end-history-refresh').onclick=history;$('end-history-search').onchange=$('end-only-pending').onchange=()=>{historyPage=1;history();};$('end-history-prev').onclick=()=>{historyPage--;history();};$('end-history-next').onclick=()=>{historyPage++;history();};
  document.querySelectorAll('.end-tabs button').forEach(b=>b.onclick=()=>showPanel(b.dataset.panel));

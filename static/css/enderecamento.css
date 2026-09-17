@@ -10,3 +10,9 @@
 /* Onde o material esta hoje, mostrado no dialogo antes de confirmar */
 .end-current{margin:18px 0 0;font-size:12.5px;color:var(--eui-muted,#536b7c);overflow-wrap:anywhere}
 .end-current:empty{display:none}
+
+/* Filtro de endereco/saldo na barra de ferramentas: largura contida, senao
+   o select estica e empurra os botoes para uma terceira linha. */
+.end-select{flex:0 0 auto;width:auto;max-width:230px;border:1px solid var(--eui-border,#dbe4ec);border-radius:8px;background:var(--eui-surface-2,#f8fafc);color:var(--eui-text,#183247);font:inherit;font-size:13px;padding:10px 12px;min-height:44px}
+.end-toolbar .end-check{flex:0 0 auto;white-space:nowrap}
+@media(max-width:600px){.end-select{max-width:none;width:100%}}

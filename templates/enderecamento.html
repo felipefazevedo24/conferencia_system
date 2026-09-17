@@ -6,11 +6,12 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/enderecamento.css') }}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-<div class="end-module" id="end-module" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}">
+<div class="end-module" id="end-module" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}" data-admin="{{ 'true' if session.get('role') == 'Admin' else 'false' }}">
  <header class="end-header"><div><div class="end-eyebrow">LOGÍSTICA / ARMAZENAGEM</div><h1><i class="fas fa-map-marked-alt" aria-hidden="true"></i> Endereçamento e movimentações</h1><p>Do recebimento ao destino certo. Consulte, movimente e acompanhe cada material.</p></div><a class="eui-btn eui-btn--secondary" href="/conferencia"><i class="fas fa-box-open"></i> Recebimento</a></header>
  <div class="end-metrics" aria-label="Resumo da armazenagem">
   <div><span class="end-metric-icon"><i class="fas fa-cubes"></i></span><div><strong id="end-kpi-materiais">—</strong><span>Materiais controlados</span></div></div>
   <div><span class="end-metric-icon"><i class="fas fa-map-marker-alt"></i></span><div><strong id="end-kpi-enderecos">—</strong><span>Endereços ocupados</span></div></div>
+  <div><span class="end-metric-icon warn"><i class="fas fa-exclamation-triangle"></i></span><div><strong id="end-kpi-sem_endereco">—</strong><span>Materiais sem endereço</span></div></div>
   <div><span class="end-metric-icon warn"><i class="fas fa-sync-alt"></i></span><div><strong id="end-kpi-sincronizar">—</strong><span>Envios pendentes</span></div></div>
  </div>
  <nav class="end-tabs" aria-label="Áreas do endereçamento">
@@ -21,9 +22,9 @@
  </nav>
  <div id="end-feedback" class="end-feedback" role="status" aria-live="polite"></div>
  <section id="end-panel-saldos" class="end-panel">
-  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU, descrição ou endereço" aria-label="Buscar SKU, descrição ou endereço"></label><button id="end-scan-search" class="eui-btn eui-btn--secondary" type="button" data-scan="end-search"><i class="fas fa-qrcode"></i> O que tem aqui?</button><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button><button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
+  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU, descrição ou endereço" aria-label="Buscar SKU, descrição ou endereço"></label><button id="end-scan-search" class="eui-btn eui-btn--secondary" type="button" data-scan="end-search"><i class="fas fa-qrcode"></i> O que tem aqui?</button><select id="end-filter" class="end-select" aria-label="Filtrar por endereço"><option value="todos">Todos os materiais</option><option value="com_endereco">Somente com endereço</option><option value="sem_endereco">Somente sem endereço</option></select><label class="end-check"><input id="end-only-stock" type="checkbox"> Somente com saldo</label><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button><button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
   <p class="end-note"><i class="fas fa-info-circle"></i> Endereços lidos do GRV, que é quem controla o saldo. O Sync só atualiza em que endereço cada material está.</p>
-  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Descrição</th><th data-nosort>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
+  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Descrição</th><th>Saldo no GRV</th><th data-nosort>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
   <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
  </section>
  <section id="end-panel-locais" class="end-panel" hidden>
