@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Endereçamento e movimentações{% endblock %}
+{% block shell_title %}Endereçamento{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_enderecamento.css') }}?v={{ asset_version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/enderecamento.css') }}?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+<div class="end-module" id="end-module" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}">
+ <header class="end-header"><div><div class="end-eyebrow">LOGÍSTICA / ARMAZENAGEM</div><h1><i class="fas fa-map-marked-alt" aria-hidden="true"></i> Endereçamento e movimentações</h1><p>Do recebimento ao destino certo. Consulte, movimente e acompanhe cada material.</p></div><a class="eui-btn eui-btn--secondary" href="/conferencia"><i class="fas fa-box-open"></i> Recebimento</a></header>
+ <div class="end-metrics" aria-label="Resumo da armazenagem">
+  <div><span class="end-metric-icon"><i class="fas fa-cubes"></i></span><div><strong id="end-kpi-materiais">—</strong><span>Materiais controlados</span></div></div>
+  <div><span class="end-metric-icon"><i class="fas fa-map-marker-alt"></i></span><div><strong id="end-kpi-enderecos">—</strong><span>Endereços ocupados</span></div></div>
+  <div><span class="end-metric-icon warn"><i class="fas fa-clipboard-check"></i></span><div><strong id="end-kpi-conferir">—</strong><span>Saldos a conferir</span></div></div>
+  <div><span class="end-metric-icon warn"><i class="fas fa-sync-alt"></i></span><div><strong id="end-kpi-sincronizar">—</strong><span>Envios pendentes</span></div></div>
+ </div>
+ <nav class="end-tabs" aria-label="Áreas do endereçamento">
+  <button type="button" data-panel="saldos" aria-pressed="true" class="active"><i class="fas fa-th-large"></i> Materiais e endereços</button>
+  <button type="button" data-panel="receber" aria-pressed="false"><i class="fas fa-inbox"></i> A endereçar</button>
+  <button type="button" data-panel="historico" aria-pressed="false"><i class="fas fa-history"></i> Histórico e sincronização</button>
+ </nav>
+ <div id="end-feedback" class="end-feedback" role="status" aria-live="polite"></div>
+ <section id="end-panel-saldos" class="end-panel">
+  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU ou endereço" aria-label="Buscar SKU ou endereço"></label><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button>{% if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') %}<button id="end-initial" class="eui-btn eui-btn--secondary"><i class="fas fa-clipboard-check"></i> Conferir saldo</button>{% endif %}<button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
+  <p class="end-note"><i class="fas fa-info-circle"></i> Saldos físicos controlados no Sync. Para material já armazenado, confira a quantidade de cada endereço antes da primeira movimentação.</p>
+  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Saldo</th><th>Conferência</th><th>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
+  <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
+ </section>
+ <section id="end-panel-receber" class="end-panel" hidden><div class="end-section-head"><h2>Endereçar o que chegou</h2><p>A mesma fila do recebimento, com os materiais mais antigos primeiro.</p></div>{% include 'recebimento_enderecamento_painel.html' %}</section>
+ <section id="end-panel-historico" class="end-panel" hidden>
+  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-history-search" type="search" placeholder="Buscar SKU ou endereço" aria-label="Buscar no histórico"></label><label class="end-check"><input id="end-only-pending" type="checkbox"> Somente envios pendentes</label><button id="end-history-refresh" class="eui-btn eui-btn--secondary">Atualizar histórico</button></div>
+  <div id="end-history" class="end-history"></div><div class="end-pages"><button id="end-history-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-history-page"></span><button id="end-history-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
+ </section>
+ <dialog id="end-work" class="end-dialog" aria-labelledby="end-work-title"><form id="end-form">
+  <div class="end-dialog-head"><div><div class="end-eyebrow">OPERAÇÃO DE ARMAZENAGEM</div><h2 id="end-work-title">Movimentar material</h2></div><button type="button" id="end-close" class="eui-btn eui-btn--secondary" aria-label="Fechar operação"><i class="fas fa-times"></i></button></div>
+  <div class="end-dialog-body"><p id="end-work-hint"></p><div id="end-work-feedback" class="end-feedback" role="status"></div>
+   <div class="end-form-grid">
+    <label class="end-full"><span>1 · Material / SKU</span><div class="end-input-action"><input id="end-sku" required maxlength="80" autocomplete="off" placeholder="Bipe ou digite o SKU"><button type="button" data-scan="end-sku" aria-label="Ler SKU pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
+    <label id="end-origin-label"><span>2 · Endereço de origem</span><div class="end-input-action"><input id="end-origin" maxlength="80" autocomplete="off" placeholder="Bipe a origem"><button type="button" data-scan="end-origin" aria-label="Ler origem pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
+    <label><span id="end-destination-label">3 · Endereço de destino</span><div class="end-input-action"><input id="end-destination" required maxlength="80" autocomplete="off" placeholder="Bipe o endereço"><button type="button" data-scan="end-destination" aria-label="Ler destino pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
+    <label><span id="end-quantity-label">Quantidade a movimentar</span><input id="end-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+    <label><span>Unidade</span><input id="end-unit" required maxlength="20" placeholder="UN, KG, M…" autocomplete="off"></label>
+    <label class="end-full"><span>Motivo</span><textarea id="end-reason" required minlength="5" maxlength="500" rows="2" placeholder="Ex.: reorganização da prateleira"></textarea></label>
+   </div><p id="end-preview" class="end-preview"></p><p class="end-note">Confira material, quantidade e etiquetas antes de confirmar. A operação ficará registrada com seu usuário.</p>
+  </div><div class="end-dialog-foot"><button type="button" id="end-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="end-submit" class="eui-btn eui-btn--primary">Confirmar movimentação</button></div>
+ </form></dialog>
+ <dialog id="end-camera" class="end-dialog" aria-label="Ler etiqueta"><div class="end-dialog-body"><h2>Ler etiqueta</h2><div id="end-reader"></div><p id="end-camera-feedback" role="status"></p><button id="end-camera-close" class="eui-btn eui-btn--secondary">Cancelar leitura</button></div></dialog>
+</div>
+{% include 'recebimento_dialog.html' %}
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='vendor/html5-qrcode/html5-qrcode.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabela_ordenavel.js') }}?v={{ asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/recebimento_enderecamento.js') }}?v={{ asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/enderecamento.js') }}?v={{ asset_version }}"></script>
+{% endblock %}

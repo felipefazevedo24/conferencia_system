@@ -1,6 +1,6 @@
 # Endereçamento após recebimento
 
-Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparece logo após **Conferido / Ag. Lançamento**. Ao clicar, a fila aparece na mesma tela; não existe página ou item adicional no menu lateral. A fila é criada apenas na confirmação final de `/validar`, para itens conformes e com quantidade positiva. A validação preliminar não cria tarefas. Divergências seguem a tratativa existente; não são liberadas automaticamente para armazenagem. A tarefa usa o ID do item da nota, preservando a identidade mesmo quando números de NF se repetem.
+Na própria **Conferência de Recebimento**, o cartão **Endereçamento** aparece logo após **Conferido / Ag. Lançamento**. Ao clicar, a fila aparece na mesma tela. Ela também está disponível no módulo **Endereçamento e movimentações** (`/wms/enderecamento`), junto das transferências e saldos físicos por endereço. Consulte [operação e publicação do módulo](enderecamento_movimentacoes.md). A fila é criada apenas na confirmação final de `/validar`, para itens conformes e com quantidade positiva. A validação preliminar não cria tarefas. Divergências seguem a tratativa existente; não são liberadas automaticamente para armazenagem. A tarefa usa o ID do item da nota, preservando a identidade mesmo quando números de NF se repetem.
 
 ## Operação
 

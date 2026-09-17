@@ -71,7 +71,7 @@
    const data = await request(`${api}?${query}`);
    if (version !== listRequest) return;
    items = data.itens; $('pa-list').replaceChildren();
-   if (!ids && !$('pa-search').value) $('dash-enderecamento').textContent = data.contadores.Pendente;
+   if (!ids && !$('pa-search').value && $('dash-enderecamento')) $('dash-enderecamento').textContent = data.contadores.Pendente;
    document.querySelectorAll('#pa-tabs button').forEach(b => { b.classList.toggle('active', b.dataset.status === status); b.setAttribute('aria-pressed', String(b.dataset.status === status)); b.querySelector('.pa-kpi-num').textContent = b.dataset.status === 'Concluído' ? data.concluidos_hoje : data.contadores[b.dataset.status]; });
     if (!items.length) {
      const row = el('tr');
@@ -93,7 +93,10 @@
      const dateCell = el('td', date(item.criado_em), 'pa-date'); dateCell.dataset.label = 'Recebido em';
      card.append(skuCell, materialCell, qtdCell, nfCell, dateCell, statusCell);
     const actions = el('div', null, 'pa-tools');
-    if (item.status === 'Pendente') actions.append(button('Endereçar material', () => openWork(item), 'fa-qrcode', 'primary'));
+    if (item.status === 'Pendente') {
+     if (item.impedimento) actions.append(el('span', item.impedimento, 'pa-meta'));
+     else actions.append(button('Endereçar material', () => openWork(item), 'fa-qrcode', 'primary'));
+    }
     const syncActions = item.erro ? el('div', null, 'pa-sync-error') : actions;
     if (item.erro) syncActions.append(el('span', item.erro));
     if (item.status === 'Aguardando sincronização') syncActions.append(button('Tentar sincronizar', async e => {
@@ -107,9 +110,9 @@
      try { await request(`${api}/${item.id}/reabrir`, {justificativa}); status='Pendente'; page=1; await refresh(); } catch(err) {feedback(err.message);}
     };
     const menuItens = [];
-    if (isAdmin) menuItens.push({texto:'Ver histórico e origem', icone:'fa-history', acao:() => history(item.id)});
+    menuItens.push({texto:'Ver histórico e origem', icone:'fa-history', acao:() => history(item.id)});
     if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') menuItens.push({texto:'Revisar leituras', icone:'fa-redo', acao:reabrir('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.')});
-    if (item.status === 'Concluído' && isAdmin) menuItens.push({texto:'Estornar endereçamento', icone:'fa-undo', perigo:true, acao:reabrir('Informe o motivo do estorno. O material volta para a fila "A endereçar"; os endereços já enviados ao GRV são preservados.')});
+    if (item.status === 'Concluído') menuItens.push({texto:'Movimentar ou conferir saldo', icone:'fa-exchange-alt', acao:() => { location.href='/wms/enderecamento?sku='+encodeURIComponent(item.sku); }});
     if (menuItens.length) actions.append(kebab(menuItens));
     const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);
     if (item.erro) { const errorRow = el('tr', null, 'pa-error-row'); const errorCell = el('td', null, 'pa-alert pa-alert--erro'); errorCell.append(syncActions); errorCell.colSpan = 7; errorRow.append(errorCell); $('pa-list').append(errorRow); }
@@ -275,7 +278,7 @@
   refresh();
  });
  $('pa-clear-filter').onclick = () => { ids=''; page=1; $('pa-search').value=''; refresh(); };
- if (new URLSearchParams(location.search).get('etapa') === 'enderecamento') {
+ if (new URLSearchParams(location.search).get('etapa') === 'enderecamento' && typeof aplicarFiltroReceb === 'function') {
   aplicarFiltroReceb('enderecamento', document.querySelector('[data-filter="enderecamento"]'));
  } else { refresh(); }
 })();

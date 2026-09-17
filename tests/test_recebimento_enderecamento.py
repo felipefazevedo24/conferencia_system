@@ -273,15 +273,16 @@ def test_reopen_pending_sync_requires_new_scans_and_preserves_audit(state):
     update.assert_not_called()
 
 
-def test_estorno_de_concluido_volta_para_fila(state):
+def test_estorno_com_saldo_exige_movimento_auditavel(state):
     task, _, update = state
     svc.confirmar(task, payload(task))
     svc.sincronizar(task)
     assert task.status == 'Concluído'
-    svc.reabrir(task, 'Endereçado no local errado')
-    assert task.status == 'Pendente'
-    assert task.alocacoes is None and task.concluido_em is None
-    assert Evento.query.filter_by(tipo='Estornado').count() == 1
+    with pytest.raises(ValueError, match='saldo por endereço'):
+        svc.reabrir(task, 'Endereçado no local errado')
+    assert task.status == 'Concluído'
+    assert task.alocacoes and task.concluido_em
+    assert Evento.query.filter_by(tipo='Estornado').count() == 0
 
 
 def test_receiving_reopened_blocks_address_update(state):
@@ -345,7 +346,8 @@ def test_final_receiving_creates_queue_but_preliminary_validation_does_not(tmp_p
     assert b'pa-camera' in page.data
     assert b'receb-enderecamento-painel' in page.data
     assert b'href="/recebimento/enderecamento"' not in page.data
-    assert client.get('/recebimento/enderecamento').status_code == 404
+    assert client.get('/recebimento/enderecamento').status_code == 200
+    assert client.get('/wms/enderecamento').status_code == 200
 
 
 def test_bridge_location_query_is_authenticated_and_parameterized(monkeypatch):

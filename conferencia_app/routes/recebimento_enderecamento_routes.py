@@ -1,7 +1,7 @@
 """Fila de endereçamento do recebimento e leituras pela câmera."""
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, render_template, current_app
 from sqlalchemy import or_
 
 from ..auth import permission_required, roles_required, is_admin_session, has_permission
@@ -24,7 +24,9 @@ def serializar(t):
             "unidade": t.unidade, "status": t.status, "alocacoes": t.alocacoes,
             "criado_em": t.criado_em.isoformat(), "confirmado_por": t.confirmado_por,
             "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
-            "erro": t.erro, "enviado": t.enderecos_enviados}
+            "erro": t.erro, "enviado": t.enderecos_enviados,
+            "impedimento": svc.impedimento(t) if t.status == 'Pendente' else '',
+            "recebimento_status": t.item.status}
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento")
@@ -49,15 +51,15 @@ def listar():
     concluidos_hoje = query.filter(Tarefa.status == "Concluído",
         Tarefa.concluido_em >= inicio, Tarefa.concluido_em < inicio + timedelta(days=1)).count()
     pagina = max(1, request.args.get("pagina", 1, type=int))
-    # Fila operacional: o recebimento mais novo aparece primeiro.
-    tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).offset((pagina-1)*40).limit(40).all()
+    tarefas = query.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
     return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
 
 def proximo_da_nota(tarefa):
     item = tarefa.item
-    query = Tarefa.query.join(ItemNota).filter(Tarefa.status == "Pendente", Tarefa.id != tarefa.id)
+    query = Tarefa.query.join(ItemNota).filter(Tarefa.status == "Pendente", Tarefa.id != tarefa.id,
+        ItemNota.status.in_(['Concluído', 'Lançado']), ItemNota.codigo_grv.isnot(None), ItemNota.codigo_grv != '')
     if item.chave_acesso:
         query = query.filter(ItemNota.chave_acesso == item.chave_acesso)
     elif item.fornecedor:
@@ -71,7 +73,7 @@ def proximo_da_nota(tarefa):
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento/<int:tarefa_id>/historico")
-@roles_required("Admin")
+@permission_required(PERMISSION)
 def historico(tarefa_id):
     t = db.get_or_404(Tarefa, tarefa_id)
     eventos = Evento.query.filter_by(tarefa_id=t.id).order_by(Evento.id).all()
@@ -110,7 +112,109 @@ def operar(tarefa_id, acao):
         db.session.rollback()
         from flask import current_app
         current_app.logger.exception("Falha na operação de endereçamento")
-        return jsonify(erro="Não foi possível consultar o GRV. Nenhum endereçamento foi confirmado. Tente novamente."), 502
+        if tarefa.status == 'Aguardando sincronização':
+            return jsonify(item=serializar(tarefa), proximo=None,
+                           aviso='Leituras salvas. Aguardando sincronização com o GRV.'), 200
+        return jsonify(erro="Não foi possível concluir a operação. Atualize a fila e tente novamente."), 502
+
+
+@recebimento_enderecamento_bp.get('/wms/enderecamento')
+@recebimento_enderecamento_bp.get('/recebimento/enderecamento')
+@permission_required(PERMISSION)
+def modulo():
+    return render_template('enderecamento.html', user=session.get('username'))
+
+
+def movimento_json(m):
+    return dict(id=m.id, sku=m.sku, unidade=m.unidade, tipo=m.tipo,
+        origem=m.origem, destino=m.destino, quantidade=str(m.quantidade),
+        usuario=m.usuario, motivo=m.motivo, detalhes=m.detalhes,
+        criado_em=m.criado_em.isoformat(),
+        sincronizado=bool(m.sincronizado_em), erro=m.erro)
+
+
+@recebimento_enderecamento_bp.get('/api/enderecamento/saldos')
+@permission_required(PERMISSION)
+def saldos():
+    from ..models import EnderecoSaldo as Saldo, EnderecoMovimento as Movimento
+    from sqlalchemy import func
+    busca = str(request.args.get('busca') or '').strip()[:100]
+    pagina = max(1, request.args.get('pagina', 1, type=int))
+    query = Saldo.query
+    if busca:
+        query = query.filter(or_(Saldo.sku.contains(busca, autoescape=True), Saldo.endereco.contains(busca, autoescape=True)))
+    total = query.count()
+    registros = query.order_by(Saldo.endereco, Saldo.sku).offset((pagina-1)*40).limit(40).all()
+    return jsonify(itens=[dict(id=s.id, sku=s.sku, endereco=s.endereco, unidade=s.unidade,
+        quantidade=str(s.quantidade), conferido=s.conferido) for s in registros], total=total,
+        pagina=pagina, metricas=dict(
+            materiais=db.session.query(func.count(func.distinct(Saldo.sku))).scalar(),
+            enderecos=db.session.query(func.count(func.distinct(Saldo.endereco))).filter(Saldo.quantidade > 0).scalar(),
+            conferir=Saldo.query.filter_by(conferido=False).count(),
+            sincronizar=Movimento.query.filter_by(sincronizado_em=None).count()))
+
+
+@recebimento_enderecamento_bp.get('/api/enderecamento/historico')
+@permission_required(PERMISSION)
+def movimentos():
+    from ..models import EnderecoMovimento as Movimento
+    query = Movimento.query
+    busca = str(request.args.get('busca') or '').strip()[:100]
+    if busca:
+        query = query.filter(or_(Movimento.sku.contains(busca, autoescape=True),
+            Movimento.origem.contains(busca, autoescape=True), Movimento.destino.contains(busca, autoescape=True)))
+    if request.args.get('pendentes') == '1':
+        query = query.filter(Movimento.sincronizado_em.is_(None))
+    pagina = max(1, request.args.get('pagina', 1, type=int))
+    total = query.count()
+    return jsonify(itens=[movimento_json(m) for m in query.order_by(Movimento.id.desc()).offset((pagina-1)*40).limit(40)],
+                   total=total, pagina=pagina)
+
+
+@recebimento_enderecamento_bp.post('/api/enderecamento/movimentar')
+@permission_required(PERMISSION)
+def movimentar():
+    from ..models import EnderecoMovimento as Movimento
+    from ..services import enderecamento_service as modulo_svc
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro='Dados inválidos.'), 400
+    try:
+        mov_id = modulo_svc.registrar(dados, session['username'], has_permission(MANAGE))
+    except PermissionError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 403
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 409
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Falha ao registrar movimentação')
+        return jsonify(erro='Não foi possível registrar. Tente novamente mantendo os dados desta operação.'), 503
+    mov = db.session.get(Movimento, mov_id)
+    try:
+        modulo_svc.sincronizar(mov.sku)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Movimentação salva; sincronização será repetida')
+    return jsonify(item=movimento_json(db.session.get(Movimento, mov_id)))
+
+
+@recebimento_enderecamento_bp.post('/api/enderecamento/sincronizar')
+@permission_required(PERMISSION)
+def sincronizar_movimentos():
+    from ..services import enderecamento_service as modulo_svc
+    from ..models import EnderecoMovimento as Movimento
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro='Dados inválidos.'), 400
+    try:
+        sku = modulo_svc.texto(dados.get('sku'), 'o SKU', 80)
+        modulo_svc.sincronizar(sku)
+        return jsonify(pendente=Movimento.query.filter_by(sku=sku, sincronizado_em=None).count() > 0)
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 409
 
 
 @recebimento_enderecamento_bp.route("/api/recebimento/enderecamento/locais", methods=["GET", "POST"])
