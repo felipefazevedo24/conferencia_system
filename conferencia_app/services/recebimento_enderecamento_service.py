@@ -210,7 +210,7 @@ def reabrir(tarefa, justificativa):
         from ..models import EnderecoMovimento
         from .enderecamento_service import chave_recebimento
         if EnderecoMovimento.query.filter_by(chave=chave_recebimento(tarefa)).first():
-            raise ValueError("Este material já entrou no saldo por endereço. Use Movimentar ou Conferir saldo no módulo Endereçamento para corrigir, preservando o histórico.")
+            raise ValueError("Este material já entrou no saldo por endereço. Use Movimentar material no módulo Endereçamento para corrigir, preservando o histórico.")
         if tarefa.status not in ("Aguardando sincronização", "Concluído"):
             raise ValueError("Somente endereçamentos aguardando sincronização ou concluídos podem ser revisados/estornados.")
         tipo = "Estornado" if tarefa.status == "Concluído" else "Reaberto para nova leitura"
