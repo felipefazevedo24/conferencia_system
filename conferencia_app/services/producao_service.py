@@ -1322,7 +1322,10 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             return any((op.get("data_inicio") or op.get("pcp_dt_primeiro_apont") or _horas_positivas(op.get("hs_realizadas")))
                        and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao"))
                        for op in operations)
-        if item_ops and finished == len(item_ops):
+        # O encerramento registrado na OS prevalece sobre o roteiro produtivo.
+        if _item_concluido(item):
+            state = "concluido"
+        elif item_ops and finished == len(item_ops):
             state = "concluido" if has_assembly else "disponivel"
         elif any(op.get("processo_travado") and not (op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops):
             state = "bloqueado"
@@ -1338,8 +1341,7 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         elif item_ops:
             state = "nao_iniciado"
         else:
-            source_finished = any(word in _texto(item.get("status")).upper() for word in ("CONCLU", "FINALIZ"))
-            state = ("concluido" if children and item.get("os_pai") is None else "disponivel") if source_finished else "nao_iniciado"
+            state = "nao_iniciado"
         visiting.remove(item_id)
         states[item_id] = state
         return state
@@ -1364,7 +1366,7 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
                                                   if item.get(key) is not None and int(item[key]) in itens_por_id and int(item[key]) != item_id)),
             "estado": state,
             "estado_label": STATUS_LABELS[state],
-            "estado_motivo": _motivo(state, item_operations),
+            "estado_motivo": "Item concluido conforme status da OS" if _item_concluido(item) else _motivo(state, item_operations),
             "operacoes_total": len(item_operations),
             "operacoes_concluidas": sum(bool(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_operations),
             "operacoes": [_operacao_payload(op) for op in item_operations],
@@ -1382,6 +1384,12 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         "operacoes_total": total,
         "bloqueados": sum(state == "bloqueado" for state in states.values()),
     }
+
+
+def _item_concluido(item: dict[str, Any]) -> bool:
+    status = unicodedata.normalize("NFKD", _texto(item.get("status")))
+    status = " ".join(status.encode("ascii", "ignore").decode().upper().split())
+    return status in {"CONCLUIDO", "CONCLUIDA", "FINALIZADO", "FINALIZADA"}
 
 
 def _horas_positivas(value: Any) -> bool:

@@ -145,24 +145,30 @@ def test_status_sem_operacoes_usa_o_item_correto_na_recursao():
     items = pieces()
     items[0]["status"] = "APROVADO"
     data = service._estrutura_payload(order("9958"), items, [])
-    assert [n["estado"] for n in data["nos"]] == ["nao_iniciado", "disponivel", "disponivel", "disponivel"]
+    assert [n["estado"] for n in data["nos"]] == ["nao_iniciado", "concluido", "concluido", "concluido"]
+
+
+def active_pieces(item_id):
+    items = pieces()
+    next(item for item in items if item["aux_code"] == item_id)["status"] = "EM PRODUCAO"
+    return items
 
 
 def test_fabricacao_pendente_impede_liberacao_so_pelos_filhos():
     operations = [dict(cod_os_aux=5, tiposervico="CORTE", codigo=1),
                   dict(cod_os_aux=5, tiposervico="MONTAGEM", codigo=2)]
-    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    data = service._estrutura_payload(order("9958"), active_pieces(5), operations)
     assert data["nos"][0]["estado"] == "nao_iniciado"
     operations[0]["finalizado"] = True
     operations[0]["data_inicio"] = "2026-09-15T10:00:00"
-    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    data = service._estrutura_payload(order("9958"), active_pieces(5), operations)
     assert data["nos"][0]["estado"] == "disponivel"
 
 
 def test_corte_iniciado_nao_significa_montagem_iniciada():
     operations = [dict(cod_os_aux=5, tiposervico="CORTE", codigo=1, data_inicio="2026-09-15T10:00:00"),
                   dict(cod_os_aux=5, tiposervico="MONTAGEM", codigo=2)]
-    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    data = service._estrutura_payload(order("9958"), active_pieces(5), operations)
     assert data["nos"][0]["estado"] == "fabricacao"
 
 
@@ -183,7 +189,7 @@ def test_etapas_finalizadas_preservam_progresso_no_mapa_e_detalhes(api, finished
                        **({finished_field: "2026-09-15" if finished_field == "dt_finalizacao" else True}
                           if i < 3 or all_finished else {}))
                   for i, name in enumerate(["CORTE", "DOBRA", "SOLDA", "CONFERENCIA"])]
-    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    data = service._estrutura_payload(order("9958"), active_pieces(3), operations)
     with (patch.object(service, "obter_estrutura", return_value=data),
           patch.object(service, "obter_documentos", return_value=[])):
         structure = api[0].get("/api/v1/orders/9958/structure").get_json()
@@ -195,10 +201,43 @@ def test_etapas_finalizadas_preservam_progresso_no_mapa_e_detalhes(api, finished
 @pytest.mark.parametrize("evidence", [{"hs_realizadas": "0.5"}, {"pcp_dt_primeiro_apont": "2026-09-15"}])
 def test_evidencia_real_de_execucao_inicia_fabricacao(evidence):
     operations = [dict(cod_os_aux=3, tiposervico="CORTE", codigo=1, **evidence)]
-    data = service._estrutura_payload(order("9958"), pieces(), operations)
+    data = service._estrutura_payload(order("9958"), active_pieces(3), operations)
     assert next(n for n in data["nos"] if n["id"] == "3")["estado"] == "fabricacao"
 
 
 def test_ciclo_na_hierarquia_nao_trava_a_serializacao(api):
     nodes = [dict(id="1", aux_code=1, parent_id="2"), dict(id="2", aux_code=2, parent_id="1")]
     assert api[1]._original_node(nodes[0], nodes, "9958")["path_ids"] == ["2", "1"]
+
+
+@pytest.mark.parametrize("status", ["CONCLUÍDO", " concluido ", "CONCLUÍDA", "FINALIZADO"])
+@pytest.mark.parametrize("operation", [None, {}, {"finalizado": True},
+                                     {"data_inicio": "2026-09-15"}, {"processo_travado": True}])
+def test_conclusao_da_os_prevalece_no_mapa_e_detalhe(api, status, operation):
+    items = pieces()
+    for item in items:
+        item["status"] = status
+    operations = [] if operation is None else [
+        dict(cod_os_aux=item["aux_code"], tiposervico="MONTAGEM", codigo=i, **operation)
+        for i, item in enumerate(items)
+    ]
+    data = service._estrutura_payload(order("9958"), items, operations)
+    assert all(node["estado"] == "concluido" for node in data["nos"])
+    with (patch.object(service, "obter_estrutura", return_value=data),
+          patch.object(service, "obter_documentos", return_value=[])):
+        structure = api[0].get("/api/v1/orders/9958/structure").get_json()
+        detail = api[0].get("/api/v1/orders/9958/items/3").get_json()
+    assert all(node["state"] == "completed" for node in structure["nodes"])
+    assert detail["node"]["state"] == "completed"
+    assert detail["node"]["state_reason"] == "Item concluido conforme status da OS"
+    assert detail["node"]["operations_completed"] == int(bool(operation and operation.get("finalizado")))
+
+
+@pytest.mark.parametrize("status", ["NÃO CONCLUÍDO", "NAO FINALIZADO", "", None, "EM PRODUCAO"])
+def test_item_aberto_nao_herda_conclusao_da_os_principal(status):
+    items = pieces()
+    items[0]["status"] = status
+    parent_order = order("9958")
+    parent_order["status_servico"] = "CONCLUÍDO"
+    data = service._estrutura_payload(parent_order, items, [])
+    assert data["nos"][0]["estado"] == "nao_iniciado"
