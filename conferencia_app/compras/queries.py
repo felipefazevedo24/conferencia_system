@@ -421,6 +421,44 @@ LIMIT 1
 SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
 SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
 
+SQL_PRODUCAO_ORCAMENTOS_MES = """
+SELECT
+    orc.cod_orcamento,
+    orc.n_orcamento,
+    orc.versao,
+    orc.dt_previsao_entrega,
+    os.n_os,
+    os.titulo,
+    os.status_servico,
+    os.cliente,
+    os.dt_prevista,
+    (
+        SELECT count(*)
+        FROM public.tos_aux aux
+        WHERE aux.cod_empresa = os.cod_empresa AND aux.cod_os = os.codigo
+    ) AS qtde_itens
+FROM (
+    SELECT DISTINCT codigo AS cod_orcamento, cod_empresa, n_orcamento, versao, dt_previsao_entrega
+    FROM public.torcamento
+    WHERE cod_empresa = %(cod_empresa)s
+      AND dt_previsao_entrega >= %(data_de)s::date
+      AND dt_previsao_entrega < %(data_ate)s::date
+) orc
+JOIN public.torcamento_servico_gerados sg
+    ON sg.cod_empresa = orc.cod_empresa
+   AND sg.cod_orcamento = orc.cod_orcamento
+   AND COALESCE(sg.cancelado, 0) = 0
+JOIN public.tos os
+    ON os.cod_empresa = sg.cod_empresa AND os.codigo = sg.cod_os
+WHERE (
+    %(busca)s::text IS NULL
+    OR os.n_os ILIKE %(busca)s
+    OR os.cliente ILIKE %(busca)s
+    OR orc.n_orcamento::text ILIKE %(busca)s
+)
+ORDER BY orc.dt_previsao_entrega, orc.n_orcamento DESC, os.n_os
+"""
+
 SQL_PRODUCAO_ORIGEM_SCHEMA = """
 SELECT count(*) = 2 AS supported
 FROM information_schema.columns
