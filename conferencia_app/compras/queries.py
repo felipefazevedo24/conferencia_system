@@ -452,7 +452,18 @@ JOIN public.torcamento_servico_gerados sg
 JOIN public.tos os
     ON os.cod_empresa = sg.cod_empresa AND os.codigo = sg.cod_os
 WHERE UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
-  AND (%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text)
+  AND (
+    %(classificacao)s::text IS NULL
+    OR EXISTS (
+        SELECT 1
+        FROM public.torcamento_servico_gerados sg2
+        JOIN public.tos os2 ON os2.cod_empresa = sg2.cod_empresa AND os2.codigo = sg2.cod_os
+        WHERE sg2.cod_empresa = orc.cod_empresa
+          AND sg2.cod_orcamento = orc.cod_orcamento
+          AND COALESCE(sg2.cancelado, 0) = 0
+          AND os2.u_classificacao = %(classificacao)s::text
+    )
+  )
   AND (
     %(busca)s::text IS NULL
     OR os.n_os ILIKE %(busca)s

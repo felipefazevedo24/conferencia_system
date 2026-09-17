@@ -48,18 +48,42 @@
     .ce-os-tab { border: 1px solid var(--eui-border-strong); background: var(--eui-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .ce-os-tab.is-active { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast); }
 
-    .ce-mapa-flow { height: 460px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: var(--eui-surface-3); }
-    .ce-mapa-flow .react-flow__attribution { font-size: 9px; }
-    .ce-node { border: 1px solid var(--eui-border); border-radius: 10px; padding: 8px 10px; margin: 6px 0; cursor: pointer; display: flex; gap: 10px; align-items: center; background: var(--eui-surface); }
-    .ce-node:hover { border-color: var(--eui-primary); }
-    .ce-node.is-selected { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); background: var(--eui-primary-soft); }
-    .ce-node--flow { width: 220px; margin: 0; }
-    .ce-node-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--eui-surface-3); flex-shrink: 0; }
-    .ce-node-thumb-fallback { width: 44px; height: 44px; border-radius: 8px; background: var(--eui-surface-3); display: flex; align-items: center; justify-content: center; color: var(--eui-muted); flex-shrink: 0; }
-    .ce-node-body { flex: 1; min-width: 0; }
-    .ce-node-code { font-weight: 700; font-size: 12.5px; }
-    .ce-node-desc { font-size: 11.5px; color: var(--eui-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ce-node-qty { font-size: 11px; color: var(--eui-muted); }
+    /* Copiado do Acompanhamento de OS (static/producao_original), escopado
+       a .ce-mapa-panel para nao vazar tokens/estilos pro resto da pagina. */
+    .ce-mapa-panel {
+        --po-ink: #071a33; --po-ink-soft: #30445c; --po-muted: #5d6b7c;
+        --po-border: #d7e1ea; --po-border-strong: #b8c8d7;
+        --po-surface: #ffffff; --po-surface-strong: #eef5f8;
+        --po-blue-600: #1769d2; --po-blue-500: #2d7bd9; --po-radius: 8px;
+        --po-shadow-soft: 0 10px 24px rgba(7, 26, 51, .06);
+        --po-not-started: #7c3aed; --po-available: #13a36f;
+        --po-manufacturing: #e99a16; --po-assembling: #1769d2;
+        --po-blocked: #d83a3a; --po-completed: #8995a5;
+    }
+    .ce-mapa-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .ce-mapa-panel-title h3 { margin: 0; font-size: 14px; color: var(--po-ink); }
+    .ce-mapa-source-label { padding: 3px 7px; color: var(--po-muted); font-size: 10px; background: var(--po-surface-strong); border-radius: 4px; }
+    .ce-mapa-flow { height: 460px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: #fbfcfd; }
+
+    .assembly-node { position: relative; display: grid; width: 218px; min-height: 130px; gap: 10px; padding: 13px; text-align: left; overflow: hidden; background: linear-gradient(150deg, #fff, #f8fbfe); border: 1px solid var(--po-border-strong); border-radius: var(--po-radius); box-shadow: var(--po-shadow-soft); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; font-family: inherit; }
+    .assembly-node:hover { border-color: var(--po-blue-500); box-shadow: 0 14px 28px #1769d224; transform: translateY(-2px); }
+    .assembly-node.selected { border: 2px solid var(--po-blue-600); background: linear-gradient(150deg, #fff, #1769d20e); box-shadow: 0 0 0 3px #1769d21a, var(--po-shadow-soft); }
+    .node-main { display: grid; grid-template-columns: 54px 1fr; align-items: center; gap: 10px; }
+    .node-main > div:last-child { display: grid; min-width: 0; gap: 4px; }
+    .node-main strong { color: var(--po-ink); font-size: 14px; }
+    .node-main span { display: -webkit-box; overflow: hidden; color: var(--po-ink-soft); font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+    .node-thumbnail { display: flex; flex: 0 0 54px; align-items: center; justify-content: center; width: 54px; height: 54px; padding: 4px; overflow: hidden; color: #8995a5; background: var(--po-surface-strong); border-radius: 6px; }
+    .node-thumbnail img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center; }
+    .node-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .node-meta small { color: var(--po-muted); }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: var(--po-ink-soft); font-size: 12px; white-space: nowrap; }
+    .status-dot { display: inline-block; width: 10px; height: 10px; flex: 0 0 auto; background: currentColor; border-radius: 50%; }
+    .status-not_started { color: var(--po-not-started); }
+    .status-available { color: var(--po-available); }
+    .status-manufacturing { color: var(--po-manufacturing); }
+    .status-assembling { color: var(--po-assembling); }
+    .status-blocked { color: var(--po-blocked); }
+    .status-completed { color: var(--po-completed); }
 
     .ce-seq-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
     .ce-seq-atual { font-size: 12px; font-weight: 700; }
@@ -312,8 +336,8 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 '<div class="ce-faixa-campo"><span>Situação geral</span><strong>' + escapeHtml((osAtual && osAtual.status_origem) || "—") + '</strong></div>' +
                 (tabs ? '<div class="ce-faixa-campo" style="min-width:100%;">' + tabs + '</div>' : "") +
             '</div></div>' +
-            '<div class="eui-card"><div class="eui-card__body eui-card__body--tight">' +
-                '<h3 style="margin:0 0 8px;font-size:14px;">Estrutura da OS</h3>' +
+            '<div class="eui-card ce-mapa-panel"><div class="eui-card__body eui-card__body--tight">' +
+                '<div class="ce-mapa-panel-title"><h3>Estrutura da OS</h3><span class="ce-mapa-source-label">Fonte: GRV</span></div>' +
                 '<div id="ce-mapa">' + '<div class="ce-loading">Carregando estrutura…</div>' + '</div>' +
             '</div></div>' +
             '<div class="eui-card" id="ce-seq-card" style="display:none;"><div class="eui-card__body eui-card__body--tight">' +
@@ -369,24 +393,16 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
             });
     }
 
-    var ESTADO_BADGE = {
-        completed: "eui-badge--success",
-        assembling: "eui-badge--warning",
-        manufacturing: "eui-badge--warning",
-        blocked: "eui-badge--danger",
-        available: "eui-badge--neutral",
-        not_started: "eui-badge--neutral",
-    };
     var ESTADO_LABEL = {
         completed: "Concluído",
         assembling: "Em montagem",
         manufacturing: "Em fabricação",
         blocked: "Bloqueado",
-        available: "Disponível",
+        available: "Pronto para montagem",
         not_started: "Não iniciado",
     };
 
-    var NODE_W = 220;
+    var NODE_W = 218;
     var GAP_X = 24;
     var GAP_Y = 130;
 
@@ -432,35 +448,51 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         return { nodes: nodes, edges: edges };
     }
 
+    function StatusBadge(props) {
+        var label = ESTADO_LABEL[props.state] || props.state;
+        return React.createElement(
+            "span",
+            { className: "status-badge status-" + props.state, title: props.reason || undefined },
+            React.createElement("span", { className: "status-dot", "aria-hidden": "true" }),
+            label
+        );
+    }
+
     function EstruturaNodeCard(props) {
         var node = props.data;
-        var badgeClasse = ESTADO_BADGE[node.state] || "eui-badge--neutral";
-        var badgeLabel = ESTADO_LABEL[node.state] || node.state;
         var imagem = node.has_drawing
             ? React.createElement("img", {
-                className: "ce-node-thumb", src: node.thumbnail_url, alt: "", loading: "lazy",
-                onError: function (event) {
-                    event.target.outerHTML = '<div class="ce-node-thumb-fallback"><i class="fas fa-image"></i></div>';
-                },
+                src: node.thumbnail_url, alt: "", loading: "lazy",
+                onError: function (event) { event.target.style.display = "none"; },
             })
-            : React.createElement("div", { className: "ce-node-thumb-fallback" }, React.createElement("i", { className: "fas fa-image" }));
+            : React.createElement("i", { className: "fas fa-image", "aria-hidden": "true" });
         return React.createElement(
-            "div",
+            "button",
             {
-                className: "ce-node ce-node--flow" + (props.selected ? " is-selected" : ""),
+                type: "button",
+                className: "assembly-node" + (props.selected ? " selected" : ""),
+                "aria-label": node.code + ": " + node.description,
                 onClick: function (event) { event.stopPropagation(); node.onSelect(node.aux_code); },
             },
-            React.createElement(Handle, { type: "target", position: Position.Top, style: { visibility: "hidden" } }),
-            imagem,
+            React.createElement(Handle, { type: "target", position: Position.Top }),
             React.createElement(
                 "div",
-                { className: "ce-node-body" },
-                React.createElement("div", { className: "ce-node-code" }, node.code),
-                React.createElement("div", { className: "ce-node-desc" }, node.description),
-                React.createElement("div", { className: "ce-node-qty" }, "Qtde: " + node.quantity)
+                { className: "node-main" },
+                React.createElement("div", { className: "node-thumbnail" }, imagem),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement("strong", null, node.code),
+                    React.createElement("span", null, node.description)
+                )
             ),
-            React.createElement("span", { className: "eui-badge " + badgeClasse }, badgeLabel),
-            React.createElement(Handle, { type: "source", position: Position.Bottom, style: { visibility: "hidden" } })
+            React.createElement(
+                "div",
+                { className: "node-meta" },
+                React.createElement("small", null, "Qtde: " + node.quantity),
+                React.createElement(StatusBadge, { state: node.state, reason: node.state_reason })
+            ),
+            React.createElement(Handle, { type: "source", position: Position.Bottom })
         );
     }
 
@@ -474,14 +506,18 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 edges: props.edges,
                 nodeTypes: MAPA_NODE_TYPES,
                 fitView: true,
+                fitViewOptions: { padding: 0.2, maxZoom: 1.15 },
+                minZoom: 0.2,
+                maxZoom: 1.8,
                 nodesDraggable: false,
                 nodesConnectable: false,
-                elementsSelectable: false,
-                panOnScroll: true,
+                elementsSelectable: true,
+                onlyRenderVisibleElements: true,
+                proOptions: { hideAttribution: true },
                 defaultEdgeOptions: { type: "smoothstep" },
             },
-            React.createElement(Background, { gap: 18, size: 1 }),
-            React.createElement(Controls, { showInteractive: false })
+            React.createElement(Background, { variant: "dots", gap: 20, size: 1, color: "#dce4ed" }),
+            React.createElement(Controls, { showInteractive: false, position: "top-right" })
         );
     }
 
