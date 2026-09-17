@@ -144,7 +144,7 @@ def saldos():
     if busca:
         query = query.filter(or_(Saldo.sku.contains(busca, autoescape=True), Saldo.endereco.contains(busca, autoescape=True)))
     total = query.count()
-    registros = query.order_by(Saldo.sku, Saldo.endereco).offset((pagina-1)*40).limit(40).all()
+    registros = query.order_by(Saldo.endereco, Saldo.sku).offset((pagina-1)*40).limit(40).all()
     return jsonify(itens=[dict(id=s.id, sku=s.sku, endereco=s.endereco, unidade=s.unidade,
         quantidade=str(s.quantidade), conferido=s.conferido) for s in registros], total=total,
         pagina=pagina, metricas=dict(

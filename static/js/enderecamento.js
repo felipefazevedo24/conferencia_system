@@ -24,7 +24,7 @@
    balances=data.itens; $('end-balances').replaceChildren();
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    for(const s of balances){
-    const row=node('tr');cell(row,'SKU',s.sku,'end-code');cell(row,'Endereço',node('span',s.endereco,'end-location'));
+    const row=node('tr');cell(row,'Endereço',node('span',s.endereco,'end-location'));cell(row,'SKU',s.sku,'end-code');
     cell(row,'Saldo',`${number(s.quantidade)} ${s.unidade}`);
     cell(row,'Conferência',node('span',s.conferido?'Conferido':'Conferir saldo inicial','end-badge'+(s.conferido?'':' warn')));
     const actions=node('div',null,'end-actions');const move=button('Movimentar',()=>open('Transferência',s));move.disabled=!s.conferido||Number(s.quantidade)<=0;actions.append(move);
@@ -112,5 +112,6 @@
  document.querySelectorAll('.end-tabs button').forEach(b=>b.onclick=()=>showPanel(b.dataset.panel));
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});window.addEventListener('pagehide',stopCamera);
  $('end-search').value=new URLSearchParams(location.search).get('sku')||'';
+ TabelaOrdenavel.ativar($('end-balances').closest('table'));
  refresh();
 })();

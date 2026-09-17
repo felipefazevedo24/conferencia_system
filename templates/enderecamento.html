@@ -23,7 +23,7 @@
  <section id="end-panel-saldos" class="end-panel">
   <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU ou endereço" aria-label="Buscar SKU ou endereço"></label><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button>{% if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') %}<button id="end-initial" class="eui-btn eui-btn--secondary"><i class="fas fa-clipboard-check"></i> Conferir saldo</button>{% endif %}<button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
   <p class="end-note"><i class="fas fa-info-circle"></i> Saldos físicos controlados no Sync. Para material já armazenado, confira a quantidade de cada endereço antes da primeira movimentação.</p>
-  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Material / SKU</th><th>Endereço</th><th>Saldo</th><th>Conferência</th><th>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
+  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Saldo</th><th>Conferência</th><th>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
   <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
  </section>
  <section id="end-panel-receber" class="end-panel" hidden><div class="end-section-head"><h2>Endereçar o que chegou</h2><p>A mesma fila do recebimento, com os materiais mais antigos primeiro.</p></div>{% include 'recebimento_enderecamento_painel.html' %}</section>
@@ -50,6 +50,7 @@
 {% endblock %}
 {% block extra_js %}
 <script src="{{ url_for('static', filename='vendor/html5-qrcode/html5-qrcode.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabela_ordenavel.js') }}?v={{ asset_version }}"></script>
 <script src="{{ url_for('static', filename='js/recebimento_enderecamento.js') }}?v={{ asset_version }}"></script>
 <script src="{{ url_for('static', filename='js/enderecamento.js') }}?v={{ asset_version }}"></script>
 {% endblock %}
