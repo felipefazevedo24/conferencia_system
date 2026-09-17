@@ -432,6 +432,7 @@ SELECT
     os.status_servico,
     os.cliente,
     os.dt_prevista,
+    os.u_classificacao AS classificacao,
     (
         SELECT count(*)
         FROM public.tos_aux aux
@@ -450,7 +451,9 @@ JOIN public.torcamento_servico_gerados sg
    AND COALESCE(sg.cancelado, 0) = 0
 JOIN public.tos os
     ON os.cod_empresa = sg.cod_empresa AND os.codigo = sg.cod_os
-WHERE (
+WHERE UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
+  AND (%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text)
+  AND (
     %(busca)s::text IS NULL
     OR os.n_os ILIKE %(busca)s
     OR os.cliente ILIKE %(busca)s

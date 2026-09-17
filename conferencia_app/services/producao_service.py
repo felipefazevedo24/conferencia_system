@@ -167,7 +167,9 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     return results
 
 
-def listar_orcamentos_mes(ano: int, mes: int, busca: str | None = None) -> list[dict[str, Any]]:
+def listar_orcamentos_mes(
+    ano: int, mes: int, busca: str | None = None, classificacao: str | None = None
+) -> list[dict[str, Any]]:
     """Orcamentos com entrega prevista no mes/ano informados e suas OS vinculadas (leitura).
 
     Traz apenas orcamentos que ja geraram OS: nao ha, no codigo existente, uma
@@ -182,6 +184,7 @@ def listar_orcamentos_mes(ano: int, mes: int, busca: str | None = None) -> list[
         "data_de": inicio.isoformat(),
         "data_ate": fim.isoformat(),
         "busca": f"%{termo}%" if termo else None,
+        "classificacao": _texto(classificacao) or None,
     })
     orcamentos: OrderedDict[str, dict[str, Any]] = OrderedDict()
     for row in rows:
@@ -204,6 +207,12 @@ def listar_orcamentos_mes(ano: int, mes: int, busca: str | None = None) -> list[
             "quantidade_itens": row.get("qtde_itens") or 0,
         })
     return list(orcamentos.values())
+
+
+def listar_segmentos() -> list[dict[str, Any]]:
+    """Segmentos (campo Classificacao da OS no GRV) disponiveis para filtro."""
+    rows = _metadata_read(fetch_all, queries.SQL_CLASSIFICACOES, {"cod_empresa": 1})
+    return [{"classificacao": row.get("classificacao"), "qtd": row.get("qtd")} for row in rows]
 
 
 def obter_dependencias(numero_os: str) -> dict[str, Any]:

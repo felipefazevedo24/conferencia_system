@@ -48,10 +48,22 @@ def cronograma_orcamentos_mes():
     if not (1 <= mes <= 12) or not (2000 <= ano <= 2100):
         return jsonify({"error": "Periodo invalido."}), 400
     termo = str(request.args.get("q") or "").strip() or None
+    classificacao = str(request.args.get("classificacao") or "").strip() or None
     try:
-        return jsonify({"orcamentos": producao_service.listar_orcamentos_mes(ano, mes, termo)})
+        return jsonify({
+            "orcamentos": producao_service.listar_orcamentos_mes(ano, mes, termo, classificacao)
+        })
     except Exception:
         return jsonify({"error": "Nao foi possivel consultar os orcamentos do periodo."}), 503
+
+
+@producao_bp.get("/api/producao/cronograma/segmentos")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_segmentos():
+    try:
+        return jsonify({"segmentos": producao_service.listar_segmentos()})
+    except Exception:
+        return jsonify({"error": "Nao foi possivel consultar os segmentos."}), 503
 
 
 @producao_bp.get("/producao-original/")

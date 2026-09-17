@@ -9,6 +9,7 @@
     .ce-filtros { justify-content: space-between; }
     .ce-mes-control { display: flex; align-items: center; gap: 6px; }
     .ce-mes-control input[type="month"] { min-width: 160px; }
+    .ce-segmento { min-width: 180px; }
     .ce-busca { flex: 1; min-width: 220px; max-width: 380px; position: relative; }
     .ce-busca i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); font-size: 13px; pointer-events: none; }
     .ce-busca input { width: 100%; padding-left: 34px; }
@@ -47,11 +48,12 @@
     .ce-os-tab { border: 1px solid var(--eui-border-strong); background: var(--eui-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .ce-os-tab.is-active { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast); }
 
-    .ce-mapa-scroll { max-height: 420px; overflow-y: auto; padding-right: 4px; }
+    .ce-mapa-flow { height: 460px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: var(--eui-surface-3); }
+    .ce-mapa-flow .react-flow__attribution { font-size: 9px; }
     .ce-node { border: 1px solid var(--eui-border); border-radius: 10px; padding: 8px 10px; margin: 6px 0; cursor: pointer; display: flex; gap: 10px; align-items: center; background: var(--eui-surface); }
     .ce-node:hover { border-color: var(--eui-primary); }
     .ce-node.is-selected { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); background: var(--eui-primary-soft); }
-    .ce-node-children { margin-left: 26px; border-left: 2px solid var(--eui-border); padding-left: 10px; }
+    .ce-node--flow { width: 220px; margin: 0; }
     .ce-node-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--eui-surface-3); flex-shrink: 0; }
     .ce-node-thumb-fallback { width: 44px; height: 44px; border-radius: 8px; background: var(--eui-surface-3); display: flex; align-items: center; justify-content: center; color: var(--eui-muted); flex-shrink: 0; }
     .ce-node-body { flex: 1; min-width: 0; }
@@ -72,6 +74,18 @@
 
     .ce-loading { padding: 24px; text-align: center; color: var(--eui-muted); font-size: 12.5px; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.11.6/dist/style.css">
+<script type="importmap">
+{
+    "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+        "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+        "@xyflow/react": "https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom"
+    }
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -92,6 +106,9 @@
                     <input type="month" id="ce-mes" class="eui-input" aria-label="Mês e ano de entrega">
                     <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" id="ce-mes-proximo" aria-label="Próximo mês"><i class="fas fa-chevron-right"></i></button>
                 </div>
+                <select id="ce-segmento" class="eui-input ce-segmento" aria-label="Segmento">
+                    <option value="">Todos os segmentos</option>
+                </select>
                 <div class="eui-input-group ce-busca">
                     <i class="fas fa-magnifying-glass"></i>
                     <input type="search" id="ce-busca" class="eui-input" placeholder="Cliente, orçamento ou OS" autocomplete="off">
@@ -104,7 +121,7 @@
         <aside class="eui-card ce-lista">
             <div class="ce-lista-head">
                 <button type="button" class="ce-lista-toggle" id="ce-lista-toggle" aria-expanded="true" aria-controls="ce-lista-body">
-                    <span id="ce-lista-titulo">Orçamentos com entrega em —</span>
+                    <span id="ce-lista-titulo">—</span>
                     <span class="ce-lista-count" id="ce-lista-count">0</span>
                     <i class="fas fa-chevron-down"></i>
                 </button>
@@ -122,7 +139,11 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script type="module">
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react";
+
 (function () {
     "use strict";
 
@@ -131,6 +152,7 @@
         mesAnterior: document.getElementById("ce-mes-anterior"),
         mesProximo: document.getElementById("ce-mes-proximo"),
         busca: document.getElementById("ce-busca"),
+        segmento: document.getElementById("ce-segmento"),
         listaToggle: document.getElementById("ce-lista-toggle"),
         listaBody: document.getElementById("ce-lista-body"),
         listaTitulo: document.getElementById("ce-lista-titulo"),
@@ -182,6 +204,7 @@
     }
 
     function renderVazio() {
+        desmontarMapa();
         els.detalhe.innerHTML = '<div class="ce-vazio"><i class="fas fa-calendar-day"></i><p>Selecione um orçamento na lista para ver os detalhes da entrega.</p></div>';
     }
 
@@ -201,11 +224,13 @@
     function carregarOrcamentos() {
         var periodo = mesAtualInputValor();
         limparSelecao();
-        els.listaTitulo.textContent = "Orçamentos com entrega em " + MESES[periodo.mes - 1] + "/" + periodo.ano;
+        els.listaTitulo.textContent = MESES[periodo.mes - 1] + "/" + periodo.ano;
         els.listaBody.innerHTML = '<div class="ce-lista-msg">Carregando…</div>';
         var termo = (els.busca.value || "").trim();
+        var segmento = els.segmento.value || "";
         var params = new URLSearchParams({ ano: periodo.ano, mes: periodo.mes });
         if (termo) params.set("q", termo);
+        if (segmento) params.set("classificacao", segmento);
         fetch("/api/producao/cronograma/orcamentos?" + params.toString())
             .then(function (resp) {
                 if (!resp.ok) throw new Error("http_" + resp.status);
@@ -229,16 +254,10 @@
             return;
         }
         var html = state.orcamentos.map(function (orc, index) {
-            var totalItens = (orc.ordens || []).reduce(function (soma, os) { return soma + (os.quantidade_itens || 0); }, 0);
-            var osResumo = (orc.ordens || []).map(function (os) { return os.numero_os; }).join(", ");
             var statusPrincipal = (orc.ordens && orc.ordens[0] && orc.ordens[0].status_origem) || "—";
             return '<button type="button" class="ce-item" data-index="' + index + '">' +
                 '<div class="ce-item-top"><span class="ce-item-orc">Orç. ' + escapeHtml(orc.numero_orcamento) + (orc.versao ? " · v" + escapeHtml(orc.versao) : "") + '</span>' +
                 '<span class="eui-badge eui-badge--neutral">' + escapeHtml(statusPrincipal) + '</span></div>' +
-                '<div class="ce-item-meta"><span class="ce-item-cliente">' + escapeHtml(orc.cliente || "Cliente não informado") + '</span>' +
-                '<span>' + escapeHtml(osResumo) + '</span></div>' +
-                '<div class="ce-item-meta"><span>Entrega ' + fmtData(orc.data_prevista_entrega) + '</span>' +
-                '<span>' + totalItens + (totalItens === 1 ? " item" : " itens") + '</span></div>' +
                 '</button>';
         }).join("");
         els.listaBody.innerHTML = html;
@@ -274,6 +293,7 @@
     function renderDetalhe() {
         var orcamento = orcamentoAtual();
         if (!orcamento) { renderVazio(); return; }
+        desmontarMapa();
         var ordens = orcamento.ordens || [];
         var osAtual = ordens.filter(function (os) { return os.numero_os === state.osSelecionada; })[0] || ordens[0];
         var tabs = "";
@@ -322,6 +342,7 @@
     function seqAtualEl() { return document.getElementById("ce-seq-atual"); }
 
     function carregarEstrutura(numeroOs) {
+        desmontarMapa();
         var alvo = mapaEl();
         if (alvo) alvo.innerHTML = '<div class="ce-loading">Carregando estrutura…</div>';
         fetch("/api/v1/orders/" + encodeURIComponent(numeroOs) + "/structure")
@@ -337,6 +358,7 @@
             })
             .catch(function (err) {
                 if (state.osSelecionada !== numeroOs) return;
+                desmontarMapa();
                 var el = mapaEl();
                 if (!el) return;
                 if (err.message === "not_found") {
@@ -364,44 +386,131 @@
         not_started: "Não iniciado",
     };
 
+    var NODE_W = 220;
+    var GAP_X = 24;
+    var GAP_Y = 130;
+
+    function calcularLayoutArvore(data) {
+        var porId = {};
+        data.nodes.forEach(function (node) { porId[node.id] = node; });
+        var cursor = { x: 0 };
+        var posicoes = {};
+        function posicionar(id, profundidade) {
+            var node = porId[id];
+            var filhos = (node.child_ids || []).filter(function (cid) { return porId[cid]; });
+            var x;
+            if (!filhos.length) {
+                x = cursor.x;
+                cursor.x += NODE_W + GAP_X;
+            } else {
+                var xs = filhos.map(function (cid) { return posicionar(cid, profundidade + 1); });
+                x = (xs[0] + xs[xs.length - 1]) / 2;
+            }
+            posicoes[id] = { x: x, y: profundidade * GAP_Y };
+            return x;
+        }
+        var raizes = (data.roots || []).filter(function (id) { return porId[id]; });
+        raizes.forEach(function (id) { posicionar(id, 0); });
+        var nodes = Object.keys(posicoes).map(function (id) {
+            var node = porId[id];
+            return {
+                id: String(id),
+                type: "estruturaNode",
+                position: posicoes[id],
+                selected: String(state.pecaSelecionada) === String(node.aux_code),
+                draggable: false,
+                data: Object.assign({}, node, { onSelect: selecionarPeca }),
+            };
+        });
+        var edges = [];
+        data.nodes.forEach(function (node) {
+            (node.child_ids || []).forEach(function (childId) {
+                if (!porId[childId]) return;
+                edges.push({ id: node.id + "-" + childId, source: String(node.id), target: String(childId) });
+            });
+        });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function EstruturaNodeCard(props) {
+        var node = props.data;
+        var badgeClasse = ESTADO_BADGE[node.state] || "eui-badge--neutral";
+        var badgeLabel = ESTADO_LABEL[node.state] || node.state;
+        var imagem = node.has_drawing
+            ? React.createElement("img", {
+                className: "ce-node-thumb", src: node.thumbnail_url, alt: "", loading: "lazy",
+                onError: function (event) {
+                    event.target.outerHTML = '<div class="ce-node-thumb-fallback"><i class="fas fa-image"></i></div>';
+                },
+            })
+            : React.createElement("div", { className: "ce-node-thumb-fallback" }, React.createElement("i", { className: "fas fa-image" }));
+        return React.createElement(
+            "div",
+            {
+                className: "ce-node ce-node--flow" + (props.selected ? " is-selected" : ""),
+                onClick: function (event) { event.stopPropagation(); node.onSelect(node.aux_code); },
+            },
+            React.createElement(Handle, { type: "target", position: Position.Top, style: { visibility: "hidden" } }),
+            imagem,
+            React.createElement(
+                "div",
+                { className: "ce-node-body" },
+                React.createElement("div", { className: "ce-node-code" }, node.code),
+                React.createElement("div", { className: "ce-node-desc" }, node.description),
+                React.createElement("div", { className: "ce-node-qty" }, "Qtde: " + node.quantity)
+            ),
+            React.createElement("span", { className: "eui-badge " + badgeClasse }, badgeLabel),
+            React.createElement(Handle, { type: "source", position: Position.Bottom, style: { visibility: "hidden" } })
+        );
+    }
+
+    var MAPA_NODE_TYPES = { estruturaNode: EstruturaNodeCard };
+
+    function EstruturaFlow(props) {
+        return React.createElement(
+            ReactFlow,
+            {
+                nodes: props.nodes,
+                edges: props.edges,
+                nodeTypes: MAPA_NODE_TYPES,
+                fitView: true,
+                nodesDraggable: false,
+                nodesConnectable: false,
+                elementsSelectable: false,
+                panOnScroll: true,
+                defaultEdgeOptions: { type: "smoothstep" },
+            },
+            React.createElement(Background, { gap: 18, size: 1 }),
+            React.createElement(Controls, { showInteractive: false })
+        );
+    }
+
+    var mapaRoot = null;
+
+    function desmontarMapa() {
+        if (mapaRoot) {
+            try { mapaRoot.unmount(); } catch (err) { /* container ja substituido no DOM */ }
+            mapaRoot = null;
+        }
+    }
+
     function renderMapa() {
         var el = mapaEl();
         if (!el) return;
         var data = state.estrutura;
+        desmontarMapa();
         if (!data || !data.nodes || !data.nodes.length) {
             el.innerHTML = '<div class="ce-erro"><i class="fas fa-circle-exclamation"></i><p>Esta OS não possui estrutura cadastrada no GRV.</p></div>';
             return;
         }
-        var porId = {};
-        data.nodes.forEach(function (node) { porId[node.id] = node; });
-        function renderNo(node) {
-            var badgeClasse = ESTADO_BADGE[node.state] || "eui-badge--neutral";
-            var badgeLabel = ESTADO_LABEL[node.state] || node.state;
-            var selecionada = state.pecaSelecionada === node.aux_code ? " is-selected" : "";
-            var imagem = node.has_drawing
-                ? '<img class="ce-node-thumb" src="' + node.thumbnail_url + '" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ce-node-thumb-fallback&quot;><i class=&quot;fas fa-image&quot;></i></div>\'">'
-                : '<div class="ce-node-thumb-fallback"><i class="fas fa-image"></i></div>';
-            var html = '<div class="ce-node' + selecionada + '" data-aux="' + node.aux_code + '">' +
-                imagem +
-                '<div class="ce-node-body"><div class="ce-node-code">' + escapeHtml(node.code) + '</div>' +
-                '<div class="ce-node-desc">' + escapeHtml(node.description) + '</div>' +
-                '<div class="ce-node-qty">Qtde: ' + escapeHtml(node.quantity) + '</div></div>' +
-                '<span class="eui-badge ' + badgeClasse + '">' + escapeHtml(badgeLabel) + '</span>' +
-                '</div>';
-            var filhos = (node.child_ids || []).map(function (id) { return porId[id]; }).filter(Boolean);
-            if (filhos.length) {
-                html += '<div class="ce-node-children">' + filhos.map(renderNo).join("") + '</div>';
-            }
-            return html;
-        }
-        var raizes = (data.roots || []).map(function (id) { return porId[id]; }).filter(Boolean);
-        el.innerHTML = '<div class="ce-mapa-scroll">' + raizes.map(renderNo).join("") + '</div>';
-        Array.prototype.forEach.call(el.querySelectorAll(".ce-node"), function (nodeEl) {
-            nodeEl.addEventListener("click", function (event) {
-                event.stopPropagation();
-                selecionarPeca(parseInt(nodeEl.getAttribute("data-aux"), 10));
-            });
-        });
+        var layout = calcularLayoutArvore(data);
+        el.innerHTML = "";
+        mapaRoot = createRoot(el);
+        mapaRoot.render(
+            React.createElement("div", { className: "ce-mapa-flow" },
+                React.createElement(EstruturaFlow, { nodes: layout.nodes, edges: layout.edges })
+            )
+        );
     }
 
     function selecionarPeca(auxCode) {
@@ -470,9 +579,26 @@
         }
     }
 
+    function carregarSegmentos() {
+        fetch("/api/producao/cronograma/segmentos")
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("http_" + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                var segmentos = data.segmentos || [];
+                var opcoes = segmentos.map(function (item) {
+                    return '<option value="' + escapeHtml(item.classificacao) + '">' + escapeHtml(item.classificacao) + '</option>';
+                }).join("");
+                els.segmento.insertAdjacentHTML("beforeend", opcoes);
+            })
+            .catch(function () { /* filtro de segmento fica indisponivel; lista principal segue funcionando */ });
+    }
+
     els.mesAnterior.addEventListener("click", function () { ajustarMes(-1); });
     els.mesProximo.addEventListener("click", function () { ajustarMes(1); });
     els.mes.addEventListener("change", carregarOrcamentos);
+    els.segmento.addEventListener("change", carregarOrcamentos);
     els.busca.addEventListener("input", function () {
         clearTimeout(state.buscaTimer);
         state.buscaTimer = setTimeout(carregarOrcamentos, 250);
@@ -485,6 +611,7 @@
 
     var inicial = hoje();
     setMesInput(inicial.ano, inicial.mes);
+    carregarSegmentos();
     carregarOrcamentos();
 })();
 </script>
