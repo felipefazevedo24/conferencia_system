@@ -49,6 +49,7 @@ from ..models import (
     ItemNota,
     ConferenciaRecebimento,
     ChecklistRecebimento,
+    ClassificacaoContabilItem,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -5443,6 +5444,10 @@ def excluir_nota_pendente():
 
     ids_alvo = [int(i.id) for i in itens]
     if ids_alvo:
+        # A classificação referencia o item: remova o vínculo na mesma transação.
+        ClassificacaoContabilItem.query.filter(
+            ClassificacaoContabilItem.item_nota_id.in_(ids_alvo)
+        ).delete(synchronize_session=False)
         ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
 
     # Só limpa logs/lock globais quando não há mais itens com o mesmo número.

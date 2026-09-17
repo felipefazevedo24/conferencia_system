@@ -2304,6 +2304,52 @@ def test_excluir_nota_pendente_exige_confirmacao_e_motivo(tmp_path):
     assert response.get_json()["sucesso"] is True
 
 
+def test_excluir_nota_pendente_com_classificacao_preserva_outra_nf(tmp_path):
+    from sqlalchemy import text
+    from conferencia_app.models import ClassificacaoContabilItem, LogExclusaoNota
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        # SQLite precisa aplicar as mesmas restrições de vínculo do banco de produção.
+        db.session.execute(text("PRAGMA foreign_keys = ON"))
+        assert db.session.execute(text("PRAGMA foreign_keys")).scalar() == 1
+        itens = [
+            ItemNota(numero_nota="556", fornecedor=fornecedor, codigo=codigo,
+                     status="Pendente", chave_acesso=chave)
+            for fornecedor, codigo, chave in (
+                ("Fornecedor A", "A1", "1" * 44),
+                ("Fornecedor A", "A2", "1" * 44),
+                ("Fornecedor B", "B1", "2" * 44),
+            )
+        ]
+        db.session.add_all(itens)
+        db.session.flush()
+        ids_alvo = [item.id for item in itens[:2]]
+        id_preservado = itens[2].id
+        for item in itens:
+            db.session.add(ClassificacaoContabilItem(item_nota_id=item.id, numero_nota="556"))
+        db.session.commit()
+
+    response = client.post("/api/excluir_nota_pendente", json={
+        "nota": "556", "documento_ref": "1" * 44,
+        "confirmacao_nota": "556", "motivo": "Importação duplicada",
+    })
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+    with app.app_context():
+        assert ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).count() == 0
+        assert ClassificacaoContabilItem.query.filter(
+            ClassificacaoContabilItem.item_nota_id.in_(ids_alvo)
+        ).count() == 0
+        assert db.session.get(ItemNota, id_preservado) is not None
+        assert ClassificacaoContabilItem.query.filter_by(item_nota_id=id_preservado).count() == 1
+        log = LogExclusaoNota.query.filter_by(numero_nota="556").one()
+        assert log.fornecedor == "Fornecedor A"
+        assert log.motivo == "Importação duplicada"
+
+
 def test_api_sla_dashboard_retorna_estrutura(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
