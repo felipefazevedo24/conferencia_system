@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}Produção | Cronograma de Entregas{% endblock %}
+{% block shell_title %}Produção — Cronograma de Entregas{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ce-wrap { display: grid; gap: 16px; }
+    .ce-filtros { justify-content: space-between; }
+    .ce-mes-control { display: flex; align-items: center; gap: 6px; }
+    .ce-mes-control input[type="month"] { min-width: 160px; }
+    .ce-segmento { min-width: 180px; }
+    .ce-busca { flex: 1; min-width: 220px; max-width: 380px; position: relative; }
+    .ce-busca i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); font-size: 13px; pointer-events: none; }
+    .ce-busca input { width: 100%; padding-left: 34px; }
+
+    .ce-layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 980px) { .ce-layout { grid-template-columns: 1fr; } }
+
+    .ce-lista { padding: 0; overflow: hidden; }
+    .ce-lista-head { border-bottom: 1px solid var(--eui-border); }
+    .ce-lista-toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 14px 16px; background: none; border: none; cursor: pointer; font-weight: 700; font-size: 13px; color: var(--eui-text); text-align: left; }
+    .ce-lista-toggle i { margin-left: auto; transition: transform .15s; color: var(--eui-muted); }
+    .ce-lista-toggle[aria-expanded="false"] i { transform: rotate(-90deg); }
+    .ce-lista-count { font-size: 11px; font-weight: 700; color: var(--eui-muted); background: var(--eui-surface-3); border-radius: 999px; padding: 2px 8px; }
+    .ce-lista-body { max-height: 640px; overflow-y: auto; }
+    .ce-lista-body.is-collapsed { display: none; }
+    .ce-lista-msg { padding: 24px 16px; text-align: center; color: var(--eui-muted); font-size: 12.5px; }
+
+    .ce-item { width: 100%; display: block; text-align: left; background: none; border: none; border-bottom: 1px solid var(--eui-border); padding: 10px 16px; cursor: pointer; }
+    .ce-item:hover { background: var(--eui-surface-3); }
+    .ce-item.is-active { background: var(--eui-primary-soft); }
+    .ce-item-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .ce-item-orc { font-weight: 700; font-size: 13px; }
+    .ce-item-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 11.5px; color: var(--eui-muted); }
+    .ce-item-cliente { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .ce-detalhe { display: grid; gap: 16px; min-height: 300px; }
+    .ce-vazio, .ce-erro { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 60px 20px; text-align: center; color: var(--eui-muted); background: var(--eui-surface); border: 1px dashed var(--eui-border); border-radius: var(--eui-radius); }
+    .ce-vazio i, .ce-erro i { font-size: 26px; opacity: .6; }
+    .ce-erro { color: var(--eui-danger); border-color: var(--eui-danger-soft); }
+
+    .ce-faixa { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+    .ce-faixa-campo { min-width: 120px; }
+    .ce-faixa-campo span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); font-weight: 700; margin-bottom: 2px; }
+    .ce-faixa-campo strong { font-size: 13.5px; }
+    .ce-os-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ce-os-tab { border: 1px solid var(--eui-border-strong); background: var(--eui-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .ce-os-tab.is-active { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast); }
+
+    .ce-mapa-flow { height: 460px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: var(--eui-surface-3); }
+    .ce-mapa-flow .react-flow__attribution { font-size: 9px; }
+    .ce-node { border: 1px solid var(--eui-border); border-radius: 10px; padding: 8px 10px; margin: 6px 0; cursor: pointer; display: flex; gap: 10px; align-items: center; background: var(--eui-surface); }
+    .ce-node:hover { border-color: var(--eui-primary); }
+    .ce-node.is-selected { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); background: var(--eui-primary-soft); }
+    .ce-node--flow { width: 220px; margin: 0; }
+    .ce-node-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--eui-surface-3); flex-shrink: 0; }
+    .ce-node-thumb-fallback { width: 44px; height: 44px; border-radius: 8px; background: var(--eui-surface-3); display: flex; align-items: center; justify-content: center; color: var(--eui-muted); flex-shrink: 0; }
+    .ce-node-body { flex: 1; min-width: 0; }
+    .ce-node-code { font-weight: 700; font-size: 12.5px; }
+    .ce-node-desc { font-size: 11.5px; color: var(--eui-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ce-node-qty { font-size: 11px; color: var(--eui-muted); }
+
+    .ce-seq-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .ce-seq-atual { font-size: 12px; font-weight: 700; }
+    .ce-seq-scroll { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 10px 2px 14px; }
+    .ce-seq-card { min-width: 210px; border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; background: var(--eui-surface); flex-shrink: 0; }
+    .ce-seq-card.is-current { border-color: var(--eui-warning); box-shadow: 0 0 0 2px var(--eui-warning-soft); }
+    .ce-seq-card.is-blocked { border-color: var(--eui-danger); }
+    .ce-seq-step { font-size: 10.5px; font-weight: 700; color: var(--eui-muted); }
+    .ce-seq-name { font-size: 13px; font-weight: 700; margin: 2px 0 6px; }
+    .ce-seq-row { font-size: 11px; color: var(--eui-muted); display: flex; justify-content: space-between; gap: 6px; }
+    .ce-seq-arrow { display: flex; align-items: center; justify-content: center; width: 30px; flex-shrink: 0; color: var(--eui-muted); }
+
+    .ce-loading { padding: 24px; text-align: center; color: var(--eui-muted); font-size: 12.5px; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.11.6/dist/style.css">
+<script type="importmap">
+{
+    "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+        "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+        "@xyflow/react": "https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom"
+    }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="ce-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Produção</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-truck-fast"></i> Cronograma de Entregas</h1>
+            <p class="eui-page-header__sub">Orçamentos com entrega prevista no mês, sua OS, estrutura de peças e sequência de produção. Consulta somente leitura.</p>
+        </div>
+    </header>
+
+    <div class="eui-card">
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar ce-filtros">
+                <div class="ce-mes-control">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" id="ce-mes-anterior" aria-label="Mês anterior"><i class="fas fa-chevron-left"></i></button>
+                    <input type="month" id="ce-mes" class="eui-input" aria-label="Mês e ano de entrega">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" id="ce-mes-proximo" aria-label="Próximo mês"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <select id="ce-segmento" class="eui-input ce-segmento" aria-label="Segmento">
+                    <option value="">Todos os segmentos</option>
+                </select>
+                <div class="eui-input-group ce-busca">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input type="search" id="ce-busca" class="eui-input" placeholder="Cliente, orçamento ou OS" autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ce-layout">
+        <aside class="eui-card ce-lista">
+            <div class="ce-lista-head">
+                <button type="button" class="ce-lista-toggle" id="ce-lista-toggle" aria-expanded="true" aria-controls="ce-lista-body">
+                    <span id="ce-lista-titulo">—</span>
+                    <span class="ce-lista-count" id="ce-lista-count">0</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+            <div id="ce-lista-body" class="ce-lista-body">
+                <div class="ce-lista-msg">Carregando…</div>
+            </div>
+        </aside>
+
+        <section class="ce-detalhe" id="ce-detalhe" aria-live="polite">
+            <div class="ce-vazio"><i class="fas fa-calendar-day"></i><p>Selecione um orçamento na lista para ver os detalhes da entrega.</p></div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react";
+
+(function () {
+    "use strict";
+
+    var els = {
+        mes: document.getElementById("ce-mes"),
+        mesAnterior: document.getElementById("ce-mes-anterior"),
+        mesProximo: document.getElementById("ce-mes-proximo"),
+        busca: document.getElementById("ce-busca"),
+        segmento: document.getElementById("ce-segmento"),
+        listaToggle: document.getElementById("ce-lista-toggle"),
+        listaBody: document.getElementById("ce-lista-body"),
+        listaTitulo: document.getElementById("ce-lista-titulo"),
+        listaCount: document.getElementById("ce-lista-count"),
+        detalhe: document.getElementById("ce-detalhe"),
+    };
+
+    var MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+    var state = {
+        orcamentos: [],
+        selecionadoIndex: null,
+        osSelecionada: null,
+        estrutura: null,
+        pecaSelecionada: null,
+        buscaTimer: null,
+    };
+
+    function hoje() {
+        var d = new Date();
+        return { ano: d.getFullYear(), mes: d.getMonth() + 1 };
+    }
+
+    function mesAtualInputValor() {
+        var partes = (els.mes.value || "").split("-");
+        if (partes.length === 2 && partes[0] && partes[1]) {
+            return { ano: parseInt(partes[0], 10), mes: parseInt(partes[1], 10) };
+        }
+        return hoje();
+    }
+
+    function ajustarMes(delta) {
+        var atual = mesAtualInputValor();
+        var d = new Date(atual.ano, atual.mes - 1 + delta, 1);
+        setMesInput(d.getFullYear(), d.getMonth() + 1);
+        carregarOrcamentos();
+    }
+
+    function setMesInput(ano, mes) {
+        els.mes.value = ano + "-" + String(mes).padStart(2, "0");
+    }
+
+    function limparSelecao() {
+        state.selecionadoIndex = null;
+        state.osSelecionada = null;
+        state.estrutura = null;
+        state.pecaSelecionada = null;
+        renderVazio();
+    }
+
+    function renderVazio() {
+        desmontarMapa();
+        els.detalhe.innerHTML = '<div class="ce-vazio"><i class="fas fa-calendar-day"></i><p>Selecione um orçamento na lista para ver os detalhes da entrega.</p></div>';
+    }
+
+    function escapeHtml(value) {
+        var div = document.createElement("div");
+        div.textContent = value == null ? "" : String(value);
+        return div.innerHTML;
+    }
+
+    function fmtData(iso) {
+        if (!iso) return "—";
+        var partes = String(iso).slice(0, 10).split("-");
+        if (partes.length !== 3) return String(iso);
+        return partes[2] + "/" + partes[1] + "/" + partes[0];
+    }
+
+    function carregarOrcamentos() {
+        var periodo = mesAtualInputValor();
+        limparSelecao();
+        els.listaTitulo.textContent = MESES[periodo.mes - 1] + "/" + periodo.ano;
+        els.listaBody.innerHTML = '<div class="ce-lista-msg">Carregando…</div>';
+        var termo = (els.busca.value || "").trim();
+        var segmento = els.segmento.value || "";
+        var params = new URLSearchParams({ ano: periodo.ano, mes: periodo.mes });
+        if (termo) params.set("q", termo);
+        if (segmento) params.set("classificacao", segmento);
+        fetch("/api/producao/cronograma/orcamentos?" + params.toString())
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("http_" + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                state.orcamentos = data.orcamentos || [];
+                renderLista();
+            })
+            .catch(function () {
+                state.orcamentos = [];
+                els.listaCount.textContent = "0";
+                els.listaBody.innerHTML = '<div class="ce-lista-msg"><i class="fas fa-triangle-exclamation"></i><br>Não foi possível consultar os orçamentos do período.</div>';
+            });
+    }
+
+    function renderLista() {
+        els.listaCount.textContent = String(state.orcamentos.length);
+        if (!state.orcamentos.length) {
+            els.listaBody.innerHTML = '<div class="ce-lista-msg">Nenhum orçamento com entrega prevista para este período.</div>';
+            return;
+        }
+        var html = state.orcamentos.map(function (orc, index) {
+            var statusPrincipal = (orc.ordens && orc.ordens[0] && orc.ordens[0].status_origem) || "—";
+            return '<button type="button" class="ce-item" data-index="' + index + '">' +
+                '<div class="ce-item-top"><span class="ce-item-orc">Orç. ' + escapeHtml(orc.numero_orcamento) + (orc.versao ? " · v" + escapeHtml(orc.versao) : "") + '</span>' +
+                '<span class="eui-badge eui-badge--neutral">' + escapeHtml(statusPrincipal) + '</span></div>' +
+                '</button>';
+        }).join("");
+        els.listaBody.innerHTML = html;
+        Array.prototype.forEach.call(els.listaBody.querySelectorAll(".ce-item"), function (button) {
+            button.addEventListener("click", function () {
+                selecionarOrcamento(parseInt(button.getAttribute("data-index"), 10));
+            });
+        });
+        if (state.selecionadoIndex != null) {
+            var ativo = els.listaBody.querySelector('.ce-item[data-index="' + state.selecionadoIndex + '"]');
+            if (ativo) ativo.classList.add("is-active");
+        }
+    }
+
+    function selecionarOrcamento(index) {
+        state.selecionadoIndex = index;
+        state.pecaSelecionada = null;
+        state.estrutura = null;
+        Array.prototype.forEach.call(els.listaBody.querySelectorAll(".ce-item"), function (button) {
+            button.classList.toggle("is-active", parseInt(button.getAttribute("data-index"), 10) === index);
+        });
+        var orcamento = state.orcamentos[index];
+        var ordens = orcamento.ordens || [];
+        state.osSelecionada = ordens.length ? ordens[0].numero_os : null;
+        renderDetalhe();
+        if (state.osSelecionada) carregarEstrutura(state.osSelecionada);
+    }
+
+    function orcamentoAtual() {
+        return state.selecionadoIndex != null ? state.orcamentos[state.selecionadoIndex] : null;
+    }
+
+    function renderDetalhe() {
+        var orcamento = orcamentoAtual();
+        if (!orcamento) { renderVazio(); return; }
+        desmontarMapa();
+        var ordens = orcamento.ordens || [];
+        var osAtual = ordens.filter(function (os) { return os.numero_os === state.osSelecionada; })[0] || ordens[0];
+        var tabs = "";
+        if (ordens.length > 1) {
+            tabs = '<div class="ce-os-tabs">' + ordens.map(function (os) {
+                var ativa = os.numero_os === state.osSelecionada ? " is-active" : "";
+                return '<button type="button" class="ce-os-tab' + ativa + '" data-os="' + escapeHtml(os.numero_os) + '">OS ' + escapeHtml(os.numero_os) + '</button>';
+            }).join("") + "</div>";
+        }
+        els.detalhe.innerHTML =
+            '<div class="eui-card"><div class="eui-card__body eui-card__body--tight ce-faixa">' +
+                '<div class="ce-faixa-campo"><span>Cliente</span><strong>' + escapeHtml(orcamento.cliente || "Não informado") + '</strong></div>' +
+                '<div class="ce-faixa-campo"><span>Entrega prevista</span><strong>' + fmtData(orcamento.data_prevista_entrega) + '</strong></div>' +
+                '<div class="ce-faixa-campo"><span>Orçamento</span><strong>' + escapeHtml(orcamento.numero_orcamento) + (orcamento.versao ? " · v" + escapeHtml(orcamento.versao) : "") + '</strong></div>' +
+                '<div class="ce-faixa-campo"><span>OS selecionada</span><strong>' + escapeHtml((osAtual && osAtual.numero_os) || "—") + '</strong></div>' +
+                '<div class="ce-faixa-campo"><span>Situação geral</span><strong>' + escapeHtml((osAtual && osAtual.status_origem) || "—") + '</strong></div>' +
+                (tabs ? '<div class="ce-faixa-campo" style="min-width:100%;">' + tabs + '</div>' : "") +
+            '</div></div>' +
+            '<div class="eui-card"><div class="eui-card__body eui-card__body--tight">' +
+                '<h3 style="margin:0 0 8px;font-size:14px;">Estrutura da OS</h3>' +
+                '<div id="ce-mapa">' + '<div class="ce-loading">Carregando estrutura…</div>' + '</div>' +
+            '</div></div>' +
+            '<div class="eui-card" id="ce-seq-card" style="display:none;"><div class="eui-card__body eui-card__body--tight">' +
+                '<div class="ce-seq-header"><h3 style="margin:0;font-size:14px;" id="ce-seq-titulo">Sequência de Montagem</h3>' +
+                '<span class="ce-seq-atual" id="ce-seq-atual"></span></div>' +
+                '<div id="ce-seq-body"></div>' +
+            '</div></div>';
+        var tabButtons = els.detalhe.querySelectorAll(".ce-os-tab");
+        Array.prototype.forEach.call(tabButtons, function (button) {
+            button.addEventListener("click", function () {
+                var numero = button.getAttribute("data-os");
+                if (numero === state.osSelecionada) return;
+                state.osSelecionada = numero;
+                state.pecaSelecionada = null;
+                state.estrutura = null;
+                renderDetalhe();
+                carregarEstrutura(numero);
+            });
+        });
+    }
+
+    function mapaEl() { return document.getElementById("ce-mapa"); }
+    function seqCardEl() { return document.getElementById("ce-seq-card"); }
+    function seqBodyEl() { return document.getElementById("ce-seq-body"); }
+    function seqTituloEl() { return document.getElementById("ce-seq-titulo"); }
+    function seqAtualEl() { return document.getElementById("ce-seq-atual"); }
+
+    function carregarEstrutura(numeroOs) {
+        desmontarMapa();
+        var alvo = mapaEl();
+        if (alvo) alvo.innerHTML = '<div class="ce-loading">Carregando estrutura…</div>';
+        fetch("/api/v1/orders/" + encodeURIComponent(numeroOs) + "/structure")
+            .then(function (resp) {
+                if (resp.status === 404) throw new Error("not_found");
+                if (!resp.ok) throw new Error("http_" + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                if (state.osSelecionada !== numeroOs) return;
+                state.estrutura = data;
+                renderMapa();
+            })
+            .catch(function (err) {
+                if (state.osSelecionada !== numeroOs) return;
+                desmontarMapa();
+                var el = mapaEl();
+                if (!el) return;
+                if (err.message === "not_found") {
+                    el.innerHTML = '<div class="ce-erro"><i class="fas fa-circle-exclamation"></i><p>Esta OS não possui estrutura cadastrada no GRV.</p></div>';
+                } else {
+                    el.innerHTML = '<div class="ce-erro"><i class="fas fa-triangle-exclamation"></i><p>Não foi possível carregar a estrutura desta OS.</p></div>';
+                }
+            });
+    }
+
+    var ESTADO_BADGE = {
+        completed: "eui-badge--success",
+        assembling: "eui-badge--warning",
+        manufacturing: "eui-badge--warning",
+        blocked: "eui-badge--danger",
+        available: "eui-badge--neutral",
+        not_started: "eui-badge--neutral",
+    };
+    var ESTADO_LABEL = {
+        completed: "Concluído",
+        assembling: "Em montagem",
+        manufacturing: "Em fabricação",
+        blocked: "Bloqueado",
+        available: "Disponível",
+        not_started: "Não iniciado",
+    };
+
+    var NODE_W = 220;
+    var GAP_X = 24;
+    var GAP_Y = 130;
+
+    function calcularLayoutArvore(data) {
+        var porId = {};
+        data.nodes.forEach(function (node) { porId[node.id] = node; });
+        var cursor = { x: 0 };
+        var posicoes = {};
+        function posicionar(id, profundidade) {
+            var node = porId[id];
+            var filhos = (node.child_ids || []).filter(function (cid) { return porId[cid]; });
+            var x;
+            if (!filhos.length) {
+                x = cursor.x;
+                cursor.x += NODE_W + GAP_X;
+            } else {
+                var xs = filhos.map(function (cid) { return posicionar(cid, profundidade + 1); });
+                x = (xs[0] + xs[xs.length - 1]) / 2;
+            }
+            posicoes[id] = { x: x, y: profundidade * GAP_Y };
+            return x;
+        }
+        var raizes = (data.roots || []).filter(function (id) { return porId[id]; });
+        raizes.forEach(function (id) { posicionar(id, 0); });
+        var nodes = Object.keys(posicoes).map(function (id) {
+            var node = porId[id];
+            return {
+                id: String(id),
+                type: "estruturaNode",
+                position: posicoes[id],
+                selected: String(state.pecaSelecionada) === String(node.aux_code),
+                draggable: false,
+                data: Object.assign({}, node, { onSelect: selecionarPeca }),
+            };
+        });
+        var edges = [];
+        data.nodes.forEach(function (node) {
+            (node.child_ids || []).forEach(function (childId) {
+                if (!porId[childId]) return;
+                edges.push({ id: node.id + "-" + childId, source: String(node.id), target: String(childId) });
+            });
+        });
+        return { nodes: nodes, edges: edges };
+    }
+
+    function EstruturaNodeCard(props) {
+        var node = props.data;
+        var badgeClasse = ESTADO_BADGE[node.state] || "eui-badge--neutral";
+        var badgeLabel = ESTADO_LABEL[node.state] || node.state;
+        var imagem = node.has_drawing
+            ? React.createElement("img", {
+                className: "ce-node-thumb", src: node.thumbnail_url, alt: "", loading: "lazy",
+                onError: function (event) {
+                    event.target.outerHTML = '<div class="ce-node-thumb-fallback"><i class="fas fa-image"></i></div>';
+                },
+            })
+            : React.createElement("div", { className: "ce-node-thumb-fallback" }, React.createElement("i", { className: "fas fa-image" }));
+        return React.createElement(
+            "div",
+            {
+                className: "ce-node ce-node--flow" + (props.selected ? " is-selected" : ""),
+                onClick: function (event) { event.stopPropagation(); node.onSelect(node.aux_code); },
+            },
+            React.createElement(Handle, { type: "target", position: Position.Top, style: { visibility: "hidden" } }),
+            imagem,
+            React.createElement(
+                "div",
+                { className: "ce-node-body" },
+                React.createElement("div", { className: "ce-node-code" }, node.code),
+                React.createElement("div", { className: "ce-node-desc" }, node.description),
+                React.createElement("div", { className: "ce-node-qty" }, "Qtde: " + node.quantity)
+            ),
+            React.createElement("span", { className: "eui-badge " + badgeClasse }, badgeLabel),
+            React.createElement(Handle, { type: "source", position: Position.Bottom, style: { visibility: "hidden" } })
+        );
+    }
+
+    var MAPA_NODE_TYPES = { estruturaNode: EstruturaNodeCard };
+
+    function EstruturaFlow(props) {
+        return React.createElement(
+            ReactFlow,
+            {
+                nodes: props.nodes,
+                edges: props.edges,
+                nodeTypes: MAPA_NODE_TYPES,
+                fitView: true,
+                nodesDraggable: false,
+                nodesConnectable: false,
+                elementsSelectable: false,
+                panOnScroll: true,
+                defaultEdgeOptions: { type: "smoothstep" },
+            },
+            React.createElement(Background, { gap: 18, size: 1 }),
+            React.createElement(Controls, { showInteractive: false })
+        );
+    }
+
+    var mapaRoot = null;
+
+    function desmontarMapa() {
+        if (mapaRoot) {
+            try { mapaRoot.unmount(); } catch (err) { /* container ja substituido no DOM */ }
+            mapaRoot = null;
+        }
+    }
+
+    function renderMapa() {
+        var el = mapaEl();
+        if (!el) return;
+        var data = state.estrutura;
+        desmontarMapa();
+        if (!data || !data.nodes || !data.nodes.length) {
+            el.innerHTML = '<div class="ce-erro"><i class="fas fa-circle-exclamation"></i><p>Esta OS não possui estrutura cadastrada no GRV.</p></div>';
+            return;
+        }
+        var layout = calcularLayoutArvore(data);
+        el.innerHTML = "";
+        mapaRoot = createRoot(el);
+        mapaRoot.render(
+            React.createElement("div", { className: "ce-mapa-flow" },
+                React.createElement(EstruturaFlow, { nodes: layout.nodes, edges: layout.edges })
+            )
+        );
+    }
+
+    function selecionarPeca(auxCode) {
+        state.pecaSelecionada = auxCode;
+        renderMapa();
+        var card = seqCardEl();
+        if (card) card.style.display = "";
+        var body = seqBodyEl();
+        if (body) body.innerHTML = '<div class="ce-loading">Carregando sequência…</div>';
+        var atualEl = seqAtualEl();
+        if (atualEl) atualEl.textContent = "";
+        var numeroOs = state.osSelecionada;
+        fetch("/api/v1/orders/" + encodeURIComponent(numeroOs) + "/items/" + auxCode)
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("http_" + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                if (state.pecaSelecionada !== auxCode) return;
+                renderSequencia(data);
+            })
+            .catch(function () {
+                if (state.pecaSelecionada !== auxCode) return;
+                var body = seqBodyEl();
+                if (body) body.innerHTML = '<div class="ce-erro"><i class="fas fa-triangle-exclamation"></i><p>Não foi possível carregar a sequência desta peça.</p></div>';
+            });
+    }
+
+    function renderSequencia(data) {
+        var node = data.node || {};
+        var titulo = seqTituloEl();
+        if (titulo) titulo.textContent = "Sequência de Montagem — " + (node.code || "");
+        var operations = data.operations || [];
+        var body = seqBodyEl();
+        var atualEl = seqAtualEl();
+        if (!operations.length) {
+            if (body) body.innerHTML = '<div class="ce-erro"><i class="fas fa-circle-exclamation"></i><p>Esta peça não possui sequência de operações cadastrada.</p></div>';
+            if (atualEl) atualEl.textContent = "";
+            return;
+        }
+        var indiceAtual = -1;
+        for (var i = 0; i < operations.length; i++) {
+            if (!operations[i].finalized) { indiceAtual = i; break; }
+        }
+        var cards = operations.map(function (op, index) {
+            var classe = "";
+            if (op.finalized) classe = "";
+            else if (index === indiceAtual) classe = " is-current";
+            else if (op.locked) classe = " is-blocked";
+            var statusLabel = op.finalized ? "Finalizada" : (op.locked ? "Bloqueada" : (index === indiceAtual ? "Em andamento" : "Aguardando"));
+            var card = '<div class="ce-seq-card' + classe + '">' +
+                '<div class="ce-seq-step">Etapa ' + (index + 1) + ' · Seq. ' + escapeHtml(op.sequence != null ? op.sequence : "—") + '</div>' +
+                '<div class="ce-seq-name">' + escapeHtml(op.name || "Operação") + '</div>' +
+                '<div class="ce-seq-row"><span>Peça</span><span>' + escapeHtml(node.code || "—") + '</span></div>' +
+                '<div class="ce-seq-row"><span>Máquina</span><span>' + escapeHtml(op.machine || "—") + '</span></div>' +
+                '<div class="ce-seq-row"><span>Status</span><span>' + escapeHtml(statusLabel) + '</span></div>' +
+                '</div>';
+            var seta = index < operations.length - 1 ? '<div class="ce-seq-arrow"><i class="fas fa-arrow-right"></i></div>' : "";
+            return card + seta;
+        }).join("");
+        if (body) body.innerHTML = '<div class="ce-seq-scroll">' + cards + '</div>';
+        if (atualEl) {
+            atualEl.textContent = indiceAtual >= 0
+                ? "Operação atual: Seq. " + (operations[indiceAtual].sequence != null ? operations[indiceAtual].sequence : (indiceAtual + 1))
+                : "Todas as operações finalizadas";
+        }
+    }
+
+    function carregarSegmentos() {
+        fetch("/api/producao/cronograma/segmentos")
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("http_" + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                var segmentos = data.segmentos || [];
+                var opcoes = segmentos.map(function (item) {
+                    return '<option value="' + escapeHtml(item.classificacao) + '">' + escapeHtml(item.classificacao) + '</option>';
+                }).join("");
+                els.segmento.insertAdjacentHTML("beforeend", opcoes);
+            })
+            .catch(function () { /* filtro de segmento fica indisponivel; lista principal segue funcionando */ });
+    }
+
+    els.mesAnterior.addEventListener("click", function () { ajustarMes(-1); });
+    els.mesProximo.addEventListener("click", function () { ajustarMes(1); });
+    els.mes.addEventListener("change", carregarOrcamentos);
+    els.segmento.addEventListener("change", carregarOrcamentos);
+    els.busca.addEventListener("input", function () {
+        clearTimeout(state.buscaTimer);
+        state.buscaTimer = setTimeout(carregarOrcamentos, 250);
+    });
+    els.listaToggle.addEventListener("click", function () {
+        var expandido = els.listaToggle.getAttribute("aria-expanded") === "true";
+        els.listaToggle.setAttribute("aria-expanded", String(!expandido));
+        els.listaBody.classList.toggle("is-collapsed", expandido);
+    });
+
+    var inicial = hoje();
+    setMesInput(inicial.ano, inicial.mes);
+    carregarSegmentos();
+    carregarOrcamentos();
+})();
+</script>
+{% endblock %}

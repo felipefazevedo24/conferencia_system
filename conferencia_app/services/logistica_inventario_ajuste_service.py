@@ -487,18 +487,69 @@ def descartar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, motiv
     return ajuste
 
 
-def concluir_finance(ajuste: LogisticaInventarioAjuste, usuario: str, observacao: str | None = None) -> LogisticaInventarioAjuste:
-    """Modulo 03 -> Modulo 04. So tracking: confirma que o ajuste de
-    estoque foi executado fora do sync e libera pro Fiscal."""
+def _aplicar_conclusao_finance(
+    ajuste: LogisticaInventarioAjuste, usuario: str, documento_grv: str, observacao: str | None
+) -> None:
+    """Grava a conclusao do Finance num ajuste (sem commit - quem chama
+    decide se e' um item so' ou o lote inteiro)."""
     if ajuste.status_modulo != "Finance":
-        raise ValueError("Este ajuste não está com o Finance.")
+        raise ValueError(f"O item {ajuste.codigo_produto} não está com o Finance.")
+    ajuste.finance_documento_grv = documento_grv
     ajuste.finance_observacao = (observacao or "").strip()[:500] or None
     ajuste.finance_concluido_em = datetime.now()
     ajuste.finance_concluido_por = usuario
     ajuste.status_modulo = "Fiscal"
     ajuste.status_slug = status_slug("Fiscal")
+
+
+def _validar_documento_grv(documento_grv: str | None) -> str:
+    """O numero do documento do GRV e' a prova de que o ajuste foi lancado
+    no ERP - por isso e' exigido pra concluir a etapa (nao da' pra so'
+    marcar como feito)."""
+    texto = (documento_grv or "").strip()
+    if not texto:
+        raise ValueError("Informe o número do documento do GRV referente ao ajuste.")
+    return texto[:60]
+
+
+def concluir_finance(
+    ajuste: LogisticaInventarioAjuste,
+    usuario: str,
+    documento_grv: str | None = None,
+    observacao: str | None = None,
+) -> LogisticaInventarioAjuste:
+    """Modulo 03 -> Modulo 04. So tracking: confirma que o ajuste de
+    estoque foi executado fora do sync e libera pro Fiscal, registrando o
+    documento do GRV que comprova o lancamento."""
+    documento = _validar_documento_grv(documento_grv)
+    _aplicar_conclusao_finance(ajuste, usuario, documento, observacao)
     db.session.commit()
     return ajuste
+
+
+def concluir_finance_em_lote(
+    ajuste_ids: list[int],
+    usuario: str,
+    documento_grv: str | None = None,
+    observacao: str | None = None,
+) -> list[LogisticaInventarioAjuste]:
+    """Mesma conclusao, para varios itens de uma vez: na pratica um unico
+    documento do GRV cobre o lote inteiro do FORM-08.52, entao digitar o
+    numero item a item seria so' repeticao. Ou passa tudo, ou nada (um
+    item fora do Finance aborta o lote inteiro)."""
+    documento = _validar_documento_grv(documento_grv)
+    ids = [int(i) for i in (ajuste_ids or [])]
+    if not ids:
+        raise ValueError("Selecione ao menos um item.")
+
+    ajustes = LogisticaInventarioAjuste.query.filter(LogisticaInventarioAjuste.id.in_(ids)).all()
+    if len(ajustes) != len(set(ids)):
+        raise ValueError("Algum item selecionado não foi encontrado - atualize a lista.")
+
+    for ajuste in ajustes:
+        _aplicar_conclusao_finance(ajuste, usuario, documento, observacao)
+    db.session.commit()
+    return ajustes
 
 
 def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: str | None = None) -> LogisticaInventarioAjuste:

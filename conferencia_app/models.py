@@ -1804,6 +1804,11 @@ class LogisticaInventarioAjuste(db.Model):
     finance_concluido_em = db.Column(db.DateTime)
     finance_concluido_por = db.Column(db.String(100))
     finance_observacao = db.Column(db.String(500))
+    # Numero do documento gerado no GRV ao lancar o ajuste no ERP - e' a
+    # prova de que o ajuste foi executado, entao e' exigido pra concluir a
+    # etapa Finance (ver concluir_finance). Normalmente um mesmo documento
+    # cobre o lote inteiro do FORM-08.52.
+    finance_documento_grv = db.Column(db.String(60))
 
     fiscal_concluido_em = db.Column(db.DateTime)
     fiscal_concluido_por = db.Column(db.String(100))

@@ -4989,7 +4989,12 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     assert resp_relatorio.status_code == 200
 
     # Finance/Fiscal avancam independente da analise ainda estar pendente.
-    resp_finance = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/finance-concluir", json={})
+    # (Confirmar o ajuste executado exige o documento do GRV - ver
+    # test_finance_exige_documento_grv_no_popup_e_confirma_em_lote.)
+    resp_finance = client.post(
+        f"/api/logistica/inventario-ajustes/{ajuste_id}/finance-concluir",
+        json={"documento_grv": "GRV-000123"},
+    )
     assert resp_finance.status_code == 200
     assert resp_finance.get_json()["ajuste"]["status_modulo"] == "Fiscal"
 
