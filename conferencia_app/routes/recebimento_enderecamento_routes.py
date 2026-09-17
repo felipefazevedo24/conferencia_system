@@ -136,22 +136,44 @@ def movimento_json(m):
 @recebimento_enderecamento_bp.get('/api/enderecamento/saldos')
 @permission_required(PERMISSION)
 def saldos():
-    from ..models import EnderecoSaldo as Saldo, EnderecoMovimento as Movimento
-    from sqlalchemy import func
-    busca = str(request.args.get('busca') or '').strip()[:100]
+    """Endereços ocupados segundo o GRV, que é quem controla o saldo.
+
+    O Sync não guarda cópia disso: a lista é montada do snapshot do estoque do
+    GRV, e a falha da bridge não pode derrubar a tela."""
+    from ..models import EnderecoMovimento as Movimento
+    from ..services.erp_estoque_service import buscar_estoque_grv
+    busca = str(request.args.get('busca') or '').strip()[:100].upper()
     pagina = max(1, request.args.get('pagina', 1, type=int))
-    query = Saldo.query
+    pendentes = Movimento.query.filter_by(sincronizado_em=None).count()
+    try:
+        estoque = buscar_estoque_grv(forcar_atualizacao=request.args.get('atualizar') == '1')
+    except Exception:
+        current_app.logger.exception('Falha ao consultar os endereços no GRV')
+        return jsonify(itens=[], total=0, pagina=pagina, indisponivel=True,
+                       metricas=dict(materiais='—', enderecos='—', sincronizar=pendentes),
+                       erro='Endereços indisponíveis: a consulta ao GRV falhou. Tente atualizar em instantes.')
+    registros = []
+    for sku, agregado in (estoque.get('por_codigo') or {}).items():
+        descricao = str(agregado.get('item') or '').strip()
+        unidade = str(agregado.get('unidade') or '').strip()
+        # O GRV guarda os endereços do produto num campo único, separados por ';'.
+        vistos = set()
+        for bruto in agregado.get('localizacoes') or []:
+            for endereco in str(bruto).split(';'):
+                endereco = endereco.strip()
+                if endereco and endereco not in vistos:
+                    vistos.add(endereco)
+                    registros.append((endereco, sku, descricao, unidade))
+    materiais = len({r[1] for r in registros})
+    enderecos = len({r[0] for r in registros})
     if busca:
-        query = query.filter(or_(Saldo.sku.contains(busca, autoescape=True), Saldo.endereco.contains(busca, autoescape=True)))
-    total = query.count()
-    registros = query.order_by(Saldo.endereco, Saldo.sku).offset((pagina-1)*40).limit(40).all()
-    return jsonify(itens=[dict(id=s.id, sku=s.sku, endereco=s.endereco, unidade=s.unidade,
-        quantidade=str(s.quantidade), conferido=s.conferido) for s in registros], total=total,
-        pagina=pagina, metricas=dict(
-            materiais=db.session.query(func.count(func.distinct(Saldo.sku))).scalar(),
-            enderecos=db.session.query(func.count(func.distinct(Saldo.endereco))).filter(Saldo.quantidade > 0).scalar(),
-            conferir=Saldo.query.filter_by(conferido=False).count(),
-            sincronizar=Movimento.query.filter_by(sincronizado_em=None).count()))
+        registros = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
+    registros.sort()
+    total = len(registros)
+    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u)
+                          for e, s, d, u in registros[(pagina-1)*40:pagina*40]],
+                   total=total, pagina=pagina,
+                   metricas=dict(materiais=materiais, enderecos=enderecos, sincronizar=pendentes))
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/historico')
@@ -180,10 +202,7 @@ def movimentar():
     if not isinstance(dados, dict):
         return jsonify(erro='Dados inválidos.'), 400
     try:
-        mov_id = modulo_svc.registrar(dados, session['username'], has_permission(MANAGE))
-    except PermissionError as exc:
-        db.session.rollback()
-        return jsonify(erro=str(exc)), 403
+        mov_id = modulo_svc.registrar(dados, session['username'])
     except ValueError as exc:
         db.session.rollback()
         return jsonify(erro=str(exc)), 409
@@ -215,6 +234,53 @@ def sincronizar_movimentos():
     except ValueError as exc:
         db.session.rollback()
         return jsonify(erro=str(exc)), 409
+
+
+@recebimento_enderecamento_bp.get('/api/enderecamento/material')
+@permission_required(PERMISSION)
+def material():
+    """Onde o material está agora, para a tela mostrar o antes e o depois."""
+    from ..services import enderecamento_service as modulo_svc
+    try:
+        sku = modulo_svc.texto(request.args.get('sku'), 'o SKU', 80)
+        return jsonify(sku=sku, enderecos=modulo_svc.enderecos_atuais(sku))
+    except ValueError as exc:
+        return jsonify(erro=str(exc)), 409
+
+
+@recebimento_enderecamento_bp.get('/api/enderecamento/locais')
+@permission_required(PERMISSION)
+def catalogo_de_locais():
+    """Todos os endereços conhecidos, inclusive os que estão vazios agora.
+
+    A ocupação vem do GRV; se a consulta falhar, a lista continua de pé sem ela."""
+    from ..services.erp_estoque_service import buscar_estoque_grv
+    from ..services import enderecamento_service as modulo_svc
+    busca = str(request.args.get('busca') or '').strip()[:100].upper()
+    ocupacao, indisponivel = {}, False
+    try:
+        for sku, agregado in (buscar_estoque_grv().get('por_codigo') or {}).items():
+            for bruto in agregado.get('localizacoes') or []:
+                for endereco in str(bruto).split(';'):
+                    endereco = modulo_svc.normalizar(endereco)
+                    if endereco:
+                        ocupacao.setdefault(endereco, set()).add(sku)
+    except Exception:
+        current_app.logger.exception('Falha ao consultar a ocupação dos endereços no GRV')
+        indisponivel = True
+    locais_query = LocalizacaoArmazem.query
+    if busca:
+        locais_query = locais_query.filter(LocalizacaoArmazem.codigo.contains(busca, autoescape=True))
+    itens = [dict(codigo=l.codigo, ativo=bool(l.ativo),
+                  materiais=len(ocupacao.get(modulo_svc.normalizar(l.codigo), ())))
+             for l in locais_query.order_by(LocalizacaoArmazem.codigo).limit(500)]
+    # Endereço que está no GRV mas nunca passou pelo Sync também é um endereço real.
+    conhecidos = {modulo_svc.normalizar(l['codigo']) for l in itens}
+    itens += [dict(codigo=endereco, ativo=True, materiais=len(skus), fora_do_catalogo=True)
+              for endereco, skus in sorted(ocupacao.items())
+              if endereco not in conhecidos and (not busca or busca in endereco)]
+    itens.sort(key=lambda l: l['codigo'])
+    return jsonify(itens=itens, total=len(itens), indisponivel=indisponivel)
 
 
 @recebimento_enderecamento_bp.route("/api/recebimento/enderecamento/locais", methods=["GET", "POST"])

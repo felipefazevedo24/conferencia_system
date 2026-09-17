@@ -11,20 +11,25 @@
  <div class="end-metrics" aria-label="Resumo da armazenagem">
   <div><span class="end-metric-icon"><i class="fas fa-cubes"></i></span><div><strong id="end-kpi-materiais">—</strong><span>Materiais controlados</span></div></div>
   <div><span class="end-metric-icon"><i class="fas fa-map-marker-alt"></i></span><div><strong id="end-kpi-enderecos">—</strong><span>Endereços ocupados</span></div></div>
-  <div><span class="end-metric-icon warn"><i class="fas fa-clipboard-check"></i></span><div><strong id="end-kpi-conferir">—</strong><span>Saldos a conferir</span></div></div>
   <div><span class="end-metric-icon warn"><i class="fas fa-sync-alt"></i></span><div><strong id="end-kpi-sincronizar">—</strong><span>Envios pendentes</span></div></div>
  </div>
  <nav class="end-tabs" aria-label="Áreas do endereçamento">
   <button type="button" data-panel="saldos" aria-pressed="true" class="active"><i class="fas fa-th-large"></i> Materiais e endereços</button>
+  <button type="button" data-panel="locais" aria-pressed="false"><i class="fas fa-map-signs"></i> Endereços</button>
   <button type="button" data-panel="receber" aria-pressed="false"><i class="fas fa-inbox"></i> A endereçar</button>
   <button type="button" data-panel="historico" aria-pressed="false"><i class="fas fa-history"></i> Histórico e sincronização</button>
  </nav>
  <div id="end-feedback" class="end-feedback" role="status" aria-live="polite"></div>
  <section id="end-panel-saldos" class="end-panel">
-  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU ou endereço" aria-label="Buscar SKU ou endereço"></label><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button>{% if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') %}<button id="end-initial" class="eui-btn eui-btn--secondary"><i class="fas fa-clipboard-check"></i> Conferir saldo</button>{% endif %}<button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
-  <p class="end-note"><i class="fas fa-info-circle"></i> Saldos físicos controlados no Sync. Para material já armazenado, confira a quantidade de cada endereço antes da primeira movimentação.</p>
-  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Saldo</th><th>Conferência</th><th>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
+  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU, descrição ou endereço" aria-label="Buscar SKU, descrição ou endereço"></label><button id="end-scan-search" class="eui-btn eui-btn--secondary" type="button" data-scan="end-search"><i class="fas fa-qrcode"></i> O que tem aqui?</button><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button><button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
+  <p class="end-note"><i class="fas fa-info-circle"></i> Endereços lidos do GRV, que é quem controla o saldo. O Sync só atualiza em que endereço cada material está.</p>
+  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Descrição</th><th data-nosort>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
   <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
+ </section>
+ <section id="end-panel-locais" class="end-panel" hidden>
+  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-place-search" type="search" placeholder="Buscar endereço" aria-label="Buscar endereço"></label><button id="end-scan-place" class="eui-btn eui-btn--secondary" type="button" data-scan="end-place-search"><i class="fas fa-qrcode"></i> Bipar endereço</button><button id="end-place-refresh" class="eui-btn eui-btn--secondary">Atualizar</button></div>
+  <p class="end-note"><i class="fas fa-info-circle"></i> Endereços não têm cadastro prévio: o local passa a existir quando o operador o usa pela primeira vez. Desativar serve para tirar de circulação um endereço que não pode mais receber material.</p>
+  <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Materiais agora</th><th>Situação</th><th data-nosort>Ações</th></tr></thead><tbody id="end-places"></tbody></table></div>
  </section>
  <section id="end-panel-receber" class="end-panel" hidden><div class="end-section-head"><h2>Endereçar o que chegou</h2><p>A mesma fila do recebimento, com os materiais mais antigos primeiro.</p></div>{% include 'recebimento_enderecamento_painel.html' %}</section>
  <section id="end-panel-historico" class="end-panel" hidden>
@@ -36,12 +41,12 @@
   <div class="end-dialog-body"><p id="end-work-hint"></p><div id="end-work-feedback" class="end-feedback" role="status"></div>
    <div class="end-form-grid">
     <label class="end-full"><span>1 · Material / SKU</span><div class="end-input-action"><input id="end-sku" required maxlength="80" autocomplete="off" placeholder="Bipe ou digite o SKU"><button type="button" data-scan="end-sku" aria-label="Ler SKU pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
-    <label id="end-origin-label"><span>2 · Endereço de origem</span><div class="end-input-action"><input id="end-origin" maxlength="80" autocomplete="off" placeholder="Bipe a origem"><button type="button" data-scan="end-origin" aria-label="Ler origem pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
+    <label id="end-origin-label"><span>2 · Endereço de origem <small>(vazio: só acrescenta o destino)</small></span><div class="end-input-action"><input id="end-origin" maxlength="80" autocomplete="off" placeholder="Bipe a origem"><button type="button" data-scan="end-origin" aria-label="Ler origem pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
     <label><span id="end-destination-label">3 · Endereço de destino</span><div class="end-input-action"><input id="end-destination" required maxlength="80" autocomplete="off" placeholder="Bipe o endereço"><button type="button" data-scan="end-destination" aria-label="Ler destino pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
-    <label><span id="end-quantity-label">Quantidade a movimentar</span><input id="end-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+    <label><span id="end-quantity-label">Quantidade movimentada <small>(anotação)</small></span><input id="end-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
     <label><span>Unidade</span><input id="end-unit" required maxlength="20" placeholder="UN, KG, M…" autocomplete="off"></label>
-    <label class="end-full"><span>Motivo</span><textarea id="end-reason" required minlength="5" maxlength="500" rows="2" placeholder="Ex.: reorganização da prateleira"></textarea></label>
-   </div><p id="end-preview" class="end-preview"></p><p class="end-note">Confira material, quantidade e etiquetas antes de confirmar. A operação ficará registrada com seu usuário.</p>
+    <label class="end-full"><span>Motivo <small>(opcional)</small></span><textarea id="end-reason" maxlength="500" rows="2" placeholder="Ex.: reorganização da prateleira"></textarea></label>
+   </div><p id="end-current" class="end-current"></p><p id="end-preview" class="end-preview"></p><p class="end-note">Quantidade e unidade ficam só no histórico desta operação: o saldo continua sendo o do GRV. O que o Sync envia é o endereço do material.</p>
   </div><div class="end-dialog-foot"><button type="button" id="end-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="end-submit" class="eui-btn eui-btn--primary">Confirmar movimentação</button></div>
  </form></dialog>
  <dialog id="end-camera" class="end-dialog" aria-label="Ler etiqueta"><div class="end-dialog-body"><h2>Ler etiqueta</h2><div id="end-reader"></div><p id="end-camera-feedback" role="status"></p><button id="end-camera-close" class="eui-btn eui-btn--secondary">Cancelar leitura</button></div></dialog>
