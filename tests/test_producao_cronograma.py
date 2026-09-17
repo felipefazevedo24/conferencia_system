@@ -85,3 +85,27 @@ def test_servico_calcula_limites_do_mes_e_repassa_busca(tmp_path):
     assert params["data_de"] == "2026-12-01"
     assert params["data_ate"] == "2027-01-01"
     assert params["busca"] == "%acme%"
+    assert params["classificacao"] is None
+
+
+def test_api_repassa_filtro_de_segmento(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    producao_service._QUERY_CACHE.clear()
+    with patch.object(producao_service, "fetch_all", return_value=[]) as fetch:
+        response = client.get("/api/producao/cronograma/orcamentos?ano=2026&mes=9&classificacao=CMS")
+    assert response.status_code == 200
+    assert fetch.call_args.args[1]["classificacao"] == "CMS"
+
+
+def test_api_segmentos_lista_classificacoes(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    producao_service._QUERY_CACHE.clear()
+    rows = [{"classificacao": "CMS", "qtd": 12}, {"classificacao": "MOLDE", "qtd": 5}]
+    with patch.object(producao_service, "fetch_all", return_value=rows):
+        response = client.get("/api/producao/cronograma/segmentos")
+    assert response.status_code == 200
+    assert response.get_json()["segmentos"] == rows

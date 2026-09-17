@@ -121,7 +121,7 @@
         <div>
             <div class="eui-page-header__eyebrow">Produção</div>
             <h1 class="eui-page-header__title"><i class="fas fa-truck-fast"></i> Cronograma de Entregas</h1>
-            <p class="eui-page-header__sub">Orçamentos com entrega prevista no mês, sua OS, estrutura de peças e sequência de produção. Consulta somente leitura.</p>
+            <p class="eui-page-header__sub">OS com entrega prevista no mês, agrupadas por orçamento, com estrutura de peças e sequência de produção. Consulta somente leitura.</p>
         </div>
     </header>
 
@@ -284,7 +284,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
     function renderLista() {
         els.listaCount.textContent = String(state.orcamentos.length);
         if (!state.orcamentos.length) {
-            els.listaBody.innerHTML = '<div class="ce-lista-msg">Nenhum orçamento com entrega prevista para este período.</div>';
+            els.listaBody.innerHTML = '<div class="ce-lista-msg">Nenhuma OS com entrega prevista para este período.</div>';
             return;
         }
         var html = state.orcamentos.map(function (orc, index) {
@@ -416,7 +416,9 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
 
     var NODE_W = 305;
     var GAP_X = 28;
-    var GAP_Y = 182;
+    // GAP_Y e o passo vertical por nivel: altura do card (182, que cresce ate
+    // ~200 quando a descricao ocupa 3 linhas) mais folga para as ligacoes.
+    var GAP_Y = 270;
 
     function calcularLayoutArvore(data) {
         var porId = {};

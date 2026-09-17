@@ -170,7 +170,11 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
 def listar_orcamentos_mes(
     ano: int, mes: int, busca: str | None = None, classificacao: str | None = None
 ) -> list[dict[str, Any]]:
-    """Orcamentos com entrega prevista no mes/ano informados e suas OS vinculadas (leitura).
+    """OS com entrega prevista no mes/ano informados, agrupadas pelo orcamento (leitura).
+
+    O mes vem da data prevista de cada OS (tos.dt_prevista), nao da data do
+    orcamento: um orcamento com OS entregando em meses diferentes aparece em
+    cada um desses meses, so com as OS daquele mes.
 
     Traz apenas orcamentos que ja geraram OS: nao ha, no codigo existente, uma
     origem confirmada de cliente para orcamento sem OS (torcamento nao expoe
