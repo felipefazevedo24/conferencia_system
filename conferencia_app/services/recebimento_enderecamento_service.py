@@ -58,6 +58,7 @@ def assinador():
 def registrar_leitura(tarefa, tipo, codigo, manual=False):
     if tarefa.status != "Pendente":
         raise ValueError("Este item já foi confirmado. Atualize a lista.")
+    validar_recebimento(tarefa)
     codigo = str(codigo or "").strip()
     if tipo == "sku":
         vinculado = str(tarefa.item.codigo_grv or "").strip()
@@ -110,11 +111,24 @@ def validar_leitura(token, tarefa, tipo):
     return dados
 
 
+def impedimento(tarefa):
+    if tarefa.item.status not in ("Concluído", "Lançado"):
+        return "O recebimento não está concluído ou foi reaberto. Regularize a conferência antes de endereçar."
+    if not str(tarefa.item.codigo_grv or '').strip():
+        return "Item sem SKU GRV vinculado. Corrija o vínculo do material no recebimento."
+    return ""
+
+
+def validar_recebimento(tarefa):
+    mensagem = impedimento(tarefa)
+    if mensagem:
+        raise ValueError(mensagem)
+
+
 def confirmar(tarefa, dados, pode_alternar=False):
     if tarefa.status != "Pendente":
         return  # confirmação repetida não duplica alocações ou quantidades
-    if tarefa.item.status != "Concluído":
-        raise ValueError("O recebimento não está concluído. Regularize a conferência antes de endereçar.")
+    validar_recebimento(tarefa)
     if tarefa.sku != str(tarefa.item.codigo_grv or "").strip():
         raise ValueError("O vínculo do SKU mudou. Bipe o material novamente.")
     sku = validar_leitura(dados.get("sku_token"), tarefa, "sku")
@@ -193,6 +207,10 @@ def reabrir(tarefa, justificativa):
     token = adquirir_trava(tarefa)
     try:
         db.session.refresh(tarefa)
+        from ..models import EnderecoMovimento
+        from .enderecamento_service import chave_recebimento
+        if EnderecoMovimento.query.filter_by(chave=chave_recebimento(tarefa)).first():
+            raise ValueError("Este material já entrou no saldo por endereço. Use Movimentar ou Conferir saldo no módulo Endereçamento para corrigir, preservando o histórico.")
         if tarefa.status not in ("Aguardando sincronização", "Concluído"):
             raise ValueError("Somente endereçamentos aguardando sincronização ou concluídos podem ser revisados/estornados.")
         tipo = "Estornado" if tarefa.status == "Concluído" else "Reaberto para nova leitura"
@@ -221,8 +239,7 @@ def sincronizar(tarefa):
             return
         if tarefa.status != "Aguardando sincronização":
             return
-        if tarefa.item.status != "Concluído":
-            raise ValueError("Recebimento reaberto. Conclua a conferência antes de sincronizar.")
+        validar_recebimento(tarefa)
         tarefa.executando_em = agora
         evento(tarefa, "Sincronização iniciada")
         db.session.commit()
@@ -241,11 +258,14 @@ def sincronizar(tarefa):
         resposta = atualizar_localizacao_estoque(tarefa.sku, enviados)
         if isinstance(resposta, dict) and (resposta.get("sucesso") is False or resposta.get("success") is False):
             raise RuntimeError("GRV recusou a atualização do endereço.")
+        from .enderecamento_service import creditar_recebimento
+        creditar_recebimento(tarefa, tarefa.enderecos_antes or [])
         tarefa.status = "Concluído"
         tarefa.concluido_em = datetime.now()
         tarefa.erro = None
         evento(tarefa, "Sincronizado", {"enviado": enviados})
     except Exception as exc:
+        db.session.rollback()
         current_app.logger.exception("Falha no endereçamento %s", tarefa.id)
         tarefa.erro = str(exc)[:1000] if isinstance(exc, ValueError) else "Falha na comunicação com o GRV. Tente sincronizar novamente."
         evento(tarefa, "Falha de sincronização", {"erro": tarefa.erro})

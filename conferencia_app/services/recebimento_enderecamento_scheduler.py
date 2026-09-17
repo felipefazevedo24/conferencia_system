@@ -55,6 +55,17 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                 falhas += 1
                 app.logger.exception("Retry endereçamento: falha na tarefa %s", tarefa_id)
 
+        from ..models import EnderecoMovimento
+        from .enderecamento_service import sincronizar as sincronizar_movimentos
+        skus = db.session.query(EnderecoMovimento.sku).filter(
+            EnderecoMovimento.sincronizado_em.is_(None)).distinct().limit(100).all()
+        for (sku,) in skus:
+            try:
+                sincronizar_movimentos(sku)
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('Retry movimentação: SKU %s', sku)
+
         _STATE.update(
             last_run=datetime.now(),
             last_status="ok",

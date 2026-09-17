@@ -1428,6 +1428,35 @@ class RecebimentoEnderecamentoEvento(db.Model):
     detalhes = db.Column(db.JSON)
 
 
+class EnderecoSaldo(db.Model):
+    """Saldo físico do Sync; não representa o saldo agregado do ERP."""
+    id = db.Column(db.Integer, primary_key=True)
+    sku = db.Column(db.String(80), nullable=False, index=True)
+    endereco = db.Column(db.String(80), nullable=False, index=True)
+    unidade = db.Column(db.String(20), nullable=False)
+    quantidade = db.Column(db.Numeric(18, 6), nullable=False, default=0)
+    conferido = db.Column(db.Boolean, nullable=False, default=False)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    __table_args__ = (db.UniqueConstraint('sku', 'endereco', name='uq_endereco_saldo'),)
+
+
+class EnderecoMovimento(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chave = db.Column(db.String(100), nullable=False, unique=True)
+    sku = db.Column(db.String(80), nullable=False, index=True)
+    unidade = db.Column(db.String(20), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False)
+    origem = db.Column(db.String(80))
+    destino = db.Column(db.String(80))
+    quantidade = db.Column(db.Numeric(18, 6), nullable=False)
+    usuario = db.Column(db.String(100), nullable=False)
+    motivo = db.Column(db.String(500))
+    detalhes = db.Column(db.JSON)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    sincronizado_em = db.Column(db.DateTime)
+    erro = db.Column(db.String(500))
+
+
 class LocalizacaoArmazem(db.Model):
     """Localização física no armazém (Rua-Prédio-Nível-Apartamento)"""
     id = db.Column(db.Integer, primary_key=True)

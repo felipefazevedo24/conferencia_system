@@ -266,7 +266,7 @@
                 {# Uniao de TODAS as permissoes dos subgrupos abaixo - esquecer uma esconde o grupo inteiro de quem so tem ela. #}
                 {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_QUALIDADE')
                     or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_CONF_CEGA') or can_access('PAGE_EXPEDICAO_ROMANEIO')
-                    or can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA')
+                    or can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') or can_access('PAGE_RECEBIMENTO_ENDERECAMENTO')
                     or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                     or can_access('PAGE_LOGISTICA_VIAGEM')
                     or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_INVENTARIO_VALIDACAO')
@@ -278,11 +278,12 @@
                     </button>
                     <div class="submenu-panel" id="menu-logistica">
 
-                        {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_QUALIDADE') %}
+                        {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_QUALIDADE') or can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}
                         <div class="submenu-subgroup" data-subgroup="recebimento">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-box-open submenu-icon"></i> Recebimento <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferência de Recebimento</a>{% endif %}
+                                {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marked-alt"></i> Endereçamento e movimentações</a>{% endif %}
                                 {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
                                 {% if can_access('PAGE_QUALIDADE') %}<a href="/qualidade" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Qualidade</a>{% endif %}
                             </div>
