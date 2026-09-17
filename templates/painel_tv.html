@@ -1347,11 +1347,16 @@
   }
 
   // ── Popup de itens da PO ao clicar num card do Comex ───────────────
-  $("comex-board").addEventListener("click", (e) => {
-    const card = e.target.closest(".cx-task");
-    if (!card) return;
-    abrirItensComex(card.dataset.processoId, card.dataset.oc);
-  });
+  // Painel sem a secao do Comex (ex.: /painel/expedicao) nao tem esses
+  // elementos no DOM - sem a guarda, o script inteiro morria aqui e a TV
+  // ficava sem rodizio e sem atualizar.
+  if ($("comex-board")) {
+    $("comex-board").addEventListener("click", (e) => {
+      const card = e.target.closest(".cx-task");
+      if (!card) return;
+      abrirItensComex(card.dataset.processoId, card.dataset.oc);
+    });
+  }
 
   async function abrirItensComex(processoId, oc) {
     $("cx-itens-titulo").textContent = "Itens da PO — OC " + oc;
@@ -1371,10 +1376,12 @@
     }
   }
   function fecharItensComex() { $("cx-itens-overlay").classList.remove("show"); }
-  $("cx-itens-fechar").addEventListener("click", fecharItensComex);
-  $("cx-itens-overlay").addEventListener("click", (e) => {
-    if (e.target === $("cx-itens-overlay")) fecharItensComex();
-  });
+  if ($("cx-itens-overlay")) {
+    $("cx-itens-fechar").addEventListener("click", fecharItensComex);
+    $("cx-itens-overlay").addEventListener("click", (e) => {
+      if (e.target === $("cx-itens-overlay")) fecharItensComex();
+    });
+  }
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });
   });
