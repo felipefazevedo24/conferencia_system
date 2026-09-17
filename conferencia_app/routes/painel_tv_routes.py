@@ -652,6 +652,18 @@ def painel_tv_rec_exp_page():
     )
 
 
+@painel_tv_bp.route("/painel/expedicao")
+def painel_tv_expedicao_page():
+    """Mesma Torre de Controle travada no slide da Expedicao - pra TV do
+    setor, que so precisa acompanhar esse painel. As demais secoes ficam
+    desligadas pra nao gastar polling/mapa com tela que nunca aparece."""
+    return render_template(
+        "painel_tv.html",
+        show_compras=False, show_frota=False, show_planejamento=False, show_comex=False,
+        only_slide="expedicao",
+    )
+
+
 @painel_tv_bp.route("/painel/comex")
 def painel_tv_comex_page():
     """Mesma Torre de Controle, mas o carrossel fica travado so no slide do
