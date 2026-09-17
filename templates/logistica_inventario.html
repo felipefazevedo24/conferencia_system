@@ -44,8 +44,16 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/tabela_ordenavel.js') }}?v={{ asset_version }}"></script>
 <script>
 (function () {
+    // Clique no cabecalho ordena as listagens de todas as abas (a ordem e'
+    // mantida quando a lista recarrega - ver tabela_ordenavel.js).
+    ['tb-consulta', 'ia-tbody', 'ac-tbody'].forEach((id) => {
+        const tbody = document.getElementById(id);
+        if (tbody) TabelaOrdenavel.ativar(tbody.closest('table'));
+    });
+
     const botoes = Array.from(document.querySelectorAll('#invu-tabs [data-aba]'));
     const paineis = Array.from(document.querySelectorAll('.invu-panel'));
     function mostrar(aba) {
