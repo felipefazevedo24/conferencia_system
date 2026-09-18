@@ -25,10 +25,20 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 # Assinaturas do rodape do formulario. Ficam aqui (e nao no banco) porque
 # sao os responsaveis fixos do processo - trocou a pessoa, troca aqui.
 # Producao saiu: o ajuste de inventario nao passa por aprovacao dela.
+#
+# O terceiro item e' o arquivo da rubrica digitalizada em
+# static/assinaturas/. Se o arquivo nao existir, o PDF sai com a linha em
+# branco pra assinar a mao - nada quebra.
+PASTA_ASSINATURAS = Path(__file__).resolve().parents[2] / "static" / "assinaturas"
 ASSINATURAS = (
-    ("Responsável Supply Chain", "Filipe Oliveira"),
-    ("Responsável Finanças", "Ricardo Serrano"),
+    ("Responsável Supply Chain", "Filipe Oliveira", "filipe_oliveira.png"),
+    ("Responsável Finanças", "Ricardo Serrano", "ricardo_serrano.png"),
 )
+
+# Altura fixa pra as duas rubricas sairem no mesmo tamanho, independente da
+# resolucao com que foram digitalizadas.
+ALTURA_ASSINATURA_MM = 12
+LARGURA_MAX_ASSINATURA_MM = 50
 
 COR_AZUL_ESCURA = colors.HexColor("#1B3B6F")
 COR_AZUL_TABELA = colors.HexColor("#3E6D93")
@@ -94,6 +104,30 @@ def _imagem_flowable(dados: bytes, max_width: float, max_height: float) -> Image
             return None
         escala = min(max_width / float(iw), max_height / float(ih), 1.0)
         return Image(BytesIO(dados), width=iw * escala, height=ih * escala)
+    except Exception:
+        return None
+
+
+def _rubrica(nome_arquivo: str) -> Image | None:
+    """Rubrica digitalizada de static/assinaturas/, na altura padrao. Devolve
+    None quando o arquivo nao existe (ou nao e' imagem valida) - ai' o PDF
+    sai com a linha em branco, como antes."""
+    if not nome_arquivo:
+        return None
+    caminho = PASTA_ASSINATURAS / nome_arquivo
+    if not caminho.is_file():
+        return None
+    try:
+        largura_px, altura_px = ImageReader(str(caminho)).getSize()
+        if not largura_px or not altura_px:
+            return None
+        altura = ALTURA_ASSINATURA_MM * mm
+        largura = largura_px * (altura / float(altura_px))
+        maxima = LARGURA_MAX_ASSINATURA_MM * mm
+        if largura > maxima:  # rubrica muito larga: limita e reduz a altura junto
+            altura *= maxima / largura
+            largura = maxima
+        return Image(str(caminho), width=largura, height=altura)
     except Exception:
         return None
 
@@ -260,6 +294,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     cabecalho_itens = [
         _p("Item", size=7.5, bold=True, color=colors.white, align=TA_CENTER),
         _p("Código", size=7.5, bold=True, color=colors.white),
+        _p("Descrição", size=7.5, bold=True, color=colors.white),
         _p("Local", size=7.5, bold=True, color=colors.white),
         _p("UN", size=7.5, bold=True, color=colors.white, align=TA_CENTER),
         _p("Qtd Contábil", size=7.5, bold=True, color=colors.white, align=TA_RIGHT),
@@ -273,7 +308,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
     # opcionalmente a foto de apoio) - por isso monta o fundo alternado
     # manualmente (BACKGROUND por item) em vez de ROWBACKGROUNDS ciclico,
     # que so funciona certo com contagem fixa de linhas por item.
-    span_comandos = []  # linhas de justificativa/imagem ocupam as 9 colunas (SPAN)
+    span_comandos = []  # linhas de justificativa/imagem ocupam as 10 colunas (SPAN)
     bg_comandos = []
     valor_total_geral = 0.0
     largura_max_imagem = largura * 0.35
@@ -288,6 +323,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         linhas.append([
             _p(str(idx), size=8, align=TA_CENTER),
             _p(a.codigo_produto, size=8),
+            _p(a.descricao_produto or "—", size=8),
             _p(a.local_codigo, size=8),
             _p(a.unidade_medida, size=8, align=TA_CENTER),
             _p(_fmt_qtd(a.qtde_estoque_vigente), size=8, align=TA_RIGHT),
@@ -300,7 +336,7 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         # lote inteiro) - pre-carregada da aprovacao (Modulo 02) e
         # editavel na hora de gerar o relatorio (ver gerar_relatorio_ajuste).
         linha_justificativa = len(linhas)
-        linhas.append([_p(f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}", size=7.5)] + [""] * 8)
+        linhas.append([_p(f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}", size=7.5)] + [""] * 9)
         span_comandos.append(("SPAN", (0, linha_justificativa), (-1, linha_justificativa)))
 
         # Foto de apoio (opcional) - anexada enquanto o item ainda estava
@@ -309,23 +345,25 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
             flow_imagem = _imagem_flowable(a.justificativa_imagem, largura_max_imagem, 60 * mm)
             if flow_imagem:
                 linha_imagem = len(linhas)
-                linhas.append([flow_imagem] + [""] * 8)
+                linhas.append([flow_imagem] + [""] * 9)
                 span_comandos.append(("SPAN", (0, linha_imagem), (-1, linha_imagem)))
                 span_comandos.append(("ALIGN", (0, linha_imagem), (-1, linha_imagem), "LEFT"))
 
         cor_item = colors.white if idx % 2 == 1 else COR_CINZA_CLARO
         bg_comandos.append(("BACKGROUND", (0, linha_inicio), (-1, len(linhas) - 1), cor_item))
 
-    # Colunas fixas (item/codigo/un/qtds/valores) - Descricao ocupa o resto
-    # da largura da pagina, pra caber nome de produto grande sem estourar.
-    # Ordem das colunas: Item, Codigo, Descricao, UN, Qtd Contabil,
-    # Qtd Fisica, Diferenca, Vlr Unit., Vlr Total.
-    larguras_fixas_mm = [10, 22, 10, 20, 20, 18, 22, 22]  # tudo exceto Descricao
+    # Colunas fixas - a Descricao ocupa o resto da largura da pagina, pra
+    # caber nome de produto grande sem estourar (e quebra em varias linhas
+    # quando precisa).
+    # Ordem: Item, Codigo, Descricao, Local, UN, Qtd Contabil, Qtd Fisica,
+    # Diferenca, Vlr Unit., Vlr Total.
+    larguras_fixas_mm = [10, 20, 16, 8, 16, 16, 15, 17, 19]  # tudo exceto Descricao
     largura_desc = largura - sum(larguras_fixas_mm) * mm
     col_widths = [
-        larguras_fixas_mm[0] * mm, larguras_fixas_mm[1] * mm, largura_desc, larguras_fixas_mm[2] * mm,
-        larguras_fixas_mm[3] * mm, larguras_fixas_mm[4] * mm, larguras_fixas_mm[5] * mm,
-        larguras_fixas_mm[6] * mm, larguras_fixas_mm[7] * mm,
+        larguras_fixas_mm[0] * mm, larguras_fixas_mm[1] * mm, largura_desc,
+        larguras_fixas_mm[2] * mm, larguras_fixas_mm[3] * mm, larguras_fixas_mm[4] * mm,
+        larguras_fixas_mm[5] * mm, larguras_fixas_mm[6] * mm, larguras_fixas_mm[7] * mm,
+        larguras_fixas_mm[8] * mm,
     ]
 
     tabela_itens = Table(linhas, colWidths=col_widths, repeatRows=1)
@@ -364,17 +402,26 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
 
     # ---- Rodape: assinaturas ----
     linha_assinatura = "_" * 38
+    # A rubrica fica ACIMA da linha; sem o arquivo, a celula sai vazia e o
+    # formulario continua servindo pra assinar a mao.
+    rubricas = [_rubrica(arquivo) or "" for _cargo, _nome, arquivo in ASSINATURAS]
     rodape = Table(
         [
+            rubricas,
             [_p(linha_assinatura, size=9, align=TA_CENTER) for _ in ASSINATURAS],
-            [_p(nome, size=8.5, align=TA_CENTER) for _cargo, nome in ASSINATURAS],
-            [_p(cargo, size=7.5, color=COR_MUTED, align=TA_CENTER) for cargo, _nome in ASSINATURAS],
+            [_p(nome, size=8.5, align=TA_CENTER) for _cargo, nome, _arquivo in ASSINATURAS],
+            [_p(cargo, size=7.5, color=COR_MUTED, align=TA_CENTER) for cargo, _nome, _arquivo in ASSINATURAS],
         ],
         colWidths=[largura / len(ASSINATURAS)] * len(ASSINATURAS),
+        rowHeights=[ALTURA_ASSINATURA_MM * mm, None, None, None],
     )
     rodape.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        # Rubrica centralizada e "sentada" na linha de assinatura.
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, 0), "BOTTOM"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
     ]))
     el.append(rodape)
     el.append(Spacer(1, 6))

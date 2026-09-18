@@ -83,6 +83,7 @@ def detectar_divergencia(
     contagem: LogisticaInventarioInicial,
     qtde_grv: float | None,
     custo_medio: float | None = None,
+    descricao_produto: str | None = None,
 ) -> LogisticaInventarioAjuste | None:
     """Chamado logo apos salvar uma contagem (Modulo 01). Se `qtde_grv` for
     None (codigo nao encontrado no GRV, ou API do GRV fora do ar), nao ha
@@ -102,6 +103,7 @@ def detectar_divergencia(
     ajuste = LogisticaInventarioAjuste(
         contagem_id=contagem.id,
         codigo_produto=contagem.codigo_produto,
+        descricao_produto=(descricao_produto or "").strip()[:200] or None,
         local_codigo=contagem.local_codigo,
         unidade_medida=contagem.unidade_medida,
         qtde_contada=float(contagem.quantidade or 0),
@@ -114,6 +116,33 @@ def detectar_divergencia(
     db.session.add(ajuste)
     db.session.commit()
     return ajuste
+
+
+def garantir_descricoes(ajustes: list[LogisticaInventarioAjuste]) -> None:
+    """Completa a descricao dos ajustes que ainda nao tem snapshot -
+    ajustes criados antes desse campo existir. Consulta o GRV UMA vez
+    (cache do proprio erp_estoque_service) e grava, pra o relatorio sair
+    completo e nao precisar consultar de novo nas proximas vezes.
+
+    Best-effort: ERP fora do ar apenas deixa a descricao em branco, nunca
+    impede a geracao do documento."""
+    faltando = [a for a in ajustes if not a.descricao_produto]
+    if not faltando:
+        return
+    try:
+        from . import erp_estoque_service
+
+        estoque = erp_estoque_service.buscar_estoque_grv()
+        achou = False
+        for ajuste in faltando:
+            descricao = erp_estoque_service.descricao_para(ajuste.codigo_produto, estoque)
+            if descricao:
+                ajuste.descricao_produto = descricao[:200]
+                achou = True
+        if achou:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[LogisticaInventarioAjuste]:

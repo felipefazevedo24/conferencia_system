@@ -32,6 +32,7 @@ from ..models import (
 )
 from ..services.logistica_inventario_relatorio_pdf import gerar_relatorio_ajuste_pdf
 from ..services.erp_estoque_service import (
+    descricao_para,
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
     buscar_consumo_kardex_grv,
@@ -622,7 +623,8 @@ def criar_inventario_inicial():
         row.custo_medio_no_momento = custo_medio
         row.grv_consultado_em = datetime.now()
         db.session.commit()
-        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio)
+        descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
+        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
     except Exception as exc:  # noqa: BLE001
@@ -1053,6 +1055,9 @@ def api_relatorio_ajuste_pdf(relatorio_id):
     relatorio = ajuste_svc.buscar_relatorio_ajuste(relatorio_id)
     if not relatorio:
         return jsonify({"error": "Relatório não encontrado."}), 404
+    # Relatorio antigo pode ter itens sem a descricao (campo criado depois) -
+    # completa antes de gerar, pra o documento nao sair capenga.
+    ajuste_svc.garantir_descricoes(relatorio.ajustes)
     try:
         pdf_bytes = gerar_relatorio_ajuste_pdf(relatorio, relatorio.ajustes)
     except Exception as exc:

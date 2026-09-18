@@ -1801,6 +1801,10 @@ class LogisticaInventarioAjuste(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     contagem_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_inicial.id"), nullable=True, index=True)
     codigo_produto = db.Column(db.String(120), nullable=False, index=True)
+    # Descricao do produto (tproduto.nome no ERP) no momento da deteccao -
+    # snapshot, como as quantidades: o FORM-08.52 e documento formal e nao
+    # pode depender do ERP estar no ar pra sair completo.
+    descricao_produto = db.Column(db.String(200))
     local_codigo = db.Column(db.String(120), nullable=False, index=True)
     unidade_medida = db.Column(db.String(20), nullable=False, default="UN")
 
