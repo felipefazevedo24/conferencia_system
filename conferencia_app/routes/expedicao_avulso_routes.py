@@ -1,23 +1,29 @@
-"""Rotas da Conferencia de Expedicao - aba Faturamento avulso.
+"""Rotas de dados das Solicitacoes de NF (modulo Assistencia Tecnica).
 
-Espelha a mesma pagina (/expedicao/conferencia-cega, mesma permissao
-PAGE_EXPEDICAO_CONF_CEGA) das abas fat/st, mas usando o modelo de
-Solicitacao de NF (garantia/bonificacao/teste/atendimento tecnico) aberto
-pelo formulario publico em /solicitacao-nf. Separacao: Logistica/Fiscal/
-Admin. Faturamento e registro de retorno: somente Fiscal/Admin."""
+A solicitacao (garantia/bonificacao/teste/conserto/atendimento tecnico) e'
+aberta no formulario publico em /solicitacao-nf e gerida em
+/assistencia-tecnica. Separacao: Logistica/Comex/Fiscal/Admin. Faturamento e
+registro de retorno: somente Fiscal/Admin — quem emite a nota e' o Fiscal.
+
+As URLs continuam com o prefixo antigo (conf-cega-avulso) porque a tela nasceu
+como aba da Conferencia de Expedicao; renomea-las nao muda comportamento e so'
+criaria risco de deixar alguma chamada para tras."""
 
 from flask import Blueprint, jsonify, request, session
 
-from ..auth import permission_required, roles_required
+from ..auth import permission_required_any, roles_required
 from ..services import solicitacao_nf_service as svc
 
 expedicao_avulso_bp = Blueprint("expedicao_avulso", __name__)
 
-PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
+# A tela vive no modulo Assistencia Tecnica. A permissao antiga continua
+# valendo para nao tirar o acesso de quem ja' tinha enquanto o cargo novo nao
+# e' revisado: o modulo nao pode depender da permissao de outro modulo.
+PERMISSOES = ("PAGE_ASSISTENCIA_TECNICA", "PAGE_EXPEDICAO_CONF_CEGA")
 
 
 @expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens")
-@permission_required(PERMISSION)
+@permission_required_any(*PERMISSOES)
 def listar_ordens_avulso():
     return jsonify({"sucesso": True, **svc.listar_ordens_avulso()})
 

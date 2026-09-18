@@ -24,11 +24,14 @@ def app(tmp_path):
                       "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'portal.db'}"})
     with app.app_context():
         db.create_all()
-        for ordem, (nome, retorno) in enumerate([("Garantia", False),
-                                                 ("Remessa para Teste", True)], 1):
-            db.session.add(TipoOperacaoNF(
-                nome=nome, descricao_ajuda=f"Ajuda de {nome}.",
-                requer_retorno_padrao=retorno, ativo=True, ordem_exibicao=ordem))
+        # Os seis tipos ja' vem semeados no start da aplicacao; aqui so' o
+        # texto de ajuda vira algo previsivel e os demais saem da frente.
+        TipoOperacaoNF.query.filter(
+            TipoOperacaoNF.nome.notin_(["Garantia", "Remessa para Teste"])
+        ).update({"ativo": False}, synchronize_session=False)
+        for nome in ("Garantia", "Remessa para Teste"):
+            TipoOperacaoNF.query.filter_by(nome=nome).update(
+                {"descricao_ajuda": f"Ajuda de {nome}.", "ativo": True})
         db.session.commit()
         yield app
         db.session.remove()

@@ -10,7 +10,7 @@ import pytest
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import SolicitacaoNF, SolicitacaoNFItem, TipoOperacaoNF
+from conferencia_app.models import SolicitacaoNF, SolicitacaoNFItem
 from conferencia_app.services import solicitacao_nf_service as svc
 
 FUNCIONARIO = {"codigo": "F01", "nome": "ANA SOUZA", "setor": "AT"}
@@ -23,9 +23,7 @@ def app(tmp_path):
     app = create_app({"TESTING": True,
                       "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'itens.db'}"})
     with app.app_context():
-        db.create_all()
-        db.session.add(TipoOperacaoNF(nome="Garantia", requer_retorno_padrao=False, ativo=True))
-        db.session.commit()
+        db.create_all()  # os tipos ja' vem semeados no start da aplicacao
         yield app
         db.session.remove()
 

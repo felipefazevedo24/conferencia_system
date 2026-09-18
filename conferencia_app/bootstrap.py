@@ -943,6 +943,36 @@ def _ensure_solicitacao_nf_columns() -> None:
             conn.commit()
         finally:
             conn.close()
+        _ensure_assistencia_tecnica_schema()
+
+
+def _ensure_assistencia_tecnica_schema() -> None:
+    """Colunas por item do modulo Assistencia Tecnica + preenchimento do historico.
+
+    Aplicado no START da aplicacao, e nao so' pelo script de migracao, porque
+    sem essas colunas o modulo inteiro para: o serializador do item consulta
+    todas elas e o painel devolve "Falha ao carregar solicitacoes". Deixar isso
+    dependendo de alguem lembrar de rodar o script na mao ja' quebrou aqui.
+
+    A logica de verdade (DDL + backfill) mora na migracao, para nao existirem
+    duas versoes dela: este trecho so' carrega aquele arquivo e executa. Rodar
+    de novo nao faz nada, porque la' tudo e' condicionado.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    caminho = (Path(__file__).resolve().parents[1]
+               / "migrations" / "versions" / "20260918_assistencia_tecnica.py")
+    if not caminho.exists():
+        return
+    spec = importlib.util.spec_from_file_location("migracao_assistencia_tecnica", caminho)
+    migracao = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migracao)
+    with db.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+        migracao.upgrade()
 
 
 def _ensure_expedicao_romaneio_columns() -> None:
