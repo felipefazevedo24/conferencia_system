@@ -136,3 +136,148 @@ def test_a_tela_recebe_os_campos_do_item(app, erp):
         assert item["tipo_operacao"] == "Garantia"
         assert item["status_slug"] == "nf_emitida"
         assert item["pode_faturar"] is False
+
+
+def test_alterar_a_operacao_de_um_item(app, erp):
+    """A equipe corrige o tipo que o solicitante escolheu errado."""
+    with app.app_context():
+        solicitacao = criar(app, "Garantia", itens=2)
+        alvo = solicitacao.itens[0]
+        svc.alterar_item(solicitacao.id, alvo.id, "fiscal",
+                         tipo_operacao="Remessa para Conserto")
+        item = db.session.get(SolicitacaoNFItem, alvo.id)
+        assert item.tipo_operacao == "Remessa para Conserto"
+        # Conserto tem a nota antes do material: o item muda de etapa junto.
+        assert item.status == svc.STATUS_AGUARDANDO_FAT
+        assert item.necessita_retorno is True   # sugerido pelo tipo novo
+        # O outro item não foi tocado.
+        assert db.session.get(SolicitacaoNFItem,
+                              solicitacao.itens[1].id).tipo_operacao == "Garantia"
+        # E a solicitação mostra que os itens estão em etapas diferentes.
+        assert db.session.get(SolicitacaoNF, solicitacao.id).status == svc.STATUS_PARCIAL
+
+
+def test_nao_altera_item_que_ja_tem_nota(app, erp):
+    with app.app_context():
+        solicitacao = criar(app, itens=1)
+        item = solicitacao.itens[0]
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-77", None)
+        with pytest.raises(svc.SolicitacaoNFError, match="NF-77"):
+            svc.alterar_item(solicitacao.id, item.id, "fiscal", tipo_operacao="Bonificação")
+
+
+def test_operacoes_diferentes_viram_notas_diferentes(app, erp):
+    """O fluxo completo: corrigir a operação de um item e faturar em dois grupos."""
+    with app.app_context():
+        solicitacao = criar(app, "Garantia", itens=2)
+        garantia, conserto = solicitacao.itens
+        svc.alterar_item(solicitacao.id, conserto.id, "fiscal",
+                         tipo_operacao="Remessa para Conserto")
+
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-G1", None, item_ids=[garantia.id])
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C1", None, item_ids=[conserto.id])
+
+        assert db.session.get(SolicitacaoNFItem, garantia.id).numero_nf == "NF-G1"
+        assert db.session.get(SolicitacaoNFItem, conserto.id).numero_nf == "NF-C1"
+        # Garantia fecha; conserto volta, então fica aguardando retorno.
+        assert db.session.get(SolicitacaoNFItem, garantia.id).status == svc.STATUS_NF_EMITIDA
+        assert db.session.get(SolicitacaoNFItem,
+                              conserto.id).status == svc.STATUS_ESTOQUE_TERCEIROS
+
+
+def test_retorno_parcial_mantem_o_item_pendente(app, erp):
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-T", None)
+
+        # Voltou metade (o item foi criado com quantidade 1).
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R1", None, retornos={item.id: 0.4})
+        item = db.session.get(SolicitacaoNFItem, item.id)
+        assert item.quantidade_retornada == 0.4
+        assert item.status == svc.STATUS_ESTOQUE_TERCEIROS   # ainda deve
+
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R2", None, retornos={item.id: 0.6})
+        item = db.session.get(SolicitacaoNFItem, item.id)
+        assert item.status == svc.STATUS_ESTOQUE_RETORNADO
+        assert item.data_efetiva_retorno is not None
+
+
+def test_devolver_mais_do_que_saiu_e_recusado(app, erp):
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-T", None)
+        with pytest.raises(svc.SolicitacaoNFError, match="passa da quantidade"):
+            svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", None, retornos={item.id: 99})
+
+
+def test_fiscal_informa_o_prazo_ao_faturar(app, erp):
+    """O prazo de retorno é do Fiscal, junto com a nota, e só para quem volta."""
+    from datetime import date, timedelta
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        prazo = (date.today() + timedelta(days=15)).isoformat()
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-P", None,
+                            data_prevista_retorno=prazo)
+        item = db.session.get(SolicitacaoNFItem, solicitacao.itens[0].id)
+        assert item.data_prevista_retorno.isoformat() == prazo
+
+
+def test_item_que_nao_volta_nao_ganha_prazo(app, erp):
+    from datetime import date, timedelta
+    with app.app_context():
+        solicitacao = criar(app, "Garantia", necessita_retorno=False, itens=1)
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-X", None,
+                            data_prevista_retorno=(date.today() + timedelta(days=9)).isoformat())
+        assert db.session.get(SolicitacaoNFItem,
+                              solicitacao.itens[0].id).data_prevista_retorno is None
+
+
+def test_atraso_e_calculado_para_a_tela(app, erp):
+    from datetime import date, timedelta
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-A", None,
+                            data_prevista_retorno=(date.today() - timedelta(days=3)).isoformat())
+        item = svc._serializar(db.session.get(SolicitacaoNF, solicitacao.id))["itens"][0]
+        assert item["dias_de_atraso"] == 3 and item["aguardando_retorno"] is True
+
+        # Depois que volta, deixa de ser atraso.
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", None)
+        item = svc._serializar(db.session.get(SolicitacaoNF, solicitacao.id))["itens"][0]
+        assert item["dias_de_atraso"] == 0 and item["aguardando_retorno"] is False
+
+
+def test_prazo_no_dia_ainda_nao_e_atraso(app, erp):
+    from datetime import date
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-H", None,
+                            data_prevista_retorno=date.today().isoformat())
+        item = svc._serializar(db.session.get(SolicitacaoNF, solicitacao.id))["itens"][0]
+        assert item["dias_de_atraso"] == 0
+
+
+def test_of_nao_fatura_sozinha_quando_ha_operacoes_diferentes(app, erp):
+    """Uma OF é uma nota só; tipos diferentes não cabem nela."""
+    from conferencia_app.models import ExpedicaoOrdemFat
+    with app.app_context():
+        solicitacao = criar(app, "Garantia", itens=2)
+        svc.alterar_item(solicitacao.id, solicitacao.itens[1].id, "fiscal",
+                         tipo_operacao="Remessa para Conserto")
+        db.session.add(ExpedicaoOrdemFat(cod_ordem_fat=4242, numero_nf="NF-OF", excluido=False))
+        solicitacao.ordem_faturamento = 4242
+        db.session.commit()
+
+        svc._reconciliar_of_vinculadas()
+        # Nenhum item pode ter sido faturado automaticamente.
+        assert all(i.numero_nf is None
+                   for i in db.session.get(SolicitacaoNF, solicitacao.id).itens)
+
+        # Com uma operação só, aí sim avança sozinha.
+        svc.alterar_item(solicitacao.id, solicitacao.itens[1].id, "fiscal",
+                         tipo_operacao="Garantia")
+        svc._reconciliar_of_vinculadas()
+        assert all(i.numero_nf == "NF-OF"
+                   for i in db.session.get(SolicitacaoNF, solicitacao.id).itens)

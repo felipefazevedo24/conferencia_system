@@ -15,11 +15,13 @@ from flask import Blueprint, current_app, jsonify, render_template, request, ses
 from openpyxl import Workbook
 import requests
 
-from ..auth import has_permission, permission_required, permission_required_any, roles_required
+from ..auth import has_permission, permission_required, permission_required_any, roles_required, is_admin_session
 from ..extensions import db
 from ..models import (
     ChapaCalculo,
     ChapaCalculoLog,
+    ChapaControleExclusao,
+    ChapaAuditoria,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -1314,6 +1316,7 @@ def estoque_chapas_page():
         "logistica_estoque_chapas.html",
         user=session["username"],
         user_role=session.get("role", ""),
+        pode_excluir_chapas=is_admin_session(),
     )
 
 
@@ -1331,6 +1334,8 @@ def api_chapas_listar():
         .filter(ItemNota.qtd_chapas_und.isnot(None))
         .filter(ItemNota.qtd_chapas_und > 0)
         .filter(ItemNota.status == "Lançado")
+        .filter(~db.session.query(ChapaControleExclusao.id).filter(
+            ChapaControleExclusao.item_nota_id == ItemNota.id).exists())
         .order_by(ItemNota.id.desc())
         .all()
     )
@@ -1479,9 +1484,31 @@ def api_chapas_diagnostico():
     return jsonify(diagnosticar_chapa_lote(saida, codigo))
 
 
+@logistica_inventario_bp.route('/api/logistica/chapas/<int:item_id>', methods=['DELETE'])
+@roles_required('Admin')
+def api_chapas_excluir(item_id):
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict) or dados.get('confirmacao_item_id') != item_id:
+        return jsonify(error='Confirme o item que deseja excluir do controle de chapas.'), 400
+    item = ItemNota.query.filter_by(id=item_id).with_for_update().first()
+    if not item:
+        return jsonify(error='Item não encontrado.'), 404
+    if not item.qtd_chapas_und or item.qtd_chapas_und <= 0:
+        return jsonify(error='Este item não faz parte do controle de chapas.'), 409
+    if not ChapaControleExclusao.query.filter_by(item_nota_id=item.id).first():
+        db.session.add(ChapaControleExclusao(item_nota_id=item.id, usuario=session['username']))
+        from ..services.chapa_auditoria_service import registrar
+        registrar(item, 'Exclusão do controle', session['username'],
+                  {'no_controle': True, 'und': item.qtd_chapas_und, 'kg_nf': _chapa_kg_do_item(item)},
+                  {'no_controle': False})
+    db.session.commit()
+    return jsonify(sucesso=True, message='Item excluído do controle de chapas.')
+
+
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])
 @permission_required(PERMISSION)
 def api_chapas_salvar_calculo():
+    from ..services.chapa_auditoria_service import registrar, estado_calculo
     data = request.get_json(silent=True) or {}
     try:
         item_id = int(data.get("item_id"))
@@ -1499,7 +1526,7 @@ def api_chapas_salvar_calculo():
         peso_por_peca = float(data.get("peso_por_peca"))
     except (TypeError, ValueError):
         return jsonify({"error": "Peso por peça inválido."}), 400
-    if peso_por_peca <= 0:
+    if not math.isfinite(peso_por_peca) or peso_por_peca <= 0:
         return jsonify({"error": "Peso por peça deve ser maior que zero."}), 400
 
     usuario = session.get("username", "desconhecido")
@@ -1507,6 +1534,7 @@ def api_chapas_salvar_calculo():
 
     calc = ChapaCalculo.query.filter_by(numero_nota=item.numero_nota, item_nota_id=item.id).first()
     estado_anterior = _chapa_serializar_calculo(calc) if calc else None
+    auditoria_anterior = estado_calculo(calc)
     if not calc:
         calc = ChapaCalculo(
             numero_nota=item.numero_nota,
@@ -1529,6 +1557,8 @@ def api_chapas_salvar_calculo():
         dados_anteriores=json.dumps(estado_anterior, ensure_ascii=False) if estado_anterior else "",
         dados_novos=json.dumps(_chapa_serializar_calculo(calc), ensure_ascii=False),
     ))
+    registrar(item, 'Cálculo criado' if auditoria_anterior is None else 'Cálculo alterado',
+              usuario, auditoria_anterior, estado_calculo(calc))
     db.session.commit()
 
     kg_nf = _chapa_kg_do_item(item)
@@ -1571,3 +1601,26 @@ def api_chapas_calculo_logs(calculo_id):
             for lg in logs
         ]
     })
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/auditoria', methods=['GET'])
+@permission_required(PERMISSION)
+def api_chapas_auditoria():
+    from sqlalchemy import or_
+    query = ChapaAuditoria.query
+    termo = str(request.args.get('q') or '').strip()[:100]
+    if termo:
+        query = query.filter(or_(*[campo.contains(termo, autoescape=True) for campo in (
+            ChapaAuditoria.numero_nota, ChapaAuditoria.codigo, ChapaAuditoria.descricao,
+            ChapaAuditoria.ar, ChapaAuditoria.usuario, ChapaAuditoria.acao)]))
+    item_id = request.args.get('item_id', type=int)
+    if item_id is not None:
+        query = query.filter_by(item_nota_id=item_id)
+    pagina = max(1, request.args.get('pagina', 1, type=int))
+    total = query.count()
+    logs = query.order_by(ChapaAuditoria.criado_em.desc(), ChapaAuditoria.id.desc()).offset((pagina-1)*40).limit(40).all()
+    return jsonify(total=total, pagina=pagina, logs=[dict(
+        id=log.id, item_id=log.item_nota_id, nf=log.numero_nota,
+        codigo=log.codigo, descricao=log.descricao, ar=log.ar,
+        acao=log.acao, usuario=log.usuario, data=log.criado_em.isoformat(),
+        antes=log.antes, depois=log.depois) for log in logs])

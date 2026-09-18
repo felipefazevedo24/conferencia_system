@@ -93,6 +93,19 @@
     .ch-logs { margin-top: 4px; font-size: 12px; color: var(--eui-text-soft); display: grid; gap: 8px; }
     .ch-log { border-left: 3px solid var(--eui-border); padding: 6px 10px; background: var(--eui-surface-2); border-radius: 6px; }
     .ch-log b { color: var(--eui-text); }
+    .ch-delete-dialog { width: min(520px, calc(100% - 24px)); padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; max-height: calc(100dvh - 24px); overflow: auto; }
+    .ch-delete-dialog::backdrop { background: rgba(15,23,42,.6); backdrop-filter: blur(2px); }
+    .ch-delete-dialog p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+    .ch-delete-btn { color: var(--eui-danger); }
+    #ch-delete-confirm { background: var(--eui-danger); color: #fff; }
+    #ch-delete-confirm:disabled, #ch-delete-cancel:disabled { opacity: .55; cursor: wait; }
+    .ch-audit-dialog { width: min(880px, calc(100% - 24px)); }
+    .ch-audit-entry { border: 1px solid var(--eui-border); border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
+    .ch-audit-values { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .ch-audit-values>div { background: var(--eui-surface-2); border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
+    .ch-audit-values p { font-size: 12px; margin-top: 5px; }
+    .ch-audit-list { display: grid; gap: 12px; }
+    @media(max-width:600px) { .ch-audit-values { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
@@ -126,6 +139,7 @@
                     <input class="eui-input" id="ch-busca" type="search" placeholder="Buscar por código, descrição, lote, NF, AR, fornecedor ou conferente...">
                 </div>
                 <div class="ch-actions">
+                    <button type="button" class="eui-btn eui-btn--ghost" id="ch-audit-open"><i class="fas fa-clock-rotate-left"></i> Histórico de alterações</button>
                     <span class="ch-muted" id="ch-updated"></span>
                     <button class="eui-btn eui-btn--ghost" id="ch-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
@@ -139,6 +153,20 @@
 </div>
 
 <!-- Modal calculadora -->
+<dialog id="ch-audit-dialog" class="ch-delete-dialog ch-audit-dialog" aria-labelledby="ch-audit-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-audit-title"><i class="fas fa-clock-rotate-left"></i> Histórico de alterações</div><button type="button" class="eui-btn eui-btn--ghost" id="ch-audit-close">Fechar</button></div>
+    <div class="ch-modal__body"><label for="ch-audit-search" class="ch-muted">Buscar NF, código, AR, usuário ou ação</label><input id="ch-audit-search" class="eui-input" type="search" placeholder="Ex.: exclusão, unidades, NF ou código">
+        <p class="ch-muted">Exclusões, unidades e cálculos registrados a partir da ativação desta auditoria. Os históricos anteriores de cálculo continuam disponíveis na calculadora.</p>
+        <div id="ch-audit-list" class="ch-audit-list" aria-live="polite"></div></div>
+    <div class="ch-modal__foot"><button type="button" id="ch-audit-prev" class="eui-btn eui-btn--ghost">Anterior</button><span id="ch-audit-page" class="ch-muted"></span><button type="button" id="ch-audit-next" class="eui-btn eui-btn--ghost">Próxima</button></div>
+</dialog>
+{% if pode_excluir_chapas %}
+<dialog id="ch-delete-dialog" class="ch-delete-dialog" aria-labelledby="ch-delete-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-delete-title"><i class="fas fa-trash-can"></i> Excluir do controle de chapas</div></div>
+    <div class="ch-modal__body"><p id="ch-delete-item"></p><p class="ch-muted">O item será removido deste controle, inclusive do histórico de zerados. A NF, os dados da conferência e os cálculos serão preservados. O saldo no GRV não será alterado.</p><p id="ch-delete-error" role="alert" class="ch-delete-btn"></p></div>
+    <div class="ch-modal__foot"><button type="button" id="ch-delete-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-delete-confirm" class="eui-btn eui-btn--danger">Excluir do controle</button></div>
+</dialog>
+{% endif %}
 <div class="ch-overlay" id="ch-calc-overlay">
     <div class="ch-modal">
         <div class="ch-modal__head">
@@ -194,6 +222,41 @@
     let saldoCod = {};
     let reservasOs = {};
     let linhaAtual = null;
+    let cargaVersao = 0;
+    let auditoriaPagina = 1, auditoriaVersao = 0, auditoriaTimer;
+
+    function valoresAuditoria(valores) {
+        if (!valores) return '<p>Sem registro anterior</p>';
+        const labels = {und:'Quantidade (UND)', no_controle:'Visível no controle', kg_nf:'Peso da NF (KG)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (KG)'};
+        const dimensoes = {espessura:'Espessura', largura:'Largura', comprimento:'Comprimento', diametro:'Diâmetro', parede:'Parede', lado:'Lado', altura:'Altura', aba:'Aba', bitola:'Bitola'};
+        return Object.entries(valores).map(([campo,valor]) => {
+            if (campo === 'dimensoes' && valor && typeof valor === 'object') valor = Object.entries(valor).map(([k,v]) => `${dimensoes[k] || k}: ${v}`).join(' · ');
+            if (typeof valor === 'boolean') valor = valor ? 'Sim' : 'Não';
+            return `<p><b>${esc(labels[campo] || campo)}:</b> ${esc(valor == null ? 'Não informado' : String(valor))}</p>`;
+        }).join('');
+    }
+    async function carregarAuditoria() {
+        const versao = ++auditoriaVersao;
+        $('ch-audit-list').textContent = 'Carregando histórico...';
+        try {
+            const resp = await fetch('/api/logistica/chapas/auditoria?' + new URLSearchParams({q:$('ch-audit-search').value, pagina:auditoriaPagina}));
+            const data = await resp.json();
+            if (versao !== auditoriaVersao) return;
+            if (!resp.ok) throw new Error(data.error || 'Não foi possível carregar o histórico.');
+            $('ch-audit-list').innerHTML = data.logs.length ? data.logs.map((log) => `<article class="ch-audit-entry">
+                <b>${esc(log.acao)}</b><span class="ch-muted">${esc(new Date(log.data).toLocaleString('pt-BR'))} · ${esc(log.usuario)}</span>
+                <p>${esc(log.codigo || '-')} · ${esc(log.descricao || '')}</p><span class="ch-muted">NF ${esc(log.nf || '-')} · AR ${esc(log.ar || '-')} · Item ${log.item_id}</span>
+                <div class="ch-audit-values"><div><b>Antes</b>${valoresAuditoria(log.antes)}</div><div><b>Depois</b>${valoresAuditoria(log.depois)}</div></div></article>`).join('') : '<span class="ch-muted">Nenhum registro para este filtro.</span>';
+            $('ch-audit-page').textContent = `Página ${data.pagina} · ${data.total} registro(s)`;
+            $('ch-audit-prev').disabled = auditoriaPagina === 1;
+            $('ch-audit-next').disabled = auditoriaPagina * 40 >= data.total;
+        } catch(e) { if (versao === auditoriaVersao) $('ch-audit-list').textContent = e.message; }
+    }
+    $('ch-audit-open').onclick = () => { auditoriaPagina=1; $('ch-audit-dialog').showModal(); carregarAuditoria(); };
+    $('ch-audit-close').onclick = () => $('ch-audit-dialog').close();
+    $('ch-audit-prev').onclick = () => { auditoriaPagina--; carregarAuditoria(); };
+    $('ch-audit-next').onclick = () => { auditoriaPagina++; carregarAuditoria(); };
+    $('ch-audit-search').oninput = () => { clearTimeout(auditoriaTimer); auditoriaTimer=setTimeout(() => { auditoriaPagina=1; carregarAuditoria(); }, 300); };
 
     const MATERIAIS = {
         aco_carbono: { label: 'Aço Carbono', densidade: 7.85 },
@@ -258,6 +321,7 @@
                     ${diffHtml(i.pct_diferenca)}
                     <span class="ch-lote__peso">${i.peso_por_peca != null ? fmt(i.peso_por_peca, 1) + ' kg/peça' : 'sem cálculo'}</span>
                     <button class="eui-btn eui-btn--primary eui-btn--sm" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar cálculo' : 'Calcular'}</button>
+                    {% if pode_excluir_chapas %}<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm ch-delete-btn" data-excluir-item="${i.item_id}" aria-label="Excluir item do controle de chapas"><i class="fas fa-trash-can"></i> Excluir</button>{% endif %}
                 </div>
             </div>
             <div class="ch-metrics">
@@ -351,9 +415,48 @@
             const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
             if (linha) abrirCalc(linha);
         }));
+        {% if pode_excluir_chapas %}
+        document.querySelectorAll('#ch-groups button[data-excluir-item]').forEach((btn) => btn.addEventListener('click', () => {
+            const linha = cache.find((x) => String(x.item_id) === btn.dataset.excluirItem);
+            if (!linha) return;
+            itemExcluir = linha;
+            $('ch-delete-item').textContent = `${linha.codigo || 'Item'} · ${linha.descricao || ''}\nNF ${linha.numero_nota || '-'} · AR ${linha.ar || 'Não informado'} · Lote ${linha.lote || '-'}`;
+            $('ch-delete-error').textContent = '';
+            $('ch-delete-dialog').showModal();
+            $('ch-delete-cancel').focus();
+        }));
+        {% endif %}
     }
 
+    {% if pode_excluir_chapas %}
+    let itemExcluir = null, excluindo = false;
+    $('ch-delete-cancel').onclick = () => { if (!excluindo) $('ch-delete-dialog').close(); };
+    $('ch-delete-dialog').addEventListener('cancel', (e) => { if (excluindo) e.preventDefault(); });
+    $('ch-delete-confirm').onclick = async () => {
+        if (!itemExcluir || excluindo) return;
+        const id = itemExcluir.item_id;
+        excluindo = true;
+        $('ch-delete-confirm').disabled = $('ch-delete-cancel').disabled = true;
+        $('ch-delete-error').textContent = '';
+        try {
+            const resp = await fetch(`/api/logistica/chapas/${id}`, {
+                method: 'DELETE', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({confirmacao_item_id:id}),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível excluir. Tente novamente.');
+            cargaVersao++;
+            cache = cache.filter((i) => i.item_id !== id);
+            render();
+            $('ch-delete-dialog').close();
+            $('ch-updated').textContent = 'Item excluído do controle de chapas.';
+        } catch (e) { $('ch-delete-error').textContent = e.message; }
+        finally { excluindo = false; $('ch-delete-confirm').disabled = $('ch-delete-cancel').disabled = false; }
+    };
+    {% endif %}
+
     async function carregar() {
+        const versao = ++cargaVersao;
         $('ch-state').style.display = 'block';
         $('ch-state').textContent = 'Carregando chapas...';
         const params = new URLSearchParams();
@@ -362,6 +465,7 @@
         try {
             const resp = await fetch('/api/logistica/chapas?' + params.toString());
             const data = await resp.json().catch(() => ({}));
+            if (versao !== cargaVersao) return;
             if (!resp.ok) throw new Error(data.error || 'Falha ao carregar chapas.');
             densidades = data.densidades || {};
             cache = data.itens || [];
@@ -370,7 +474,8 @@
             render();
             $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
         } catch (e) {
-            $('ch-table').style.display = 'none';
+            if (versao !== cargaVersao) return;
+            $('ch-groups').replaceChildren();
             $('ch-state').style.display = 'block';
             $('ch-state').textContent = e.message || 'Falha ao carregar chapas.';
         }
@@ -520,6 +625,7 @@
     // ERP) e a cada 60s. Pula se a calculadora estiver aberta, pra não atrapalhar.
     function autoAtualizar() {
         if ($('ch-calc-overlay').classList.contains('open')) return;
+        if ($('ch-delete-dialog')?.open) return;
         carregar();
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) autoAtualizar(); });

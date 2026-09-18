@@ -83,6 +83,8 @@ def faturar_ordem_avulso(solicitacao_id):
             # Sem itens, fatura tudo que falta; com itens, só aquele grupo —
             # é assim que uma solicitação vira mais de uma nota.
             item_ids=payload.get("itens"),
+            # Prazo de retorno: quem informa é o Fiscal, junto com a nota.
+            data_prevista_retorno=payload.get("data_prevista_retorno"),
         )
     except svc.SolicitacaoNFError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

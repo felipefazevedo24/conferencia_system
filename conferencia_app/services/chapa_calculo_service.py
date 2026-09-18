@@ -75,6 +75,7 @@ def validar_calculo(dados):
 
 
 def salvar_calculo_item(item, dados, usuario):
+    from .chapa_auditoria_service import registrar
     material, formato, dimensoes, peso = validar_calculo(dados)
     calc = ChapaCalculo.query.filter_by(numero_nota=item.numero_nota, item_nota_id=item.id).first()
     anterior = None
@@ -101,4 +102,5 @@ def salvar_calculo_item(item, dados, usuario):
         dados_anteriores=json.dumps(anterior, ensure_ascii=False) if anterior else "",
         dados_novos=json.dumps(novo, ensure_ascii=False),
     ))
+    registrar(item, 'Cálculo criado' if anterior is None else 'Cálculo alterado', usuario, anterior, novo)
     return calc
