@@ -1,3 +1,4 @@
+import base64
 import io
 import hashlib
 import hmac
@@ -6891,10 +6892,11 @@ def test_inventario_pdf_tem_apenas_duas_assinaturas_nomeadas(tmp_path):
     from conferencia_app.services import logistica_inventario_ajuste_service as svc
     from conferencia_app.services.logistica_inventario_relatorio_pdf import ASSINATURAS
 
-    # A fonte da verdade e' a constante - duas, com cargo e nome.
+    # A fonte da verdade e' a constante - duas, com cargo, nome e o arquivo
+    # da rubrica digitalizada.
     assert len(ASSINATURAS) == 2
-    assert ASSINATURAS[0] == ("Responsável Supply Chain", "Filipe Oliveira")
-    assert ASSINATURAS[1] == ("Responsável Finanças", "Ricardo Serrano")
+    assert ASSINATURAS[0][:2] == ("Responsável Supply Chain", "Filipe Oliveira")
+    assert ASSINATURAS[1][:2] == ("Responsável Finanças", "Ricardo Serrano")
 
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -7054,3 +7056,66 @@ def test_inventario_descricao_do_erp_entra_no_ajuste_e_backfill_nao_quebra(tmp_p
         with patch.object(erp_estoque_service, "buscar_estoque_grv", side_effect=RuntimeError("ERP fora")):
             svc.garantir_descricoes([sem_descricao])  # nao pode levantar
         assert sem_descricao.descricao_produto is None
+
+
+# PNG 1x1 valido - serve de rubrica falsa nos testes, sem depender de
+# arquivo real no repositorio.
+_PNG_MINIMO = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+def test_inventario_pdf_desenha_a_rubrica_quando_o_arquivo_existe(tmp_path):
+    """As rubricas digitalizadas (static/assinaturas/) sao desenhadas ACIMA
+    da linha de assinatura. Sem o arquivo, o PDF sai com a linha em branco
+    pra assinar a mao - nunca quebra."""
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+    from conferencia_app.services import logistica_inventario_relatorio_pdf as pdf_svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="SKU-RUBRICA")
+        ajuste_id = ajuste.id
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+
+    gerado = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Cíclico", "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+        "responsavel": "Responsável", "solicitante": "Solicitante", "depto": "LOGÍSTICA",
+    })
+    relatorio_id = gerado.get_json()["relatorio_id"]
+    url_pdf = f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf"
+
+    # Sem os arquivos: gera normalmente, so' com as linhas em branco.
+    pasta_vazia = tmp_path / "sem_assinaturas"
+    pasta_vazia.mkdir()
+    with patch.object(pdf_svc, "PASTA_ASSINATURAS", pasta_vazia):
+        sem_rubrica = client.get(url_pdf)
+        assert sem_rubrica.status_code == 200
+        assert sem_rubrica.data[:4] == b"%PDF"
+        assert pdf_svc._rubrica("filipe_oliveira.png") is None
+
+    # Com os arquivos: as imagens entram no PDF (o documento cresce e passa
+    # a ter objetos de imagem).
+    pasta_com = tmp_path / "com_assinaturas"
+    pasta_com.mkdir()
+    for _cargo, _nome, arquivo in pdf_svc.ASSINATURAS:
+        (pasta_com / arquivo).write_bytes(_PNG_MINIMO)
+    with patch.object(pdf_svc, "PASTA_ASSINATURAS", pasta_com):
+        assert pdf_svc._rubrica("filipe_oliveira.png") is not None
+        com_rubrica = client.get(url_pdf)
+        assert com_rubrica.status_code == 200
+        assert com_rubrica.data.count(b"/Image") > sem_rubrica.data.count(b"/Image")
+
+    # Arquivo corrompido nao derruba a geracao.
+    pasta_ruim = tmp_path / "assinatura_corrompida"
+    pasta_ruim.mkdir()
+    (pasta_ruim / "filipe_oliveira.png").write_bytes(b"isso nao e uma imagem")
+    with patch.object(pdf_svc, "PASTA_ASSINATURAS", pasta_ruim):
+        assert pdf_svc._rubrica("filipe_oliveira.png") is None
+        assert client.get(url_pdf).status_code == 200

@@ -25,10 +25,20 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 # Assinaturas do rodape do formulario. Ficam aqui (e nao no banco) porque
 # sao os responsaveis fixos do processo - trocou a pessoa, troca aqui.
 # Producao saiu: o ajuste de inventario nao passa por aprovacao dela.
+#
+# O terceiro item e' o arquivo da rubrica digitalizada em
+# static/assinaturas/. Se o arquivo nao existir, o PDF sai com a linha em
+# branco pra assinar a mao - nada quebra.
+PASTA_ASSINATURAS = Path(__file__).resolve().parents[2] / "static" / "assinaturas"
 ASSINATURAS = (
-    ("Responsável Supply Chain", "Filipe Oliveira"),
-    ("Responsável Finanças", "Ricardo Serrano"),
+    ("Responsável Supply Chain", "Filipe Oliveira", "filipe_oliveira.png"),
+    ("Responsável Finanças", "Ricardo Serrano", "ricardo_serrano.png"),
 )
+
+# Altura fixa pra as duas rubricas sairem no mesmo tamanho, independente da
+# resolucao com que foram digitalizadas.
+ALTURA_ASSINATURA_MM = 12
+LARGURA_MAX_ASSINATURA_MM = 50
 
 COR_AZUL_ESCURA = colors.HexColor("#1B3B6F")
 COR_AZUL_TABELA = colors.HexColor("#3E6D93")
@@ -94,6 +104,30 @@ def _imagem_flowable(dados: bytes, max_width: float, max_height: float) -> Image
             return None
         escala = min(max_width / float(iw), max_height / float(ih), 1.0)
         return Image(BytesIO(dados), width=iw * escala, height=ih * escala)
+    except Exception:
+        return None
+
+
+def _rubrica(nome_arquivo: str) -> Image | None:
+    """Rubrica digitalizada de static/assinaturas/, na altura padrao. Devolve
+    None quando o arquivo nao existe (ou nao e' imagem valida) - ai' o PDF
+    sai com a linha em branco, como antes."""
+    if not nome_arquivo:
+        return None
+    caminho = PASTA_ASSINATURAS / nome_arquivo
+    if not caminho.is_file():
+        return None
+    try:
+        largura_px, altura_px = ImageReader(str(caminho)).getSize()
+        if not largura_px or not altura_px:
+            return None
+        altura = ALTURA_ASSINATURA_MM * mm
+        largura = largura_px * (altura / float(altura_px))
+        maxima = LARGURA_MAX_ASSINATURA_MM * mm
+        if largura > maxima:  # rubrica muito larga: limita e reduz a altura junto
+            altura *= maxima / largura
+            largura = maxima
+        return Image(str(caminho), width=largura, height=altura)
     except Exception:
         return None
 
@@ -368,17 +402,26 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
 
     # ---- Rodape: assinaturas ----
     linha_assinatura = "_" * 38
+    # A rubrica fica ACIMA da linha; sem o arquivo, a celula sai vazia e o
+    # formulario continua servindo pra assinar a mao.
+    rubricas = [_rubrica(arquivo) or "" for _cargo, _nome, arquivo in ASSINATURAS]
     rodape = Table(
         [
+            rubricas,
             [_p(linha_assinatura, size=9, align=TA_CENTER) for _ in ASSINATURAS],
-            [_p(nome, size=8.5, align=TA_CENTER) for _cargo, nome in ASSINATURAS],
-            [_p(cargo, size=7.5, color=COR_MUTED, align=TA_CENTER) for cargo, _nome in ASSINATURAS],
+            [_p(nome, size=8.5, align=TA_CENTER) for _cargo, nome, _arquivo in ASSINATURAS],
+            [_p(cargo, size=7.5, color=COR_MUTED, align=TA_CENTER) for cargo, _nome, _arquivo in ASSINATURAS],
         ],
         colWidths=[largura / len(ASSINATURAS)] * len(ASSINATURAS),
+        rowHeights=[ALTURA_ASSINATURA_MM * mm, None, None, None],
     )
     rodape.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        # Rubrica centralizada e "sentada" na linha de assinatura.
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, 0), "BOTTOM"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
     ]))
     el.append(rodape)
     el.append(Spacer(1, 6))
