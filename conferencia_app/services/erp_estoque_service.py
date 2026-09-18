@@ -473,6 +473,19 @@ def qtde_grv_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any
     return float(agregado.get("qtde_total") or 0)
 
 
+def descricao_para(codigo_produto: str, estoque: dict[str, Any]) -> str | None:
+    """Descricao do produto (tproduto.nome, campo "item" do GRV) pra um
+    codigo do inventario. A descricao nao varia por localizacao, entao
+    basta o agregado por codigo. Retorna None se o codigo nao existir."""
+    codigo = str(codigo_produto or "").strip().upper()
+    if not codigo:
+        return None
+    agregado = estoque.get("por_codigo", {}).get(codigo)
+    if not agregado:
+        return None
+    return str(agregado.get("item") or "").strip() or None
+
+
 def custo_medio_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any]) -> float | None:
     """Resolve o custo medio (tproduto.preco_custo, vindo do bridge do ERP)
     do GRV pra um item do inventario, mesma logica de casamento do

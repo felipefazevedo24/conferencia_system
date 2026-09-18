@@ -6970,3 +6970,87 @@ def test_inventario_pdf_titulo_ajuste_de_inventario_na_linha_do_logo(tmp_path):
     assert topo("AJUSTE DE INVENT") < topo("Documento:")
     # E na mesma faixa vertical da caixa FORM-08.52 (tolerancia de 1 linha).
     assert abs(topo("AJUSTE DE INVENT") - topo("FORM-08.52")) < 30
+
+
+def test_inventario_pdf_traz_a_descricao_do_item(tmp_path):
+    """A tabela do FORM-08.52 passa a ter a coluna Descricao, alimentada
+    pelo snapshot gravado quando a divergencia foi detectada (assim o
+    documento sai completo mesmo com o ERP fora do ar)."""
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    descricao = "CHAPA A36 - 1/4'' (6,30MM) LAMINADA A QUENTE"
+    with app.app_context():
+        ajuste = _ajuste_divergente(codigo="19-01-00558")
+        ajuste.descricao_produto = descricao
+        db.session.commit()
+        ajuste_id = ajuste.id
+        svc.registrar_recontagem(ajuste, 5, "GESTOR", qtde_estoque_atual=8)
+        svc.confirmar_divergencia(ajuste, "GESTOR", "avaria")
+
+    gerado = client.post("/api/logistica/inventario-ajustes/relatorio", json={
+        "ajuste_ids": [ajuste_id],
+        "tipo_ajuste": "Inventário Cíclico", "motivo_ajuste": "Erro de contagem",
+        "deposito_tipo": "Depósito - Principal",
+        "responsavel": "Responsável", "solicitante": "Solicitante", "depto": "LOGÍSTICA",
+    })
+    relatorio_id = gerado.get_json()["relatorio_id"]
+    pdf = client.get(f"/api/logistica/inventario-ajustes/relatorio/{relatorio_id}.pdf").data
+
+    # PDF sai sem compressao (pageCompression=0) - da' pra conferir nos bytes.
+    assert b"Descri" in pdf                       # cabecalho da coluna
+    assert b"CHAPA A36" in pdf                    # a descricao do item
+    assert b"19-01-00558" in pdf                  # codigo continua
+    assert b"A01" in pdf                          # local nao foi substituido
+
+
+def test_inventario_descricao_do_erp_entra_no_ajuste_e_backfill_nao_quebra(tmp_path):
+    """A descricao vem do GRV no momento da deteccao. Item antigo (sem o
+    snapshot) e' completado sob demanda - e se o ERP estiver fora do ar,
+    isso nao pode impedir a geracao do relatorio."""
+    from conferencia_app.models import LogisticaInventarioAjuste, LogisticaInventarioInicial
+    from conferencia_app.services import erp_estoque_service
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    estoque_falso = {"por_codigo": {"19-01-00558": {"item": "CHAPA A36 - 1/4''", "qtde_total": 8}}, "por_local": {}}
+    assert erp_estoque_service.descricao_para("19-01-00558", estoque_falso) == "CHAPA A36 - 1/4''"
+    assert erp_estoque_service.descricao_para("NAO-EXISTE", estoque_falso) is None
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        contagem = LogisticaInventarioInicial(
+            local_codigo="A01", codigo_produto="19-01-00558", unidade_medida="UN",
+            quantidade=5, criado_por="OPERADOR",
+        )
+        db.session.add(contagem)
+        db.session.commit()
+
+        ajuste = svc.detectar_divergencia(contagem, 8.0, 2.0, "CHAPA A36 - 1/4''")
+        assert ajuste.descricao_produto == "CHAPA A36 - 1/4''"
+
+        # Item antigo, sem descricao: o backfill completa consultando o GRV.
+        antigo = LogisticaInventarioAjuste(
+            codigo_produto="19-01-00558", local_codigo="B02", unidade_medida="UN",
+            qtde_contada=1, qtde_estoque_no_momento=4, diferenca=-3,
+            status_modulo="Relatorio", status_slug="relatorio",
+        )
+        db.session.add(antigo)
+        db.session.commit()
+        with patch.object(erp_estoque_service, "buscar_estoque_grv", return_value=estoque_falso):
+            svc.garantir_descricoes([antigo])
+        assert antigo.descricao_produto == "CHAPA A36 - 1/4''"
+
+        # ERP fora do ar: apenas nao preenche - nunca estoura.
+        sem_descricao = LogisticaInventarioAjuste(
+            codigo_produto="SEM-ERP", local_codigo="C03", unidade_medida="UN",
+            qtde_contada=1, qtde_estoque_no_momento=2, diferenca=-1,
+            status_modulo="Relatorio", status_slug="relatorio",
+        )
+        db.session.add(sem_descricao)
+        db.session.commit()
+        with patch.object(erp_estoque_service, "buscar_estoque_grv", side_effect=RuntimeError("ERP fora")):
+            svc.garantir_descricoes([sem_descricao])  # nao pode levantar
+        assert sem_descricao.descricao_produto is None
