@@ -98,6 +98,12 @@
     .item-row .info span { color: var(--muted); font-size: 12px; }
     .item-row .btn-x { background: transparent; border: none; color: var(--err); cursor: pointer; padding: 6px; flex-shrink: 0; }
     .empty-list { text-align: center; color: var(--muted); font-size: 13px; padding: 14px; }
+    .item-row--detalhado { flex-wrap: wrap; align-items: flex-start; }
+    .item-row--detalhado .info { flex: 1 1 240px; min-width: 0; }
+    .item-config { display: flex; gap: 10px; flex-wrap: wrap; }
+    .item-config label { font-size: 11px; font-weight: 600; color: var(--muted); display: grid; gap: 4px; }
+    .item-config select { font: inherit; font-size: 13px; border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--text); max-width: 230px; }
 
     .btn { font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; border: none; border-radius: var(--radius); padding: 13px 22px; display: inline-flex; align-items: center; gap: 9px; transition: filter .15s, transform .05s; }
     .btn:active { transform: translateY(1px); }
@@ -182,6 +188,7 @@
           <!-- 2) Tipo de operacao -->
           <div class="section">
             <div class="section-title"><span class="step">2</span> Tipo de operação</div>
+            <p class="hint">Vale para os materiais que você adicionar. Dá para trocar item a item na lista, se um deles for de outro tipo.</p>
             <div class="segmented tipo-op" id="tipoSeg">
               {% for tipo in tipos_operacao %}
               <div class="seg-option" data-tipo="{{ tipo.nome }}" role="button" tabindex="0"
@@ -201,6 +208,7 @@
           <!-- 3) O material volta? Sugerido pelo tipo, confirmado por quem pede -->
           <div class="section">
             <div class="section-title"><span class="step">3</span> O material vai voltar?</div>
+            <p class="hint">Também vale por item: o tipo sugere, mas quem pede é quem sabe.</p>
             <div class="segmented" id="retornoSeg">
               <div class="seg-option" data-retorno="sim" role="button" tabindex="0">
                 <i class="fas fa-rotate-left"></i><span>Sim — precisa voltar</span>
@@ -479,12 +487,38 @@
     if (!materialSelecionado) { showFeedback("Selecione um material da lista antes de adicionar.", "err"); return; }
     if (!qtde || qtde <= 0) { showFeedback("Informe uma quantidade válida.", "err"); return; }
     clearFeedback();
-    itens.push({ material_codigo: materialSelecionado.codigo_interno, material_nome: materialSelecionado.nome, quantidade: qtde });
+    if (!$("tipoOperacao").value) { showFeedback("Selecione o tipo de operação antes de adicionar.", "err"); return; }
+    itens.push({
+      material_codigo: materialSelecionado.codigo_interno,
+      material_nome: materialSelecionado.nome,
+      quantidade: qtde,
+      // Cada item leva a propria operacao: itens de tipos diferentes nao
+      // entram na mesma nota fiscal.
+      tipo_operacao: $("tipoOperacao").value,
+      necessita_retorno: $("necessitaRetorno").value === "sim",
+    });
     renderItens();
     materialSelecionado = null;
     $("buscaMaterial").value = "";
     $("txtQuantidade").value = "";
     $("helpMaterial").textContent = "Selecione um material da lista antes de adicionar.";
+  };
+
+  const TIPOS = Array.from(document.querySelectorAll("#tipoSeg .seg-option"))
+    .map((o) => o.dataset.tipo);
+  const RETORNO_SUGERIDO = Object.fromEntries(
+    Array.from(document.querySelectorAll("#tipoSeg .seg-option"))
+      .map((o) => [o.dataset.tipo, o.dataset.retornoSugerido === "sim"]));
+
+  window.mudarTipoItem = function (idx, valor) {
+    itens[idx].tipo_operacao = valor;
+    // Trocar a operacao do item traz junto o retorno sugerido dela.
+    itens[idx].necessita_retorno = RETORNO_SUGERIDO[valor] ?? itens[idx].necessita_retorno;
+    renderItens();
+  };
+
+  window.mudarRetornoItem = function (idx, valor) {
+    itens[idx].necessita_retorno = valor === "sim";
   };
 
   window.removerItem = function (idx) {
@@ -498,9 +532,25 @@
       container.innerHTML = '<div class="empty-list">Nenhum item adicionado ainda.</div>';
       return;
     }
+    const opcoes = (atual) => TIPOS.map((t) =>
+      `<option value="${t}" ${t === atual ? "selected" : ""}>${t}</option>`).join("");
     container.innerHTML = itens.map((it, idx) => `
-      <div class="item-row">
-        <div class="info"><strong>${it.material_codigo} - ${it.material_nome}</strong><span>Quantidade: ${it.quantidade}</span></div>
+      <div class="item-row item-row--detalhado">
+        <div class="info">
+          <strong>${it.material_codigo} - ${it.material_nome}</strong>
+          <span>Quantidade: ${it.quantidade}</span>
+        </div>
+        <div class="item-config">
+          <label>Operação
+            <select onchange="mudarTipoItem(${idx}, this.value)">${opcoes(it.tipo_operacao)}</select>
+          </label>
+          <label>Volta?
+            <select onchange="mudarRetornoItem(${idx}, this.value)">
+              <option value="sim" ${it.necessita_retorno ? "selected" : ""}>Sim</option>
+              <option value="nao" ${it.necessita_retorno ? "" : "selected"}>Não</option>
+            </select>
+          </label>
+        </div>
         <button type="button" class="btn-x" onclick="removerItem(${idx})"><i class="fas fa-trash"></i></button>
       </div>
     `).join("");

@@ -73,16 +73,18 @@
 
 /* A tela deixou de ser aba: o painel nao fica mais escondido por padrao. */
 #avulso-panel { display: block; }
-.at-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.at-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.at-module { display: grid; gap: 18px; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="at-module" id="at-root" data-is-admin="{{ 'true' if session.get('role') == 'Admin' else 'false' }}">
- <header class="eui-page-head at-toolbar">
+ <header class="eui-page-header at-header">
   <div>
-   <h1 class="eui-page-title"><i class="fas fa-screwdriver-wrench"></i> Assistência Técnica</h1>
-   <p class="eui-page-sub">Solicitações de NF abertas pelo formulário público: separação, faturamento
-    e retorno do material. <strong id="at-total">0</strong> solicitação(ões) na lista.</p>
+   <div class="eui-page-header__eyebrow">Assistência Técnica</div>
+   <h1 class="eui-page-header__title"><i class="fas fa-screwdriver-wrench"></i> Solicitações de NF</h1>
+   <p class="eui-page-header__sub">Abertas pelo formulário público: separação, faturamento e retorno
+    do material. <strong id="at-total">0</strong> na lista.</p>
   </div>
   <a class="eui-btn eui-btn--secondary" href="/solicitacao-nf" target="_blank" rel="noopener">
    <i class="fas fa-up-right-from-square"></i> Abrir formulário do solicitante</a>
@@ -101,69 +103,40 @@
                     <button class="eui-btn eui-btn--ghost" id="avulso-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
 
-                <div class="eui-stats" id="avulso-metrics">
+                <!-- Quatro indicadores, por ACAO, em vez de um por status
+                     interno: o operador quer saber o que fazer agora, nao em
+                     qual dos sete estados a solicitacao esta. Cada um filtra. -->
+                <div class="eui-stats at-stats" id="avulso-metrics">
                     <div class="eui-stat is-clickable" data-filter="em_separacao">
                         <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
                         <div class="eui-stat__body">
-                            <span class="eui-stat__label">Em separação</span>
+                            <span class="eui-stat__label">A separar</span>
                             <span class="eui-stat__value" id="avulso-m-em_separacao">0</span>
-                            <span class="eui-stat__hint">Novas solicitações</span>
+                            <span class="eui-stat__hint">Chegaram do formulário</span>
                         </div>
                     </div>
-                    <div class="eui-stat is-clickable" data-filter="expedido_sem_nf">
-                        <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-dolly"></i></div>
+                    <div class="eui-stat is-clickable" data-filter="a_faturar">
+                        <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-file-invoice-dollar"></i></div>
                         <div class="eui-stat__body">
-                            <span class="eui-stat__label">Expedido sem nota fiscal</span>
-                            <span class="eui-stat__value" id="avulso-m-expedido_sem_nf">0</span>
-                            <span class="eui-stat__hint">Aguardando faturamento</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="aguardando_faturamento">
-                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Aguardando faturamento</span>
-                            <span class="eui-stat__value" id="avulso-m-aguardando_faturamento">0</span>
-                            <span class="eui-stat__hint">Conserto / retorno demonstração</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="nf_emitida">
-                        <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Notas fiscais emitidas</span>
-                            <span class="eui-stat__value" id="avulso-m-nf_emitida">0</span>
-                            <span class="eui-stat__hint">Garantia / Bonificação</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_assistencia">
-                        <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-screwdriver-wrench"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque c/ Assistência técnica</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_assistencia">0</span>
-                            <span class="eui-stat__hint">Atendimento técnico</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_terceiros">
-                        <div class="eui-stat__icon eui-stat__icon--primary"><i class="fas fa-people-carry-box"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque em poder de terceiros</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_terceiros">0</span>
-                            <span class="eui-stat__hint">Teste</span>
+                            <span class="eui-stat__label">A faturar</span>
+                            <span class="eui-stat__value" id="avulso-m-a_faturar">0</span>
+                            <span class="eui-stat__hint">Separadas, esperando a nota</span>
                         </div>
                     </div>
                     <div class="eui-stat is-clickable" data-filter="pendencia_estoque">
-                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-triangle-exclamation"></i></div>
+                        <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-rotate-left"></i></div>
                         <div class="eui-stat__body">
-                            <span class="eui-stat__label">Pendência de estoque</span>
+                            <span class="eui-stat__label">Aguardando retorno</span>
                             <span class="eui-stat__value" id="avulso-m-pendencia_estoque">0</span>
-                            <span class="eui-stat__hint">Ainda não retornou</span>
+                            <span class="eui-stat__hint">Material ainda fora</span>
                         </div>
                     </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_retornado">
-                        <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
+                    <div class="eui-stat is-clickable" data-filter="concluidas">
+                        <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div>
                         <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque retornado</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_retornado">0</span>
-                            <span class="eui-stat__hint">Material de volta</span>
+                            <span class="eui-stat__label">Concluídas</span>
+                            <span class="eui-stat__value" id="avulso-m-concluidas">0</span>
+                            <span class="eui-stat__hint">Nota emitida ou material de volta</span>
                         </div>
                     </div>
                 </div>

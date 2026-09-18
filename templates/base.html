@@ -346,18 +346,6 @@
 
                 {% endif %}
 
-                {% if can_access('PAGE_ASSISTENCIA_TECNICA') %}
-                <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-assistencia-tecnica" aria-expanded="true">
-                        <span class="nav-group-title"><i class="fas fa-screwdriver-wrench"></i><span>Assistência Técnica</span></span>
-                        <i class="fas fa-chevron-right nav-chevron"></i>
-                    </button>
-                    <div class="submenu-panel" id="menu-assistencia-tecnica">
-                        <a href="/assistencia-tecnica" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Solicitações de NF</a>
-                    </div>
-                </div>
-                {% endif %}
-
                 {% if can_access('PAGE_LOGISTICA_CONSUMO_CHAPA') or can_access('PAGE_INTRALOG_PICKING') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-intralog" aria-expanded="true">
@@ -397,6 +385,18 @@
                     <div class="submenu-panel" id="menu-comex">
                         <a href="/comex" class="list-group-item list-group-item-action"><i class="fas fa-ship"></i> Processos de Importação/Exportação</a>
                         <a href="/comex/fornecedores" class="list-group-item list-group-item-action"><i class="fas fa-address-book"></i> Fornecedores</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if can_access('PAGE_ASSISTENCIA_TECNICA') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-assistencia-tecnica" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-screwdriver-wrench"></i><span>Assistência Técnica</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-assistencia-tecnica">
+                        <a href="/assistencia-tecnica" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Solicitações de NF</a>
                     </div>
                 </div>
                 {% endif %}
