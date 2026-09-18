@@ -128,72 +128,6 @@
         .ce-conf-item { grid-template-columns: 32px 1fr 90px; }
     }
 
-    /* Faturamento avulso (Solicitacao de NF) */
-    .avl-item-list { display: grid; gap: 6px; margin-top: 4px; }
-    .avl-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: var(--eui-text); }
-    .avl-item label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .avl-item.is-nao-separado { color: var(--eui-danger); }
-    .avl-obs { width: 100%; border: 1px solid var(--eui-border-strong); border-radius: var(--eui-radius-sm); padding: 8px 12px; font-size: 13px; font-family: inherit; margin-top: 10px; resize: vertical; min-height: 60px; }
-    .avl-nf-row { display: grid; grid-template-columns: 220px 1fr; gap: 10px; margin-top: 10px; align-items: start; }
-    @media (max-width: 640px) { .avl-nf-row { grid-template-columns: 1fr; } }
-    .avl-detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .avl-admin-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--eui-border); }
-
-    /* Cartao da solicitacao (visual repaginado) */
-    .avl-card { border: 1px solid var(--eui-border, #e3e8ef); border-radius: 14px; background: var(--eui-surface, #fff); overflow: hidden; transition: box-shadow .16s, border-color .16s; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
-    .avl-card + .avl-card { margin-top: 12px; }
-    .avl-card:hover { box-shadow: 0 10px 28px rgba(15,23,42,.10); border-color: #cdd7e5; }
-    .avl-card.is-open { border-color: var(--eui-primary, #0f62c9); box-shadow: 0 12px 34px rgba(15,98,201,.14); }
-    .avl-card__head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
-    .avl-card__accent { width: 4px; align-self: stretch; border-radius: 4px; background: var(--eui-border, #e3e8ef); }
-    .avl-card.acc-warning .avl-card__accent { background: #f59e0b; }
-    .avl-card.acc-info .avl-card__accent { background: #3b82f6; }
-    .avl-card.acc-violet .avl-card__accent { background: #8b5cf6; }
-    .avl-card.acc-primary .avl-card__accent { background: #0f62c9; }
-    .avl-card.acc-danger .avl-card__accent { background: #ef4444; }
-    .avl-card.acc-success .avl-card__accent { background: #16a34a; }
-    .avl-card__id { min-width: 0; }
-    .avl-card__title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--eui-text, #0f172a); }
-    .avl-card__title b { font-family: var(--eui-font-display, inherit); letter-spacing: .2px; }
-    .avl-card__title .avl-cliente { font-weight: 600; }
-    .avl-card__title .sep { color: var(--eui-text-muted, #94a3b8); }
-    .avl-chip-tipo { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #eef2ff; color: #4338ca; white-space: nowrap; }
-    .avl-card__meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; font-size: 12px; color: var(--eui-text-muted, #64748b); }
-    .avl-card__meta i { margin-right: 4px; opacity: .8; }
-    .avl-card__toggle { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--eui-border, #e3e8ef); background: var(--eui-surface-2, #f5f8fd); color: var(--eui-text, #334155); cursor: pointer; display: grid; place-items: center; transition: transform .2s, background .15s; flex-shrink: 0; }
-    .avl-card__toggle:hover { background: #eaf1fb; }
-    .avl-card.is-open .avl-card__toggle { transform: rotate(180deg); background: #eaf1fb; color: var(--eui-primary, #0f62c9); }
-    .avl-card__detail { display: none; padding: 0 16px 16px; border-top: 1px solid var(--eui-border, #eef0f3); }
-    .avl-card.is-open .avl-card__detail { display: block; }
-
-    /* Barra de etapas (progresso do fluxo) */
-    .avl-steps { display: flex; align-items: center; gap: 0; margin: 14px 0 4px; overflow-x: auto; padding-bottom: 4px; }
-    .avl-step { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; color: var(--eui-text-muted, #94a3b8); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-    .avl-step__dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--eui-surface-3, #eef1f6); color: #94a3b8; font-size: 10px; border: 2px solid transparent; }
-    .avl-step.is-done .avl-step__dot { background: #16a34a; color: #fff; }
-    .avl-step.is-current .avl-step__dot { background: var(--eui-primary, #0f62c9); color: #fff; box-shadow: 0 0 0 4px rgba(15,98,201,.14); }
-    .avl-step.is-current { color: var(--eui-primary, #0f62c9); }
-    .avl-step.is-done { color: #15803d; }
-    .avl-step__bar { width: 26px; height: 2px; background: var(--eui-border, #e3e8ef); margin: 0 4px; flex: 0 0 auto; }
-    .avl-step__bar.is-done { background: #16a34a; }
-
-    /* Tabela de itens (codigo / descricao / local / qtde) */
-    .avl-section-title { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-text-muted, #64748b); margin: 16px 0 8px; display: flex; align-items: center; gap: 7px; }
-    .avl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .avl-table thead th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--eui-text-muted, #94a3b8); padding: 6px 10px; border-bottom: 1px solid var(--eui-border, #e3e8ef); }
-    .avl-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--eui-border, #eef0f3); vertical-align: middle; }
-    .avl-table tbody tr:last-child td { border-bottom: none; }
-    .avl-table tbody tr.is-nao-separado { background: #fef2f2; }
-    .avl-table .avl-td-cod { font-weight: 700; color: var(--eui-text, #0f172a); white-space: nowrap; }
-    .avl-table .avl-td-qtde { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .avl-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-    .avl-local { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 11.5px; font-weight: 600; }
-    .avl-local.is-empty { background: var(--eui-surface-3, #f1f5f9); color: #94a3b8; font-weight: 500; }
-    .avl-local i { font-size: 10px; }
-    .avl-nf-info { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 12px; border-radius: 10px; background: #f0f9ff; border: 1px solid #cfe6fb; margin-top: 12px; }
-    .avl-nf-info .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #0369a1; display: block; }
-    .avl-nf-info .v { font-size: 13px; color: var(--eui-text, #0f172a); }
-
     /* View "Romaneios" — embute a tela de romaneios (mesmo layout/UI) sem
        sair da Conferência de Expedição. */
     .ce-romaneio-iframe { width: 100%; min-height: 78vh; border: none; display: block; background: var(--eui-surface-2, #f1f6fb); border-radius: var(--eui-radius); }
@@ -638,113 +572,12 @@
                 <i class="fas fa-people-carry-box"></i> Serv. terceiro (ST)
                 <span class="ce-tab-count" id="st-tab-count">0</span>
             </button>
-            <button class="ce-tab" data-tab="avulso">
-                <i class="fas fa-file-invoice"></i> Faturamento avulso
-                <span class="ce-tab-count" id="avulso-tab-count">0</span>
-            </button>
         </div>
 
         {{ painel('fat', false, 'Ordens de faturamento', 'Ordem', 'Cliente', 'Orçamento') }}
         {{ painel('st', true, 'Ordens de compra · Serv. terceiro', 'Ordem compra', 'Fornecedor', 'Nº OS') }}
 
         <!-- FATURAMENTO AVULSO (Solicitacao de NF: garantia/bonificacao/teste/atendimento tecnico) -->
-        <div id="avulso-panel" class="ce-tabpanel hidden">
-            <div class="ce-wrap">
-                <div class="eui-toolbar" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
-                    <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
-                        <div class="eui-input-group" style="flex:1; position:relative;">
-                            <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
-                            <input type="search" id="avulso-busca" class="eui-input" autocomplete="off"
-                                placeholder="Buscar por protocolo, cliente ou solicitante…" style="width:100%; padding-left:34px;">
-                        </div>
-                        <button class="eui-btn eui-btn--ghost hidden" id="avulso-btn-limpar-busca" title="Limpar busca"><i class="fas fa-xmark"></i></button>
-                    </div>
-                    <button class="eui-btn eui-btn--ghost" id="avulso-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
-                </div>
-
-                <div class="eui-stats" id="avulso-metrics">
-                    <div class="eui-stat is-clickable" data-filter="em_separacao">
-                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Em separação</span>
-                            <span class="eui-stat__value" id="avulso-m-em_separacao">0</span>
-                            <span class="eui-stat__hint">Novas solicitações</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="expedido_sem_nf">
-                        <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-dolly"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Expedido sem nota fiscal</span>
-                            <span class="eui-stat__value" id="avulso-m-expedido_sem_nf">0</span>
-                            <span class="eui-stat__hint">Aguardando faturamento</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="aguardando_faturamento">
-                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Aguardando faturamento</span>
-                            <span class="eui-stat__value" id="avulso-m-aguardando_faturamento">0</span>
-                            <span class="eui-stat__hint">Conserto / retorno demonstração</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="nf_emitida">
-                        <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Notas fiscais emitidas</span>
-                            <span class="eui-stat__value" id="avulso-m-nf_emitida">0</span>
-                            <span class="eui-stat__hint">Garantia / Bonificação</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_assistencia">
-                        <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-screwdriver-wrench"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque c/ Assistência técnica</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_assistencia">0</span>
-                            <span class="eui-stat__hint">Atendimento técnico</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_terceiros">
-                        <div class="eui-stat__icon eui-stat__icon--primary"><i class="fas fa-people-carry-box"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque em poder de terceiros</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_terceiros">0</span>
-                            <span class="eui-stat__hint">Teste</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="pendencia_estoque">
-                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-triangle-exclamation"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Pendência de estoque</span>
-                            <span class="eui-stat__value" id="avulso-m-pendencia_estoque">0</span>
-                            <span class="eui-stat__hint">Ainda não retornou</span>
-                        </div>
-                    </div>
-                    <div class="eui-stat is-clickable" data-filter="estoque_retornado">
-                        <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
-                        <div class="eui-stat__body">
-                            <span class="eui-stat__label">Estoque retornado</span>
-                            <span class="eui-stat__value" id="avulso-m-estoque_retornado">0</span>
-                            <span class="eui-stat__hint">Material de volta</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="eui-card">
-                    <div class="eui-card__head">
-                        <div>
-                            <h2 class="eui-card__title"><i class="fas fa-file-invoice"></i> Solicitações de NF avulsa</h2>
-                            <p class="eui-card__sub" id="avulso-subtitulo">Garantia, bonificação, remessa para teste/conserto, retorno de demonstração e atendimento técnico — abertas pelo formulário público.</p>
-                        </div>
-                        <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="avulso-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
-                    </div>
-                    <div class="eui-card__body eui-card__body--tight">
-                        <div id="avulso-lista" class="eui-list" style="padding: var(--eui-space-3);">
-                            <div class="eui-empty"><i class="fas fa-circle-notch fa-spin"></i><strong>Carregando…</strong></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -2185,374 +2018,6 @@
         return { carregarDashboard, atualizarSePossivel, abrirViewRomaneios };
     }
 
-    /**
-     * Controlador da aba "Faturamento avulso" (Solicitacao de NF: garantia,
-     * bonificacao, teste, atendimento tecnico). Estrutura bem diferente do
-     * fluxo cego (fat/st) — lista de cards com estado, nao tabela de
-     * contagem — entao nao reaproveita criarControlador, so os helpers
-     * genericos (toast, escapeHtml, fmtDataBR/fmtDataHora).
-     */
-    function criarControladorAvulso() {
-        let ordens = [];
-        let currentFilter = null;
-        let busca = "";
-
-        async function apiAvulso(url, opts) {
-            const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
-            let data = {};
-            try { data = await resp.json(); } catch (e) {}
-            if (!resp.ok || !data.sucesso) throw new Error(data.erro || ("Erro " + resp.status));
-            return data;
-        }
-
-        function renderMetrics(resumo) {
-            resumo = resumo || {};
-            Object.keys(resumo).forEach((k) => {
-                const el = $("avulso-m-" + k);
-                if (el) el.textContent = resumo[k] || 0;
-            });
-            $("avulso-tab-count").textContent = ordens.length;
-        }
-
-        function statusFiltro(o) {
-            if (o.status_slug === "estoque_terceiros" || o.status_slug === "estoque_assistencia") return true;
-            return false;
-        }
-
-        function ordensFiltradas() {
-            let lista = ordens;
-            if (currentFilter === "pendencia_estoque") {
-                lista = lista.filter(statusFiltro);
-            } else if (currentFilter) {
-                lista = lista.filter((o) => o.status_slug === currentFilter);
-            }
-            if (busca) {
-                const termo = busca.toLowerCase();
-                lista = lista.filter((o) =>
-                    (o.protocolo || "").toLowerCase().includes(termo) ||
-                    (o.cliente_nome || "").toLowerCase().includes(termo) ||
-                    (o.solicitante_nome || "").toLowerCase().includes(termo));
-            }
-            return lista;
-        }
-
-        function renderAcoesAdmin(o) {
-            if (!CE_IS_ADMIN) return "";
-            const podeEstornar = o.status_slug !== "em_separacao";
-            return `
-                <div class="avl-admin-actions">
-                    ${podeEstornar ? `<button type="button" class="eui-btn eui-btn--warning eui-btn--sm" data-action="estornar"><i class="fas fa-rotate-left"></i> Estornar etapa</button>` : ""}
-                    <button type="button" class="eui-btn eui-btn--danger eui-btn--sm" data-action="excluir"><i class="fas fa-trash"></i> Excluir solicitação</button>
-                </div>`;
-        }
-
-        const STEP_LABEL = {
-            em_separacao: "Separação",
-            expedido_sem_nf: "Expedido s/ NF",
-            aguardando_faturamento: "Aguard. faturamento",
-            nf_emitida: "NF emitida",
-            estoque_terceiros: "Poder de terceiros",
-            estoque_assistencia: "Assistência",
-            estoque_retornado: "Retornado",
-        };
-        const ACCENT = {
-            em_separacao: "acc-warning", expedido_sem_nf: "acc-info", aguardando_faturamento: "acc-warning",
-            nf_emitida: "acc-violet", estoque_terceiros: "acc-primary", estoque_assistencia: "acc-danger", estoque_retornado: "acc-success",
-        };
-        const TIPOS_AGUARDA = ["Remessa para Conserto", "Remessa de retorno de demonstração"];
-        const TIPOS_RETORNO = ["Remessa para Teste", "Materiais para atendimento técnico no cliente", "Remessa para Conserto"];
-
-        function fluxoSlugs(o) {
-            const aguarda = o.status_slug === "aguardando_faturamento" || TIPOS_AGUARDA.includes(o.tipo_operacao);
-            const comRetorno = ["estoque_terceiros", "estoque_assistencia", "estoque_retornado"].includes(o.status_slug)
-                || TIPOS_RETORNO.includes(o.tipo_operacao);
-            const seg2 = aguarda ? "aguardando_faturamento" : "expedido_sem_nf";
-            if (!comRetorno) return ["em_separacao", seg2, "nf_emitida"];
-            const finalStock = o.tipo_operacao === "Materiais para atendimento técnico no cliente" ? "estoque_assistencia" : "estoque_terceiros";
-            return ["em_separacao", seg2, finalStock, "estoque_retornado"];
-        }
-
-        function renderSteps(o) {
-            const slugs = fluxoSlugs(o);
-            let cur = slugs.indexOf(o.status_slug);
-            if (cur < 0) cur = 0;
-            return `<div class="avl-steps">` + slugs.map((sl, i) => {
-                const cls = i < cur ? "is-done" : (i === cur ? "is-current" : "");
-                const bar = i > 0 ? `<span class="avl-step__bar ${i <= cur ? "is-done" : ""}"></span>` : "";
-                const dot = i < cur ? '<i class="fas fa-check"></i>' : (i + 1);
-                return `${bar}<div class="avl-step ${cls}"><span class="avl-step__dot">${dot}</span>${STEP_LABEL[sl] || sl}</div>`;
-            }).join("") + `</div>`;
-        }
-
-        function renderItens(o, comCheckbox) {
-            const rows = o.itens.map((it) => {
-                const local = it.material_local
-                    ? `<span class="avl-local"><i class="fas fa-location-dot"></i>${escapeHtml(it.material_local)}</span>`
-                    : `<span class="avl-local is-empty"><i class="fas fa-location-dot"></i>sem local</span>`;
-                const naoSep = (o.status_slug !== "em_separacao") && !it.separado;
-                const chk = comCheckbox ? `<td><input type="checkbox" class="avl-chk-item" value="${it.id}" checked></td>` : "";
-                return `<tr class="${naoSep ? "is-nao-separado" : ""}">
-                    ${chk}
-                    <td class="avl-td-cod">${escapeHtml(it.material_codigo)}</td>
-                    <td>${escapeHtml(it.material_nome || "")}${naoSep ? ' <span style="color:var(--eui-danger);font-size:11px;">(não separado)</span>' : ""}</td>
-                    <td>${local}</td>
-                    <td class="avl-td-qtde">${it.quantidade}</td>
-                </tr>`;
-            }).join("");
-            const thChk = comCheckbox ? '<th style="width:34px;"></th>' : "";
-            return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th><th>Local de estoque</th><th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
-        }
-
-        function renderOfBox(o) {
-            const info = o.ordem_faturamento_info;
-            if (o.ordem_faturamento) {
-                const detalhe = (info && info.encontrada)
-                    ? `<div class="avl-nf-info">
-                        <div><span class="k">Ordem de faturamento</span><span class="v">#${o.ordem_faturamento}</span></div>
-                        ${info.cliente ? `<div><span class="k">Cliente</span><span class="v">${escapeHtml(info.cliente)}</span></div>` : ""}
-                        ${info.status ? `<div><span class="k">Status da OF</span><span class="v">${escapeHtml(info.status)}</span></div>` : ""}
-                        <div><span class="k">NF da OF</span><span class="v">${info.numero_nf ? escapeHtml(info.numero_nf) : "aguardando faturamento da OF…"}</span></div>
-                       </div>`
-                    : `<div class="avl-nf-info"><div><span class="k">Ordem de faturamento</span><span class="v">#${o.ordem_faturamento} (não localizada na base)</span></div></div>`;
-                return `<div class="avl-section-title"><i class="fas fa-link"></i> Ordem de faturamento vinculada</div>
-                    ${detalhe}
-                    <p class="eui-caption" style="margin-top:6px;"><i class="fas fa-circle-info"></i> Quando a OF for faturada, a solicitação avança automaticamente.</p>
-                    <div class="avl-nf-row" style="margin-top:8px;">
-                        <input type="number" class="eui-input avl-of" placeholder="Trocar nº da OF" value="${o.ordem_faturamento}">
-                    </div>
-                    <div class="avl-detail-actions">
-                        <button type="button" class="eui-btn eui-btn--subtle" data-action="vincular-of"><i class="fas fa-link"></i> Atualizar vínculo</button>
-                    </div>`;
-            }
-            return `<div class="avl-section-title"><i class="fas fa-link"></i> Vincular ordem de faturamento</div>
-                <p class="eui-caption"><i class="fas fa-circle-info"></i> Vincule a OF do ERP correspondente a esta expedição. Quando ela for faturada, a solicitação avança sozinha para o status final.</p>
-                <div class="avl-nf-row">
-                    <input type="number" class="eui-input avl-of" placeholder="Número da ordem de faturamento">
-                </div>
-                <div class="avl-detail-actions">
-                    <button type="button" class="eui-btn eui-btn--subtle" data-action="vincular-of"><i class="fas fa-link"></i> Vincular OF</button>
-                </div>`;
-        }
-
-        function renderDetalhe(o) {
-            const steps = renderSteps(o);
-            const emSeparacao = o.status_slug === "em_separacao";
-            const itensBloco = `<div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>${renderItens(o, emSeparacao)}`;
-            const vendaInfo = o.venda_posterior
-                ? `<div class="eui-callout eui-callout--warning" style="margin-top:12px;"><i class="fas fa-triangle-exclamation"></i> Solicitante indicou venda posterior — acompanhar orçamento manualmente.</div>`
-                : "";
-            const parceiroBox = (o.nf_parceiro_nome || o.nf_parceiro_endereco)
-                ? `<div class="avl-nf-info">
-                    ${o.nf_parceiro_nome ? `<div><span class="k">Destinatário (NF)</span><span class="v">${escapeHtml(o.nf_parceiro_nome)}</span></div>` : ""}
-                    ${o.nf_parceiro_endereco ? `<div><span class="k">Endereço</span><span class="v">${escapeHtml(o.nf_parceiro_endereco)}</span></div>` : ""}
-                   </div>` : "";
-            const nfEmitidaLinha = o.numero_nf
-                ? `<div class="eui-caption" style="margin-top:12px;"><i class="fas fa-file-invoice"></i> NF ${escapeHtml(o.numero_nf)} emitida por ${escapeHtml(o.faturado_por || "—")} em ${fmtDataHora(o.faturado_at)}</div>`
-                : "";
-
-            if (emSeparacao) {
-                return `${steps}${vendaInfo}${itensBloco}
-                    <textarea class="avl-obs" placeholder="Observações da separação (opcional)"></textarea>
-                    <div class="avl-detail-actions">
-                        <button type="button" class="eui-btn eui-btn--primary" data-action="separar"><i class="fas fa-check"></i> Confirmar separação</button>
-                    </div>
-                    ${renderAcoesAdmin(o)}`;
-            }
-            if (o.status_slug === "expedido_sem_nf" || o.status_slug === "aguardando_faturamento") {
-                const dica = o.tipo_operacao === "Remessa para Conserto"
-                    ? `<p class="eui-caption" style="margin-top:8px;"><i class="fas fa-circle-info"></i> Ao informar a NF, o destinatário e o endereço serão puxados automaticamente da nota.</p>`
-                    : "";
-                return `${steps}${vendaInfo}${itensBloco}
-                    ${renderOfBox(o)}
-                    <div class="avl-section-title"><i class="fas fa-file-invoice-dollar"></i> Faturamento manual</div>
-                    <div class="avl-nf-row">
-                        <input type="text" class="eui-input avl-nf" placeholder="Número da NF">
-                        <textarea class="avl-obs" placeholder="Observações do faturamento (opcional)" style="margin-top:0;"></textarea>
-                    </div>${dica}
-                    <div class="avl-detail-actions">
-                        <button type="button" class="eui-btn eui-btn--primary" data-action="faturar"><i class="fas fa-check"></i> Confirmar faturamento</button>
-                    </div>
-                    ${renderAcoesAdmin(o)}`;
-            }
-            if (o.status_slug === "estoque_terceiros" || o.status_slug === "estoque_assistencia") {
-                return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${itensBloco}
-                    <div class="avl-section-title"><i class="fas fa-rotate-left"></i> Retorno do material</div>
-                    <div class="avl-nf-row">
-                        <input type="text" class="eui-input avl-nf-retorno" placeholder="Número da NF de retorno">
-                        <textarea class="avl-obs" placeholder="Observações do retorno (opcional)" style="margin-top:0;"></textarea>
-                    </div>
-                    <div class="avl-detail-actions">
-                        <button type="button" class="eui-btn eui-btn--primary" data-action="retorno"><i class="fas fa-rotate-left"></i> Registrar retorno</button>
-                    </div>
-                    ${renderAcoesAdmin(o)}`;
-            }
-            // nf_emitida | estoque_retornado — somente leitura
-            let extra = "";
-            if (o.status_slug === "estoque_retornado") {
-                extra = `<div class="eui-caption" style="margin-top:8px;"><i class="fas fa-rotate-left"></i> Retorno: NF ${escapeHtml(o.numero_nf_retorno || "—")} registrado por ${escapeHtml(o.retorno_por || "—")} em ${fmtDataHora(o.retorno_at)}</div>`;
-            }
-            return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${extra}${itensBloco}
-                ${renderAcoesAdmin(o)}`;
-        }
-
-        function renderCard(o) {
-            const acc = ACCENT[o.status_slug] || "";
-            const nfMeta = o.numero_nf ? `<span><i class="fas fa-file-invoice"></i>NF ${escapeHtml(o.numero_nf)}</span>` : "";
-            return `
-                <article class="avl-card ${acc}" data-id="${o.id}">
-                    <div class="avl-card__head" data-action="toggle-detail">
-                        <div class="avl-card__accent"></div>
-                        <div class="avl-card__id">
-                            <div class="avl-card__title">
-                                <b>${escapeHtml(o.protocolo)}</b><span class="sep">·</span>
-                                <span class="avl-cliente">${escapeHtml(o.cliente_nome)}</span>
-                                <span class="avl-chip-tipo">${escapeHtml(o.tipo_operacao)}</span>
-                                <span class="eui-badge ${o.status_badge}"><span class="eui-badge__dot"></span>${escapeHtml(o.status)}</span>
-                            </div>
-                            <div class="avl-card__meta">
-                                <span><i class="far fa-user"></i>${escapeHtml(o.solicitante_nome)}</span>
-                                <span><i class="far fa-clock"></i>${fmtDataHora(o.created_at)}</span>
-                                <span><i class="fas fa-boxes"></i>${o.itens.length} ${o.itens.length === 1 ? "item" : "itens"}</span>
-                                ${o.ordem_faturamento ? `<span><i class="fas fa-link"></i>OF #${o.ordem_faturamento}</span>` : ""}
-                                ${nfMeta}
-                            </div>
-                        </div>
-                        <button type="button" class="avl-card__toggle" title="Detalhes"><i class="fas fa-chevron-down"></i></button>
-                    </div>
-                    <div class="avl-card__detail">${renderDetalhe(o)}</div>
-                </article>`;
-        }
-
-        function renderLista() {
-            const container = $("avulso-lista");
-            const filtradas = ordensFiltradas();
-            if (!filtradas.length) {
-                container.innerHTML = `<div class="eui-empty"><i class="fas fa-inbox"></i><strong>Nenhuma solicitação encontrada.</strong></div>`;
-                return;
-            }
-            container.innerHTML = filtradas.map(renderCard).join("");
-        }
-
-        async function carregarDashboard() {
-            try {
-                const data = await apiAvulso("/api/expedicao/conf-cega-avulso/ordens");
-                ordens = data.ordens || [];
-                renderMetrics(data.resumo);
-                renderLista();
-            } catch (e) {
-                $("avulso-lista").innerHTML = `<div class="eui-empty"><i class="fas fa-triangle-exclamation"></i><strong>Falha ao carregar solicitações.</strong></div>`;
-                toast(e.message, "error");
-            }
-        }
-
-        function aplicarFiltro(filtro, elemento) {
-            currentFilter = (currentFilter === filtro) ? null : filtro;
-            $("avulso-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
-            if (currentFilter && elemento) elemento.classList.add("is-active");
-            $("avulso-btn-limpar-filtro").classList.toggle("hidden", !currentFilter);
-            renderLista();
-        }
-
-        async function executarAcao(id, endpoint, body, sucessoMsg) {
-            try {
-                await apiAvulso(`/api/expedicao/conf-cega-avulso/ordens/${id}/${endpoint}`, {
-                    method: "POST",
-                    body: JSON.stringify(body),
-                });
-                toast(sucessoMsg);
-                await carregarDashboard();
-            } catch (e) {
-                toast(e.message, "error");
-            }
-        }
-
-        $("avulso-lista").addEventListener("click", (e) => {
-            const toggle = e.target.closest('[data-action="toggle-detail"]');
-            if (toggle) { toggle.closest(".avl-card").classList.toggle("is-open"); return; }
-
-            const row = e.target.closest(".avl-card");
-            if (!row) return;
-            const id = row.dataset.id;
-
-            if (e.target.closest('[data-action="separar"]')) {
-                const itensSeparados = Array.from(row.querySelectorAll(".avl-chk-item:checked")).map((el) => parseInt(el.value, 10));
-                const observacao = row.querySelector(".avl-obs").value;
-                executarAcao(id, "separar", { itens_separados: itensSeparados, observacao }, "Solicitação separada com sucesso.");
-                return;
-            }
-            if (e.target.closest('[data-action="faturar"]')) {
-                const numeroNf = row.querySelector(".avl-nf").value;
-                if (!numeroNf.trim()) { toast("Informe o número da NF.", "error"); return; }
-                const observacao = row.querySelector(".avl-obs").value;
-                executarAcao(id, "faturar", { numero_nf: numeroNf, observacao }, "Faturamento confirmado com sucesso.");
-                return;
-            }
-            if (e.target.closest('[data-action="vincular-of"]')) {
-                const codOf = row.querySelector(".avl-of").value;
-                if (!String(codOf).trim()) { toast("Informe o número da ordem de faturamento.", "error"); return; }
-                executarAcao(id, "vincular-of", { cod_ordem_fat: codOf }, "Ordem de faturamento vinculada.");
-                return;
-            }
-            if (e.target.closest('[data-action="retorno"]')) {
-                const numeroNfRetorno = row.querySelector(".avl-nf-retorno").value;
-                if (!numeroNfRetorno.trim()) { toast("Informe o número da NF de retorno.", "error"); return; }
-                const observacao = row.querySelector(".avl-obs").value;
-                executarAcao(id, "retorno", { numero_nf_retorno: numeroNfRetorno, observacao }, "Retorno registrado com sucesso.");
-                return;
-            }
-            if (e.target.closest('[data-action="estornar"]')) {
-                pedirMotivo({
-                    title: "Estornar etapa",
-                    sub: "A solicitação volta para a etapa anterior, desfazendo os dados registrados nesta etapa.",
-                    okLabel: "Estornar",
-                    placeholder: "Motivo do estorno…",
-                }).then((motivo) => {
-                    if (motivo === null) return;
-                    executarAcao(id, "estornar", { motivo }, "Etapa estornada com sucesso.");
-                });
-                return;
-            }
-            if (e.target.closest('[data-action="excluir"]')) {
-                pedirMotivo({
-                    title: "Excluir solicitação",
-                    sub: "Essa ação remove a solicitação permanentemente e não pode ser desfeita.",
-                    okLabel: "Excluir definitivamente",
-                    placeholder: "Motivo da exclusão…",
-                }).then((motivo) => {
-                    if (motivo === null) return;
-                    excluirOrdemAvulso(id, motivo);
-                });
-                return;
-            }
-        });
-
-        async function excluirOrdemAvulso(id, motivo) {
-            try {
-                await apiAvulso(`/api/expedicao/conf-cega-avulso/ordens/${id}`, {
-                    method: "DELETE",
-                    body: JSON.stringify({ motivo }),
-                });
-                toast("Solicitação excluída.");
-                await carregarDashboard();
-            } catch (e) {
-                toast(e.message, "error");
-            }
-        }
-
-        $("avulso-metrics").querySelectorAll(".eui-stat.is-clickable").forEach((elemento) => {
-            elemento.addEventListener("click", () => aplicarFiltro(elemento.dataset.filter, elemento));
-        });
-        $("avulso-btn-limpar-filtro").addEventListener("click", () => aplicarFiltro(currentFilter, null));
-        $("avulso-btn-atualizar").addEventListener("click", carregarDashboard);
-
-        let buscaTimer = null;
-        $("avulso-busca").addEventListener("input", (e) => {
-            clearTimeout(buscaTimer);
-            buscaTimer = setTimeout(() => { busca = e.target.value; renderLista(); }, 250);
-        });
-
-        return { carregarDashboard, atualizarSePossivel: carregarDashboard };
-    }
 
     // Instancia os dois controladores
     const ctrlFat = criarControlador({
@@ -2577,11 +2042,9 @@
         previsao: (o) => o.dt_prevista_entrega,
         onCount: (n) => { $("st-tab-count").textContent = n; },
     });
-    const ctrlAvulso = criarControladorAvulso();
 
     // Abas
     let stCarregado = false;
-    let avulsoCarregado = false;
     document.querySelectorAll(".ce-tab").forEach((tab) => {
         tab.addEventListener("click", () => {
             const alvo = tab.dataset.tab;
@@ -2592,10 +2055,6 @@
             if (alvo === "st" && !stCarregado) {
                 stCarregado = true;
                 ctrlSt.carregarDashboard();
-            }
-            if (alvo === "avulso" && !avulsoCarregado) {
-                avulsoCarregado = true;
-                ctrlAvulso.carregarDashboard();
             }
         });
     });
@@ -2711,9 +2170,8 @@
     });
 
     ctrlFat.carregarDashboard();
-    // Carrega a contagem da aba ST/avulso em segundo plano (para o badge), sem trocar de aba.
+    // Carrega a contagem da aba ST em segundo plano (para o badge), sem trocar de aba.
     ctrlSt.carregarDashboard().then(() => { stCarregado = true; });
-    ctrlAvulso.carregarDashboard().then(() => { avulsoCarregado = true; });
 
     // Atualizacao automatica da tela a cada 4 minutos.
     // A BUSCA REAL no ERP roda no SERVIDOR (scheduler continuo), garantindo que
@@ -2725,7 +2183,6 @@
         // Nao recarrega enquanto o usuario esta contando itens numa conferencia.
         ctrlFat.atualizarSePossivel();
         if (stCarregado) ctrlSt.atualizarSePossivel();
-        if (avulsoCarregado) ctrlAvulso.atualizarSePossivel();
     }, AUTO_REFRESH_MS);
 
     // Ao voltar o foco para a aba, atualiza imediatamente.
@@ -2733,7 +2190,6 @@
         if (!document.hidden) {
             ctrlFat.atualizarSePossivel();
             if (stCarregado) ctrlSt.atualizarSePossivel();
-            if (avulsoCarregado) ctrlAvulso.atualizarSePossivel();
         }
     });
 })();

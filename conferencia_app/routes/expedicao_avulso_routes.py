@@ -48,6 +48,9 @@ def faturar_ordem_avulso(solicitacao_id):
             usuario=session.get("username", ""),
             numero_nf=payload.get("numero_nf"),
             observacao=payload.get("observacao"),
+            # Sem itens, fatura tudo que falta; com itens, só aquele grupo —
+            # é assim que uma solicitação vira mais de uma nota.
+            item_ids=payload.get("itens"),
         )
     except svc.SolicitacaoNFError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

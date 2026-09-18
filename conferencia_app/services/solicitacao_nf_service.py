@@ -50,6 +50,10 @@ STATUS_ESTOQUE_TERCEIROS = "Estoque em poder de terceiros"
 STATUS_ESTOQUE_ASSISTENCIA = "Estoque em poder da Assistência técnica"
 STATUS_ESTOQUE_RETORNADO = "Estoque retornado"
 
+# Itens da mesma solicitacao podem estar em etapas diferentes, porque itens de
+# tipos diferentes nao entram na mesma nota. O cabecalho mostra isso.
+STATUS_PARCIAL = "Parcialmente atendida"
+
 STATUS_PENDENTES_RETORNO = (STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA)
 # Status a partir dos quais e possivel faturar (informar a NF).
 STATUS_PODE_FATURAR = (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT)
@@ -64,6 +68,7 @@ STATUS_SLUGS = {
     STATUS_ESTOQUE_TERCEIROS: "estoque_terceiros",
     STATUS_ESTOQUE_ASSISTENCIA: "estoque_assistencia",
     STATUS_ESTOQUE_RETORNADO: "estoque_retornado",
+    STATUS_PARCIAL: "parcialmente_atendida",
 }
 
 STATUS_BADGE = {
@@ -74,6 +79,7 @@ STATUS_BADGE = {
     STATUS_ESTOQUE_TERCEIROS: "eui-badge--primary",
     STATUS_ESTOQUE_ASSISTENCIA: "eui-badge--danger",
     STATUS_ESTOQUE_RETORNADO: "eui-badge--success",
+    STATUS_PARCIAL: "eui-badge--info",
 }
 
 
@@ -303,6 +309,35 @@ def _validar_cliente(codigo: str, nome: str) -> dict[str, Any]:
     return cliente
 
 
+def listar_tipos_operacao() -> list[dict[str, Any]]:
+    """Tipos ativos, com o texto de ajuda que o solicitante lê na hora de escolher.
+
+    A tabela guarda o texto e o retorno sugerido; as regras de fluxo de cada
+    tipo continuam nas constantes TIPOS_* acima. Se a tabela ainda não foi
+    semeada, cai nos tipos do código para a tela nunca ficar sem opção."""
+    try:
+        from ..models import TipoOperacaoNF
+        tipos = (TipoOperacaoNF.query.filter_by(ativo=True)
+                 .order_by(TipoOperacaoNF.ordem_exibicao, TipoOperacaoNF.nome).all())
+    except Exception:
+        current_app.logger.warning("Tipos de operação: tabela indisponível, usando os do código.",
+                                   exc_info=True)
+        tipos = []
+    if not tipos:
+        return [{"nome": nome, "descricao_ajuda": "",
+                 "requer_retorno_padrao": nome not in TIPOS_SEM_RETORNO}
+                for nome in TIPOS_OPERACAO]
+    return [{"nome": t.nome, "descricao_ajuda": t.descricao_ajuda or "",
+             "requer_retorno_padrao": bool(t.requer_retorno_padrao)} for t in tipos]
+
+
+def _retorno_sugerido(tipo_operacao: str) -> bool:
+    for tipo in listar_tipos_operacao():
+        if tipo["nome"] == tipo_operacao:
+            return tipo["requer_retorno_padrao"]
+    return tipo_operacao not in TIPOS_SEM_RETORNO
+
+
 def _validar_itens(itens_payload: list) -> list[dict[str, Any]]:
     if not itens_payload:
         raise SolicitacaoNFError("Informe ao menos um material.")
@@ -329,7 +364,10 @@ def _validar_itens(itens_payload: list) -> list[dict[str, Any]]:
 
 def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     tipo_operacao = str((payload or {}).get("tipo_operacao") or "").strip()
-    if tipo_operacao not in TIPOS_OPERACAO:
+    # Aceita o que estiver ativo na tabela; os tipos do código seguem valendo
+    # como piso, para um tipo desativado por engano não derrubar o formulário.
+    validos = {t["nome"] for t in listar_tipos_operacao()} | set(TIPOS_OPERACAO)
+    if tipo_operacao not in validos:
         raise SolicitacaoNFError("Tipo de operação inválido.")
 
     funcionario = _validar_solicitante((payload or {}).get("solicitante_nome"))
@@ -352,8 +390,22 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
         status=STATUS_SOLICITADO,
         ip_solicitante=(ip or "")[:64],
     )
+    # O item carrega a operação, a NF e o retorno (é o que permite uma
+    # solicitação virar mais de uma nota). Hoje o tipo ainda é escolhido uma
+    # vez por solicitação, então todo item nasce com o tipo do cabeçalho: o
+    # processamento interno ainda decide o fluxo pelo tipo do cabeçalho, e
+    # deixar itens de tipos diferentes entrarem antes disso faria a Logística
+    # e o Fiscal tratarem o item pela regra errada.
+    #
+    # O tipo de operação SUGERE se o material volta, mas quem responde é o
+    # solicitante: é ele que sabe se aquele material específico vai voltar.
+    informado = (payload or {}).get("necessita_retorno")
+    necessita_retorno = (bool(informado) if informado is not None
+                         else _retorno_sugerido(tipo_operacao))
     for i, item in enumerate(itens):
-        solicitacao.itens.append(SolicitacaoNFItem(linha=i, **item))
+        solicitacao.itens.append(SolicitacaoNFItem(
+            linha=i, tipo_operacao=tipo_operacao, sera_vendido=venda_posterior,
+            necessita_retorno=necessita_retorno, status=STATUS_SOLICITADO, **item))
 
     db.session.add(solicitacao)
     db.session.flush()  # garante solicitacao.id para o protocolo
@@ -389,14 +441,16 @@ def marcar_separada(solicitacao_id: int, usuario: str, itens_separados: list, ob
     ids_separados = {int(i) for i in (itens_separados or [])}
     for item in solicitacao.itens:
         item.separado = item.id in ids_separados
+        # Conserto / retorno de demonstracao: a NF sai antes do material, entao
+        # ficam "Aguardando faturamento". Os demais sao expedidos sem NF. A
+        # regra passou a olhar o tipo DO ITEM, que e' o que permite itens de
+        # tipos diferentes seguirem caminhos diferentes na mesma solicitacao.
+        item.status = (STATUS_AGUARDANDO_FAT
+                       if (item.tipo_operacao or solicitacao.tipo_operacao) in TIPOS_AGUARDA_FATURAMENTO
+                       else STATUS_EXPEDIDO_SEM_NF)
 
     status_anterior = solicitacao.status
-    # Conserto / retorno de demonstracao: a NF sai antes do material, entao
-    # ficam "Aguardando faturamento". Os demais sao expedidos sem NF.
-    if solicitacao.tipo_operacao in TIPOS_AGUARDA_FATURAMENTO:
-        solicitacao.status = STATUS_AGUARDANDO_FAT
-    else:
-        solicitacao.status = STATUS_EXPEDIDO_SEM_NF
+    solicitacao.status = _recalcular_status(solicitacao)
     solicitacao.separado_por = usuario
     solicitacao.separado_at = datetime.now()
     solicitacao.observacoes_separacao = (observacao or "")[:500]
@@ -420,28 +474,74 @@ def marcar_separada(solicitacao_id: int, usuario: str, itens_separados: list, ob
     return solicitacao
 
 
-def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observacao: str | None) -> SolicitacaoNF:
+def _status_do_item_apos_faturar(item) -> str:
+    """Para onde o item vai depois que a nota sai.
+
+    Quem diz se o material volta é o solicitante (necessita_retorno); o tipo de
+    operação decide apenas em poder de quem ele fica enquanto não volta."""
+    tipo = item.tipo_operacao or ""
+    if not item.necessita_retorno:
+        return STATUS_NF_EMITIDA
+    if tipo == "Materiais para atendimento técnico no cliente":
+        return STATUS_ESTOQUE_ASSISTENCIA
+    return STATUS_ESTOQUE_TERCEIROS
+
+
+def _recalcular_status(solicitacao: SolicitacaoNF) -> str:
+    """Status da solicitação a partir dos itens.
+
+    Estado derivado não se inventa: a solicitação está onde seus itens estão.
+    Quando eles estão em etapas diferentes — o que passa a acontecer agora que
+    cada item tem a própria nota — o cabeçalho mostra "Parcialmente atendida".
+    A coluna continua existindo porque é indexada, filtrada na tela e lida pelo
+    avanço automático da ordem de faturamento."""
+    situacoes = {item.status for item in solicitacao.itens if item.status}
+    if not situacoes:
+        return solicitacao.status
+    return situacoes.pop() if len(situacoes) == 1 else STATUS_PARCIAL
+
+
+def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observacao: str | None,
+                    item_ids: list | None = None) -> SolicitacaoNF:
+    """Informa a NF. Sem `item_ids`, fatura tudo que ainda falta — é assim que
+    a tela faz quando a solicitação tem um tipo só. Com `item_ids`, fatura só
+    aquele grupo, que é o caso de itens de tipos diferentes: cada grupo vira
+    uma nota e a solicitação fica parcialmente atendida até fechar a última."""
     solicitacao = SolicitacaoNF.query.get(solicitacao_id)
     if not solicitacao:
         raise SolicitacaoNFError("Solicitação não encontrada.")
-    if solicitacao.status not in STATUS_PODE_FATURAR:
+    # Quem manda agora é o estado dos itens; no cabeçalho só resta a checagem
+    # de que a separação aconteceu, senão a mensagem de erro engana o Fiscal.
+    if solicitacao.status == STATUS_SOLICITADO:
         raise SolicitacaoNFError("Solicitação ainda não foi separada.")
     numero_nf = str(numero_nf or "").strip()
     if not numero_nf:
         raise SolicitacaoNFError("Informe o número da NF.")
 
-    if solicitacao.tipo_operacao in TIPOS_SEM_RETORNO:
-        novo_status = STATUS_NF_EMITIDA
-    elif solicitacao.tipo_operacao == "Materiais para atendimento técnico no cliente":
-        novo_status = STATUS_ESTOQUE_ASSISTENCIA
-    else:  # Remessa para Teste | Remessa para Conserto
-        novo_status = STATUS_ESTOQUE_TERCEIROS
+    faturaveis = [i for i in solicitacao.itens if i.status in STATUS_PODE_FATURAR]
+    if item_ids is not None:
+        escolhidos = {int(i) for i in item_ids}
+        alvos = [i for i in faturaveis if i.id in escolhidos]
+        if not alvos:
+            raise SolicitacaoNFError("Nenhum dos itens escolhidos está pronto para faturar.")
+    else:
+        alvos = faturaveis
+    if not alvos:
+        raise SolicitacaoNFError("Todos os itens desta solicitação já foram faturados.")
+
+    agora = datetime.now()
+    for item in alvos:
+        item.numero_nf = numero_nf
+        item.data_emissao_nf = agora
+        item.status = _status_do_item_apos_faturar(item)
 
     status_anterior = solicitacao.status
-    solicitacao.status = novo_status
+    solicitacao.status = _recalcular_status(solicitacao)
     solicitacao.faturado_por = usuario
-    solicitacao.faturado_at = datetime.now()
-    solicitacao.numero_nf = numero_nf
+    solicitacao.faturado_at = agora
+    # Uma solicitação pode ter mais de uma nota; o cabeçalho lista as que saíram.
+    notas = list(dict.fromkeys([i.numero_nf for i in solicitacao.itens if i.numero_nf]))
+    solicitacao.numero_nf = ", ".join(notas)[:80]
     solicitacao.observacoes_faturamento = (observacao or "")[:500]
 
     # Remessa para Conserto: puxa o destinatario/endereco da NF na bridge do ERP.
@@ -459,7 +559,8 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
         usuario=usuario,
         status_anterior=status_anterior,
         status_novo=solicitacao.status,
-        detalhes=json.dumps({"numero_nf": numero_nf, "observacao": observacao}, ensure_ascii=False),
+        detalhes=json.dumps({"numero_nf": numero_nf, "observacao": observacao,
+                             "itens": [i.id for i in alvos]}, ensure_ascii=False),
     ))
     db.session.commit()
 
@@ -679,6 +780,59 @@ def excluir_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) -
     )
 
 
+def resolver_funcionario_do_usuario(username: str) -> dict[str, Any] | None:
+    """Funcionário do GRV correspondente à conta logada.
+
+    O formulário é público e a pessoa se identifica pela lista de
+    funcionários, então a conta do Sync não sabe, sozinha, de quem são as
+    solicitações. O vínculo é resolvido pelo e-mail na primeira consulta e
+    gravado no usuário; quando não dá para resolver, devolve None e a tela
+    pede para a pessoa escolher o próprio nome uma vez."""
+    from ..models import Usuario, UsuarioFuncionario
+    username = (username or "").strip()
+    if not username:
+        return None
+    funcionarios = FacilitiesGRVService.listar_funcionarios(ativos=True)
+    vinculo = UsuarioFuncionario.query.filter_by(username=username).first()
+    if vinculo:
+        for func in funcionarios:
+            if str(func.get("codigo") or "") == str(vinculo.funcionario_codigo):
+                return func
+        return None  # vínculo aponta para alguém que não está mais ativo
+    usuario = Usuario.query.filter_by(username=username).first()
+    email = ((usuario.email if usuario else "") or "").strip().lower()
+    if not email:
+        return None
+    for func in funcionarios:
+        if (func.get("email") or "").strip().lower() == email:
+            db.session.add(UsuarioFuncionario(username=username, origem="email",
+                                              funcionario_codigo=str(func.get("codigo") or "")))
+            db.session.commit()
+            return func
+    return None
+
+
+def vincular_funcionario(username: str, codigo: str) -> dict[str, Any]:
+    """Grava o vínculo escolhido a mão, quando o e-mail não resolveu."""
+    from ..models import UsuarioFuncionario
+    username = (username or "").strip()
+    codigo = str(codigo or "").strip()
+    if not username:
+        raise SolicitacaoNFError("Usuário não encontrado.")
+    for func in FacilitiesGRVService.listar_funcionarios(ativos=True):
+        if str(func.get("codigo") or "") == codigo:
+            vinculo = UsuarioFuncionario.query.filter_by(username=username).first()
+            if vinculo:
+                vinculo.funcionario_codigo = codigo
+                vinculo.origem = "manual"
+            else:
+                db.session.add(UsuarioFuncionario(username=username, funcionario_codigo=codigo,
+                                                  origem="manual"))
+            db.session.commit()
+            return func
+    raise SolicitacaoNFError("Funcionário não encontrado na lista de ativos.")
+
+
 def listar_minhas_solicitacoes(solicitante_codigo: str) -> list[dict[str, Any]]:
     solicitante_codigo = str(solicitante_codigo or "").strip()
     if not solicitante_codigo:
@@ -704,6 +858,21 @@ def _serializar_item(item: SolicitacaoNFItem) -> dict[str, Any]:
         "material_local": item.material_local,
         "quantidade": item.quantidade,
         "separado": item.separado,
+        # Operação, nota e retorno por item: é o que a tela usa para agrupar
+        # os itens em notas diferentes e para cobrar o que ainda não voltou.
+        "tipo_operacao": item.tipo_operacao,
+        "sera_vendido": item.sera_vendido,
+        "necessita_retorno": item.necessita_retorno,
+        "status": item.status,
+        "status_slug": STATUS_SLUGS.get(item.status, ""),
+        "status_badge": STATUS_BADGE.get(item.status, "eui-badge--neutral"),
+        "numero_nf": item.numero_nf,
+        "data_emissao_nf": _iso(item.data_emissao_nf),
+        "data_prevista_retorno": _iso(item.data_prevista_retorno),
+        "data_efetiva_retorno": _iso(item.data_efetiva_retorno),
+        "quantidade_retornada": item.quantidade_retornada,
+        "numero_nf_retorno": item.numero_nf_retorno,
+        "pode_faturar": item.status in STATUS_PODE_FATURAR,
     }
 
 

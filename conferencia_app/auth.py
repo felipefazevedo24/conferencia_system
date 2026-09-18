@@ -56,6 +56,7 @@ PERMISSION_CATALOG = {
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
     "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
+    "PAGE_ASSISTENCIA_TECNICA": "Assistência Técnica > Solicitações de NF (separação, faturamento e retorno)",
     "MANAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Gerenciar romaneios (editar, estornar e excluir)",
     "PAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
@@ -98,6 +99,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LANCAMENTO",
         "PAGE_EXPEDICAO_CONFERENCIA",
         "PAGE_EXPEDICAO_CONF_CEGA",
+        "PAGE_ASSISTENCIA_TECNICA",
         "PAGE_CADASTRO_WORKFLOW",
     },
     "Financeiro": {
@@ -114,6 +116,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_EXPEDICAO_CONFERENCIA",
         "PAGE_EXPEDICAO_CONF_CEGA",
+        "PAGE_ASSISTENCIA_TECNICA",
         "PAGE_EXPEDICAO_ROMANEIO",
         "PAGE_LOGISTICA_AGENDAMENTO",
         "PAGE_LOGISTICA_SOLICITACAO",

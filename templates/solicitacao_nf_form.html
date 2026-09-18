@@ -116,6 +116,13 @@
     .feedback.err { background: var(--err-bg); color: var(--err); }
 
     .hint { font-size: 12.5px; color: var(--muted); margin-top: -2px; }
+    .seg-ajuda { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted); font-weight: 700; font-size: 11px;
+      cursor: help; line-height: 1; padding: 0; }
+    .seg-option.active .seg-ajuda { border-color: currentColor; color: inherit; }
+    .seg-ajuda-texto:empty { display: none; }
+    .seg-ajuda-texto { background: var(--surface-soft); border-radius: var(--radius);
+      padding: 10px 12px; margin-top: 10px; }
     .foot { text-align: center; color: rgba(255,255,255,.6); font-size: 12.5px; margin-top: 18px; }
 
     .success-screen { display: none; text-align: center; padding: 20px 6px; }
@@ -177,23 +184,45 @@
             <div class="section-title"><span class="step">2</span> Tipo de operação</div>
             <div class="segmented tipo-op" id="tipoSeg">
               {% for tipo in tipos_operacao %}
-              <div class="seg-option" data-tipo="{{ tipo }}" role="button" tabindex="0">
-                <i class="fas fa-tag"></i><span>{{ tipo }}</span>
+              <div class="seg-option" data-tipo="{{ tipo.nome }}" role="button" tabindex="0"
+                   data-retorno-sugerido="{{ 'sim' if tipo.requer_retorno_padrao else 'nao' }}">
+                <i class="fas fa-tag"></i><span>{{ tipo.nome }}</span>
+                {% if tipo.descricao_ajuda %}
+                <button type="button" class="seg-ajuda" aria-label="O que é {{ tipo.nome }}?"
+                        data-ajuda="{{ tipo.descricao_ajuda }}">?</button>
+                {% endif %}
               </div>
               {% endfor %}
             </div>
+            <p class="hint seg-ajuda-texto" id="tipoAjuda"></p>
             <input type="hidden" id="tipoOperacao" value="">
           </div>
 
-          <!-- 3) Venda posterior -->
+          <!-- 3) O material volta? Sugerido pelo tipo, confirmado por quem pede -->
           <div class="section">
-            <div class="section-title"><span class="step">3</span> Haverá venda posterior do material?</div>
+            <div class="section-title"><span class="step">3</span> O material vai voltar?</div>
+            <div class="segmented" id="retornoSeg">
+              <div class="seg-option" data-retorno="sim" role="button" tabindex="0">
+                <i class="fas fa-rotate-left"></i><span>Sim — precisa voltar</span>
+              </div>
+              <div class="seg-option" data-retorno="nao" role="button" tabindex="0">
+                <i class="fas fa-check"></i><span>Não — fica com o cliente</span>
+              </div>
+            </div>
+            <input type="hidden" id="necessitaRetorno" value="">
+            <p class="hint" id="retornoHint">O tipo de operação já sugere uma resposta, mas quem
+              pede é quem sabe: confirme se este material volta para o estoque.</p>
+          </div>
+
+          <!-- 4) Venda posterior -->
+          <div class="section">
+            <div class="section-title"><span class="step">4</span> Haverá venda posterior do material?</div>
             <div class="segmented" id="vendaSeg">
               <div class="seg-option" data-venda="sim" role="button" tabindex="0">
-                <i class="fas fa-rotate-left"></i><span>Sim — retorno + orçamento futuro</span>
+                <i class="fas fa-file-invoice-dollar"></i><span>Sim — orçamento/venda depois</span>
               </div>
               <div class="seg-option active" data-venda="nao" role="button" tabindex="0">
-                <i class="fas fa-check"></i><span>Não — garantia/bonificação</span>
+                <i class="fas fa-check"></i><span>Não — sem cobrança</span>
               </div>
             </div>
             <input type="hidden" id="vendaPosterior" value="nao">
@@ -201,7 +230,7 @@
 
           <!-- 4) Cliente -->
           <div class="section">
-            <div class="section-title"><span class="step">4</span> Cliente</div>
+            <div class="section-title"><span class="step">5</span> Cliente</div>
             <div class="field">
               <label for="buscaCliente">Nome do cliente <span style="color:var(--err)">*</span></label>
               <input type="text" id="buscaCliente" placeholder="Digite o nome do cliente..." autocomplete="off">
@@ -215,7 +244,7 @@
 
           <!-- 5) Materiais -->
           <div class="section">
-            <div class="section-title"><span class="step">5</span> Materiais</div>
+            <div class="section-title"><span class="step">6</span> Materiais</div>
             <div class="field">
               <label for="buscaMaterial">Código ou nome do material</label>
               <div class="add-item-row">
@@ -290,13 +319,46 @@
   }
 
   // ----- Tipo de operacao (segmented) -----
+  function mostrarAjuda(opt) {
+    const botao = opt.querySelector(".seg-ajuda");
+    $("tipoAjuda").textContent = botao ? botao.dataset.ajuda : "";
+  }
+
+  // O tipo SUGERE se o material volta; quem pede confirma. Se a pessoa ja
+  // respondeu a mao, trocar de tipo nao desfaz a resposta dela.
+  let retornoEscolhidoAMao = false;
+  function marcarRetorno(valor) {
+    document.querySelectorAll("#retornoSeg .seg-option").forEach((o) => {
+      o.classList.toggle("active", o.dataset.retorno === valor);
+    });
+    $("necessitaRetorno").value = valor;
+  }
+  function sugerirRetorno(opt) {
+    if (retornoEscolhidoAMao) return;
+    marcarRetorno(opt.dataset.retornoSugerido || "nao");
+  }
+  document.querySelectorAll("#retornoSeg .seg-option").forEach((opt) => {
+    const escolher = () => { retornoEscolhidoAMao = true; marcarRetorno(opt.dataset.retorno); };
+    opt.addEventListener("click", escolher);
+    opt.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); escolher(); }
+    });
+  });
   document.querySelectorAll("#tipoSeg .seg-option").forEach((opt) => {
     const select = () => {
       document.querySelectorAll("#tipoSeg .seg-option").forEach((o) => o.classList.remove("active"));
       opt.classList.add("active");
       $("tipoOperacao").value = opt.dataset.tipo;
+      mostrarAjuda(opt);
+      sugerirRetorno(opt);
     };
     opt.addEventListener("click", select);
+    // O "?" explica o tipo sem obrigar a escolher ele.
+    const ajuda = opt.querySelector(".seg-ajuda");
+    if (ajuda) {
+      ajuda.addEventListener("click", (e) => { e.stopPropagation(); mostrarAjuda(opt); });
+      ajuda.addEventListener("mouseenter", () => mostrarAjuda(opt));
+    }
     opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
   });
 
@@ -332,13 +394,28 @@
     "Estoque retornado": { bg: "#dcfce7", fg: "#166534" },
   };
 
+  // A consulta das proprias solicitacoes passou a exigir login: antes bastava
+  // escolher o nome de outra pessoa para ver as solicitacoes dela. Quem nao
+  // esta logado ve o convite para entrar, e nao um erro.
   async function carregarMinhasSolicitacoes(codigo) {
     const wrap = $("minhasSolicitacoesWrap");
     const lista = $("minhasSolicitacoesLista");
     if (!codigo) { wrap.style.display = "none"; return; }
     try {
-      const r = await fetch(`/api/solicitacao-nf/minhas?codigo=${encodeURIComponent(codigo)}`);
+      const r = await fetch("/api/solicitacao-nf/minhas");
+      if (r.status === 401) {
+        lista.innerHTML = '<p class="hint">Para acompanhar suas solicitacoes, '
+          + '<a href="/login">entre com seu usuario do Sync</a>. '
+          + 'Para abrir uma nova, e so preencher abaixo.</p>';
+        wrap.style.display = "block";
+        return;
+      }
       const d = await lerResposta(r);
+      if (d.precisa_vincular) {
+        lista.innerHTML = `<p class="hint">${d.erro}</p>`;
+        wrap.style.display = "block";
+        return;
+      }
       const solicitacoes = d.solicitacoes || [];
       if (!solicitacoes.length) { wrap.style.display = "none"; return; }
       lista.innerHTML = solicitacoes.map((s) => {
@@ -488,6 +565,7 @@
     clearFeedback();
     if (!funcionarioSelecionado) { showFeedback("Selecione seu nome na lista de funcionários.", "err"); return; }
     if (!$("tipoOperacao").value) { showFeedback("Selecione o tipo de operação.", "err"); return; }
+    if (!$("necessitaRetorno").value) { showFeedback("Informe se o material vai voltar.", "err"); return; }
     if (!clienteSelecionado) { showFeedback("Selecione o cliente na lista.", "err"); return; }
     if (!itens.length) { showFeedback("Adicione ao menos um material.", "err"); return; }
 
@@ -499,6 +577,7 @@
       const payload = {
         solicitante_nome: funcionarioSelecionado.nome,
         tipo_operacao: $("tipoOperacao").value,
+        necessita_retorno: $("necessitaRetorno").value === "sim",
         venda_posterior: $("vendaPosterior").value === "sim",
         cliente_codigo: clienteSelecionado.codigo,
         cliente_nome: clienteSelecionado.nome,

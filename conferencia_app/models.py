@@ -954,6 +954,25 @@ class SolicitacaoNFItem(db.Model):
     quantidade = db.Column(db.Float, nullable=False, default=0)
     separado = db.Column(db.Boolean, nullable=False, default=False)
 
+    # --- Assistencia Tecnica: operacao, NF e retorno por item ---------------
+    # O tipo de operacao saiu do cabecalho para o item: itens de tipos
+    # diferentes nao entram na mesma nota, entao e o item que carrega a
+    # operacao, a NF e o controle de retorno. O `separado` acima continua
+    # sendo gravado, mas quem manda no fluxo agora e o `status`.
+    tipo_operacao = db.Column(db.String(60))
+    sera_vendido = db.Column(db.Boolean, nullable=False, default=False)
+    # Sugerido pelo tipo de operacao e ajustavel item a item no processamento:
+    # material de apoio a AT pode voltar ou ser consumido no atendimento.
+    necessita_retorno = db.Column(db.Boolean, nullable=False, default=False)
+    status = db.Column(db.String(40), nullable=False, default="Solicitado", index=True)
+    numero_nf = db.Column(db.String(80), index=True)
+    data_emissao_nf = db.Column(db.DateTime)
+    data_prevista_retorno = db.Column(db.Date)
+    data_efetiva_retorno = db.Column(db.Date)
+    # Permite retorno parcial: o item so fecha quando a soma devolvida bate.
+    quantidade_retornada = db.Column(db.Float, nullable=False, default=0)
+    numero_nf_retorno = db.Column(db.String(80))
+
 
 class SolicitacaoNFLog(db.Model):
     """Trilha de auditoria da solicitacao de NF (criacao, separacao,
@@ -963,12 +982,58 @@ class SolicitacaoNFLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     solicitacao_id = db.Column(db.Integer, nullable=False, index=True)
+    # Preenchido quando a mudanca foi de um item, e nao da solicitacao inteira.
+    item_id = db.Column(db.Integer, index=True)
     acao = db.Column(db.String(30), nullable=False)  # criada|separada|faturada|cancelada
     usuario = db.Column(db.String(100))
     status_anterior = db.Column(db.String(20))
     status_novo = db.Column(db.String(20))
     detalhes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class UsuarioFuncionario(db.Model):
+    """Liga a conta do Sync ao funcionario do GRV.
+
+    A Solicitacao de NF e aberta por um formulario publico, onde a pessoa se
+    identifica escolhendo o proprio nome na lista de funcionarios — a conta do
+    Sync nao sabe, sozinha, de quem sao as solicitacoes. Este vinculo e o que
+    permite a consulta "minhas solicitacoes" exigir login.
+
+    Tabela separada de propria: `usuario` e consultada no boot da aplicacao
+    (_ensure_default_admin_user), entao coluna nova la derrubaria o sistema
+    inteiro ate a migracao rodar. Tabela nova o create_all() cria sozinho.
+    """
+
+    __tablename__ = "usuario_funcionario"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    funcionario_codigo = db.Column(db.String(40), nullable=False, index=True)
+    # 'email' quando o vinculo saiu do e-mail corporativo, 'manual' quando a
+    # pessoa escolheu o proprio nome na tela.
+    origem = db.Column(db.String(20), nullable=False, default="email")
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class TipoOperacaoNF(db.Model):
+    """Tipos de operacao da Solicitacao de NF (modulo Assistencia Tecnica).
+
+    A tabela guarda o que e' apresentacao: nome, texto de ajuda ao solicitante
+    e se o retorno vem sugerido. As REGRAS DE FLUXO de cada tipo continuam no
+    servico (se a NF sai antes ou depois do material, para qual estado de
+    retorno o item vai, se puxa o parceiro da NF na bridge) — um tipo novo
+    cadastrado aqui aparece na tela, mas o fluxo dele ainda precisa ser
+    decidido em codigo."""
+
+    __tablename__ = "tipo_operacao_nf"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(60), unique=True, nullable=False)
+    descricao_ajuda = db.Column(db.Text)
+    requer_retorno_padrao = db.Column(db.Boolean, nullable=False, default=False)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    ordem_exibicao = db.Column(db.Integer, nullable=False, default=0)
 
 
 class AgendamentoVeiculo(db.Model):

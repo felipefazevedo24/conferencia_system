@@ -51,6 +51,7 @@ from .routes.cadastro_workflow_routes import cadastro_workflow_bp
 from .routes.coleta_routes import coleta_bp
 from .routes.compras_routes import compras_bp
 from .routes.expedicao_avulso_routes import expedicao_avulso_bp
+from .routes.assistencia_tecnica_routes import assistencia_tecnica_bp
 from .routes.expedicao_fat_routes import expedicao_fat_bp
 from .routes.expedicao_st_routes import expedicao_st_bp
 from .routes.expedicao_romaneio_routes import expedicao_romaneio_bp
@@ -111,6 +112,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_fat_bp)
     app.register_blueprint(expedicao_st_bp)
     app.register_blueprint(expedicao_avulso_bp)
+    app.register_blueprint(assistencia_tecnica_bp)
     app.register_blueprint(expedicao_romaneio_bp)
     app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(expedicao_assistente_bp)
