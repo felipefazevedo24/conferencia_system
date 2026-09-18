@@ -3753,6 +3753,30 @@ class DivergenciaPedidoAprovacao(db.Model):
     token = db.Column(db.String(64), unique=True, index=True)
 
 
+class ChapaAuditoria(db.Model):
+    """Histórico permanente; sem FK para sobreviver à exclusão da NF e do cálculo."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_nota_id = db.Column(db.Integer, nullable=False, index=True)
+    numero_nota = db.Column(db.String(20), index=True)
+    codigo = db.Column(db.String(120), index=True)
+    descricao = db.Column(db.String(200))
+    ar = db.Column(db.String(100))
+    acao = db.Column(db.String(60), nullable=False)
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    antes = db.Column(db.JSON)
+    depois = db.Column(db.JSON)
+
+
+class ChapaControleExclusao(db.Model):
+    """Exclusão manual da visualização, preservando o recebimento e seus cálculos."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_nota_id = db.Column(db.Integer, db.ForeignKey('item_nota.id', ondelete='CASCADE'),
+                             nullable=False, unique=True)
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+
 class ChapaCalculo(db.Model):
     """Cálculo de peso de uma chapa (por lote/NF) no Controle de Chapas.
 

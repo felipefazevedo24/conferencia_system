@@ -13,6 +13,12 @@
     const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
         ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+    const fmtData = (v) => {
+        if (!v) return "—";
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? escapeHtml(String(v).slice(0, 10)) : d.toLocaleDateString("pt-BR");
+    };
+
     const fmtDataHora = (v) => {
         if (!v) return "—";
         const d = new Date(v);
@@ -43,24 +49,35 @@
             return data;
         }
 
-        function renderMetrics(resumo) {
-            resumo = resumo || {};
-            Object.keys(resumo).forEach((k) => {
-                const el = $("avulso-m-" + k);
-                if (el) el.textContent = resumo[k] || 0;
+        // Os grupos saem dos ITENS, nao do status do cabecalho: agora que cada
+        // item anda no seu ritmo, a pergunta util e' "o que ainda falta fazer
+        // nesta solicitacao?", e a mesma pode aparecer em mais de um grupo.
+        function itensDe(o) {
+            return (o.itens && o.itens.length) ? o.itens : [{ status_slug: o.status_slug }];
+        }
+
+        const GRUPOS = {
+            em_separacao: (o) => itensDe(o).some((i) => i.status_slug === "em_separacao"),
+            a_faturar: (o) => itensDe(o).some((i) => i.pode_faturar
+                || i.status_slug === "expedido_sem_nf" || i.status_slug === "aguardando_faturamento"),
+            pendencia_estoque: (o) => itensDe(o).some((i) => i.status_slug === "estoque_terceiros"
+                || i.status_slug === "estoque_assistencia"),
+            concluidas: (o) => itensDe(o).every((i) => i.status_slug === "nf_emitida"
+                || i.status_slug === "estoque_retornado"),
+        };
+
+        function renderMetrics() {
+            Object.keys(GRUPOS).forEach((grupo) => {
+                const el = $("avulso-m-" + grupo);
+                if (el) el.textContent = ordens.filter(GRUPOS[grupo]).length;
             });
             const total = $("at-total"); if (total) total.textContent = ordens.length;
         }
 
-        function statusFiltro(o) {
-            if (o.status_slug === "estoque_terceiros" || o.status_slug === "estoque_assistencia") return true;
-            return false;
-        }
-
         function ordensFiltradas() {
             let lista = ordens;
-            if (currentFilter === "pendencia_estoque") {
-                lista = lista.filter(statusFiltro);
+            if (currentFilter && GRUPOS[currentFilter]) {
+                lista = lista.filter(GRUPOS[currentFilter]);
             } else if (currentFilter) {
                 lista = lista.filter((o) => o.status_slug === currentFilter);
             }
@@ -100,19 +117,47 @@
         const TIPOS_AGUARDA = ["Remessa para Conserto", "Remessa de retorno de demonstração"];
         const TIPOS_RETORNO = ["Remessa para Teste", "Materiais para atendimento técnico no cliente", "Remessa para Conserto"];
 
+        // Os tipos que a solicitacao tem DE VERDADE, olhando os itens: o campo
+        // do cabecalho guarda so' o do primeiro e mente quando eles diferem.
+        function tiposDe(o) {
+            const tipos = [...new Set((o.itens || []).map((i) => i.tipo_operacao).filter(Boolean))];
+            return tipos.length ? tipos : [o.tipo_operacao].filter(Boolean);
+        }
+
+        function chipTipo(o) {
+            const tipos = tiposDe(o);
+            if (tipos.length <= 1) {
+                return `<span class="avl-chip-tipo">${escapeHtml(tipos[0] || "—")}</span>`;
+            }
+            return `<span class="avl-chip-tipo is-misto" title="${escapeHtml(tipos.join(" · "))}">`
+                + `${tipos.length} operações</span>`;
+        }
+
         function fluxoSlugs(o) {
-            const aguarda = o.status_slug === "aguardando_faturamento" || TIPOS_AGUARDA.includes(o.tipo_operacao);
-            const comRetorno = ["estoque_terceiros", "estoque_assistencia", "estoque_retornado"].includes(o.status_slug)
-                || TIPOS_RETORNO.includes(o.tipo_operacao);
+            const tipos = tiposDe(o);
+            const slugs = (o.itens || []).map((i) => i.status_slug);
+            const aguarda = slugs.includes("aguardando_faturamento")
+                || tipos.some((t) => TIPOS_AGUARDA.includes(t));
+            const comRetorno = slugs.some((sl) =>
+                    ["estoque_terceiros", "estoque_assistencia", "estoque_retornado"].includes(sl))
+                || (o.itens || []).some((i) => i.necessita_retorno)
+                || tipos.some((t) => TIPOS_RETORNO.includes(t));
             const seg2 = aguarda ? "aguardando_faturamento" : "expedido_sem_nf";
             if (!comRetorno) return ["em_separacao", seg2, "nf_emitida"];
-            const finalStock = o.tipo_operacao === "Materiais para atendimento técnico no cliente" ? "estoque_assistencia" : "estoque_terceiros";
+            const finalStock = slugs.includes("estoque_assistencia")
+                || tipos.includes("Materiais para atendimento técnico no cliente")
+                ? "estoque_assistencia" : "estoque_terceiros";
             return ["em_separacao", seg2, finalStock, "estoque_retornado"];
         }
 
         function renderSteps(o) {
             const slugs = fluxoSlugs(o);
-            let cur = slugs.indexOf(o.status_slug);
+            // A etapa atual e' a do item MENOS adiantado: e' o que ainda falta
+            // fazer. Antes vinha do status do cabecalho, que com itens em
+            // etapas diferentes nao casa com nenhuma e voltava para a primeira.
+            const posicoes = (o.itens || []).map((i) => slugs.indexOf(i.status_slug))
+                .filter((n) => n >= 0);
+            let cur = posicoes.length ? Math.min(...posicoes) : slugs.indexOf(o.status_slug);
             if (cur < 0) cur = 0;
             return `<div class="avl-steps">` + slugs.map((sl, i) => {
                 const cls = i < cur ? "is-done" : (i === cur ? "is-current" : "");
@@ -131,7 +176,16 @@
                     ? `<span class="avl-local"><i class="fas fa-location-dot"></i>${escapeHtml(it.material_local)}</span>`
                     : `<span class="avl-local is-empty"><i class="fas fa-location-dot"></i>sem local</span>`;
                 const naoSep = (o.status_slug !== "em_separacao") && !it.separado;
-                const chk = comCheckbox ? `<td><input type="checkbox" class="avl-chk-item" value="${it.id}" checked></td>` : "";
+                let chk = "";
+                if (comCheckbox === "separar") {
+                    chk = `<td><input type="checkbox" class="avl-chk-item" value="${it.id}" checked></td>`;
+                } else if (comCheckbox === "faturar") {
+                    // Itens de operacoes diferentes nao entram na mesma nota:
+                    // vem marcado so' o grupo da primeira operacao faturavel.
+                    chk = it.pode_faturar
+                        ? `<td><input type="checkbox" class="avl-chk-fat" value="${it.id}" data-op="${escapeHtml(it.tipo_operacao || "")}" checked></td>`
+                        : '<td></td>';
+                }
                 // A operacao so' pode mudar enquanto o item nao tem nota: depois
                 // dela o tipo ja' definiu como a nota saiu.
                 const travado = !!it.numero_nf;
@@ -147,21 +201,28 @@
                          <option value="nao" ${it.necessita_retorno ? "" : "selected"}>Não</option>
                        </select>`;
                 const devolvido = Number(it.quantidade_retornada || 0);
+                const atraso = Number(it.dias_de_atraso || 0);
+                const prazo = it.data_prevista_retorno
+                    ? (atraso
+                        ? `<span class="avl-atraso">atrasado ${atraso} dia${atraso > 1 ? "s" : ""}</span>`
+                        : `<span class="avl-prazo-ok">volta até ${fmtData(it.data_prevista_retorno)}</span>`)
+                    : (it.aguardando_retorno ? '<span class="avl-prazo-ok is-vazio">sem prazo</span>' : "");
                 const nf = it.numero_nf
                     ? `<span class="avl-item-nf">NF ${escapeHtml(it.numero_nf)}</span>`
                     : '<span class="avl-item-nf is-empty">sem nota</span>';
-                return `<tr class="${naoSep ? "is-nao-separado" : ""}">
+                return `<tr class="${naoSep ? "is-nao-separado" : ""} ${atraso ? "is-atrasado" : ""}">
                     ${chk}
                     <td class="avl-td-cod">${escapeHtml(it.material_codigo)}</td>
                     <td>${escapeHtml(it.material_nome || "")}${naoSep ? ' <span style="color:var(--eui-danger);font-size:11px;">(não separado)</span>' : ""}</td>
                     <td>${local}</td>
                     <td class="avl-td-op">${operacao}</td>
                     <td class="avl-td-volta">${volta}</td>
-                    <td class="avl-td-nf">${nf}</td>
+                    <td class="avl-td-nf">${nf}${prazo ? `<br>${prazo}` : ""}</td>
                     <td class="avl-td-qtde">${it.quantidade}${devolvido ? `<small> (voltou ${devolvido})</small>` : ""}</td>
                 </tr>`;
             }).join("");
             const thChk = comCheckbox ? '<th style="width:34px;"></th>' : "";
+            void thChk;
             return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th>`
                 + `<th>Local</th><th>Operação</th><th>Volta?</th><th>Nota</th>`
                 + `<th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -213,7 +274,8 @@
         function renderDetalhe(o) {
             const steps = renderSteps(o);
             const emSeparacao = o.status_slug === "em_separacao";
-            const itensBloco = `<div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>${renderItens(o, emSeparacao)}`;
+            const itensBloco = `<div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>`
+                + renderItens(o, emSeparacao ? "separar" : null);
             const vendaInfo = o.venda_posterior
                 ? `<div class="eui-callout eui-callout--warning" style="margin-top:12px;"><i class="fas fa-triangle-exclamation"></i> Solicitante indicou venda posterior — acompanhar orçamento manualmente.</div>`
                 : "";
@@ -234,17 +296,37 @@
                     </div>
                     ${renderAcoesAdmin(o)}`;
             }
-            if (o.status_slug === "expedido_sem_nf" || o.status_slug === "aguardando_faturamento") {
+            if (itensDe(o).some((i) => i.pode_faturar)) {
                 const dica = o.tipo_operacao === "Remessa para Conserto"
                     ? `<p class="eui-caption" style="margin-top:8px;"><i class="fas fa-circle-info"></i> Ao informar a NF, o destinatário e o endereço serão puxados automaticamente da nota.</p>`
                     : "";
-                return `${steps}${vendaInfo}${itensBloco}
+                const operacoes = [...new Set(o.itens.filter((i) => i.pode_faturar)
+                    .map((i) => i.tipo_operacao))];
+                // Prazo de retorno: quem informa e' o Fiscal, junto com a nota, e
+                // so' aparece se algum item do grupo realmente volta.
+                const temRetorno = o.itens.some((i) => i.pode_faturar && i.necessita_retorno);
+                const prazoBox = temRetorno
+                    ? `<label class="avl-prazo">Prazo de retorno
+                         <input type="date" class="eui-input avl-prazo-input">
+                         <small>Vale para os itens marcados que voltam. Depois dele, o item aparece como atrasado.</small>
+                       </label>`
+                    : "";
+                const avisoGrupo = operacoes.length > 1
+                    ? `<p class="eui-caption avl-aviso-grupo"><i class="fas fa-circle-info"></i>
+                        Esta solicitação tem ${operacoes.length} operações diferentes, que não cabem
+                        na mesma nota. Marque os itens de uma delas, informe a NF, e depois repita
+                        para as outras.</p>`
+                    : "";
+                return `${steps}${vendaInfo}
+                    <div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>
+                    ${renderItens(o, "faturar")}
                     ${renderOfBox(o)}
                     <div class="avl-section-title"><i class="fas fa-file-invoice-dollar"></i> Faturamento manual</div>
+                    ${avisoGrupo}
                     <div class="avl-nf-row">
                         <input type="text" class="eui-input avl-nf" placeholder="Número da NF">
                         <textarea class="avl-obs" placeholder="Observações do faturamento (opcional)" style="margin-top:0;"></textarea>
-                    </div>${dica}
+                    </div>${prazoBox}${dica}
                     <div class="avl-detail-actions">
                         <button type="button" class="eui-btn eui-btn--primary" data-action="faturar"><i class="fas fa-check"></i> Confirmar faturamento</button>
                     </div>
@@ -282,7 +364,7 @@
                             <div class="avl-card__title">
                                 <b>${escapeHtml(o.protocolo)}</b><span class="sep">·</span>
                                 <span class="avl-cliente">${escapeHtml(o.cliente_nome)}</span>
-                                <span class="avl-chip-tipo">${escapeHtml(o.tipo_operacao)}</span>
+                                ${chipTipo(o)}
                                 <span class="eui-badge ${o.status_badge}"><span class="eui-badge__dot"></span>${escapeHtml(o.status)}</span>
                             </div>
                             <div class="avl-card__meta">
@@ -317,7 +399,7 @@
                 }
                 const data = await apiAvulso("/api/expedicao/conf-cega-avulso/ordens");
                 ordens = data.ordens || [];
-                renderMetrics(data.resumo);
+                renderMetrics();
                 renderLista();
             } catch (e) {
                 $("avulso-lista").innerHTML = `<div class="eui-empty"><i class="fas fa-triangle-exclamation"></i><strong>Falha ao carregar solicitações.</strong></div>`;
@@ -376,7 +458,14 @@
                 const numeroNf = row.querySelector(".avl-nf").value;
                 if (!numeroNf.trim()) { toast("Informe o número da NF.", "error"); return; }
                 const observacao = row.querySelector(".avl-obs").value;
-                executarAcao(id, "faturar", { numero_nf: numeroNf, observacao }, "Faturamento confirmado com sucesso.");
+                const itens = Array.from(row.querySelectorAll(".avl-chk-fat:checked"))
+                    .map((el) => parseInt(el.value, 10));
+                if (!itens.length) { toast("Marque ao menos um item para esta nota.", "error"); return; }
+                const prazoEl = row.querySelector(".avl-prazo-input");
+                executarAcao(id, "faturar", {
+                    numero_nf: numeroNf, observacao, itens,
+                    data_prevista_retorno: prazoEl ? prazoEl.value : null,
+                }, "Faturamento confirmado com sucesso.");
                 return;
             }
             if (e.target.closest('[data-action="vincular-of"]')) {

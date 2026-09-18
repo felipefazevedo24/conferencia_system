@@ -50,6 +50,7 @@ from ..models import (
     ConferenciaRecebimento,
     ChecklistRecebimento,
     ClassificacaoContabilItem,
+    ChapaControleExclusao,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -3418,6 +3419,7 @@ def retirar_nota_da_fila_auditor_xml():
 
     ids_alvo = [int(i.id) for i in itens]
     if ids_alvo:
+        ChapaControleExclusao.query.filter(ChapaControleExclusao.item_nota_id.in_(ids_alvo)).delete(synchronize_session=False)
         ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
 
     # Só limpa logs/lock globais da NF quando não existem mais itens com esse número.
@@ -5468,6 +5470,7 @@ def excluir_nota_pendente():
         ClassificacaoContabilItem.query.filter(
             ClassificacaoContabilItem.item_nota_id.in_(ids_alvo)
         ).delete(synchronize_session=False)
+        ChapaControleExclusao.query.filter(ChapaControleExclusao.item_nota_id.in_(ids_alvo)).delete(synchronize_session=False)
         ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
 
     # Só limpa logs/lock globais quando não há mais itens com o mesmo número.
@@ -5783,7 +5786,8 @@ def validar():
             chapa_dados = chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None
             chapa_und = _parse_chapas_und(chapa_dados)
             if chapa_und is not None:
-                item.qtd_chapas_und = chapa_und
+                from ..services.chapa_auditoria_service import alterar_unidades
+                alterar_unidades(item, chapa_und, user)
                 try:
                     from ..services.chapa_calculo_service import salvar_calculo_item
                     salvar_calculo_item(item, chapa_dados, user)

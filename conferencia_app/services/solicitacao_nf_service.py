@@ -585,7 +585,8 @@ def _recalcular_status(solicitacao: SolicitacaoNF) -> str:
 
 
 def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observacao: str | None,
-                    item_ids: list | None = None) -> SolicitacaoNF:
+                    item_ids: list | None = None,
+                    data_prevista_retorno: str | None = None) -> SolicitacaoNF:
     """Informa a NF. Sem `item_ids`, fatura tudo que ainda falta — é assim que
     a tela faz quando a solicitação tem um tipo só. Com `item_ids`, fatura só
     aquele grupo, que é o caso de itens de tipos diferentes: cada grupo vira
@@ -613,10 +614,15 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
         raise SolicitacaoNFError("Todos os itens desta solicitação já foram faturados.")
 
     agora = datetime.now()
+    # O prazo de retorno é do Fiscal, informado junto com a nota, e só faz
+    # sentido para o item que volta.
+    prazo = _data(data_prevista_retorno) if data_prevista_retorno else None
     for item in alvos:
         item.numero_nf = numero_nf
         item.data_emissao_nf = agora
         item.status = _status_do_item_apos_faturar(item)
+        if item.necessita_retorno and prazo:
+            item.data_prevista_retorno = prazo
 
     status_anterior = solicitacao.status
     solicitacao.status = _recalcular_status(solicitacao)
@@ -711,23 +717,33 @@ def vincular_ordem_faturamento(solicitacao_id: int, usuario: str, cod_ordem_fat)
 def _reconciliar_of_vinculadas() -> None:
     """Avanca automaticamente as solicitacoes vinculadas a uma OF que ja foi
     faturada no ERP (numero_nf preenchido). Chamada ao listar o painel."""
+    # Inclui a parcialmente atendida: ela tem itens esperando nota e, sem isso,
+    # nunca mais avançaria sozinha depois do primeiro faturamento.
     pendentes = (
         SolicitacaoNF.query
         .filter(SolicitacaoNF.ordem_faturamento.isnot(None))
-        .filter(SolicitacaoNF.status.in_(STATUS_PODE_VINCULAR_OF))
+        .filter(SolicitacaoNF.status.in_(STATUS_PODE_VINCULAR_OF + (STATUS_PARCIAL,)))
         .all()
     )
     for sol in pendentes:
         ordem = _buscar_ordem_fat(sol.ordem_faturamento)
         numero_nf = str(ordem.numero_nf or "").strip() if ordem else ""
-        if numero_nf:
-            try:
-                marcar_faturada(
-                    sol.id, "Sistema (OF)", numero_nf,
-                    f"Faturado automaticamente pela ordem de faturamento #{sol.ordem_faturamento}",
-                )
-            except SolicitacaoNFError:
-                continue
+        if not numero_nf:
+            continue
+        # Uma OF corresponde a uma nota; itens de operações diferentes não
+        # cabem nela. Só avança sozinho quando há uma operação pendente, e o
+        # resto fica para o Fiscal faturar à mão, com a nota certa de cada um.
+        faturaveis = [i for i in sol.itens if i.status in STATUS_PODE_FATURAR]
+        operacoes = {i.tipo_operacao for i in faturaveis}
+        if len(operacoes) > 1:
+            continue
+        try:
+            marcar_faturada(
+                sol.id, "Sistema (OF)", numero_nf,
+                f"Faturado automaticamente pela ordem de faturamento #{sol.ordem_faturamento}",
+            )
+        except SolicitacaoNFError:
+            continue
 
 
 def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
@@ -996,7 +1012,16 @@ def _serializar_item(item: SolicitacaoNFItem) -> dict[str, Any]:
         "quantidade_retornada": item.quantidade_retornada,
         "numero_nf_retorno": item.numero_nf_retorno,
         "pode_faturar": item.status in STATUS_PODE_FATURAR,
+        "aguardando_retorno": item.status in STATUS_PENDENTES_RETORNO,
+        "dias_de_atraso": _dias_de_atraso(item),
     }
+
+
+def _dias_de_atraso(item) -> int:
+    """Dias passados do prazo, para o item que ainda não voltou. 0 = em dia."""
+    if item.status not in STATUS_PENDENTES_RETORNO or not item.data_prevista_retorno:
+        return 0
+    return max(0, (datetime.now().date() - item.data_prevista_retorno).days)
 
 
 def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
