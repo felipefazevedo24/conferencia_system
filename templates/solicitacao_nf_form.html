@@ -260,63 +260,9 @@
             </div>
           </div>
 
-          <!-- 2) Tipo de operacao -->
+          <!-- 2) Cliente -->
           <div class="section">
-            <div class="section-title"><span class="step">2</span> Tipo de operação</div>
-            <p class="hint">Vale para os materiais que você adicionar. Dá para trocar item a item na lista, se um deles for de outro tipo.</p>
-            <div class="segmented tipo-op" id="tipoSeg">
-              {% for tipo in tipos_operacao %}
-              <div class="seg-option" data-tipo="{{ tipo.nome }}" role="button" tabindex="0"
-                   data-retorno-sugerido="{{ 'sim' if tipo.requer_retorno_padrao else 'nao' }}">
-                <i class="fas fa-tag"></i><span>{{ tipo.nome }}</span>
-                {% if tipo.descricao_ajuda %}
-                <button type="button" class="seg-ajuda" aria-label="O que é {{ tipo.nome }}?"
-                        data-ajuda="{{ tipo.descricao_ajuda }}">?</button>
-                {% endif %}
-              </div>
-              {% endfor %}
-            </div>
-            <p class="hint seg-ajuda-texto" id="tipoAjuda"></p>
-            <input type="hidden" id="tipoOperacao" value="">
-          </div>
-
-          <!-- 3) As duas perguntas de sim/nao ficam lado a lado: sao curtas,
-               relacionadas, e ocupavam uma secao inteira cada uma. -->
-          <div class="section">
-            <div class="section-title"><span class="step">3</span> Condições do envio</div>
-            <div class="duo">
-              <div>
-                <h3>O material vai voltar?</h3>
-                <p class="hint">O tipo sugere, mas quem pede é quem sabe. Dá para ajustar por item.</p>
-                <div class="segmented" id="retornoSeg">
-                  <div class="seg-option" data-retorno="sim" role="button" tabindex="0">
-                    <i class="fas fa-rotate-left"></i><span>Sim, volta</span>
-                  </div>
-                  <div class="seg-option" data-retorno="nao" role="button" tabindex="0">
-                    <i class="fas fa-check"></i><span>Não, fica</span>
-                  </div>
-                </div>
-                <input type="hidden" id="necessitaRetorno" value="">
-              </div>
-              <div>
-                <h3>Haverá venda depois?</h3>
-                <p class="hint">Vale para a solicitação inteira.</p>
-                <div class="segmented" id="vendaSeg">
-                  <div class="seg-option" data-venda="sim" role="button" tabindex="0">
-                    <i class="fas fa-file-invoice-dollar"></i><span>Sim, será cobrado</span>
-                  </div>
-                  <div class="seg-option active" data-venda="nao" role="button" tabindex="0">
-                    <i class="fas fa-check"></i><span>Não, sem cobrança</span>
-                  </div>
-                </div>
-                <input type="hidden" id="vendaPosterior" value="nao">
-              </div>
-            </div>
-          </div>
-
-          <!-- 4) Cliente -->
-          <div class="section">
-            <div class="section-title"><span class="step">4</span> Cliente</div>
+            <div class="section-title"><span class="step">2</span> Cliente</div>
             <div class="field">
               <label for="buscaCliente">Nome do cliente <span style="color:var(--err)">*</span></label>
               <input type="text" id="buscaCliente" placeholder="Digite o nome do cliente..." autocomplete="off">
@@ -330,7 +276,9 @@
 
           <!-- 5) Materiais -->
           <div class="section">
-            <div class="section-title"><span class="step">5</span> Materiais</div>
+            <div class="section-title"><span class="step">3</span> Materiais</div>
+            <p class="hint">Cada material tem a própria operação: se um for garantia e outro for
+              remessa para teste, eles saem em notas diferentes.</p>
             <div class="field">
               <label for="buscaMaterial">Código ou nome do material</label>
               <div class="add-item-row">
@@ -339,7 +287,13 @@
                   <div class="sugestoes" id="sugestoesMaterial"></div>
                 </div>
                 <input type="number" id="txtQuantidade" placeholder="Qtde" min="0.01" step="0.01">
-                <button type="button" class="btn btn-ghost" onclick="adicionarItem()"><i class="fas fa-plus"></i></button>
+                <button type="button" class="btn btn-ghost" onclick="adicionarItem()" title="Adicionar material"><i class="fas fa-plus"></i></button>
+              </div>
+              <div class="add-op-row">
+                <label for="addOperacao">Operação deste material
+                  <select id="addOperacao"></select>
+                </label>
+                <p class="hint seg-ajuda-texto" id="tipoAjuda"></p>
               </div>
               <p class="hint" id="helpMaterial">Selecione um material da lista antes de adicionar.</p>
             </div>
@@ -381,6 +335,11 @@
     <div class="foot">Columbia Sync · Solicitação de Nota Fiscal</div>
   </div>
 
+<script id="dados-tipos" type="application/json">
+  [{% for t in tipos_operacao %}{"nome": {{ t.nome | tojson }},
+    "ajuda": {{ (t.descricao_ajuda or "") | tojson }},
+    "retorno": {{ "true" if t.requer_retorno_padrao else "false" }}}{{ "," if not loop.last }}{% endfor %}]
+</script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -413,61 +372,25 @@
     return (texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   }
 
-  // ----- Tipo de operacao (segmented) -----
-  function mostrarAjuda(opt) {
-    const botao = opt.querySelector(".seg-ajuda");
-    $("tipoAjuda").textContent = botao ? botao.dataset.ajuda : "";
-  }
+  // ----- Tipos de operacao -----
+  // A operacao e' escolhida POR MATERIAL, na hora de adicionar, e pode ser
+  // trocada depois em cada linha: itens de tipos diferentes nao entram na
+  // mesma nota fiscal.
+  const TIPOS_INFO = JSON.parse($("dados-tipos").textContent);
+  const TIPOS = TIPOS_INFO.map((t) => t.nome);
+  const RETORNO_SUGERIDO = Object.fromEntries(TIPOS_INFO.map((t) => [t.nome, t.retorno]));
+  const AJUDA = Object.fromEntries(TIPOS_INFO.map((t) => [t.nome, t.ajuda]));
 
-  // O tipo SUGERE se o material volta; quem pede confirma. Se a pessoa ja
-  // respondeu a mao, trocar de tipo nao desfaz a resposta dela.
-  let retornoEscolhidoAMao = false;
-  function marcarRetorno(valor) {
-    document.querySelectorAll("#retornoSeg .seg-option").forEach((o) => {
-      o.classList.toggle("active", o.dataset.retorno === valor);
-    });
-    $("necessitaRetorno").value = valor;
+  function montarSeletorDeOperacao() {
+    const sel = $("addOperacao");
+    sel.innerHTML = TIPOS.map((t) => `<option value="${t}">${t}</option>`).join("");
+    sel.addEventListener("change", mostrarAjudaDoSeletor);
+    mostrarAjudaDoSeletor();
   }
-  function sugerirRetorno(opt) {
-    if (retornoEscolhidoAMao) return;
-    marcarRetorno(opt.dataset.retornoSugerido || "nao");
+  function mostrarAjudaDoSeletor() {
+    $("tipoAjuda").textContent = AJUDA[$("addOperacao").value] || "";
   }
-  document.querySelectorAll("#retornoSeg .seg-option").forEach((opt) => {
-    const escolher = () => { retornoEscolhidoAMao = true; marcarRetorno(opt.dataset.retorno); };
-    opt.addEventListener("click", escolher);
-    opt.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); escolher(); }
-    });
-  });
-  document.querySelectorAll("#tipoSeg .seg-option").forEach((opt) => {
-    const select = () => {
-      document.querySelectorAll("#tipoSeg .seg-option").forEach((o) => o.classList.remove("active"));
-      opt.classList.add("active");
-      $("tipoOperacao").value = opt.dataset.tipo;
-      mostrarAjuda(opt);
-      sugerirRetorno(opt);
-      renderResumo();
-    };
-    opt.addEventListener("click", select);
-    // O "?" explica o tipo sem obrigar a escolher ele.
-    const ajuda = opt.querySelector(".seg-ajuda");
-    if (ajuda) {
-      ajuda.addEventListener("click", (e) => { e.stopPropagation(); mostrarAjuda(opt); });
-      ajuda.addEventListener("mouseenter", () => mostrarAjuda(opt));
-    }
-    opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
-  });
-
-  // ----- Venda posterior (segmented) -----
-  document.querySelectorAll("#vendaSeg .seg-option").forEach((opt) => {
-    const select = () => {
-      document.querySelectorAll("#vendaSeg .seg-option").forEach((o) => o.classList.remove("active"));
-      opt.classList.add("active");
-      $("vendaPosterior").value = opt.dataset.venda;
-    };
-    opt.addEventListener("click", select);
-    opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
-  });
+  montarSeletorDeOperacao();
 
   // ----- Funcionario (lista carregada uma vez, filtro local) -----
   async function carregarFuncionarios() {
@@ -579,15 +502,16 @@
     if (!materialSelecionado) { showFeedback("Selecione um material da lista antes de adicionar.", "err"); return; }
     if (!qtde || qtde <= 0) { showFeedback("Informe uma quantidade válida.", "err"); return; }
     clearFeedback();
-    if (!$("tipoOperacao").value) { showFeedback("Selecione o tipo de operação antes de adicionar.", "err"); return; }
+    const operacao = $("addOperacao").value;
+    if (!operacao) { showFeedback("Escolha a operação deste material.", "err"); return; }
     itens.push({
       material_codigo: materialSelecionado.codigo_interno,
       material_nome: materialSelecionado.nome,
       quantidade: qtde,
-      // Cada item leva a propria operacao: itens de tipos diferentes nao
-      // entram na mesma nota fiscal.
-      tipo_operacao: $("tipoOperacao").value,
-      necessita_retorno: $("necessitaRetorno").value === "sim",
+      tipo_operacao: operacao,
+      // O retorno vem sugerido pela operacao e pode ser trocado na linha.
+      necessita_retorno: !!RETORNO_SUGERIDO[operacao],
+      sera_vendido: false,
     });
     renderItens();
     renderResumo();
@@ -596,12 +520,6 @@
     $("txtQuantidade").value = "";
     $("helpMaterial").textContent = "Selecione um material da lista antes de adicionar.";
   };
-
-  const TIPOS = Array.from(document.querySelectorAll("#tipoSeg .seg-option"))
-    .map((o) => o.dataset.tipo);
-  const RETORNO_SUGERIDO = Object.fromEntries(
-    Array.from(document.querySelectorAll("#tipoSeg .seg-option"))
-      .map((o) => [o.dataset.tipo, o.dataset.retornoSugerido === "sim"]));
 
   window.mudarTipoItem = function (idx, valor) {
     itens[idx].tipo_operacao = valor;
@@ -612,6 +530,10 @@
 
   window.mudarRetornoItem = function (idx, valor) {
     itens[idx].necessita_retorno = valor === "sim";
+  };
+
+  window.mudarVendaItem = function (idx, valor) {
+    itens[idx].sera_vendido = valor === "sim";
   };
 
   window.removerItem = function (idx) {
@@ -632,7 +554,7 @@
     por("resSolicitante", funcionarioSelecionado ? funcionarioSelecionado.nome : "");
     por("resCliente", clienteSelecionado ? clienteSelecionado.nome : "");
     const tipos = [...new Set(itens.map((i) => i.tipo_operacao).filter(Boolean))];
-    por("resOperacao", tipos.length > 1 ? `${tipos.length} operações` : (tipos[0] || $("tipoOperacao").value));
+    por("resOperacao", tipos.length > 1 ? `${tipos.length} operações` : (tipos[0] || ""));
     const total = itens.reduce((soma, i) => soma + Number(i.quantidade || 0), 0);
     por("resItens", itens.length
       ? `${itens.length} ${itens.length === 1 ? "material" : "materiais"} · ${total} un.`
@@ -661,6 +583,12 @@
             <select onchange="mudarRetornoItem(${idx}, this.value)">
               <option value="sim" ${it.necessita_retorno ? "selected" : ""}>Sim</option>
               <option value="nao" ${it.necessita_retorno ? "" : "selected"}>Não</option>
+            </select>
+          </label>
+          <label>Venda depois?
+            <select onchange="mudarVendaItem(${idx}, this.value)">
+              <option value="nao" ${it.sera_vendido ? "" : "selected"}>Não</option>
+              <option value="sim" ${it.sera_vendido ? "selected" : ""}>Sim</option>
             </select>
           </label>
         </div>
@@ -727,8 +655,7 @@
   window.enviarSolicitacao = async function () {
     clearFeedback();
     if (!funcionarioSelecionado) { showFeedback("Selecione seu nome na lista de funcionários.", "err"); return; }
-    if (!$("tipoOperacao").value) { showFeedback("Selecione o tipo de operação.", "err"); return; }
-    if (!$("necessitaRetorno").value) { showFeedback("Informe se o material vai voltar.", "err"); return; }
+
     if (!clienteSelecionado) { showFeedback("Selecione o cliente na lista.", "err"); return; }
     if (!itens.length) { showFeedback("Adicione ao menos um material.", "err"); return; }
 
@@ -739,9 +666,7 @@
     try {
       const payload = {
         solicitante_nome: funcionarioSelecionado.nome,
-        tipo_operacao: $("tipoOperacao").value,
-        necessita_retorno: $("necessitaRetorno").value === "sim",
-        venda_posterior: $("vendaPosterior").value === "sim",
+
         cliente_codigo: clienteSelecionado.codigo,
         cliente_nome: clienteSelecionado.nome,
         itens: itens,
