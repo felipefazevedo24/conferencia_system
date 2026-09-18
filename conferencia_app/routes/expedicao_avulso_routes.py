@@ -44,6 +44,32 @@ def separar_ordem_avulso(solicitacao_id):
     return jsonify({"sucesso": True, "ordem": svc._serializar(solicitacao)})
 
 
+@expedicao_avulso_bp.route(
+    "/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/itens/<int:item_id>",
+    methods=["PATCH"])
+@roles_required("Logística", "Comex", "Fiscal", "Admin")
+def alterar_item_avulso(solicitacao_id, item_id):
+    """Corrige a operação/retorno/prazo de um item que ainda não tem nota."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        solicitacao = svc.alterar_item(
+            solicitacao_id, item_id,
+            usuario=session.get("username", ""),
+            tipo_operacao=payload.get("tipo_operacao"),
+            necessita_retorno=payload.get("necessita_retorno"),
+            data_prevista_retorno=payload.get("data_prevista_retorno"),
+        )
+    except svc.SolicitacaoNFError as exc:
+        return jsonify({"sucesso": False, "erro": str(exc)}), 400
+    return jsonify({"sucesso": True, "ordem": svc._serializar(solicitacao)})
+
+
+@expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/tipos-operacao")
+@permission_required_any(*PERMISSOES)
+def tipos_operacao_avulso():
+    return jsonify({"sucesso": True, "tipos": svc.listar_tipos_operacao()})
+
+
 @expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/faturar", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def faturar_ordem_avulso(solicitacao_id):
@@ -88,6 +114,8 @@ def registrar_retorno_avulso(solicitacao_id):
             usuario=session.get("username", ""),
             numero_nf_retorno=payload.get("numero_nf_retorno"),
             observacao=payload.get("observacao"),
+            # {item_id: quantidade} permite devolucao parcial.
+            retornos={int(k): v for k, v in (payload.get("retornos") or {}).items()} or None,
         )
     except svc.SolicitacaoNFError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

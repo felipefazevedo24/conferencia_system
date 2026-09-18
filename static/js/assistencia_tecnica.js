@@ -122,6 +122,9 @@
             }).join("") + `</div>`;
         }
 
+        // Tipos de operacao, para o seletor por item. Carregado uma vez.
+        let TIPOS = [];
+
         function renderItens(o, comCheckbox) {
             const rows = o.itens.map((it) => {
                 const local = it.material_local
@@ -129,16 +132,51 @@
                     : `<span class="avl-local is-empty"><i class="fas fa-location-dot"></i>sem local</span>`;
                 const naoSep = (o.status_slug !== "em_separacao") && !it.separado;
                 const chk = comCheckbox ? `<td><input type="checkbox" class="avl-chk-item" value="${it.id}" checked></td>` : "";
+                // A operacao so' pode mudar enquanto o item nao tem nota: depois
+                // dela o tipo ja' definiu como a nota saiu.
+                const travado = !!it.numero_nf;
+                const opcoes = TIPOS.map((t) =>
+                    `<option value="${escapeHtml(t)}" ${t === it.tipo_operacao ? "selected" : ""}>${escapeHtml(t)}</option>`).join("");
+                const operacao = travado
+                    ? `<span class="avl-op-fixa">${escapeHtml(it.tipo_operacao || "—")}</span>`
+                    : `<select class="avl-op" data-item="${it.id}" title="Trocar a operação deste item">${opcoes}</select>`;
+                const volta = travado
+                    ? (it.necessita_retorno ? "Sim" : "Não")
+                    : `<select class="avl-ret" data-item="${it.id}" title="Este material volta?">
+                         <option value="sim" ${it.necessita_retorno ? "selected" : ""}>Sim</option>
+                         <option value="nao" ${it.necessita_retorno ? "" : "selected"}>Não</option>
+                       </select>`;
+                const devolvido = Number(it.quantidade_retornada || 0);
+                const nf = it.numero_nf
+                    ? `<span class="avl-item-nf">NF ${escapeHtml(it.numero_nf)}</span>`
+                    : '<span class="avl-item-nf is-empty">sem nota</span>';
                 return `<tr class="${naoSep ? "is-nao-separado" : ""}">
                     ${chk}
                     <td class="avl-td-cod">${escapeHtml(it.material_codigo)}</td>
                     <td>${escapeHtml(it.material_nome || "")}${naoSep ? ' <span style="color:var(--eui-danger);font-size:11px;">(não separado)</span>' : ""}</td>
                     <td>${local}</td>
-                    <td class="avl-td-qtde">${it.quantidade}</td>
+                    <td class="avl-td-op">${operacao}</td>
+                    <td class="avl-td-volta">${volta}</td>
+                    <td class="avl-td-nf">${nf}</td>
+                    <td class="avl-td-qtde">${it.quantidade}${devolvido ? `<small> (voltou ${devolvido})</small>` : ""}</td>
                 </tr>`;
             }).join("");
             const thChk = comCheckbox ? '<th style="width:34px;"></th>' : "";
-            return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th><th>Local de estoque</th><th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
+            return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th>`
+                + `<th>Local</th><th>Operação</th><th>Volta?</th><th>Nota</th>`
+                + `<th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }
+
+        async function salvarItem(solicitacaoId, itemId, campos) {
+            try {
+                await apiAvulso(`/api/expedicao/conf-cega-avulso/ordens/${solicitacaoId}/itens/${itemId}`,
+                                { method: "PATCH", body: JSON.stringify(campos) });
+                toast("Item atualizado.", "ok");
+                await carregarDashboard();
+            } catch (e) {
+                toast(e.message, "err");
+                await carregarDashboard();
+            }
         }
 
         function renderOfBox(o) {
@@ -273,6 +311,10 @@
 
         async function carregarDashboard() {
             try {
+                if (!TIPOS.length) {
+                    const t = await apiAvulso("/api/expedicao/conf-cega-avulso/tipos-operacao");
+                    TIPOS = (t.tipos || []).map((x) => x.nome);
+                }
                 const data = await apiAvulso("/api/expedicao/conf-cega-avulso/ordens");
                 ordens = data.ordens || [];
                 renderMetrics(data.resumo);
@@ -303,6 +345,18 @@
                 toast(e.message, "error");
             }
         }
+
+        // Trocar operacao/volta de um item salva na hora.
+        $("avulso-lista").addEventListener("change", (e) => {
+            const op = e.target.closest(".avl-op");
+            const ret = e.target.closest(".avl-ret");
+            const alvo = op || ret;
+            if (!alvo) return;
+            const card = alvo.closest("[data-id]");
+            if (!card) return;
+            salvarItem(card.dataset.id, alvo.dataset.item,
+                op ? { tipo_operacao: alvo.value } : { necessita_retorno: alvo.value === "sim" });
+        });
 
         $("avulso-lista").addEventListener("click", (e) => {
             const toggle = e.target.closest('[data-action="toggle-detail"]');

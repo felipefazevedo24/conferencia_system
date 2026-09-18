@@ -338,9 +338,15 @@ def _retorno_sugerido(tipo_operacao: str) -> bool:
     return tipo_operacao not in TIPOS_SEM_RETORNO
 
 
-def _validar_itens(itens_payload: list) -> list[dict[str, Any]]:
+def _validar_itens(itens_payload: list, tipo_padrao: str = "",
+                   retorno_padrao: bool | None = None) -> list[dict[str, Any]]:
+    """Cada item carrega a própria operação e o próprio retorno.
+
+    O que vier em branco herda a escolha feita no topo do formulário, que é o
+    caso comum: uma solicitação inteira do mesmo tipo."""
     if not itens_payload:
         raise SolicitacaoNFError("Informe ao menos um material.")
+    validos = {t["nome"] for t in listar_tipos_operacao()} | set(TIPOS_OPERACAO)
     itens = []
     for bruto in itens_payload:
         codigo = str((bruto or {}).get("material_codigo") or "").strip()
@@ -353,11 +359,20 @@ def _validar_itens(itens_payload: list) -> list[dict[str, Any]]:
         material = _buscar_material_por_codigo(codigo)
         if not material:
             raise SolicitacaoNFError(f"Material '{codigo}' não encontrado.")
+        tipo = str((bruto or {}).get("tipo_operacao") or tipo_padrao).strip()
+        if tipo not in validos:
+            raise SolicitacaoNFError(f"Tipo de operação inválido no item '{codigo}'.")
+        informado = (bruto or {}).get("necessita_retorno")
+        if informado is None:
+            informado = retorno_padrao
         itens.append({
             "material_codigo": material["codigo_interno"],
             "material_nome": material["nome"],
             "material_local": str(material.get("localizacao_estoque") or "").strip() or None,
             "quantidade": quantidade,
+            "tipo_operacao": tipo,
+            "necessita_retorno": bool(informado) if informado is not None
+                                 else _retorno_sugerido(tipo),
         })
     return itens
 
@@ -375,9 +390,14 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
         (payload or {}).get("cliente_codigo"),
         (payload or {}).get("cliente_nome"),
     )
-    itens = _validar_itens((payload or {}).get("itens") or [])
     venda_posterior = bool((payload or {}).get("venda_posterior"))
+    informado = (payload or {}).get("necessita_retorno")
+    itens = _validar_itens((payload or {}).get("itens") or [], tipo_operacao,
+                           bool(informado) if informado is not None else None)
 
+    # O cabecalho e' NOT NULL e ainda alimenta telas e notificacoes: guarda o
+    # tipo do primeiro item, que na pratica e' o da solicitacao inteira.
+    tipo_operacao = itens[0]["tipo_operacao"]
     solicitacao = SolicitacaoNF(
         solicitante_codigo=str(funcionario.get("codigo") or ""),
         solicitante_nome=funcionario.get("nome") or "",
@@ -399,13 +419,9 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     #
     # O tipo de operação SUGERE se o material volta, mas quem responde é o
     # solicitante: é ele que sabe se aquele material específico vai voltar.
-    informado = (payload or {}).get("necessita_retorno")
-    necessita_retorno = (bool(informado) if informado is not None
-                         else _retorno_sugerido(tipo_operacao))
     for i, item in enumerate(itens):
         solicitacao.itens.append(SolicitacaoNFItem(
-            linha=i, tipo_operacao=tipo_operacao, sera_vendido=venda_posterior,
-            necessita_retorno=necessita_retorno, status=STATUS_SOLICITADO, **item))
+            linha=i, sera_vendido=venda_posterior, status=STATUS_SOLICITADO, **item))
 
     db.session.add(solicitacao)
     db.session.flush()  # garante solicitacao.id para o protocolo
@@ -472,6 +488,73 @@ def marcar_separada(solicitacao_id: int, usuario: str, itens_separados: list, ob
         subinfo=f"Separado por {usuario}",
     )
     return solicitacao
+
+
+def alterar_item(solicitacao_id: int, item_id: int, usuario: str,
+                 tipo_operacao: str | None = None, necessita_retorno=None,
+                 data_prevista_retorno: str | None = None) -> SolicitacaoNF:
+    """Corrige a operação, o retorno e o prazo de um item.
+
+    O solicitante escolhe o tipo, mas nem sempre acerta — e quem separa e
+    fatura é quem conhece a regra fiscal. Enquanto o item não tem nota, dá para
+    corrigir aqui; depois dela, não, porque o tipo define como a nota saiu."""
+    solicitacao = SolicitacaoNF.query.get(solicitacao_id)
+    if not solicitacao:
+        raise SolicitacaoNFError("Solicitação não encontrada.")
+    item = next((i for i in solicitacao.itens if i.id == int(item_id)), None)
+    if not item:
+        raise SolicitacaoNFError("Item não encontrado nesta solicitação.")
+    if item.numero_nf:
+        raise SolicitacaoNFError(
+            f"O item já foi faturado na NF {item.numero_nf}. Estorne antes de alterar.")
+
+    antes = {"tipo_operacao": item.tipo_operacao, "necessita_retorno": item.necessita_retorno,
+             "data_prevista_retorno": _iso(item.data_prevista_retorno)}
+
+    if tipo_operacao is not None:
+        tipo_operacao = str(tipo_operacao).strip()
+        validos = {t["nome"] for t in listar_tipos_operacao()} | set(TIPOS_OPERACAO)
+        if tipo_operacao not in validos:
+            raise SolicitacaoNFError("Tipo de operação inválido.")
+        item.tipo_operacao = tipo_operacao
+        # O tipo manda para onde o item vai depois da nota, então enquanto ele
+        # está só separado o status acompanha a mudança.
+        if item.status in STATUS_PODE_FATURAR:
+            item.status = (STATUS_AGUARDANDO_FAT if tipo_operacao in TIPOS_AGUARDA_FATURAMENTO
+                           else STATUS_EXPEDIDO_SEM_NF)
+        if necessita_retorno is None:
+            item.necessita_retorno = _retorno_sugerido(tipo_operacao)
+
+    if necessita_retorno is not None:
+        item.necessita_retorno = bool(necessita_retorno)
+    if data_prevista_retorno is not None:
+        item.data_prevista_retorno = _data(data_prevista_retorno)
+    if not item.necessita_retorno:
+        item.data_prevista_retorno = None
+
+    solicitacao.status = _recalcular_status(solicitacao)
+    solicitacao.updated_at = datetime.now()
+    db.session.add(SolicitacaoNFLog(
+        solicitacao_id=solicitacao.id, item_id=item.id, acao="item alterado", usuario=usuario,
+        status_anterior=antes["tipo_operacao"], status_novo=item.tipo_operacao,
+        detalhes=json.dumps({"antes": antes, "depois": {
+            "tipo_operacao": item.tipo_operacao,
+            "necessita_retorno": item.necessita_retorno,
+            "data_prevista_retorno": _iso(item.data_prevista_retorno)}}, ensure_ascii=False),
+    ))
+    db.session.commit()
+    return solicitacao
+
+
+def _data(valor):
+    """Aceita 'AAAA-MM-DD' vindo do <input type=date>; vazio limpa o campo."""
+    valor = str(valor or "").strip()
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise SolicitacaoNFError("Data de retorno inválida.")
 
 
 def _status_do_item_apos_faturar(item) -> str:
@@ -545,7 +628,7 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
     solicitacao.observacoes_faturamento = (observacao or "")[:500]
 
     # Remessa para Conserto: puxa o destinatario/endereco da NF na bridge do ERP.
-    if solicitacao.tipo_operacao in TIPOS_PUXA_NF_BRIDGE:
+    if any((i.tipo_operacao or solicitacao.tipo_operacao) in TIPOS_PUXA_NF_BRIDGE for i in alvos):
         parceiro = _dados_parceiro_nf(numero_nf)
         if parceiro:
             solicitacao.nf_parceiro_nome = (parceiro.get("nome") or "")[:200] or None
@@ -647,18 +730,46 @@ def _reconciliar_of_vinculadas() -> None:
                 continue
 
 
-def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str, observacao: str | None) -> SolicitacaoNF:
+def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
+                      observacao: str | None, retornos: dict | None = None) -> SolicitacaoNF:
+    """Registra a volta do material.
+
+    `retornos` é {item_id: quantidade} e permite devolução parcial: o item só
+    fecha quando a soma devolvida alcança a quantidade enviada. Sem ele, tudo
+    que estava esperando volta inteiro — que era o único jeito antes."""
     solicitacao = SolicitacaoNF.query.get(solicitacao_id)
     if not solicitacao:
         raise SolicitacaoNFError("Solicitação não encontrada.")
-    if solicitacao.status not in STATUS_PENDENTES_RETORNO:
+    esperando = [i for i in solicitacao.itens if i.status in STATUS_PENDENTES_RETORNO]
+    if not esperando:
         raise SolicitacaoNFError("Esta solicitação não está aguardando retorno de material.")
     numero_nf_retorno = str(numero_nf_retorno or "").strip()
     if not numero_nf_retorno:
         raise SolicitacaoNFError("Informe o número da NF de retorno.")
 
+    hoje = datetime.now()
+    for item in esperando:
+        if retornos is not None and item.id not in retornos:
+            continue
+        try:
+            voltou = float(retornos[item.id]) if retornos is not None else float(item.quantidade or 0)
+        except (TypeError, ValueError):
+            raise SolicitacaoNFError("Quantidade devolvida inválida.")
+        if voltou <= 0:
+            continue
+        ja_tinha = float(item.quantidade_retornada or 0)
+        if ja_tinha + voltou > float(item.quantidade or 0) + 1e-6:
+            raise SolicitacaoNFError(
+                f"A devolução de {item.material_codigo} passa da quantidade enviada.")
+        item.quantidade_retornada = ja_tinha + voltou
+        item.numero_nf_retorno = numero_nf_retorno
+        # Só fecha quando tudo voltou; devolução parcial continua pendente.
+        if item.quantidade_retornada + 1e-6 >= float(item.quantidade or 0):
+            item.status = STATUS_ESTOQUE_RETORNADO
+            item.data_efetiva_retorno = hoje.date()
+
     status_anterior = solicitacao.status
-    solicitacao.status = STATUS_ESTOQUE_RETORNADO
+    solicitacao.status = _recalcular_status(solicitacao)
     solicitacao.numero_nf_retorno = numero_nf_retorno
     solicitacao.retorno_por = usuario
     solicitacao.retorno_at = datetime.now()
@@ -702,6 +813,7 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.ordem_faturamento = None
         for item in solicitacao.itens:
             item.separado = False
+            item.status = STATUS_SOLICITADO
     elif status_atual in (STATUS_NF_EMITIDA, STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA):
         # Volta para a etapa anterior ao faturamento (depende do tipo).
         novo_status = (
@@ -717,6 +829,12 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.nf_parceiro_endereco = None
         # Desfaz o vinculo com a OF para nao refaturar automaticamente ao listar.
         solicitacao.ordem_faturamento = None
+        for item in solicitacao.itens:
+            item.numero_nf = None
+            item.data_emissao_nf = None
+            item.status = (STATUS_AGUARDANDO_FAT
+                           if (item.tipo_operacao or solicitacao.tipo_operacao) in TIPOS_AGUARDA_FATURAMENTO
+                           else STATUS_EXPEDIDO_SEM_NF)
     elif status_atual == STATUS_ESTOQUE_RETORNADO:
         novo_status = (
             STATUS_ESTOQUE_ASSISTENCIA
@@ -727,6 +845,11 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.retorno_por = None
         solicitacao.retorno_at = None
         solicitacao.observacoes_retorno = None
+        for item in solicitacao.itens:
+            item.numero_nf_retorno = None
+            item.quantidade_retornada = 0
+            item.data_efetiva_retorno = None
+            item.status = _status_do_item_apos_faturar(item)
     else:
         raise SolicitacaoNFError("Não é possível estornar esta solicitação.")
 
