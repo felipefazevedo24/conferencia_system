@@ -8,7 +8,8 @@ const performanceMode = process.argv.includes('--performance');
 const budgetContext = process.argv.includes('--budget-context');
 const fullStructureMode = process.argv.includes('--cronograma-estrutura');
 const largeStructureMode = process.argv.includes('--estrutura-grande');
-const cronogramaMode = process.argv.includes('--cronograma') || fullStructureMode;
+const cronogramaScrollMode = process.argv.includes('--cronograma-scroll');
+const cronogramaMode = process.argv.includes('--cronograma') || fullStructureMode || cronogramaScrollMode;
 const recognitionPreviews = process.argv.includes('--recognition-previews');
 const cylinderPreviews = process.argv.includes('--cylinder-previews');
 const slowPreviewMode = process.argv.includes('--slow-previews');
@@ -98,7 +99,7 @@ const server=http.createServer((req,res)=>{
       return res.end(JSON.stringify({classificacoes:fullStructureMode?['MOLDE']:['CMS','Moldes']}));
     }
     if(cronogramaMode && url.pathname==='/api/producao/cronograma-entregas') {
-      const deliveries=fullStructureMode?[{orcamento:'7155',versao:'',cliente:'CIDADE ENGENHARIA LTDA',descricao:'MOLD FI500',classificacoes:['MOLDE'],data_entrega:'2026-09-18',status:'Em produção',percentual:77,os:[{numero:'9961',principal:true},{numero:'9962',principal:true},{numero:'9963',principal:true}]}]:[
+      const deliveries=cronogramaScrollMode?Array.from({length:20},(_,index)=>({orcamento:String(7100+index),versao:'',cliente:`Cliente ${index}`,descricao:`Projeto ${index}`,classificacoes:['CMS'],data_entrega:'2026-09-25',status:'Em produção',percentual:50,os:[{numero:String(9000+index),principal:true},{numero:String(9200+index),principal:false}]})):fullStructureMode?[{orcamento:'7155',versao:'',cliente:'CIDADE ENGENHARIA LTDA',descricao:'MOLD FI500',classificacoes:['MOLDE'],data_entrega:'2026-09-18',status:'Em produção',percentual:77,os:[{numero:'9961',principal:true},{numero:'9962',principal:true},{numero:'9963',principal:true}]}]:[
         {orcamento:'7222',versao:'A',cliente:'Cliente ABC',descricao:'Transportador',classificacoes:['CMS'],data_entrega:'2026-09-25',status:'Em produção',percentual:86,os:[{numero:'7900',principal:true,descricao:'Principal'},{numero:'7807/001',principal:false,descricao:'Secundária'}]},
         {orcamento:'7333',versao:'',cliente:'Cliente Moldes',descricao:'Molde',classificacoes:['Moldes'],data_entrega:'2026-09-28',status:'Concluído',percentual:100,os:[{numero:'8010',principal:true,descricao:'Molde'}]}
       ];
@@ -174,6 +175,24 @@ const server=http.createServer((req,res)=>{
       assert.equal(requests.filter(path=>path.endsWith('/structure')).length,1);
       assert.deepEqual(exceptions,[]);
       console.log('PASS: 301 itens e três níveis completos, sem consulta por filho (dados simulados)');
+      await call('Browser.close');return;
+    }
+
+    if(cronogramaScrollMode) {
+      await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
+      await wait("return d.querySelectorAll('.delivery-card').length===20;");
+      await inner("const list=d.querySelector('.delivery-list');const card=d.querySelectorAll('.delivery-card')[15];list.scrollTop=card.offsetTop-list.offsetTop-100;");
+      await wait("return d.querySelector('.delivery-list').scrollTop>500;");
+      const before=await inner("return d.querySelector('.delivery-list').scrollTop;");
+      await inner("d.querySelectorAll('.delivery-card-toggle')[15].click();");
+      await wait("return w.location.search.includes('os=9015') && d.querySelectorAll('.delivery-card')[15]?.querySelectorAll('.delivery-order').length===2;");
+      await wait("const list=d.querySelector('.delivery-list');const card=d.querySelectorAll('.delivery-card')[15];const a=list.getBoundingClientRect(),b=card.getBoundingClientRect();return list.scrollTop>500 && b.top>=a.top && b.top<a.bottom;");
+      const after=await inner("return d.querySelector('.delivery-list').scrollTop;");
+      assert(Math.abs(after-before)<5,JSON.stringify({before,after}));
+      await inner("d.querySelectorAll('.delivery-card')[15].querySelectorAll('.delivery-order')[1].click();");
+      await wait("return w.location.search.includes('os=9215') && d.querySelector('.delivery-list')?.scrollTop>500 && d.querySelectorAll('.delivery-card')[15]?.querySelector('.delivery-card-toggle')?.getAttribute('aria-expanded')==='true';");
+      assert.deepEqual(exceptions,[]);
+      console.log('PASS: ORÇ permanece visível após abrir e trocar OS na lista rolada (dados simulados)');
       await call('Browser.close');return;
     }
 
