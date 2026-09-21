@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const project = path.resolve(__dirname, '..');
 const performanceMode = process.argv.includes('--performance');
 const budgetContext = process.argv.includes('--budget-context');
+const cronogramaMode = process.argv.includes('--cronograma');
 const recognitionPreviews = process.argv.includes('--recognition-previews');
 const cylinderPreviews = process.argv.includes('--cylinder-previews');
 const slowPreviewMode = process.argv.includes('--slow-previews');
@@ -60,6 +61,22 @@ const server=http.createServer((req,res)=>{
   }
   if(url.pathname.startsWith('/api/')) {
     requests.push(url.pathname);
+    if(cronogramaMode && url.pathname==='/api/producao/cronograma-entregas/classificacoes') {
+      res.setHeader('Content-Type','application/json');
+      return res.end(JSON.stringify({classificacoes:['CMS','Moldes']}));
+    }
+    if(cronogramaMode && url.pathname==='/api/producao/cronograma-entregas') {
+      const deliveries=[
+        {orcamento:'7222',versao:'A',cliente:'Cliente ABC',descricao:'Transportador',classificacoes:['CMS'],data_entrega:'2026-09-25',status:'Em produção',percentual:86,os:[{numero:'7900',principal:true,descricao:'Principal'},{numero:'7807/001',principal:false,descricao:'Secundária'}]},
+        {orcamento:'7333',versao:'',cliente:'Cliente Moldes',descricao:'Molde',classificacoes:['Moldes'],data_entrega:'2026-09-28',status:'Concluído',percentual:100,os:[{numero:'8010',principal:true,descricao:'Molde'}]}
+      ];
+      const month=Number(url.searchParams.get('mes'));
+      const classification=url.searchParams.get('classificacao');
+      const search=(url.searchParams.get('pesquisa')||'').toLowerCase();
+      const result=month===9?deliveries.filter(item=>(!classification||item.classificacoes.includes(classification))&&(!search||[item.orcamento,item.cliente,item.descricao,...item.os.map(o=>o.numero)].some(value=>value.toLowerCase().includes(search)))):[];
+      res.setHeader('Content-Type','application/json');
+      return res.end(JSON.stringify({periodo:{mes:month,ano:Number(url.searchParams.get('ano'))},entregas:result}));
+    }
     if(performanceMode && url.pathname.endsWith('/thumbnail')) {
       res.setHeader('Cache-Control','no-store');
       if(!previewStarted.has(url.pathname))previewStarted.set(url.pathname,Date.now());
@@ -117,6 +134,47 @@ const server=http.createServer((req,res)=>{
     await call('Page.navigate',{url:base+'/producao'}); await sleep(500);
     await wait("return !!d.querySelector('.workspace') && d.querySelectorAll('.sequence-operation-card').length===8;");
 
+    if(cronogramaMode) {
+      await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
+      await wait("return d.querySelectorAll('.delivery-card').length===2;");
+      const screenshot=path.join(project,'tmp_producao_layout','cronograma-painel.png');
+      fs.mkdirSync(path.dirname(screenshot),{recursive:true});
+      fs.writeFileSync(screenshot,Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await inner("d.querySelector('.delivery-classification').value='CMS';d.querySelector('.delivery-classification').dispatchEvent(new w.Event('change',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===1 && d.querySelector('.delivery-card').textContent.includes('7222');");
+      await inner("d.querySelector('.delivery-card-toggle').click();");
+      await wait("return w.location.search.includes('os=7900') && d.querySelectorAll('.delivery-order').length===2;");
+      await inner("[...d.querySelectorAll('.delivery-order')].find(b=>b.textContent.includes('7807/001')).click();");
+      await wait("return w.location.search.includes('os=7807%2F001') && d.querySelector('.delivery-order.selected')?.textContent.includes('7807/001');");
+      await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Estrutura')).click();");
+      await wait("return d.querySelector('.tree-row.selected') && w.getComputedStyle(d.querySelector('.tree-content')).display!=='none';");
+      assert(await inner("return w.location.search.includes('os=7807%2F001') && !!d.querySelector('.assembly-node');"));
+      await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
+      await inner("d.querySelector('.delivery-classification').value='Moldes';d.querySelector('.delivery-classification').dispatchEvent(new w.Event('change',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===1 && d.querySelector('.delivery-card').textContent.includes('7333');");
+      await inner("d.querySelector('.delivery-card-toggle').click();");
+      await wait("return w.location.search.includes('os=8010') && d.querySelectorAll('.delivery-order').length===1 && !!d.querySelector('.assembly-node');");
+      await inner("d.querySelector('.delivery-classification').value='';d.querySelector('.delivery-classification').dispatchEvent(new w.Event('change',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===2;");
+      await inner("const input=d.querySelector('.delivery-search');input.value='Cliente Moldes';input.dispatchEvent(new w.Event('input',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===1 && d.querySelector('.delivery-card').textContent.includes('7333');");
+      await inner("d.querySelector('.delivery-search').value='7222';d.querySelector('.delivery-search').dispatchEvent(new w.Event('input',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===1 && d.querySelector('.delivery-card').textContent.includes('7222');");
+      await inner("const input=d.querySelector('.delivery-search');input.value='7807/001';input.dispatchEvent(new w.Event('input',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===1 && d.querySelector('.delivery-card').textContent.includes('7222');");
+      await inner("d.querySelector('.delivery-search').value='';d.querySelector('.delivery-search').dispatchEvent(new w.Event('input',{bubbles:true}));");
+      await wait("return d.querySelectorAll('.delivery-card').length===2;");
+      await inner("d.querySelector('[aria-label=\"Próximo mês\"]').click();");
+      await wait("return d.querySelector('.delivery-message')?.textContent==='Nenhuma entrega prevista para este período.';");
+      await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
+      await click('[data-production-target="tree"]');
+      await wait("return w.getComputedStyle(d.querySelector('.tree-panel')).display==='grid' && w.getComputedStyle(d.querySelector('.delivery-panel')).display==='flex';");
+      assert(await inner("return d.querySelector('.delivery-panel').scrollWidth <= d.querySelector('.delivery-panel').clientWidth + 1;"));
+      assert.deepEqual(exceptions,[]);
+      console.log('PASS: cronograma filtra, abre orçamento e OS, preserva árvore e mapa (dados simulados)');
+      await call('Browser.close');return;
+    }
+
     if(budgetContext) {
       await inner("const input=d.querySelector('input[placeholder*=\"orçamento\"]');Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set.call(input,'7175');input.dispatchEvent(new w.Event('input',{bubbles:true}));");
       await wait("return d.body.innerText.includes('Orçamento 7175 · OS 9958') && d.body.innerText.includes('Orçamento 7175 · OS 9959');");
@@ -132,7 +190,7 @@ const server=http.createServer((req,res)=>{
       await wait("return d.querySelectorAll('.dependency-node').length===1 && d.body.innerText.includes('Esta OS não possui dependências registradas.');");
       await inner("[...d.querySelectorAll('.map-view-switch button')].find(b=>b.textContent==='Estrutura da OS').click();");
       await wait("return d.querySelectorAll('.assembly-node').length===4;");
-      assert(await inner("return d.querySelectorAll('.react-flow__edge').length===3;"));
+      await wait("return d.querySelectorAll('.react-flow__edge').length===3;");
       assert(await inner("return [...d.querySelectorAll('.assembly-node')].find(n=>n.textContent.includes('9958/003')).textContent.includes('10');"));
       const artifact=path.join(project,'tmp_producao_contexto');fs.mkdirSync(artifact,{recursive:true});
       fs.writeFileSync(path.join(artifact,'estrutura.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));

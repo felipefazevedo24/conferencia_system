@@ -78,6 +78,36 @@ def listar_os_abertas():
         return jsonify({"error": "Nao foi possivel consultar as OS abertas no GRV."}), 503
 
 
+@producao_bp.get("/api/producao/cronograma-entregas")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_entregas():
+    try:
+        mes = int(request.args.get("mes", datetime.now().month))
+        ano = int(request.args.get("ano", datetime.now().year))
+        if not 1 <= mes <= 12 or not 2000 <= ano <= 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "Período inválido."}), 400
+    try:
+        entregas = producao_service.listar_entregas_cronograma(
+            mes, ano, request.args.get("classificacao", ""), request.args.get("pesquisa", "")
+        )
+        return jsonify({"periodo": {"mes": mes, "ano": ano}, "entregas": entregas})
+    except Exception:
+        current_app.logger.exception("Falha ao consultar cronograma de entregas")
+        return jsonify({"error": "Não foi possível consultar o cronograma no GRV."}), 503
+
+
+@producao_bp.get("/api/producao/cronograma-entregas/classificacoes")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_classificacoes():
+    try:
+        return jsonify({"classificacoes": producao_service.listar_classificacoes_cronograma()})
+    except Exception:
+        current_app.logger.exception("Falha ao consultar classificações do cronograma")
+        return jsonify({"error": "Não foi possível consultar as classificações no GRV."}), 503
+
+
 @producao_bp.get("/api/producao/os/<path:numero_os>")
 @permission_required("PAGE_PRODUCAO")
 def estrutura_os(numero_os: str):

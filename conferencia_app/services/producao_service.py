@@ -167,6 +167,64 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     return results
 
 
+def listar_classificacoes_cronograma() -> list[str]:
+    rows = _metadata_read(fetch_all, queries.SQL_CLASSIFICACOES, {"cod_empresa": 1})
+    return sorted({_texto(row.get("classificacao")) for row in rows if _texto(row.get("classificacao"))}, key=str.casefold)
+
+
+def listar_entregas_cronograma(mes: int, ano: int, classificacao: str = "", pesquisa: str = "") -> list[dict[str, Any]]:
+    inicio = date(ano, mes, 1)
+    fim = date(ano + (mes == 12), mes % 12 + 1, 1)
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_CRONOGRAMA_ENTREGAS, {
+        "cod_empresa": 1,
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "classificacao": _texto(classificacao) or None,
+        "pesquisa": f"%{_texto(pesquisa)}%" if _texto(pesquisa) else None,
+    })
+    deliveries: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        budget_id = int(row["cod_orcamento"])
+        delivery = deliveries.setdefault(budget_id, {
+            "orcamento": _texto(row.get("n_orcamento")),
+            "versao": _texto(row.get("versao")),
+            "data_entrega": _iso(row.get("dt_previsao_entrega")),
+            "cliente": "", "descricao": "", "classificacoes": [],
+            "status": "", "percentual": None,
+            "operacoes_total": 0, "operacoes_concluidas": 0,
+            "os": [],
+        })
+        numero = _texto(row.get("n_os"))
+        if not numero:
+            continue
+        if not delivery["cliente"]:
+            delivery["cliente"] = _texto(row.get("cliente"))
+        if not delivery["descricao"]:
+            delivery["descricao"] = _texto(row.get("titulo"))
+        classification = _texto(row.get("u_classificacao"))
+        if classification and classification not in delivery["classificacoes"]:
+            delivery["classificacoes"].append(classification)
+        delivery["os"].append({
+            "numero": numero,
+            "descricao": _texto(row.get("titulo")),
+            "principal": bool(row.get("principal")),
+            "status": _texto(row.get("status_servico")),
+        })
+        delivery["operacoes_total"] += int(row.get("operacoes_total") or 0)
+        delivery["operacoes_concluidas"] += int(row.get("operacoes_concluidas") or 0)
+    for delivery in deliveries.values():
+        total = delivery["operacoes_total"]
+        completed = delivery["operacoes_concluidas"]
+        if total:
+            delivery["percentual"] = round(completed * 100 / total)
+            delivery["status"] = "Concluído" if completed == total else "Em produção"
+        elif delivery["os"]:
+            delivery["status"] = delivery["os"][0]["status"] or "Sem operações"
+        else:
+            delivery["status"] = "OS não gerada"
+    return list(deliveries.values())
+
+
 def obter_dependencias(numero_os: str) -> dict[str, Any]:
     """Rastreia o orcamento e as OS geradas por solicitacoes reais do GRV."""
     ordem = _obter_ordem(_texto(numero_os))
