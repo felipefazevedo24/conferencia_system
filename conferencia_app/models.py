@@ -923,6 +923,10 @@ class SolicitacaoNF(db.Model):
     # avanca automaticamente para o status final conforme o tipo.
     ordem_faturamento = db.Column(db.Integer, index=True)
 
+    # Recado de quem abriu o pedido. As outras observacoes desta tabela sao do
+    # time interno; sem esta, o solicitante nao tinha onde explicar o caso.
+    observacoes = db.Column(db.String(500))
+
     ip_solicitante = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
@@ -951,6 +955,9 @@ class SolicitacaoNFItem(db.Model):
     # Local de estoque (endereco) do material no ERP (tproduto.localizacao_estoque),
     # congelado no momento em que a solicitacao e criada.
     material_local = db.Column(db.String(160))
+    # Unidade do material no ERP, congelada junto: sem ela a quantidade fica
+    # ambigua ("100" de cabo e 100 metros, nao 100 pecas).
+    material_unidade = db.Column(db.String(20))
     quantidade = db.Column(db.Float, nullable=False, default=0)
     separado = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -1013,6 +1020,25 @@ class UsuarioFuncionario(db.Model):
     # 'email' quando o vinculo saiu do e-mail corporativo, 'manual' quando a
     # pessoa escolheu o proprio nome na tela.
     origem = db.Column(db.String(20), nullable=False, default="email")
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class SolicitacaoNFAnexo(db.Model):
+    """Laudo, foto do defeito ou protocolo de teste anexado a solicitacao.
+
+    Arquivo vai para o banco, e nao para drive externo, como o resto do
+    sistema faz."""
+
+    __tablename__ = "solicitacao_nf_anexo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(db.Integer, db.ForeignKey("solicitacao_nf.id"),
+                               nullable=False, index=True)
+    nome_arquivo = db.Column(db.String(260), nullable=False)
+    mimetype = db.Column(db.String(120))
+    tamanho = db.Column(db.Integer, nullable=False, default=0)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    enviado_por = db.Column(db.String(160))
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 

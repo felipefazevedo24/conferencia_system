@@ -16,7 +16,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-COLUNAS_ITEM = ('tipo_operacao', 'sera_vendido', 'necessita_retorno', 'status',
+COLUNAS_ITEM = ('material_unidade', 'tipo_operacao', 'sera_vendido', 'necessita_retorno', 'status',
                 'numero_nf', 'data_emissao_nf', 'data_prevista_retorno',
                 'data_efetiva_retorno', 'quantidade_retornada', 'numero_nf_retorno')
 

@@ -104,6 +104,18 @@
   color: var(--eui-warning-soft-text, #84550d); cursor: help; }
 .avl-aviso-grupo { margin: 4px 0 10px; }
 
+/* O que o solicitante escreveu e anexou ao abrir o pedido. */
+.avl-obs-solicitante { background: var(--eui-surface-2, #f8fafc); border-left: 3px solid var(--eui-primary, #0f62c9);
+  border-radius: 0 8px 8px 0; padding: 10px 12px; font-size: 13px; color: var(--eui-text, #183247);
+  white-space: pre-line; overflow-wrap: anywhere; margin-bottom: 8px; }
+.avl-anexos { display: flex; flex-wrap: wrap; gap: 8px; }
+.avl-anexo { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px;
+  border: 1px solid var(--eui-border, #dbe4ec); border-radius: 999px; background: var(--eui-surface, #fff);
+  font-size: 12px; font-weight: 600; color: var(--eui-primary, #0f62c9); text-decoration: none;
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avl-anexo:hover { background: var(--eui-primary-soft, #e6efff); }
+.avl-anexo small { color: var(--eui-muted, #64748b); font-weight: 500; }
+
 /* Retorno: quanto voltou por item, com a opcao de encerrar com diferenca. */
 .avl-table-retorno .avl-qtd-ret { max-width: 130px; padding: 6px 8px; font-size: 13px; }
 .avl-encerrar { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;

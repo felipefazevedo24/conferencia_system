@@ -47,7 +47,9 @@ TIPOS_INICIAIS = (
      'material e não há retorno a controlar.'),
 )
 
+# Unidade do material junto do item: sem ela a quantidade fica ambígua.
 COLUNAS_ITEM = (
+    ('material_unidade', sa.String(20), {}),
     ('tipo_operacao', sa.String(60), {}),
     ('sera_vendido', sa.Boolean(), {'nullable': False, 'server_default': '0'}),
     ('necessita_retorno', sa.Boolean(), {'nullable': False, 'server_default': '0'}),
@@ -89,6 +91,10 @@ def upgrade():
     for nome, tipo, extra in COLUNAS_ITEM:
         if nome not in existentes:
             op.add_column('solicitacao_nf_item', sa.Column(nome, tipo, **extra))
+
+    # Recado de quem abre o pedido: as outras observações são do time interno.
+    if 'observacoes' not in _colunas(inspector, 'solicitacao_nf'):
+        op.add_column('solicitacao_nf', sa.Column('observacoes', sa.String(500)))
 
     if 'item_id' not in _colunas(inspector, 'solicitacao_nf_log'):
         op.add_column('solicitacao_nf_log', sa.Column('item_id', sa.Integer()))
@@ -171,5 +177,6 @@ def _backfill(bind):
 def downgrade():
     for nome, _tipo, _extra in COLUNAS_ITEM:
         op.drop_column('solicitacao_nf_item', nome)
+    op.drop_column('solicitacao_nf', 'observacoes')
     op.drop_index('ix_solicitacao_nf_log_item_id', table_name='solicitacao_nf_log')
     op.drop_column('solicitacao_nf_log', 'item_id')

@@ -273,8 +273,23 @@
                 </div>`;
         }
 
+        // O que o solicitante escreveu e anexou. Em garantia, e' quase sempre
+        // aqui que esta a explicacao do caso.
+        function renderPedidoDoSolicitante(o) {
+            const anexos = (o.anexos || []).map((a) =>
+                `<a class="avl-anexo" href="/api/expedicao/conf-cega-avulso/anexos/${a.id}"
+                    target="_blank" rel="noopener" title="${escapeHtml(a.nome)}">
+                   <i class="fas fa-paperclip"></i>${escapeHtml(a.nome)}
+                   <small>${(a.tamanho / 1024).toFixed(0)} KB</small></a>`).join("");
+            if (!o.observacoes && !anexos) return "";
+            return `<div class="avl-section-title"><i class="fas fa-comment"></i> Do solicitante</div>
+                ${o.observacoes ? `<p class="avl-obs-solicitante">${escapeHtml(o.observacoes)}</p>` : ""}
+                ${anexos ? `<div class="avl-anexos">${anexos}</div>` : ""}`;
+        }
+
         function renderDetalhe(o) {
             const steps = renderSteps(o);
+            const doSolicitante = renderPedidoDoSolicitante(o);
             const emSeparacao = o.status_slug === "em_separacao";
             const itensBloco = `<div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>`
                 + renderItens(o, emSeparacao ? "separar" : null);
@@ -291,7 +306,7 @@
                 : "";
 
             if (emSeparacao) {
-                return `${steps}${vendaInfo}${itensBloco}
+                return `${steps}${doSolicitante}${vendaInfo}${itensBloco}
                     <textarea class="avl-obs" placeholder="Observações da separação (opcional)"></textarea>
                     <div class="avl-detail-actions">
                         <button type="button" class="eui-btn eui-btn--primary" data-action="separar"><i class="fas fa-check"></i> Confirmar separação</button>
@@ -319,7 +334,7 @@
                         na mesma nota. Marque os itens de uma delas, informe a NF, e depois repita
                         para as outras.</p>`
                     : "";
-                return `${steps}${vendaInfo}
+                return `${steps}${doSolicitante}${vendaInfo}
                     <div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>
                     ${renderItens(o, "faturar")}
                     ${renderOfBox(o)}
@@ -349,7 +364,7 @@
                             </label></td>
                     </tr>`;
                 }).join("");
-                return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${itensBloco}
+                return `${steps}${doSolicitante}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${itensBloco}
                     <div class="avl-section-title"><i class="fas fa-rotate-left"></i> Retorno do material</div>
                     <table class="avl-table avl-table-retorno"><thead><tr>
                         <th>Código</th><th>Descrição</th><th style="text-align:right;">Falta voltar</th>
@@ -372,7 +387,7 @@
             if (o.status_slug === "estoque_retornado") {
                 extra = `<div class="eui-caption" style="margin-top:8px;"><i class="fas fa-rotate-left"></i> Retorno: NF ${escapeHtml(o.numero_nf_retorno || "—")} registrado por ${escapeHtml(o.retorno_por || "—")} em ${fmtDataHora(o.retorno_at)}</div>`;
             }
-            return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${extra}${itensBloco}
+            return `${steps}${doSolicitante}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${extra}${itensBloco}
                 ${renderAcoesAdmin(o)}`;
         }
 

@@ -70,6 +70,21 @@ def tipos_operacao_avulso():
     return jsonify({"sucesso": True, "tipos": svc.listar_tipos_operacao()})
 
 
+@expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/anexos/<int:anexo_id>")
+@permission_required_any(*PERMISSOES)
+def baixar_anexo_avulso(anexo_id):
+    """Laudo/foto que o solicitante anexou. Só quem opera o módulo baixa."""
+    from flask import send_file
+    from io import BytesIO
+    from ..models import SolicitacaoNFAnexo
+
+    anexo = SolicitacaoNFAnexo.query.get(anexo_id)
+    if not anexo or not anexo.dados:
+        return jsonify({"sucesso": False, "erro": "Anexo não encontrado."}), 404
+    return send_file(BytesIO(anexo.dados), download_name=anexo.nome_arquivo,
+                     mimetype=anexo.mimetype or "application/octet-stream")
+
+
 @expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/faturar", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def faturar_ordem_avulso(solicitacao_id):

@@ -21,7 +21,8 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import ExpedicaoOrdemFat, SolicitacaoNF, SolicitacaoNFItem, SolicitacaoNFLog
+from ..models import (ExpedicaoOrdemFat, SolicitacaoNF, SolicitacaoNFAnexo,
+                      SolicitacaoNFItem, SolicitacaoNFLog)
 from .erp_lancamento_service import _conectar, _resolver_config
 from .facilities_grv_service import FacilitiesGRVService, normalizar_nome
 from . import teams_service
@@ -81,6 +82,13 @@ STATUS_BADGE = {
     STATUS_ESTOQUE_RETORNADO: "eui-badge--success",
     STATUS_PARCIAL: "eui-badge--info",
 }
+
+
+# Anexo: laudo, foto do defeito, protocolo de teste. Vai para o banco, como o
+# resto do sistema faz, entao o tamanho precisa de teto.
+ANEXO_TAMANHO_MAXIMO = 8 * 1024 * 1024
+ANEXO_MAXIMO_POR_SOLICITACAO = 5
+ANEXO_TIPOS = ("application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic")
 
 
 class SolicitacaoNFError(ValueError):
@@ -187,6 +195,7 @@ SQL_CLIENTE_POR_CODIGO = _CLIENTE_SELECT + " where to_jsonb(c)->>'codigo' = %(co
 
 SQL_MATERIAL_BUSCAR = """
     select codigo_interno, nome, estoque_disponivel_uso,
+           coalesce(nullif(unidade, ''), nullif(unidade_compra, ''), '') as unidade,
            coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
     from public.tproduto
     where cod_empresa = %(empresa)s
@@ -197,6 +206,7 @@ SQL_MATERIAL_BUSCAR = """
 
 SQL_MATERIAL_POR_CODIGO = """
     select codigo_interno, nome, estoque_disponivel_uso,
+           coalesce(nullif(unidade, ''), nullif(unidade_compra, ''), '') as unidade,
            coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
     from public.tproduto
     where cod_empresa = %(empresa)s
@@ -375,6 +385,7 @@ def _validar_itens(itens_payload: list, tipo_padrao: str = "",
             "material_codigo": material["codigo_interno"],
             "material_nome": material["nome"],
             "material_local": str(material.get("localizacao_estoque") or "").strip() or None,
+            "material_unidade": str(material.get("unidade") or "").strip()[:20] or None,
             "quantidade": quantidade,
             "tipo_operacao": tipo,
             "necessita_retorno": bool(informado) if informado is not None
@@ -382,6 +393,42 @@ def _validar_itens(itens_payload: list, tipo_padrao: str = "",
             "sera_vendido": bool(vendido),
         })
     return itens
+
+
+def _validar_anexos(anexos) -> list[dict[str, Any]]:
+    """Anexos do pedido, recebidos em base64 pelo formulário público."""
+    import base64
+    import binascii
+
+    if not anexos:
+        return []
+    if not isinstance(anexos, list) or len(anexos) > ANEXO_MAXIMO_POR_SOLICITACAO:
+        raise SolicitacaoNFError(
+            f"No máximo {ANEXO_MAXIMO_POR_SOLICITACAO} arquivos por solicitação.")
+    limpos = []
+    for bruto in anexos:
+        if not isinstance(bruto, dict):
+            raise SolicitacaoNFError("Anexo inválido.")
+        nome = str(bruto.get("nome") or "").strip()[:260]
+        mimetype = str(bruto.get("mimetype") or "").strip().lower()[:120]
+        conteudo = str(bruto.get("conteudo") or "")
+        if "," in conteudo[:64]:  # data:...;base64,XXXX
+            conteudo = conteudo.split(",", 1)[1]
+        if not nome or not conteudo:
+            raise SolicitacaoNFError("Anexo sem nome ou sem conteúdo.")
+        if mimetype and mimetype not in ANEXO_TIPOS:
+            raise SolicitacaoNFError(
+                f"'{nome}': envie PDF ou imagem (JPG, PNG, WEBP, HEIC).")
+        try:
+            dados = base64.b64decode(conteudo, validate=True)
+        except (binascii.Error, ValueError):
+            raise SolicitacaoNFError(f"Não foi possível ler o arquivo '{nome}'.")
+        if len(dados) > ANEXO_TAMANHO_MAXIMO:
+            raise SolicitacaoNFError(
+                f"'{nome}' passa de {ANEXO_TAMANHO_MAXIMO // (1024 * 1024)} MB.")
+        limpos.append({"nome_arquivo": nome, "mimetype": mimetype or None,
+                       "tamanho": len(dados), "dados": dados})
+    return limpos
 
 
 def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
@@ -394,6 +441,7 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
         (payload or {}).get("cliente_codigo"),
         (payload or {}).get("cliente_nome"),
     )
+    anexos = _validar_anexos((payload or {}).get("anexos"))
     informado = (payload or {}).get("necessita_retorno")
     itens = _validar_itens(
         (payload or {}).get("itens") or [],
@@ -415,6 +463,7 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
         cliente_codigo=str(cliente.get("codigo") or ""),
         cliente_nome=cliente.get("nome") or "",
         cliente_documento=cliente.get("documento") or "",
+        observacoes=str((payload or {}).get("observacoes") or "").strip()[:500] or None,
         status=STATUS_SOLICITADO,
         ip_solicitante=(ip or "")[:64],
     )
@@ -434,6 +483,10 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     db.session.add(solicitacao)
     db.session.flush()  # garante solicitacao.id para o protocolo
     solicitacao.protocolo = f"SNF-{solicitacao.id:06d}"
+
+    for anexo in anexos:
+        db.session.add(SolicitacaoNFAnexo(
+            solicitacao_id=solicitacao.id, enviado_por=solicitacao.solicitante_nome, **anexo))
 
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
@@ -1021,6 +1074,7 @@ def _serializar_item(item: SolicitacaoNFItem) -> dict[str, Any]:
         "material_codigo": item.material_codigo,
         "material_nome": item.material_nome,
         "material_local": item.material_local,
+        "material_unidade": item.material_unidade,
         "quantidade": item.quantidade,
         "separado": item.separado,
         # Operação, nota e retorno por item: é o que a tela usa para agrupar
@@ -1061,6 +1115,10 @@ def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
         "cliente_nome": s.cliente_nome,
         "cliente_documento": s.cliente_documento,
         "status": s.status,
+        "observacoes": s.observacoes,
+        "anexos": [{"id": a.id, "nome": a.nome_arquivo, "tamanho": a.tamanho}
+                   for a in SolicitacaoNFAnexo.query.filter_by(solicitacao_id=s.id)
+                   .order_by(SolicitacaoNFAnexo.id)],
         "status_slug": STATUS_SLUGS.get(s.status, ""),
         "status_badge": STATUS_BADGE.get(s.status, "eui-badge--neutral"),
         "separado_por": s.separado_por,

@@ -153,6 +153,13 @@
       display: grid; gap: 3px; text-transform: uppercase; letter-spacing: .3px; }
     .item-config select { font: inherit; font-size: 12.5px; border: 1px solid var(--border-strong);
       border-radius: 8px; padding: 6px 8px; background: #fff; color: var(--text); max-width: 210px; }
+    .anexo-item { display: flex; align-items: center; gap: 10px; background: var(--surface-soft);
+      border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; margin-top: 6px;
+      font-size: 12.5px; }
+    .anexo-item .nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .anexo-item .tam { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+    .aviso-saldo { color: var(--err); font-weight: 600; }
     .empty-list { text-align: center; color: var(--muted); font-size: 13px; padding: 22px;
       border: 1px dashed var(--border-strong); border-radius: var(--radius); margin-top: 8px;
       background: var(--surface-soft); }
@@ -299,6 +306,24 @@
             </div>
             <div id="listaItens">
               <div class="empty-list">Nenhum item adicionado ainda.</div>
+            </div>
+          </div>
+
+          <!-- 4) Recado e anexos de quem abre o pedido -->
+          <div class="section">
+            <div class="section-title"><span class="step">4</span> Observações e anexos</div>
+            <p class="hint">Opcional. Em garantia, o laudo ou a foto do defeito ajudam muito
+              quem vai avaliar.</p>
+            <div class="field">
+              <label for="observacoes">Alguma observação?</label>
+              <textarea id="observacoes" rows="3" maxlength="500"
+                placeholder="Ex.: bomba apresentou vazamento com 3 meses de uso."></textarea>
+            </div>
+            <div class="field">
+              <label for="anexos">Anexos <small>(PDF ou imagem, até 5 arquivos de 8 MB)</small></label>
+              <input type="file" id="anexos" multiple
+                     accept="application/pdf,image/jpeg,image/png,image/webp,image/heic">
+              <div id="listaAnexos"></div>
             </div>
           </div>
 
@@ -494,7 +519,9 @@
     materialSelecionado = mat;
     $("buscaMaterial").value = `${mat.codigo_interno} - ${mat.nome}`;
     $("sugestoesMaterial").classList.remove("show");
-    $("helpMaterial").textContent = `Saldo em estoque: ${mat.estoque_disponivel_uso ?? "-"}`;
+    const un = mat.unidade ? ` ${mat.unidade}` : "";
+    $("helpMaterial").textContent = `Saldo em estoque: ${mat.estoque_disponivel_uso ?? "-"}${un}`;
+    $("txtQuantidade").focus();
   };
 
   window.adicionarItem = function () {
@@ -504,15 +531,28 @@
     clearFeedback();
     const operacao = $("addOperacao").value;
     if (!operacao) { showFeedback("Escolha a operação deste material.", "err"); return; }
-    itens.push({
-      material_codigo: materialSelecionado.codigo_interno,
-      material_nome: materialSelecionado.nome,
-      quantidade: qtde,
-      tipo_operacao: operacao,
-      // O retorno vem sugerido pela operacao e pode ser trocado na linha.
-      necessita_retorno: !!RETORNO_SUGERIDO[operacao],
-      sera_vendido: false,
-    });
+
+    // Mesmo material na MESMA operacao vira uma linha so: duas linhas iguais
+    // confundem quem separa. Operacao diferente continua sendo outra linha,
+    // porque vai em outra nota.
+    const igual = itens.find((i) => i.material_codigo === materialSelecionado.codigo_interno
+                                 && i.tipo_operacao === operacao);
+    if (igual) {
+      igual.quantidade = Number(igual.quantidade) + qtde;
+      showFeedback(`Quantidade de ${igual.material_codigo} somada: agora ${igual.quantidade}.`, "ok");
+    } else {
+      itens.push({
+        material_codigo: materialSelecionado.codigo_interno,
+        material_nome: materialSelecionado.nome,
+        material_unidade: materialSelecionado.unidade || "",
+        quantidade: qtde,
+        tipo_operacao: operacao,
+        // O retorno vem sugerido pela operacao e pode ser trocado na linha.
+        necessita_retorno: !!RETORNO_SUGERIDO[operacao],
+        sera_vendido: false,
+        saldo: materialSelecionado.estoque_disponivel_uso,
+      });
+    }
     renderItens();
     renderResumo();
     materialSelecionado = null;
@@ -535,6 +575,44 @@
   window.mudarVendaItem = function (idx, valor) {
     itens[idx].sera_vendido = valor === "sim";
   };
+
+  // ----- Anexos -----
+  const anexos = [];
+  const ANEXO_MAX = 8 * 1024 * 1024;
+  const ANEXO_LIMITE = 5;
+
+  function renderAnexos() {
+    $("listaAnexos").innerHTML = anexos.map((a, i) => `
+      <div class="anexo-item">
+        <i class="fas fa-paperclip"></i>
+        <span class="nome">${a.nome}</span>
+        <span class="tam">${(a.tamanho / 1024).toFixed(0)} KB</span>
+        <button type="button" class="btn-x" onclick="removerAnexo(${i})" title="Remover">
+          <i class="fas fa-times"></i></button>
+      </div>`).join("");
+  }
+
+  window.removerAnexo = function (i) { anexos.splice(i, 1); renderAnexos(); };
+
+  $("anexos").addEventListener("change", (e) => {
+    const escolhidos = Array.from(e.target.files || []);
+    e.target.value = "";
+    escolhidos.forEach((arquivo) => {
+      if (anexos.length >= ANEXO_LIMITE) {
+        showFeedback(`No máximo ${ANEXO_LIMITE} arquivos.`, "err"); return;
+      }
+      if (arquivo.size > ANEXO_MAX) {
+        showFeedback(`"${arquivo.name}" passa de 8 MB.`, "err"); return;
+      }
+      const leitor = new FileReader();
+      leitor.onload = () => {
+        anexos.push({ nome: arquivo.name, mimetype: arquivo.type,
+                      tamanho: arquivo.size, conteudo: String(leitor.result).split(",")[1] });
+        renderAnexos();
+      };
+      leitor.readAsDataURL(arquivo);
+    });
+  });
 
   window.removerItem = function (idx) {
     itens.splice(idx, 1);
@@ -573,7 +651,9 @@
       <div class="item-row item-row--detalhado">
         <div class="info">
           <strong>${it.material_codigo} - ${it.material_nome}</strong>
-          <span>Quantidade: ${it.quantidade}</span>
+          <span>Quantidade: ${it.quantidade}${it.material_unidade ? " " + it.material_unidade : ""}${
+            (it.saldo != null && Number(it.quantidade) > Number(it.saldo))
+              ? ` <span class="aviso-saldo">· acima do saldo (${it.saldo})</span>` : ""}</span>
         </div>
         <div class="item-config">
           <label>Operação
@@ -670,6 +750,8 @@
         cliente_codigo: clienteSelecionado.codigo,
         cliente_nome: clienteSelecionado.nome,
         itens: itens,
+        observacoes: $("observacoes").value.trim(),
+        anexos: anexos,
         website: $("website").value,
       };
       const r = await fetch("/api/solicitacao-nf", {
