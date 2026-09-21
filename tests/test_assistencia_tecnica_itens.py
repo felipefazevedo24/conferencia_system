@@ -281,3 +281,75 @@ def test_of_nao_fatura_sozinha_quando_ha_operacoes_diferentes(app, erp):
         svc._reconciliar_of_vinculadas()
         assert all(i.numero_nf == "NF-OF"
                    for i in db.session.get(SolicitacaoNF, solicitacao.id).itens)
+
+
+def test_voltou_menos_e_esta_certo_assim(app, erp):
+    """Saiu 100 de cabo, voltou 50, e acabou: nao e pendencia."""
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        item.quantidade = 100
+        db.session.commit()
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C", None)
+
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", "Resto consumido no cliente",
+                              retornos={item.id: 50}, encerrar=[item.id])
+        item = db.session.get(SolicitacaoNFItem, item.id)
+        assert item.status == svc.STATUS_ESTOQUE_RETORNADO
+        assert item.quantidade_retornada == 50      # o que voltou de verdade
+        assert item.data_efetiva_retorno is not None
+        assert db.session.get(SolicitacaoNF, solicitacao.id).status == svc.STATUS_ESTOQUE_RETORNADO
+
+
+def test_a_diferenca_fica_no_historico(app, erp):
+    """Garantia precisa conseguir rastrear o que nao voltou."""
+    import json
+    from conferencia_app.models import SolicitacaoNFLog
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        item.quantidade = 100
+        db.session.commit()
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C", None)
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", None,
+                              retornos={item.id: 40}, encerrar=[item.id])
+
+        log = (SolicitacaoNFLog.query.filter_by(solicitacao_id=solicitacao.id, acao="retorno")
+               .order_by(SolicitacaoNFLog.id.desc()).first())
+        diferenca = json.loads(log.detalhes)["encerrados_com_diferenca"][0]
+        assert diferenca["enviado"] == 100 and diferenca["devolvido"] == 40
+
+
+def test_sem_encerrar_o_que_falta_continua_pendente(app, erp):
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        item.quantidade = 100
+        db.session.commit()
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C", None)
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", None, retornos={item.id: 50})
+        assert db.session.get(SolicitacaoNFItem, item.id).status == svc.STATUS_ESTOQUE_TERCEIROS
+
+
+def test_encerrar_sem_nada_voltar_tambem_vale(app, erp):
+    """Nada voltou e nao vai voltar: fecha com zero devolvido."""
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=1)
+        item = solicitacao.itens[0]
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C", None)
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", "Consumido no atendimento",
+                              retornos={}, encerrar=[item.id])
+        item = db.session.get(SolicitacaoNFItem, item.id)
+        assert item.status == svc.STATUS_ESTOQUE_RETORNADO
+        assert item.quantidade_retornada == 0
+
+
+def test_encerrar_um_item_nao_encerra_o_outro(app, erp):
+    with app.app_context():
+        solicitacao = criar(app, "Remessa para Teste", necessita_retorno=True, itens=2)
+        primeiro, segundo = solicitacao.itens
+        svc.marcar_faturada(solicitacao.id, "fiscal", "NF-C", None)
+        svc.registrar_retorno(solicitacao.id, "fiscal", "NF-R", None,
+                              retornos={primeiro.id: 0.5}, encerrar=[primeiro.id])
+        assert db.session.get(SolicitacaoNFItem, primeiro.id).status == svc.STATUS_ESTOQUE_RETORNADO
+        assert db.session.get(SolicitacaoNFItem, segundo.id).status == svc.STATUS_ESTOQUE_TERCEIROS

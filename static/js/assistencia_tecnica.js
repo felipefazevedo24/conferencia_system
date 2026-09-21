@@ -40,6 +40,8 @@
         let ordens = [];
         let currentFilter = null;
         let busca = "";
+        // Ids das solicitacoes abertas na tela.
+        const abertos = new Set();
 
         async function apiAvulso(url, opts) {
             const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
@@ -332,9 +334,30 @@
                     </div>
                     ${renderAcoesAdmin(o)}`;
             }
-            if (o.status_slug === "estoque_terceiros" || o.status_slug === "estoque_assistencia") {
+            if (itensDe(o).some((i) => i.aguardando_retorno)) {
+                const aguardando = o.itens.filter((i) => i.aguardando_retorno);
+                const linhas = aguardando.map((it) => {
+                    const falta = Number(it.quantidade || 0) - Number(it.quantidade_retornada || 0);
+                    return `<tr data-item="${it.id}">
+                        <td class="avl-td-cod">${escapeHtml(it.material_codigo)}</td>
+                        <td>${escapeHtml(it.material_nome || "")}</td>
+                        <td class="avl-td-qtde">${falta}</td>
+                        <td><input type="number" step="any" min="0" class="eui-input avl-qtd-ret"
+                                   placeholder="quanto voltou" value="${falta}"></td>
+                        <td><label class="avl-encerrar">
+                              <input type="checkbox" class="avl-chk-encerrar"> encerrar
+                            </label></td>
+                    </tr>`;
+                }).join("");
                 return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${itensBloco}
                     <div class="avl-section-title"><i class="fas fa-rotate-left"></i> Retorno do material</div>
+                    <table class="avl-table avl-table-retorno"><thead><tr>
+                        <th>Código</th><th>Descrição</th><th style="text-align:right;">Falta voltar</th>
+                        <th>Voltou agora</th><th>Encerrar</th>
+                    </tr></thead><tbody>${linhas}</tbody></table>
+                    <p class="eui-caption avl-aviso-grupo"><i class="fas fa-circle-info"></i>
+                       Voltou menos do que saiu e está certo assim? Marque <b>encerrar</b>: o item
+                       fecha sem pendência e a diferença fica registrada no histórico.</p>
                     <div class="avl-nf-row">
                         <input type="text" class="eui-input avl-nf-retorno" placeholder="Número da NF de retorno">
                         <textarea class="avl-obs" placeholder="Observações do retorno (opcional)" style="margin-top:0;"></textarea>
@@ -389,6 +412,12 @@
                 return;
             }
             container.innerHTML = filtradas.map(renderCard).join("");
+            // Reabre o que estava aberto: o render troca o HTML inteiro, entao
+            // sem isso a solicitacao fechava sozinha a cada atualizacao.
+            abertos.forEach((id) => {
+                const card = container.querySelector(`[data-id="${id}"]`);
+                if (card) card.classList.add("is-open");
+            });
         }
 
         async function carregarDashboard() {
@@ -442,7 +471,12 @@
 
         $("avulso-lista").addEventListener("click", (e) => {
             const toggle = e.target.closest('[data-action="toggle-detail"]');
-            if (toggle) { toggle.closest(".avl-card").classList.toggle("is-open"); return; }
+            if (toggle) {
+                const card = toggle.closest(".avl-card");
+                const aberto = card.classList.toggle("is-open");
+                if (aberto) abertos.add(card.dataset.id); else abertos.delete(card.dataset.id);
+                return;
+            }
 
             const row = e.target.closest(".avl-card");
             if (!row) return;
@@ -478,7 +512,20 @@
                 const numeroNfRetorno = row.querySelector(".avl-nf-retorno").value;
                 if (!numeroNfRetorno.trim()) { toast("Informe o número da NF de retorno.", "error"); return; }
                 const observacao = row.querySelector(".avl-obs").value;
-                executarAcao(id, "retorno", { numero_nf_retorno: numeroNfRetorno, observacao }, "Retorno registrado com sucesso.");
+                const retornos = {};
+                const encerrar = [];
+                row.querySelectorAll(".avl-table-retorno tbody tr").forEach((tr) => {
+                    const item = tr.dataset.item;
+                    const qtd = parseFloat(tr.querySelector(".avl-qtd-ret").value || "0");
+                    if (qtd > 0) retornos[item] = qtd;
+                    if (tr.querySelector(".avl-chk-encerrar").checked) encerrar.push(item);
+                });
+                if (!Object.keys(retornos).length && !encerrar.length) {
+                    toast("Informe quanto voltou, ou marque encerrar.", "error"); return;
+                }
+                executarAcao(id, "retorno", {
+                    numero_nf_retorno: numeroNfRetorno, observacao, retornos, encerrar,
+                }, "Retorno registrado com sucesso.");
                 return;
             }
             if (e.target.closest('[data-action="estornar"]')) {
@@ -532,7 +579,15 @@
             buscaTimer = setTimeout(() => { busca = e.target.value; renderLista(); }, 250);
         });
 
-        return { carregarDashboard, atualizarSePossivel: carregarDashboard };
+        function atualizarSePossivel() {
+            // Com uma solicitacao aberta, quem esta na tela esta no meio de
+            // algo (conferindo item, digitando NF). Recarregar ali atrapalha,
+            // e o botao Atualizar continua disponivel.
+            if (abertos.size) return Promise.resolve();
+            return carregarDashboard();
+        }
+
+        return { carregarDashboard, atualizarSePossivel };
     }
     const ctrl = criarControladorAvulso();
     ctrl.carregarDashboard();

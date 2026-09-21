@@ -118,6 +118,8 @@ def registrar_retorno_avulso(solicitacao_id):
             observacao=payload.get("observacao"),
             # {item_id: quantidade} permite devolucao parcial.
             retornos={int(k): v for k, v in (payload.get("retornos") or {}).items()} or None,
+            # Itens que fecham mesmo tendo voltado menos do que saiu.
+            encerrar=payload.get("encerrar"),
         )
     except svc.SolicitacaoNFError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

@@ -755,12 +755,17 @@ def _reconciliar_of_vinculadas() -> None:
 
 
 def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
-                      observacao: str | None, retornos: dict | None = None) -> SolicitacaoNF:
+                      observacao: str | None, retornos: dict | None = None,
+                      encerrar: list | None = None) -> SolicitacaoNF:
     """Registra a volta do material.
 
-    `retornos` é {item_id: quantidade} e permite devolução parcial: o item só
-    fecha quando a soma devolvida alcança a quantidade enviada. Sem ele, tudo
-    que estava esperando volta inteiro — que era o único jeito antes."""
+    `retornos` é {item_id: quantidade}: permite devolver em parcelas, e o item
+    segue pendente enquanto faltar material.
+
+    `encerrar` é a lista de itens que fecham mesmo tendo voltado menos. Isso
+    acontece de verdade — saem 100 m de cabo e voltam 50 m porque o resto foi
+    consumido no cliente. Não é pendência, e cobrar o saldo seria errado. A
+    quantidade devolvida continua sendo a real; a diferença fica no histórico."""
     solicitacao = SolicitacaoNF.query.get(solicitacao_id)
     if not solicitacao:
         raise SolicitacaoNFError("Solicitação não encontrada.")
@@ -771,15 +776,21 @@ def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
     if not numero_nf_retorno:
         raise SolicitacaoNFError("Informe o número da NF de retorno.")
 
+    fechar = {int(i) for i in (encerrar or [])}
     hoje = datetime.now()
+    diferencas = []
     for item in esperando:
-        if retornos is not None and item.id not in retornos:
+        informado = retornos is None or item.id in retornos
+        if not informado and item.id not in fechar:
             continue
         try:
-            voltou = float(retornos[item.id]) if retornos is not None else float(item.quantidade or 0)
+            voltou = (float(retornos[item.id]) if (retornos is not None and item.id in retornos)
+                      else (0.0 if item.id in fechar else float(item.quantidade or 0)))
         except (TypeError, ValueError):
             raise SolicitacaoNFError("Quantidade devolvida inválida.")
-        if voltou <= 0:
+        if voltou < 0:
+            raise SolicitacaoNFError("Quantidade devolvida inválida.")
+        if voltou == 0 and item.id not in fechar:
             continue
         ja_tinha = float(item.quantidade_retornada or 0)
         if ja_tinha + voltou > float(item.quantidade or 0) + 1e-6:
@@ -787,10 +798,16 @@ def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
                 f"A devolução de {item.material_codigo} passa da quantidade enviada.")
         item.quantidade_retornada = ja_tinha + voltou
         item.numero_nf_retorno = numero_nf_retorno
-        # Só fecha quando tudo voltou; devolução parcial continua pendente.
-        if item.quantidade_retornada + 1e-6 >= float(item.quantidade or 0):
+        completo = item.quantidade_retornada + 1e-6 >= float(item.quantidade or 0)
+        if completo or item.id in fechar:
             item.status = STATUS_ESTOQUE_RETORNADO
             item.data_efetiva_retorno = hoje.date()
+            if not completo:
+                diferencas.append({
+                    "item": item.id, "material": item.material_codigo,
+                    "enviado": float(item.quantidade or 0),
+                    "devolvido": float(item.quantidade_retornada or 0),
+                })
 
     status_anterior = solicitacao.status
     solicitacao.status = _recalcular_status(solicitacao)
@@ -806,7 +823,8 @@ def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
         usuario=usuario,
         status_anterior=status_anterior,
         status_novo=solicitacao.status,
-        detalhes=json.dumps({"numero_nf_retorno": numero_nf_retorno, "observacao": observacao}, ensure_ascii=False),
+        detalhes=json.dumps({"numero_nf_retorno": numero_nf_retorno, "observacao": observacao,
+                             "encerrados_com_diferenca": diferencas}, ensure_ascii=False),
     ))
     db.session.commit()
 
