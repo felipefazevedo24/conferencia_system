@@ -137,6 +137,7 @@ const server=http.createServer((req,res)=>{
     if(cronogramaMode) {
       await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
       await wait("return d.querySelectorAll('.delivery-card').length===2;");
+      assert(await inner("return d.querySelectorAll('.tree-panel .panel-title .delivery-tabs button').length===2 && d.querySelector('.delivery-tabs button').textContent==='Estrutura' && w.getComputedStyle(d.querySelector('.tree-panel .panel-title h2')).display==='none';"));
       const screenshot=path.join(project,'tmp_producao_layout','cronograma-painel.png');
       fs.mkdirSync(path.dirname(screenshot),{recursive:true});
       fs.writeFileSync(screenshot,Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
@@ -148,6 +149,7 @@ const server=http.createServer((req,res)=>{
       await wait("return w.location.search.includes('os=7807%2F001') && d.querySelector('.delivery-order.selected')?.textContent.includes('7807/001');");
       await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Estrutura')).click();");
       await wait("return d.querySelector('.tree-row.selected') && w.getComputedStyle(d.querySelector('.tree-content')).display!=='none';");
+      assert(await inner("const title=d.querySelector('.tree-panel .panel-title').getBoundingClientRect();const actions=d.querySelector('.tree-panel .panel-title > div:not(.delivery-tabs)').getBoundingClientRect();return actions.right<=title.right+1;"));
       assert(await inner("return w.location.search.includes('os=7807%2F001') && !!d.querySelector('.assembly-node');"));
       await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
       await inner("d.querySelector('.delivery-classification').value='Moldes';d.querySelector('.delivery-classification').dispatchEvent(new w.Event('change',{bubbles:true}));");

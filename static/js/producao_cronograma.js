@@ -107,7 +107,7 @@
     function makeTabs() {
         const tabs = element('div', 'delivery-tabs');
         tabs.setAttribute('role', 'tablist');
-        [['estrutura', 'Estrutura da OS'], ['cronograma', 'Cronograma de Entrega']].forEach(([id, label]) => {
+        [['estrutura', 'Estrutura'], ['cronograma', 'Cronograma de Entrega']].forEach(([id, label]) => {
             const button = element('button', '', label);
             button.type = 'button';
             button.setAttribute('role', 'tab');
@@ -244,11 +244,12 @@
         const focused = document.activeElement;
         const focusClass = focused?.closest?.('.delivery-panel') ? focused.className : '';
         const caret = focusClass === 'delivery-search' ? focused.selectionStart : null;
-        const oldTabs = tree.querySelector(':scope > .delivery-tabs');
+        const title = tree.querySelector(':scope > .panel-title');
+        if (!title) return;
+        const oldTabs = title.querySelector(':scope > .delivery-tabs');
         if (oldTabs) oldTabs.remove();
         const tabs = makeTabs();
-        const title = tree.querySelector(':scope > .panel-title');
-        if (title) title.after(tabs);
+        title.prepend(tabs);
         const oldPanel = tree.querySelector(':scope > .delivery-panel');
         if (oldPanel) oldPanel.remove();
         const panel = element('div', 'delivery-panel');
@@ -262,7 +263,7 @@
             list.append(element('p', 'delivery-message', 'Nenhuma entrega prevista para este período.'));
         else state.deliveries.forEach((delivery) => list.append(makeCard(delivery)));
         panel.append(list);
-        tabs.after(panel);
+        title.after(panel);
         if (focusClass) {
             const replacement = [...panel.querySelectorAll('input, select')]
                 .find((input) => input.className === focusClass);
@@ -281,7 +282,7 @@
         if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) =>
             node.nodeType === 1 && !node.classList?.contains('delivery-tabs') && !node.classList?.contains('delivery-panel')))) {
             const tree = document.querySelector('.tree-panel');
-            if (tree && (!tree.querySelector(':scope > .delivery-tabs') || !tree.querySelector(':scope > .delivery-panel')))
+            if (tree && (!tree.querySelector(':scope > .panel-title > .delivery-tabs') || !tree.querySelector(':scope > .delivery-panel')))
                 scheduleRender();
         }
     });
