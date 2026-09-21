@@ -339,7 +339,8 @@ def _retorno_sugerido(tipo_operacao: str) -> bool:
 
 
 def _validar_itens(itens_payload: list, tipo_padrao: str = "",
-                   retorno_padrao: bool | None = None) -> list[dict[str, Any]]:
+                   retorno_padrao: bool | None = None,
+                   venda_padrao=None) -> list[dict[str, Any]]:
     """Cada item carrega a própria operação e o próprio retorno.
 
     O que vier em branco herda a escolha feita no topo do formulário, que é o
@@ -360,11 +361,16 @@ def _validar_itens(itens_payload: list, tipo_padrao: str = "",
         if not material:
             raise SolicitacaoNFError(f"Material '{codigo}' não encontrado.")
         tipo = str((bruto or {}).get("tipo_operacao") or tipo_padrao).strip()
+        if not tipo:
+            raise SolicitacaoNFError(f"Escolha a operação do item '{codigo}'.")
         if tipo not in validos:
             raise SolicitacaoNFError(f"Tipo de operação inválido no item '{codigo}'.")
         informado = (bruto or {}).get("necessita_retorno")
         if informado is None:
             informado = retorno_padrao
+        vendido = (bruto or {}).get("sera_vendido")
+        if vendido is None:
+            vendido = venda_padrao
         itens.append({
             "material_codigo": material["codigo_interno"],
             "material_nome": material["nome"],
@@ -373,31 +379,33 @@ def _validar_itens(itens_payload: list, tipo_padrao: str = "",
             "tipo_operacao": tipo,
             "necessita_retorno": bool(informado) if informado is not None
                                  else _retorno_sugerido(tipo),
+            "sera_vendido": bool(vendido),
         })
     return itens
 
 
 def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
-    tipo_operacao = str((payload or {}).get("tipo_operacao") or "").strip()
-    # Aceita o que estiver ativo na tabela; os tipos do código seguem valendo
-    # como piso, para um tipo desativado por engano não derrubar o formulário.
-    validos = {t["nome"] for t in listar_tipos_operacao()} | set(TIPOS_OPERACAO)
-    if tipo_operacao not in validos:
-        raise SolicitacaoNFError("Tipo de operação inválido.")
-
+    """Cria a solicitação. A operação, o retorno e a venda posterior são de
+    cada item — o formulário escolhe material a material, porque itens de
+    tipos diferentes não entram na mesma nota. Os campos no topo do payload
+    continuam aceitos como padrão, para não quebrar chamada antiga."""
     funcionario = _validar_solicitante((payload or {}).get("solicitante_nome"))
     cliente = _validar_cliente(
         (payload or {}).get("cliente_codigo"),
         (payload or {}).get("cliente_nome"),
     )
-    venda_posterior = bool((payload or {}).get("venda_posterior"))
     informado = (payload or {}).get("necessita_retorno")
-    itens = _validar_itens((payload or {}).get("itens") or [], tipo_operacao,
-                           bool(informado) if informado is not None else None)
+    itens = _validar_itens(
+        (payload or {}).get("itens") or [],
+        str((payload or {}).get("tipo_operacao") or "").strip(),
+        bool(informado) if informado is not None else None,
+        (payload or {}).get("venda_posterior"),
+    )
 
     # O cabecalho e' NOT NULL e ainda alimenta telas e notificacoes: guarda o
-    # tipo do primeiro item, que na pratica e' o da solicitacao inteira.
+    # que vale para o primeiro item.
     tipo_operacao = itens[0]["tipo_operacao"]
+    venda_posterior = bool(itens[0]["sera_vendido"])
     solicitacao = SolicitacaoNF(
         solicitante_codigo=str(funcionario.get("codigo") or ""),
         solicitante_nome=funcionario.get("nome") or "",
@@ -421,7 +429,7 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     # solicitante: é ele que sabe se aquele material específico vai voltar.
     for i, item in enumerate(itens):
         solicitacao.itens.append(SolicitacaoNFItem(
-            linha=i, sera_vendido=venda_posterior, status=STATUS_SOLICITADO, **item))
+            linha=i, status=STATUS_SOLICITADO, **item))
 
     db.session.add(solicitacao)
     db.session.flush()  # garante solicitacao.id para o protocolo

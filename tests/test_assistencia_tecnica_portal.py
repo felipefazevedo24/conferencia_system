@@ -128,11 +128,53 @@ def test_tipo_do_codigo_continua_aceito_mesmo_fora_da_tabela(app, erp):
 
 
 def test_formulario_publico_responde_sem_login(app):
+    """A operação saiu do topo: os tipos vão para o seletor de cada material."""
     resposta = app.test_client().get("/solicitacao-nf")
     corpo = resposta.get_data(as_text=True)
     assert resposta.status_code == 200
-    assert 'data-tipo="Garantia"' in corpo
+    assert 'id="dados-tipos"' in corpo
+    assert '"Garantia"' in corpo
     assert "Ajuda de Garantia." in corpo
+    # Nada de escolher operação/retorno/venda para a solicitação inteira.
+    assert 'id="tipoSeg"' not in corpo
+    assert 'id="vendaSeg"' not in corpo
+    assert 'id="addOperacao"' in corpo
+
+
+def test_operacao_e_venda_sao_de_cada_item(app, erp):
+    """Dois materiais, operações e condições diferentes, na mesma solicitação."""
+    with app.app_context():
+        solicitacao = svc.criar_solicitacao({
+            "solicitante_nome": FUNCIONARIO["nome"],
+            "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
+            "itens": [
+                {"material_codigo": "M1", "quantidade": 2,
+                 "tipo_operacao": "Remessa para Teste", "sera_vendido": True},
+                {"material_codigo": "M1", "quantidade": 5,
+                 "tipo_operacao": "Garantia", "sera_vendido": False},
+            ],
+        })
+        itens = SolicitacaoNFItem.query.filter_by(
+            solicitacao_id=solicitacao.id).order_by(SolicitacaoNFItem.linha).all()
+        assert [i.tipo_operacao for i in itens] == ["Remessa para Teste", "Garantia"]
+        assert [i.sera_vendido for i in itens] == [True, False]
+        # O retorno vem sugerido pela operação de cada um.
+        assert [i.necessita_retorno for i in itens] == [True, False]
+        # O cabeçalho guarda o que vale para o primeiro item.
+        assert solicitacao.tipo_operacao == "Remessa para Teste"
+        assert solicitacao.venda_posterior is True
+
+
+def test_item_sem_operacao_e_recusado(app, erp):
+    """Sem a operação não dá para saber em que nota o item entra."""
+    with app.app_context():
+        with pytest.raises(svc.SolicitacaoNFError, match="Escolha a operação"):
+            svc.criar_solicitacao({
+                "solicitante_nome": FUNCIONARIO["nome"],
+                "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
+                "itens": [{"material_codigo": "M1", "quantidade": 1}],
+            })
+        assert SolicitacaoNF.query.count() == 0
 
 
 FUNCIONARIOS = [
