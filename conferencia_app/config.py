@@ -354,6 +354,11 @@ class Config:
     ENTRADA_CHAPA_CFOPS = os.environ.get("ENTRADA_CHAPA_CFOPS", "1901,1915,1924")
     ENTRADA_CHAPA_CONTROLE_LOTE_VALORES = os.environ.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")
 
+    # Valores de tproduto.tipo_controle que tornam o lote obrigatorio na
+    # contagem do inventario. "1,3" sao os codigos que a entrada de chapa ja
+    # trata como controle de lote; "LOTE" cobre o caso de o campo ser texto.
+    INVENTARIO_CONTROLE_LOTE_VALORES = os.environ.get("INVENTARIO_CONTROLE_LOTE_VALORES", "LOTE,1,3")
+
     # DANFE: usa por padrão a engine fiscal aprovada para o layout principal da NF.
     DANFE_PREFER_FISCAL_ENGINE = os.environ.get("DANFE_PREFER_FISCAL_ENGINE", "1") == "1"
 

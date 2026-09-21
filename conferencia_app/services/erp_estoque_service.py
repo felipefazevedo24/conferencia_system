@@ -149,6 +149,9 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "grupo": item.get("grupo") or "",
             "estoque_minimo": float(item.get("estoque_minimo") or 0),
             "lote_economico": float(item.get("lote_economico") or 0),
+            # None = bridge antiga, que ainda nao manda o campo (nao da pra
+            # afirmar que o item NAO controla lote).
+            "tipo_controle": item.get("tipo_controle"),
             "localizacoes": [],
             "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })
@@ -484,6 +487,39 @@ def descricao_para(codigo_produto: str, estoque: dict[str, Any]) -> str | None:
     if not agregado:
         return None
     return str(agregado.get("item") or "").strip() or None
+
+
+def controla_lote(tipo_controle: Any) -> bool | None:
+    """tproduto.tipo_controle indica controle por lote? None quando o valor
+    nao veio (bridge antiga) - quem chama decide o que fazer sem o dado.
+
+    Os valores que significam "lote" vem de INVENTARIO_CONTROLE_LOTE_VALORES
+    (config), comparados sem diferenciar maiuscula."""
+    if tipo_controle is None:
+        return None
+    valores = {
+        v.strip().upper()
+        for v in str(current_app.config.get("INVENTARIO_CONTROLE_LOTE_VALORES") or "").split(",")
+        if v.strip()
+    }
+    return str(tipo_controle).strip().upper() in valores
+
+
+def cadastro_para(codigo_produto: str, estoque: dict[str, Any]) -> dict[str, Any] | None:
+    """Dados de CADASTRO do produto no GRV (unidade, descricao, controle de
+    lote) - nunca o saldo, pra poder ser mostrado a quem esta contando sem
+    furar a conferencia cega. None se o codigo nao existir no GRV."""
+    codigo = str(codigo_produto or "").strip().upper()
+    agregado = estoque.get("por_codigo", {}).get(codigo) if codigo else None
+    if not agregado:
+        return None
+    return {
+        "codigo": codigo,
+        "descricao": str(agregado.get("item") or "").strip(),
+        "unidade": str(agregado.get("unidade") or "").strip().upper(),
+        "tipo_controle": agregado.get("tipo_controle"),
+        "controla_lote": controla_lote(agregado.get("tipo_controle")),
+    }
 
 
 def custo_medio_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any]) -> float | None:

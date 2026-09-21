@@ -41,6 +41,7 @@ from ..services.erp_estoque_service import (
     buscar_estoque_grv,
     buscar_ordens_compra_abertas_grv,
     buscar_reservas_produto_acabado_grv,
+    cadastro_para,
     custo_medio_para,
     qtde_grv_para,
 )
@@ -455,6 +456,24 @@ def listar_unidades_padrao():
     return jsonify({"unidades": UNIDADES_PADRAO})
 
 
+@logistica_inventario_bp.route("/api/logistica/inventario-inicial/produto", methods=["GET"])
+@permission_required(PERMISSION)
+def consultar_cadastro_produto():
+    """Unidade e controle de lote do GRV pro codigo que esta sendo contado.
+    So cadastro - o saldo nunca sai daqui (conferencia cega)."""
+    codigo = (request.args.get("codigo") or "").strip().upper()
+    if not codigo:
+        return jsonify({"error": "Informe o codigo."}), 400
+    try:
+        cadastro = cadastro_para(codigo, buscar_estoque_grv())
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.warning("Falha ao consultar cadastro no GRV (código=%s): %s", codigo, exc)
+        return jsonify({"disponivel": False, "encontrado": False})
+    if not cadastro:
+        return jsonify({"disponivel": True, "encontrado": False})
+    return jsonify({"disponivel": True, "encontrado": True, **cadastro})
+
+
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial", methods=["GET"])
 @permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def listar_inventario_inicial():
@@ -575,6 +594,21 @@ def criar_inventario_inicial():
 
     if quantidade <= 0:
         return jsonify({"error": "Quantidade deve ser maior que zero."}), 400
+
+    # Unidade e exigencia de lote vem do cadastro do GRV, nao do que foi
+    # escolhido na tela - e' o que evita contar em UN um item que o GRV
+    # controla em KG. Com o GRV fora do ar, vale o que veio da tela (a
+    # contagem nao pode parar por causa da integracao).
+    try:
+        cadastro = cadastro_para(codigo_produto, buscar_estoque_grv())
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.warning("GRV indisponivel ao validar a contagem (código=%s): %s", codigo_produto, exc)
+        cadastro = None
+    if cadastro:
+        if cadastro["unidade"]:
+            unidade_medida = cadastro["unidade"]
+        if cadastro["controla_lote"] and not lote:
+            return jsonify({"error": "Item controlado por lote no GRV: informe o lote."}), 400
 
     row = LogisticaInventarioInicial(
         local_codigo=local_codigo,

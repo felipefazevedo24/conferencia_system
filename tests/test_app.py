@@ -3634,7 +3634,10 @@ def test_admin_atualiza_grv_individualmente_e_estorna_ajuste_de_qualquer_etapa(t
         ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
         contagem = db.session.get(LogisticaInventarioInicial, ajuste.contagem_id)
         assert ajuste.qtde_estoque_no_momento == 12
-        assert ajuste.diferenca == -2
+        # Diferenca apurada e' estatica (ver atualizar_saldo_grv): o saldo
+        # andou +4 e a quantidade contada acompanhou, 10 -> 14.
+        assert ajuste.qtde_contada == 14
+        assert ajuste.diferenca == 2
         assert ajuste.custo_medio == 4
         assert contagem.qtde_grv_no_momento == 12
         assert contagem.custo_medio_no_momento == 4
@@ -7196,3 +7199,70 @@ def test_inventario_atualizar_grv_pela_api_preserva_a_divergencia(tmp_path):
     assert corpo["ajuste"]["qtde_estoque_no_momento"] == 2300
     assert corpo["ajuste"]["qtde_contada"] == 4200
     assert corpo["ajuste"]["diferenca"] == 1900
+
+
+def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
+    """Unidade e exigencia de lote vem do cadastro do GRV (tproduto.unidade
+    e tproduto.tipo_controle), nao do que foi escolhido na tela."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    estoque_fake = {
+        "por_local": {},
+        "por_codigo": {
+            "CHAPA-01": {"qtde_total": 500.0, "item": "CHAPA 3/16", "unidade": "KG", "tipo_controle": "1"},
+            "PARAF-01": {"qtde_total": 90.0, "item": "PARAFUSO M8", "unidade": "PC", "tipo_controle": "0"},
+            "LEGADO-01": {"qtde_total": 3.0, "item": "SEM CAMPO", "unidade": "UN", "tipo_controle": None},
+        },
+    }
+    rota = "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv"
+
+    with patch(rota, return_value=estoque_fake):
+        # Consulta de cadastro: unidade + lote, e NUNCA o saldo (contagem cega).
+        cad = client.get("/api/logistica/inventario-inicial/produto?codigo=chapa-01").get_json()
+        assert cad["encontrado"] is True
+        assert cad["unidade"] == "KG"
+        assert cad["controla_lote"] is True
+        assert "qtde_total" not in cad and "qtde_grv" not in cad
+
+        assert client.get("/api/logistica/inventario-inicial/produto?codigo=PARAF-01").get_json()["controla_lote"] is False
+        assert client.get("/api/logistica/inventario-inicial/produto?codigo=NAO-EXISTE").get_json() == {
+            "disponivel": True, "encontrado": False,
+        }
+
+        # Item com lote: sem lote nao salva.
+        sem_lote = client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN", "quantidade": 480,
+        })
+        assert sem_lote.status_code == 400
+        assert "lote" in sem_lote.get_json()["error"]
+
+        # Com lote salva - e a unidade gravada e' a do GRV, nao a da tela.
+        com_lote = client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN",
+            "quantidade": 480, "lote": "L-2026-07",
+        })
+        assert com_lote.status_code == 201
+        assert com_lote.get_json()["registro"]["unidade_medida"] == "KG"
+
+        # Item sem controle de lote: lote segue opcional.
+        assert client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A02", "codigo_produto": "PARAF-01", "unidade_medida": "UN", "quantidade": 90,
+        }).status_code == 201
+
+        # Bridge antiga (sem tipo_controle): nao da pra afirmar lote -> nao exige.
+        assert client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A03", "codigo_produto": "LEGADO-01", "unidade_medida": "UN", "quantidade": 3,
+        }).status_code == 201
+
+    # GRV fora do ar: a contagem nao para, vale a unidade escolhida na tela.
+    with patch(rota, side_effect=RuntimeError("bridge fora")):
+        assert client.get("/api/logistica/inventario-inicial/produto?codigo=CHAPA-01").get_json() == {
+            "disponivel": False, "encontrado": False,
+        }
+        resp = client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A04", "codigo_produto": "CHAPA-01", "unidade_medida": "M", "quantidade": 2,
+        })
+        assert resp.status_code == 201
+        assert resp.get_json()["registro"]["unidade_medida"] == "M"

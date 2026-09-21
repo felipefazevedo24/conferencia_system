@@ -856,7 +856,11 @@ ESTOQUE_SQL = """
         p.preco_custo as custo_medio,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
-        coalesce(p.cod_grupo::text, '') as grupo
+        coalesce(p.cod_grupo::text, '') as grupo,
+        -- Inventario exige o lote na contagem quando o item e' controlado
+        -- por lote no GRV.
+        coalesce(p.tipo_controle::text, '') as tipo_controle,
+        coalesce(p.controle_lote_serie::text, '') as controle_lote_serie
     from public.tproduto p
     left join estoque_deposito d
       on d.cod_empresa = p.cod_empresa

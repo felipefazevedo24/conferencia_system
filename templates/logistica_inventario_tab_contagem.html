@@ -3,6 +3,10 @@
     .invc-field { display: grid; gap: 6px; }
     .invc-field label { font-size: 12px; font-weight: 600; color: var(--eui-text-soft); }
     .invc-scan { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .invc-hint { font-size: 12px; color: var(--eui-muted); min-height: 16px; }
+    .invc-hint.ok { color: var(--eui-success-soft-text); }
+    .invc-hint.warn { color: var(--eui-danger-soft-text); }
+    .invc-req { color: var(--eui-danger-soft-text); }
     .invc-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
     .inv-status { display: none; margin-top: 12px; padding: 10px 12px; border-radius: var(--eui-radius-sm); font-size: 13px; font-weight: 600; }
     .inv-status.show { display: block; }
@@ -53,14 +57,16 @@
             <div class="invc-field">
                 <label for="inv-unidade">Unidade de medida</label>
                 <select id="inv-unidade" class="eui-input"></select>
+                <div id="inv-unidade-hint" class="invc-hint"></div>
             </div>
             <div class="invc-field">
                 <label for="inv-quantidade">Quantidade</label>
                 <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
             </div>
             <div class="invc-field">
-                <label for="inv-lote">Lote</label>
+                <label for="inv-lote">Lote <span id="inv-lote-req" class="invc-req" hidden>*</span></label>
                 <input id="inv-lote" class="eui-input" autocomplete="off" placeholder="Informe o lote (opcional)" />
+                <div id="inv-lote-hint" class="invc-hint"></div>
             </div>
             <div class="invc-field" style="grid-column: 1 / -1;">
                 <label for="inv-obs">Observações</label>
@@ -100,6 +106,10 @@
     let scanStream = null;
     let rafId = null;
     let detector = null;
+    let unidadesPadrao = ['UN'];
+    let cadastroAtual = null;   // cadastro do GRV do codigo digitado
+    let consultaSeq = 0;
+    let consultaTimer = null;
 
     function esc(v) {
         return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -119,7 +129,55 @@
 
     function preencherUnidades(unidades) {
         const lista = Array.isArray(unidades) && unidades.length ? unidades : ['UN'];
+        unidadesPadrao = lista;
         unidadeSel.innerHTML = lista.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+    }
+
+    function hint(id, texto, kind = '') {
+        const el = document.getElementById(id);
+        el.textContent = texto || '';
+        el.className = `invc-hint ${kind}`;
+    }
+
+    // Unidade e lote seguem o cadastro do GRV. Sem cadastro (codigo novo ou
+    // GRV fora do ar) a tela volta a deixar escolher - o servidor faz a
+    // mesma regra na hora de salvar, entao nada passa por fora.
+    function aplicarCadastro(cad) {
+        cadastroAtual = cad;
+        const loteInput = document.getElementById('inv-lote');
+        const loteObrig = !!(cad && cad.encontrado && cad.controla_lote);
+
+        if (cad && cad.encontrado && cad.unidade) {
+            if (!unidadesPadrao.includes(cad.unidade)) {
+                unidadeSel.insertAdjacentHTML('beforeend', `<option value="${esc(cad.unidade)}">${esc(cad.unidade)}</option>`);
+            }
+            unidadeSel.value = cad.unidade;
+            unidadeSel.disabled = true;
+            hint('inv-unidade-hint', `Unidade do GRV${cad.descricao ? ' · ' + cad.descricao : ''}`, 'ok');
+        } else {
+            unidadeSel.disabled = false;
+            if (!cad) hint('inv-unidade-hint', '');
+            else if (cad.disponivel === false) hint('inv-unidade-hint', 'GRV indisponível: confira a unidade manualmente.', 'warn');
+            else hint('inv-unidade-hint', 'Código não encontrado no GRV: confira a unidade.', 'warn');
+        }
+
+        document.getElementById('inv-lote-req').hidden = !loteObrig;
+        loteInput.placeholder = loteObrig ? 'Obrigatório: item controlado por lote' : 'Informe o lote (opcional)';
+        hint('inv-lote-hint', loteObrig ? 'Item controlado por lote no GRV.' : '', loteObrig ? 'warn' : '');
+    }
+
+    async function consultarCadastro() {
+        const codigo = (document.getElementById('inv-codigo').value || '').trim();
+        const seq = ++consultaSeq;
+        if (!codigo) { aplicarCadastro(null); return; }
+        hint('inv-unidade-hint', 'Consultando GRV...');
+        let cad;
+        try {
+            cad = await api(`/api/logistica/inventario-inicial/produto?codigo=${encodeURIComponent(codigo)}`);
+        } catch (_) {
+            cad = { disponivel: false, encontrado: false };
+        }
+        if (seq === consultaSeq) aplicarCadastro(cad);  // ignora resposta de codigo antigo
     }
 
     function limparFormulario() {
@@ -128,6 +186,8 @@
         document.getElementById('inv-quantidade').value = '';
         document.getElementById('inv-lote').value = '';
         document.getElementById('inv-obs').value = '';
+        consultaSeq++;
+        aplicarCadastro(null);
         document.getElementById('inv-local').focus();
     }
 
@@ -152,6 +212,11 @@
         if (!localCodigo) { showStatus('Informe o Local.', 'err'); return; }
         if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
         if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }
+        if (cadastroAtual && cadastroAtual.controla_lote && !lote) {
+            showStatus('Item controlado por lote no GRV: informe o lote.', 'err');
+            document.getElementById('inv-lote').focus();
+            return;
+        }
 
         const quantidade = Number(String(quantidadeTxt).replace(',', '.'));
         if (!Number.isFinite(quantidade) || quantidade <= 0) {
@@ -263,6 +328,16 @@
     document.getElementById('scan-fechar').addEventListener('click', pararScanner);
     modal.addEventListener('click', (ev) => {
         if (ev.target === modal) pararScanner();
+    });
+
+    const codigoInput = document.getElementById('inv-codigo');
+    codigoInput.addEventListener('input', () => {
+        clearTimeout(consultaTimer);
+        consultaTimer = setTimeout(consultarCadastro, 400);
+    });
+    codigoInput.addEventListener('change', () => {
+        clearTimeout(consultaTimer);
+        consultarCadastro();
     });
 
     document.getElementById('inv-salvar').addEventListener('click', salvarRegistro);
