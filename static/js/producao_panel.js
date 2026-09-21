@@ -235,7 +235,7 @@
         });
         document.querySelectorAll('.tree-row').forEach((row) => {
             const indent = Number.parseFloat(row.style.paddingLeft || '10');
-            const depth = Math.max(0, Math.round((indent - 10) / 18));
+            const depth = Math.max(0, Math.round((indent - 10) / 16));
             row.dataset.productionDepth = String(depth);
             row.style.setProperty('--production-indent', `${indent}px`);
         });
