@@ -145,6 +145,35 @@ def garantir_descricoes(ajustes: list[LogisticaInventarioAjuste]) -> None:
         db.session.rollback()
 
 
+def atualizar_saldo_grv(
+    ajuste: LogisticaInventarioAjuste, qtde_grv: float, custo_medio: float | None = None
+) -> float:
+    """Atualiza o saldo sistemico do ajuste SEM mexer na diferenca apurada.
+
+    A diferenca e' justamente o que o gestor valida (segundo par de olhos).
+    Ela nao pode se perder por causa de movimentacao de entrada/saida que
+    aconteceu DEPOIS da contagem - o item continua divergente na mesma
+    medida. Entao o saldo novo entra e a quantidade contada anda JUNTO:
+
+        01/07  contado 2200  x  sistemico  300  ->  diferenca 1900
+        05/07  entram 2000 kg
+               contado 4200  x  sistemico 2300  ->  diferenca 1900
+
+    A contagem fisica original nao se perde: continua em
+    LogisticaInventarioInicial.quantidade (o ajuste passa a carregar a
+    projecao dela pro saldo de hoje). Devolve o movimento aplicado.
+    """
+    novo_saldo = float(qtde_grv)
+    movimento = novo_saldo - float(ajuste.qtde_estoque_no_momento or 0)
+
+    ajuste.qtde_estoque_no_momento = novo_saldo
+    ajuste.qtde_contada = float(ajuste.qtde_contada or 0) + movimento
+    # `diferenca` NAO e' recalculada de proposito - e' o dado que precisa
+    # sobreviver ate' a validacao do gestor.
+    ajuste.custo_medio = custo_medio
+    return movimento
+
+
 def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[LogisticaInventarioAjuste]:
     query = LogisticaInventarioAjuste.query
     if status_modulo:

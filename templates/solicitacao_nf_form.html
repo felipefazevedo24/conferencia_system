@@ -13,19 +13,24 @@
   <style>
     :root {
       --primary: #0f62c9;
-      --primary-2: #0d4ea3;
-      --bg: #071a33;
-      --bg-2: #0d3a6e;
+      --primary-2: #0a4ea3;
+      --primary-soft: #eaf1fd;
+      --ink: #0b1b30;
+      --bg: #eef2f8;
       --surface: #ffffff;
-      --surface-soft: #f5f8fd;
-      --border: #e3e8ef;
-      --text: #0f172a;
-      --muted: #5b6b82;
+      --surface-soft: #f7f9fc;
+      --border: #e2e8f2;
+      --border-strong: #cfd9e8;
+      --text: #14243a;
+      --muted: #64748b;
       --ok: #0c7a4f;
-      --ok-bg: #e7f6ee;
-      --err: #d64545;
-      --err-bg: #fdecec;
-      --radius: 14px;
+      --ok-bg: #e9f7f0;
+      --err: #c8372d;
+      --err-bg: #fdeeec;
+      --radius: 12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 2px rgba(16, 34, 59, .06);
+      --shadow-md: 0 6px 20px rgba(16, 34, 59, .08);
       --font: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-display: "Space Grotesk", var(--font);
     }
@@ -33,138 +38,208 @@
     body {
       font-family: var(--font);
       color: var(--text);
+      background: var(--bg);
       min-height: 100vh;
-      background:
-        radial-gradient(1100px 700px at 12% -10%, var(--bg-2) 0%, var(--bg) 60%),
-        var(--bg);
-      padding: clamp(16px, 4vw, 48px) 16px;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
+      padding: 0 0 40px;
+      -webkit-font-smoothing: antialiased;
     }
-    .shell { width: min(920px, 100%); }
 
-    .brand { display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
-    .brand .logo-badge { background: #fff; border-radius: 16px; padding: 12px 20px; box-shadow: 0 12px 34px rgba(0,0,0,.35); }
-    .brand .logo-badge img { height: clamp(34px, 6vw, 50px); display: block; }
+    /* Faixa do topo: identidade, sem o degrade pesado de antes. */
+    .topbar { background: var(--ink); padding: 14px 20px; display: flex; justify-content: center; }
+    .topbar .marca { background: #fff; border-radius: 10px; padding: 8px 16px; display: flex; }
+    .topbar img { height: 26px; display: block; }
 
-    .card { background: var(--surface); border-radius: 22px; box-shadow: 0 24px 60px rgba(4, 20, 45, .45); overflow: hidden; }
-    .card-head { background: linear-gradient(120deg, var(--primary) 0%, var(--primary-2) 100%); color: #fff; padding: clamp(20px, 3.4vw, 30px) clamp(20px, 4vw, 38px); }
-    .card-head h1 { font-family: var(--font-display); font-size: clamp(20px, 3.2vw, 30px); font-weight: 800; letter-spacing: .3px; display: flex; align-items: center; gap: 12px; }
-    .card-head p { margin-top: 8px; opacity: .92; font-size: clamp(13px, 1.8vw, 15px); max-width: 60ch; }
-    .card-body { padding: clamp(20px, 4vw, 38px); }
+    .shell { width: min(1120px, 100%); margin: 0 auto; padding: 0 16px; }
 
-    .section-title { font-family: var(--font-display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .8px; color: var(--primary); margin: 6px 0 14px; display: flex; align-items: center; gap: 10px; }
-    .section-title .step { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0; }
-    .section + .section { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--border); }
+    .page-head { padding: 28px 0 22px; }
+    .page-head .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--primary); }
+    .page-head h1 { font-family: var(--font-display); font-size: clamp(22px, 3vw, 31px);
+      font-weight: 800; letter-spacing: -.4px; margin-top: 6px; display: flex;
+      align-items: center; gap: 11px; }
+    .page-head p { color: var(--muted); font-size: 14.5px; margin-top: 8px; max-width: 68ch; line-height: 1.55; }
 
-    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .segmented.tipo-op { grid-template-columns: 1fr 1fr; }
-    .seg-option { border: 2px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; text-align: center; transition: all .18s ease; background: var(--surface-soft); font-weight: 600; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13.5px; }
-    .seg-option i { font-size: 20px; }
-    .seg-option:hover { border-color: #c3d3ea; }
-    .seg-option.active { border-color: var(--primary); color: var(--primary); background: #eef4fd; box-shadow: 0 0 0 3px rgba(15,98,201,.12); }
+    /* Duas colunas: formulario e um resumo que acompanha a rolagem. */
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
 
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .field { display: flex; flex-direction: column; gap: 6px; position: relative; }
-    .field.full { grid-column: 1 / -1; }
-    .field label { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; }
+    .card-body { padding: clamp(18px, 2.6vw, 28px); }
+
+    .section + .section { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .section-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+      display: flex; align-items: center; gap: 10px; letter-spacing: -.1px; }
+    .section-title .step { width: 24px; height: 24px; border-radius: 7px; display: grid;
+      place-items: center; background: var(--primary-soft); color: var(--primary);
+      font-size: 12px; font-weight: 800; flex-shrink: 0; }
+    .hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+    .section-title + .hint { margin: 0 0 12px 34px; }
+
+    /* Operacoes: bloco compacto, tres por linha, em vez de seis cartoes altos. */
+    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .segmented.tipo-op { grid-template-columns: repeat(3, 1fr); }
+    .seg-option { border: 1.5px solid var(--border); border-radius: var(--radius);
+      padding: 11px 12px; cursor: pointer; background: var(--surface-soft);
+      font-weight: 600; color: var(--text); font-size: 13px; line-height: 1.3;
+      display: flex; align-items: center; gap: 9px; transition: border-color .15s, background .15s;
+      min-height: 52px; }
+    .seg-option > i { font-size: 13px; color: var(--muted); flex-shrink: 0; }
+    .seg-option > span { flex: 1; min-width: 0; }
+    .seg-option:hover { border-color: var(--border-strong); background: #fff; }
+    .seg-option.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-2); }
+    .seg-option.active > i { color: var(--primary); }
+    .seg-ajuda { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-strong);
+      background: #fff; color: var(--muted); font-weight: 700; font-size: 10px; cursor: help;
+      line-height: 1; padding: 0; flex-shrink: 0; }
+    .seg-option.active .seg-ajuda { border-color: var(--primary); color: var(--primary); }
+    .seg-ajuda-texto:empty { display: none; }
+    .seg-ajuda-texto { background: var(--primary-soft); border-radius: var(--radius);
+      padding: 10px 12px; margin-top: 10px; color: var(--primary-2); font-size: 12.5px; }
+
+    /* As duas perguntas de sim/nao dividem uma linha, em vez de uma secao cada. */
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 10px;
+      align-items: stretch; }
+    .duo > div { min-width: 0; display: flex; flex-direction: column; }
+    .duo .segmented { margin-top: auto; }
+    .duo h3 { font-size: 13px; font-weight: 700; color: var(--ink); }
+    .duo .hint { margin-top: 3px; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; position: relative; margin-top: 10px; }
+    .field label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
     .field input, .field select, .field textarea {
-      font-family: var(--font); font-size: 15px; color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 12px 14px; background: #fff; transition: border-color .15s, box-shadow .15s;
-      width: 100%;
+      font-family: var(--font); font-size: 14.5px; color: var(--text);
+      border: 1px solid var(--border-strong); border-radius: var(--radius);
+      padding: 11px 13px; background: #fff; width: 100%;
+      transition: border-color .15s, box-shadow .15s;
     }
-    .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15,98,201,.14); }
+    .field input::placeholder { color: #9aa8bd; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15,98,201,.13); }
 
-    .sugestoes { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 14px 35px rgba(15,23,42,.14); max-height: 260px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; }
+    .sugestoes { position: absolute; top: 100%; left: 0; right: 0; background: #fff;
+      border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md);
+      max-height: 260px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; }
     .sugestoes.show { display: block; }
-    .sugestoes .item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .sugestoes .item { padding: 10px 13px; cursor: pointer; border-bottom: 1px solid #eef2f7; font-size: 13.5px; }
     .sugestoes .item:last-child { border-bottom: none; }
-    .sugestoes .item:hover { background: var(--surface-soft); }
+    .sugestoes .item:hover { background: var(--primary-soft); }
     .sugestoes .item small { color: var(--muted); display: block; margin-top: 2px; font-size: 12px; }
     .sugestoes .empty { padding: 14px; color: var(--muted); font-size: 13px; text-align: center; }
 
-    .chip { display: flex; align-items: center; gap: 12px; background: var(--ok-bg); border: 1px solid #bfe6d4; border-radius: var(--radius); padding: 12px 14px; margin-top: 8px; }
+    .chip { display: flex; align-items: center; gap: 12px; background: var(--ok-bg);
+      border: 1px solid #c6e7d7; border-radius: var(--radius); padding: 10px 13px; margin-top: 8px; }
     .chip .info { flex: 1; min-width: 0; }
-    .chip .info strong { display: block; color: var(--ok); font-size: 14px; }
+    .chip .info strong { display: block; color: var(--ok); font-size: 13.5px; }
     .chip .info small { color: var(--muted); font-size: 12px; }
-    .chip .btn-x { background: transparent; border: none; color: var(--err); cursor: pointer; padding: 6px; border-radius: 6px; flex-shrink: 0; }
-    .chip .btn-x:hover { background: var(--err-bg); }
+    .chip .btn-x { background: transparent; border: none; color: var(--muted); cursor: pointer;
+      padding: 6px; border-radius: 6px; flex-shrink: 0; }
+    .chip .btn-x:hover { background: #fff; color: var(--err); }
 
-    .add-item-row { display: grid; grid-template-columns: 1fr 110px auto; gap: 10px; align-items: start; }
-    .item-row { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-    .item-row .info strong { display: block; color: var(--text); font-size: 14px; }
+    .add-item-row { display: grid; grid-template-columns: 1fr 104px 46px; gap: 8px; align-items: start; }
+
+    /* Item: o material manda na linha; operacao e retorno ficam discretos. */
+    .item-row { background: var(--surface-soft); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px; margin-top: 8px;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
+    .item-row .info { min-width: 0; }
+    .item-row .info strong { display: block; color: var(--ink); font-size: 13.5px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .item-row .info span { color: var(--muted); font-size: 12px; }
-    .item-row .btn-x { background: transparent; border: none; color: var(--err); cursor: pointer; padding: 6px; flex-shrink: 0; }
-    .empty-list { text-align: center; color: var(--muted); font-size: 13px; padding: 14px; }
-    .item-row--detalhado { flex-wrap: wrap; align-items: flex-start; }
-    .item-row--detalhado .info { flex: 1 1 240px; min-width: 0; }
-    .item-config { display: flex; gap: 10px; flex-wrap: wrap; }
-    .item-config label { font-size: 11px; font-weight: 600; color: var(--muted); display: grid; gap: 4px; }
-    .item-config select { font: inherit; font-size: 13px; border: 1px solid var(--border);
-      border-radius: 8px; padding: 7px 9px; background: #fff; color: var(--text); max-width: 230px; }
+    .item-row .btn-x { background: transparent; border: none; color: #b6c0ce; cursor: pointer;
+      padding: 6px; border-radius: 6px; }
+    .item-row .btn-x:hover { background: var(--err-bg); color: var(--err); }
+    .item-config { display: flex; gap: 8px; flex-wrap: wrap; }
+    .item-config label { font-size: 10.5px; font-weight: 700; color: var(--muted);
+      display: grid; gap: 3px; text-transform: uppercase; letter-spacing: .3px; }
+    .item-config select { font: inherit; font-size: 12.5px; border: 1px solid var(--border-strong);
+      border-radius: 8px; padding: 6px 8px; background: #fff; color: var(--text); max-width: 210px; }
+    .empty-list { text-align: center; color: var(--muted); font-size: 13px; padding: 22px;
+      border: 1px dashed var(--border-strong); border-radius: var(--radius); margin-top: 8px;
+      background: var(--surface-soft); }
 
-    .btn { font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; border: none; border-radius: var(--radius); padding: 13px 22px; display: inline-flex; align-items: center; gap: 9px; transition: filter .15s, transform .05s; }
+    .btn { font-family: var(--font); font-weight: 700; font-size: 14.5px; cursor: pointer;
+      border: 1px solid transparent; border-radius: var(--radius); padding: 11px 18px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      transition: filter .15s, transform .05s; }
     .btn:active { transform: translateY(1px); }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
-    .btn-ghost { background: #eef4fd; color: var(--primary); }
-    .btn-ghost:hover:not(:disabled) { filter: brightness(.98); }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-2); }
+    .btn-ghost { background: var(--primary-soft); color: var(--primary); }
+    .btn-ghost:hover:not(:disabled) { background: #dde9fb; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
 
-    .actions { margin-top: 26px; display: flex; justify-content: flex-end; }
-    .actions .btn { width: 100%; justify-content: center; padding: 15px; }
+    /* Resumo: acompanha a rolagem e leva o botao de enviar. */
+    .resumo { position: sticky; top: 16px; }
+    .resumo h2 { font-size: 13px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted); margin-bottom: 12px; }
+    .resumo-linha { display: flex; justify-content: space-between; gap: 12px;
+      padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+    .resumo-linha:last-of-type { border-bottom: none; }
+    .resumo-linha .k { color: var(--muted); flex-shrink: 0; }
+    .resumo-linha .v { font-weight: 600; text-align: right; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; }
+    .resumo-linha .v.is-vazio { color: #9aa8bd; font-weight: 500; font-style: italic; }
+    .resumo .btn { width: 100%; margin-top: 14px; }
 
-    .feedback { display: none; margin-top: 18px; padding: 14px 16px; border-radius: var(--radius); font-size: 14px; font-weight: 600; }
-    .feedback.show { display: flex; gap: 10px; align-items: center; }
+    .feedback { display: none; margin-top: 14px; padding: 12px 14px; border-radius: var(--radius);
+      font-size: 13.5px; font-weight: 600; }
+    .feedback.show { display: flex; gap: 9px; align-items: center; }
     .feedback.ok { background: var(--ok-bg); color: var(--ok); }
     .feedback.err { background: var(--err-bg); color: var(--err); }
 
-    .hint { font-size: 12.5px; color: var(--muted); margin-top: -2px; }
-    .seg-ajuda { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border);
-      background: var(--surface); color: var(--muted); font-weight: 700; font-size: 11px;
-      cursor: help; line-height: 1; padding: 0; }
-    .seg-option.active .seg-ajuda { border-color: currentColor; color: inherit; }
-    .seg-ajuda-texto:empty { display: none; }
-    .seg-ajuda-texto { background: var(--surface-soft); border-radius: var(--radius);
-      padding: 10px 12px; margin-top: 10px; }
-    .foot { text-align: center; color: rgba(255,255,255,.6); font-size: 12.5px; margin-top: 18px; }
+    .minha-sol-item { display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px;
+      margin-top: 6px; font-size: 12.5px; background: var(--surface-soft); }
+    .minha-sol-item .info strong { display: block; font-size: 12.5px; }
+    .minha-sol-item .info small { color: var(--muted); font-size: 11.5px; }
+    .status-pill { padding: 3px 9px; border-radius: 999px; font-size: 10.5px;
+      font-weight: 700; white-space: nowrap; }
 
-    .success-screen { display: none; text-align: center; padding: 20px 6px; }
+    .success-screen { display: none; text-align: center; padding: 40px 20px; }
     .success-screen.show { display: block; }
-    .success-screen .circle { width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 18px; background: var(--ok-bg); color: var(--ok); display: grid; place-items: center; font-size: 40px; }
-    .success-screen h2 { font-family: var(--font-display); font-size: 24px; margin-bottom: 10px; }
-    .success-screen p { color: var(--muted); max-width: 46ch; margin: 0 auto; }
-    .success-screen .protocolo { font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--primary); margin: 14px 0; }
+    .success-screen .circle { width: 64px; height: 64px; border-radius: 50%; background: var(--ok-bg);
+      color: var(--ok); display: grid; place-items: center; font-size: 27px; margin: 0 auto 18px; }
+    .success-screen h2 { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
+    .success-screen p { color: var(--muted); margin-top: 8px; font-size: 14px; }
+    .protocolo { font-family: var(--font-display); font-size: 27px; font-weight: 800;
+      color: var(--primary); background: var(--primary-soft); border-radius: var(--radius);
+      padding: 14px; margin: 18px auto; max-width: 300px; letter-spacing: 1px; }
 
-    .honeypot { position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden; }
+    .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 22px; }
+    .honeypot { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
 
-    .minha-sol-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; background: var(--surface-soft); }
-    .minha-sol-item .info strong { display: block; font-size: 13.5px; color: var(--text); }
-    .minha-sol-item .info small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-    .status-pill { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap; text-transform: uppercase; letter-spacing: .3px; }
-
-    @media (max-width: 620px) {
-      .grid { grid-template-columns: 1fr; }
-      .segmented { grid-template-columns: 1fr; }
-      .add-item-row { grid-template-columns: 1fr; }
-      .actions { justify-content: stretch; }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .resumo { position: static; }
+      .segmented.tipo-op { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .segmented, .segmented.tipo-op, .duo { grid-template-columns: 1fr; }
+      /* Material e lixeira na primeira linha; operacao/retorno embaixo, senao
+         a lixeira sobra sozinha numa terceira linha. */
+      .item-row { grid-template-columns: minmax(0, 1fr) auto; }
+      .item-row .btn-x { grid-row: 1; grid-column: 2; align-self: start; }
+      .item-config { grid-row: 2; grid-column: 1 / -1; }
+      .add-item-row { grid-template-columns: 1fr 84px 46px; }
+      .page-head { padding: 20px 0 16px; }
     }
   </style>
 </head>
 <body>
+  <div class="topbar">
+    <div class="marca"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
+  </div>
+
   <div class="shell">
-    <div class="brand">
-      <div class="logo-badge"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
+    <div class="page-head">
+      <div class="eyebrow">Columbia Sync</div>
+      <h1><i class="fas fa-file-invoice"></i> Solicitação de Nota Fiscal</h1>
+      <p>Garantia, bonificação, remessa para teste ou conserto, retorno de demonstração e
+         atendimento técnico. Preencha abaixo e guarde o protocolo para acompanhar.</p>
     </div>
 
-    <div class="card">
-      <div class="card-head">
-        <h1><i class="fas fa-file-invoice"></i> Solicitação de Nota Fiscal</h1>
-        <p>Garantia, bonificação, remessa para teste/conserto, retorno de demonstração ou atendimento técnico — preencha os dados abaixo para solicitar a emissão.</p>
-      </div>
-
+    <div class="layout">
+     <div class="card">
       <div class="card-body">
         <form id="form-solicitacao" novalidate>
           <!-- 1) Solicitante -->
@@ -205,40 +280,43 @@
             <input type="hidden" id="tipoOperacao" value="">
           </div>
 
-          <!-- 3) O material volta? Sugerido pelo tipo, confirmado por quem pede -->
+          <!-- 3) As duas perguntas de sim/nao ficam lado a lado: sao curtas,
+               relacionadas, e ocupavam uma secao inteira cada uma. -->
           <div class="section">
-            <div class="section-title"><span class="step">3</span> O material vai voltar?</div>
-            <p class="hint">Também vale por item: o tipo sugere, mas quem pede é quem sabe.</p>
-            <div class="segmented" id="retornoSeg">
-              <div class="seg-option" data-retorno="sim" role="button" tabindex="0">
-                <i class="fas fa-rotate-left"></i><span>Sim — precisa voltar</span>
+            <div class="section-title"><span class="step">3</span> Condições do envio</div>
+            <div class="duo">
+              <div>
+                <h3>O material vai voltar?</h3>
+                <p class="hint">O tipo sugere, mas quem pede é quem sabe. Dá para ajustar por item.</p>
+                <div class="segmented" id="retornoSeg">
+                  <div class="seg-option" data-retorno="sim" role="button" tabindex="0">
+                    <i class="fas fa-rotate-left"></i><span>Sim, volta</span>
+                  </div>
+                  <div class="seg-option" data-retorno="nao" role="button" tabindex="0">
+                    <i class="fas fa-check"></i><span>Não, fica</span>
+                  </div>
+                </div>
+                <input type="hidden" id="necessitaRetorno" value="">
               </div>
-              <div class="seg-option" data-retorno="nao" role="button" tabindex="0">
-                <i class="fas fa-check"></i><span>Não — fica com o cliente</span>
+              <div>
+                <h3>Haverá venda depois?</h3>
+                <p class="hint">Vale para a solicitação inteira.</p>
+                <div class="segmented" id="vendaSeg">
+                  <div class="seg-option" data-venda="sim" role="button" tabindex="0">
+                    <i class="fas fa-file-invoice-dollar"></i><span>Sim, será cobrado</span>
+                  </div>
+                  <div class="seg-option active" data-venda="nao" role="button" tabindex="0">
+                    <i class="fas fa-check"></i><span>Não, sem cobrança</span>
+                  </div>
+                </div>
+                <input type="hidden" id="vendaPosterior" value="nao">
               </div>
             </div>
-            <input type="hidden" id="necessitaRetorno" value="">
-            <p class="hint" id="retornoHint">O tipo de operação já sugere uma resposta, mas quem
-              pede é quem sabe: confirme se este material volta para o estoque.</p>
-          </div>
-
-          <!-- 4) Venda posterior -->
-          <div class="section">
-            <div class="section-title"><span class="step">4</span> Haverá venda posterior do material?</div>
-            <div class="segmented" id="vendaSeg">
-              <div class="seg-option" data-venda="sim" role="button" tabindex="0">
-                <i class="fas fa-file-invoice-dollar"></i><span>Sim — orçamento/venda depois</span>
-              </div>
-              <div class="seg-option active" data-venda="nao" role="button" tabindex="0">
-                <i class="fas fa-check"></i><span>Não — sem cobrança</span>
-              </div>
-            </div>
-            <input type="hidden" id="vendaPosterior" value="nao">
           </div>
 
           <!-- 4) Cliente -->
           <div class="section">
-            <div class="section-title"><span class="step">5</span> Cliente</div>
+            <div class="section-title"><span class="step">4</span> Cliente</div>
             <div class="field">
               <label for="buscaCliente">Nome do cliente <span style="color:var(--err)">*</span></label>
               <input type="text" id="buscaCliente" placeholder="Digite o nome do cliente..." autocomplete="off">
@@ -252,7 +330,7 @@
 
           <!-- 5) Materiais -->
           <div class="section">
-            <div class="section-title"><span class="step">6</span> Materiais</div>
+            <div class="section-title"><span class="step">5</span> Materiais</div>
             <div class="field">
               <label for="buscaMaterial">Código ou nome do material</label>
               <div class="add-item-row">
@@ -271,14 +349,6 @@
           </div>
 
           <input type="text" id="website" class="honeypot" tabindex="-1" autocomplete="off">
-
-          <div class="feedback" id="feedback"></div>
-
-          <div class="actions">
-            <button type="button" class="btn btn-primary" id="btn-enviar" onclick="enviarSolicitacao()">
-              <i class="fas fa-paper-plane"></i><span>Enviar solicitação</span>
-            </button>
-          </div>
         </form>
 
         <div class="success-screen" id="success">
@@ -289,6 +359,23 @@
           <button type="button" class="btn btn-ghost" onclick="location.reload()">Nova solicitação</button>
         </div>
       </div>
+     </div>
+
+     <!-- Resumo: mostra o que ja foi preenchido e leva o botao de enviar, para
+          o pedido nao terminar no fim de uma pagina longa. -->
+     <aside class="card resumo" id="resumoCard">
+      <div class="card-body">
+        <h2>Resumo do pedido</h2>
+        <div class="resumo-linha"><span class="k">Solicitante</span><span class="v is-vazio" id="resSolicitante" data-vazio="a informar">a informar</span></div>
+        <div class="resumo-linha"><span class="k">Operação</span><span class="v is-vazio" id="resOperacao" data-vazio="a escolher">a escolher</span></div>
+        <div class="resumo-linha"><span class="k">Cliente</span><span class="v is-vazio" id="resCliente" data-vazio="a informar">a informar</span></div>
+        <div class="resumo-linha"><span class="k">Materiais</span><span class="v is-vazio" id="resItens" data-vazio="nenhum">nenhum</span></div>
+        <div class="feedback" id="feedback"></div>
+        <button type="button" class="btn btn-primary" id="btn-enviar" onclick="enviarSolicitacao()">
+          <i class="fas fa-paper-plane"></i><span>Enviar solicitação</span>
+        </button>
+      </div>
+     </aside>
     </div>
 
     <div class="foot">Columbia Sync · Solicitação de Nota Fiscal</div>
@@ -359,6 +446,7 @@
       $("tipoOperacao").value = opt.dataset.tipo;
       mostrarAjuda(opt);
       sugerirRetorno(opt);
+      renderResumo();
     };
     opt.addEventListener("click", select);
     // O "?" explica o tipo sem obrigar a escolher ele.
@@ -452,12 +540,14 @@
     $("buscaFuncionario").style.display = "none";
     $("sugestoesFuncionario").classList.remove("show");
     carregarMinhasSolicitacoes(func.codigo);
+    renderResumo();
   };
   window.limparFuncionario = function () {
     funcionarioSelecionado = null;
     $("funcionarioChip").style.display = "none";
     $("buscaFuncionario").style.display = "block";
     $("minhasSolicitacoesWrap").style.display = "none";
+    renderResumo();
   };
 
   window.selecionarCliente = function (cli) {
@@ -468,11 +558,13 @@
     $("buscaCliente").value = "";
     $("buscaCliente").style.display = "none";
     $("sugestoesCliente").classList.remove("show");
+    renderResumo();
   };
   window.limparCliente = function () {
     clienteSelecionado = null;
     $("clienteChip").style.display = "none";
     $("buscaCliente").style.display = "block";
+    renderResumo();
   };
 
   window.selecionarMaterial = function (mat) {
@@ -498,6 +590,7 @@
       necessita_retorno: $("necessitaRetorno").value === "sim",
     });
     renderItens();
+    renderResumo();
     materialSelecionado = null;
     $("buscaMaterial").value = "";
     $("txtQuantidade").value = "";
@@ -524,7 +617,27 @@
   window.removerItem = function (idx) {
     itens.splice(idx, 1);
     renderItens();
+    renderResumo();
   };
+
+  // Resumo lateral: espelha o que ja foi preenchido, para a pessoa conferir
+  // antes de enviar sem precisar rolar a pagina de volta.
+  function renderResumo() {
+    const por = (id, texto) => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = texto || el.dataset.vazio || "—";
+      el.classList.toggle("is-vazio", !texto);
+    };
+    por("resSolicitante", funcionarioSelecionado ? funcionarioSelecionado.nome : "");
+    por("resCliente", clienteSelecionado ? clienteSelecionado.nome : "");
+    const tipos = [...new Set(itens.map((i) => i.tipo_operacao).filter(Boolean))];
+    por("resOperacao", tipos.length > 1 ? `${tipos.length} operações` : (tipos[0] || $("tipoOperacao").value));
+    const total = itens.reduce((soma, i) => soma + Number(i.quantidade || 0), 0);
+    por("resItens", itens.length
+      ? `${itens.length} ${itens.length === 1 ? "material" : "materiais"} · ${total} un.`
+      : "");
+  }
 
   function renderItens() {
     const container = $("listaItens");
