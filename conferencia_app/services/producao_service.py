@@ -186,6 +186,11 @@ def listar_orcamentos_mes(
         "busca": f"%{termo}%" if termo else None,
         "classificacao": _texto(classificacao) or None,
     })
+    if has_app_context():
+        current_app.logger.debug(
+            "cronograma_periodo inicio=%s fim=%s classificacao=%s linhas=%s",
+            inicio.isoformat(), fim.isoformat(), _texto(classificacao) or "todas", len(rows),
+        )
     orcamentos: OrderedDict[str, dict[str, Any]] = OrderedDict()
     for row in rows:
         chave = _texto(row.get("cod_orcamento"))
@@ -215,6 +220,15 @@ def listar_orcamentos_mes(
         orcamento["quantidade_os"] = len(orcamento["ordens"])
         for os in orcamento["ordens"]:
             os["data_prevista_entrega"] = data_orcamento
+    if has_app_context():
+        current_app.logger.debug("cronograma_agrupamento orcamentos=%s", len(orcamentos))
+        if termo and termo.isdecimal():
+            for orcamento in orcamentos.values():
+                if str(orcamento["numero_orcamento"]) == termo:
+                    current_app.logger.debug(
+                        "cronograma_orcamento numero=%s ordens=%s",
+                        termo, [os["numero_os"] for os in orcamento["ordens"]],
+                    )
     return list(orcamentos.values())
 
 

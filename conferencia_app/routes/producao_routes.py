@@ -9,6 +9,7 @@ from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
+from ..compras.db import ProducaoSourceError
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -53,8 +54,11 @@ def cronograma_orcamentos_mes():
         return jsonify({
             "orcamentos": producao_service.listar_orcamentos_mes(ano, mes, termo, classificacao)
         })
+    except ProducaoSourceError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 503
     except Exception:
-        return jsonify({"error": "Nao foi possivel consultar os orcamentos do periodo."}), 503
+        current_app.logger.exception("Falha na consulta do cronograma")
+        return jsonify({"error": "Falha na consulta do cronograma.", "code": "query_error"}), 503
 
 
 @producao_bp.get("/api/producao/cronograma/segmentos")

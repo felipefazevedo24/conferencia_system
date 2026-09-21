@@ -5,6 +5,7 @@ from test_app import build_test_app, login_admin
 
 from conferencia_app.services import producao_service
 from conferencia_app.compras import queries
+from conferencia_app.compras.db import ProducaoSourceError
 
 
 def _linha(cod_orcamento=1, n_orcamento=7175, versao="01", n_os="9958", **extra):
@@ -75,6 +76,17 @@ def test_api_falha_de_consulta_retorna_503(tmp_path):
     with patch.object(producao_service, "fetch_all", side_effect=RuntimeError("bridge indisponivel")):
         response = client.get("/api/producao/cronograma/orcamentos?ano=2026&mes=9")
     assert response.status_code == 503
+    assert response.get_json()["code"] == "query_error"
+
+
+def test_api_distingue_bridge_indisponivel_de_lista_vazia(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with patch.object(producao_service, "listar_orcamentos_mes", side_effect=ProducaoSourceError("bridge_unavailable")):
+        response = client.get("/api/producao/cronograma/orcamentos?ano=2026&mes=9&q=7344")
+    assert response.status_code == 503
+    assert response.get_json()["code"] == "bridge_unavailable"
 
 
 def test_servico_calcula_limites_do_mes_e_repassa_busca(tmp_path):
@@ -158,6 +170,30 @@ def test_filtro_mensal_usa_data_do_orcamento_e_mantem_todas_as_os():
     assert "COALESCE(os.cod_orcamento, ol.cod_orcamento)" in sql
     assert sql.lstrip().startswith("WITH ")
     assert not any(word in sql.upper() for word in ("INSERT ", "UPDATE ", "DELETE "))
+
+
+def test_classificacao_nula_so_e_excluida_com_filtro_explicito():
+    sql = queries.SQL_PRODUCAO_ORCAMENTOS_MES
+    assert "%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text" in sql
+
+
+def test_caso_logico_7344_10616_sem_classificacao(tmp_path):
+    app = build_test_app(tmp_path)
+    producao_service._QUERY_CACHE.clear()
+    rows = [
+        _linha(cod_orcamento=7344, n_orcamento=7344, n_os=numero,
+               cliente="ALUMITA EXTRUSAO DE METAIS LTDA",
+               dt_previsao_entrega="2026-09-23", dt_prevista="2026-09-23",
+               classificacao=None)
+        for numero in ("10612", "10616", "10617", "10618")
+    ]
+    with app.app_context(), patch.object(producao_service, "fetch_all", return_value=rows) as fetch:
+        result = producao_service.listar_orcamentos_mes(2026, 9, "7344")
+    assert fetch.call_args.args[1]["classificacao"] is None
+    assert len(result) == 1
+    assert result[0]["quantidade_os"] == 4
+    assert "10616" in [os["numero_os"] for os in result[0]["ordens"]]
+    assert result[0]["data_prevista_entrega"] == "2026-09-23"
 
 
 def test_estrutura_e_sequencia_sao_da_os_selecionada(tmp_path):

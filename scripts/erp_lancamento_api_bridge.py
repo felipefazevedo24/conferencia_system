@@ -1745,6 +1745,7 @@ def create_app() -> Flask:
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             return jsonify({"erro": "postgres_nao_configurado"}), 500
 
+        production = False
         try:
             payload = request.get_json(silent=True) or {}
             query_name = str(payload.get("query") or "").strip()
@@ -1775,6 +1776,12 @@ def create_app() -> Flask:
                             })
                         rows = [dict(zip(cols, row)) for row in cur.fetchall()]
                         return jsonify({"sucesso": True, "rows": _json_safe(rows), "read_only": production})
+        except psycopg2.Error as exc:
+            app.logger.exception("Falha SQL na consulta de Compras da bridge")
+            if production:
+                code = "sql_error" if isinstance(exc, (psycopg2.ProgrammingError, psycopg2.DataError)) else "grv_unavailable"
+                return jsonify({"sucesso": False, "erro": code}), 500
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
         except Exception as exc:
             app.logger.exception("Falha ao executar query de Compras na bridge")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500

@@ -28,6 +28,7 @@ class ProducaoSourceError(RuntimeError):
         "bridge_access_denied": "A Bridge ERP recusou o acesso de Producao.",
         "bridge_unavailable": "Nao foi possivel consultar a Bridge ERP.",
         "grv_unavailable": "Nao foi possivel consultar o PostgreSQL do GRV.",
+        "grv_query_invalid": "Consulta rejeitada pelo PostgreSQL do GRV.",
     }
 
     def __init__(self, code: str):
@@ -72,9 +73,10 @@ def _exec_fetch(sql: str, params: tuple | dict | None, *, one: bool):
             with get_connection(readonly=production) as conn, conn.cursor() as cur:
                 cur.execute(sql, params or {})
                 result = cur.fetchone() if one else cur.fetchall()
-    except psycopg2.Error:
+    except psycopg2.Error as exc:
         if production:
-            raise ProducaoSourceError("grv_unavailable") from None
+            code = "grv_query_invalid" if isinstance(exc, (psycopg2.ProgrammingError, psycopg2.DataError)) else "grv_unavailable"
+            raise ProducaoSourceError(code) from None
         raise
     elapsed_ms = (perf_counter() - started) * 1000
     if elapsed_ms >= max(0, int(settings.APP_DB_SLOW_MS)):
@@ -117,6 +119,8 @@ def _exec_fetch_bridge(sql: str, params: tuple | dict | None, *, one: bool):
             raise ProducaoSourceError("bridge_unavailable") from None
         if response.status_code == 400 and payload.get("erro") == "query_nao_permitida":
             raise ProducaoSourceError("bridge_catalog_outdated")
+        if payload.get("erro") == "sql_error":
+            raise ProducaoSourceError("grv_query_invalid")
         if response.status_code != 200 or payload.get("sucesso") is not True:
             raise ProducaoSourceError("bridge_unavailable")
         if payload.get("read_only") is not True:

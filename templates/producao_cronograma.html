@@ -138,8 +138,8 @@
                     <input type="month" id="ce-mes" class="eui-input" aria-label="Mês e ano de entrega">
                     <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" id="ce-mes-proximo" aria-label="Próximo mês"><i class="fas fa-chevron-right"></i></button>
                 </div>
-                <select id="ce-segmento" class="eui-input ce-segmento" aria-label="Setor">
-                    <option value="">Todos os setores</option>
+                <select id="ce-segmento" class="eui-input ce-segmento" aria-label="Classificação da OS">
+                    <option value="">Todas as classificações</option>
                 </select>
                 <div class="eui-input-group ce-busca">
                     <i class="fas fa-magnifying-glass"></i>
@@ -277,17 +277,22 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         if (segmento) params.set("classificacao", segmento);
         fetch("/api/producao/cronograma/orcamentos?" + params.toString())
             .then(function (resp) {
-                if (!resp.ok) throw new Error("http_" + resp.status);
-                return resp.json();
+                return resp.json().then(function (data) {
+                    if (!resp.ok) throw new Error(data.code || "query_error");
+                    return data;
+                });
             })
             .then(function (data) {
                 state.orcamentos = data.orcamentos || [];
                 renderLista();
             })
-            .catch(function () {
+            .catch(function (err) {
                 state.orcamentos = [];
                 els.listaCount.textContent = "0";
-                els.listaBody.innerHTML = '<div class="ce-lista-msg"><i class="fas fa-triangle-exclamation"></i><br>Não foi possível consultar os orçamentos do período.</div>';
+                var fonte = err.message === "grv_query_invalid" || err.message === "query_error"
+                    ? "Falha na consulta do cronograma."
+                    : "Bridge/GRV indisponível.";
+                els.listaBody.innerHTML = '<div class="ce-lista-msg"><i class="fas fa-triangle-exclamation"></i><br>' + fonte + '</div>';
             });
     }
 
