@@ -7119,3 +7119,80 @@ def test_inventario_pdf_desenha_a_rubrica_quando_o_arquivo_existe(tmp_path):
     with patch.object(pdf_svc, "PASTA_ASSINATURAS", pasta_ruim):
         assert pdf_svc._rubrica("filipe_oliveira.png") is None
         assert client.get(url_pdf).status_code == 200
+
+
+def test_inventario_atualizar_grv_mantem_a_diferenca_estatica(tmp_path):
+    """A diferenca apurada e' o que o gestor valida (segundo par de olhos) -
+    ela NAO pode se perder por movimentacao que aconteceu depois da
+    contagem. Ao atualizar o saldo do GRV, a quantidade contada acompanha o
+    movimento e a diferenca fica igual:
+
+        01/07  contado 2200  x  sistemico  300  ->  1900
+        05/07  entram 2000 kg
+               contado 4200  x  sistemico 2300  ->  1900
+    """
+    from conferencia_app.models import LogisticaInventarioAjuste
+    from conferencia_app.services import logistica_inventario_ajuste_service as svc
+
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="19-01-00558", local_codigo="A01", unidade_medida="KG",
+            qtde_contada=2200, qtde_estoque_no_momento=300, diferenca=1900, custo_medio=5.0,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+
+        # Entrada de 2000 kg.
+        movimento = svc.atualizar_saldo_grv(ajuste, 2300, 5.0)
+        db.session.commit()
+        assert movimento == 2000
+        assert ajuste.qtde_estoque_no_momento == 2300
+        assert ajuste.qtde_contada == 4200
+        assert ajuste.diferenca == 1900
+
+        # Saida de 500 kg: mesma regra.
+        movimento = svc.atualizar_saldo_grv(ajuste, 1800, 5.0)
+        db.session.commit()
+        assert movimento == -500
+        assert ajuste.qtde_contada == 3700
+        assert ajuste.diferenca == 1900
+
+        # Sem movimento nenhum, nada muda.
+        assert svc.atualizar_saldo_grv(ajuste, 1800, 5.0) == 0
+        assert (ajuste.qtde_contada, ajuste.diferenca) == (3700, 1900)
+
+
+def test_inventario_atualizar_grv_pela_api_preserva_a_divergencia(tmp_path):
+    """Mesma regra pela rota (acao "Atualizar quantidade GRV" do menu)."""
+    from unittest.mock import patch as _patch
+
+    from conferencia_app.models import LogisticaInventarioAjuste
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="19-01-00558", local_codigo="A01", unidade_medida="KG",
+            qtde_contada=2200, qtde_estoque_no_momento=300, diferenca=1900, custo_medio=5.0,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    rotas = "conferencia_app.routes.logistica_inventario_routes"
+    with _patch(f"{rotas}.buscar_estoque_grv", return_value={}), \
+            _patch(f"{rotas}.qtde_grv_para", return_value=2300.0), \
+            _patch(f"{rotas}.custo_medio_para", return_value=5.0):
+        resposta = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/atualizar-grv", json={})
+
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert "1900" in corpo["message"]  # a mensagem confirma a diferenca preservada
+    assert corpo["ajuste"]["qtde_estoque_no_momento"] == 2300
+    assert corpo["ajuste"]["qtde_contada"] == 4200
+    assert corpo["ajuste"]["diferenca"] == 1900

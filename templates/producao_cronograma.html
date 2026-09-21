@@ -63,7 +63,7 @@
     .ce-mapa-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .ce-mapa-panel-title h3 { margin: 0; font-size: 14px; color: var(--po-ink); }
     .ce-mapa-source-label { padding: 3px 7px; color: var(--po-muted); font-size: 10px; background: var(--po-surface-strong); border-radius: 4px; }
-    .ce-mapa-flow { height: 560px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: #fbfcfd; }
+    .ce-mapa-flow { height: 360px; border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; background: #fbfcfd; }
 
     .assembly-node { position: relative; display: grid; width: 305px; min-height: 182px; gap: 14px; padding: 18px; text-align: left; overflow: hidden; background: linear-gradient(150deg, #fff, #f8fbfe); border: 1px solid var(--po-border-strong); border-radius: var(--po-radius); box-shadow: var(--po-shadow-soft); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; font-family: inherit; }
     .assembly-node:hover { border-color: var(--po-blue-500); box-shadow: 0 14px 28px #1769d224; transform: translateY(-2px); }
@@ -76,6 +76,7 @@
     .node-toggle { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; padding: 0; color: var(--po-ink-soft); font-size: 11px; background: var(--po-surface); border: 1px solid var(--po-border-strong); border-radius: 999px; cursor: pointer; z-index: 1; }
     .node-toggle:hover { color: var(--po-blue-600); border-color: var(--po-blue-500); }
     .node-thumbnail img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center; }
+    .node-thumbnail .ce-image-fallback { color: var(--eui-muted); font-size: 10px; text-align: center; line-height: 1.2; }
     .node-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .node-meta small { color: var(--po-muted); font-size: 14px; }
     .status-badge { display: inline-flex; align-items: center; gap: 7px; width: fit-content; color: var(--po-ink-soft); font-size: 15px; white-space: nowrap; }
@@ -311,7 +312,8 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 '<span class="eui-badge eui-badge--neutral">' + escapeHtml(statusPrincipal) + '</span></div>' +
                 '<div class="ce-item-meta">' +
                 '<span class="ce-item-cliente">' + escapeHtml(orc.cliente || "Cliente não informado") + '</span>' +
-                (totalItens ? '<span>' + totalItens + (totalItens === 1 ? " item" : " itens") + '</span>' : '') +
+                '<span>' + fmtData(orc.data_prevista_entrega) + '</span>' +
+                '<span>' + totalItens + (totalItens === 1 ? " item" : " itens") + ' · ' + (orc.ordens || []).length + ' OS</span>' +
                 '</div>' +
                 '</button>';
         }).join("");
@@ -366,8 +368,9 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 '<div class="ce-faixa-campo"><span>Entrega prevista</span><strong>' + fmtData(orcamento.data_prevista_entrega) + '</strong></div>' +
                 '<div class="ce-faixa-campo"><span>Orçamento</span><strong>' + escapeHtml(orcamento.numero_orcamento) + (orcamento.versao ? " · v" + escapeHtml(orcamento.versao) : "") + '</strong></div>' +
                 '<div class="ce-faixa-campo"><span>OS selecionada</span><strong>' + escapeHtml((osAtual && osAtual.numero_os) || "—") + '</strong></div>' +
-                '<div class="ce-faixa-campo"><span>Situação geral</span><strong>' + escapeHtml((osAtual && osAtual.status_origem) || "—") + '</strong></div>' +
-                (tabs ? '<div class="ce-faixa-campo" style="min-width:100%;">' + tabs + '</div>' : "") +
+                '<div class="ce-faixa-campo"><span>Situação geral</span><strong>' + escapeHtml(statusResumoOrcamento(ordens)) + '</strong></div>' +
+                (orcamento.datas_divergentes ? '<div class="ce-faixa-campo" style="min-width:100%;"><span>Datas divergentes nas OS</span><strong>' + escapeHtml((orcamento.datas_previstas_os || []).map(fmtData).join(", ")) + '</strong></div>' : '') +
+                (tabs ? '<div class="ce-faixa-campo" style="min-width:100%;"><span>OS vinculadas</span>' + tabs + '</div>' : "") +
             '</div></div>' +
             '<div class="eui-card ce-mapa-panel"><div class="eui-card__body eui-card__body--tight">' +
                 '<div class="ce-mapa-panel-title"><h3>Estrutura da OS</h3><span class="ce-mapa-source-label">Fonte: GRV</span></div>' +
@@ -540,23 +543,31 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         );
     }
 
+    function DesenhoMiniatura(props) {
+        var [tentativa, setTentativa] = React.useState(0);
+        var [indisponivel, setIndisponivel] = React.useState(false);
+        var timer = React.useRef(null);
+        React.useEffect(function () { return function () { if (timer.current) clearTimeout(timer.current); }; }, []);
+        if (!props.url || indisponivel) {
+            return React.createElement("span", { className: "ce-image-fallback" }, "Desenho não disponível");
+        }
+        return React.createElement("img", {
+            src: props.url + (props.url.indexOf("?") >= 0 ? "&" : "?") + "ce_retry=" + tentativa,
+            alt: "Desenho da peça " + props.code,
+            loading: "lazy",
+            onLoad: function (event) {
+                // A rota compartilhada retorna um PNG de 1 pixel enquanto a bridge processa a prévia.
+                if (event.currentTarget.naturalWidth > 1 && event.currentTarget.naturalHeight > 1) return;
+                if (tentativa >= 5) { setIndisponivel(true); return; }
+                timer.current = setTimeout(function () { setTentativa(function (atual) { return atual + 1; }); }, 1500);
+            },
+            onError: function () { setIndisponivel(true); },
+        });
+    }
+
     function EstruturaNodeCard(props) {
         var node = props.data;
-        var imagem = node.thumbnail_url
-            ? React.createElement("img", {
-                src: node.thumbnail_url, alt: "", loading: "lazy",
-                onError: function (event) {
-                    var container = event.target.parentNode;
-                    event.target.style.display = "none";
-                    if (container && !container.querySelector(".fa-image")) {
-                        var icone = document.createElement("i");
-                        icone.className = "fas fa-image";
-                        icone.setAttribute("aria-hidden", "true");
-                        container.appendChild(icone);
-                    }
-                },
-            })
-            : React.createElement("i", { className: "fas fa-image", "aria-hidden": "true" });
+        var imagem = React.createElement(DesenhoMiniatura, { url: node.thumbnail_url, code: node.code });
         var toggle = node.has_children
             ? React.createElement(
                 "button",
@@ -665,6 +676,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
     }
 
     function selecionarPeca(auxCode) {
+        pararPolling();
         state.pecaSelecionada = auxCode;
         renderMapa();
         var card = seqCardEl();
@@ -682,14 +694,14 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 return resp.json();
             })
             .then(function (data) {
-                if (state.pecaSelecionada !== auxCode) return;
+                if (state.pecaSelecionada !== auxCode || state.osSelecionada !== numeroOs) return;
                 renderSequencia(data);
                 state.assinaturaSeq = assinaturaOperacoes(data.operations);
                 pararPolling();
                 state.pollingTimer = setInterval(function () { pollSequencia(auxCode); }, 12000);
             })
             .catch(function () {
-                if (state.pecaSelecionada !== auxCode) return;
+                if (state.pecaSelecionada !== auxCode || state.osSelecionada !== numeroOs) return;
                 var body = seqBodyEl();
                 if (body) body.innerHTML = '<div class="ce-erro"><i class="fas fa-triangle-exclamation"></i><p>Não foi possível carregar a sequência desta peça.</p></div>';
             });
@@ -714,7 +726,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 return resp.json();
             })
             .then(function (data) {
-                if (state.pecaSelecionada !== auxCode) return;
+                if (state.pecaSelecionada !== auxCode || state.osSelecionada !== numeroOs) return;
                 var assinatura = assinaturaOperacoes(data.operations);
                 if (assinatura === state.assinaturaSeq) return;
                 state.assinaturaSeq = assinatura;
@@ -733,7 +745,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
         var body = seqBodyEl();
         var atualEl = seqAtualEl();
         if (!operations.length) {
-            if (body) body.innerHTML = '<div class="ce-erro"><i class="fas fa-circle-exclamation"></i><p>Esta peça não possui sequência de operações cadastrada.</p></div>';
+            if (body) body.innerHTML = '<div class="ce-loading">Nenhuma sequência de operações encontrada para esta peça.</div>';
             if (atualEl) atualEl.textContent = "";
             return;
         }
@@ -751,6 +763,7 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
                 '<div class="ce-seq-step">Etapa ' + (index + 1) + ' · Seq. ' + escapeHtml(op.sequence != null ? op.sequence : "—") + '</div>' +
                 '<div class="ce-seq-name">' + escapeHtml(op.name || "Operação") + '</div>' +
                 '<div class="ce-seq-row"><span>Peça</span><span>' + escapeHtml(node.code || "—") + '</span></div>' +
+                '<div class="ce-seq-row"><span>Setor</span><span>' + escapeHtml(op.sector || "—") + '</span></div>' +
                 '<div class="ce-seq-row"><span>Máquina</span><span>' + escapeHtml(op.machine || "—") + '</span></div>' +
                 '<div class="ce-seq-row"><span>Status</span><span>' + escapeHtml(statusLabel) + '</span></div>' +
                 '</div>';
@@ -758,6 +771,8 @@ import { ReactFlow, Background, Controls, Handle, Position } from "@xyflow/react
             return card + seta;
         }).join("");
         if (body) body.innerHTML = '<div class="ce-seq-scroll">' + cards + '</div>';
+        var cabecalho = els.detalhe.querySelector(".ce-seq-header");
+        if (cabecalho && !cabecalho.querySelector(".ce-live")) cabecalho.insertAdjacentHTML("beforeend", '<span class="eui-badge eui-badge--success ce-live">AO VIVO</span>');
         if (atualEl) {
             atualEl.textContent = indiceAtual >= 0
                 ? "Operação atual: Seq. " + (operations[indiceAtual].sequence != null ? operations[indiceAtual].sequence : (indiceAtual + 1))

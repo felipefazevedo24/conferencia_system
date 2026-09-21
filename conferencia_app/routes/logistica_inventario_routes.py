@@ -1161,9 +1161,9 @@ def api_atualizar_grv_ajuste(ajuste_id):
         if qtde_grv is None:
             return jsonify({"error": "Produto não encontrado no estoque atual do GRV."}), 404
         custo_medio = custo_medio_para(ajuste.codigo_produto, ajuste.local_codigo, estoque_grv)
-        ajuste.qtde_estoque_no_momento = qtde_grv
-        ajuste.diferenca = float(ajuste.qtde_contada or 0) - qtde_grv
-        ajuste.custo_medio = custo_medio
+        # A diferenca apurada e' estatica: o saldo novo entra e a quantidade
+        # contada acompanha o movimento (ver atualizar_saldo_grv).
+        movimento = ajuste_svc.atualizar_saldo_grv(ajuste, qtde_grv, custo_medio)
         if ajuste.contagem_id:
             contagem = db.session.get(LogisticaInventarioInicial, ajuste.contagem_id)
             if contagem:
@@ -1174,7 +1174,14 @@ def api_atualizar_grv_ajuste(ajuste_id):
     except Exception as exc:
         db.session.rollback()
         return jsonify({"error": f"Não foi possível atualizar o GRV: {exc}"}), 502
-    return jsonify({"message": "Quantidade do GRV atualizada.", "ajuste": _fmt_ajuste(ajuste)})
+    if movimento:
+        mensagem = (
+            f"Saldo do GRV atualizado ({movimento:+g} de movimento). "
+            f"A quantidade contada acompanhou e a diferença apurada continua {ajuste.diferenca:g}."
+        )
+    else:
+        mensagem = "Saldo do GRV atualizado - não houve movimento desde a contagem."
+    return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/estornar", methods=["POST"])

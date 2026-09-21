@@ -170,11 +170,7 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
 def listar_orcamentos_mes(
     ano: int, mes: int, busca: str | None = None, classificacao: str | None = None
 ) -> list[dict[str, Any]]:
-    """OS com entrega prevista no mes/ano informados, agrupadas pelo orcamento (leitura).
-
-    O mes vem da data prevista de cada OS (tos.dt_prevista), nao da data do
-    orcamento: um orcamento com OS entregando em meses diferentes aparece em
-    cada um desses meses, so com as OS daquele mes.
+    """Orcamentos com entrega prevista no mes, incluindo todas as suas OS.
 
     Traz apenas orcamentos que ja geraram OS: nao ha, no codigo existente, uma
     origem confirmada de cliente para orcamento sem OS (torcamento nao expoe
@@ -210,6 +206,15 @@ def listar_orcamentos_mes(
             "data_prevista_os": _iso(row.get("dt_prevista")),
             "quantidade_itens": row.get("qtde_itens") or 0,
         })
+    for orcamento in orcamentos.values():
+        data_orcamento = orcamento["data_prevista_entrega"]
+        datas_os = sorted({os["data_prevista_os"] for os in orcamento["ordens"] if os["data_prevista_os"]})
+        orcamento["datas_previstas_os"] = datas_os
+        orcamento["datas_divergentes"] = any(data != data_orcamento for data in datas_os)
+        orcamento["quantidade_itens"] = sum(os["quantidade_itens"] for os in orcamento["ordens"])
+        orcamento["quantidade_os"] = len(orcamento["ordens"])
+        for os in orcamento["ordens"]:
+            os["data_prevista_entrega"] = data_orcamento
     return list(orcamentos.values())
 
 

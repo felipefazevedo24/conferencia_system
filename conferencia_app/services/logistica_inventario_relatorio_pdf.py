@@ -11,6 +11,7 @@ tabela de itens ajustados, e rodape com as assinaturas (ver ASSINATURAS).
 
 Mesmo padrao de biblioteca usado em comex_po_pdf.py: SimpleDocTemplate +
 Table/Paragraph -> bytes, servido via send_file."""
+import pathlib
 from io import BytesIO
 from pathlib import Path
 
@@ -114,9 +115,21 @@ def _rubrica(nome_arquivo: str) -> Image | None:
     sai com a linha em branco, como antes."""
     if not nome_arquivo:
         return None
+    # Aceita a extensao que vier: quem digitaliza salva ora png, ora jpg -
+    # o que importa e' o nome (filipe_oliveira, ricardo_serrano).
     caminho = PASTA_ASSINATURAS / nome_arquivo
     if not caminho.is_file():
-        return None
+        base = pathlib.Path(nome_arquivo).stem.lower()
+        caminho = next(
+            (
+                arq for arq in sorted(PASTA_ASSINATURAS.glob("*"))
+                if arq.is_file() and arq.stem.lower() == base
+                and arq.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif")
+            ),
+            None,
+        )
+        if caminho is None:
+            return None
     try:
         largura_px, altura_px = ImageReader(str(caminho)).getSize()
         if not largura_px or not altura_px:
