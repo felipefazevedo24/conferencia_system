@@ -258,6 +258,101 @@ WHERE UPPER(BTRIM(service.n_os)) NOT LIKE 'E%%'
 ORDER BY service.n_os, dependency_walk.dependent_cod_os NULLS FIRST
 """
 
+# Cronograma do painel visual: a data pertence ao orçamento. O vínculo usa
+# as chaves oficiais do GRV e percorre as mesmas solicitações das dependências.
+SQL_PRODUCAO_CRONOGRAMA_ENTREGAS = """
+WITH RECURSIVE budgets AS (
+    SELECT codigo, n_orcamento, versao, dt_previsao_entrega
+    FROM public.torcamento
+    WHERE cod_empresa = %(cod_empresa)s
+      AND dt_previsao_entrega >= %(inicio)s::date
+      AND dt_previsao_entrega < %(fim)s::date
+),
+seed AS (
+    SELECT b.codigo AS cod_orcamento, os.codigo AS cod_os, FALSE AS principal
+    FROM budgets b
+    JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
+                      AND os.cod_orcamento = b.codigo
+    UNION
+    SELECT b.codigo, sg.cod_os, FALSE
+    FROM budgets b
+    JOIN public.torcamento_servico_gerados sg
+      ON sg.cod_empresa = %(cod_empresa)s AND sg.cod_orcamento = b.codigo
+     AND COALESCE(sg.cancelado, 0) = 0
+    UNION
+    SELECT b.codigo, necessity.cod_os, TRUE
+    FROM budgets b
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s
+     AND request.numero_orcamento = b.n_orcamento
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = request.cod_empresa
+     AND necessity.guid_solicitacao = request.guid_pai
+    WHERE necessity.cod_os IS NOT NULL
+),
+linked AS (
+    SELECT cod_orcamento, cod_os, principal FROM seed
+    UNION
+    SELECT linked.cod_orcamento, generated.cod_os, FALSE
+    FROM linked
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s AND request.cod_os = linked.cod_os
+    JOIN public.tos_solicitacao_necessidade generated
+      ON generated.cod_empresa = request.cod_empresa
+     AND generated.guid_solicitacao = request.guid_pai
+    WHERE generated.cod_os IS NOT NULL
+),
+orders AS (
+    SELECT cod_orcamento, cod_os, BOOL_OR(principal) AS principal
+    FROM linked GROUP BY cod_orcamento, cod_os
+),
+operation_counts AS (
+    SELECT process.cod_os,
+           COUNT(*)::integer AS total,
+           COUNT(*) FILTER (WHERE process.finalizado = 1
+                            OR process.concluido = 1
+                            OR process.dt_finalizacao IS NOT NULL)::integer AS concluidas
+    FROM public.tpro_pro process
+    WHERE process.cod_empresa = %(cod_empresa)s
+      AND process.cod_os IN (SELECT cod_os FROM orders)
+    GROUP BY process.cod_os
+)
+SELECT b.codigo AS cod_orcamento, b.n_orcamento, b.versao,
+       b.dt_previsao_entrega, os.codigo AS cod_os, os.n_os,
+       os.cliente, os.titulo, os.u_classificacao,
+       os.status_servico, COALESCE(o.principal, FALSE) AS principal,
+       COALESCE(op.total, 0) AS operacoes_total,
+       COALESCE(op.concluidas, 0) AS operacoes_concluidas
+FROM budgets b
+LEFT JOIN orders o ON o.cod_orcamento = b.codigo
+LEFT JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
+                       AND os.codigo = o.cod_os
+                       AND UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
+LEFT JOIN operation_counts op ON op.cod_os = os.codigo
+WHERE (%(classificacao)s::text IS NULL OR EXISTS (
+    SELECT 1 FROM orders class_orders
+    JOIN public.tos class_os ON class_os.cod_empresa = %(cod_empresa)s
+                            AND class_os.codigo = class_orders.cod_os
+    WHERE class_orders.cod_orcamento = b.codigo
+      AND UPPER(BTRIM(class_os.u_classificacao)) = UPPER(BTRIM(%(classificacao)s::text))
+))
+AND (%(pesquisa)s::text IS NULL OR b.n_orcamento::text ILIKE %(pesquisa)s
+     OR EXISTS (
+       SELECT 1 FROM orders search_orders
+       JOIN public.tos search_os ON search_os.cod_empresa = %(cod_empresa)s
+                                AND search_os.codigo = search_orders.cod_os
+       WHERE search_orders.cod_orcamento = b.codigo
+         AND (search_os.n_os ILIKE %(pesquisa)s
+              OR search_os.cliente ILIKE %(pesquisa)s
+              OR search_os.titulo ILIKE %(pesquisa)s
+              OR EXISTS (SELECT 1 FROM public.tos_aux item
+                         WHERE item.cod_empresa = search_os.cod_empresa
+                           AND item.cod_os = search_os.codigo
+                           AND item.subtitulo ILIKE %(pesquisa)s))
+     ))
+ORDER BY b.dt_previsao_entrega, b.n_orcamento, principal DESC, os.codigo
+"""
+
 SQL_PRODUCAO_OS_ABERTAS = """
 SELECT cod_empresa, codigo, n_os, titulo, status_servico, dt_prevista,
              n_desenho, u_classificacao
@@ -420,57 +515,6 @@ LIMIT 1
 
 SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
 SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
-
-# Liga OS ao orçamento que a gerou (cod_orcamento aponta para torcamento.codigo).
-# os.cod_orcamento (direto na OS) tem prioridade sobre o vinculo via
-# torcamento_servico_gerados: mesmo padrao usado nas demais queries de
-# Producao neste arquivo. Comecar de torcamento_servico_gerados (como esta
-# query fazia antes) perde OS cujo vinculo so existe em os.cod_orcamento.
-#
-# O cronograma agrupa pela data registrada no orcamento. As datas individuais
-# das OS seguem na resposta para tornar visiveis eventuais divergencias do GRV.
-SQL_PRODUCAO_ORCAMENTOS_MES = """
-WITH orc_link AS (
-    SELECT DISTINCT ON (sg.cod_empresa, sg.cod_os)
-           sg.cod_empresa, sg.cod_os, sg.cod_orcamento
-    FROM public.torcamento_servico_gerados sg
-    WHERE COALESCE(sg.cancelado, 0) = 0
-    ORDER BY sg.cod_empresa, sg.cod_os, sg.cod_orcamento DESC
-)
-SELECT
-    orc.codigo AS cod_orcamento,
-    COALESCE(os.n_orcamento, orc.n_orcamento) AS n_orcamento,
-    COALESCE(NULLIF(os.versao_orcamento, ''), orc.versao) AS versao,
-    orc.dt_previsao_entrega AS dt_previsao_entrega,
-    os.n_os,
-    os.titulo,
-    os.status_servico,
-    os.cliente,
-    os.dt_prevista,
-    os.u_classificacao AS classificacao,
-    (
-        SELECT count(*)
-        FROM public.tos_aux aux
-        WHERE aux.cod_empresa = os.cod_empresa AND aux.cod_os = os.codigo
-    ) AS qtde_itens
-FROM public.tos os
-LEFT JOIN orc_link ol ON ol.cod_empresa = os.cod_empresa AND ol.cod_os = os.codigo
-JOIN public.torcamento orc
-    ON orc.cod_empresa = os.cod_empresa
-   AND orc.codigo = COALESCE(os.cod_orcamento, ol.cod_orcamento)
-WHERE os.cod_empresa = %(cod_empresa)s
-  AND orc.dt_previsao_entrega >= %(data_de)s::date
-  AND orc.dt_previsao_entrega < %(data_ate)s::date
-  AND UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
-  AND (%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text)
-  AND (
-    %(busca)s::text IS NULL
-    OR os.n_os ILIKE %(busca)s
-    OR os.cliente ILIKE %(busca)s
-    OR orc.n_orcamento::text ILIKE %(busca)s
-)
-ORDER BY orc.dt_previsao_entrega, orc.n_orcamento DESC, os.n_os
-"""
 
 SQL_PRODUCAO_ORIGEM_SCHEMA = """
 SELECT count(*) = 2 AS supported

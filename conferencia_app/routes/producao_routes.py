@@ -9,7 +9,6 @@ from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
-from ..compras.db import ProducaoSourceError
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -29,45 +28,6 @@ def _original_static_directory() -> str:
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
     return render_template("producao_shell.html")
-
-
-@producao_bp.get("/producao/cronograma")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_entregas_page():
-    return render_template("producao_cronograma.html")
-
-
-@producao_bp.get("/api/producao/cronograma/orcamentos")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_orcamentos_mes():
-    hoje = datetime.now()
-    try:
-        ano = int(request.args.get("ano") or hoje.year)
-        mes = int(request.args.get("mes") or hoje.month)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Periodo invalido."}), 400
-    if not (1 <= mes <= 12) or not (2000 <= ano <= 2100):
-        return jsonify({"error": "Periodo invalido."}), 400
-    termo = str(request.args.get("q") or "").strip() or None
-    classificacao = str(request.args.get("classificacao") or "").strip() or None
-    try:
-        return jsonify({
-            "orcamentos": producao_service.listar_orcamentos_mes(ano, mes, termo, classificacao)
-        })
-    except ProducaoSourceError as exc:
-        return jsonify({"error": str(exc), "code": exc.code}), 503
-    except Exception:
-        current_app.logger.exception("Falha na consulta do cronograma")
-        return jsonify({"error": "Falha na consulta do cronograma.", "code": "query_error"}), 503
-
-
-@producao_bp.get("/api/producao/cronograma/segmentos")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_segmentos():
-    try:
-        return jsonify({"segmentos": producao_service.listar_segmentos()})
-    except Exception:
-        return jsonify({"error": "Nao foi possivel consultar os segmentos."}), 503
 
 
 @producao_bp.get("/producao-original/")
@@ -116,6 +76,36 @@ def listar_os_abertas():
         return jsonify({"resultados": producao_service.listar_os_abertas()})
     except Exception:
         return jsonify({"error": "Nao foi possivel consultar as OS abertas no GRV."}), 503
+
+
+@producao_bp.get("/api/producao/cronograma-entregas")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_entregas():
+    try:
+        mes = int(request.args.get("mes", datetime.now().month))
+        ano = int(request.args.get("ano", datetime.now().year))
+        if not 1 <= mes <= 12 or not 2000 <= ano <= 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "Período inválido."}), 400
+    try:
+        entregas = producao_service.listar_entregas_cronograma(
+            mes, ano, request.args.get("classificacao", ""), request.args.get("pesquisa", "")
+        )
+        return jsonify({"periodo": {"mes": mes, "ano": ano}, "entregas": entregas})
+    except Exception:
+        current_app.logger.exception("Falha ao consultar cronograma de entregas")
+        return jsonify({"error": "Não foi possível consultar o cronograma no GRV."}), 503
+
+
+@producao_bp.get("/api/producao/cronograma-entregas/classificacoes")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_classificacoes():
+    try:
+        return jsonify({"classificacoes": producao_service.listar_classificacoes_cronograma()})
+    except Exception:
+        current_app.logger.exception("Falha ao consultar classificações do cronograma")
+        return jsonify({"error": "Não foi possível consultar as classificações no GRV."}), 503
 
 
 @producao_bp.get("/api/producao/os/<path:numero_os>")
@@ -174,15 +164,17 @@ def criar_observacao(numero_os: str, aux_code: int):
     return jsonify({"id": row.id, "texto": row.texto, "autor": row.autor, "criado_em": row.criado_em.isoformat()}), 201
 
 
-def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") -> dict:
-    parent = next((item for item in all_nodes if item["id"] == node.get("parent_id")), None)
+def _original_node(node: dict, all_nodes: list[dict], order_number: str = "", nodes_by_id: dict | None = None) -> dict:
+    index = nodes_by_id if nodes_by_id is not None else {item["id"]: item for item in all_nodes}
+    parent = index.get(node.get("parent_id"))
     path = []
     cursor = parent
     visited = {node["id"]}
     while cursor and cursor["id"] not in visited:
         visited.add(cursor["id"])
-        path.insert(0, cursor)
-        cursor = next((item for item in all_nodes if item["id"] == cursor.get("parent_id")), None)
+        path.append(cursor)
+        cursor = index.get(cursor.get("parent_id"))
+    path.reverse()
     return {
         "id": node["id"],
         "aux_code": node["aux_code"],
@@ -216,7 +208,9 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
 
 
 def _original_structure(data: dict) -> dict:
-    nodes = [_original_node(node, data.get("nos", []), data["ordem"]["numero"]) for node in data.get("nos", [])]
+    source_nodes = data.get("nos", [])
+    nodes_by_id = {node["id"]: node for node in source_nodes}
+    nodes = [_original_node(node, source_nodes, data["ordem"]["numero"], nodes_by_id) for node in source_nodes]
     for node in nodes:
         node["detail_url"] = node["detail_url"].format(order=data["ordem"]["numero"])
     return {
@@ -225,6 +219,7 @@ def _original_structure(data: dict) -> dict:
         "nodes": nodes,
         "progress": {"percentage": data.get("progresso", 0), "finalized_operations": data.get("operacoes_concluidas", 0), "total_operations": data.get("operacoes_total", 0)},
         "pending_count": data.get("bloqueados", 0),
+        "structure_warnings": data.get("avisos_estrutura", []),
         "current_stage": "Producao",
         "source": {"calculated_at": datetime.now().isoformat()},
     }

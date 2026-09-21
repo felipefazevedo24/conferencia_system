@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 .pending-tile { color: var(--manufacturing); }
 .workspace {
-    --tree-panel-width: clamp(240px, 22vw, 310px);
+    --tree-panel-width: clamp(360px, 27vw, 460px);
     --details-panel-width: clamp(270px, 25vw, 350px);
     grid-template-columns: var(--tree-panel-width) 24px minmax(0, 1fr) 24px var(--details-panel-width);
     padding: 10px 0 0;
@@ -129,7 +129,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     content: "";
     pointer-events: none;
 }
-.tree-copy small { display: none; }
+.tree-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-row.selected { box-shadow: inset 3px 0 var(--blue-600); border-radius: 6px; }
 .tree-row.selected .tree-copy small { display: block; white-space: normal; overflow-wrap: anywhere; }
 .tree-copy strong { overflow-wrap: anywhere; }

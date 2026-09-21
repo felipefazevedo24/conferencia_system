@@ -167,75 +167,62 @@ def buscar_os(termo: str, limite: int = 20) -> list[dict[str, Any]]:
     return results
 
 
-def listar_orcamentos_mes(
-    ano: int, mes: int, busca: str | None = None, classificacao: str | None = None
-) -> list[dict[str, Any]]:
-    """Orcamentos com entrega prevista no mes, incluindo todas as suas OS.
-
-    Traz apenas orcamentos que ja geraram OS: nao ha, no codigo existente, uma
-    origem confirmada de cliente para orcamento sem OS (torcamento nao expoe
-    coluna de cliente em nenhuma consulta atual; so tos.cliente e usado).
-    """
-    inicio = date(ano, mes, 1)
-    fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
-    termo = _texto(busca)
-    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_ORCAMENTOS_MES, {
-        "cod_empresa": 1,
-        "data_de": inicio.isoformat(),
-        "data_ate": fim.isoformat(),
-        "busca": f"%{termo}%" if termo else None,
-        "classificacao": _texto(classificacao) or None,
-    })
-    if has_app_context():
-        current_app.logger.debug(
-            "cronograma_periodo inicio=%s fim=%s classificacao=%s linhas=%s",
-            inicio.isoformat(), fim.isoformat(), _texto(classificacao) or "todas", len(rows),
-        )
-    orcamentos: OrderedDict[str, dict[str, Any]] = OrderedDict()
-    for row in rows:
-        chave = _texto(row.get("cod_orcamento"))
-        orcamento = orcamentos.get(chave)
-        if orcamento is None:
-            orcamento = {
-                "numero_orcamento": row.get("n_orcamento"),
-                "versao": _texto(row.get("versao")) or None,
-                "data_prevista_entrega": _iso(row.get("dt_previsao_entrega")),
-                "cliente": _texto(row.get("cliente")) or None,
-                "ordens": [],
-            }
-            orcamentos[chave] = orcamento
-        orcamento["ordens"].append({
-            "numero_os": _texto(row.get("n_os")),
-            "titulo": _texto(row.get("titulo")),
-            "status_origem": _texto(row.get("status_servico")),
-            "data_prevista_os": _iso(row.get("dt_prevista")),
-            "quantidade_itens": row.get("qtde_itens") or 0,
-        })
-    for orcamento in orcamentos.values():
-        data_orcamento = orcamento["data_prevista_entrega"]
-        datas_os = sorted({os["data_prevista_os"] for os in orcamento["ordens"] if os["data_prevista_os"]})
-        orcamento["datas_previstas_os"] = datas_os
-        orcamento["datas_divergentes"] = any(data != data_orcamento for data in datas_os)
-        orcamento["quantidade_itens"] = sum(os["quantidade_itens"] for os in orcamento["ordens"])
-        orcamento["quantidade_os"] = len(orcamento["ordens"])
-        for os in orcamento["ordens"]:
-            os["data_prevista_entrega"] = data_orcamento
-    if has_app_context():
-        current_app.logger.debug("cronograma_agrupamento orcamentos=%s", len(orcamentos))
-        if termo and termo.isdecimal():
-            for orcamento in orcamentos.values():
-                if str(orcamento["numero_orcamento"]) == termo:
-                    current_app.logger.debug(
-                        "cronograma_orcamento numero=%s ordens=%s",
-                        termo, [os["numero_os"] for os in orcamento["ordens"]],
-                    )
-    return list(orcamentos.values())
-
-
-def listar_segmentos() -> list[dict[str, Any]]:
-    """Segmentos (campo Classificacao da OS no GRV) disponiveis para filtro."""
+def listar_classificacoes_cronograma() -> list[str]:
     rows = _metadata_read(fetch_all, queries.SQL_CLASSIFICACOES, {"cod_empresa": 1})
-    return [{"classificacao": row.get("classificacao"), "qtd": row.get("qtd")} for row in rows]
+    return sorted({_texto(row.get("classificacao")) for row in rows if _texto(row.get("classificacao"))}, key=str.casefold)
+
+
+def listar_entregas_cronograma(mes: int, ano: int, classificacao: str = "", pesquisa: str = "") -> list[dict[str, Any]]:
+    inicio = date(ano, mes, 1)
+    fim = date(ano + (mes == 12), mes % 12 + 1, 1)
+    rows = _metadata_read(fetch_all, queries.SQL_PRODUCAO_CRONOGRAMA_ENTREGAS, {
+        "cod_empresa": 1,
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "classificacao": _texto(classificacao) or None,
+        "pesquisa": f"%{_texto(pesquisa)}%" if _texto(pesquisa) else None,
+    })
+    deliveries: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        budget_id = int(row["cod_orcamento"])
+        delivery = deliveries.setdefault(budget_id, {
+            "orcamento": _texto(row.get("n_orcamento")),
+            "versao": _texto(row.get("versao")),
+            "data_entrega": _iso(row.get("dt_previsao_entrega")),
+            "cliente": "", "descricao": "", "classificacoes": [],
+            "status": "", "percentual": None,
+            "operacoes_total": 0, "operacoes_concluidas": 0,
+            "os": [],
+        })
+        numero = _texto(row.get("n_os"))
+        if not numero:
+            continue
+        if not delivery["cliente"]:
+            delivery["cliente"] = _texto(row.get("cliente"))
+        if not delivery["descricao"]:
+            delivery["descricao"] = _texto(row.get("titulo"))
+        classification = _texto(row.get("u_classificacao"))
+        if classification and classification not in delivery["classificacoes"]:
+            delivery["classificacoes"].append(classification)
+        delivery["os"].append({
+            "numero": numero,
+            "descricao": _texto(row.get("titulo")),
+            "principal": bool(row.get("principal")),
+            "status": _texto(row.get("status_servico")),
+        })
+        delivery["operacoes_total"] += int(row.get("operacoes_total") or 0)
+        delivery["operacoes_concluidas"] += int(row.get("operacoes_concluidas") or 0)
+    for delivery in deliveries.values():
+        total = delivery["operacoes_total"]
+        completed = delivery["operacoes_concluidas"]
+        if total:
+            delivery["percentual"] = round(completed * 100 / total)
+            delivery["status"] = "Concluído" if completed == total else "Em produção"
+        elif delivery["os"]:
+            delivery["status"] = delivery["os"][0]["status"] or "Sem operações"
+        else:
+            delivery["status"] = "OS não gerada"
+    return list(deliveries.values())
 
 
 def obter_dependencias(numero_os: str) -> dict[str, Any]:
@@ -308,6 +295,10 @@ def _carregar_estrutura(numero_os):
     )
     rncs_job = _STRUCTURE_EXECUTOR.submit(_run_with_app, app, _rncs, ordem["codigo"])
     payload = _estrutura_payload(ordem, items_job.result(), operations_job.result())
+    if payload.get("avisos_estrutura") and has_app_context():
+        current_app.logger.warning(
+            "Estrutura GRV da OS %s: %s", numero_os, "; ".join(payload["avisos_estrutura"])
+        )
     payload["rncs"] = rncs_job.result()
     return payload
 
@@ -1360,31 +1351,65 @@ def _os_payload(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], operacoes: list[dict[str, Any]]) -> dict[str, Any]:
-    filhos: dict[int, list[int]] = defaultdict(list)
-    itens_por_id = {int(item["aux_code"]): item for item in itens}
+    # os_pai e a chave estrutural do GRV. A consulta ja traz todos os itens da
+    # OS; normalizamos a floresta uma vez, sem inferir parentesco pelo codigo.
+    itens_por_id: dict[int, dict[str, Any]] = {}
+    warnings: list[str] = []
     for item in itens:
-        parent = item.get("os_pai")
-        if parent is not None and int(parent) in itens_por_id:
-            filhos[int(parent)].append(int(item["aux_code"]))
-    roots = [item_id for item_id, item in itens_por_id.items() if item.get("os_pai") is None or int(item.get("os_pai") or 0) not in itens_por_id]
+        item_id = int(item["aux_code"])
+        if item_id in itens_por_id:
+            warnings.append(f"Item estrutural duplicado: {item_id}")
+            continue
+        itens_por_id[item_id] = item
+
+    parent_by_id: dict[int, int | None] = {}
+    for item_id, item in itens_por_id.items():
+        raw_parent = item.get("os_pai")
+        try:
+            parent = int(raw_parent) if raw_parent not in (None, "", 0, "0") else None
+        except (TypeError, ValueError):
+            warnings.append(f"Pai inválido do item {item_id}: {raw_parent}")
+            parent = None
+        if parent == item_id:
+            warnings.append(f"Item {item_id} aponta para si mesmo em os_pai")
+            parent = None
+        elif parent is not None and parent not in itens_por_id:
+            warnings.append(f"Pai {parent} do item {item_id} ausente na OS")
+            parent = None
+        parent_by_id[item_id] = parent
+
+    resolved: set[int] = set()
+    for item_id in itens_por_id:
+        chain: list[int] = []
+        seen: set[int] = set()
+        current: int | None = item_id
+        while current is not None and current not in resolved:
+            if current in seen:
+                warnings.append(f"Ciclo estrutural em os_pai envolvendo o item {current}")
+                parent_by_id[current] = None
+                break
+            seen.add(current)
+            chain.append(current)
+            current = parent_by_id[current]
+        resolved.update(chain)
+
+    filhos: dict[int, list[int]] = defaultdict(list)
+    for item_id, parent in parent_by_id.items():
+        if parent is not None:
+            filhos[parent].append(item_id)
+    roots = [item_id for item_id, parent in parent_by_id.items() if parent is None]
+    if len(roots) > 1:
+        warnings.append(f"OS com {len(roots)} raízes estruturais independentes")
     ops_por_item: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for operation in operacoes:
         ops_por_item[int(operation["cod_os_aux"])].append(operation)
 
     states: dict[int, str] = {}
-    visiting: set[int] = set()
-
     def derive(item_id: int) -> str:
-        if item_id in states:
-            return states[item_id]
-        if item_id in visiting:
-            states[item_id] = "bloqueado"
-            return states[item_id]
-        visiting.add(item_id)
         item = itens_por_id[item_id]
         item_ops = ops_por_item.get(item_id, [])
         finished = sum(bool(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops)
-        children = [derive(child_id) for child_id in filhos.get(item_id, [])]
+        children = [states[child_id] for child_id in filhos.get(item_id, [])]
         assembly_ops = [op for op in item_ops if "MONTAGEM" in re.sub(r"[^\w]+", " ", _texto(op.get("tiposervico")).upper()).split()]
         productive_ops = [op for op in item_ops if op not in assembly_ops]
         has_assembly = bool(assembly_ops)
@@ -1413,15 +1438,24 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             state = "nao_iniciado"
         else:
             state = "nao_iniciado"
-        visiting.remove(item_id)
         states[item_id] = state
         return state
 
+    # Pós-ordem iterativa: suporta estruturas profundas sem estourar a pilha.
+    stack = [(root_id, False) for root_id in reversed(roots)]
+    while stack:
+        item_id, ready = stack.pop()
+        if ready:
+            derive(item_id)
+            continue
+        stack.append((item_id, True))
+        stack.extend((child_id, False) for child_id in reversed(filhos.get(item_id, [])))
+
     nodes = []
     for item_id, item in itens_por_id.items():
-        state = derive(item_id)
+        state = states[item_id]
         item_operations = ops_por_item.get(item_id, [])
-        parent_id = item.get("os_pai") if item.get("os_pai") in itens_por_id else None
+        parent_id = parent_by_id[item_id]
         nodes.append({
             "id": str(item_id),
             "aux_code": item_id,
@@ -1454,6 +1488,7 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         "operacoes_concluidas": concluidas,
         "operacoes_total": total,
         "bloqueados": sum(state == "bloqueado" for state in states.values()),
+        "avisos_estrutura": warnings,
     }
 
 
