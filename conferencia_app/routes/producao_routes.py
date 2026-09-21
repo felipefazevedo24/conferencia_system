@@ -9,7 +9,6 @@ from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service
-from ..compras.db import ProducaoSourceError
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -29,45 +28,6 @@ def _original_static_directory() -> str:
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
     return render_template("producao_shell.html")
-
-
-@producao_bp.get("/producao/cronograma")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_entregas_page():
-    return render_template("producao_cronograma.html")
-
-
-@producao_bp.get("/api/producao/cronograma/orcamentos")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_orcamentos_mes():
-    hoje = datetime.now()
-    try:
-        ano = int(request.args.get("ano") or hoje.year)
-        mes = int(request.args.get("mes") or hoje.month)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Periodo invalido."}), 400
-    if not (1 <= mes <= 12) or not (2000 <= ano <= 2100):
-        return jsonify({"error": "Periodo invalido."}), 400
-    termo = str(request.args.get("q") or "").strip() or None
-    classificacao = str(request.args.get("classificacao") or "").strip() or None
-    try:
-        return jsonify({
-            "orcamentos": producao_service.listar_orcamentos_mes(ano, mes, termo, classificacao)
-        })
-    except ProducaoSourceError as exc:
-        return jsonify({"error": str(exc), "code": exc.code}), 503
-    except Exception:
-        current_app.logger.exception("Falha na consulta do cronograma")
-        return jsonify({"error": "Falha na consulta do cronograma.", "code": "query_error"}), 503
-
-
-@producao_bp.get("/api/producao/cronograma/segmentos")
-@permission_required("PAGE_PRODUCAO")
-def cronograma_segmentos():
-    try:
-        return jsonify({"segmentos": producao_service.listar_segmentos()})
-    except Exception:
-        return jsonify({"error": "Nao foi possivel consultar os segmentos."}), 503
 
 
 @producao_bp.get("/producao-original/")

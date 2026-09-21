@@ -421,57 +421,6 @@ LIMIT 1
 SQL_PRODUCAO_ANEXO_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_anexos")
 SQL_PRODUCAO_IMAGEM_ARQUIVO = SQL_PRODUCAO_DESENHO_ARQUIVO.replace("tos_aux_desenhos", "tos_aux_imagens")
 
-# Liga OS ao orçamento que a gerou (cod_orcamento aponta para torcamento.codigo).
-# os.cod_orcamento (direto na OS) tem prioridade sobre o vinculo via
-# torcamento_servico_gerados: mesmo padrao usado nas demais queries de
-# Producao neste arquivo. Comecar de torcamento_servico_gerados (como esta
-# query fazia antes) perde OS cujo vinculo so existe em os.cod_orcamento.
-#
-# O cronograma agrupa pela data registrada no orcamento. As datas individuais
-# das OS seguem na resposta para tornar visiveis eventuais divergencias do GRV.
-SQL_PRODUCAO_ORCAMENTOS_MES = """
-WITH orc_link AS (
-    SELECT DISTINCT ON (sg.cod_empresa, sg.cod_os)
-           sg.cod_empresa, sg.cod_os, sg.cod_orcamento
-    FROM public.torcamento_servico_gerados sg
-    WHERE COALESCE(sg.cancelado, 0) = 0
-    ORDER BY sg.cod_empresa, sg.cod_os, sg.cod_orcamento DESC
-)
-SELECT
-    orc.codigo AS cod_orcamento,
-    COALESCE(os.n_orcamento, orc.n_orcamento) AS n_orcamento,
-    COALESCE(NULLIF(os.versao_orcamento, ''), orc.versao) AS versao,
-    orc.dt_previsao_entrega AS dt_previsao_entrega,
-    os.n_os,
-    os.titulo,
-    os.status_servico,
-    os.cliente,
-    os.dt_prevista,
-    os.u_classificacao AS classificacao,
-    (
-        SELECT count(*)
-        FROM public.tos_aux aux
-        WHERE aux.cod_empresa = os.cod_empresa AND aux.cod_os = os.codigo
-    ) AS qtde_itens
-FROM public.tos os
-LEFT JOIN orc_link ol ON ol.cod_empresa = os.cod_empresa AND ol.cod_os = os.codigo
-JOIN public.torcamento orc
-    ON orc.cod_empresa = os.cod_empresa
-   AND orc.codigo = COALESCE(os.cod_orcamento, ol.cod_orcamento)
-WHERE os.cod_empresa = %(cod_empresa)s
-  AND orc.dt_previsao_entrega >= %(data_de)s::date
-  AND orc.dt_previsao_entrega < %(data_ate)s::date
-  AND UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
-  AND (%(classificacao)s::text IS NULL OR os.u_classificacao = %(classificacao)s::text)
-  AND (
-    %(busca)s::text IS NULL
-    OR os.n_os ILIKE %(busca)s
-    OR os.cliente ILIKE %(busca)s
-    OR orc.n_orcamento::text ILIKE %(busca)s
-)
-ORDER BY orc.dt_previsao_entrega, orc.n_orcamento DESC, os.n_os
-"""
-
 SQL_PRODUCAO_ORIGEM_SCHEMA = """
 SELECT count(*) = 2 AS supported
 FROM information_schema.columns
