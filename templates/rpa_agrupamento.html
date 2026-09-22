@@ -1,29 +1,40 @@
 {% extends "base.html" %}
 {% block title %}RPA agrupamento | Columbia Sync{% endblock %}
 {% block shell_title %}RPA agrupamento{% endblock %}
-{% block shell_subtitle %}Consulta de processos e preparo de chapas para agrupamento.{% endblock %}
+{% block shell_subtitle %}Apontamento agrupado de Corte Laser.{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/rpa_agrupamento.css') }}?v={{ asset_version }}">{% endblock %}
 {% block content %}
-<main class="rpa-page">
-  <div class="rpa-intro"><div><h1>RPA agrupamento</h1><p>Processos de Corte Laser disponíveis para agrupamento</p></div><span class="rpa-pill" id="rpa-count">Aguardando consulta</span></div>
-  <section class="rpa-panel" aria-label="Filtros de consulta">
-    <h2><i class="fas fa-filter"></i> Consultar processos</h2>
-    <form id="rpa-search-form" class="rpa-search">
-      <label for="rpa-search">OS, código do processo, chapa, cliente ou descrição</label>
-      <div class="rpa-search-row"><input id="rpa-search" name="q" autocomplete="off" placeholder="Ex.: 9321, A36 ou cliente"><button type="submit">Consultar</button></div>
-    </form>
-    <p class="rpa-hint">Os dados são consultados no GRV em modo somente leitura. Até 500 linhas por consulta.</p>
+<div class="eui-scope rpa-page" id="rpa-page">
+  <header class="eui-page-header">
+    <div><div class="eui-page-header__eyebrow">Produção · RPA agrupamento</div><h1 class="eui-page-header__title">Apontamento Agrupado — Corte Laser</h1><p class="eui-page-header__sub">Consulta, seleção e preparação de processos para agrupamento operacional.</p></div>
+    <div class="rpa-header-actions"><span class="eui-badge eui-badge--neutral" id="rpa-count">0 processos encontrados</span><button class="eui-btn eui-btn--ghost" id="rpa-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar dados</button></div>
+  </header>
+  <section class="eui-card" aria-labelledby="rpa-filters-title">
+    <div class="eui-card__head"><h2 class="eui-card__title" id="rpa-filters-title"><i class="fas fa-filter"></i> Filtros de consulta</h2><button class="eui-btn eui-btn--subtle eui-btn--sm" id="rpa-clear-link" type="button">Limpar filtros</button></div>
+    <div class="eui-card__body"><form id="rpa-search-form"><div class="rpa-filter-grid">
+      <label class="eui-field"><span class="eui-field__label">Material / chapa</span><select class="eui-select" id="rpa-material"><option value="">Todos os materiais</option></select></label>
+      <label class="eui-field"><span class="eui-field__label">Espessura (mm)</span><select class="eui-select" id="rpa-thickness"><option value="">Todas as espessuras</option></select></label>
+      <label class="eui-field"><span class="eui-field__label">Classificação</span><select class="eui-select" id="rpa-classification"><option value="">Todas as classificações</option></select></label>
+      <label class="eui-field"><span class="eui-field__label">Nº da OS</span><input class="eui-input" id="rpa-os" type="search" placeholder="Ex.: 6128" autocomplete="off"></label>
+      <label class="eui-field"><span class="eui-field__label">Código do processo</span><input class="eui-input" id="rpa-code" type="search" placeholder="Ex.: 100070" autocomplete="off"></label>
+      <label class="eui-field"><span class="eui-field__label">Busca geral</span><input class="eui-input" id="rpa-search" type="search" placeholder="Buscar em todos os campos" autocomplete="off"></label>
+    </div><div class="rpa-filter-actions"><button class="eui-btn eui-btn--primary" id="rpa-apply" type="submit">Aplicar filtros</button><button class="eui-btn eui-btn--ghost" id="rpa-clear" type="button">Limpar</button><span class="eui-caption">Consulta em lote no GRV, sem executar a tela M83.</span></div></form></div>
   </section>
-  <div id="rpa-message" class="rpa-message" role="status" aria-live="polite"></div>
-  <section class="rpa-panel rpa-results" aria-label="Resultado da consulta">
-    <div class="rpa-panel-head"><h2><i class="fas fa-table-list"></i> Resultado em grade</h2><span id="rpa-selected-count">0 selecionados</span></div>
-    <div class="rpa-table-wrap"><table><thead><tr><th scope="col">Selecionar</th><th scope="col">OS completa</th><th scope="col">Processo</th><th scope="col">Classificação</th><th scope="col">Descrição</th><th scope="col">Material / chapa</th><th scope="col">Espessura</th><th scope="col">Qtde formato</th><th scope="col">Cliente</th></tr></thead><tbody id="rpa-results-body"><tr><td colspan="9" class="rpa-empty">Consulte os processos para começar.</td></tr></tbody></table></div>
-  </section>
-  <section class="rpa-panel rpa-selection" aria-label="Preparo do agrupamento">
-    <div><h2><i class="fas fa-layer-group"></i> Agrupamento selecionado</h2><p>Selecione pelo menos dois códigos de processo da mesma chapa, espessura e norma.</p></div>
-    <div class="rpa-actions"><button id="rpa-prepare" type="button" disabled>Preparar agrupamento</button><button id="rpa-copy" type="button" disabled>Copiar códigos</button><button id="rpa-export" type="button" disabled>Exportar JSON</button></div>
-    <pre id="rpa-payload" hidden></pre>
-  </section>
-</main>
-<script src="{{ url_for('static', filename='js/rpa_agrupamento.js') }}?v={{ asset_version }}" defer></script>
+  <div class="rpa-message" id="rpa-message" role="status" aria-live="polite"></div>
+  <div class="rpa-workspace">
+    <section class="eui-card rpa-results" aria-labelledby="rpa-results-title">
+      <div class="eui-card__head"><div><h2 class="eui-card__title" id="rpa-results-title"><i class="fas fa-table-list"></i> Resultados — processos de Corte Laser</h2><p class="eui-card__sub" id="rpa-result-count">0 processos</p></div><span class="eui-badge eui-badge--primary" id="rpa-selected-count">0 selecionados</span></div>
+      <div class="rpa-table-wrap"><table class="table rpa-table" aria-label="Processos de Corte Laser"><thead><tr><th scope="col"><input id="rpa-select-all" type="checkbox" aria-label="Selecionar todos os processos elegíveis desta página"></th><th scope="col">Nº OS</th><th scope="col">Cód. OS completa</th><th scope="col">Código</th><th scope="col">Classificação</th><th scope="col">Descrição</th><th scope="col">Material</th><th scope="col">Espessura</th><th scope="col">Norma</th><th scope="col">Qtde/Formato</th><th scope="col">Situação</th><th scope="col">Ação</th></tr></thead><tbody id="rpa-results-body"><tr><td colspan="12" class="rpa-state">Buscando processos...</td></tr></tbody></table></div>
+      <div class="rpa-pagination" id="rpa-pagination" hidden><span id="rpa-page-status"></span><div><button class="eui-btn eui-btn--ghost eui-btn--sm" id="rpa-prev" type="button">Anterior</button><button class="eui-btn eui-btn--ghost eui-btn--sm" id="rpa-next" type="button">Próxima</button></div></div>
+    </section>
+    <aside class="eui-card rpa-group" aria-labelledby="rpa-group-title">
+      <div class="eui-card__head"><h2 class="eui-card__title" id="rpa-group-title"><i class="fas fa-layer-group"></i> Agrupamento</h2><button class="eui-btn eui-btn--subtle eui-btn--sm" id="rpa-clear-selection" type="button" disabled>Limpar seleção</button></div>
+      <div class="eui-card__body rpa-group-body"><div class="eui-empty" id="rpa-group-empty"><i class="fas fa-layer-group" aria-hidden="true"></i><strong>Nenhum processo selecionado.</strong><span>Selecione pelo menos dois códigos na tabela.</span></div>
+        <div id="rpa-group-content" hidden><div class="rpa-group-summary"><span class="eui-field__label">Processos selecionados</span><strong id="rpa-group-count">0</strong></div><div class="rpa-selected-list" id="rpa-selected-list"></div><div class="rpa-validation" id="rpa-validation" role="status" aria-live="polite">Selecione pelo menos dois processos.</div><button class="eui-btn eui-btn--primary rpa-prepare" id="rpa-prepare" type="button" disabled>Preparar agrupamento</button><div class="rpa-payload-actions" id="rpa-payload-actions" hidden><button class="eui-btn eui-btn--ghost eui-btn--sm" id="rpa-copy" type="button">Copiar códigos</button><button class="eui-btn eui-btn--ghost eui-btn--sm" id="rpa-export" type="button">Exportar JSON</button></div><details class="rpa-payload-details" id="rpa-payload-details" hidden><summary>Ver dados preparados</summary><pre id="rpa-payload"></pre></details></div>
+      </div>
+    </aside>
+  </div>
+</div>
+<div class="modal fade" id="rpa-details-modal" tabindex="-1" aria-labelledby="rpa-details-title" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="rpa-details-title">Detalhes do processo</h2><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button></div><div class="modal-body"><dl class="rpa-details-grid" id="rpa-details-content"></dl></div><div class="modal-footer"><button type="button" class="eui-btn eui-btn--ghost" data-bs-dismiss="modal">Fechar</button></div></div></div></div>
 {% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/rpa_agrupamento.js') }}?v={{ asset_version }}"></script>{% endblock %}
