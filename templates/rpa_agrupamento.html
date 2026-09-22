@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}RPA agrupamento | Columbia Sync{% endblock %}
+{% block shell_title %}RPA agrupamento{% endblock %}
+{% block shell_subtitle %}Consulta de processos e preparo de chapas para agrupamento.{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/rpa_agrupamento.css') }}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="rpa-page">
+  <div class="rpa-intro"><div><h1>RPA agrupamento</h1><p>Processos de Corte Laser disponíveis para agrupamento</p></div><span class="rpa-pill" id="rpa-count">Aguardando consulta</span></div>
+  <section class="rpa-panel" aria-label="Filtros de consulta">
+    <h2><i class="fas fa-filter"></i> Consultar processos</h2>
+    <form id="rpa-search-form" class="rpa-search">
+      <label for="rpa-search">OS, código do processo, chapa, cliente ou descrição</label>
+      <div class="rpa-search-row"><input id="rpa-search" name="q" autocomplete="off" placeholder="Ex.: 9321, A36 ou cliente"><button type="submit">Consultar</button></div>
+    </form>
+    <p class="rpa-hint">Os dados são consultados no GRV em modo somente leitura. Até 500 linhas por consulta.</p>
+  </section>
+  <div id="rpa-message" class="rpa-message" role="status" aria-live="polite"></div>
+  <section class="rpa-panel rpa-results" aria-label="Resultado da consulta">
+    <div class="rpa-panel-head"><h2><i class="fas fa-table-list"></i> Resultado em grade</h2><span id="rpa-selected-count">0 selecionados</span></div>
+    <div class="rpa-table-wrap"><table><thead><tr><th scope="col">Selecionar</th><th scope="col">OS completa</th><th scope="col">Processo</th><th scope="col">Classificação</th><th scope="col">Descrição</th><th scope="col">Material / chapa</th><th scope="col">Espessura</th><th scope="col">Qtde formato</th><th scope="col">Cliente</th></tr></thead><tbody id="rpa-results-body"><tr><td colspan="9" class="rpa-empty">Consulte os processos para começar.</td></tr></tbody></table></div>
+  </section>
+  <section class="rpa-panel rpa-selection" aria-label="Preparo do agrupamento">
+    <div><h2><i class="fas fa-layer-group"></i> Agrupamento selecionado</h2><p>Selecione pelo menos dois códigos de processo da mesma chapa, espessura e norma.</p></div>
+    <div class="rpa-actions"><button id="rpa-prepare" type="button" disabled>Preparar agrupamento</button><button id="rpa-copy" type="button" disabled>Copiar códigos</button><button id="rpa-export" type="button" disabled>Exportar JSON</button></div>
+    <pre id="rpa-payload" hidden></pre>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='js/rpa_agrupamento.js') }}?v={{ asset_version }}" defer></script>
+{% endblock %}

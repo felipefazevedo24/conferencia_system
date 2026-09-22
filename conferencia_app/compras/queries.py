@@ -85,6 +85,44 @@ LIMIT %(limite)s;
 # -------------------------------------------------------------------
 # Produção: estrutura e processos da OS (somente leitura no GRV).
 # -------------------------------------------------------------------
+# Consulta isolada do RPA de agrupamento. Mantem os filtros da consulta
+# operacional do projeto de referencia e nunca modifica o GRV.
+SQL_PRODUCAO_RPA_AGRUPAMENTO = """
+SELECT tos.n_os, item.cod_os_completo, processo.codigo,
+       tos.u_classificacao, item.subtitulo AS descricao,
+       material.produto AS material, material.d1 AS largura_mm,
+       material.d2 AS altura_mm, material.d3 AS comprimento_mm,
+       material.qtde_formato_total AS qtde_formato,
+       convert_from(processo.obs, 'LATIN1') AS obs,
+       tos.cliente, tos.status_servico AS status_origem,
+       processo.tiposervico AS tipo_servico,
+       processo.finalizado AS processo_finalizado,
+       tos.cancelado AS cancelada,
+       CASE WHEN tos.cancelado <> 0 THEN 'CANCELADA'
+            WHEN tos.concluido <> 0 THEN 'CONCLUIDA'
+            WHEN tos.aprovado <> 1 THEN 'NAO APROVADA'
+            ELSE 'ABERTA' END AS status_os
+FROM public.tlis_mat material
+JOIN public.tos_aux item ON item.cod_empresa = material.cod_empresa
+    AND item.cod_os = material.cod_os AND item.codigo = material.cod_os_aux
+JOIN public.tos tos ON tos.cod_empresa = item.cod_empresa AND tos.codigo = item.cod_os
+JOIN public.tpro_pro processo ON processo.cod_empresa = item.cod_empresa
+    AND processo.cod_os = item.cod_os AND processo.cod_os_aux = item.codigo
+WHERE tos.cod_empresa = %(cod_empresa)s
+  AND tos.n_os NOT LIKE 'E%%'
+  AND tos.concluido = 0 AND tos.cancelado = 0 AND tos.aprovado = 1
+  AND processo.finalizado = 0
+  AND UPPER(COALESCE(processo.tiposervico, '')) LIKE 'CORTE LASER%%'
+  AND UPPER(BTRIM(material.produto)) LIKE 'CHAPA%%'
+  AND (%(busca)s = '' OR tos.n_os ILIKE %(busca_like)s
+       OR item.cod_os_completo ILIKE %(busca_like)s
+       OR processo.codigo::text = %(busca)s
+       OR material.produto ILIKE %(busca_like)s
+       OR tos.cliente ILIKE %(busca_like)s
+       OR item.subtitulo ILIKE %(busca_like)s)
+ORDER BY tos.n_os DESC, item.cod_os_completo, processo.codigo, material.produto
+LIMIT %(limite)s
+"""
 # Consultas de rastreio do projeto Estrutura, adaptadas para o catalogo da bridge.
 SQL_PRODUCAO_BUSCAR_OS = """
 WITH budget_order_links AS (
