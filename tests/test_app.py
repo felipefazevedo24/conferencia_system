@@ -7266,3 +7266,53 @@ def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
         })
         assert resp.status_code == 201
         assert resp.get_json()["registro"]["unidade_medida"] == "M"
+
+
+def test_conf_cega_st_salvar_parcial_nao_da_405(tmp_path):
+    """Aba ST (ordem de compra) da conferencia de expedicao: o botao "Salvar
+    progresso" aparece nas duas abas, mas so' o Faturamento tinha a rota - na
+    aba ST o POST caia na rota GET da ordem (<path:> engole o sufixo) e
+    voltava 405. Mesma regra do Faturamento: checkpoint cego, sem status."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    # Codigo com barra de proposito: a rota usa <path:>.
+    cod = "OC-55/1"
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemST, ExpedicaoOrdemSTItem
+        from conferencia_app.services.expedicao_st_service import STATUS_PENDENTE
+
+        ordem = ExpedicaoOrdemST(cod_ordem_compra=cod, fornecedor="FORNECEDOR ST", status=STATUS_PENDENTE)
+        db.session.add(ordem)
+        db.session.commit()
+        it1 = ExpedicaoOrdemSTItem(ordem_id=ordem.id, linha=1, cod_interno="S1", item="Item 1", qtde_a_faturar=4)
+        it2 = ExpedicaoOrdemSTItem(ordem_id=ordem.id, linha=2, cod_interno="S2", item="Item 2", qtde_a_faturar=2)
+        db.session.add_all([it1, it2])
+        db.session.commit()
+        it1_id, it2_id = it1.id, it2.id
+
+    base = f"/api/expedicao/conf-cega-st/ordens/{cod}"
+    assert client.post("/api/expedicao/conf-cega-st/ordens/NAO-EXISTE/salvar-parcial", json={}).status_code == 404
+
+    # Parcial: so' o item 1, contado errado de proposito, e o peso liquido.
+    resp = client.post(f"{base}/salvar-parcial", json={
+        "itens": [{"id": it1_id, "qtde_conferida": 3}], "peso_liquido": "40 kg",
+    })
+    assert resp.status_code == 200
+    assert "1 item" in resp.get_json()["mensagem"]
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemST
+        from conferencia_app.services.expedicao_st_service import STATUS_PENDENTE
+
+        ordem_db = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod).first()
+        assert ordem_db.status == STATUS_PENDENTE
+        assert ordem_db.conferido_at is None
+        assert ordem_db.peso_liquido == "40 kg"
+
+    # Reabrindo a ordem: a contagem volta preenchida, sem revelar divergencia.
+    itens = {it["id"]: it for it in client.get(base).get_json()["itens"]}
+    assert itens[it1_id]["qtde_conferida"] == 3
+    assert "qtde_conferida" not in itens[it2_id]
+    assert all("divergente" not in it for it in itens.values())

@@ -436,9 +436,12 @@ def obter_ordem_conf_st(cod_ordem_compra):
         # enviada ao front-end. Ela existe apenas no back-end para validar a
         # contagem. Apos conferir, expomos somente o que o proprio operador
         # contou (qtde_conferida) e se houve divergencia (booleano) — sem
-        # revelar o numero esperado.
-        if conferido:
+        # revelar o numero esperado. ANTES de conferir, uma contagem PARCIAL
+        # salva (ver /salvar-parcial) tambem volta, pro campo vir preenchido -
+        # mas sem "divergente", que so' e' calculado na conferencia oficial.
+        if it.qtde_conferida is not None:
             dados["qtde_conferida"] = it.qtde_conferida
+        if conferido:
             dados["divergente"] = bool(it.divergente)
         itens.append(dados)
 
@@ -622,6 +625,51 @@ def conferir_ordem_conf_st(cod_ordem_compra):
         "ordem": _ordem_resumo(ordem, len(itens)),
         "itens": resultado_itens,
         "historico": log_svc.listar_logs("st", ordem.id),
+    })
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/salvar-parcial", methods=["POST"])
+@roles_required(*ROLES)
+def salvar_parcial_conf_st(cod_ordem_compra):
+    """Checkpoint da conferencia da aba ST - mesma regra do salvar-parcial do
+    Faturamento: grava a contagem e o peso/volumes ja preenchidos, sem exigir
+    todos os itens, sem mudar status, sem calcular divergencia (conferencia
+    cega) e sem notificar. Valor vazio nunca apaga um valor ja salvo."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    if not _ordem_editavel(ordem):
+        return jsonify({"error": f"Ordem '{ordem.status}' nao pode ser editada."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    itens_por_id = {it.id: it for it in ordem.itens}
+
+    salvos = 0
+    for entry in payload.get("itens") or []:
+        try:
+            item_id = int(entry.get("id"))
+        except (TypeError, ValueError):
+            continue
+        item = itens_por_id.get(item_id)
+        if not item:
+            continue
+        qtd = svc._parse_int(entry.get("qtde_conferida"), None)
+        if qtd is None:
+            continue
+        item.qtde_conferida = qtd
+        salvos += 1
+
+    for campo in ("peso_liquido", "peso_bruto", "qtde_volumes", "especie_volumes"):
+        valor = str(payload.get(campo) or "").strip()
+        if valor:
+            setattr(ordem, campo, valor)
+
+    ordem.updated_at = datetime.now()
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "mensagem": f"Progresso salvo — {salvos} item(ns) com quantidade contada até agora.",
     })
 
 
