@@ -3,7 +3,7 @@ garantia/bonificacao/teste/atendimento tecnico. A gestao interna
 (separacao/faturamento/retorno) vive na aba "Faturamento avulso" dentro de
 /expedicao/conferencia-cega (ver routes/expedicao_avulso_routes.py)."""
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, current_app, jsonify, render_template, request, session
 
 from ..auth import login_required
 from ..services import solicitacao_nf_service as svc
@@ -25,13 +25,23 @@ def api_solicitacao_nf_funcionarios():
 @solicitacao_nf_bp.route("/api/solicitacao-nf/clientes")
 def api_solicitacao_nf_clientes():
     termo = request.args.get("q", "")
-    return jsonify({"sucesso": True, "clientes": svc.buscar_clientes(termo)})
+    try:
+        return jsonify({"sucesso": True, "clientes": svc.buscar_clientes(termo)})
+    except Exception:
+        current_app.logger.exception("Falha ao buscar clientes para solicitação de NF")
+        return jsonify({"sucesso": False, "erro":
+                        "Não foi possível consultar os clientes no ERP. Tente novamente."}), 503
 
 
 @solicitacao_nf_bp.route("/api/solicitacao-nf/materiais")
 def api_solicitacao_nf_materiais():
     termo = request.args.get("q", "")
-    return jsonify({"sucesso": True, "materiais": svc.buscar_materiais(termo)})
+    try:
+        return jsonify({"sucesso": True, "materiais": svc.buscar_materiais(termo)})
+    except Exception:
+        current_app.logger.exception("Falha ao buscar materiais para solicitação de NF")
+        return jsonify({"sucesso": False, "erro":
+                        "Não foi possível consultar os materiais no ERP. Tente novamente."}), 503
 
 
 @solicitacao_nf_bp.route("/api/solicitacao-nf/minhas")

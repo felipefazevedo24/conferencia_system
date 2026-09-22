@@ -709,17 +709,32 @@
     const input = $(inputId);
     const lista = $(listaId);
     let debounce = null;
+    let versao = 0;
     input.addEventListener("input", () => {
       clearTimeout(debounce);
+      const atual = ++versao;
+      if (campo === "materiais") {
+        materialSelecionado = null;
+        $("helpMaterial").textContent = "Selecione o material nos resultados da busca.";
+      }
       const termo = input.value.trim();
       if (termo.length < 2) { lista.classList.remove("show"); return; }
+      lista.innerHTML = '<div class="empty">Buscando…</div>';
+      lista.classList.add("show");
       debounce = setTimeout(async () => {
         try {
           const r = await fetch(`${url}?q=${encodeURIComponent(termo)}`);
           const d = await lerResposta(r);
-          renderSugestoes(lista, d[campo] || [], render, onSelecionar);
+          if (atual !== versao) return;
+          if (!r.ok || !d.sucesso) throw new Error(d.erro || "Falha na busca. Tente novamente.");
+          renderSugestoes(lista, d[campo] || [], render, (item) => {
+            ++versao;
+            onSelecionar(item);
+          });
         } catch (e) {
-          lista.innerHTML = '<div class="empty">Falha na busca.</div>';
+          if (atual !== versao) return;
+          lista.innerHTML = '<div class="empty"></div>';
+          lista.firstChild.textContent = e.message || "Falha na busca. Tente novamente.";
           lista.classList.add("show");
         }
       }, 300);
