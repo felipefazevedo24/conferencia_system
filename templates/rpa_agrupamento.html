@@ -15,7 +15,6 @@
     <div class="header-meta"><div class="summary-actions" aria-label="Atualização dos processos"><span class="result-pill" id="rpa-count">0 processo(s) encontrado(s)</span><button class="refresh-button" id="rpa-refresh" type="button"><span aria-hidden="true">⟳</span> Atualizar dados</button></div><img class="brand-logo" src="{{ url_for('static', filename='rpa_agrupamento_logo.png') }}?v={{ asset_version }}" alt="Columbia"></div>
   </div></header>
   <main id="rpa-main">
-    <section class="mode-banner mode-safe" aria-live="polite"><strong>Consulta segura ativa</strong><span>Nenhuma automação será executada no GRV.</span></section>
     <section class="filters-section" id="rpa-filters-section" aria-labelledby="rpa-filters-title">
       <div class="filters-heading"><div class="filters-title" id="rpa-filters-title"><span aria-hidden="true">☷</span> FILTROS DE CONSULTA</div><button class="clear-filters-link" id="rpa-clear-link" type="button">Limpar filtros</button></div>
       <form id="rpa-search-form"><div class="filters-grid">
@@ -43,9 +42,20 @@
       <aside class="group-panel" id="rpa-group-panel" aria-labelledby="rpa-group-title">
         <div class="group-header"><h2 id="rpa-group-title"><span aria-hidden="true">◇</span> AGRUPAMENTO</h2><button id="rpa-group-toggle" type="button" aria-label="Recolher painel" aria-expanded="true">⌄</button></div>
         <div class="group-empty" id="rpa-group-empty"><div class="cube-icon" aria-hidden="true">⬡</div><p>Selecione processos na tabela para compor o agrupamento.</p><small>Mínimo: 2 processos</small></div>
-        <div class="group-content" id="rpa-group-content" hidden><div class="selection-total"><span>PROCESSOS SELECIONADOS</span><strong id="rpa-group-count">0</strong></div><div class="selected-processes" id="rpa-selected-list"></div>
-          <dl class="group-details"><div><dt>Material</dt><dd id="rpa-summary-material">—</dd></div><div class="dual-detail"><span><dt>Espessura</dt><dd id="rpa-summary-thickness">—</dd></span><span><dt>Norma</dt><dd id="rpa-summary-norm">—</dd></span></div><div><dt>OS envolvidas</dt><dd id="rpa-summary-os">—</dd></div><div><dt>Processos</dt><dd id="rpa-summary-codes">—</dd></div><div class="dual-detail"><span><dt>Quantidade</dt><dd id="rpa-summary-count">0</dd></span><span><dt>Formatos</dt><dd id="rpa-summary-quantity">0</dd></span></div></dl>
-          <div class="group-validation" id="rpa-validation" role="status" aria-live="polite">Selecione pelo menos dois processos.</div><button class="button generate-button" id="rpa-prepare" type="button" disabled>Preparar Agrupamento</button><div class="payload-actions" id="rpa-payload-actions" hidden><button class="button button-outline" id="rpa-copy" type="button">Copiar códigos</button><button class="button button-outline" id="rpa-export" type="button">Exportar JSON</button></div><details class="payload-details" id="rpa-payload-details" hidden><summary>Ver dados preparados</summary><pre id="rpa-payload"></pre></details><button class="clear-selection-link" id="rpa-clear-selection" type="button">Limpar seleção</button>
+        <div class="group-content" id="rpa-group-content" hidden>
+          <div class="selection-total"><span>PROCESSOS SELECIONADOS</span><strong id="rpa-group-count">0</strong></div>
+          <dl class="group-details">
+            <div class="material-detail"><dt>Material</dt><dd id="rpa-summary-material">—</dd></div>
+            <div class="dual-detail"><span><dt>Espessura</dt><dd id="rpa-summary-thickness">—</dd></span><span><dt>Norma</dt><dd id="rpa-summary-norm">—</dd></span></div>
+            <div><dt>OS envolvidas</dt><dd id="rpa-summary-os">—</dd></div>
+            <div><dt>Processos</dt><dd id="rpa-summary-codes">—</dd></div>
+            <div class="dual-detail"><span><dt>Quantidade</dt><dd id="rpa-summary-count">0</dd></span><span><dt>Formatos</dt><dd id="rpa-summary-quantity">0</dd></span></div>
+          </dl>
+          <label class="description-field" for="rpa-group-description"><span>DESCRIÇÃO DO AGRUPAMENTO</span><textarea id="rpa-group-description" maxlength="80" rows="3" aria-label="Descrição do agrupamento"></textarea></label>
+          <button class="clear-selection-link" id="rpa-clear-selection" type="button">Limpar seleção</button>
+          <div class="group-internal-controls" hidden aria-hidden="true">
+            <div class="group-validation" id="rpa-validation" role="status" aria-live="polite">Selecione pelo menos dois processos.</div><button class="button generate-button" id="rpa-prepare" type="button" disabled>Preparar Agrupamento</button><div class="payload-actions" id="rpa-payload-actions" hidden><button class="button button-outline" id="rpa-copy" type="button">Copiar códigos</button><button class="button button-outline" id="rpa-export" type="button">Exportar JSON</button></div><details class="payload-details" id="rpa-payload-details" hidden><summary>Ver dados preparados</summary><pre id="rpa-payload"></pre></details>
+          </div>
         </div>
       </aside>
     </div>

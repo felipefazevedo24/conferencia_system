@@ -11,10 +11,10 @@ const dom = new JSDOM(markup, {url: 'http://localhost/producao/rpa-agrupamento',
 const {window} = dom;
 const document = window.document;
 const rows = Array.from({length: 60}, (_, index) => ({
-  os: String(6128 + index), os_completa: `${6128 + index}/001`,
+  os: String(index === 3 ? 6129 : 6128 + index), os_completa: index === 3 ? '6129/002' : `${6128 + index}/001`,
   codigo_processo: String(100070 + index), classificacao: index % 2 ? 'CMS' : 'MOLDE',
   descricao: `Peça ${index}`, material: index % 2 ? 'CHAPA A36 - 1/2' : 'CHAPA A572 - 3/8',
-  espessura: index % 2 ? '12.70MM' : '9.53MM', norma: index % 2 ? 'A36' : 'A572',
+  espessura: index < 19 ? '4.75MM' : (index % 2 ? '12.70MM' : '9.53MM'), norma: index % 2 ? 'A36' : 'A572',
   quantidade_formato: 2, cliente: 'Cliente', observacao: 'Corte Laser',
   status_os: 'ABERTA', tipo_servico: 'CORTE LASER', elegivel: true,
 }));
@@ -45,8 +45,15 @@ const get = id => document.getElementById(id);
   await tick(10);
   assert.equal(document.querySelectorAll('#rpa-results-body tr').length, 35);
   assert.equal(get('rpa-material').options.length, 3);
-  assert.equal(get('rpa-thickness').options.length, 3);
+  assert.equal(get('rpa-thickness').options.length, 4);
   assert.equal(get('rpa-pagination').hidden, false);
+  assert.equal(get('rpa-group-empty').hidden, false);
+  assert.equal(get('rpa-group-description').maxLength, 80);
+
+  get('rpa-group-toggle').click();
+  assert.equal(get('rpa-group-panel').classList.contains('is-collapsed'), true);
+  get('rpa-group-toggle').click();
+  assert.equal(get('rpa-group-panel').classList.contains('is-collapsed'), false);
 
   get('rpa-next').click();
   assert.match(get('rpa-page-status').textContent, /36–60 de 60/);
@@ -55,15 +62,20 @@ const get = id => document.getElementById(id);
   assert.equal(modalOpened, true);
   assert.match(get('rpa-details-content').textContent, /Código do processo/);
 
-  document.querySelectorAll('#rpa-results-body input[type=checkbox]')[1].click();
-  document.querySelectorAll('#rpa-results-body input[type=checkbox]')[3].click();
+  [...document.querySelectorAll('#rpa-results-body tr')].find(row => row.cells[3].textContent === '100071').querySelector('input[type=checkbox]').click();
+  assert.equal(get('rpa-group-count').textContent, '1');
+  assert.equal(get('rpa-group-content').hidden, false);
+  [...document.querySelectorAll('#rpa-results-body tr')].find(row => row.cells[3].textContent === '100073').querySelector('input[type=checkbox]').click();
+  assert.equal(get('rpa-summary-os').textContent, '6129');
+  assert.equal(get('rpa-summary-count').textContent, '2');
+  assert.equal(get('rpa-summary-quantity').textContent, '4');
   await tick(350);
   assert.match(get('rpa-validation').textContent, /Agrupamento válido/);
   assert.equal(get('rpa-prepare').disabled, false);
   get('rpa-prepare').click();
   await tick(10);
   assert.equal(get('rpa-payload-actions').hidden, false);
-  document.querySelector('.selected-process button').click();
+  document.querySelectorAll('#rpa-results-body input[type=checkbox]')[1].click();
   assert.equal(get('rpa-payload-actions').hidden, true);
   document.querySelectorAll('#rpa-results-body input[type=checkbox]')[0].click();
   await tick(350);
@@ -84,6 +96,23 @@ const get = id => document.getElementById(id);
   await tick(10);
   assert.equal(get('rpa-classification').value, '');
   assert.equal(get('rpa-table-count').textContent, '60 processo(s)');
+
+  get('rpa-thickness').value = '4.75MM';
+  get('rpa-search-form').dispatchEvent(new window.Event('submit', {cancelable: true}));
+  await tick(10);
+  const filteredRows = document.querySelectorAll('#rpa-results-body tr');
+  assert.equal(get('rpa-table-count').textContent, '19 processo(s)');
+  assert.equal(filteredRows.length, 19);
+  assert.equal(get('rpa-pagination').hidden, true);
+  document.querySelectorAll('#rpa-results-body tr')[0].querySelector('input[type=checkbox]').click();
+  document.querySelectorAll('#rpa-results-body tr')[9].querySelector('input[type=checkbox]').click();
+  document.querySelectorAll('#rpa-results-body tr')[18].querySelector('input[type=checkbox]').click();
+  assert.equal(get('rpa-group-count').textContent, '3');
+  assert.match(get('rpa-summary-codes').textContent, /100088/);
+  get('rpa-group-description').value = 'Agrupamento teste';
+  get('rpa-clear-selection').click();
+  assert.equal(get('rpa-group-description').value, '');
+  assert.equal(document.querySelector('.mode-banner'), null);
 
   failNext = true;
   get('rpa-refresh').click();
