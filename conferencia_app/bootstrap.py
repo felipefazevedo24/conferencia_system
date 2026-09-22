@@ -678,6 +678,7 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             ("sem_conferencia_motivo", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN sem_conferencia_motivo VARCHAR(60)"),
             ("retirado_por", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN retirado_por VARCHAR(160)"),
             ("retirada_justificativa", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN retirada_justificativa VARCHAR(500)"),
+            ("sem_conferencia_justificativa", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN sem_conferencia_justificativa VARCHAR(500)"),
             (
                 "status",
                 "ALTER TABLE expedicao_conferencia_simples ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'Pendente de expedicao'",
@@ -812,6 +813,14 @@ def _ensure_expedicao_ordem_fat_columns() -> None:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_fat ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
             ))
+        if "expedido_sem_conferencia" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_fat ADD COLUMN expedido_sem_conferencia BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "expedido_sem_conferencia_motivo" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_fat ADD COLUMN expedido_sem_conferencia_motivo VARCHAR(500)"
+            ))
         if "operacao_tipo" not in cols:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_fat ADD COLUMN operacao_tipo VARCHAR(20) NOT NULL DEFAULT 'nacional'"
@@ -849,6 +858,14 @@ def _ensure_expedicao_ordem_st_columns() -> None:
         if "conferido_pos_faturamento" not in cols:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_st ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "expedido_sem_conferencia" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_st ADD COLUMN expedido_sem_conferencia BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "expedido_sem_conferencia_motivo" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_st ADD COLUMN expedido_sem_conferencia_motivo VARCHAR(500)"
             ))
         if "codigo_interno" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN codigo_interno VARCHAR(20)"))
@@ -1025,7 +1042,8 @@ def _ensure_expedicao_romaneio_columns() -> None:
 
 def _ensure_expedicao_romaneio_nf_columns() -> None:
     """Garante colunas adicionais na expedicao_romaneio_nf: modfrete_nf
-    (modalidade de frete declarada na NF-e) e ordem_compra (fluxo ST)."""
+    (modalidade de frete declarada na NF-e), ordem_compra (fluxo ST) e a
+    marca de expedicao sem conferencia."""
     if not _has_table("expedicao_romaneio_nf"):
         return
     cols = _get_column_names("expedicao_romaneio_nf")
@@ -1035,6 +1053,14 @@ def _ensure_expedicao_romaneio_nf_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN modfrete_nf VARCHAR(4)"))
         if "ordem_compra" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN ordem_compra VARCHAR(80)"))
+        if "sem_conferencia" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_romaneio_nf ADD COLUMN sem_conferencia BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "sem_conferencia_motivo" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_romaneio_nf ADD COLUMN sem_conferencia_motivo VARCHAR(500)"
+            ))
         conn.commit()
     finally:
         conn.close()

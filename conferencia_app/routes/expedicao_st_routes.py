@@ -13,11 +13,13 @@ from flask import (
     request,
     session,
 )
+from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from ..auth import permission_required, roles_required
 from ..extensions import db
 from ..models import (
+    ExpedicaoRomaneio,
     ExpedicaoOrdemST,
     ExpedicaoOrdemSTItem,
     ExpedicaoConferenciaSimples,
@@ -85,6 +87,8 @@ def _ordem_resumo(ordem: ExpedicaoOrdemST, total_itens: int | None = None) -> di
         "faturado_at": _iso(ordem.faturado_at),
         "expedido_at": _iso(ordem.expedido_at),
         "expedicao_registro_id": ordem.expedicao_registro_id,
+        "expedido_sem_conferencia": bool(ordem.expedido_sem_conferencia),
+        "expedido_sem_conferencia_motivo": ordem.expedido_sem_conferencia_motivo,
     }
 
 
@@ -753,6 +757,112 @@ def seguir_sem_contagem_st(cod_ordem_compra):
 
     return jsonify({
         "sucesso": True,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
+@expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/expedir-sem-conferencia",
+    methods=["POST"],
+)
+@permission_required(PERMISSION)
+def expedir_sem_conferencia_st(cod_ordem_compra):
+    """Cria o romaneio de uma ordem ST que ja saiu faturada SEM conferencia.
+
+    Espelha o mesmo caminho de excecao da aba de faturamento: sem conferencia
+    nao ha foto da mercadoria nem do cliente, e e a foto do cliente que hoje
+    barra a NF de entrar no romaneio. Em troca, exigimos a justificativa de
+    quem liberou, que acompanha a NF ate o romaneio e ate o Registro de
+    expedicao (que nasce Finalizado, sem canhoto a esperar).
+    """
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    if ordem.status != svc.STATUS_FATURADO_SEM_CONF:
+        return jsonify({
+            "error": f"Ordem '{ordem.status}' nao esta faturada sem conferencia.",
+        }), 400
+
+    numero_nf = str(ordem.numero_nf or "").strip()
+    if not numero_nf:
+        return jsonify({"error": "A ordem ainda nao tem NF emitida."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+    if not motivo:
+        return jsonify({
+            "error": "Explique por que a ordem foi faturada/expedida sem conferência.",
+        }), 400
+    motivo = motivo[:500]
+
+    # Import local: expedicao_romaneio_routes importa deste modulo em outros
+    # pontos, entao o import no topo fecharia um ciclo.
+    from .expedicao_romaneio_routes import incluir_nf_no_romaneio, proximo_numero_romaneio
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+
+    # A ordem volta ao fluxo normal ja marcada. E o flag que, na inclusao da
+    # NF, dispensa a foto do cliente e carimba o romaneio.
+    ordem.expedido_sem_conferencia = True
+    ordem.expedido_sem_conferencia_motivo = motivo
+    ordem.status = svc.STATUS_FATURADO
+    if not ordem.faturado_at:
+        ordem.faturado_at = agora
+    ordem.updated_at = agora
+
+    romaneio = ExpedicaoRomaneio(
+        numero_romaneio=proximo_numero_romaneio(),
+        data_romaneio=agora.date(),
+        status="Rascunho",
+        tipo_frete="FOB",
+        # ST nao tem orcamento: a referencia e a propria ordem de compra, que
+        # incluir_nf_no_romaneio grava na linha da NF.
+        cliente=ordem.fornecedor or "",
+        observacao_1=f"Expedido sem conferência: {motivo}"[:500],
+        criado_por=usuario,
+    )
+    try:
+        db.session.add(romaneio)
+        db.session.flush()
+        # commit=False: ordem, romaneio e NF entram na mesma transacao — se a
+        # inclusao falhar, a ordem nao fica marcada sem romaneio nenhum.
+        _, erro = incluir_nf_no_romaneio(romaneio, numero_nf, usuario, commit=False)
+        if erro:
+            db.session.rollback()
+            return jsonify({"error": erro}), 400
+
+        log_svc.registrar_log(
+            origem="st",
+            ordem_id=ordem.id,
+            cod_ordem=ordem.cod_ordem_compra,
+            acao="expedicao_sem_conferencia",
+            usuario=usuario,
+            status_anterior=status_anterior,
+            status_novo=ordem.status,
+            divergente=False,
+            pos_faturamento=bool(ordem.conferido_pos_faturamento),
+            diff_cabecalho=[
+                {"campo": "acao", "label": "Ação", "de": "",
+                 "para": f"Romaneio {romaneio.numero_romaneio} criado sem conferência"},
+                {"campo": "motivo", "label": "Motivo", "de": "", "para": motivo},
+            ],
+            diff_itens=[],
+        )
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "error": "Conflito ao montar romaneio. Atualize a tela e tente novamente.",
+        }), 409
+
+    return jsonify({
+        "sucesso": True,
+        "romaneio_id": romaneio.id,
+        "numero_romaneio": romaneio.numero_romaneio,
+        "numero_nf": numero_nf,
         "status": ordem.status,
         "status_slug": svc.status_slug(ordem.status),
     })

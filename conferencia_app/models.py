@@ -582,6 +582,9 @@ class ExpedicaoConferenciaSimples(db.Model):
     motorista = db.Column(db.String(160))
     sem_conferencia = db.Column(db.Boolean, nullable=False, default=False)  # Expedição avulsa sem conferência
     sem_conferencia_motivo = db.Column(db.String(60))  # Motivo da expedição sem conferência
+    # Texto livre de quem liberou a expedição sem conferência (o motivo acima
+    # é curto demais para a justificativa exigida na Conferência de Expedição).
+    sem_conferencia_justificativa = db.Column(db.String(500))
     retirado_por = db.Column(db.String(160))  # Quem retirou (quando aplicável)
     retirada_justificativa = db.Column(db.String(500))  # Justificativa opcional da retirada
     status = db.Column(db.String(30), nullable=False, default="Pendente de expedição", index=True)
@@ -674,6 +677,14 @@ class ExpedicaoOrdemFat(db.Model):
     # Registro para consulta futura: a conferencia foi feita APOS o
     # faturamento (NF ja emitida quando o material foi conferido).
     conferido_pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Expedicao liberada SEM conferencia cega: a NF saiu faturada sem o
+    # material ter sido conferido e a logistica decidiu expedir assim mesmo,
+    # com justificativa obrigatoria. E este flag que dispensa a foto do
+    # cliente exigida para a NF entrar no romaneio e faz o Registro de
+    # expedicao nascer Finalizado (nao existe foto nem canhoto a esperar).
+    expedido_sem_conferencia = db.Column(db.Boolean, nullable=False, default=False)
+    expedido_sem_conferencia_motivo = db.Column(db.String(500))
 
     # Faturamento (NF preenchida na origem)
     numero_nf = db.Column(db.String(80), index=True)
@@ -790,6 +801,14 @@ class ExpedicaoOrdemST(db.Model):
     divergente = db.Column(db.Boolean, nullable=False, default=False)
     # Registro para consulta futura: conferencia feita APOS o faturamento.
     conferido_pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Mesmo caminho de excecao do ExpedicaoOrdemFat: a NF saiu faturada sem
+    # conferencia cega e a logistica expede assim mesmo, com justificativa
+    # obrigatoria. Dispensa a foto do cliente para entrar no romaneio, tira a
+    # NF da conta da carta de correcao de frete e faz o Registro de expedicao
+    # nascer Finalizado.
+    expedido_sem_conferencia = db.Column(db.Boolean, nullable=False, default=False)
+    expedido_sem_conferencia_motivo = db.Column(db.String(500))
 
     # Faturamento (NF de envio/retorno preenchida na origem)
     numero_nf = db.Column(db.String(80), index=True)
@@ -2880,6 +2899,12 @@ class ExpedicaoRomaneioNF(db.Model):
     # 9 = sem frete). Preenchido na inclusão da NF e usado para detectar
     # divergência com o tipo_frete do romaneio na finalização.
     modfrete_nf = db.Column(db.String(4))
+
+    # Copia do flag da ordem no momento da inclusao: esta NF entrou no
+    # romaneio sem conferencia cega. Fica gravado aqui para que o romaneio
+    # (tela e impressao) mostre a marca sem depender da ordem de origem.
+    sem_conferencia = db.Column(db.Boolean, nullable=False, default=False)
+    sem_conferencia_motivo = db.Column(db.String(500))
 
     # Auditoria
     adicionado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)

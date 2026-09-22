@@ -767,6 +767,7 @@ function renderHistorico(data) {
                         <div><span>Motorista</span><strong>${registro.motorista || "—"}</strong></div>
                         <div><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
                         ${semConf ? `<div><span>Motivo sem conferência</span><strong style="color:#dc2626;">${registro.sem_conferencia_motivo || "—"}</strong></div>` : ""}
+                        ${semConf && registro.sem_conferencia_justificativa ? `<div><span>Justificativa</span><strong style="color:#dc2626;">${registro.sem_conferencia_justificativa}</strong></div>` : ""}
                         ${semConf && registro.retirado_por ? `<div><span>Quem retirou</span><strong>${registro.retirado_por}</strong></div>` : ""}
                         ${semConf && registro.retirada_justificativa ? `<div><span>Justificativa da retirada</span><strong>${registro.retirada_justificativa}</strong></div>` : ""}
                     </div>
