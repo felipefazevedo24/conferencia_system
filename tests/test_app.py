@@ -7316,3 +7316,50 @@ def test_conf_cega_st_salvar_parcial_nao_da_405(tmp_path):
     assert itens[it1_id]["qtde_conferida"] == 3
     assert "qtde_conferida" not in itens[it2_id]
     assert all("divergente" not in it for it in itens.values())
+
+
+# Cartao CNPJ como a consulta da Atualizacao Cadastral devolve
+# (cad_svc.consultar_cartao_cnpj) - a rede nunca e' chamada no teste.
+_CARTAO_CNPJ_FAKE = {
+    "documento": "11.222.333/0001-81",
+    "razao_social": "ACOS EXEMPLO LTDA",
+    "nome_fantasia": "ACOS EXEMPLO",
+    "endereco": "RUA, DAS INDUSTRIAS, 100, GALPAO 2, DISTRITO INDUSTRIAL - Sumare - SP",
+    "cep": "13170000",
+    "municipio": "Sumare",
+    "uf": "SP",
+    "telefone": "1933334444",
+    "email": "FISCAL@CONTADOR.COM.BR",
+    "inscricao_estadual": "671234567890",
+    "situacao_cadastral": "ATIVA",
+}
+
+
+def test_homologacao_busca_dados_cadastrais_pelo_cnpj(tmp_path):
+    """Homologacao de fornecedor: digitar o CNPJ carrega os dados cadastrais
+    pela mesma consulta da Atualizacao Cadastral."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    alvo = "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj"
+
+    with patch(alvo, return_value=dict(_CARTAO_CNPJ_FAKE)) as consulta:
+        resp = client.get("/api/compras/homologacao/cnpj/11.222.333/0001-81")
+    assert resp.status_code == 200
+    consulta.assert_called_once_with("11.222.333/0001-81")
+    d = resp.get_json()
+    assert d["razao_social"] == "ACOS EXEMPLO LTDA"
+    assert d["inscricao_estadual"] == "671234567890"
+    assert d["cidade_estado"] == "Sumare - SP"
+    # Cidade tem campo proprio: nao se repete no endereco; o CEP entra nele.
+    assert d["endereco"] == "RUA, DAS INDUSTRIAS, 100, GALPAO 2, DISTRITO INDUSTRIAL - CEP 13170000"
+    assert d["email"] == "fiscal@contador.com.br"
+
+    with patch(alvo, side_effect=ValueError("Informe um CNPJ válido com 14 dígitos.")):
+        invalido = client.get("/api/compras/homologacao/cnpj/123")
+    assert invalido.status_code == 400
+    assert "CNPJ" in invalido.get_json()["error"]
+
+    with patch(alvo, side_effect=RuntimeError("timeout")):
+        fora = client.get("/api/compras/homologacao/cnpj/11222333000181")
+    assert fora.status_code == 502

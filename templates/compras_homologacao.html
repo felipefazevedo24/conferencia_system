@@ -256,7 +256,12 @@
 
         desenharNota();
 
-        let html = `<div class="hf-form-grid">` + CAMPOS.map(([k, rot, cls]) => `
+        let html = `<div class="hf-form-grid">` + CAMPOS.map(([k, rot, cls]) => k === "cnpj" ? `
+            <div class="hf-field ${cls || ""}"><label>${rot}</label>
+                <div style="display:flex; gap:6px;">
+                    <input data-campo="cnpj" value="${esc(atual.cnpj || "")}" placeholder="Digite e saia do campo" inputmode="numeric" style="flex:1; min-width:0;" ${ed ? "" : "disabled"}>
+                    ${ed ? '<button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="hf-btn-cnpj" title="Buscar dados cadastrais pelo CNPJ"><i class="fas fa-magnifying-glass"></i></button>' : ""}
+                </div></div>` : `
             <div class="hf-field ${cls || ""}"><label>${rot}</label>
                 <input data-campo="${k}" value="${esc(atual[k] || "")}" ${ed ? "" : "disabled"}></div>`).join("") + `
             <div class="hf-field"><label>Validade (meses)</label><input type="number" min="1" max="120" data-campo="validade_meses" value="${atual.validade_meses || 12}" ${ed ? "" : "disabled"}></div>
@@ -360,7 +365,52 @@
         return dados;
     }
 
+    // CNPJ -> dados cadastrais (mesma consulta da Atualizacao Cadastral).
+    // Razao social, fantasia, IE, endereco e cidade sao dado de registro:
+    // seguem o cartao CNPJ. Telefone e e-mail do cartao costumam ser do
+    // contador, entao so' entram se o campo estiver vazio.
+    const CAMPOS_CARTAO = ["razao_social", "nome_fantasia", "inscricao_estadual", "endereco", "cidade_estado"];
+    const CAMPOS_SE_VAZIO = ["telefone", "email"];
+    let cnpjConsultado = "";
+
+    async function buscarCnpj(forcar) {
+        const inp = $("hf-corpo").querySelector('[data-campo="cnpj"]');
+        if (!inp || inp.disabled) return;
+        const digitos = (inp.value || "").replace(/\D/g, "");
+        if (digitos.length !== 14) {
+            if (forcar) toast("Informe um CNPJ com 14 dígitos.", "error");
+            return;
+        }
+        if (!forcar && digitos === cnpjConsultado) return;
+        cnpjConsultado = digitos;
+        const btn = $("hf-btn-cnpj");
+        if (btn) btn.disabled = true;
+        try {
+            const d = await api(`/api/compras/homologacao/cnpj/${digitos}`);
+            const campo = (k) => $("hf-corpo").querySelector(`[data-campo="${k}"]`);
+            inp.value = d.cnpj || inp.value;
+            CAMPOS_CARTAO.forEach((k) => { if (d[k] && campo(k)) campo(k).value = d[k]; });
+            CAMPOS_SE_VAZIO.forEach((k) => { if (d[k] && campo(k) && !campo(k).value.trim()) campo(k).value = d[k]; });
+            const situacao = (d.situacao_cadastral || "").toUpperCase();
+            if (situacao && situacao !== "ATIVA") {
+                toast(`Atenção: situação cadastral na Receita = ${d.situacao_cadastral}.`, "error");
+            } else {
+                toast("Dados cadastrais carregados pelo CNPJ.", "success");
+            }
+        } catch (err) {
+            cnpjConsultado = "";
+            toast(err.message, "error");
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    $("hf-corpo").addEventListener("change", (e) => {
+        if (e.target.matches('[data-campo="cnpj"]')) buscarCnpj(false);
+    });
+
     $("hf-corpo").addEventListener("click", (e) => {
+        if (e.target.closest("#hf-btn-cnpj")) { buscarCnpj(true); return; }
         const op = e.target.closest("[data-resp]");
         if (op) {
             const [chave, item, valor] = op.dataset.resp.split("|");
