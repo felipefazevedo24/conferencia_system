@@ -163,6 +163,43 @@ def api_modelo():
     })
 
 
+@compras_homologacao_bp.route("/api/compras/homologacao/cnpj/<path:cnpj>", methods=["GET"])
+@permission_required(PERMISSION)
+def api_consultar_cnpj(cnpj):
+    """Dados cadastrais do fornecedor pelo cartao CNPJ - mesma consulta da
+    Atualizacao Cadastral (BrasilAPI + IE pelo publica.cnpj.ws), traduzida
+    pros campos do cabecalho da homologacao."""
+    from ..services.cadastro_workflow_service import consultar_cartao_cnpj
+
+    try:
+        cartao = consultar_cartao_cnpj(cnpj)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:  # noqa: BLE001
+        return jsonify({"error": "Não foi possível consultar o CNPJ agora. Tente novamente em instantes."}), 502
+
+    cidade_estado = " - ".join(p for p in (cartao.get("municipio"), cartao.get("uf")) if p)
+    # O endereco do cartao ja' termina com "Cidade - UF"; aqui a cidade tem
+    # campo proprio, entao sai do endereco pra nao aparecer duas vezes.
+    endereco = cartao.get("endereco") or ""
+    if cidade_estado and endereco.endswith(f" - {cidade_estado}"):
+        endereco = endereco[: -len(f" - {cidade_estado}")]
+    if endereco and cartao.get("cep"):
+        endereco = f"{endereco} - CEP {cartao['cep']}"
+
+    return jsonify({
+        "cnpj": cartao.get("documento") or "",
+        "razao_social": cartao.get("razao_social") or "",
+        "nome_fantasia": cartao.get("nome_fantasia") or "",
+        "inscricao_estadual": cartao.get("inscricao_estadual") or "",
+        "endereco": endereco,
+        "cidade_estado": cidade_estado,
+        "telefone": cartao.get("telefone") or "",
+        "email": (cartao.get("email") or "").lower(),
+        "situacao_cadastral": cartao.get("situacao_cadastral") or "",
+    })
+
+
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>", methods=["GET"])
 @permission_required(PERMISSION)
 def api_detalhe(homologacao_id):

@@ -7266,3 +7266,100 @@ def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
         })
         assert resp.status_code == 201
         assert resp.get_json()["registro"]["unidade_medida"] == "M"
+
+
+def test_conf_cega_st_salvar_parcial_nao_da_405(tmp_path):
+    """Aba ST (ordem de compra) da conferencia de expedicao: o botao "Salvar
+    progresso" aparece nas duas abas, mas so' o Faturamento tinha a rota - na
+    aba ST o POST caia na rota GET da ordem (<path:> engole o sufixo) e
+    voltava 405. Mesma regra do Faturamento: checkpoint cego, sem status."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    # Codigo com barra de proposito: a rota usa <path:>.
+    cod = "OC-55/1"
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemST, ExpedicaoOrdemSTItem
+        from conferencia_app.services.expedicao_st_service import STATUS_PENDENTE
+
+        ordem = ExpedicaoOrdemST(cod_ordem_compra=cod, fornecedor="FORNECEDOR ST", status=STATUS_PENDENTE)
+        db.session.add(ordem)
+        db.session.commit()
+        it1 = ExpedicaoOrdemSTItem(ordem_id=ordem.id, linha=1, cod_interno="S1", item="Item 1", qtde_a_faturar=4)
+        it2 = ExpedicaoOrdemSTItem(ordem_id=ordem.id, linha=2, cod_interno="S2", item="Item 2", qtde_a_faturar=2)
+        db.session.add_all([it1, it2])
+        db.session.commit()
+        it1_id, it2_id = it1.id, it2.id
+
+    base = f"/api/expedicao/conf-cega-st/ordens/{cod}"
+    assert client.post("/api/expedicao/conf-cega-st/ordens/NAO-EXISTE/salvar-parcial", json={}).status_code == 404
+
+    # Parcial: so' o item 1, contado errado de proposito, e o peso liquido.
+    resp = client.post(f"{base}/salvar-parcial", json={
+        "itens": [{"id": it1_id, "qtde_conferida": 3}], "peso_liquido": "40 kg",
+    })
+    assert resp.status_code == 200
+    assert "1 item" in resp.get_json()["mensagem"]
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemST
+        from conferencia_app.services.expedicao_st_service import STATUS_PENDENTE
+
+        ordem_db = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod).first()
+        assert ordem_db.status == STATUS_PENDENTE
+        assert ordem_db.conferido_at is None
+        assert ordem_db.peso_liquido == "40 kg"
+
+    # Reabrindo a ordem: a contagem volta preenchida, sem revelar divergencia.
+    itens = {it["id"]: it for it in client.get(base).get_json()["itens"]}
+    assert itens[it1_id]["qtde_conferida"] == 3
+    assert "qtde_conferida" not in itens[it2_id]
+    assert all("divergente" not in it for it in itens.values())
+
+
+# Cartao CNPJ como a consulta da Atualizacao Cadastral devolve
+# (cad_svc.consultar_cartao_cnpj) - a rede nunca e' chamada no teste.
+_CARTAO_CNPJ_FAKE = {
+    "documento": "11.222.333/0001-81",
+    "razao_social": "ACOS EXEMPLO LTDA",
+    "nome_fantasia": "ACOS EXEMPLO",
+    "endereco": "RUA, DAS INDUSTRIAS, 100, GALPAO 2, DISTRITO INDUSTRIAL - Sumare - SP",
+    "cep": "13170000",
+    "municipio": "Sumare",
+    "uf": "SP",
+    "telefone": "1933334444",
+    "email": "FISCAL@CONTADOR.COM.BR",
+    "inscricao_estadual": "671234567890",
+    "situacao_cadastral": "ATIVA",
+}
+
+
+def test_homologacao_busca_dados_cadastrais_pelo_cnpj(tmp_path):
+    """Homologacao de fornecedor: digitar o CNPJ carrega os dados cadastrais
+    pela mesma consulta da Atualizacao Cadastral."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    alvo = "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj"
+
+    with patch(alvo, return_value=dict(_CARTAO_CNPJ_FAKE)) as consulta:
+        resp = client.get("/api/compras/homologacao/cnpj/11.222.333/0001-81")
+    assert resp.status_code == 200
+    consulta.assert_called_once_with("11.222.333/0001-81")
+    d = resp.get_json()
+    assert d["razao_social"] == "ACOS EXEMPLO LTDA"
+    assert d["inscricao_estadual"] == "671234567890"
+    assert d["cidade_estado"] == "Sumare - SP"
+    # Cidade tem campo proprio: nao se repete no endereco; o CEP entra nele.
+    assert d["endereco"] == "RUA, DAS INDUSTRIAS, 100, GALPAO 2, DISTRITO INDUSTRIAL - CEP 13170000"
+    assert d["email"] == "fiscal@contador.com.br"
+
+    with patch(alvo, side_effect=ValueError("Informe um CNPJ válido com 14 dígitos.")):
+        invalido = client.get("/api/compras/homologacao/cnpj/123")
+    assert invalido.status_code == 400
+    assert "CNPJ" in invalido.get_json()["error"]
+
+    with patch(alvo, side_effect=RuntimeError("timeout")):
+        fora = client.get("/api/compras/homologacao/cnpj/11222333000181")
+    assert fora.status_code == 502
