@@ -8,7 +8,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
-from ..services import producao_service, rpa_agrupamento_service
+from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -66,6 +66,63 @@ def rpa_agrupamento_payload():
     except Exception:
         current_app.logger.exception("Falha ao preparar agrupamento")
         return jsonify({"error": "Não foi possível preparar o agrupamento."}), 503
+
+
+def _rpa_error_response(exc: Exception):
+    if isinstance(exc, rpa_grv_service.RpaApiError):
+        return jsonify({"ok": False, "error": exc.message}), exc.status_code
+    current_app.logger.exception("Falha na integração do agrupamento com o GRV")
+    return jsonify({"ok": False, "error": "Falha interna ao processar a solicitação."}), 500
+
+
+@producao_bp.get("/api/status")
+@permission_required("PAGE_PRODUCAO")
+def rpa_status():
+    from ..auth import has_permission
+
+    return jsonify(
+        rpa_grv_service.status(
+            session.get("username", "usuario_local"),
+            has_permission("EXECUTE_RPA_GRV"),
+        )
+    )
+
+
+@producao_bp.get("/api/rpa/janelas")
+@permission_required("EXECUTE_RPA_GRV")
+def rpa_janelas():
+    try:
+        return jsonify(rpa_grv_service.diagnosticar_janelas())
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/agrupamentos/simular")
+@permission_required("PAGE_PRODUCAO")
+def rpa_simular_agrupamento():
+    try:
+        return jsonify(
+            rpa_grv_service.montar_agrupamento(
+                request.get_json(silent=True) or {},
+                session.get("username", "usuario_local"),
+            )
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/agrupamentos/executar")
+@permission_required("EXECUTE_RPA_GRV")
+def rpa_executar_agrupamento():
+    try:
+        return jsonify(
+            rpa_grv_service.executar_agrupamento(
+                request.get_json(silent=True) or {},
+                session.get("username", "usuario_local"),
+            )
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
 
 
 @producao_bp.get("/producao-original/")

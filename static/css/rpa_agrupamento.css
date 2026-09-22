@@ -168,4 +168,29 @@
 .rpa-grouping-page .description-field textarea:focus{outline:0;background:#fff;border-color:var(--primary);box-shadow:0 0 0 3px rgba(23,105,210,.12)}
 .rpa-grouping-page .clear-selection-link{margin:12px auto 0;padding:7px 10px;font-size:9px}
 .rpa-grouping-page .group-internal-controls{display:none!important}
+
+/* Fluxo final: geração, simulação e revisão do envio à M83. */
+.rpa-grouping-page .selection-toolbar{display:flex;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border);background:#fff}
+.rpa-grouping-page .selection-toolbar .generate-button{width:244px;min-height:38px}
+.rpa-grouping-page .modal-large{width:min(820px,calc(100vw - 32px))}
+.rpa-grouping-page .review-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:18px 24px 22px}
+.rpa-grouping-page .review-item{min-width:0;min-height:70px;padding:13px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius)}
+.rpa-grouping-page .review-item.full{grid-column:1/-1}
+.rpa-grouping-page .review-item span{display:block;color:#7a8999;font-size:9px;font-weight:800;letter-spacing:.045em;text-transform:uppercase}
+.rpa-grouping-page .review-item strong{display:block;margin-top:7px;color:var(--text-primary);font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.rpa-grouping-page .critical-alert{padding:12px 14px;margin:18px 24px 0;color:#17633d;background:#f0faf5;border:1px solid #acd9c2;border-radius:var(--radius);font-size:11px;line-height:1.5}
+.rpa-grouping-page .critical-alert.is-loading{color:var(--primary);background:#f3f8fd;border-color:#bfd4e8}
+.rpa-grouping-page .critical-alert.is-success{color:#17633d;background:#f0faf5;border-color:#acd9c2}
+.rpa-grouping-page .critical-alert.is-warning,.rpa-grouping-page .critical-alert.is-error{color:#aa2929;background:#fff6f6;border-color:#e9c0c3}
+.rpa-grouping-page .modal-payload-details{margin:0 24px 20px;overflow:hidden;background:var(--surface-soft);border:1px solid var(--border);border-radius:var(--radius)}
+.rpa-grouping-page .modal-payload-details summary{padding:12px 14px;color:var(--primary);cursor:pointer;font-size:10px;font-weight:700}
+.rpa-grouping-page .modal-payload-details pre{max-height:250px;overflow:auto;padding:14px;margin:0;color:#d6e8f5;background:#071a33;font:10px/1.55 "Inter",sans-serif;white-space:pre-wrap}
+
+@media(max-width:520px){
+  .rpa-grouping-page .selection-toolbar .generate-button{width:100%}
+  .rpa-grouping-page .review-grid{grid-template-columns:1fr}
+  .rpa-grouping-page .review-item.full{grid-column:auto}
+  .rpa-grouping-page .modal-footer{align-items:stretch;flex-direction:column;gap:9px}
+  .rpa-grouping-page .modal-footer .button{width:100%}
+}
 @media(max-width:420px){.rpa-grouping-page .group-details .dual-detail{grid-template-columns:1fr;gap:10px}}

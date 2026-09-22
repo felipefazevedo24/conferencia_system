@@ -77,6 +77,63 @@ def test_producao_paginas_e_arquivos_estaticos(tmp_path):
         assert response.data, path
 
 
+def test_rpa_grv_endpoints_usam_usuario_autenticado_e_confirmacao(tmp_path, monkeypatch):
+    from conferencia_app.services import rpa_grv_service
+
+    app = build_test_app(tmp_path)
+    app.config["GRV_WEB_RPA_ENABLED"] = True
+    client = app.test_client()
+    login_admin(client)
+    calls = []
+
+    monkeypatch.setattr(
+        rpa_grv_service,
+        "status",
+        lambda usuario, pode_executar: {
+            "rpa_habilitado": True,
+            "rpa_disponivel": True,
+            "desktop_interativo": True,
+            "usuario": usuario,
+            "permissoes": {"execucao_grv": pode_executar},
+        },
+    )
+    monkeypatch.setattr(
+        rpa_grv_service,
+        "diagnosticar_janelas",
+        lambda: {"janela_grv_encontrada": True, "tela_m83_encontrada": True, "hwnd": 123},
+    )
+    monkeypatch.setattr(
+        rpa_grv_service,
+        "montar_agrupamento",
+        lambda data, usuario: {"payload": {"descricao_agrupamento": data["description"]}, "usuario": usuario},
+    )
+
+    def execute(data, usuario):
+        calls.append((data, usuario))
+        return {"result": {"gravado": True, "comando_gravar_enviado": True}}
+
+    monkeypatch.setattr(rpa_grv_service, "executar_agrupamento", execute)
+
+    status = client.get("/api/status")
+    assert status.status_code == 200
+    assert status.get_json()["usuario"] == "ADMIN"
+    assert client.get("/api/rpa/janelas").get_json()["tela_m83_encontrada"] is True
+    simulation = client.post(
+        "/api/agrupamentos/simular",
+        json={"codes": ["101053", "101088"], "description": "Teste"},
+    )
+    assert simulation.status_code == 200
+    execution = client.post(
+        "/api/agrupamentos/executar",
+        json={"codes": ["101053", "101088"], "description": "Teste", "confirmed": True},
+    )
+    assert execution.status_code == 200
+    assert execution.get_json()["result"]["gravado"] is True
+    assert calls == [
+        ({"codes": ["101053", "101088"], "confirmed": True, "description": "Teste"}, "ADMIN")
+    ]
+
+
 def test_producao_estaticos_exigem_pasta_configurada():
     import pytest
     from flask import Flask

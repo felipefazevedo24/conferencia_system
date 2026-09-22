@@ -20,6 +20,7 @@ const rows = Array.from({length: 60}, (_, index) => ({
 }));
 let failNext = false;
 let modalOpened = false;
+let executionRequest = null;
 window.HTMLDialogElement.prototype.showModal = function () { this.open = true; modalOpened = true; };
 window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 window.fetch = async (url, options) => {
@@ -27,13 +28,24 @@ window.fetch = async (url, options) => {
     failNext = false;
     return {ok: false, json: async () => ({error: 'Falha simulada'})};
   }
+  if (url === '/api/status') {
+    return {ok: true, json: async () => ({rpa_habilitado: true, rpa_disponivel: true, desktop_interativo: true, usuario: 'guilherme.bonfim'})};
+  }
+  if (url === '/api/rpa/janelas') {
+    return {ok: true, json: async () => ({janela_grv_encontrada: true, hwnd: 123})};
+  }
+  if (url === '/api/agrupamentos/executar') {
+    executionRequest = JSON.parse(options.body);
+    return {ok: true, json: async () => ({result: {gravado: true, comando_gravar_enviado: true, quantidade_codigos: executionRequest.codes.length}})};
+  }
   if (options?.method === 'POST') {
-    const codes = JSON.parse(options.body).codigos;
+    const request = JSON.parse(options.body);
+    const codes = request.codigos || request.codes;
     const items = rows.filter(row => codes.includes(row.codigo_processo));
     if (new Set(items.map(row => row.material)).size !== 1) {
       return {ok: false, json: async () => ({error: 'Selecione processos da mesma chapa, espessura e norma.'})};
     }
-    return {ok: true, json: async () => ({payload: {quantidade_itens: codes.length, codigos_destacados_para_agrupamento: codes}})};
+    return {ok: true, json: async () => ({payload: {produto: items[0]?.material, produto_chave: items[0]?.produto_chave, espessura_extraida: items[0]?.espessura, norma_extraida: items[0]?.norma, quantidade_itens: codes.length, codigos_destacados_para_agrupamento: codes, cod_os_completo: items.map(item => item.os_completa), descricao_agrupamento: request.description}})};
   }
   return {ok: true, json: async () => ({resultados: rows})};
 };
@@ -113,6 +125,25 @@ const get = id => document.getElementById(id);
   get('rpa-clear-selection').click();
   assert.equal(get('rpa-group-description').value, '');
   assert.equal(document.querySelector('.mode-banner'), null);
+
+  [...document.querySelectorAll('#rpa-results-body tr')].find(row => row.cells[3].textContent === '100071').querySelector('input[type=checkbox]').click();
+  [...document.querySelectorAll('#rpa-results-body tr')].find(row => row.cells[3].textContent === '100073').querySelector('input[type=checkbox]').click();
+  get('rpa-group-description').value = '21889 - A36 - 6545';
+  get('rpa-generate').click();
+  await tick(10);
+  assert.equal(get('rpa-simulation-modal').open, true);
+  assert.match(get('rpa-simulation-review').textContent, /21889 - A36 - 6545/);
+  get('rpa-continue-review').click();
+  await tick(10);
+  assert.equal(get('rpa-review-modal').open, true);
+  assert.match(get('rpa-final-review').textContent, /guilherme\.bonfim/);
+  get('rpa-confirm-execution').click();
+  await tick(20);
+  assert.deepEqual(executionRequest.codes, ['100071', '100073']);
+  assert.equal(executionRequest.confirmed, true);
+  assert.equal(executionRequest.description, '21889 - A36 - 6545');
+  assert.match(get('rpa-execution-status').textContent, /gravado no GRV/);
+  assert.equal(get('rpa-group-empty').hidden, false);
 
   failNext = true;
   get('rpa-refresh').click();

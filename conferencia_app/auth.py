@@ -85,6 +85,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Intralog > Consumo de Chapa (Nesting)",
     "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
+    "EXECUTE_RPA_GRV": "Produção > Executar apontamento agrupado no GRV",
 }
 
 
@@ -149,6 +150,7 @@ BASE_ROLE_PERMISSIONS = {
     },
     "PCP": {
         "PAGE_PRODUCAO",
+        "EXECUTE_RPA_GRV",
     },
     "Solicitante": {
         "PAGE_LOGISTICA_SOLICITACAO",

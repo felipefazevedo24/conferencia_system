@@ -86,6 +86,10 @@ class Config:
     _database_url = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
     SQLALCHEMY_DATABASE_URI = _database_url or f"sqlite:///{_db_path.as_posix()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    GRV_WEB_RPA_ENABLED = os.environ.get("GRV_WEB_RPA_ENABLED", "0") == "1"
+    GRV_RPA_BACKEND_PATH = os.environ.get("GRV_RPA_BACKEND_PATH", "")
+    GRV_RPA_WINDOW_TITLE = os.environ.get("GRV_RPA_WINDOW_TITLE", r".*CPS.*COLUMBIA.*")
+    GRV_RPA_DELAY = float(os.environ.get("GRV_RPA_DELAY", "0.55"))
     SQLALCHEMY_ENGINE_OPTIONS = (
         {}
         if SQLALCHEMY_DATABASE_URI.startswith("sqlite:")

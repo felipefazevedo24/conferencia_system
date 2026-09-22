@@ -38,6 +38,7 @@
         </tr></thead><tbody id="rpa-results-body"></tbody></table></div>
         <div class="mobile-results" id="rpa-mobile-results" hidden></div>
         <div class="pagination" id="rpa-pagination" hidden><span id="rpa-page-status"></span><div><button class="toolbar-link" id="rpa-prev" type="button">Anterior</button><button class="toolbar-link" id="rpa-next" type="button">Próxima</button></div></div>
+        <div class="selection-toolbar"><button class="button generate-button" id="rpa-generate" type="button" disabled>Gerar Apontamento Agrupado</button></div>
       </section>
       <aside class="group-panel" id="rpa-group-panel" aria-labelledby="rpa-group-title">
         <div class="group-header"><h2 id="rpa-group-title"><span aria-hidden="true">◇</span> AGRUPAMENTO</h2><button id="rpa-group-toggle" type="button" aria-label="Recolher painel" aria-expanded="true">⌄</button></div>
@@ -61,6 +62,18 @@
     </div>
   </main>
   <dialog class="modal" id="rpa-details-modal"><div class="modal-card details-modal-card"><div class="modal-header"><div><span>DETALHES DO PROCESSO</span><h2 id="rpa-details-title">Processo</h2></div><button type="button" data-close aria-label="Fechar">×</button></div><div class="details-grid" id="rpa-details-content"></div><div class="modal-footer"><button class="button button-outline" type="button" data-close>Fechar</button></div></div></dialog>
+  <dialog class="modal" id="rpa-simulation-modal"><div class="modal-card modal-large">
+    <div class="modal-header"><div><span>SIMULAÇÃO · NENHUM ENVIO SERÁ REALIZADO</span><h2>Simulação do agrupamento</h2></div><button type="button" data-close aria-label="Fechar">×</button></div>
+    <div class="review-grid" id="rpa-simulation-review"></div>
+    <details class="modal-payload-details"><summary>Ver dados estruturados da simulação</summary><pre id="rpa-simulation-payload"></pre></details>
+    <div class="modal-footer"><button class="button button-outline" type="button" data-close>Voltar</button><button class="button button-primary" id="rpa-continue-review" type="button">Continuar para revisão</button></div>
+  </div></dialog>
+  <dialog class="modal" id="rpa-review-modal"><div class="modal-card modal-large">
+    <div class="modal-header"><div><span>REVISÃO ANTES DA EXECUÇÃO</span><h2>Revisar envio ao GRV</h2></div><button type="button" data-close aria-label="Fechar">×</button></div>
+    <div class="critical-alert" id="rpa-execution-status">Esta ação pode preencher e gravar informações na tela M83 do GRV.</div>
+    <div class="review-grid" id="rpa-final-review"></div>
+    <div class="modal-footer"><button class="button button-outline" type="button" data-close>Voltar e corrigir</button><button class="button button-primary" id="rpa-confirm-execution" type="button">Confirmar envio ao GRV</button></div>
+  </div></dialog>
 </div>
 {% endblock %}
 {% block extra_js %}<script src="{{ url_for('static', filename='js/rpa_agrupamento.js') }}?v={{ asset_version }}"></script>{% endblock %}
