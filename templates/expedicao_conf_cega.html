@@ -943,6 +943,7 @@
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
                     else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
+                    else if (act === "expedir-sem-conf") expedirSemConferencia(cod);
                     else if (act === "excluir") excluirOrdem(cod);
                 });
             }
@@ -964,6 +965,12 @@
                 const lbl = s === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
                 itens += it("conferir", "fa-barcode", lbl);
                 itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
+                // Saida de excecao: a NF ja foi emitida sem conferencia, entao
+                // nao ha foto para exigir. Cria o romaneio direto, mediante
+                // justificativa obrigatoria.
+                if (s === "faturado_sem_conf" && cfg.podeExpedirSemConf && o.numero_nf) {
+                    itens += "<hr>" + it("expedir-sem-conf", "fa-truck-fast", "Expedir sem conferência (romaneio direto)");
+                }
             } else if (s === "faturado") {
                 itens += btnEtiqueta();
                 itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
@@ -1074,6 +1081,39 @@
                 document.body.appendChild(inp);
             }
             return inp;
+        }
+
+        // Ordem faturada SEM conferencia: monta o romaneio direto, pulando a
+        // exigencia da foto do cliente (nao houve conferencia, logo nao ha
+        // foto). O comentario e obrigatorio e acompanha a NF ate o Registro
+        // de expedicao, que ja nasce finalizado.
+        async function expedirSemConferencia(cod) {
+            const o = ordemPorCod(cod);
+            if (!o) return;
+            if (!o.numero_nf) {
+                toast("A ordem ainda não tem NF emitida.", "error");
+                return;
+            }
+            const motivo = await pedirMotivo({
+                title: "Expedir sem conferência",
+                sub: `A NF <b>${escapeHtml(o.numero_nf)}</b> vai direto para um romaneio novo, <b>sem foto</b> da mercadoria nem do cliente. A marca de "expedido sem conferência" fica no romaneio e no Registro de expedição.`,
+                label: "Por que foi faturado/expedido sem conferência?",
+                okLabel: "Criar romaneio",
+                errLabel: "Informe por que a ordem saiu sem conferência.",
+                placeholder: "Ex.: cliente retirou no contraturno, sem equipe de conferência…",
+            });
+            if (!motivo) return;
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod) + "/expedir-sem-conferencia", {
+                    method: "POST",
+                    body: JSON.stringify({ motivo }),
+                });
+                toast(`Romaneio ${r.numero_romaneio} criado sem conferência.`, "success");
+                await carregarDashboard();
+                if (r.romaneio_id) setTimeout(() => abrirViewRomaneios(r.romaneio_id), 600);
+            } catch (e) {
+                toast(e.message, "error");
+            }
         }
 
         function abrirUploadComprovante(cod) {
@@ -1228,6 +1268,9 @@
                     : "";
                 // Composição do romaneio: exibida nas etapas "Em Romaneio" e "Expedido".
                 const romInfo = (o.status_slug === "romaneio" || o.status_slug === "expedido") ? badgeRomaneio(o.romaneio) : "";
+                const semConf = o.expedido_sem_conferencia
+                    ? `<div class="ce-diverg" title="${escapeHtml(o.expedido_sem_conferencia_motivo || "")}"><i class="fas fa-triangle-exclamation"></i> Expedido sem conferência</div>`
+                    : "";
                 const c = cfg.colunas(o);
                 const prev = fmtDataBR(typeof cfg.previsao === "function" ? cfg.previsao(o) : null);
                 const codInterno = o.codigo_interno
@@ -1240,7 +1283,7 @@
                     <td>${prev}</td>
                     <td style="text-align:center;">${o.total_itens}</td>
                     <td>${nf}</td>
-                    <td>${badge(o.status_slug, o.status)}${div}${posFat}${romInfo}</td>
+                    <td>${badge(o.status_slug, o.status)}${div}${posFat}${semConf}${romInfo}</td>
                     <td style="text-align:right;">${acao}</td>
                 </tr>`;
             }).join("");
@@ -2028,6 +2071,7 @@
         internacional: true,
         podeCorrigirNf: true,
         podeInformarNf: true,
+        podeExpedirSemConf: true,
         colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
         previsao: (o) => o.dt_previsao_entrega,
         onCount: (n) => { $("fat-tab-count").textContent = n; },
@@ -2038,6 +2082,7 @@
         codKey: "cod_ordem_compra",
         refTipo: "st",
         podeInformarNf: true,
+        podeExpedirSemConf: true,
         colunas: (o) => [o.cod_ordem_compra, o.fornecedor, o.n_os],
         previsao: (o) => o.dt_prevista_entrega,
         onCount: (n) => { $("st-tab-count").textContent = n; },

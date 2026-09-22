@@ -275,11 +275,18 @@ def _analisar_divergencia_frete(romaneio) -> dict:
     tipo_frete do romaneio. Retorna:
       - divergentes: NFs cuja modalidade não bate com o romaneio (inclui
         Terceiros/Sem frete, que não correspondem a CIF nem FOB);
-      - nao_validadas: NFs cuja modalidade não pôde ser lida no ERP."""
+      - nao_validadas: NFs cuja modalidade não pôde ser lida no ERP.
+
+    NF expedida SEM conferência fica fora da conta em qualquer caso: essa saída
+    já é uma exceção assumida com justificativa, e cobrar carta de correção da
+    modalidade de frete em cima dela só geraria pedido de CC-e que ninguém vai
+    emitir. Vale inclusive quando a nota é FOB e o romaneio é CIF."""
     frete_rom = str(getattr(romaneio, "tipo_frete", "") or "").strip().upper()
     divergentes = []
     nao_validadas = []
     for nf in romaneio.nfs or []:
+        if getattr(nf, "sem_conferencia", False):
+            continue
         codigo = _modfrete_da_nf(nf)
         grupo = _modfrete_grupo(codigo)
         if not grupo:
@@ -429,6 +436,21 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
         if motorista:
             registro.motorista = motorista
         registro.status = "Expedido"
+
+    if getattr(nf, "sem_conferencia", False):
+        # Expedicao liberada sem conferencia: nao ha foto do material nem do
+        # cliente, e nao faz sentido ficar esperando canhoto de uma entrega
+        # que ja saiu fora do fluxo. O registro nasce Finalizado com a
+        # justificativa de quem liberou, que a tela exibe em vermelho.
+        registro.sem_conferencia = True
+        registro.sem_conferencia_motivo = "Expedido sem conferência"
+        registro.sem_conferencia_justificativa = (
+            str(getattr(nf, "sem_conferencia_motivo", "") or "").strip() or None
+        )
+        registro.status = "Finalizado"
+        if not registro.finalizado_at:
+            registro.finalizado_at = agora
+            registro.finalizado_by = usuario
 
     # O registro fica em "Expedido" ate o comprovante de entrega (canhoto) ser
     # anexado - FOB anexa um unico comprovante pro romaneio inteiro (ver
@@ -662,6 +684,8 @@ def listar_romaneios():
                     "cliente": nf.cliente,
                     "peso_bruto": nf.peso_bruto,
                     "qtde_volumes": nf.qtde_volumes,
+                    "sem_conferencia": bool(nf.sem_conferencia),
+                    "sem_conferencia_motivo": nf.sem_conferencia_motivo,
                     "registro_id": comprovantes_info.get(nf.numero_nf, {}).get("registro_id"),
                     "canhoto_pendente": comprovantes_info.get(nf.numero_nf, {}).get("canhoto_pendente"),
                 }
@@ -676,6 +700,27 @@ def listar_romaneios():
         })
     
     return jsonify({"romaneios": data})
+
+
+def proximo_numero_romaneio() -> str:
+    """Gera o número único do romaneio (p.ex: ROM-2026-0001). Usa o MAIOR
+    sufixo numérico já existente no ano (não a contagem de linhas) — contar
+    linhas gera número duplicado sempre que um romaneio anterior é excluído
+    (o total cai, mas o número "vago" já pode pertencer a um romaneio que
+    ainda existe), disparando IntegrityError na coluna única."""
+    prefixo = f"ROM-{datetime.now().year}-"
+    existentes = (
+        ExpedicaoRomaneio.query
+        .filter(ExpedicaoRomaneio.numero_romaneio.like(f"{prefixo}%"))
+        .with_entities(ExpedicaoRomaneio.numero_romaneio)
+        .all()
+    )
+    maior_sequencia = 0
+    for (numero,) in existentes:
+        sufixo = str(numero or "")[len(prefixo):]
+        if sufixo.isdigit():
+            maior_sequencia = max(maior_sequencia, int(sufixo))
+    return f"{prefixo}{maior_sequencia + 1:04d}"
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat", methods=["POST"])
@@ -693,25 +738,7 @@ def criar_romaneio():
     if frete not in _TIPOS_FRETE_VALIDOS:
         return jsonify({"error": "Tipo de frete inválido."}), 400
 
-    # Gera número único para o romaneio (p.ex: ROM-2026-0001). Usa o MAIOR
-    # sufixo numérico já existente no ano (não a contagem de linhas) — contar
-    # linhas gera número duplicado sempre que um romaneio anterior é excluído
-    # (o total cai, mas o número "vago" já pode pertencer a um romaneio que
-    # ainda existe), disparando IntegrityError na coluna única.
-    hoje = datetime.now()
-    prefixo = f"ROM-{hoje.year}-"
-    existentes = (
-        ExpedicaoRomaneio.query
-        .filter(ExpedicaoRomaneio.numero_romaneio.like(f"{prefixo}%"))
-        .with_entities(ExpedicaoRomaneio.numero_romaneio)
-        .all()
-    )
-    maior_sequencia = 0
-    for (numero,) in existentes:
-        sufixo = str(numero or "")[len(prefixo):]
-        if sufixo.isdigit():
-            maior_sequencia = max(maior_sequencia, int(sufixo))
-    numero_romaneio = f"{prefixo}{maior_sequencia + 1:04d}"
+    numero_romaneio = proximo_numero_romaneio()
     
     romaneio = ExpedicaoRomaneio(
         numero_romaneio=numero_romaneio,
@@ -808,6 +835,8 @@ def obter_romaneio(romaneio_id):
                 "numeros_os": nf.numeros_os,
                 "adicionado_em": nf.adicionado_em.isoformat() if nf.adicionado_em else None,
                 "adicionado_por": nf.adicionado_por,
+                "sem_conferencia": bool(nf.sem_conferencia),
+                "sem_conferencia_motivo": nf.sem_conferencia_motivo,
             }
             for nf in romaneio.nfs or []
         ],
@@ -964,7 +993,16 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None, *, commit=T
     ordem_st = None if ordem_fat else ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
 
     ordem_com_conferencia = ordem_fat or ordem_st
-    if ordem_com_conferencia:
+    # Ordem liberada para expedir SEM conferencia cega (Conferencia de
+    # Expedicao > "Expedir sem conferencia"): nao houve conferencia, logo nao
+    # existe foto do cliente para exigir. A justificativa de quem liberou
+    # viaja junto e fica gravada na NF do romaneio.
+    sem_conferencia = bool(getattr(ordem_com_conferencia, "expedido_sem_conferencia", False))
+    motivo_sem_conferencia = (
+        str(getattr(ordem_com_conferencia, "expedido_sem_conferencia_motivo", "") or "").strip() or None
+        if sem_conferencia else None
+    )
+    if ordem_com_conferencia and not sem_conferencia:
         registro_conferencia = None
         if ordem_com_conferencia.expedicao_registro_id:
             registro_conferencia = ExpedicaoConferenciaSimples.query.get(
@@ -1071,6 +1109,8 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None, *, commit=T
         especie_volumes=especie_volumes,
         numeros_os=numeros_os,
         modfrete_nf=modfrete_codigo,
+        sem_conferencia=sem_conferencia,
+        sem_conferencia_motivo=motivo_sem_conferencia,
         adicionado_por=autor,
     )
 

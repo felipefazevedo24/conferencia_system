@@ -783,6 +783,15 @@
         return "—";
     }
 
+    // NF que entrou no romaneio pela saida de excecao da Conferencia de
+    // Expedicao (faturada sem conferencia cega): nao tem foto e o Registro de
+    // expedicao dela nasce finalizado. O motivo vai no title.
+    function marcaSemConferencia(nf) {
+        if (!nf || !nf.sem_conferencia) return "";
+        const motivo = escapeHtml(nf.sem_conferencia_motivo || "Expedido sem conferência");
+        return `<div title="${motivo}" style="margin-top:2px;font-size:11px;font-weight:800;color:#dc2626;"><i class="fas fa-triangle-exclamation"></i> Sem conferência</div>`;
+    }
+
     // Lista consolidada das referencias do romaneio (orcamentos e OCs),
     // exibida no cabecalho quando ha os dois tipos juntos.
     function refsConsolidado(nfs) {
@@ -801,7 +810,7 @@
         const linhasNf = nfs.length
             ? nfs.map(nf => `
                 <tr>
-                    <td><strong>${escapeHtml(nf.numero_nf)}</strong></td>
+                    <td><strong>${escapeHtml(nf.numero_nf)}</strong>${marcaSemConferencia(nf)}</td>
                     <td>${escapeHtml(refDocLabel(nf))}</td>
                     <td>${escapeHtml(nf.cliente || "—")}</td>
                     <td>${nf.peso_bruto || 0} kg</td>
@@ -1006,7 +1015,7 @@
 
         container.innerHTML = nfsAtual.map(nf => `
             <div class="rom-nf-item">
-                <div class="rom-nf-info"><strong>${nf.numero_nf}</strong></div>
+                <div class="rom-nf-info"><strong>${nf.numero_nf}</strong>${marcaSemConferencia(nf)}</div>
                 <div class="rom-nf-info">${escapeHtml(refDocLabel(nf))}</div>
                 <div class="rom-nf-info"><strong>${nf.cliente || "—"}</strong></div>
                 <div class="rom-nf-info"><strong>${nf.peso_bruto || 0} kg</strong></div>

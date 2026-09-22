@@ -290,7 +290,7 @@
                     {% if grupo.nfs and grupo.nfs|length > 0 %}
                         {% for nf in grupo.nfs %}
                         <tr>
-                            <td><strong>{{ nf.numero_nf }}</strong></td>
+                            <td><strong>{{ nf.numero_nf }}</strong>{% if nf.sem_conferencia %}<div style="font-size:9px; font-weight:700; color:#b91c1c;">EXPEDIDO SEM CONFERÊNCIA</div>{% endif %}</td>
                             <td>{% if nf.ordem_compra %}OC {{ nf.ordem_compra }}{% elif nf.orcamento %}Orç. {{ nf.orcamento }}{% else %}—{% endif %}</td>
                             <td>{{ nf.cliente or '—' }}</td>
                             <td style="text-align: right;">{{ "%.2f"|format(nf.peso_bruto or 0) }}</td>
