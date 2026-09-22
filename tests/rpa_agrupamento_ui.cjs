@@ -20,7 +20,8 @@ const rows = Array.from({length: 60}, (_, index) => ({
 }));
 let failNext = false;
 let modalOpened = false;
-window.bootstrap = {Modal: {getOrCreateInstance: () => ({show: () => { modalOpened = true; }})}};
+window.HTMLDialogElement.prototype.showModal = function () { this.open = true; modalOpened = true; };
+window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 window.fetch = async (url, options) => {
   if (failNext) {
     failNext = false;
@@ -48,9 +49,9 @@ const get = id => document.getElementById(id);
   assert.equal(get('rpa-pagination').hidden, false);
 
   get('rpa-next').click();
-  assert.match(get('rpa-page-status').textContent, /Página 2 de 2/);
+  assert.match(get('rpa-page-status').textContent, /36–60 de 60/);
   get('rpa-prev').click();
-  document.querySelector('.rpa-detail-button').click();
+  document.querySelector('.detail-button').click();
   assert.equal(modalOpened, true);
   assert.match(get('rpa-details-content').textContent, /Código do processo/);
 
@@ -62,7 +63,7 @@ const get = id => document.getElementById(id);
   get('rpa-prepare').click();
   await tick(10);
   assert.equal(get('rpa-payload-actions').hidden, false);
-  document.querySelector('.rpa-selected-item button').click();
+  document.querySelector('.selected-process button').click();
   assert.equal(get('rpa-payload-actions').hidden, true);
   document.querySelectorAll('#rpa-results-body input[type=checkbox]')[0].click();
   await tick(350);
@@ -72,17 +73,17 @@ const get = id => document.getElementById(id);
   assert.equal(get('rpa-group-empty').hidden, false);
 
   get('rpa-select-all').click();
-  assert.equal(get('rpa-selected-count').textContent, '35 selecionados');
+  assert.equal(get('rpa-group-count').textContent, '35');
   get('rpa-clear-selection').click();
 
   get('rpa-classification').value = 'CMS';
   get('rpa-search-form').dispatchEvent(new window.Event('submit', {cancelable: true}));
   await tick(10);
-  assert.equal(get('rpa-result-count').textContent, '30 processos nos filtros');
+  assert.equal(get('rpa-table-count').textContent, '30 processo(s)');
   get('rpa-clear').click();
   await tick(10);
   assert.equal(get('rpa-classification').value, '');
-  assert.equal(get('rpa-result-count').textContent, '60 processos nos filtros');
+  assert.equal(get('rpa-table-count').textContent, '60 processo(s)');
 
   failNext = true;
   get('rpa-refresh').click();
