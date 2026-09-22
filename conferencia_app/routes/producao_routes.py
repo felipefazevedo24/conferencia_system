@@ -8,7 +8,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
-from ..services import producao_service
+from ..services import producao_service, rpa_agrupamento_service
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -28,6 +28,44 @@ def _original_static_directory() -> str:
 @permission_required("PAGE_PRODUCAO")
 def producao_page():
     return render_template("producao_shell.html")
+
+
+@producao_bp.get("/producao/rpa-agrupamento")
+@permission_required("PAGE_PRODUCAO")
+def rpa_agrupamento_page():
+    return render_template("rpa_agrupamento.html")
+
+
+@producao_bp.get("/api/producao/rpa-agrupamento")
+@permission_required("PAGE_PRODUCAO")
+def rpa_agrupamento_consulta():
+    try:
+        rows = rpa_agrupamento_service.consultar(request.args.get("q", ""))
+        return jsonify({"resultados": rows, "total": len(rows)})
+    except Exception:
+        current_app.logger.exception("Falha na consulta do RPA agrupamento")
+        return jsonify({"error": "Não foi possível consultar os processos no GRV."}), 503
+
+
+@producao_bp.post("/api/producao/rpa-agrupamento/payload")
+@permission_required("PAGE_PRODUCAO")
+def rpa_agrupamento_payload():
+    body = request.get_json(silent=True) or {}
+    codigos = body.get("codigos")
+    if not isinstance(codigos, list) or len(codigos) > 1000 or any(not isinstance(code, str) for code in codigos):
+        return jsonify({"error": "Seleção inválida."}), 400
+    try:
+        # Reconsulta os dados de origem. A elegibilidade nunca vem do navegador.
+        rows = rpa_agrupamento_service.consultar(str(body.get("busca") or ""), 1000)
+        selected = [row for row in rows if row["codigo_processo"] in set(codigos)]
+        if {row["codigo_processo"] for row in selected} != set(codigos):
+            return jsonify({"error": "A seleção mudou. Atualize a consulta."}), 409
+        return jsonify({"payload": rpa_agrupamento_service.montar_payload(selected)})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        current_app.logger.exception("Falha ao preparar agrupamento")
+        return jsonify({"error": "Não foi possível preparar o agrupamento."}), 503
 
 
 @producao_bp.get("/producao-original/")
