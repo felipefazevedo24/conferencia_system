@@ -5794,6 +5794,23 @@ def validar():
                 except ValueError as exc:
                     return jsonify({"sucesso": False, "msg": str(exc), "item_id": item.id}), 400
 
+            # Item marcado como chapa (agora ou numa chamada anterior de
+            # /validar): o conferente conta as chapas em UND e informa as
+            # medidas, mas NAO digita mais o peso. O peso em KG e o da propria
+            # NF e segue pelo caminho de sempre - tolerancia, log de tentativa
+            # e enderecamento. Escrevemos de volta nos dicionarios porque
+            # criar_pendencias tambem le dali, e porque quem decide isso e o
+            # servidor, nao o que a tela mandou. A conversao volta a 1: a
+            # quantidade ja esta na unidade da nota, nao ha o que converter.
+            if chapa_und is not None or float(item.qtd_chapas_und or 0) > 0:
+                if isinstance(contagens, dict):
+                    contagens[str(item.id)] = item.qtd_real
+                if isinstance(conversoes_itens, dict):
+                    conversoes_itens[str(item.id)] = {
+                        "fator": 1,
+                        "unidade": str(item.unidade_comercial or "")[:20],
+                    }
+
         valor_bruto = contagens.get(str(item.id))
         if valor_bruto is None or str(valor_bruto).strip() == "":
             erros.append(item.descricao)

@@ -442,6 +442,8 @@
         }
         .chapa-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
         .chapa-input.faltando { border-color: #f97316; background: #fff7ed; }
+        /* Peso lido da NF: campo travado, sem cara de pendencia. */
+        .qtd-input.peso-da-nf { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; font-size: 13px; cursor: not-allowed; }
         .chapa-suffix { font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: .04em; }
         @media(max-width:560px){.chapa-medidas-grid{grid-template-columns:1fr}.chapa-medidas-grid .chapa-medida-full{grid-column:auto}#modal-chapa .modal-sap{width:calc(100% - 20px)!important;max-height:calc(100dvh - 20px);margin:auto}#modal-chapa .modal-body{overflow:auto;padding:18px}#modal-chapa .modal-foot{position:sticky;bottom:0;display:grid;grid-template-columns:1fr 1fr;padding-bottom:calc(15px + env(safe-area-inset-bottom))}#modal-chapa input,#modal-chapa select{font-size:16px}}
         .confirm-box {
@@ -1219,7 +1221,7 @@
                     <input type="number" id="chapa-modal-input" class="chapa-modal-num" min="0" step="1" placeholder="0" inputmode="numeric" oninput="document.getElementById('chapa-modal-msg').textContent=''; atualizarPreviewChapa();">
                     <span style="font-size:14px; font-weight:800; color:#64748b; letter-spacing:.04em;">UND</span>
                 </div>
-                <div style="font-size:11px; color:#64748b; margin-top:8px; line-height:1.5;">A NF vem em KG; a quantidade de chapas (UND) que você informar aqui é a que vai no e-mail de entrada de chapas.</div>
+                <div style="font-size:11px; color:#64748b; margin-top:8px; line-height:1.5;">Você conta só as chapas: <b>o peso em KG é lido da própria NF</b>, não precisa pesar nem digitar. A quantidade em UND informada aqui é a que vai no e-mail de entrada de chapas.</div>
                 <div class="chapa-medidas-grid">
                     <label>Material<select id="chapa-modal-material" onchange="atualizarPreviewChapa()"></select></label>
                     <label>Formato<select id="chapa-modal-formato" onchange="montarMedidasChapa(); atualizarPreviewChapa()"></select></label>
@@ -1289,9 +1291,19 @@
     let devolucoesPendentesCache = [];
     let devolucaoAprovarSelecionada = null;
 
+    // Item marcado como chapa: o peso em KG vem da propria NF, entao a tela
+    // nao digita, nao cobra e nao envia esse valor — quem preenche e o
+    // servidor, com a quantidade da nota.
+    function pesoVemDaNf(input) {
+        const id = input && input.dataset ? input.dataset.id : null;
+        const btn = id ? document.getElementById('chapa-btn-' + id) : null;
+        return !!btn && btn.dataset.ativo === '1';
+    }
+
     function coletarContagens() {
         const contagens = {};
         document.querySelectorAll('.qtd-input').forEach((input) => {
+            if (pesoVemDaNf(input)) return;
             contagens[input.dataset.id] = input.value;
         });
         return contagens;
@@ -1427,6 +1439,7 @@
         const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
         const btn = document.getElementById(`chapa-btn-${id}`);
         if (!input || !btn) return;
+        aplicarPesoDaNf(id, btn.dataset.ativo === '1');
         if (btn.dataset.ativo !== '1') {
             // Nao marcado como chapa: botao neutro, sem cobranca.
             input.classList.remove('faltando');
@@ -1442,6 +1455,35 @@
         btn.innerHTML = preenchido
             ? `<i class="fas fa-check"></i> Chapa: ${valor} UND`
             : `<i class="fas fa-layer-group"></i> Chapa`;
+    }
+
+    // Marcou como chapa: o campo de peso sai de cena (o valor vem da NF) e a
+    // conversao volta para 1, porque nao ha contagem a converter. Desmarcou:
+    // o campo volta a ser do conferente, vazio.
+    function aplicarPesoDaNf(id, ativo) {
+        const qtd = document.querySelector(`.qtd-input[data-id="${id}"]`);
+        if (!qtd) return;
+        const fator = document.querySelector(`.fator-input[data-id="${id}"]`);
+        const unidade = document.querySelector(`.unidade-input[data-id="${id}"]`);
+        qtd.value = '';
+        qtd.disabled = ativo;
+        qtd.classList.toggle('peso-da-nf', ativo);
+        qtd.classList.remove('input-ok', 'input-warning', 'input-error');
+        qtd.placeholder = ativo ? 'Peso da NF' : '';
+        if (fator) {
+            if (ativo) fator.value = '1';
+            fator.disabled = ativo;
+        }
+        if (unidade) unidade.disabled = ativo;
+        const alerta = document.querySelector(`.item-alerta[data-id="${id}"]`);
+        if (alerta) {
+            alerta.className = 'item-alerta';
+            alerta.innerText = ativo ? 'Peso em KG vem da NF — conte só as chapas.' : '';
+        }
+        const linha = qtd.closest('tr');
+        if (linha) linha.classList.toggle('contado', ativo);
+        atualizarBotaoFinalizar();
+        atualizarProgressoConferencia();
     }
 
     function coletarChapas() {
@@ -1976,7 +2018,9 @@
     function atualizarProgressoConferencia() {
         const inputs = Array.from(document.querySelectorAll('.qtd-input'));
         const total = inputs.length;
-        const preenchidos = inputs.filter((input) => String(input.value || '').trim() !== '').length;
+        const preenchidos = inputs.filter(
+            (input) => pesoVemDaNf(input) || String(input.value || '').trim() !== ''
+        ).length;
         const percentual = total > 0 ? Math.round((preenchidos / total) * 100) : 0;
 
         const countEl = document.getElementById('conf-progress-count');
@@ -2331,9 +2375,15 @@
             if (estado.tipo === 'warning') alerta.classList.add('warning');
             if (estado.tipo === 'erro') alerta.classList.add('error');
         }
-        const inputs = document.querySelectorAll('.qtd-input');
-        document.getElementById('btn-finalizar').disabled = Array.from(inputs).some(i => i.value === "");
+        atualizarBotaoFinalizar();
         atualizarProgressoConferencia();
+    }
+
+    function atualizarBotaoFinalizar() {
+        const btn = document.getElementById('btn-finalizar');
+        if (!btn) return;
+        btn.disabled = Array.from(document.querySelectorAll('.qtd-input'))
+            .some((i) => i.value === '' && !pesoVemDaNf(i));
     }
 
     function toggleConfMenu(e) {
