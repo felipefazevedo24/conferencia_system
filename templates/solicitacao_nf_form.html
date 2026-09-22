@@ -290,7 +290,7 @@
               <label for="buscaMaterial">Código ou nome do material</label>
               <div class="add-item-row">
                 <div style="position:relative">
-                  <input type="text" id="buscaMaterial" placeholder="Digite o código ou nome..." autocomplete="off">
+                  <input type="text" id="buscaMaterial" placeholder="Digite o código ou nome..." autocomplete="off" disabled>
                   <div class="sugestoes" id="sugestoesMaterial"></div>
                 </div>
                 <input type="number" id="txtQuantidade" placeholder="Qtde" min="0.01" step="0.01">
@@ -709,21 +709,50 @@
     const input = $(inputId);
     const lista = $(listaId);
     let debounce = null;
-    input.addEventListener("input", () => {
+    let versao = 0;
+    let ultimoValor = input.value;
+    function buscar() {
+      ultimoValor = input.value;
       clearTimeout(debounce);
+      const atual = ++versao;
+      if (campo === "materiais") {
+        materialSelecionado = null;
+        $("helpMaterial").textContent = "Selecione o material nos resultados da busca.";
+      }
       const termo = input.value.trim();
       if (termo.length < 2) { lista.classList.remove("show"); return; }
+      lista.innerHTML = '<div class="empty">Buscando…</div>';
+      lista.classList.add("show");
       debounce = setTimeout(async () => {
         try {
           const r = await fetch(`${url}?q=${encodeURIComponent(termo)}`);
           const d = await lerResposta(r);
-          renderSugestoes(lista, d[campo] || [], render, onSelecionar);
+          if (atual !== versao) return;
+          if (!r.ok || !d.sucesso) throw new Error(d.erro || "Falha na busca. Tente novamente.");
+          renderSugestoes(lista, d[campo] || [], render, (item) => {
+            ++versao;
+            onSelecionar(item);
+            ultimoValor = input.value;
+          });
         } catch (e) {
-          lista.innerHTML = '<div class="empty">Falha na busca.</div>';
+          if (atual !== versao) return;
+          lista.innerHTML = '<div class="empty"></div>';
+          lista.firstChild.textContent = e.message || "Falha na busca. Tente novamente.";
           lista.classList.add("show");
         }
       }, 300);
+    }
+    input.addEventListener("input", buscar);
+    input.addEventListener("change", () => {
+      if (input.value !== ultimoValor) buscar();
     });
+    input.addEventListener("focus", () => {
+      if (campo === "materiais" && materialSelecionado) return;
+      if (input.value.trim().length >= 2) buscar();
+    });
+    input.disabled = false;
+    // Inclui valores restaurados pelo navegador antes de registrar os eventos.
+    if (input.value.trim().length >= 2) buscar();
   }
 
   document.addEventListener("click", (e) => {

@@ -113,15 +113,17 @@ def _executar(sql: str, params: dict) -> list[dict[str, Any]]:
     FacilitiesGRVService/compras/db.py.
     """
     cfg = _resolver_config()
+    bridge_error = None
     if cfg.get("api_url"):
         try:
             return _executar_bridge(cfg, sql, params)
-        except Exception:
+        except Exception as exc:
+            bridge_error = exc
             current_app.logger.warning(
                 "solicitacao_nf: bridge indisponivel, tentando Postgres direto", exc_info=True
             )
     if not cfg["host"] or not cfg["database"] or not cfg["user"]:
-        return []
+        raise RuntimeError("Conexão com o ERP indisponível ou não configurada") from bridge_error
     conn = _conectar(cfg)
     try:
         with conn.cursor() as cur:
