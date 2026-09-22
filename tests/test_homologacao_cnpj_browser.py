@@ -55,3 +55,55 @@ def test_homologacao_preenche_dados_ao_digitar_o_cnpj(tmp_path):
             browser.close()
     finally:
         server.shutdown()
+
+
+def test_homologacao_so_fecha_pelos_botoes(tmp_path):
+    """Clicar no fundo escuro fechava a janela e perdia o que foi preenchido
+    (um toque sem querer no tablet). So' Fechar, Salvar e fechar e o X
+    fecham."""
+    from conferencia_app.models import ComprasHomologacaoFornecedor
+
+    app = build_test_app(tmp_path)
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with sync_playwright() as playwright:
+            if not Path(playwright.chromium.executable_path).exists():
+                pytest.skip("Instale o Chromium do Playwright para executar este teste.")
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page()
+            erros_js = []
+            page.on("pageerror", lambda erro: erros_js.append(str(erro)))
+
+            assert page.request.post(f"{base}/login", data={"username": "admin", "password": "admin1234"}).ok
+            page.goto(f"{base}/compras/homologacao")
+            modal = page.locator("#hf-modal")
+            razao = page.locator('#hf-corpo [data-campo="razao_social"]')
+
+            page.get_by_role("button", name="Nova homologação").click()
+            razao.fill("FORNECEDOR TOQUE")
+            # Toque no fundo escuro, fora da janela: continua aberta e com o dado.
+            page.mouse.click(5, 5)
+            expect(modal).to_have_class("hf-modal-backdrop open")
+            expect(razao).to_have_value("FORNECEDOR TOQUE")
+
+            # X fecha.
+            page.locator("#hf-modal-x").click()
+            expect(modal).not_to_have_class("hf-modal-backdrop open")
+
+            # Salvar e fechar: grava e fecha.
+            page.get_by_role("button", name="Nova homologação").click()
+            razao.fill("FORNECEDOR SALVO")
+            page.get_by_role("button", name="Salvar e fechar").click()
+            expect(modal).not_to_have_class("hf-modal-backdrop open")
+            expect(page.locator("#hf-toast")).to_be_visible()
+
+            assert erros_js == []
+            browser.close()
+    finally:
+        server.shutdown()
+
+    with app.app_context():
+        nomes = [h.razao_social for h in ComprasHomologacaoFornecedor.query.all()]
+    assert nomes == ["FORNECEDOR SALVO"]
