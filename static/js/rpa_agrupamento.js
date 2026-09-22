@@ -1,312 +1,78 @@
 (() => {
-  'use strict';
-  const byId = id => document.getElementById(id);
-  const form = byId('rpa-search-form');
-  const body = byId('rpa-results-body');
-  const message = byId('rpa-message');
-  const inputs = {
-    material: byId('rpa-material'), thickness: byId('rpa-thickness'),
-    classification: byId('rpa-classification'), os: byId('rpa-os'),
-    code: byId('rpa-code'), general: byId('rpa-search')
-  };
+  "use strict";
+  const $ = id => document.getElementById(id);
   const PAGE_SIZE = 35;
-  let rows = [];
-  let filtered = [];
-  let selected = new Set();
-  let payload = null;
-  let sourceSearch = '';
-  let page = 0;
-  let busy = false;
-  let validationSequence = 0;
+  const state = {rows:[],filtered:[],selected:new Set(),payload:null,page:0,busy:false,sortKey:"os",sortDirection:"asc",sourceSearch:"",validationSequence:0,groupCollapsed:false};
+  const fields = {material:$("rpa-material"),thickness:$("rpa-thickness"),classification:$("rpa-classification"),os:$("rpa-os"),code:$("rpa-code"),general:$("rpa-search")};
+  const labels = {material:"Material",thickness:"Espessura",classification:"Classificação",os:"OS",code:"Código",general:"Busca"};
   let validationTimer;
 
-  function status(text, error = false) {
-    message.textContent = text;
-    message.classList.toggle('error', error);
+  const plain = value => String(value ?? "").trim();
+  const display = value => value === null || value === undefined || value === "" ? "—" : String(value);
+  const contains = (value, query) => plain(value).toLocaleLowerCase("pt-BR").includes(plain(query).toLocaleLowerCase("pt-BR"));
+  function announce(text, error=false){const node=$("rpa-message");node.textContent=text;node.classList.toggle("error",error)}
+  function selectedRows(){const map=new Map();state.rows.forEach(item=>{if(state.selected.has(item.codigo_processo)&&!map.has(item.codigo_processo))map.set(item.codigo_processo,item)});return [...map.values()]}
+  function resetPayload(){state.payload=null;$("rpa-payload-actions").hidden=true;$("rpa-payload-details").hidden=true;$("rpa-payload").textContent=""}
+  function setValidation(text,kind=""){const node=$("rpa-validation");node.textContent=text;node.classList.toggle("valid",kind==="valid");node.classList.toggle("invalid",kind==="invalid")}
+  function statusFor(item){
+    const raw=plain(item.situacao||item.status_agrupamento).toLocaleLowerCase("pt-BR");
+    if(state.selected.has(item.codigo_processo))return{label:"Selecionado",className:"status-selected"};
+    if(item.processo_finalizado||raw.includes("finaliz"))return{label:"Processo finalizado",className:"status-finished"};
+    if(["CONCLUIDA","CANCELADA","ENCERRADA"].includes(plain(item.status_os).toUpperCase())||raw.includes("encerr"))return{label:"OS encerrada",className:"status-closed"};
+    if(raw.includes("incompat"))return{label:"Incompatível",className:"status-blocked"};
+    if(item.elegivel)return{label:"Compatível",className:"status-eligible"};
+    return{label:"Neutro",className:"status-insufficient"};
   }
-  function text(value) { return value == null || value === '' ? '—' : String(value); }
-  function cell(tr, value) {
-    const td = document.createElement('td');
-    td.textContent = text(value);
-    tr.append(td);
-    return td;
+  function fillOptions(select,values,placeholder){const old=select.value;select.replaceChildren(new Option(placeholder,""));[...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true})).forEach(value=>select.add(new Option(value,value)));if([...select.options].some(option=>option.value===old))select.value=old}
+  function populateOptions(){fillOptions(fields.material,state.rows.map(x=>x.material),"Todos os materiais");fillOptions(fields.thickness,state.rows.map(x=>x.espessura),"Todas");fillOptions(fields.classification,state.rows.map(x=>x.classificacao),"Todas")}
+  function renderActiveFilters(){const target=$("rpa-active-filters");target.replaceChildren();const active=Object.entries(fields).filter(([,node])=>node.value);if(!active.length){const span=document.createElement("span");span.className="active-filters-label";span.textContent="Nenhum filtro aplicado";target.append(span);return}active.forEach(([key,node])=>{const chip=document.createElement("span");chip.className="filter-chip";chip.append(`${labels[key]}: ${node.value} `);const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label",`Remover filtro ${labels[key]}`);remove.addEventListener("click",()=>{node.value="";applyFilters()});chip.append(remove);target.append(chip)})}
+  function applyFilters(){
+    const f=Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value.trim()]));
+    state.filtered=state.rows.filter(item=>(!f.material||item.material===f.material)&&(!f.thickness||item.espessura===f.thickness)&&(!f.classification||item.classificacao===f.classification)&&(!f.os||contains(item.os,f.os)||contains(item.os_completa,f.os))&&(!f.code||contains(item.codigo_processo,f.code))&&(!f.general||[item.os,item.os_completa,item.codigo_processo,item.classificacao,item.descricao,item.material,item.norma,item.espessura,item.cliente].some(v=>contains(v,f.general))));
+    state.page=0;renderActiveFilters();renderResults();
   }
-  function button(label, className, handler) {
-    const node = document.createElement('button');
-    node.type = 'button';
-    node.className = className;
-    node.textContent = label;
-    node.addEventListener('click', handler);
-    return node;
+  function sortedRows(){return [...state.filtered].sort((a,b)=>{const left=plain(a[state.sortKey]);const right=plain(b[state.sortKey]);const value=left.localeCompare(right,"pt-BR",{numeric:true,sensitivity:"base"});return state.sortDirection==="asc"?value:-value})}
+  function setBusy(value){state.busy=value;$("rpa-loading").hidden=!value;$("rpa-table-wrapper").hidden=value;$("rpa-mobile-results").hidden=value;$("rpa-refresh").disabled=value;$("rpa-apply").disabled=value;$("rpa-clear").disabled=value;$("rpa-clear-link").disabled=value;$("rpa-filters-section").classList.toggle("is-loading",value);$("rpa-refresh").classList.toggle("is-loading",value)}
+  function createCell(tr,value,className=""){const td=document.createElement("td");td.textContent=display(value);if(className)td.className=className;if(plain(value))td.title=plain(value);tr.append(td);return td}
+  function toggle(code,checked){if(checked)state.selected.add(code);else state.selected.delete(code);selectionChanged()}
+  function detailButton(item){const button=document.createElement("button");button.type="button";button.className="detail-button";button.textContent="Ver detalhes";button.addEventListener("click",event=>{event.stopPropagation();openDetails(item)});return button}
+  function renderRow(item,index){
+    const tr=document.createElement("tr");const status=statusFor(item);tr.className=`${item.elegivel?"eligible-row":""} ${state.selected.has(item.codigo_processo)?"selected":""} ${item.elegivel?"":"blocked"}`.trim();tr.style.setProperty("--enter-index",String(index));
+    const first=document.createElement("td");const checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.disabled=!item.elegivel;checkbox.checked=state.selected.has(item.codigo_processo);checkbox.setAttribute("aria-label",`Selecionar processo ${item.codigo_processo}`);checkbox.addEventListener("change",()=>toggle(item.codigo_processo,checkbox.checked));first.append(checkbox);tr.append(first);
+    createCell(tr,item.os,"os-cell");createCell(tr,item.os_completa);createCell(tr,item.codigo_processo,"process-code");const classification=createCell(tr,"");const tag=document.createElement("span");tag.className="classification-tag";tag.textContent=display(item.classificacao);classification.append(tag);createCell(tr,item.descricao);const material=createCell(tr,"");material.className="material-cell";const strong=document.createElement("strong");strong.textContent=display(item.material);material.append(strong);createCell(tr,item.espessura);createCell(tr,item.norma);createCell(tr,item.quantidade_formato);const statusCell=createCell(tr,"");const badge=document.createElement("span");badge.className=`process-status-badge ${status.className}`;badge.textContent=status.label;statusCell.append(badge);const action=createCell(tr,"");action.append(detailButton(item));
+    tr.addEventListener("click",event=>{if(!item.elegivel||event.target.closest("button,input"))return;toggle(item.codigo_processo,!state.selected.has(item.codigo_processo))});return tr;
   }
-  function selectedRows() {
-    const unique = new Map();
-    rows.forEach(item => { if (selected.has(item.codigo_processo) && !unique.has(item.codigo_processo)) unique.set(item.codigo_processo, item); });
-    return [...unique.values()];
+  function renderCard(item,index){const status=statusFor(item);const card=document.createElement("article");card.className=`process-card ${state.selected.has(item.codigo_processo)?"selected":""}`;card.style.setProperty("--enter-index",String(index));const head=document.createElement("div");head.className="process-card-header";const checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.disabled=!item.elegivel;checkbox.checked=state.selected.has(item.codigo_processo);checkbox.addEventListener("change",()=>toggle(item.codigo_processo,checkbox.checked));const title=document.createElement("div");title.className="process-card-title";const strong=document.createElement("strong");strong.textContent=`Processo ${item.codigo_processo}`;const sub=document.createElement("span");sub.textContent=`OS ${item.os_completa} · ${display(item.classificacao)}`;title.append(strong,sub);head.append(checkbox,title);const body=document.createElement("div");body.className="process-card-body";[["Material",item.material],["Cliente",item.cliente],["Descrição",item.descricao]].forEach(([label,value])=>{const span=document.createElement("span");span.append(label);const valueNode=document.createElement("strong");valueNode.textContent=display(value);span.append(valueNode);body.append(span)});const foot=document.createElement("div");foot.className="process-card-footer";const badge=document.createElement("span");badge.className=`process-status-badge ${status.className}`;badge.textContent=status.label;foot.append(badge,detailButton(item));card.append(head,body,foot);return card}
+  function renderResults(){
+    const sorted=sortedRows();const totalPages=Math.ceil(sorted.length/PAGE_SIZE);if(state.page>=totalPages)state.page=Math.max(0,totalPages-1);const pageRows=sorted.slice(state.page*PAGE_SIZE,(state.page+1)*PAGE_SIZE);const tbody=$("rpa-results-body");const mobile=$("rpa-mobile-results");tbody.replaceChildren();mobile.replaceChildren();pageRows.forEach((item,index)=>{tbody.append(renderRow(item,index));mobile.append(renderCard(item,index))});
+    $("rpa-count").textContent=`${state.rows.length} processo(s) encontrado(s)`;$("rpa-table-count").textContent=`${state.filtered.length} processo(s)`;$("rpa-empty").hidden=state.busy||state.filtered.length>0;$("rpa-table-wrapper").hidden=state.busy||state.filtered.length===0;$("rpa-mobile-results").hidden=state.busy||state.filtered.length===0;
+    const eligible=pageRows.filter(x=>x.elegivel);const all=$("rpa-select-all");all.disabled=!eligible.length;all.checked=eligible.length>0&&eligible.every(x=>state.selected.has(x.codigo_processo));all.indeterminate=!all.checked&&eligible.some(x=>state.selected.has(x.codigo_processo));
+    $("rpa-pagination").hidden=totalPages<=1;$("rpa-page-status").textContent=`Mostrando ${state.page*PAGE_SIZE+1}–${Math.min((state.page+1)*PAGE_SIZE,sorted.length)} de ${sorted.length}`;$("rpa-prev").disabled=state.page===0;$("rpa-next").disabled=state.page>=totalPages-1;
   }
-  function resetPayload() {
-    payload = null;
-    byId('rpa-payload-actions').hidden = true;
-    byId('rpa-payload-details').hidden = true;
-    byId('rpa-payload').textContent = '';
+  function renderGroup(){
+    const items=selectedRows();$("rpa-group-empty").hidden=items.length>0;$("rpa-group-content").hidden=!items.length;$("rpa-group-count").textContent=String(items.length);const list=$("rpa-selected-list");list.replaceChildren();items.forEach(item=>{const card=document.createElement("div");card.className="selected-process";const head=document.createElement("div");head.className="selected-process-head";const title=document.createElement("strong");title.textContent=`Processo ${item.codigo_processo}`;const remove=document.createElement("button");remove.type="button";remove.textContent="Remover";remove.addEventListener("click",()=>toggle(item.codigo_processo,false));head.append(title,remove);const detail=document.createElement("small");detail.textContent=`OS ${item.os_completa} · ${item.material} · ${display(item.espessura)} · Qtde ${display(item.quantidade_formato)}`;card.append(head,detail);list.append(card)});
+    const first=items[0]||{};$("rpa-summary-material").textContent=display(first.material);$("rpa-summary-thickness").textContent=display(first.espessura);$("rpa-summary-norm").textContent=display(first.norma);$("rpa-summary-os").textContent=items.length?[...new Set(items.map(x=>x.os_completa))].join(", "):"—";$("rpa-summary-codes").textContent=items.length?items.map(x=>x.codigo_processo).join(", "):"—";$("rpa-summary-count").textContent=String(items.length);$("rpa-summary-quantity").textContent=String(items.reduce((sum,x)=>sum+(Number(x.quantidade_formato)||0),0));
   }
-  function renderGroup() {
-    const items = selectedRows();
-    byId('rpa-selected-count').textContent = `${items.length} selecionado${items.length === 1 ? '' : 's'}`;
-    byId('rpa-group-count').textContent = String(items.length);
-    byId('rpa-group-empty').hidden = Boolean(items.length);
-    byId('rpa-group-content').hidden = !items.length;
-    byId('rpa-clear-selection').disabled = !items.length;
-    const list = byId('rpa-selected-list');
-    list.replaceChildren();
-    items.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'rpa-selected-item';
-      const top = document.createElement('div');
-      top.className = 'rpa-selected-item__top';
-      const title = document.createElement('strong');
-      title.textContent = `Processo ${item.codigo_processo}`;
-      const remove = button('Remover', 'eui-btn eui-btn--subtle eui-btn--sm', () => {
-        selected.delete(item.codigo_processo);
-        selectionChanged();
-      });
-      remove.setAttribute('aria-label', `Remover processo ${item.codigo_processo} da seleção`);
-      top.append(title, remove);
-      const meta = document.createElement('small');
-      meta.textContent = `OS ${item.os_completa} · ${item.material} · ${text(item.espessura)} · Qtde ${text(item.quantidade_formato)}`;
-      card.append(top, meta);
-      list.append(card);
-    });
+  async function requestPayload(codes){const response=await fetch("/api/producao/rpa-agrupamento/payload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({busca:state.sourceSearch,codigos:codes})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Não foi possível validar o agrupamento.");return data.payload}
+  function validateSelection(){clearTimeout(validationTimer);const sequence=++state.validationSequence;const codes=[...state.selected];$("rpa-prepare").disabled=true;if(codes.length<2){setValidation("Selecione pelo menos dois processos.");return}setValidation("Validando processos...");validationTimer=setTimeout(async()=>{try{const payload=await requestPayload(codes);if(sequence!==state.validationSequence)return;setValidation(`Agrupamento válido: ${payload.quantidade_itens} códigos compatíveis.`,"valid");$("rpa-prepare").disabled=false}catch(error){if(sequence!==state.validationSequence)return;setValidation(error.message||"Processos incompatíveis.","invalid")}},300)}
+  function selectionChanged(){resetPayload();renderGroup();renderResults();validateSelection()}
+  function detail(label,value,full=false){const item=document.createElement("div");item.className=`detail-item ${full?"full":""}`;const key=document.createElement("span");key.textContent=label;const data=document.createElement("strong");data.textContent=display(value);item.append(key,data);return item}
+  function openDetails(item){$("rpa-details-title").textContent=`Processo ${item.codigo_processo}`;const target=$("rpa-details-content");target.replaceChildren();[["Nº OS",item.os],["OS completa",item.os_completa],["Código do processo",item.codigo_processo],["Classificação",item.classificacao],["Descrição",item.descricao],["Material",item.material],["Espessura",item.espessura],["Norma",item.norma],["Quantidade/Formato",item.quantidade_formato],["Cliente",item.cliente],["Situação",statusFor(item).label],["Tipo de serviço",item.tipo_servico],["Dimensões",[item.largura_mm,item.altura_mm,item.comprimento_mm].filter(Boolean).join(" × ")],["Observação",item.observacao,true]].forEach(([label,value,full])=>target.append(detail(label,value,full)));$("rpa-details-modal").showModal()}
+  async function consult(){
+    if(state.busy)return;setBusy(true);announce("Buscando processos...");state.selected.clear();selectionChanged();const query=fields.os.value.trim()||fields.code.value.trim()||fields.general.value.trim();state.sourceSearch=query;
+    try{const response=await fetch(`/api/producao/rpa-agrupamento?q=${encodeURIComponent(query)}`);const data=await response.json();if(!response.ok)throw new Error(data.error||"Não foi possível consultar os processos.");state.rows=data.resultados||[];populateOptions();applyFilters();announce(`${state.rows.length} processo(s) carregado(s). A consulta mostra até 500 registros.`)}catch(error){state.rows=[];state.filtered=[];renderResults();announce(error.message||"Falha na consulta.",true)}finally{setBusy(false);renderResults()}
   }
-  function validation(textValue, state = '') {
-    const node = byId('rpa-validation');
-    node.textContent = textValue;
-    node.classList.toggle('valid', state === 'valid');
-    node.classList.toggle('invalid', state === 'invalid');
-  }
-  async function requestPayload(codes) {
-    const response = await fetch('/api/producao/rpa-agrupamento/payload', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({busca: sourceSearch, codigos: codes})
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Não foi possível validar o agrupamento.');
-    return data.payload;
-  }
-  function validateSelection() {
-    clearTimeout(validationTimer);
-    const sequence = ++validationSequence;
-    const codes = [...selected];
-    byId('rpa-prepare').disabled = true;
-    if (codes.length < 2) {
-      validation('Selecione pelo menos dois processos.');
-      return;
-    }
-    validation('Validando processos...');
-    validationTimer = setTimeout(async () => {
-      try {
-        const result = await requestPayload(codes);
-        if (sequence !== validationSequence) return;
-        validation(`Agrupamento válido: ${result.quantidade_itens} códigos compatíveis.`, 'valid');
-        byId('rpa-prepare').disabled = false;
-      } catch (error) {
-        if (sequence !== validationSequence) return;
-        validation(error.message || 'Processos incompatíveis.', 'invalid');
-      }
-    }, 300);
-  }
-  function selectionChanged() {
-    resetPayload();
-    renderGroup();
-    renderTable();
-    validateSelection();
-  }
-  function options(select, values, placeholder) {
-    const previous = select.value;
-    select.replaceChildren(new Option(placeholder, ''));
-    [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', {numeric:true})).forEach(value => select.add(new Option(value, value)));
-    if ([...select.options].some(option => option.value === previous)) select.value = previous;
-  }
-  function populateFilters() {
-    options(inputs.material, rows.map(item => item.material), 'Todos os materiais');
-    options(inputs.thickness, rows.map(item => item.espessura), 'Todas as espessuras');
-    options(inputs.classification, rows.map(item => item.classificacao), 'Todas as classificações');
-  }
-  function includes(value, query) { return String(value || '').toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR')); }
-  function applyLocalFilters() {
-    const material = inputs.material.value;
-    const thickness = inputs.thickness.value;
-    const classification = inputs.classification.value;
-    const os = inputs.os.value.trim();
-    const code = inputs.code.value.trim();
-    const general = inputs.general.value.trim();
-    filtered = rows.filter(item =>
-      (!material || item.material === material) &&
-      (!thickness || item.espessura === thickness) &&
-      (!classification || item.classificacao === classification) &&
-      (!os || includes(item.os, os) || includes(item.os_completa, os)) &&
-      (!code || includes(item.codigo_processo, code)) &&
-      (!general || [item.os, item.os_completa, item.codigo_processo, item.classificacao,
-        item.descricao, item.material, item.norma, item.espessura, item.cliente].some(value => includes(value, general)))
-    );
-    page = 0;
-    renderTable();
-  }
-  function stateRow(label) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 12;
-    td.className = 'rpa-state';
-    td.textContent = label;
-    tr.append(td);
-    body.replaceChildren(tr);
-  }
-  function details(item) {
-    const values = [
-      ['Nº OS', item.os], ['OS completa', item.os_completa], ['Código do processo', item.codigo_processo],
-      ['Classificação', item.classificacao], ['Descrição', item.descricao], ['Material', item.material],
-      ['Norma', item.norma], ['Espessura', item.espessura], ['Quantidade/Formato', item.quantidade_formato],
-      ['Cliente', item.cliente], ['Observação', item.observacao], ['Status', item.status_os],
-      ['Tipo de serviço', item.tipo_servico], ['Elegibilidade', item.elegivel ? 'Elegível' : 'Não elegível'],
-      ['Largura (mm)', item.largura_mm], ['Altura (mm)', item.altura_mm], ['Comprimento (mm)', item.comprimento_mm]
-    ];
-    byId('rpa-details-title').textContent = `Processo ${item.codigo_processo}`;
-    const content = byId('rpa-details-content');
-    content.replaceChildren();
-    values.forEach(([label, value]) => {
-      const wrapper = document.createElement('div');
-      const term = document.createElement('dt'); term.textContent = label;
-      const description = document.createElement('dd'); description.textContent = text(value);
-      wrapper.append(term, description); content.append(wrapper);
-    });
-    bootstrap.Modal.getOrCreateInstance(byId('rpa-details-modal')).show();
-  }
-  function renderTable() {
-    const visible = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-    byId('rpa-count').textContent = `${rows.length} processos encontrados`;
-    byId('rpa-result-count').textContent = `${filtered.length} processo${filtered.length === 1 ? '' : 's'} nos filtros`;
-    if (busy) stateRow('Buscando processos...');
-    else if (!filtered.length) stateRow('Nenhum processo encontrado para os filtros informados.');
-    else {
-      body.replaceChildren();
-      visible.forEach(item => {
-        const tr = document.createElement('tr');
-        tr.classList.toggle('is-selected', selected.has(item.codigo_processo));
-        const selection = document.createElement('td');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.disabled = !item.elegivel;
-        checkbox.checked = selected.has(item.codigo_processo);
-        checkbox.setAttribute('aria-label', `Selecionar processo ${item.codigo_processo} da OS ${item.os_completa}`);
-        checkbox.addEventListener('change', () => {
-          if (checkbox.checked) selected.add(item.codigo_processo);
-          else selected.delete(item.codigo_processo);
-          selectionChanged();
-        });
-        selection.append(checkbox); tr.append(selection);
-        [item.os, item.os_completa, item.codigo_processo, item.classificacao, item.descricao,
-          item.material, item.espessura, item.norma, item.quantidade_formato].forEach(value => cell(tr, value));
-        const situation = document.createElement('td');
-        const badge = document.createElement('span');
-        badge.className = `eui-badge eui-badge--${selected.has(item.codigo_processo) ? 'primary' : item.elegivel ? 'success' : 'neutral'}`;
-        badge.textContent = selected.has(item.codigo_processo) ? 'Selecionado' : item.elegivel ? 'Compatível' : 'Neutro';
-        situation.append(badge); tr.append(situation);
-        const action = document.createElement('td');
-        action.append(button('Ver detalhes', 'eui-btn eui-btn--ghost eui-btn--sm rpa-detail-button', () => details(item)));
-        tr.append(action); body.append(tr);
-      });
-    }
-    const all = byId('rpa-select-all');
-    const eligible = visible.filter(item => item.elegivel);
-    all.disabled = busy || eligible.length === 0;
-    all.checked = eligible.length > 0 && eligible.every(item => selected.has(item.codigo_processo));
-    all.indeterminate = !all.checked && eligible.some(item => selected.has(item.codigo_processo));
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-    byId('rpa-pagination').hidden = totalPages <= 1;
-    byId('rpa-page-status').textContent = `Página ${page + 1} de ${totalPages}`;
-    byId('rpa-prev').disabled = page === 0;
-    byId('rpa-next').disabled = page >= totalPages - 1;
-  }
-  async function consult() {
-    if (busy) return;
-    busy = true;
-    byId('rpa-refresh').disabled = true;
-    byId('rpa-apply').disabled = true;
-    byId('rpa-clear').disabled = true;
-    byId('rpa-clear-link').disabled = true;
-    const query = inputs.os.value.trim() || inputs.code.value.trim() || inputs.general.value.trim();
-    sourceSearch = query;
-    selected = new Set();
-    selectionChanged();
-    status('Buscando processos...');
-    renderTable();
-    try {
-      const response = await fetch(`/api/producao/rpa-agrupamento?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível consultar os processos.');
-      rows = data.resultados || [];
-      populateFilters();
-      applyLocalFilters();
-      status(`${rows.length} processos carregados. A consulta mostra até 500 registros.`);
-    } catch (error) {
-      rows = []; filtered = [];
-      renderTable();
-      status(error.message || 'Falha na consulta.', true);
-    } finally {
-      busy = false;
-      byId('rpa-refresh').disabled = false;
-      byId('rpa-apply').disabled = false;
-      byId('rpa-clear').disabled = false;
-      byId('rpa-clear-link').disabled = false;
-      renderTable();
-    }
-  }
-  function clearFilters() {
-    Object.values(inputs).forEach(input => { input.value = ''; });
-    consult();
-  }
-  form.addEventListener('submit', event => { event.preventDefault(); consult(); });
-  byId('rpa-clear').addEventListener('click', clearFilters);
-  byId('rpa-clear-link').addEventListener('click', clearFilters);
-  byId('rpa-refresh').addEventListener('click', consult);
-  byId('rpa-select-all').addEventListener('change', event => {
-    filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).filter(item => item.elegivel).forEach(item => {
-      if (event.target.checked) selected.add(item.codigo_processo);
-      else selected.delete(item.codigo_processo);
-    });
-    selectionChanged();
-  });
-  byId('rpa-clear-selection').addEventListener('click', () => { selected.clear(); selectionChanged(); });
-  byId('rpa-prev').addEventListener('click', () => { page--; renderTable(); });
-  byId('rpa-next').addEventListener('click', () => { page++; renderTable(); });
-  byId('rpa-prepare').addEventListener('click', async () => {
-    const prepare = byId('rpa-prepare');
-    const sequence = validationSequence;
-    const codes = [...selected];
-    prepare.disabled = true;
-    validation('Atualizando validação...');
-    try {
-      const result = await requestPayload(codes);
-      if (sequence !== validationSequence) return;
-      payload = result;
-      byId('rpa-payload').textContent = JSON.stringify(payload, null, 2);
-      byId('rpa-payload-actions').hidden = false;
-      byId('rpa-payload-details').hidden = false;
-      validation(`Agrupamento válido: ${payload.quantidade_itens} códigos preparados.`, 'valid');
-    } catch (error) { if (sequence === validationSequence) { resetPayload(); validation(error.message || 'Falha ao preparar agrupamento.', 'invalid'); } }
-    finally { if (sequence === validationSequence) prepare.disabled = !payload; }
-  });
-  byId('rpa-copy').addEventListener('click', async () => {
-    if (!payload) return;
-    try { await navigator.clipboard.writeText(payload.codigos_destacados_para_agrupamento.join(', ')); status('Códigos copiados.'); }
-    catch (_) { status('Não foi possível copiar os códigos.', true); }
-  });
-  byId('rpa-export').addEventListener('click', () => {
-    if (!payload) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
-    const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = 'rpa-agrupamento.json'; anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+  function clearFilters(){Object.values(fields).forEach(node=>node.value="");consult()}
+  function closeDetails(){const modal=$("rpa-details-modal");if(modal.open)modal.close()}
+
+  $("rpa-search-form").addEventListener("submit",event=>{event.preventDefault();consult()});$("rpa-clear").addEventListener("click",clearFilters);$("rpa-clear-link").addEventListener("click",clearFilters);$("rpa-refresh").addEventListener("click",consult);
+  $("rpa-select-all").addEventListener("change",event=>{sortedRows().slice(state.page*PAGE_SIZE,(state.page+1)*PAGE_SIZE).filter(x=>x.elegivel).forEach(item=>{if(event.target.checked)state.selected.add(item.codigo_processo);else state.selected.delete(item.codigo_processo)});selectionChanged()});
+  $("rpa-clear-selection").addEventListener("click",()=>{state.selected.clear();selectionChanged()});$("rpa-prev").addEventListener("click",()=>{state.page--;renderResults()});$("rpa-next").addEventListener("click",()=>{state.page++;renderResults()});
+  $("rpa-group-toggle").addEventListener("click",()=>{state.groupCollapsed=!state.groupCollapsed;$("rpa-workspace").classList.toggle("group-collapsed",state.groupCollapsed);$("rpa-group-panel").classList.toggle("is-collapsed",state.groupCollapsed);$("rpa-group-toggle").textContent=state.groupCollapsed?"‹":"⌄";$("rpa-group-toggle").setAttribute("aria-expanded",String(!state.groupCollapsed));$("rpa-group-toggle").setAttribute("aria-label",state.groupCollapsed?"Expandir painel":"Recolher painel")});
+  document.querySelectorAll(".rpa-grouping-page .sort-button").forEach(button=>button.addEventListener("click",()=>{const key=button.dataset.sort;if(state.sortKey===key)state.sortDirection=state.sortDirection==="asc"?"desc":"asc";else{state.sortKey=key;state.sortDirection="asc"}document.querySelectorAll(".rpa-grouping-page .sort-button").forEach(x=>x.classList.toggle("is-active",x===button));state.page=0;renderResults()}));
+  $("rpa-prepare").addEventListener("click",async()=>{const sequence=state.validationSequence;const codes=[...state.selected];$("rpa-prepare").disabled=true;setValidation("Atualizando validação...");try{const payload=await requestPayload(codes);if(sequence!==state.validationSequence)return;state.payload=payload;$("rpa-payload").textContent=JSON.stringify(payload,null,2);$("rpa-payload-actions").hidden=false;$("rpa-payload-details").hidden=false;setValidation(`Agrupamento válido: ${payload.quantidade_itens} códigos preparados.`,"valid")}catch(error){if(sequence===state.validationSequence){resetPayload();setValidation(error.message||"Falha ao preparar agrupamento.","invalid")}}finally{if(sequence===state.validationSequence)$("rpa-prepare").disabled=!state.payload}});
+  $("rpa-copy").addEventListener("click",async()=>{if(!state.payload)return;try{await navigator.clipboard.writeText(state.payload.codigos_destacados_para_agrupamento.join("\r\n"));announce("Códigos copiados, um por linha.")}catch{announce("Não foi possível copiar os códigos.",true)}});
+  $("rpa-export").addEventListener("click",()=>{if(!state.payload)return;const url=URL.createObjectURL(new Blob([JSON.stringify(state.payload,null,2)],{type:"application/json"}));const anchor=document.createElement("a");anchor.href=url;anchor.download="rpa-agrupamento.json";anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
+  document.querySelectorAll("#rpa-details-modal [data-close]").forEach(button=>button.addEventListener("click",closeDetails));$("rpa-details-modal").addEventListener("click",event=>{if(event.target===$("rpa-details-modal"))closeDetails()});document.addEventListener("keydown",event=>{if(event.key==="Escape")closeDetails();if(event.key==="/"&&!event.target.matches("input,select,textarea")){event.preventDefault();fields.general.focus()}});
   consult();
 })();
