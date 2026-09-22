@@ -101,6 +101,26 @@ def test_busca_selecao_erro_e_resposta_atrasada_no_navegador(app):
             expect(results).to_contain_text('ERP indisponível')
             page.evaluate('window.adicionarItem()')
             expect(page.locator('#feedback')).to_contain_text('Selecione um material')
+            # Valor preenchido/restaurado antes da inicialização do JavaScript.
+            html = app.test_client().get('/solicitacao-nf').get_data(as_text=True)
+            html = html.replace('id="buscaMaterial"', 'id="buscaMaterial" value="000123"')
+            page.route('**/solicitacao-nf', lambda route: route.fulfill(
+                status=200, content_type='text/html', body=html))
+            page.route('**/api/solicitacao-nf/materiais?*', lambda route: route.fulfill(
+                json={'sucesso': True, 'materiais': [
+                    {'codigo_interno': '000123', 'nome': 'BOMBA', 'estoque_disponivel_uso': 5}]}))
+            page.reload()
+            expect(field).to_be_enabled()
+            expect(results).to_contain_text('000123')
+            page.locator('#txtQuantidade').click()
+            expect(results).not_to_be_visible()
+            field.focus()
+            expect(results).to_be_visible()
+            expect(results).to_contain_text('000123')
+            results.locator('.item').click()
+            page.locator('#txtQuantidade').fill('2')
+            page.evaluate('window.adicionarItem()')
+            expect(page.locator('#listaItens')).to_contain_text('000123 - BOMBA')
             browser.close()
     finally:
         server.shutdown()

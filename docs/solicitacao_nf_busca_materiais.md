@@ -16,6 +16,11 @@ A tela também descarta respostas de buscas anteriores e limpa a seleção ao
 editar o campo, evitando adicionar um código que já não corresponde ao texto.
 O tratamento de falhas se aplica à busca de clientes, que usa a mesma conexão.
 
+O campo de material fica desabilitado até a busca estar inicializada. Valores
+preenchidos antes dessa inicialização também disparam a consulta. Ao voltar
+ao campo com um termo digitado, as sugestões são consultadas novamente;
+um material já selecionado permanece selecionado.
+
 ## Conferência em produção
 
 Não houve alteração de SQL, banco de dados ou configuração da integração.
