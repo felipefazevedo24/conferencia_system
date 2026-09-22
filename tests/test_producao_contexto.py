@@ -141,6 +141,49 @@ def test_estrutura_caminho_quantidades_e_predecessoras(api):
     assert detail["predecessors"][0]["code"] == "9958/002"
 
 
+def test_estrutura_grv_preserva_raiz_e_todos_os_niveis_9961(api):
+    # O exemplo reproduz as chaves estruturais do GRV; não é dado de produção.
+    links = [(1, None), (2, 1), (4, 1), (5, 1), (6, 1), (7, 1),
+             (8, 2), (9, 8), (10, 9)]
+    items = [dict(aux_code=code, cod_os_completo=f"9961/{code:03}",
+                  subtitulo=f"Item {code}", qtde_pecas=1, os_pai=parent,
+                  status="EM PRODUÇÃO") for code, parent in links]
+    data = service._estrutura_payload(order("9961"), items, [])
+    structure = api[1]._original_structure(data)
+    by_code = {node["code"]: node for node in structure["nodes"]}
+    assert structure["roots"] == ["1"]
+    assert by_code["9961/001"]["parent_id"] is None
+    assert by_code["9961/001"]["child_ids"] == ["2", "4", "5", "6", "7"]
+    assert by_code["9961/010"]["path_ids"] == ["1", "2", "8", "9", "10"]
+    assert len(structure["nodes"]) == len(items)
+
+
+def test_estrutura_nao_deduz_raiz_pelo_sufixo_e_registra_anomalias():
+    items = [dict(aux_code=5, cod_os_completo="100/005", os_pai=None),
+             dict(aux_code=1, cod_os_completo="100/001", os_pai=5),
+             dict(aux_code=8, cod_os_completo="100/008", os_pai=999),
+             dict(aux_code=9, cod_os_completo="100/009", os_pai=9),
+             dict(aux_code=10, cod_os_completo="100/010", os_pai=11),
+             dict(aux_code=11, cod_os_completo="100/011", os_pai=10)]
+    data = service._estrutura_payload(order("100"), items, [])
+    assert "5" in data["raizes"]
+    assert next(node for node in data["nos"] if node["id"] == "1")["parent_id"] == "5"
+    assert len(data["nos"]) == len(items)
+    assert any("ausente" in warning for warning in data["avisos_estrutura"])
+    assert any("si mesmo" in warning for warning in data["avisos_estrutura"])
+    assert any("Ciclo" in warning for warning in data["avisos_estrutura"])
+
+
+def test_estrutura_profunda_sem_recursao_python():
+    items = [dict(aux_code=code, cod_os_completo=f"OS/{code}",
+                  os_pai=code - 1 if code > 1 else None)
+             for code in range(1, 1201)]
+    data = service._estrutura_payload(order("100"), items, [])
+    assert data["raizes"] == ["1"]
+    assert data["nos"][-1]["parent_id"] == "1199"
+    assert len(data["nos"]) == 1200
+
+
 def test_status_sem_operacoes_usa_o_item_correto_na_recursao():
     items = pieces()
     items[0]["status"] = "APROVADO"

@@ -295,6 +295,10 @@ def _carregar_estrutura(numero_os):
     )
     rncs_job = _STRUCTURE_EXECUTOR.submit(_run_with_app, app, _rncs, ordem["codigo"])
     payload = _estrutura_payload(ordem, items_job.result(), operations_job.result())
+    if payload.get("avisos_estrutura") and has_app_context():
+        current_app.logger.warning(
+            "Estrutura GRV da OS %s: %s", numero_os, "; ".join(payload["avisos_estrutura"])
+        )
     payload["rncs"] = rncs_job.result()
     return payload
 
@@ -1347,31 +1351,65 @@ def _os_payload(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], operacoes: list[dict[str, Any]]) -> dict[str, Any]:
-    filhos: dict[int, list[int]] = defaultdict(list)
-    itens_por_id = {int(item["aux_code"]): item for item in itens}
+    # os_pai e a chave estrutural do GRV. A consulta ja traz todos os itens da
+    # OS; normalizamos a floresta uma vez, sem inferir parentesco pelo codigo.
+    itens_por_id: dict[int, dict[str, Any]] = {}
+    warnings: list[str] = []
     for item in itens:
-        parent = item.get("os_pai")
-        if parent is not None and int(parent) in itens_por_id:
-            filhos[int(parent)].append(int(item["aux_code"]))
-    roots = [item_id for item_id, item in itens_por_id.items() if item.get("os_pai") is None or int(item.get("os_pai") or 0) not in itens_por_id]
+        item_id = int(item["aux_code"])
+        if item_id in itens_por_id:
+            warnings.append(f"Item estrutural duplicado: {item_id}")
+            continue
+        itens_por_id[item_id] = item
+
+    parent_by_id: dict[int, int | None] = {}
+    for item_id, item in itens_por_id.items():
+        raw_parent = item.get("os_pai")
+        try:
+            parent = int(raw_parent) if raw_parent not in (None, "", 0, "0") else None
+        except (TypeError, ValueError):
+            warnings.append(f"Pai inválido do item {item_id}: {raw_parent}")
+            parent = None
+        if parent == item_id:
+            warnings.append(f"Item {item_id} aponta para si mesmo em os_pai")
+            parent = None
+        elif parent is not None and parent not in itens_por_id:
+            warnings.append(f"Pai {parent} do item {item_id} ausente na OS")
+            parent = None
+        parent_by_id[item_id] = parent
+
+    resolved: set[int] = set()
+    for item_id in itens_por_id:
+        chain: list[int] = []
+        seen: set[int] = set()
+        current: int | None = item_id
+        while current is not None and current not in resolved:
+            if current in seen:
+                warnings.append(f"Ciclo estrutural em os_pai envolvendo o item {current}")
+                parent_by_id[current] = None
+                break
+            seen.add(current)
+            chain.append(current)
+            current = parent_by_id[current]
+        resolved.update(chain)
+
+    filhos: dict[int, list[int]] = defaultdict(list)
+    for item_id, parent in parent_by_id.items():
+        if parent is not None:
+            filhos[parent].append(item_id)
+    roots = [item_id for item_id, parent in parent_by_id.items() if parent is None]
+    if len(roots) > 1:
+        warnings.append(f"OS com {len(roots)} raízes estruturais independentes")
     ops_por_item: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for operation in operacoes:
         ops_por_item[int(operation["cod_os_aux"])].append(operation)
 
     states: dict[int, str] = {}
-    visiting: set[int] = set()
-
     def derive(item_id: int) -> str:
-        if item_id in states:
-            return states[item_id]
-        if item_id in visiting:
-            states[item_id] = "bloqueado"
-            return states[item_id]
-        visiting.add(item_id)
         item = itens_por_id[item_id]
         item_ops = ops_por_item.get(item_id, [])
         finished = sum(bool(op.get("finalizado") or op.get("concluido") or op.get("dt_finalizacao")) for op in item_ops)
-        children = [derive(child_id) for child_id in filhos.get(item_id, [])]
+        children = [states[child_id] for child_id in filhos.get(item_id, [])]
         assembly_ops = [op for op in item_ops if "MONTAGEM" in re.sub(r"[^\w]+", " ", _texto(op.get("tiposervico")).upper()).split()]
         productive_ops = [op for op in item_ops if op not in assembly_ops]
         has_assembly = bool(assembly_ops)
@@ -1400,15 +1438,24 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
             state = "nao_iniciado"
         else:
             state = "nao_iniciado"
-        visiting.remove(item_id)
         states[item_id] = state
         return state
 
+    # Pós-ordem iterativa: suporta estruturas profundas sem estourar a pilha.
+    stack = [(root_id, False) for root_id in reversed(roots)]
+    while stack:
+        item_id, ready = stack.pop()
+        if ready:
+            derive(item_id)
+            continue
+        stack.append((item_id, True))
+        stack.extend((child_id, False) for child_id in reversed(filhos.get(item_id, [])))
+
     nodes = []
     for item_id, item in itens_por_id.items():
-        state = derive(item_id)
+        state = states[item_id]
         item_operations = ops_por_item.get(item_id, [])
-        parent_id = item.get("os_pai") if item.get("os_pai") in itens_por_id else None
+        parent_id = parent_by_id[item_id]
         nodes.append({
             "id": str(item_id),
             "aux_code": item_id,
@@ -1441,6 +1488,7 @@ def _estrutura_payload(ordem: dict[str, Any], itens: list[dict[str, Any]], opera
         "operacoes_concluidas": concluidas,
         "operacoes_total": total,
         "bloqueados": sum(state == "bloqueado" for state in states.values()),
+        "avisos_estrutura": warnings,
     }
 
 

@@ -7,7 +7,7 @@
         tab: 'estrutura', month: now.getMonth() + 1, year: now.getFullYear(),
         classification: '', search: '', deliveries: [], classes: [],
         openBudget: null, loading: false, loaded: false, classesLoaded: false,
-        error: '', request: 0
+        error: '', request: 0, scrollTop: 0
     };
     const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -71,6 +71,7 @@
 
     async function loadDeliveries() {
         const requestId = ++state.request;
+        state.scrollTop = 0;
         state.loading = true;
         state.error = '';
         scheduleRender();
@@ -107,7 +108,7 @@
     function makeTabs() {
         const tabs = element('div', 'delivery-tabs');
         tabs.setAttribute('role', 'tablist');
-        [['estrutura', 'Estrutura da OS'], ['cronograma', 'Cronograma de Entrega']].forEach(([id, label]) => {
+        [['estrutura', 'Estrutura'], ['cronograma', 'Cronograma de Entrega']].forEach(([id, label]) => {
             const button = element('button', '', label);
             button.type = 'button';
             button.setAttribute('role', 'tab');
@@ -191,6 +192,7 @@
         const marker = element('span', 'delivery-chevron', open ? '⌄' : '›');
         toggle.append(title, marker);
         toggle.addEventListener('click', () => {
+            state.scrollTop = toggle.closest('.delivery-list')?.scrollTop || 0;
             state.openBudget = open ? null : key;
             if (!open) {
                 const initial = delivery.os.find((order) => order.principal) || delivery.os[0];
@@ -228,7 +230,10 @@
                 if (order.numero === selectedOrder()) button.classList.add('selected');
                 if (order.principal) button.append(element('small', '', 'Principal'));
                 button.title = order.descricao || order.numero;
-                button.addEventListener('click', () => selectOS(order.numero));
+                button.addEventListener('click', () => {
+                    state.scrollTop = button.closest('.delivery-list')?.scrollTop || 0;
+                    selectOS(order.numero);
+                });
                 orders.append(button);
             });
             card.append(orders);
@@ -244,11 +249,12 @@
         const focused = document.activeElement;
         const focusClass = focused?.closest?.('.delivery-panel') ? focused.className : '';
         const caret = focusClass === 'delivery-search' ? focused.selectionStart : null;
-        const oldTabs = tree.querySelector(':scope > .delivery-tabs');
+        const title = tree.querySelector(':scope > .panel-title');
+        if (!title) return;
+        const oldTabs = title.querySelector(':scope > .delivery-tabs');
         if (oldTabs) oldTabs.remove();
         const tabs = makeTabs();
-        const title = tree.querySelector(':scope > .panel-title');
-        if (title) title.after(tabs);
+        title.prepend(tabs);
         const oldPanel = tree.querySelector(':scope > .delivery-panel');
         if (oldPanel) oldPanel.remove();
         const panel = element('div', 'delivery-panel');
@@ -256,13 +262,21 @@
         panel.setAttribute('aria-label', 'Cronograma de Entrega');
         panel.append(makeFilters());
         const list = element('div', 'delivery-list');
+        list.addEventListener('scroll', () => {
+            if (list.isConnected) state.scrollTop = list.scrollTop;
+        }, { passive: true });
         if (state.loading) list.append(element('p', 'delivery-message', 'Carregando entregas...'));
         else if (state.error) list.append(element('p', 'delivery-message delivery-error', state.error));
         else if (!state.deliveries.length)
             list.append(element('p', 'delivery-message', 'Nenhuma entrega prevista para este período.'));
         else state.deliveries.forEach((delivery) => list.append(makeCard(delivery)));
         panel.append(list);
-        tabs.after(panel);
+        title.after(panel);
+        const scrollTop = state.scrollTop;
+        list.scrollTop = scrollTop;
+        requestAnimationFrame(() => {
+            if (list.isConnected) list.scrollTop = scrollTop;
+        });
         if (focusClass) {
             const replacement = [...panel.querySelectorAll('input, select')]
                 .find((input) => input.className === focusClass);
@@ -281,7 +295,7 @@
         if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) =>
             node.nodeType === 1 && !node.classList?.contains('delivery-tabs') && !node.classList?.contains('delivery-panel')))) {
             const tree = document.querySelector('.tree-panel');
-            if (tree && (!tree.querySelector(':scope > .delivery-tabs') || !tree.querySelector(':scope > .delivery-panel')))
+            if (tree && (!tree.querySelector(':scope > .panel-title > .delivery-tabs') || !tree.querySelector(':scope > .delivery-panel')))
                 scheduleRender();
         }
     });

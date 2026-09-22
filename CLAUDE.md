@@ -10,7 +10,7 @@ Sistema interno da Columbia Machine Brasil: recebimento, expedição,
 logística, intralog, compras, comex, produção e qualidade. Flask + SQLAlchemy,
 app factory em `conferencia_app/__init__.py`.
 
-- **Produção:** PythonAnywhere (MySQL), `sync.columbiamachine.com`. Deploy é
+- **Produção:** PythonAnywhere (MySQL), `sync.columbiamachine.com.br`. Deploy é
   `git pull` + Reload — **não há staging**. O que entra no `main` vai pro ar.
 - **Local:** SQLite (`database.db`).
 - **Bridge do ERP:** VM Windows separada (`scripts/erp_lancamento_api_bridge.py`),

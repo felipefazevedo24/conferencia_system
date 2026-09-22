@@ -164,15 +164,17 @@ def criar_observacao(numero_os: str, aux_code: int):
     return jsonify({"id": row.id, "texto": row.texto, "autor": row.autor, "criado_em": row.criado_em.isoformat()}), 201
 
 
-def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") -> dict:
-    parent = next((item for item in all_nodes if item["id"] == node.get("parent_id")), None)
+def _original_node(node: dict, all_nodes: list[dict], order_number: str = "", nodes_by_id: dict | None = None) -> dict:
+    index = nodes_by_id if nodes_by_id is not None else {item["id"]: item for item in all_nodes}
+    parent = index.get(node.get("parent_id"))
     path = []
     cursor = parent
     visited = {node["id"]}
     while cursor and cursor["id"] not in visited:
         visited.add(cursor["id"])
-        path.insert(0, cursor)
-        cursor = next((item for item in all_nodes if item["id"] == cursor.get("parent_id")), None)
+        path.append(cursor)
+        cursor = index.get(cursor.get("parent_id"))
+    path.reverse()
     return {
         "id": node["id"],
         "aux_code": node["aux_code"],
@@ -206,7 +208,9 @@ def _original_node(node: dict, all_nodes: list[dict], order_number: str = "") ->
 
 
 def _original_structure(data: dict) -> dict:
-    nodes = [_original_node(node, data.get("nos", []), data["ordem"]["numero"]) for node in data.get("nos", [])]
+    source_nodes = data.get("nos", [])
+    nodes_by_id = {node["id"]: node for node in source_nodes}
+    nodes = [_original_node(node, source_nodes, data["ordem"]["numero"], nodes_by_id) for node in source_nodes]
     for node in nodes:
         node["detail_url"] = node["detail_url"].format(order=data["ordem"]["numero"])
     return {
@@ -215,6 +219,7 @@ def _original_structure(data: dict) -> dict:
         "nodes": nodes,
         "progress": {"percentage": data.get("progresso", 0), "finalized_operations": data.get("operacoes_concluidas", 0), "total_operations": data.get("operacoes_total", 0)},
         "pending_count": data.get("bloqueados", 0),
+        "structure_warnings": data.get("avisos_estrutura", []),
         "current_stage": "Producao",
         "source": {"calculated_at": datetime.now().isoformat()},
     }
