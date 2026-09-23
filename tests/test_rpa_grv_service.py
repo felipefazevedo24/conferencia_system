@@ -154,8 +154,9 @@ def test_launcher_windows_habilita_rpa_antes_de_subir_aplicacao():
 
     assert "call deploy\\windows\\start.bat" in root_launcher
     assert "start_rpa.ps1" in windows_launcher
-    assert '"RPA_AGENT_TOKEN", "User"' in powershell_launcher
-    assert '"RPA_AGENT_SERVER_URL", "User"' in powershell_launcher
+    assert '$tokenVariable = "RPA_AGENT_TOKEN$suffix"' in powershell_launcher
+    assert '$urlVariable = "RPA_AGENT_SERVER_URL$suffix"' in powershell_launcher
+    assert 'ValidateSet("Homologacao", "Producao")' in powershell_launcher
     assert '"rpa_agent.py"' in powershell_launcher
     assert "https://homologacao.columbiamachine.com.br" in powershell_launcher
 

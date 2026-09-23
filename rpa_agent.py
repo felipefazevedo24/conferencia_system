@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ctypes
+import argparse
+from contextlib import contextmanager
 import getpass
 import logging
 import os
@@ -39,30 +41,53 @@ def _user_env(name: str, default: str = "") -> str:
     return default
 
 
-def _configure_logging() -> None:
+def _configure_logging(instance: str) -> None:
     log_dir = ROOT / "logs"
     log_dir.mkdir(exist_ok=True)
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     LOGGER.setLevel(logging.INFO)
     stream = logging.StreamHandler()
     stream.setFormatter(formatter)
+    log_name = "rpa_agent.log" if instance == "homologacao" else f"rpa_agent_{instance}.log"
     file_handler = RotatingFileHandler(
-        log_dir / "rpa_agent.log", maxBytes=2_000_000, backupCount=5, encoding="utf-8"
+        log_dir / log_name, maxBytes=2_000_000, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
     LOGGER.handlers[:] = [stream, file_handler]
 
 
-def _single_instance() -> None:
+def _single_instance(instance: str) -> None:
     if os.name != "nt":
         raise RuntimeError("O agente RPA somente pode ser executado no Windows.")
-    handle = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\ColumbiaSyncRpaAgent")
+    safe_instance = "".join(character for character in instance if character.isalnum())
+    handle = ctypes.windll.kernel32.CreateMutexW(
+        None, False, f"Local\\ColumbiaSyncRpaAgent_{safe_instance}"
+    )
     if not handle or ctypes.windll.kernel32.GetLastError() == 183:
         raise RuntimeError("Já existe um agente RPA em execução nesta sessão.")
 
 
+@contextmanager
+def _exclusive_grv_execution():
+    """Serializa o acesso ao CPS entre agentes de ambientes diferentes."""
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.CreateMutexW(None, False, "Local\\ColumbiaSyncRpaExecution")
+    if not handle:
+        raise RuntimeError("Não foi possível criar o bloqueio de execução do GRV.")
+    wait_result = kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)
+    if wait_result not in (0, 0x80):
+        kernel32.CloseHandle(handle)
+        raise RuntimeError("Não foi possível obter exclusividade para executar o GRV.")
+    try:
+        yield
+    finally:
+        kernel32.ReleaseMutex(handle)
+        kernel32.CloseHandle(handle)
+
+
 class Agent:
-    def __init__(self) -> None:
+    def __init__(self, instance: str) -> None:
+        self.instance = instance
         self.base_url = _user_env(
             "RPA_AGENT_SERVER_URL", "https://homologacao.columbiamachine.com.br"
         ).rstrip("/")
@@ -142,7 +167,8 @@ class Agent:
 
     def run(self) -> None:
         LOGGER.info(
-            "Agente iniciado | id=%s | servidor=%s | hostname=%s | usuario=%s",
+            "Agente iniciado | ambiente=%s | id=%s | servidor=%s | hostname=%s | usuario=%s",
+            self.instance,
             self.agent_id,
             self.base_url,
             socket.gethostname(),
@@ -178,43 +204,48 @@ class Agent:
             requested_by,
             ",".join(payload.get("codigos_destacados_para_agrupamento") or []),
         )
-        self._post(f"/api/rpa/agent/executions/{execution_id}/running", {})
-        try:
-            with self.app.app_context():
-                execution = rpa_grv_service.executar_payload_validado(
-                    payload, requested_by, execution_id=execution_id
-                )
-            result = execution.get("result") or {}
-            self._post(
-                f"/api/rpa/agent/executions/{execution_id}/result",
-                {"success": result.get("gravado") is True, "result": result},
-            )
-            LOGGER.warning(
-                "Execução concluída | execution_id=%s | gravado=%s",
-                execution_id,
-                result.get("gravado"),
-            )
-        except Exception as exc:
-            LOGGER.exception("Execução falhou | execution_id=%s", execution_id)
+        with _exclusive_grv_execution():
+            self._post(f"/api/rpa/agent/executions/{execution_id}/running", {})
             try:
+                with self.app.app_context():
+                    execution = rpa_grv_service.executar_payload_validado(
+                        payload, requested_by, execution_id=execution_id
+                    )
+                result = execution.get("result") or {}
                 self._post(
                     f"/api/rpa/agent/executions/{execution_id}/result",
-                    {"success": False, "error": str(exc), "result": {}},
+                    {"success": result.get("gravado") is True, "result": result},
                 )
-            except Exception:
-                LOGGER.exception("Falha ao devolver erro | execution_id=%s", execution_id)
-            raise
-        finally:
-            refreshed = self._diagnose()
-            with self.state_lock:
-                self.state = refreshed
+                LOGGER.warning(
+                    "Execução concluída | execution_id=%s | gravado=%s",
+                    execution_id,
+                    result.get("gravado"),
+                )
+            except Exception as exc:
+                LOGGER.exception("Execução falhou | execution_id=%s", execution_id)
+                try:
+                    self._post(
+                        f"/api/rpa/agent/executions/{execution_id}/result",
+                        {"success": False, "error": str(exc), "result": {}},
+                    )
+                except Exception:
+                    LOGGER.exception("Falha ao devolver erro | execution_id=%s", execution_id)
+                raise
+            finally:
+                refreshed = self._diagnose()
+                with self.state_lock:
+                    self.state = refreshed
 
 
 def main() -> int:
-    _configure_logging()
+    parser = argparse.ArgumentParser(description="Agente Windows do RPA de agrupamento")
+    parser.add_argument("--instance", default="homologacao")
+    args = parser.parse_args()
+    instance = str(args.instance).strip().lower() or "homologacao"
+    _configure_logging(instance)
     try:
-        _single_instance()
-        Agent().run()
+        _single_instance(instance)
+        Agent(instance).run()
         return 0
     except Exception:
         LOGGER.exception("Agente RPA não pôde ser iniciado")

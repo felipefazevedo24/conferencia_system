@@ -30,13 +30,15 @@ que o CPS/M83 está aberto, inicie o agente por:
 .\iniciar_sync_rpa.cmd
 ```
 
-O navegador continua em `homologacao.columbiamachine.com.br`. O agente usa HTTPS
-de saída para enviar heartbeat, buscar uma execução persistida e devolver o
-resultado. O token fica na variável de usuário Windows `RPA_AGENT_TOKEN`; use
-`deploy\windows\configurar_agente_rpa.ps1` para configurá-lo. O launcher prefere
-`.venv312`, impede duas instâncias e não publica uma API local. A M83 só é
-acionada quando o agente autorizado está no desktop interativo e confirma que o
-GRV está disponível.
+O agente usa HTTPS de saída para enviar heartbeat, buscar uma execução persistida
+e devolver o resultado. Homologação e produção possuem tokens, IDs, processos e
+filas independentes. Configure cada ambiente com
+`deploy\windows\configurar_agente_rpa.ps1 -Ambiente Homologacao` e
+`deploy\windows\configurar_agente_rpa.ps1 -Ambiente Producao`. Inicie os agentes
+com `deploy\windows\start_rpa.ps1 -Ambiente <ambiente>`. O launcher prefere
+`.venv312` e não publica uma API local. Um mutex compartilhado impede que os dois
+agentes controlem a M83 ao mesmo tempo. A automação só é acionada quando o agente
+autorizado está no desktop interativo e confirma que o GRV está disponível.
 
 Testes do backend:
 

@@ -90,15 +90,35 @@ class Config:
     GRV_RPA_BACKEND_PATH = os.environ.get("GRV_RPA_BACKEND_PATH", "")
     GRV_RPA_WINDOW_TITLE = os.environ.get("GRV_RPA_WINDOW_TITLE", r".*CPS.*COLUMBIA.*")
     GRV_RPA_DELAY = float(os.environ.get("GRV_RPA_DELAY", "0.55"))
-    _is_homologation = "sync_hml" in _database_url.lower() or BASE_DIR.name.endswith("_hml")
-    RPA_AGENT_ENABLED = _env_bool("RPA_AGENT_ENABLED") or _is_homologation
-    RPA_AGENT_ENVIRONMENT = _env_or_default("RPA_AGENT_ENVIRONMENT", "homologacao")
-    RPA_AGENT_ID = _env_or_default("RPA_AGENT_ID", "columbia-grv-hml-01")
+    _database_url_lower = _database_url.lower()
+    _is_homologation = "sync_hml" in _database_url_lower or BASE_DIR.name.endswith("_hml")
+    _is_pythonanywhere_production = (
+        "pythonanywhere-services.com" in _database_url_lower
+        and "sync_hml" not in _database_url_lower
+        and BASE_DIR.name == "conferencia_system"
+    )
+    _rpa_environment_default = "homologacao" if _is_homologation else "producao"
+    _rpa_agent_id_default = (
+        "columbia-grv-hml-01" if _is_homologation else "columbia-grv-prod-01"
+    )
+    RPA_AGENT_ENABLED = (
+        _env_bool("RPA_AGENT_ENABLED")
+        or _is_homologation
+        or _is_pythonanywhere_production
+    )
+    RPA_AGENT_ENVIRONMENT = _env_or_default(
+        "RPA_AGENT_ENVIRONMENT", _rpa_environment_default
+    )
+    RPA_AGENT_ID = _env_or_default("RPA_AGENT_ID", _rpa_agent_id_default)
     RPA_AGENT_TOKEN_HASH = _env_or_default(
         "RPA_AGENT_TOKEN_HASH",
         "0f965584d4f9bf81afb527fd95bf65dc6a774743cbdaa623f30267c269ef11dc"
         if _is_homologation
-        else "",
+        else (
+            "bb3658073ad51db39b40e49ccd3c5ed514da302763ed6066f1beba07e2367fdf"
+            if _is_pythonanywhere_production
+            else ""
+        ),
     )
     RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS = _env_int(
         "RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS", "45"
