@@ -35,6 +35,10 @@ python app.py --habilitar-rpa
 O launcher Windows define `GRV_WEB_RPA_ENABLED=1` antes de criar a aplicação.
 Quando `.venv312` estiver disponível, ele usa esse ambiente estável e valida
 Pandas/SQLAlchemy antes de iniciar; caso contrário, usa `.venv`.
+Ele publica a instância interativa somente em `127.0.0.1:8795` e abre a tela
+local de agrupamento. As URLs `sync.columbiamachine.com.br` e
+`homologacao.columbiamachine.com.br` executam fora do desktop Windows e não
+podem controlar a M83.
 O RPA continua indisponível fora do desktop interativo `Default` e a execução
 continua dependendo da permissão do usuário e da detecção da tela M83.
 

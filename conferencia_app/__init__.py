@@ -331,14 +331,20 @@ def create_app(test_config=None) -> Flask:
                 True,
             )
         app.logger.warning(
-            "RPA GRV | habilitado=%s | desktop_interativo=%s | executor_disponivel=%s | launcher=%s | python=%s | usuario=%s | pid=%s",
+            "SYNC - DIAGNOSTICO DE RPA | pid=%s | python=%s | diretorio=%s | argumentos=%s | env=%s | cli=%s | habilitado=%s | desktop_interativo=%s | disponivel=%s | host=%s | porta=%s | launcher=%s | usuario=%s",
+            os.getpid(),
+            sys.executable,
+            os.getcwd(),
+            sys.argv,
+            os.environ.get("GRV_WEB_RPA_ENABLED", ""),
+            "--habilitar-rpa" in sys.argv,
             "SIM" if rpa_status["rpa_habilitado"] else "NAO",
             "SIM" if rpa_status["desktop_interativo"] else "NAO",
             "SIM" if rpa_status["rpa_disponivel"] else "NAO",
+            os.environ.get("APP_HOST", ""),
+            os.environ.get("APP_PORT", ""),
             os.environ.get("SYNC_LAUNCHER") or "entrypoint sem identificação",
-            sys.executable,
             rpa_status["usuario"],
-            os.getpid(),
         )
 
     return app
