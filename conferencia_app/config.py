@@ -90,6 +90,19 @@ class Config:
     GRV_RPA_BACKEND_PATH = os.environ.get("GRV_RPA_BACKEND_PATH", "")
     GRV_RPA_WINDOW_TITLE = os.environ.get("GRV_RPA_WINDOW_TITLE", r".*CPS.*COLUMBIA.*")
     GRV_RPA_DELAY = float(os.environ.get("GRV_RPA_DELAY", "0.55"))
+    _is_homologation = "sync_hml" in _database_url.lower() or BASE_DIR.name.endswith("_hml")
+    RPA_AGENT_ENABLED = _env_bool("RPA_AGENT_ENABLED") or _is_homologation
+    RPA_AGENT_ENVIRONMENT = _env_or_default("RPA_AGENT_ENVIRONMENT", "homologacao")
+    RPA_AGENT_ID = _env_or_default("RPA_AGENT_ID", "columbia-grv-hml-01")
+    RPA_AGENT_TOKEN_HASH = _env_or_default(
+        "RPA_AGENT_TOKEN_HASH",
+        "0f965584d4f9bf81afb527fd95bf65dc6a774743cbdaa623f30267c269ef11dc"
+        if _is_homologation
+        else "",
+    )
+    RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS = _env_int(
+        "RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS", "45"
+    ) or 45
     SQLALCHEMY_ENGINE_OPTIONS = (
         {}
         if SQLALCHEMY_DATABASE_URI.startswith("sqlite:")

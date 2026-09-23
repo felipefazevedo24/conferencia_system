@@ -154,11 +154,10 @@ def test_launcher_windows_habilita_rpa_antes_de_subir_aplicacao():
 
     assert "call deploy\\windows\\start.bat" in root_launcher
     assert "start_rpa.ps1" in windows_launcher
-    assert '$env:GRV_WEB_RPA_ENABLED = "1"' in powershell_launcher
-    assert '$env:APP_PORT = [string]$Porta' in powershell_launcher
-    assert 'serve_tablet.py"' in powershell_launcher
-    assert "--habilitar-rpa" in powershell_launcher
-    assert "127.0.0.1:$Porta" in powershell_launcher
+    assert '"RPA_AGENT_TOKEN", "User"' in powershell_launcher
+    assert '"RPA_AGENT_SERVER_URL", "User"' in powershell_launcher
+    assert '"rpa_agent.py"' in powershell_launcher
+    assert "https://homologacao.columbiamachine.com.br" in powershell_launcher
 
 
 def test_conexao_reaproveita_variaveis_do_rpa_original(monkeypatch):

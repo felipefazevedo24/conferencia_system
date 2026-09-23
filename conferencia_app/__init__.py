@@ -162,10 +162,15 @@ def create_app(test_config=None) -> Flask:
                 }
                 allowed_prefixes = (
                     "/static/",
+                    "/api/rpa/agent/",
                 )
 
                 if not is_admin:
-                    if path.startswith("/api") and path != "/api/convite/validar":
+                    if (
+                        path.startswith("/api")
+                        and path != "/api/convite/validar"
+                        and not path.startswith("/api/rpa/agent/")
+                    ):
                         return jsonify({
                             "error": "Sistema em manutenção.",
                             "maintenance": True,
@@ -323,12 +328,16 @@ def create_app(test_config=None) -> Flask:
             app.logger.exception("Falha ao iniciar scheduler Enderecamento Retry")
 
     if not app.config.get("TESTING"):
-        from .services import rpa_grv_service
+        from .services import rpa_grv_service, rpa_queue_service
 
         with app.app_context():
-            rpa_status = rpa_grv_service.status(
-                os.environ.get("USERNAME") or os.environ.get("USER") or "usuario_local",
-                True,
+            status_provider = (
+                rpa_queue_service.status
+                if rpa_queue_service.agent_mode_enabled()
+                else rpa_grv_service.status
+            )
+            rpa_status = status_provider(
+                os.environ.get("USERNAME") or os.environ.get("USER") or "usuario_local", True
             )
         app.logger.warning(
             "SYNC - DIAGNOSTICO DE RPA | pid=%s | python=%s | diretorio=%s | argumentos=%s | env=%s | cli=%s | habilitado=%s | desktop_interativo=%s | disponivel=%s | host=%s | porta=%s | launcher=%s | usuario=%s",

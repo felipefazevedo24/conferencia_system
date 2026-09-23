@@ -8,7 +8,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
-from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service
+from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -69,7 +69,7 @@ def rpa_agrupamento_payload():
 
 
 def _rpa_error_response(exc: Exception):
-    if isinstance(exc, rpa_grv_service.RpaApiError):
+    if isinstance(exc, (rpa_grv_service.RpaApiError, rpa_queue_service.RpaQueueError)):
         return jsonify({"ok": False, "error": exc.message}), exc.status_code
     current_app.logger.exception("Falha na integração do agrupamento com o GRV")
     return jsonify({"ok": False, "error": "Falha interna ao processar a solicitação."}), 500
@@ -80,6 +80,13 @@ def _rpa_error_response(exc: Exception):
 def rpa_status():
     from ..auth import has_permission
 
+    if rpa_queue_service.agent_mode_enabled():
+        return jsonify(
+            rpa_queue_service.status(
+                session.get("username", "usuario_local"),
+                has_permission("EXECUTE_RPA_GRV"),
+            )
+        )
     return jsonify(
         rpa_grv_service.status(
             session.get("username", "usuario_local"),
@@ -92,6 +99,8 @@ def rpa_status():
 @permission_required("EXECUTE_RPA_GRV")
 def rpa_janelas():
     try:
+        if rpa_queue_service.agent_mode_enabled():
+            return jsonify(rpa_queue_service.diagnostico_janela())
         return jsonify(rpa_grv_service.diagnosticar_janelas())
     except Exception as exc:
         return _rpa_error_response(exc)
@@ -115,10 +124,98 @@ def rpa_simular_agrupamento():
 @permission_required("EXECUTE_RPA_GRV")
 def rpa_executar_agrupamento():
     try:
+        if rpa_queue_service.agent_mode_enabled():
+            result = rpa_queue_service.enqueue(
+                request.get_json(silent=True) or {},
+                session.get("username", "usuario_local"),
+            )
+            return jsonify(result), 202
         return jsonify(
             rpa_grv_service.executar_agrupamento(
                 request.get_json(silent=True) or {},
                 session.get("username", "usuario_local"),
+            )
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.get("/api/agrupamentos/executar/<execution_id>")
+@permission_required("EXECUTE_RPA_GRV")
+def rpa_execucao_status(execution_id: str):
+    from ..auth import is_admin_session
+
+    try:
+        return jsonify(
+            rpa_queue_service.user_execution(
+                execution_id,
+                session.get("username", "usuario_local"),
+                is_admin=is_admin_session(),
+            )
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.get("/api/rpa/status")
+@permission_required("PAGE_PRODUCAO")
+def rpa_executor_status():
+    from ..auth import has_permission
+
+    try:
+        if rpa_queue_service.agent_mode_enabled():
+            return jsonify(
+                rpa_queue_service.status(
+                    session.get("username", "usuario_local"),
+                    has_permission("EXECUTE_RPA_GRV"),
+                )
+            )
+        return jsonify(
+            rpa_grv_service.status(
+                session.get("username", "usuario_local"),
+                has_permission("EXECUTE_RPA_GRV"),
+            )
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/rpa/agent/heartbeat")
+def rpa_agent_heartbeat():
+    try:
+        agent_id = rpa_queue_service.authenticate_agent()
+        return jsonify(
+            rpa_queue_service.heartbeat(agent_id, request.get_json(silent=True) or {})
+        )
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/rpa/agent/claim")
+def rpa_agent_claim():
+    try:
+        agent_id = rpa_queue_service.authenticate_agent()
+        return jsonify(rpa_queue_service.claim(agent_id, request.get_json(silent=True) or {}))
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/rpa/agent/executions/<execution_id>/running")
+def rpa_agent_running(execution_id: str):
+    try:
+        agent_id = rpa_queue_service.authenticate_agent()
+        return jsonify(rpa_queue_service.mark_running(agent_id, execution_id))
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
+@producao_bp.post("/api/rpa/agent/executions/<execution_id>/result")
+def rpa_agent_result(execution_id: str):
+    try:
+        agent_id = rpa_queue_service.authenticate_agent()
+        return jsonify(
+            rpa_queue_service.finish(
+                agent_id, execution_id, request.get_json(silent=True) or {}
             )
         )
     except Exception as exc:

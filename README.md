@@ -23,24 +23,20 @@ Os arquivos Python mantidos na raiz (`app.py`, `wsgi.py` e `serve_tablet.py`) sa
 python app.py
 ```
 
-Esse comando mantém o RPA do GRV desativado. Na estação Windows em que o
-CPS/M83 está aberto, inicie explicitamente por um destes caminhos:
+Esse comando mantém a execução direta do RPA desativada. Na estação Windows em
+que o CPS/M83 está aberto, inicie o agente por:
 
 ```powershell
 .\iniciar_sync_rpa.cmd
-# ou, para o servidor de desenvolvimento:
-python app.py --habilitar-rpa
 ```
 
-O launcher Windows define `GRV_WEB_RPA_ENABLED=1` antes de criar a aplicação.
-Quando `.venv312` estiver disponível, ele usa esse ambiente estável e valida
-Pandas/SQLAlchemy antes de iniciar; caso contrário, usa `.venv`.
-Ele publica a instância interativa somente em `127.0.0.1:8795` e abre a tela
-local de agrupamento. As URLs `sync.columbiamachine.com.br` e
-`homologacao.columbiamachine.com.br` executam fora do desktop Windows e não
-podem controlar a M83.
-O RPA continua indisponível fora do desktop interativo `Default` e a execução
-continua dependendo da permissão do usuário e da detecção da tela M83.
+O navegador continua em `homologacao.columbiamachine.com.br`. O agente usa HTTPS
+de saída para enviar heartbeat, buscar uma execução persistida e devolver o
+resultado. O token fica na variável de usuário Windows `RPA_AGENT_TOKEN`; use
+`deploy\windows\configurar_agente_rpa.ps1` para configurá-lo. O launcher prefere
+`.venv312`, impede duas instâncias e não publica uma API local. A M83 só é
+acionada quando o agente autorizado está no desktop interativo e confirma que o
+GRV está disponível.
 
 Testes do backend:
 

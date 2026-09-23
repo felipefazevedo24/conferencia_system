@@ -1,15 +1,9 @@
-param(
-    [int]$Porta = 8795,
-    [switch]$NoBrowser
-)
+param([switch]$NoBrowser)
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$EntryPoint = Join-Path $ProjectRoot "serve_tablet.py"
-$LocalUrl = "http://127.0.0.1:$Porta/producao/rpa-agrupamento"
-
-$venvCandidates = @(".venv312", ".venv")
-$venvName = $venvCandidates | Where-Object {
+$AgentScript = Join-Path $ProjectRoot "rpa_agent.py"
+$venvName = @(".venv312", ".venv") | Where-Object {
     Test-Path -LiteralPath (Join-Path $ProjectRoot "$_\Scripts\python.exe")
 } | Select-Object -First 1
 
@@ -18,86 +12,66 @@ if (-not $venvName) {
 }
 
 $PythonExe = Join-Path $ProjectRoot "$venvName\Scripts\python.exe"
-$listener = Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue |
-    Select-Object -First 1
+$currentAgents = @(Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine.IndexOf($ProjectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $_.CommandLine.IndexOf("rpa_agent.py", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    })
 
-if ($listener) {
-    $existing = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"
-    $command = [string]$existing.CommandLine
-    $isCurrentSync =
-        $command.IndexOf($ProjectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $command.IndexOf("serve_tablet.py", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $command.IndexOf("--habilitar-rpa", [StringComparison]::OrdinalIgnoreCase) -ge 0
-    $isLegacyRpa =
-        $command.IndexOf("RPA - Consulta no Banco de Dados - Agrupamento", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $command.IndexOf("servidor_web.py", [StringComparison]::OrdinalIgnoreCase) -ge 0
-
-    if ($isCurrentSync) {
-        Write-Host "Sync com RPA ja esta ativo em $LocalUrl (PID $($existing.ProcessId))." -ForegroundColor Green
-        if (-not $NoBrowser) {
-            Start-Process $LocalUrl
-        }
-        exit 0
-    }
-
-    if ($isLegacyRpa) {
-        Write-Host "Encerrando instancia antiga do RPA na porta $Porta (PID $($existing.ProcessId))..." -ForegroundColor Yellow
-        Stop-Process -Id $existing.ProcessId
-        for ($attempt = 0; $attempt -lt 30; $attempt++) {
-            Start-Sleep -Milliseconds 200
-            if (-not (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)) {
-                break
-            }
-        }
-    } else {
-        throw "A porta $Porta pertence a outro processo (PID $($existing.ProcessId)): $command"
-    }
+if ($currentAgents.Count -gt 0) {
+    Write-Host "Agente RPA do Sync ja esta ativo (PID $($currentAgents[0].ProcessId))." -ForegroundColor Green
+    exit 0
 }
 
-$env:GRV_WEB_RPA_ENABLED = "1"
-$env:SYNC_LAUNCHER = "deploy\windows\start_rpa.ps1"
-$env:APP_HOST = "127.0.0.1"
-$env:APP_PORT = [string]$Porta
-$env:APP_DEBUG = "false"
+$oldServers = @(Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine.IndexOf($ProjectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $_.CommandLine.IndexOf("serve_tablet.py", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    })
+foreach ($oldServer in $oldServers) {
+    Write-Host "Encerrando servidor local substituido pelo agente (PID $($oldServer.ProcessId))..." -ForegroundColor Yellow
+    Stop-Process -Id $oldServer.ProcessId
+}
+
+$agentToken = [Environment]::GetEnvironmentVariable("RPA_AGENT_TOKEN", "User")
+if ([string]::IsNullOrWhiteSpace($agentToken)) {
+    throw "RPA_AGENT_TOKEN nao esta configurado no usuario Windows. Execute configurar_agente_rpa.ps1."
+}
+
+$serverUrl = [Environment]::GetEnvironmentVariable("RPA_AGENT_SERVER_URL", "User")
+if ([string]::IsNullOrWhiteSpace($serverUrl)) {
+    $serverUrl = "https://homologacao.columbiamachine.com.br"
+}
+$agentId = [Environment]::GetEnvironmentVariable("RPA_AGENT_ID", "User")
+if ([string]::IsNullOrWhiteSpace($agentId)) {
+    $agentId = "columbia-grv-hml-01"
+}
+
+$env:RPA_AGENT_TOKEN = $agentToken
+$env:RPA_AGENT_SERVER_URL = $serverUrl
+$env:RPA_AGENT_ID = $agentId
 
 Push-Location $ProjectRoot
 try {
-    & $PythonExe -c "import pandas; import sqlalchemy; import waitress"
+    & $PythonExe -c "import flask; import pandas; import requests; import sqlalchemy"
     if ($LASTEXITCODE -ne 0) {
-        throw "O ambiente $venvName nao possui as dependencias do Sync/RPA."
+        throw "O ambiente $venvName nao possui as dependencias do agente RPA."
     }
 
     Write-Host "========================================" -ForegroundColor DarkCyan
-    Write-Host "SYNC - INICIALIZACAO LOCAL DO RPA" -ForegroundColor Cyan
+    Write-Host "SYNC - AGENTE WINDOWS DO RPA" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor DarkCyan
     Write-Host "Python: $PythonExe"
     Write-Host "Diretorio: $ProjectRoot"
-    Write-Host "Entrypoint: $EntryPoint --habilitar-rpa"
-    Write-Host "GRV_WEB_RPA_ENABLED: $env:GRV_WEB_RPA_ENABLED"
-    Write-Host "Host: $env:APP_HOST"
-    Write-Host "Porta: $env:APP_PORT"
-    Write-Host "URL local: $LocalUrl"
+    Write-Host "Entrypoint: $AgentScript"
+    Write-Host "Servidor: $serverUrl"
+    Write-Host "Agente: $agentId"
+    Write-Host "Desktop: sessao interativa do usuario $env:USERNAME"
     Write-Host "========================================" -ForegroundColor DarkCyan
 
-    if (-not $NoBrowser) {
-        Start-Job -ScriptBlock {
-            param($Url)
-            for ($attempt = 0; $attempt -lt 40; $attempt++) {
-                try {
-                    Invoke-WebRequest -Uri $Url -TimeoutSec 1 -UseBasicParsing | Out-Null
-                    break
-                } catch {
-                    if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -in 200, 302, 401, 403) {
-                        break
-                    }
-                }
-                Start-Sleep -Milliseconds 250
-            }
-            Start-Process $Url
-        } -ArgumentList $LocalUrl | Out-Null
-    }
-
-    & $PythonExe $EntryPoint --habilitar-rpa
+    & $PythonExe $AgentScript
     exit $LASTEXITCODE
 } finally {
     Pop-Location

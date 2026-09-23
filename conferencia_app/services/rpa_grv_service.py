@@ -222,7 +222,6 @@ def diagnosticar_janelas() -> dict[str, Any]:
 
 
 def executar_agrupamento(data: dict[str, Any], usuario: str) -> dict[str, Any]:
-    global _last_execution
     if not _enabled():
         raise RpaApiError(403, "A execução do RPA está desativada neste servidor.")
     if not desktop_permite_rpa():
@@ -239,10 +238,37 @@ def executar_agrupamento(data: dict[str, Any], usuario: str) -> dict[str, Any]:
     grouping = montar_agrupamento(data, usuario)
     payload = grouping["payload"]
     payload["descricao_agrupamento"] = description
+    return executar_payload_validado(payload, usuario)
+
+
+def executar_payload_validado(
+    payload: dict[str, Any], usuario: str, execution_id: str | None = None
+) -> dict[str, Any]:
+    """Executa somente payload já validado e assinado pelo backend Sync."""
+    global _last_execution
+    if not _enabled():
+        raise RpaApiError(403, "A execução do RPA está desativada neste executor.")
+    if not desktop_permite_rpa():
+        raise RpaApiError(
+            409,
+            "O módulo de automação precisa estar no desktop Windows interativo.",
+        )
+    if not isinstance(payload, dict):
+        raise RpaApiError(400, "Payload do agrupamento inválido.")
+    description = _normalizar(payload.get("descricao_agrupamento"))[:80]
+    codes = payload.get("codigos_destacados_para_agrupamento")
+    if not description or not isinstance(codes, list) or len(codes) < 2:
+        raise RpaApiError(422, "Payload do agrupamento incompleto para execução.")
+    normalized_codes = [_normalizar(code) for code in codes if _normalizar(code)]
+    if len(normalized_codes) != len(codes) or len(set(normalized_codes)) != len(codes):
+        raise RpaApiError(422, "Códigos de processo inválidos no payload do executor.")
+    payload = dict(payload)
+    payload["descricao_agrupamento"] = description
+    payload["codigos_destacados_para_agrupamento"] = normalized_codes
     fingerprint = hashlib.sha256(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
-    execution_id = uuid.uuid4().hex
+    execution_id = execution_id or uuid.uuid4().hex
 
     with _execution_lock:
         now = time.monotonic()

@@ -3901,3 +3901,45 @@ class ProducaoSequencia(db.Model):
     instrucoes = db.Column(db.Text)
     criado_por = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class RpaExecutor(db.Model):
+    __tablename__ = "rpa_executor"
+
+    id = db.Column(db.String(100), primary_key=True)
+    ambiente = db.Column(db.String(40), nullable=False, index=True)
+    hostname = db.Column(db.String(160), nullable=False)
+    usuario_windows = db.Column(db.String(160), nullable=False)
+    versao = db.Column(db.String(80))
+    desktop_interativo = db.Column(db.Boolean, nullable=False, default=False)
+    grv_disponivel = db.Column(db.Boolean, nullable=False, default=False)
+    janela_titulo = db.Column(db.String(300))
+    janela_hwnd = db.Column(db.String(40))
+    erro = db.Column(db.Text)
+    ultima_comunicacao = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
+class RpaExecucao(db.Model):
+    __tablename__ = "rpa_execucao"
+
+    id = db.Column(db.String(36), primary_key=True)
+    ambiente = db.Column(db.String(40), nullable=False, index=True)
+    usuario_solicitante = db.Column(db.String(100), nullable=False, index=True)
+    descricao = db.Column(db.String(80), nullable=False)
+    fingerprint = db.Column(db.String(64), nullable=False, index=True)
+    payload_json = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="PENDING", index=True)
+    executor_id = db.Column(db.String(100), db.ForeignKey("rpa_executor.id"), index=True)
+    tentativas = db.Column(db.Integer, nullable=False, default=0)
+    erro = db.Column(db.Text)
+    resultado_json = db.Column(db.Text)
+    criada_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    reivindicada_em = db.Column(db.DateTime)
+    iniciada_em = db.Column(db.DateTime)
+    finalizada_em = db.Column(db.DateTime)
+    atualizada_em = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        db.Index("ix_rpa_execucao_fila", "ambiente", "status", "criada_em"),
+    )

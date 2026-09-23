@@ -21,6 +21,7 @@ const rows = Array.from({length: 60}, (_, index) => ({
 let failNext = false;
 let modalOpened = false;
 let executionRequest = null;
+let executionPolls = 0;
 window.HTMLDialogElement.prototype.showModal = function () { this.open = true; modalOpened = true; };
 window.HTMLDialogElement.prototype.close = function () { this.open = false; };
 window.fetch = async (url, options) => {
@@ -28,15 +29,21 @@ window.fetch = async (url, options) => {
     failNext = false;
     return {ok: false, json: async () => ({error: 'Falha simulada'})};
   }
-  if (url === '/api/status') {
-    return {ok: true, json: async () => ({rpa_habilitado: true, rpa_disponivel: true, desktop_interativo: true, usuario: 'guilherme.bonfim'})};
+  if (url === '/api/rpa/status') {
+    return {ok: true, json: async () => ({modo: 'agente_windows', configurado: true, executor_online: true, grv_disponivel: true, rpa_habilitado: true, rpa_disponivel: true, desktop_interativo: true, usuario: 'guilherme.bonfim'})};
   }
   if (url === '/api/rpa/janelas') {
     return {ok: true, json: async () => ({janela_grv_encontrada: true, hwnd: 123})};
   }
   if (url === '/api/agrupamentos/executar') {
     executionRequest = JSON.parse(options.body);
-    return {ok: true, json: async () => ({result: {gravado: true, comando_gravar_enviado: true, quantidade_codigos: executionRequest.codes.length}})};
+    return {ok: true, json: async () => ({queued: true, execution_id: 'exec-ui-1', status: 'PENDING'})};
+  }
+  if (url === '/api/agrupamentos/executar/exec-ui-1') {
+    executionPolls += 1;
+    return {ok: true, json: async () => executionPolls === 1
+      ? ({execution_id: 'exec-ui-1', status: 'RUNNING'})
+      : ({execution_id: 'exec-ui-1', status: 'SUCCEEDED', result: {gravado: true, comando_gravar_enviado: true, quantidade_codigos: 2}})};
   }
   if (options?.method === 'POST') {
     const request = JSON.parse(options.body);
@@ -138,11 +145,12 @@ const get = id => document.getElementById(id);
   assert.equal(get('rpa-review-modal').open, true);
   assert.match(get('rpa-final-review').textContent, /guilherme\.bonfim/);
   get('rpa-confirm-execution').click();
-  await tick(20);
+  await tick(1700);
   assert.deepEqual(executionRequest.codes, ['100071', '100073']);
   assert.equal(executionRequest.confirmed, true);
   assert.equal(executionRequest.description, '21889 - A36 - 6545');
-  assert.match(get('rpa-execution-status').textContent, /gravado no GRV/);
+  assert.equal(executionPolls, 2);
+  assert.match(get('rpa-execution-status').textContent, /gravado com sucesso no GRV/);
   assert.equal(get('rpa-group-empty').hidden, false);
 
   failNext = true;

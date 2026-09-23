@@ -66,6 +66,14 @@ os.environ["ERP_LANCAMENTO_AUTO_ENABLED"] = "0"
 os.environ["FACILITIES_ALERTAS_ENABLED"] = "0"
 os.environ["DB_POOL_RECYCLE_SECONDS"] = "120"
 
+# Fila do RPA: o segredo bruto permanece somente na estação Windows. O
+# servidor guarda apenas o SHA-256 usado para validar o Bearer token.
+os.environ["RPA_AGENT_ENABLED"] = "1"
+os.environ["RPA_AGENT_ENVIRONMENT"] = "homologacao"
+os.environ["RPA_AGENT_ID"] = "columbia-grv-hml-01"
+os.environ["RPA_AGENT_TOKEN_HASH"] = "0f965584d4f9bf81afb527fd95bf65dc6a774743cbdaa623f30267c269ef11dc"
+os.environ["RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS"] = "45"
+
 # Não postar cards no Teams a partir da homologação (deixe vazio):
 os.environ["TEAMS_WEBHOOK_EXPEDICAO_URL"] = ""
 os.environ["TEAMS_WEBHOOK_EXPEDICAO_ST_URL"] = ""
