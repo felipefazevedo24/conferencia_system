@@ -9,17 +9,26 @@ from conferencia_app.services import rpa_grv_service
 
 TOKEN = "token-de-teste-do-agente"
 AGENT_ID = "columbia-grv-hml-01"
+PRODUCTION_TOKEN = "token-de-teste-producao"
+PRODUCTION_AGENT_ID = "columbia-grv-prod-01"
 
 
-def build_app(tmp_path):
+def build_app(
+    tmp_path,
+    *,
+    environment="homologacao",
+    token=TOKEN,
+    agent_id=AGENT_ID,
+    database_name="agent.db",
+):
     return create_app(
         {
             "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'agent.db'}",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / database_name}",
             "RPA_AGENT_ENABLED": True,
-            "RPA_AGENT_ENVIRONMENT": "homologacao",
-            "RPA_AGENT_ID": AGENT_ID,
-            "RPA_AGENT_TOKEN_HASH": hashlib.sha256(TOKEN.encode()).hexdigest(),
+            "RPA_AGENT_ENVIRONMENT": environment,
+            "RPA_AGENT_ID": agent_id,
+            "RPA_AGENT_TOKEN_HASH": hashlib.sha256(token.encode()).hexdigest(),
             "RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS": 45,
         }
     )
@@ -85,6 +94,14 @@ def test_fluxo_completo_fila_agente_e_retorno_ao_usuario(tmp_path, monkeypatch):
     assert status.get_json()["executor_online"] is True
     assert status.get_json()["grv_disponivel"] is True
     assert status.get_json()["rpa_disponivel"] is True
+
+    agent_status = client.get(
+        "/api/rpa/agent/status",
+        headers=agent_headers(),
+    )
+    assert agent_status.status_code == 200
+    assert agent_status.get_json()["executor_online"] is True
+    assert agent_status.get_json()["executor"]["id"] == AGENT_ID
 
     queued = client.post(
         "/api/agrupamentos/executar",
@@ -184,3 +201,37 @@ def test_heartbeat_do_agente_continua_disponivel_em_manutencao(tmp_path, monkeyp
 
     assert heartbeat.status_code == 200
     assert heartbeat.get_json()["agent_id"] == AGENT_ID
+
+
+def test_credenciais_e_filas_sao_isoladas_por_ambiente(tmp_path):
+    homologacao = build_app(tmp_path, database_name="homologacao.db")
+    producao = build_app(
+        tmp_path,
+        environment="producao",
+        token=PRODUCTION_TOKEN,
+        agent_id=PRODUCTION_AGENT_ID,
+        database_name="producao.db",
+    )
+
+    with homologacao.test_client() as client:
+        assert client.post(
+            "/api/rpa/agent/heartbeat",
+            headers=agent_headers(PRODUCTION_TOKEN, PRODUCTION_AGENT_ID),
+            json=heartbeat_payload(),
+        ).status_code == 401
+
+    with producao.test_client() as client:
+        assert client.post(
+            "/api/rpa/agent/heartbeat",
+            headers=agent_headers(),
+            json=heartbeat_payload(),
+        ).status_code == 401
+        accepted = client.post(
+            "/api/rpa/agent/heartbeat",
+            headers=agent_headers(PRODUCTION_TOKEN, PRODUCTION_AGENT_ID),
+            json=heartbeat_payload(),
+        )
+        assert accepted.status_code == 200
+        with producao.app_context():
+            executor = db.session.get(RpaExecutor, PRODUCTION_AGENT_ID)
+            assert executor.ambiente == "producao"

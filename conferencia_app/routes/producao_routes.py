@@ -192,6 +192,15 @@ def rpa_agent_heartbeat():
         return _rpa_error_response(exc)
 
 
+@producao_bp.get("/api/rpa/agent/status")
+def rpa_agent_status():
+    try:
+        rpa_queue_service.authenticate_agent()
+        return jsonify(rpa_queue_service.status("agente", True))
+    except Exception as exc:
+        return _rpa_error_response(exc)
+
+
 @producao_bp.post("/api/rpa/agent/claim")
 def rpa_agent_claim():
     try:

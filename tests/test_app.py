@@ -3,7 +3,9 @@ import io
 import hashlib
 import hmac
 from datetime import datetime, timedelta
+import shutil
 import sqlite3
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -37,8 +39,23 @@ from conferencia_app.services.xml_service import process_xml_and_store
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
+_BANCO_MODELO = None
+
+
 def build_test_app(tmp_path):
+    """App de teste com banco SQLite proprio em tmp_path.
+
+    Criar o schema do zero (create_all) custava ~6 s por teste - era a maior
+    parte da suite. Cria uma vez por sessao um banco modelo e copia o
+    arquivo pra cada teste; o create_app ai' so' confere que as tabelas
+    existem (~0,25 s). Cada teste continua com o proprio arquivo."""
+    global _BANCO_MODELO
+    if _BANCO_MODELO is None:
+        modelo = Path(tempfile.mkdtemp(prefix="sync_banco_modelo_")) / "modelo.db"
+        create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": f"sqlite:///{modelo}"})
+        _BANCO_MODELO = modelo
     db_path = tmp_path / "test.db"
+    shutil.copyfile(_BANCO_MODELO, db_path)
     return create_app(
         {
             "TESTING": True,

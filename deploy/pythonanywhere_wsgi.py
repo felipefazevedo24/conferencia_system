@@ -35,4 +35,12 @@ os.environ.setdefault("CONSYSTE_TOKEN", "troque-seu-token")
 # privado antes de carregar a aplicação; não inclua o token neste arquivo.
 os.environ.setdefault("ERP_LANCAMENTO_API_URL", "https://wk-dev.tail2061cd.ts.net")
 
+# Fila do RPA de producao. O segredo bruto fica somente na estacao Windows;
+# o servidor armazena apenas o SHA-256 usado para validar o Bearer token.
+os.environ["RPA_AGENT_ENABLED"] = "1"
+os.environ["RPA_AGENT_ENVIRONMENT"] = "producao"
+os.environ["RPA_AGENT_ID"] = "columbia-grv-prod-01"
+os.environ["RPA_AGENT_TOKEN_HASH"] = "bb3658073ad51db39b40e49ccd3c5ed514da302763ed6066f1beba07e2367fdf"
+os.environ["RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS"] = "45"
+
 from wsgi import application

@@ -9,13 +9,23 @@ Workflow:
                                |         \\--reprovar--> Reprovado
                                \\--devolver--> Rascunho
     (Homologado/Reprovado podem ser reabertos, voltando pra Rascunho.)
+
+Self assessment (opcional, a partir do Rascunho):
+    Rascunho ---enviar_para_fornecedor--> Com fornecedor
+    Com fornecedor ---fornecedor envia pelo link--> Rascunho (comprador revisa)
+    Com fornecedor ---cancelar_envio_fornecedor--> Rascunho
 """
 from __future__ import annotations
 
+import hashlib
+import re
+import secrets
 from datetime import date, datetime, timedelta
 
 from ..extensions import db
 from ..models import (
+    ComprasHomologacaoConvite,
+    ComprasHomologacaoEvidencia,
     ComprasHomologacaoFornecedor as Homologacao,
     ComprasHomologacaoFoto,
     ComprasHomologacaoResposta,
@@ -28,6 +38,19 @@ DIAS_ALERTA_VENCIMENTO = 30
 
 MAX_FOTO_BYTES = 8 * 1024 * 1024
 CONTENT_TYPES_FOTO = ("image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif")
+
+VALIDADE_LINK_FORNECEDOR_DIAS = 14
+MAX_EVIDENCIA_BYTES = 10 * 1024 * 1024
+# O content type vem da extensao (lista fechada), nao do que o navegador do
+# fornecedor declarou - a evidencia e' servida de volta pro comprador.
+TIPOS_EVIDENCIA = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+# Campos que o fornecedor confirma/ajusta no link. Razao social, CNPJ e
+# endereco vem do cartao CNPJ (so' leitura pra ele); auditoria, fotos e
+# comentario final sao internos.
+CAMPOS_FORNECEDOR = ("contato_principal", "telefone", "email", "website", "descricao_produto_servico")
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _txt(valor) -> str:
@@ -384,4 +407,206 @@ def remover_foto(foto: ComprasHomologacaoFoto) -> None:
     if foto.homologacao.status != Homologacao.STATUS_RASCUNHO:
         raise ValueError("Só é possível remover fotos enquanto a homologação está em rascunho.")
     db.session.delete(foto)
+    db.session.commit()
+
+
+# ── Self assessment (link publico do fornecedor) ────────────────────────
+def _hash_token(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def convite_ativo(homologacao: Homologacao) -> ComprasHomologacaoConvite | None:
+    """O convite ainda nao respondido nem cancelado (pode estar expirado)."""
+    for convite in reversed(homologacao.convites):
+        if not convite.respondido_em and not convite.cancelado_em:
+            return convite
+    return None
+
+
+def ultimo_convite(homologacao: Homologacao) -> ComprasHomologacaoConvite | None:
+    return homologacao.convites[-1] if homologacao.convites else None
+
+
+def situacao_convite(convite: ComprasHomologacaoConvite, agora: datetime | None = None) -> str:
+    if convite.respondido_em:
+        return "respondido"
+    if convite.cancelado_em:
+        return "cancelado"
+    if convite.expira_em < (agora or datetime.now()):
+        return "expirado"
+    return "pendente"
+
+
+def _cancelar_convites_abertos(homologacao: Homologacao, agora: datetime) -> None:
+    for convite in homologacao.convites:
+        if not convite.respondido_em and not convite.cancelado_em:
+            convite.cancelado_em = agora
+
+
+def enviar_para_fornecedor(homologacao: Homologacao, email: str, usuario: str) -> tuple[ComprasHomologacaoConvite, str]:
+    """Gera o link de self assessment. Serve tambem pro reenvio: o convite
+    anterior e' cancelado (o link velho para de funcionar) e sai um novo,
+    com prazo renovado. O token bruto so' existe neste retorno - so' o
+    hash fica salvo (mesmo padrao da cotacao do Comex)."""
+    if homologacao.status not in (Homologacao.STATUS_RASCUNHO, Homologacao.STATUS_COM_FORNECEDOR):
+        raise ValueError("Só um rascunho pode ser enviado ao fornecedor.")
+    if not _txt(homologacao.razao_social):
+        raise ValueError("Informe a razão social do fornecedor.")
+    if not _txt(homologacao.cnpj):
+        raise ValueError("Informe o CNPJ do fornecedor antes de enviar o link.")
+    email = _txt(email).lower()
+    if not _EMAIL_RE.match(email):
+        raise ValueError("Informe um e-mail válido para o fornecedor.")
+
+    agora = datetime.now()
+    _cancelar_convites_abertos(homologacao, agora)
+    token = secrets.token_urlsafe(32)
+    convite = ComprasHomologacaoConvite(
+        email=email[:120],
+        token_hash=_hash_token(token),
+        expira_em=agora + timedelta(days=VALIDADE_LINK_FORNECEDOR_DIAS),
+        enviado_em=agora,
+        enviado_por=usuario,
+    )
+    homologacao.convites.append(convite)
+    if not _txt(homologacao.email):
+        homologacao.email = email[:120]
+    homologacao.status = Homologacao.STATUS_COM_FORNECEDOR
+    db.session.commit()
+    return convite, token
+
+
+def cancelar_envio_fornecedor(homologacao: Homologacao, usuario: str) -> Homologacao:
+    if homologacao.status != Homologacao.STATUS_COM_FORNECEDOR:
+        raise ValueError("Esta homologação não está com o fornecedor.")
+    _cancelar_convites_abertos(homologacao, datetime.now())
+    homologacao.status = Homologacao.STATUS_RASCUNHO
+    db.session.commit()
+    return homologacao
+
+
+def obter_convite_por_token(token: str) -> ComprasHomologacaoConvite | None:
+    if not token:
+        return None
+    return ComprasHomologacaoConvite.query.filter_by(token_hash=_hash_token(token)).first()
+
+
+def convite_aceita_edicao(convite: ComprasHomologacaoConvite) -> bool:
+    return (
+        situacao_convite(convite) == "pendente"
+        and convite.homologacao.status == Homologacao.STATUS_COM_FORNECEDOR
+    )
+
+
+def _exigir_convite_aberto(convite: ComprasHomologacaoConvite) -> Homologacao:
+    if not convite_aceita_edicao(convite):
+        situacao = situacao_convite(convite)
+        if situacao == "respondido":
+            raise ValueError("Este questionário já foi enviado. Obrigado!")
+        if situacao == "expirado":
+            raise ValueError("Este link expirou. Solicite um novo link ao comprador da Columbia.")
+        raise ValueError("Este link não está mais ativo. Solicite um novo link ao comprador da Columbia.")
+    return convite.homologacao
+
+
+def salvar_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) -> Homologacao:
+    """Rascunho do fornecedor: grava so' os campos liberados pra ele e as
+    respostas/comentarios. Pode salvar e voltar pelo mesmo link."""
+    homologacao = _exigir_convite_aberto(convite)
+    for campo in CAMPOS_FORNECEDOR:
+        if campo in dados:
+            setattr(homologacao, campo, _txt(dados.get(campo)) or None)
+    if "respostas" in dados:
+        salvar_respostas(homologacao, dados.get("respostas") or [], commit=False)
+    recalcular(homologacao)
+    db.session.commit()
+    return homologacao
+
+
+def pendencias_evidencia(homologacao: Homologacao) -> list[dict]:
+    """Itens respondidos Sim/Parcial/Conforme sem nenhuma evidencia, na
+    ordem do formulario."""
+    respostas = {(r.secao, r.item): r.resposta for r in homologacao.respostas}
+    com_evidencia = {(e.secao, e.item) for e in homologacao.evidencias}
+    pendentes = []
+    for secao_chave, item, texto in form.itens_do_formulario():
+        if respostas.get((secao_chave, item)) in form.RESPOSTAS_EXIGEM_EVIDENCIA \
+                and (secao_chave, item) not in com_evidencia:
+            pendentes.append({
+                "secao": secao_chave,
+                "secao_titulo": form.secao_por_chave(secao_chave)["titulo"],
+                "item": item,
+                "texto": texto,
+            })
+    return pendentes
+
+
+def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) -> Homologacao:
+    """Envio final do fornecedor: tudo respondido + evidencia onde exigida.
+    Volta pra Rascunho pro comprador revisar e mandar pra aprovacao."""
+    homologacao = salvar_self_assessment(convite, dados)
+    faltando = itens_faltando(homologacao)
+    if faltando:
+        primeira = faltando[0]
+        raise ValueError(
+            f"Responda todos os itens antes de enviar - faltam {len(faltando)} "
+            f"(ex.: {primeira['secao_titulo']}, item {primeira['item']})."
+        )
+    sem_evidencia = pendencias_evidencia(homologacao)
+    if sem_evidencia:
+        primeira = sem_evidencia[0]
+        raise ValueError(
+            f"Anexe evidência nos itens respondidos como Sim, Parcial ou Conforme - faltam "
+            f"{len(sem_evidencia)} (ex.: {primeira['secao_titulo']}, item {primeira['item']})."
+        )
+    convite.respondido_em = datetime.now()
+    homologacao.status = Homologacao.STATUS_RASCUNHO
+    db.session.commit()
+    return homologacao
+
+
+def anexar_evidencia(convite: ComprasHomologacaoConvite, secao_chave: str, item, arquivo) -> ComprasHomologacaoEvidencia:
+    homologacao = _exigir_convite_aberto(convite)
+    secao = form.secao_por_chave(_txt(secao_chave))
+    try:
+        item = int(item)
+    except (TypeError, ValueError):
+        item = 0
+    if not secao or not (1 <= item <= len(secao["itens"])):
+        raise ValueError("Item do formulário inválido.")
+    if not arquivo or not getattr(arquivo, "filename", ""):
+        raise ValueError("Nenhum arquivo recebido.")
+    nome = _txt(arquivo.filename)
+    extensao = ("." + nome.rsplit(".", 1)[-1].lower()) if "." in nome else ""
+    content_type = TIPOS_EVIDENCIA.get(extensao)
+    if not content_type:
+        raise ValueError("Formato não suportado - envie PDF, JPG ou PNG.")
+    conteudo = arquivo.read(MAX_EVIDENCIA_BYTES + 1)
+    if not conteudo:
+        raise ValueError("Arquivo vazio.")
+    if len(conteudo) > MAX_EVIDENCIA_BYTES:
+        raise ValueError("Arquivo muito grande (máximo 10 MB).")
+
+    evidencia = ComprasHomologacaoEvidencia(
+        secao=secao["chave"],
+        item=item,
+        nome_arquivo=nome[:260],
+        content_type=content_type,
+        tamanho_bytes=len(conteudo),
+        dados=conteudo,
+        enviado_por=f"Fornecedor ({convite.email})"[:100],
+    )
+    homologacao.evidencias.append(evidencia)
+    db.session.commit()
+    return evidencia
+
+
+def evidencia_do_convite(convite: ComprasHomologacaoConvite, evidencia_id) -> ComprasHomologacaoEvidencia | None:
+    """So' enxerga evidencia da propria homologacao do link."""
+    return next((e for e in convite.homologacao.evidencias if str(e.id) == str(evidencia_id)), None)
+
+
+def remover_evidencia(convite: ComprasHomologacaoConvite, evidencia: ComprasHomologacaoEvidencia) -> None:
+    homologacao = _exigir_convite_aberto(convite)
+    homologacao.evidencias.remove(evidencia)
     db.session.commit()

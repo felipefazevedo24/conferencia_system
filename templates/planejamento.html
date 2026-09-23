@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Planejamento de Tarefas | Columbia Sync{% endblock %}
+{% block title %}{{ "Minhas tarefas" if modo_pessoal else "Planejamento de Tarefas" }} | Columbia Sync{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -476,12 +476,18 @@
 <div class="plan-wrap">
     <header class="eui-page-header plan-hero">
         <div>
+            {% if modo_pessoal %}
+            <div class="eui-page-header__eyebrow"><i class="fas fa-user-lock"></i> Planejamento · Quadro pessoal</div>
+            <h1 class="eui-page-header__title plan-title">Minhas tarefas</h1>
+            <p class="eui-page-header__sub plan-sub">Seu quadro individual: cadastre suas tarefas e organize nos seus próprios status (colunas). Só você vê este quadro.</p>
+            {% else %}
             <div class="eui-page-header__eyebrow"><i class="fas fa-user-shield"></i> Administração · Planejamento</div>
             <h1 class="eui-page-header__title plan-title">Planejamento de Tarefas</h1>
             <p class="eui-page-header__sub plan-sub">Board Kanban integrado ao Sync para gestão interna: backlog, execução, revisão e entrega com histórico por card.</p>
+            {% endif %}
         </div>
         <div class="plan-actions">
-            <button class="plan-btn" onclick="openColumnModal()"><i class="fas fa-plus"></i> Nova coluna</button>
+            <button class="plan-btn" onclick="openColumnModal()"><i class="fas fa-plus"></i> {{ "Novo status" if modo_pessoal else "Nova coluna" }}</button>
             <button class="plan-btn" onclick="openLabelModal()"><i class="fas fa-tags"></i> Etiquetas</button>
             <button class="plan-btn primary" onclick="openTaskModal()"><i class="fas fa-circle-plus"></i> Nova tarefa</button>
         </div>
@@ -742,6 +748,9 @@ function closeConfirm(ok) {
     }
 }
 
+// Mesma tela pro board da equipe e pro "Minhas tarefas" - so' muda a base da API.
+const API_BASE = {{ api_base|tojson }};
+
 async function api(url, opts = {}) {
     const headers = opts.headers || {};
     if (!headers["Content-Type"] && opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -753,7 +762,7 @@ async function api(url, opts = {}) {
 
 async function loadBoard() {
     try {
-        const data = await api("/api/planejamento/board");
+        const data = await api(`${API_BASE}/board`);
         board = data.board;
         renderKpis(board.kpis || {});
         renderBoard();
@@ -892,7 +901,7 @@ function toggleChecklist(idx, done) {
     checklistDraft[idx].is_done = !!done;
     renderChecklist();
     if (checklistDraft[idx].id) {
-        api(`/api/planejamento/checklist/${checklistDraft[idx].id}`, { method: "PATCH", body: JSON.stringify({ is_done: !!done }) })
+        api(`${API_BASE}/checklist/${checklistDraft[idx].id}`, { method: "PATCH", body: JSON.stringify({ is_done: !!done }) })
             .then(() => loadBoard())
             .catch(err => notify(err.message, "error"));
     }
@@ -906,7 +915,7 @@ async function removeChecklist(idx) {
 
     if (item.id) {
         try {
-            await api(`/api/planejamento/checklist/${item.id}`, { method: "DELETE" });
+            await api(`${API_BASE}/checklist/${item.id}`, { method: "DELETE" });
             notify("Item removido.", "success");
             await loadBoard();
             if (editingTaskId) {
@@ -933,7 +942,7 @@ async function addChecklistItem() {
 
     if (editingTaskId) {
         try {
-            await api(`/api/planejamento/cards/${editingTaskId}/checklist`, { method: "POST", body: JSON.stringify({ texto }) });
+            await api(`${API_BASE}/cards/${editingTaskId}/checklist`, { method: "POST", body: JSON.stringify({ texto }) });
             inp.value = "";
             await loadBoard();
             const found = findCard(editingTaskId);
@@ -979,7 +988,7 @@ async function addComment() {
     const texto = (inp.value || "").trim();
     if (!texto) return;
     try {
-        await api(`/api/planejamento/cards/${editingTaskId}/comments`, { method: "POST", body: JSON.stringify({ texto }) });
+        await api(`${API_BASE}/cards/${editingTaskId}/comments`, { method: "POST", body: JSON.stringify({ texto }) });
         inp.value = "";
         await loadBoard();
         const found = findCard(editingTaskId);
@@ -1059,11 +1068,11 @@ async function saveTask() {
 
     try {
         if (editingTaskId) {
-            await api(`/api/planejamento/cards/${editingTaskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+            await api(`${API_BASE}/cards/${editingTaskId}`, { method: "PATCH", body: JSON.stringify(payload) });
             notify("Tarefa atualizada.", "success");
         } else {
             payload.checklist = checklistDraft.map(i => i.texto);
-            await api("/api/planejamento/cards", { method: "POST", body: JSON.stringify(payload) });
+            await api(`${API_BASE}/cards`, { method: "POST", body: JSON.stringify(payload) });
             notify("Tarefa criada.", "success");
         }
         closeTaskModal();
@@ -1078,7 +1087,7 @@ async function confirmDeleteTask() {
     const ok = await askConfirm("Deseja excluir esta tarefa?");
     if (!ok) return;
     try {
-        await api(`/api/planejamento/cards/${editingTaskId}`, { method: "DELETE" });
+        await api(`${API_BASE}/cards/${editingTaskId}`, { method: "DELETE" });
         closeTaskModal();
         await loadBoard();
         notify("Tarefa excluída.", "success");
@@ -1131,10 +1140,10 @@ async function saveColumn() {
 
     try {
         if (editingColumnId) {
-            await api(`/api/planejamento/columns/${editingColumnId}`, { method: "PATCH", body: JSON.stringify(payload) });
+            await api(`${API_BASE}/columns/${editingColumnId}`, { method: "PATCH", body: JSON.stringify(payload) });
             notify("Coluna atualizada.", "success");
         } else {
-            await api("/api/planejamento/columns", { method: "POST", body: JSON.stringify(payload) });
+            await api(`${API_BASE}/columns`, { method: "POST", body: JSON.stringify(payload) });
             notify("Coluna criada.", "success");
         }
         closeColumnModal();
@@ -1149,7 +1158,7 @@ async function confirmDeleteColumn() {
     const ok = await askConfirm("Deseja excluir esta coluna? Ela precisa estar sem tarefas.");
     if (!ok) return;
     try {
-        await api(`/api/planejamento/columns/${editingColumnId}`, { method: "DELETE" });
+        await api(`${API_BASE}/columns/${editingColumnId}`, { method: "DELETE" });
         closeColumnModal();
         await loadBoard();
         notify("Coluna excluída.", "success");
@@ -1195,7 +1204,7 @@ async function createLabel() {
         return;
     }
     try {
-        await api("/api/planejamento/labels", { method: "POST", body: JSON.stringify({ nome, color }) });
+        await api(`${API_BASE}/labels`, { method: "POST", body: JSON.stringify({ nome, color }) });
         document.getElementById("label-new-name").value = "";
         notify("Etiqueta criada.", "success");
         await loadBoard();
@@ -1210,7 +1219,7 @@ async function removeLabel(labelId) {
     const ok = await askConfirm("Excluir esta etiqueta? Ela será removida dos cards vinculados.");
     if (!ok) return;
     try {
-        await api(`/api/planejamento/labels/${labelId}`, { method: "DELETE" });
+        await api(`${API_BASE}/labels/${labelId}`, { method: "DELETE" });
         selectedLabelIds = selectedLabelIds.filter(id => id !== labelId);
         notify("Etiqueta excluída.", "success");
         await loadBoard();
@@ -1326,7 +1335,7 @@ async function onColDrop(event, columnId) {
     if (!cardId || !columnId) return;
 
     try {
-        await api(`/api/planejamento/cards/${cardId}/move`, {
+        await api(`${API_BASE}/cards/${cardId}/move`, {
             method: "POST",
             body: JSON.stringify({ to_column_id: columnId, position: index }),
         });
@@ -1351,7 +1360,7 @@ async function reorderColumns(draggedId, targetId, before) {
     ids.splice(before ? targetIdx : targetIdx + 1, 0, draggedId);
 
     try {
-        await api("/api/planejamento/columns/reorder", {
+        await api(`${API_BASE}/columns/reorder`, {
             method: "POST",
             body: JSON.stringify({ column_ids: ids }),
         });

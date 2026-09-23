@@ -2177,7 +2177,8 @@ class ComprasHomologacaoFornecedor(db.Model):
     services/compras_homologacao_form.py; aqui ficam os dados preenchidos.
 
     Workflow: Rascunho (Compras preenche, pode salvar e voltar depois) ->
-    Em aprovacao (nota ja calculada, aguardando o gestor) -> Homologado ou
+    [opcional: Com fornecedor - self assessment pelo link publico, volta
+    pra Rascunho quando o fornecedor envia] -> Em aprovacao (nota ja calculada, aguardando o gestor) -> Homologado ou
     Reprovado. A nota/classificacao e' calculada pelo service a cada
     salvamento, seguindo a regra de pontuacao da planilha.
     """
@@ -2188,6 +2189,9 @@ class ComprasHomologacaoFornecedor(db.Model):
     STATUS_EM_APROVACAO = "Em aprovação"
     STATUS_HOMOLOGADO = "Homologado"
     STATUS_REPROVADO = "Reprovado"
+    # Self assessment: link publico aberto, fornecedor preenchendo. Cabe no
+    # String(20) da coluna ("Aguardando fornecedor" nao caberia).
+    STATUS_COM_FORNECEDOR = "Com fornecedor"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -2249,6 +2253,18 @@ class ComprasHomologacaoFornecedor(db.Model):
         cascade="all, delete-orphan",
         order_by="ComprasHomologacaoFoto.id",
     )
+    evidencias = db.relationship(
+        "ComprasHomologacaoEvidencia",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoEvidencia.id",
+    )
+    convites = db.relationship(
+        "ComprasHomologacaoConvite",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoConvite.id",
+    )
 
 
 class ComprasHomologacaoResposta(db.Model):
@@ -2285,6 +2301,51 @@ class ComprasHomologacaoFoto(db.Model):
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
     legenda = db.Column(db.String(250))
     enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    enviado_por = db.Column(db.String(100))
+
+
+class ComprasHomologacaoConvite(db.Model):
+    """Link de self assessment enviado ao fornecedor (mesmo padrao do link
+    de cotacao do Comex): so' o hash do token fica salvo, o token bruto so'
+    existe no e-mail. Reenviar gera um convite novo e cancela o anterior -
+    no maximo um convite "vivo" por homologacao.
+
+    Situacao (pendente/respondido/cancelado/expirado) e' derivada das datas,
+    nao gravada."""
+
+    __tablename__ = "compras_homologacao_convite"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    email = db.Column(db.String(120), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    expira_em = db.Column(db.DateTime, nullable=False)
+    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_por = db.Column(db.String(100))
+    respondido_em = db.Column(db.DateTime)
+    cancelado_em = db.Column(db.DateTime)
+
+
+class ComprasHomologacaoEvidencia(db.Model):
+    """Evidencia de um item do formulario (PDF/imagem), enviada pelo
+    fornecedor no self assessment. Obrigatoria quando a resposta e'
+    Sim, Parcial ou Conforme. Guardada no banco, como as fotos."""
+
+    __tablename__ = "compras_homologacao_evidencia"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    secao = db.Column(db.String(60), nullable=False)
+    item = db.Column(db.Integer, nullable=False)
+    nome_arquivo = db.Column(db.String(260))
+    content_type = db.Column(db.String(80))
+    tamanho_bytes = db.Column(db.Integer)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
     enviado_por = db.Column(db.String(100))
 
 
@@ -3243,6 +3304,22 @@ class PlannerChecklistItem(db.Model):
     criado_por = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+
+
+class PlannerBoardPessoal(db.Model):
+    """Dono de um board pessoal ("Minhas tarefas"). Tabela a parte (em vez
+    de uma coluna "dono" no planner_board) pra nao exigir migration: board
+    sem linha aqui e' o board compartilhado da equipe. Um board por usuario,
+    visivel so' pro dono - nem o Admin enxerga o dos outros pela tela."""
+
+    __tablename__ = "planner_board_pessoal"
+
+    id = db.Column(db.Integer, primary_key=True)
+    board_id = db.Column(db.Integer, db.ForeignKey("planner_board.id"), nullable=False, unique=True, index=True)
+    username = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    board = db.relationship("PlannerBoard")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

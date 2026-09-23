@@ -171,12 +171,14 @@ def enqueue(data: dict[str, Any], usuario: str) -> dict[str, Any]:
     db.session.add(execution)
     db.session.commit()
     current_app.logger.warning(
-        "RPA enfileirado | execution_id=%s | ambiente=%s | usuario=%s | quantidade=%s | codigos=%s",
+        "RPA enfileirado | execution_id=%s | ambiente=%s | usuario=%s | quantidade=%s | codigos=%s | os=%s | descricao=%s",
         execution.id,
         execution.ambiente,
         usuario,
         payload.get("quantidade_itens"),
         ",".join(payload.get("codigos_destacados_para_agrupamento") or []),
+        ",".join(payload.get("cod_os_completo") or []),
+        description,
     )
     return {
         "ok": True,
@@ -278,7 +280,11 @@ def claim(agent_id: str, heartbeat_data: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "job": None}
     claimed = db.session.get(RpaExecucao, candidate.id)
     current_app.logger.warning(
-        "RPA reivindicado | execution_id=%s | executor=%s", claimed.id, agent_id
+        "RPA reivindicado | execution_id=%s | ambiente=%s | executor=%s | hostname=%s",
+        claimed.id,
+        claimed.ambiente,
+        agent_id,
+        (db.session.get(RpaExecutor, agent_id).hostname or ""),
     )
     return {"ok": True, "job": _serialize_execution(claimed, include_payload=True)}
 
@@ -294,7 +300,11 @@ def mark_running(agent_id: str, execution_id: str) -> dict[str, Any]:
     execution.atualizada_em = agora_br()
     db.session.commit()
     current_app.logger.warning(
-        "RPA iniciado | execution_id=%s | executor=%s", execution.id, agent_id
+        "RPA iniciado | execution_id=%s | ambiente=%s | executor=%s | inicio=%s",
+        execution.id,
+        execution.ambiente,
+        agent_id,
+        execution.iniciada_em.isoformat(),
     )
     return _serialize_execution(execution)
 
@@ -313,10 +323,15 @@ def finish(agent_id: str, execution_id: str, data: dict[str, Any]) -> dict[str, 
     execution.atualizada_em = agora_br()
     db.session.commit()
     current_app.logger.warning(
-        "RPA finalizado | execution_id=%s | executor=%s | status=%s | gravado=%s",
+        "RPA finalizado | execution_id=%s | ambiente=%s | executor=%s | hostname=%s | status=%s | gravado=%s | inicio=%s | fim=%s | erro=%s",
         execution.id,
+        execution.ambiente,
         agent_id,
+        (db.session.get(RpaExecutor, agent_id).hostname or ""),
         execution.status,
         success,
+        execution.iniciada_em.isoformat() if execution.iniciada_em else "",
+        execution.finalizada_em.isoformat(),
+        execution.erro or "",
     )
     return _serialize_execution(execution)
