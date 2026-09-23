@@ -235,11 +235,6 @@
                 <a href="/" class="list-group-item list-group-item-action sidebar-home-link">
                     <span class="nav-group-title"><i class="fas fa-house"></i><span>Menu principal</span></span>
                 </a>
-                {% if can_access('PAGE_MINHAS_TAREFAS') %}
-                <a href="/minhas-tarefas" class="list-group-item list-group-item-action sidebar-home-link">
-                    <span class="nav-group-title"><i class="fas fa-list-check"></i><span>Minhas tarefas</span></span>
-                </a>
-                {% endif %}
 
                 {% if can_access('PAGE_PORTARIA') and not can_access('PAGE_CONFERENCIA') %}
                 <div class="menu-item">
@@ -447,6 +442,12 @@
                         <i class="fas fa-gear"></i>
                         <span>Meu perfil e configurações</span>
                     </a>
+                    {% if can_access('PAGE_MINHAS_TAREFAS') %}
+                    <a href="/minhas-tarefas" class="sidebar-profile-menu-item" role="menuitem">
+                        <i class="fas fa-list-check"></i>
+                        <span>Minhas tarefas</span>
+                    </a>
+                    {% endif %}
                     {% if session.get('role') == 'Admin' %}
                     <button type="button" class="sidebar-profile-menu-item" role="menuitem" id="maintenanceToggleBtn">
                         <i class="fas fa-screwdriver-wrench"></i>
