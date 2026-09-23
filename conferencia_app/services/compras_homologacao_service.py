@@ -432,7 +432,7 @@ def situacao_convite(convite: ComprasHomologacaoConvite, agora: datetime | None 
         return "respondido"
     if convite.cancelado_em:
         return "cancelado"
-    if convite.expira_em < (agora or datetime.now()):
+    if convite.expira_em < (agora or agora_br()):
         return "expirado"
     return "pendente"
 
@@ -458,7 +458,7 @@ def enviar_para_fornecedor(homologacao: Homologacao, email: str, usuario: str) -
     if not _EMAIL_RE.match(email):
         raise ValueError("Informe um e-mail válido para o fornecedor.")
 
-    agora = datetime.now()
+    agora = agora_br()
     _cancelar_convites_abertos(homologacao, agora)
     token = secrets.token_urlsafe(32)
     convite = ComprasHomologacaoConvite(
@@ -479,7 +479,7 @@ def enviar_para_fornecedor(homologacao: Homologacao, email: str, usuario: str) -
 def cancelar_envio_fornecedor(homologacao: Homologacao, usuario: str) -> Homologacao:
     if homologacao.status != Homologacao.STATUS_COM_FORNECEDOR:
         raise ValueError("Esta homologação não está com o fornecedor.")
-    _cancelar_convites_abertos(homologacao, datetime.now())
+    _cancelar_convites_abertos(homologacao, agora_br())
     homologacao.status = Homologacao.STATUS_RASCUNHO
     db.session.commit()
     return homologacao
@@ -559,7 +559,7 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
             f"Anexe evidência nos itens respondidos como Sim, Parcial ou Conforme - faltam "
             f"{len(sem_evidencia)} (ex.: {primeira['secao_titulo']}, item {primeira['item']})."
         )
-    convite.respondido_em = datetime.now()
+    convite.respondido_em = agora_br()
     homologacao.status = Homologacao.STATUS_RASCUNHO
     db.session.commit()
     return homologacao

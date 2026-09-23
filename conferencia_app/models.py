@@ -2347,7 +2347,7 @@ class ComprasHomologacaoConvite(db.Model):
     email = db.Column(db.String(120), nullable=False)
     token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
     expira_em = db.Column(db.DateTime, nullable=False)
-    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
     respondido_em = db.Column(db.DateTime)
     cancelado_em = db.Column(db.DateTime)
@@ -2370,7 +2370,7 @@ class ComprasHomologacaoEvidencia(db.Model):
     content_type = db.Column(db.String(80))
     tamanho_bytes = db.Column(db.Integer)
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
-    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
 
 
@@ -3342,7 +3342,7 @@ class PlannerBoardPessoal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     board_id = db.Column(db.Integer, db.ForeignKey("planner_board.id"), nullable=False, unique=True, index=True)
     username = db.Column(db.String(80), nullable=False, unique=True, index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     board = db.relationship("PlannerBoard")
 

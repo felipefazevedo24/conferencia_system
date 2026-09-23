@@ -155,7 +155,7 @@ def _board_pessoal() -> PlannerBoard:
             db.session.commit()
         return dono.board
 
-    now = datetime.now()
+    now = agora_br()
     board = PlannerBoard(
         nome=f"Minhas tarefas · {username}"[:120],
         criado_por=username,
