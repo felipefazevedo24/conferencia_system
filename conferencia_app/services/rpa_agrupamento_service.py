@@ -103,8 +103,8 @@ def _pontuacao(material: str, norma: str, espessura: str, obs: str) -> int:
 
 
 def preparar_registros(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Seleciona a melhor chapa por processo, conforme pontuacao do RPA."""
-    by_process: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    """Seleciona uma unica melhor chapa por codigo de processo."""
+    by_process: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         material = _texto(row.get("material"))
         codigo = _texto(row.get("codigo"))
@@ -136,28 +136,79 @@ def preparar_registros(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                             and not item["processo_finalizado"]
                             and _chave(item["tipo_servico"]).startswith("CORTE LASER"))
         item["pontuacao"] = _pontuacao(material, norma, espessura, item["observacao"])
-        by_process[(item["os_completa"], codigo)].append(item)
+        by_process[codigo].append(item)
     result = []
     for candidates in by_process.values():
         top_score = max(item["pontuacao"] for item in candidates)
-        for item in candidates:
-            if item["pontuacao"] == top_score and top_score > 0:
-                item["elegivel"] = bool(item["elegivel"])
-                item.pop("pontuacao")
-                result.append(item)
+        if top_score <= 0:
+            continue
+        item = next(candidate for candidate in candidates if candidate["pontuacao"] == top_score)
+        item["elegivel"] = bool(item["elegivel"])
+        item.pop("pontuacao")
+        result.append(item)
     return result
+
+
+def diagnosticar_registros(rows: list[dict[str, Any]], result: list[dict[str, Any]]) -> dict[str, int]:
+    """Resume cada etapa usando o codigo do processo como unidade operacional."""
+    def codigo(row: dict[str, Any]) -> str:
+        return _texto(row.get("codigo"))
+
+    def chapa_valida(row: dict[str, Any]) -> bool:
+        return bool(codigo(row)) and _chave(row.get("material")).startswith("CHAPA")
+
+    corte_laser = [
+        row for row in rows
+        if chapa_valida(row) and _chave(row.get("tipo_servico")).startswith("CORTE LASER")
+    ]
+    status_valido = [
+        row for row in corte_laser
+        if _texto(row.get("status_os")) == "ABERTA" and not bool(row.get("cancelada"))
+    ]
+    nao_finalizados = [row for row in status_valido if not bool(row.get("processo_finalizado"))]
+    codigos_antes_deduplicacao = [codigo(row) for row in nao_finalizados]
+    codigos_deduplicados = set(codigos_antes_deduplicacao)
+    codigos_finais = {item["codigo_processo"] for item in result if item.get("elegivel")}
+    return {
+        "linhas_brutas": len(rows),
+        "apos_corte_laser": len({codigo(row) for row in corte_laser}),
+        "apos_status_valido": len({codigo(row) for row in status_valido}),
+        "apos_nao_finalizados": len(codigos_deduplicados),
+        "duplicados_removidos": len(codigos_antes_deduplicacao) - len(codigos_deduplicados),
+        "apos_deduplicacao": len(codigos_deduplicados),
+        "descartados_por_material": len(codigos_deduplicados) - len(codigos_finais),
+        "total_final": len(codigos_finais),
+    }
 
 
 def consultar(busca: str = "", limite: int = 500) -> list[dict[str, Any]]:
     busca = _texto(busca)[:80]
+    limite = max(1, min(int(limite), 1000))
     rows = fetch_all(queries.SQL_PRODUCAO_RPA_AGRUPAMENTO, {
         "cod_empresa": 1, "busca": busca, "busca_like": f"%{busca}%",
-        "limite": max(1, min(int(limite), 1000)),
+        # O JOIN com materiais pode gerar varias linhas para um processo. O
+        # limite de exibicao e aplicado somente depois da deduplicacao.
+        "limite": min(limite * 10, 10000),
     })
-    result = preparar_registros(rows)
-    _logger.info("rpa_agrupamento_consulta linhas=%s compativeis=%s elegiveis=%s",
-                 len(rows), len(result), sum(bool(item["elegivel"]) for item in result))
-    return result
+    prepared = preparar_registros(rows)
+    eligible = [item for item in prepared if item["elegivel"]]
+    diagnostic = diagnosticar_registros(rows, eligible)
+    _logger.info(
+        "rpa_agrupamento_consulta busca=%r linhas_brutas=%s apos_corte_laser=%s "
+        "apos_status_valido=%s apos_nao_finalizados=%s duplicados_removidos=%s "
+        "apos_deduplicacao=%s descartados_por_material=%s total_final=%s limite=%s",
+        busca,
+        diagnostic["linhas_brutas"],
+        diagnostic["apos_corte_laser"],
+        diagnostic["apos_status_valido"],
+        diagnostic["apos_nao_finalizados"],
+        diagnostic["duplicados_removidos"],
+        diagnostic["apos_deduplicacao"],
+        diagnostic["descartados_por_material"],
+        diagnostic["total_final"],
+        limite,
+    )
+    return eligible[:limite]
 
 
 def montar_payload(selecionados: list[dict[str, Any]]) -> dict[str, Any]:

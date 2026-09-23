@@ -42,7 +42,7 @@ def rpa_agrupamento_page():
 def rpa_agrupamento_consulta():
     try:
         rows = rpa_agrupamento_service.consultar(request.args.get("q", ""))
-        return jsonify({"resultados": rows, "total": len(rows)})
+        return jsonify({"resultados": rows, "total": len(rows), "total_elegiveis": len(rows)})
     except Exception:
         current_app.logger.exception("Falha na consulta do RPA agrupamento")
         return jsonify({"error": "Não foi possível consultar os processos no GRV."}), 503
