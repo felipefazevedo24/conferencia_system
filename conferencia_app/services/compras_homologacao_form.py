@@ -34,6 +34,10 @@ RESPOSTA_CONFORME = "Conforme"
 RESPOSTA_NAO_CONFORME = "Nao Conforme"
 RESPOSTAS_LEGAL = (RESPOSTA_CONFORME, RESPOSTA_NAO_CONFORME)
 
+# No self assessment, o fornecedor que afirma atender (total ou parcialmente)
+# precisa comprovar com evidencia anexada ao item.
+RESPOSTAS_EXIGEM_EVIDENCIA = (RESPOSTA_SIM, RESPOSTA_PARCIAL, RESPOSTA_CONFORME)
+
 # Quanto cada resposta vale do peso do item (0 a 1).
 FATOR_RESPOSTA = {
     RESPOSTA_SIM: 1.0,

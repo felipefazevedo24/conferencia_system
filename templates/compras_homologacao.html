@@ -41,13 +41,14 @@
     .hf-item.sem-resposta { background: #fffbeb; }
     .hf-item-num { font-size: 12px; font-weight: 700; color: var(--eui-muted); padding-top: 6px; }
     .hf-item-texto { font-size: 12.5px; line-height: 1.45; padding-top: 4px; }
-    .hf-opcoes { display: flex; flex-wrap: wrap; gap: 4px; }
-    .hf-opt { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; padding: 4px 9px; font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .hf-opt:hover { background: var(--eui-surface-2, #f3f4f6); }
-    .hf-opt.sel { background: var(--eui-primary, #4f46e5); border-color: var(--eui-primary, #4f46e5); color: #fff; }
-    .hf-opt.sel.neg { background: #dc2626; border-color: #dc2626; }
-    .hf-opt.sel.meio { background: #b45309; border-color: #b45309; }
-    .hf-opt.sel.na { background: #64748b; border-color: #64748b; }
+    /* Resposta em lista suspensa; a cor segue a resposta escolhida. */
+    .hf-resp { width: 100%; font-size: 12px; font-weight: 600; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; background: #fff; cursor: pointer; }
+    .hf-resp:disabled { cursor: default; }
+    .hf-resp.sel { background: #dcfce7; border-color: #16a34a; color: #166534; }
+    .hf-resp.sel.neg { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+    .hf-resp.sel.meio { background: #fef3c7; border-color: #b45309; color: #92400e; }
+    .hf-resp.sel.na { background: #f1f5f9; border-color: #64748b; color: #475569; }
+    .hf-resp option { background: #fff; color: #0f172a; }
     .hf-item textarea { width: 100%; min-height: 32px; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; resize: vertical; }
 
     .hf-nota { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--eui-surface-2, #f8fafc); border: 1px solid var(--eui-border, #e5e7eb); border-radius: 10px; padding: 12px 16px; margin: 4px 0 14px; }
@@ -63,6 +64,10 @@
     .hf-badge.aprovacao { background: #e0e7ff; color: #3730a3; }
     .hf-badge.homologado { background: #dcfce7; color: #166534; }
     .hf-badge.reprovado { background: #fee2e2; color: #991b1b; }
+    .hf-badge.fornecedor { background: #fef3c7; color: #92400e; }
+    .hf-evid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .hf-evid a { font-size: 11px; font-weight: 600; background: #eef2ff; color: #3730a3; border-radius: 5px; padding: 2px 7px; text-decoration: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hf-evid-falta { font-size: 11px; font-weight: 700; color: #b45309; margin-top: 5px; }
     .hf-val { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
     .hf-val.a_vencer { background: #fef3c7; color: #92400e; }
     .hf-val.vencido { background: #fee2e2; color: #991b1b; }
@@ -98,6 +103,7 @@
     <div class="eui-stats" id="hf-metrics">
         <div class="eui-stat is-clickable is-active" data-filter="" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todas</span><span class="eui-stat__value" id="hf-m-total">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Rascunho" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-pen-to-square"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Rascunho</span><span class="eui-stat__value" id="hf-m-rascunho">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Com fornecedor" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-envelope-open-text"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Com fornecedor</span><span class="eui-stat__value" id="hf-m-fornecedor">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Em aprovação" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em aprovação</span><span class="eui-stat__value" id="hf-m-aprovacao">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Homologado" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Homologados</span><span class="eui-stat__value" id="hf-m-homologado">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="a_vencer" data-tipo="validade"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A vencer (30d)</span><span class="eui-stat__value" id="hf-m-avencer">0</span></div></div>
@@ -174,7 +180,7 @@
     const pct = (v) => (v == null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%");
     const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
 
-    const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado" };
+    const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado", "Com fornecedor": "fornecedor" };
     const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado" };
     const SLUG_OPT = { "Sim": "", "Conforme": "", "Parcial": "meio", "Não": "neg", "Nao": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
 
@@ -192,6 +198,7 @@
             $("hf-m-total").textContent = m.total || 0;
             $("hf-m-rascunho").textContent = m["Rascunho"] || 0;
             $("hf-m-aprovacao").textContent = m["Em aprovação"] || 0;
+            $("hf-m-fornecedor").textContent = m["Com fornecedor"] || 0;
             $("hf-m-homologado").textContent = m["Homologado"] || 0;
             $("hf-m-avencer").textContent = m.a_vencer || 0;
             $("hf-m-vencido").textContent = m.vencido || 0;
@@ -260,6 +267,14 @@
         const faltando = (atual.secoes || []).reduce((n, s) => n + s.itens.filter((i) => !i.resposta).length, 0);
         $("hf-avisos").innerHTML = (ed && faltando)
             ? `<div class="hf-aviso"><i class="fas fa-circle-info"></i> Faltam <b>${faltando}</b> item(ns) sem resposta — o envio para aprovação só é liberado com o formulário completo.</div>` : "";
+        const cv = atual.convite;
+        if (atual.status === "Com fornecedor" && cv) {
+            $("hf-avisos").innerHTML += cv.situacao === "expirado"
+                ? `<div class="hf-aviso"><i class="fas fa-clock"></i> O link enviado para <b>${esc(cv.email)}</b> <b>expirou</b> em ${esc(cv.expira_em)} sem resposta. Reenvie o link ou cancele o envio para editar.</div>`
+                : `<div class="hf-aviso"><i class="fas fa-envelope-open-text"></i> Aguardando o fornecedor responder a autoavaliação. Link enviado para <b>${esc(cv.email)}</b> em ${esc(cv.enviado_em)} por ${esc(cv.enviado_por || "—")}, válido até ${esc(cv.expira_em)}. Para editar, cancele o envio.</div>`;
+        } else if (ed && cv && cv.situacao === "respondido") {
+            $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;"><i class="fas fa-circle-check"></i> Autoavaliação respondida pelo fornecedor (${esc(cv.email)}) em ${esc(cv.respondido_em)}. Revise as respostas e as evidências antes de enviar para aprovação.</div>`;
+        }
         if (atual.justificativa_decisao) {
             $("hf-avisos").innerHTML += `<div class="hf-aviso"><b>Justificativa:</b> ${esc(atual.justificativa_decisao)}</div>`;
         }
@@ -290,10 +305,14 @@
                 <div class="hf-secao-body">` + s.itens.map((it) => `
                     <div class="hf-item ${it.resposta ? "" : "sem-resposta"}">
                         <div class="hf-item-num">${it.item}</div>
-                        <div class="hf-item-texto">${esc(it.texto)}</div>
-                        <div class="hf-opcoes">${s.escala.map((op) => `
-                            <button type="button" class="hf-opt ${it.resposta === op ? "sel " + (SLUG_OPT[op] || "") : ""}"
-                                data-resp="${esc(s.chave)}|${it.item}|${esc(op)}" ${ed ? "" : "disabled"}>${esc(op)}</button>`).join("")}</div>
+                        <div class="hf-item-texto">${esc(it.texto)}${(it.evidencias || []).length ? `
+                            <div class="hf-evid">${it.evidencias.map((ev) => `<a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>`).join("")}</div>`
+                            : (cv && ["Sim", "Parcial", "Conforme"].includes(it.resposta) ? '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Sem evidência</div>' : "")}</div>
+                        <select class="hf-resp ${it.resposta ? "sel " + (SLUG_OPT[it.resposta] || "") : ""}"
+                            data-resp="${esc(s.chave)}|${it.item}" ${ed ? "" : "disabled"}>
+                            <option value="">Selecione…</option>${s.escala.map((op) => `
+                            <option value="${esc(op)}" ${it.resposta === op ? "selected" : ""}>${esc(op)}</option>`).join("")}
+                        </select>
                         <textarea data-coment="${esc(s.chave)}|${it.item}" rows="1" placeholder="Comentário…" ${ed ? "" : "disabled"}>${esc(it.comentario || "")}</textarea>
                     </div>`).join("") + `</div></div>`;
         });
@@ -349,7 +368,12 @@
         let b = "";
         if (ed) b += `<button class="eui-btn eui-btn--primary" data-act="salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>`;
         if (ed) b += `<button class="eui-btn eui-btn--subtle" data-act="salvar-fechar"><i class="fas fa-floppy-disk"></i> Salvar e fechar</button>`;
+        if (ed) b += `<button class="eui-btn eui-btn--subtle" data-act="fornecedor"><i class="fas fa-envelope"></i> Enviar ao fornecedor</button>`;
         if (ed && atual.id) b += `<button class="eui-btn eui-btn--success" data-act="enviar"><i class="fas fa-paper-plane"></i> Enviar para aprovação</button>`;
+        if (atual.status === "Com fornecedor") {
+            b += `<button class="eui-btn eui-btn--primary" data-act="fornecedor"><i class="fas fa-envelope"></i> Reenviar link</button>`;
+            b += `<button class="eui-btn eui-btn--subtle" data-act="cancelar-fornecedor"><i class="fas fa-link-slash"></i> Cancelar envio</button>`;
+        }
         if (atual.status === "Em aprovação") {
             b += `<button class="eui-btn eui-btn--success" data-act="homologar"><i class="fas fa-circle-check"></i> Homologar</button>`;
             b += `<button class="eui-btn eui-btn--danger" data-act="reprovar"><i class="fas fa-ban"></i> Reprovar</button>`;
@@ -417,14 +441,9 @@
     }
 
     $("hf-corpo").addEventListener("change", (e) => {
-        if (e.target.matches('[data-campo="cnpj"]')) buscarCnpj(false);
-    });
-
-    $("hf-corpo").addEventListener("click", (e) => {
-        if (e.target.closest("#hf-btn-cnpj")) { buscarCnpj(true); return; }
-        const op = e.target.closest("[data-resp]");
-        if (op) {
-            const [chave, item, valor] = op.dataset.resp.split("|");
+        const sel = e.target.closest("[data-resp]");
+        if (sel) {
+            const [chave, item] = sel.dataset.resp.split("|");
             const s = atual.secoes.find((x) => x.chave === chave);
             const it = s && s.itens.find((x) => String(x.item) === item);
             if (!it) return;
@@ -436,10 +455,15 @@
                 if (cit) cit.comentario = ta.value;
             });
             $("hf-corpo").querySelectorAll("[data-campo]").forEach((el) => { atual[el.dataset.campo] = el.value; });
-            it.resposta = it.resposta === valor ? null : valor;
+            it.resposta = sel.value || null;
             desenhar($("hf-modal-titulo").textContent);
             return;
         }
+        if (e.target.matches('[data-campo="cnpj"]')) buscarCnpj(false);
+    });
+
+    $("hf-corpo").addEventListener("click", (e) => {
+        if (e.target.closest("#hf-btn-cnpj")) { buscarCnpj(true); return; }
         const del = e.target.closest("[data-del-foto]");
         if (del) removerFoto(del.dataset.delFoto);
     });
@@ -463,7 +487,28 @@
                 desenhar(atual.razao_social || "Homologação");
                 return;
             }
-            if (act === "enviar") {
+            if (act === "fornecedor") {
+                // Self assessment: grava o que o comprador ja' preencheu
+                // (CNPJ, e-mail...) antes de gerar o link.
+                if (atual.status === "Rascunho") {
+                    const dados = coletar();
+                    const salvo = atual.id
+                        ? await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(dados) })
+                        : await api("/api/compras/homologacao", { method: "POST", body: JSON.stringify(dados) });
+                    atual = salvo.homologacao;
+                }
+                const sugestao = (atual.convite && atual.status === "Com fornecedor") ? atual.convite.email : (atual.email || "");
+                const email = prompt("E-mail do fornecedor que vai receber o link da autoavaliação:\n(o e-mail do cartão CNPJ às vezes é do contador - confira)", sugestao);
+                if (email === null) { desenhar(atual.razao_social || "Homologação"); carregar(); return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/enviar-fornecedor`, { method: "POST", body: JSON.stringify({ email }) });
+                atual = r.homologacao;
+                toast(r.message, r.email_enviado ? "success" : "error");
+                if (!r.email_enviado) prompt("Copie o link e envie ao fornecedor:", r.link);
+            } else if (act === "cancelar-fornecedor") {
+                if (!confirm("Cancelar o envio? O link do fornecedor deixa de funcionar e a homologação volta para rascunho.")) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/cancelar-fornecedor`, { method: "POST" });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "enviar") {
                 await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(coletar()) });
                 const r = await api(`/api/compras/homologacao/${atual.id}/enviar`, { method: "POST" });
                 atual = r.homologacao; toast(r.message, "success");

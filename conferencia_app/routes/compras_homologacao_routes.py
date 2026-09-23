@@ -1,19 +1,24 @@
 """Rotas da Homologacao de Fornecedores (Compras) - formulario F-COM-001-01."""
 from __future__ import annotations
 
+import html
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from io import BytesIO
 
-from flask import Blueprint, jsonify, render_template, request, send_file, session
+from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 
 from ..auth import permission_required
 from ..extensions import db
 from ..models import (
+    ComprasHomologacaoEvidencia,
     ComprasHomologacaoFornecedor as Homologacao,
     ComprasHomologacaoFoto,
 )
 from ..services import compras_homologacao_form as form
 from ..services import compras_homologacao_pdf as pdf_svc
 from ..services import compras_homologacao_service as svc
+from ..services.smtp_service import enviar_mensagem_smtp
 
 compras_homologacao_bp = Blueprint("compras_homologacao", __name__)
 
@@ -68,26 +73,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     respostas = {(r.secao, r.item): r for r in homologacao.respostas}
     _, _, detalhe = svc.calcular_nota({c: r.resposta for c, r in respostas.items()})
     dados["detalhe_secoes"] = detalhe
-    dados["secoes"] = [
-        {
-            "chave": secao["chave"],
-            "titulo": secao["titulo"],
-            "peso": secao["peso"],
-            "escala": list(secao["escala"]),
-            "itens": [
-                {
-                    "item": i,
-                    "texto": texto,
-                    "resposta": (respostas.get((secao["chave"], i)).resposta
-                                 if respostas.get((secao["chave"], i)) else None),
-                    "comentario": (respostas.get((secao["chave"], i)).comentario
-                                   if respostas.get((secao["chave"], i)) else None),
-                }
-                for i, texto in enumerate(secao["itens"], start=1)
-            ],
-        }
-        for secao in form.SECOES
-    ]
+    dados["secoes"] = _secoes_payload(homologacao, "/api/compras/homologacao/evidencias/{id}")
     dados["fotos"] = [
         {
             "id": f.id,
@@ -101,7 +87,53 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         for f in homologacao.fotos
     ]
     dados["itens_faltando"] = len(svc.itens_faltando(homologacao))
+    dados["itens_sem_evidencia"] = len(svc.pendencias_evidencia(homologacao))
+    convite = svc.ultimo_convite(homologacao)
+    dados["convite"] = {
+        "email": convite.email,
+        "situacao": svc.situacao_convite(convite),
+        "enviado_em": _dt(convite.enviado_em),
+        "enviado_por": convite.enviado_por,
+        "expira_em": _dt(convite.expira_em),
+        "respondido_em": _dt(convite.respondido_em),
+    } if convite else None
     return dados
+
+
+def _secoes_payload(homologacao: Homologacao, url_evidencia: str) -> list[dict]:
+    """Secoes do formulario com resposta, comentario e evidencias de cada
+    item. `url_evidencia` muda entre a tela interna e o link do fornecedor."""
+    respostas = {(r.secao, r.item): r for r in homologacao.respostas}
+    evidencias: dict[tuple[str, int], list] = {}
+    for e in homologacao.evidencias:
+        evidencias.setdefault((e.secao, e.item), []).append({
+            "id": e.id,
+            "nome_arquivo": e.nome_arquivo,
+            "tamanho_bytes": e.tamanho_bytes,
+            "enviado_em": _dt(e.enviado_em),
+            "url": url_evidencia.format(id=e.id),
+        })
+    return [
+        {
+            "chave": secao["chave"],
+            "titulo": secao["titulo"],
+            "peso": secao["peso"],
+            "escala": list(secao["escala"]),
+            "itens": [
+                {
+                    "item": i,
+                    "texto": texto,
+                    "resposta": (respostas.get((secao["chave"], i)).resposta
+                                 if respostas.get((secao["chave"], i)) else None),
+                    "comentario": (respostas.get((secao["chave"], i)).comentario
+                                   if respostas.get((secao["chave"], i)) else None),
+                    "evidencias": evidencias.get((secao["chave"], i), []),
+                }
+                for i, texto in enumerate(secao["itens"], start=1)
+            ],
+        }
+        for secao in form.SECOES
+    ]
 
 
 def _obter(homologacao_id: int) -> Homologacao | None:
@@ -349,3 +381,241 @@ def api_remover_foto(foto_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Foto removida."})
+
+
+# ── Self assessment: lado do comprador ──────────────────────────────────
+def _enviar_email_self_assessment(homologacao: Homologacao, link: str, destinatario: str, validade: str) -> None:
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = f"Homologação de Fornecedor – Autoavaliação – {homologacao.razao_social} – Columbia Machine Brasil"
+    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    msg["To"] = destinatario
+    corpo = (
+        f"<p>Prezados,</p>"
+        f"<p>A Columbia Machine Brasil está conduzindo a homologação da empresa "
+        f"<strong>{html.escape(homologacao.razao_social or '')}</strong> como fornecedora.</p>"
+        f"<p>Solicitamos, por gentileza, o preenchimento do questionário de autoavaliação "
+        f"({form.CODIGO_FORMULARIO}) pelo link abaixo. Para os itens respondidos como "
+        f"<strong>Sim</strong>, <strong>Parcial</strong> ou <strong>Conforme</strong> é obrigatório "
+        f"anexar a evidência (PDF, JPG ou PNG).</p>"
+        f"<p><a href=\"{link}\">{link}</a></p>"
+        f"<p>É possível salvar e continuar depois pelo mesmo link, válido até {validade}.</p>"
+        f"<p>Atenciosamente,</p>"
+        f"<p>Compras – Columbia Machine Brasil</p>"
+    )
+    msg.attach(MIMEText(corpo, "html", "utf-8"))
+    enviar_mensagem_smtp(current_app, msg)
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/enviar-fornecedor", methods=["POST"])
+@permission_required(PERMISSION)
+def api_enviar_fornecedor(homologacao_id):
+    """Gera (ou regera) o link de self assessment e manda por e-mail. Se o
+    e-mail falhar, o link continua valido e volta na resposta pro comprador
+    repassar por outro canal - mesmo comportamento da cotacao do Comex."""
+    homologacao = _obter(homologacao_id)
+    if not homologacao:
+        return jsonify({"error": "Homologação não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        convite, token = svc.enviar_para_fornecedor(homologacao, payload.get("email") or "", _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    link = url_for("compras_homologacao.self_assessment_page", token=token, _external=True)
+    try:
+        _enviar_email_self_assessment(homologacao, link, convite.email, _dt(convite.expira_em))
+        email_erro = None
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.exception("Falha ao enviar e-mail do self assessment (homologacao %s)", homologacao.id)
+        email_erro = str(exc)
+
+    mensagem = (f"Link enviado para {convite.email}." if not email_erro
+                else f"Link gerado, mas o e-mail NÃO foi enviado: {email_erro}. Copie o link e envie ao fornecedor.")
+    return jsonify({
+        "message": mensagem,
+        "email_enviado": not email_erro,
+        "link": link,
+        "homologacao": _fmt(homologacao, completo=True),
+    })
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/cancelar-fornecedor", methods=["POST"])
+@permission_required(PERMISSION)
+def api_cancelar_fornecedor(homologacao_id):
+    return _acao(homologacao_id, svc.cancelar_envio_fornecedor,
+                 "Envio cancelado - o link do fornecedor foi desativado.", usuario=_usuario())
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/evidencias/<int:evidencia_id>", methods=["GET"])
+@permission_required(PERMISSION)
+def api_baixar_evidencia(evidencia_id):
+    evidencia = db.session.get(ComprasHomologacaoEvidencia, evidencia_id)
+    if not evidencia or not evidencia.dados:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    return _enviar_evidencia(evidencia)
+
+
+def _enviar_evidencia(evidencia: ComprasHomologacaoEvidencia):
+    return send_file(
+        BytesIO(evidencia.dados), mimetype=evidencia.content_type or "application/octet-stream",
+        as_attachment=False, download_name=evidencia.nome_arquivo or f"evidencia_{evidencia.id}",
+    )
+
+
+# ── Self assessment: link publico do fornecedor (sem login) ─────────────
+def _convite_ou_404(token):
+    convite = svc.obter_convite_por_token(token)
+    if not convite:
+        return None, (jsonify({"error": "Link inválido."}), 404)
+    return convite, None
+
+
+def _payload_publico(convite, token: str) -> dict:
+    homologacao = convite.homologacao
+    return {
+        "editavel": svc.convite_aceita_edicao(convite),
+        "situacao": svc.situacao_convite(convite),
+        "expira_em": _dt(convite.expira_em),
+        "respondido_em": _dt(convite.respondido_em),
+        "codigo": form.CODIGO_FORMULARIO,
+        "exigem_evidencia": list(form.RESPOSTAS_EXIGEM_EVIDENCIA),
+        "max_evidencia_mb": svc.MAX_EVIDENCIA_BYTES // (1024 * 1024),
+        "cadastro": {
+            "razao_social": homologacao.razao_social,
+            "cnpj": homologacao.cnpj,
+            "nome_fantasia": homologacao.nome_fantasia,
+            "inscricao_estadual": homologacao.inscricao_estadual,
+            "endereco": homologacao.endereco,
+            "cidade_estado": homologacao.cidade_estado,
+        },
+        "contato": {campo: getattr(homologacao, campo) for campo in svc.CAMPOS_FORNECEDOR},
+        # O banco so' tem o hash: a URL de download usa o token da propria requisicao.
+        "secoes": _secoes_payload(homologacao, f"/api/homologacao-fornecedor/{token}/evidencias/{{id}}"),
+    }
+
+
+@compras_homologacao_bp.route("/homologacao-fornecedor/<token>")
+def self_assessment_page(token):
+    if not svc.obter_convite_por_token(token):
+        return render_template("acesso_negado.html"), 404
+    return render_template("compras_homologacao_publica.html", token=token)
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>", methods=["GET"])
+def api_self_assessment_dados(token):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    return jsonify(_payload_publico(convite, token))
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>", methods=["PUT"])
+def api_self_assessment_salvar(token):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    try:
+        svc.salvar_self_assessment(convite, request.get_json(silent=True) or {})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Rascunho salvo.", **_payload_publico(convite, token)})
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>/enviar", methods=["POST"])
+def api_self_assessment_enviar(token):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    try:
+        homologacao = svc.concluir_self_assessment(convite, request.get_json(silent=True) or {})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    # O envio do fornecedor ja' foi gravado: falha no aviso so' vai pro log.
+    try:
+        _avisar_comprador_resposta(homologacao, convite)
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Falha ao avisar o comprador da resposta do fornecedor (homologacao %s)", homologacao.id)
+    return jsonify({"message": "Questionário enviado com sucesso. Obrigado!", **_payload_publico(convite, token)})
+
+
+def _avisar_comprador_resposta(homologacao: Homologacao, convite) -> None:
+    """E-mail pro comprador que mandou o link (ou, na falta dele, quem criou
+    a homologacao). Sem e-mail no cadastro do usuario, nao ha' pra quem mandar."""
+    from sqlalchemy import func
+
+    from ..models import Usuario
+
+    destinatario = None
+    for username in (convite.enviado_por, homologacao.criado_por):
+        if not username:
+            continue
+        usuario = Usuario.query.filter(func.lower(Usuario.username) == username.strip().lower()).first()
+        if usuario and usuario.email:
+            destinatario = usuario.email.strip()
+            break
+    if not destinatario:
+        current_app.logger.warning("Homologacao %s respondida, mas o comprador nao tem e-mail cadastrado.", homologacao.id)
+        return
+
+    link = url_for("compras_homologacao.homologacao_page", _external=True)
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = f"Autoavaliação respondida – {homologacao.razao_social}"
+    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    msg["To"] = destinatario
+    nota = f"{(homologacao.nota or 0) * 100:.1f}".replace(".", ",")
+    corpo = (
+        f"<p>Olá,</p>"
+        f"<p>O fornecedor <strong>{html.escape(homologacao.razao_social or '')}</strong> "
+        f"({html.escape(homologacao.cnpj or '')}) respondeu a autoavaliação de homologação "
+        f"({form.CODIGO_FORMULARIO}) em {_dt(convite.respondido_em)}.</p>"
+        f"<p>Nota calculada pelas respostas do fornecedor: <strong>{nota}%</strong> "
+        f"({html.escape(homologacao.classificacao or '')}).</p>"
+        f"<p>A homologação voltou para <strong>Rascunho</strong>: revise as respostas e as evidências "
+        f"e envie para aprovação.</p>"
+        f"<p><a href=\"{link}\">{link}</a></p>"
+        f"<p>Columbia Sync</p>"
+    )
+    msg.attach(MIMEText(corpo, "html", "utf-8"))
+    enviar_mensagem_smtp(current_app, msg)
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>/evidencias", methods=["POST"])
+def api_self_assessment_anexar(token):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    # Rota publica e o app nao tem MAX_CONTENT_LENGTH: recusa upload gigante
+    # antes de o Werkzeug ler o corpo inteiro.
+    if (request.content_length or 0) > svc.MAX_EVIDENCIA_BYTES + 64 * 1024:
+        return jsonify({"error": "Arquivo muito grande (máximo 10 MB)."}), 400
+    try:
+        svc.anexar_evidencia(convite, request.form.get("secao"), request.form.get("item"), request.files.get("arquivo"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência anexada.", **_payload_publico(convite, token)})
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>/evidencias/<int:evidencia_id>", methods=["GET"])
+def api_self_assessment_baixar(token, evidencia_id):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    evidencia = svc.evidencia_do_convite(convite, evidencia_id)
+    if not evidencia or not evidencia.dados:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    return _enviar_evidencia(evidencia)
+
+
+@compras_homologacao_bp.route("/api/homologacao-fornecedor/<token>/evidencias/<int:evidencia_id>", methods=["DELETE"])
+def api_self_assessment_remover(token, evidencia_id):
+    convite, erro = _convite_ou_404(token)
+    if erro:
+        return erro
+    evidencia = svc.evidencia_do_convite(convite, evidencia_id)
+    if not evidencia:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    try:
+        svc.remover_evidencia(convite, evidencia)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência removida.", **_payload_publico(convite, token)})
