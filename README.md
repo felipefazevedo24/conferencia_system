@@ -40,6 +40,14 @@ com `deploy\windows\start_rpa.ps1 -Ambiente <ambiente>`. O launcher prefere
 agentes controlem a M83 ao mesmo tempo. A automação só é acionada quando o agente
 autorizado está no desktop interativo e confirma que o GRV está disponível.
 
+Na estação autorizada, instale a execução permanente com
+`deploy\windows\install_rpa_agent.ps1 -Ambiente <ambiente>`. A tarefa inicia o
+`pythonw.exe` diretamente no logon, sem terminal aberto, grava logs rotativos em
+`logs\` e reinicia o processo em caso de falha. Os scripts
+`status_rpa_agent.ps1`, `restart_rpa_agent.ps1` e `uninstall_rpa_agent.ps1`
+permitem operação e suporte. Como a M83 é automatizada pela interface gráfica,
+o usuário autorizado deve permanecer conectado a uma sessão Windows interativa.
+
 Testes do backend:
 
 ```powershell

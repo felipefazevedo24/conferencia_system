@@ -95,6 +95,14 @@ def test_fluxo_completo_fila_agente_e_retorno_ao_usuario(tmp_path, monkeypatch):
     assert status.get_json()["grv_disponivel"] is True
     assert status.get_json()["rpa_disponivel"] is True
 
+    agent_status = client.get(
+        "/api/rpa/agent/status",
+        headers=agent_headers(),
+    )
+    assert agent_status.status_code == 200
+    assert agent_status.get_json()["executor_online"] is True
+    assert agent_status.get_json()["executor"]["id"] == AGENT_ID
+
     queued = client.post(
         "/api/agrupamentos/executar",
         json={
