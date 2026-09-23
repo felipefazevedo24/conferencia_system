@@ -211,6 +211,10 @@
     .protocolo { font-family: var(--font-display); font-size: 27px; font-weight: 800;
       color: var(--primary); background: var(--primary-soft); border-radius: var(--radius);
       padding: 14px; margin: 18px auto; max-width: 300px; letter-spacing: 1px; }
+    .aviso-fora-horario { max-width: 420px; margin: 0 auto 18px; padding: 12px 14px;
+      border-radius: var(--radius); background: #fff7ed; border: 1px solid #fdba74;
+      color: #9a3412; font-size: 13px; font-weight: 600; line-height: 1.5; text-align: left; }
+    .aviso-fora-horario a { color: #9a3412; text-decoration: underline; }
 
     .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 22px; }
     .honeypot { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
@@ -279,6 +283,14 @@
               <div class="info"><strong id="cliNome">-</strong><small id="cliDocumento">-</small></div>
               <button type="button" class="btn-x" onclick="limparCliente()" title="Trocar"><i class="fas fa-times"></i></button>
             </div>
+            <div class="field">
+              <label for="dataNecessidade">Quando o material é necessário? <span style="color:var(--err)">*</span></label>
+              <input type="date" id="dataNecessidade">
+              <p class="hint">Fora do horário comercial (seg-sex, 6h às 17h) com necessidade
+                para hoje, a separação já acontece agora, mas a nota fiscal só sai no
+                próximo dia útil — o Sync avisa e gera um romaneio para o material sair
+                com um documento até lá.</p>
+            </div>
           </div>
 
           <!-- 5) Materiais -->
@@ -335,6 +347,7 @@
           <h2>Solicitação enviada!</h2>
           <p>Guarde o protocolo abaixo para acompanhamento junto à logística/fiscal.</p>
           <div class="protocolo" id="protocoloGerado">-</div>
+          <p class="aviso-fora-horario" id="avisoForaHorario" style="display:none"></p>
           <button type="button" class="btn btn-ghost" onclick="location.reload()">Nova solicitação</button>
         </div>
       </div>
@@ -767,6 +780,7 @@
 
     if (!clienteSelecionado) { showFeedback("Selecione o cliente na lista.", "err"); return; }
     if (!itens.length) { showFeedback("Adicione ao menos um material.", "err"); return; }
+    if (!$("dataNecessidade").value) { showFeedback("Informe quando o material é necessário.", "err"); return; }
 
     const btn = $("btn-enviar");
     const original = btn.innerHTML;
@@ -778,6 +792,7 @@
 
         cliente_codigo: clienteSelecionado.codigo,
         cliente_nome: clienteSelecionado.nome,
+        data_necessidade: $("dataNecessidade").value,
         itens: itens,
         observacoes: $("observacoes").value.trim(),
         anexos: anexos,
@@ -797,6 +812,18 @@
       }
       document.getElementById("form-solicitacao").style.display = "none";
       $("protocoloGerado").textContent = d.protocolo;
+      const avisoEl = $("avisoForaHorario");
+      if (avisoEl) {
+        if (d.aviso) {
+          const linkRomaneio = d.romaneio_url
+            ? ` <a href="${d.romaneio_url}" target="_blank" rel="noopener">Baixar romaneio</a>.`
+            : "";
+          avisoEl.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${d.aviso}${linkRomaneio}`;
+          avisoEl.style.display = "block";
+        } else {
+          avisoEl.style.display = "none";
+        }
+      }
       $("success").classList.add("show");
     } catch (e) {
       showFeedback("Falha ao enviar solicitação. Tente novamente.", "err");

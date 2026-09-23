@@ -7,6 +7,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ChapaCalculo, ChapaCalculoLog
+from ..tempo import agora_br
 
 DENSIDADES = {
     "aco_carbono": 7.85, "inox": 8.00, "aluminio": 2.71,
@@ -95,7 +96,7 @@ def salvar_calculo_item(item, dados, usuario):
     calc.dimensoes = json.dumps(dimensoes, ensure_ascii=False)
     calc.peso_por_peca = peso
     calc.atualizado_por = usuario
-    calc.atualizado_em = datetime.now()
+    calc.atualizado_em = agora_br()
     db.session.flush()
     db.session.add(ChapaCalculoLog(
         chapa_calculo_id=calc.id, alterado_por=usuario,

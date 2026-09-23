@@ -17,6 +17,7 @@ from sqlalchemy.exc import DBAPIError
 
 from ..extensions import db
 from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemST, ItemNota, PlannerBoard
+from ..tempo import agora_br
 
 painel_tv_bp = Blueprint("painel_tv", __name__)
 
@@ -91,7 +92,7 @@ def _count_distinct_notas(status: str) -> int:
 
 
 def _coletar_indicadores() -> dict:
-    agora = datetime.now()
+    agora = agora_br()
     hoje = agora.date()
 
     # ---- RECEBIMENTO ----
@@ -606,7 +607,7 @@ def _coletar_comex() -> dict:
     processos_com_interacao = [(p, _ultima_interacao(p)) for p in processos]
     processos_com_interacao.sort(key=lambda item: item[1] or datetime.min, reverse=True)
 
-    agora = datetime.now()
+    agora = agora_br()
     colunas_cards: list[list[dict]] = [[] for _ in _COMEX_BASKETS]
     for p, ultima_interacao in processos_com_interacao:
         idx = _COMEX_STATUS_PARA_BASKET.get(p.status_modulo)
@@ -795,7 +796,7 @@ def _oc_janela_dias() -> int:
 def _coletar_ocs_atrasadas() -> dict:
     from ..compras.services import compras_service
 
-    hoje = datetime.now().date()
+    hoje = agora_br().date()
     limite_semana = hoje + timedelta(days=1)
     rows = compras_service.ordens_compra_entregas(limite=3000)
 
@@ -823,13 +824,13 @@ def _coletar_ocs_atrasadas() -> dict:
     return {
         "atrasadas": {"total": len(atrasadas), "lista": atrasadas[:150]},
         "semana": {"total": len(semana), "lista": semana[:150]},
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora_br().isoformat(),
     }
 
 
 @painel_tv_bp.route("/api/painel/compras")
 def painel_tv_compras():
-    agora = datetime.now()
+    agora = agora_br()
     ttl = _oc_cache_ttl()
     with _oc_lock:
         cache_ok = (

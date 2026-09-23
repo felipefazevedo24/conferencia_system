@@ -9,6 +9,7 @@ from flask import current_app
 from ..auth import is_admin_role
 from ..extensions import db
 from ..models import ActiveSession, Usuario
+from ..tempo import agora_br
 
 
 DEFAULT_MESSAGE = "O Columbia Sync está em manutenção no momento. Tente novamente em alguns minutos."
@@ -48,7 +49,7 @@ def set_maintenance_state(enabled: bool, updated_by: str, message: str | None = 
     state = {
         "enabled": bool(enabled),
         "message": str(message or DEFAULT_MESSAGE).strip() or DEFAULT_MESSAGE,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": agora_br().isoformat(),
         "updated_by": str(updated_by or "admin").strip() or "admin",
     }
     os.makedirs(current_app.instance_path, exist_ok=True)

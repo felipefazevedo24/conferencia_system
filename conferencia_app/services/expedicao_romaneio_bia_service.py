@@ -26,6 +26,7 @@ from ..models import (
     ExpedicaoRomaneio,
     ExpedicaoRomaneioEstorno,
 )
+from ..tempo import agora_br
 
 
 SUGESTOES = [
@@ -240,7 +241,7 @@ def _decidir_estorno(estorno_id: int, aprovar: bool, ctx: dict) -> dict:
 
     from datetime import datetime
     e.admin_usuario = ctx.get("username") or "admin"
-    e.resolvido_at = datetime.now()
+    e.resolvido_at = agora_br()
 
     if not aprovar:
         e.status = "Rejeitado"

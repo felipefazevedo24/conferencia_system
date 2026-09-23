@@ -23,6 +23,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import ExpedicaoCobranca, ExpedicaoCobrancaLog, ExpedicaoRomaneio
 from . import expedicao_assistente_service as svc
+from ..tempo import agora_br
 
 
 # Intervalo entre cobranças da mesma pendência.
@@ -140,7 +141,7 @@ def sincronizar() -> None:
     """
     try:
         mapa = _mapa_pendencias_atuais()
-        agora = datetime.now()
+        agora = agora_br()
         seeded = _cutoff_registrado()
 
         existentes = {
@@ -258,7 +259,7 @@ def proxima_para_cobrar(role: str | None, marcar: bool = True) -> dict | None:
         return None
 
     sincronizar()
-    agora = datetime.now()
+    agora = agora_br()
 
     cob = (
         ExpedicaoCobranca.query
@@ -323,7 +324,7 @@ def registrar_resposta(ref_tipo: str, ref_id: str, texto: str, autor: str = "") 
         cob = _buscar(ref_tipo, ref_id)
         if cob is None:
             return False
-        agora = datetime.now()
+        agora = agora_br()
         cob.motivo = texto[:1000]
         cob.status = "respondida"
         cob.respondida_por = autor or ""
@@ -352,7 +353,7 @@ def adiar(ref_tipo: str, ref_id: str, autor: str = "") -> bool:
         cob = _buscar(ref_tipo, ref_id)
         if cob is None:
             return False
-        agora = datetime.now()
+        agora = agora_br()
         cob.proxima_cobranca_em = agora + INTERVALO_COBRANCA
         cob.atualizada_em = agora
         db.session.commit()
@@ -420,7 +421,7 @@ def marcar_cce_feita(numero_romaneio: str, autor: str = "") -> dict:
             return {"ok": False, "erro": f"Romaneio {numero} não encontrado."}
         if not rom.cce_modalidade_pendente:
             return {"ok": False, "erro": f"O romaneio {numero} não tem CC-e pendente."}
-        agora = datetime.now()
+        agora = agora_br()
         rom.cce_modalidade_pendente = False
         # Resolve a cobrança associada (se houver).
         cob = _buscar("romaneio", numero)

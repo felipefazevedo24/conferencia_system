@@ -14,6 +14,7 @@ from ..models import (EnderecoSaldo as Saldo, EnderecoMovimento as Movimento,
                       LocalizacaoArmazem, RecebimentoEnderecamento as Tarefa,
                       RecebimentoEnderecamentoTrava as Trava)
 from . import recebimento_enderecamento_service as receb
+from ..tempo import agora_br
 
 
 def texto(valor, nome, limite):
@@ -124,7 +125,7 @@ def creditar_recebimento(tarefa, enderecos_anteriores):
         reg = saldo(tarefa.sku, parcela['endereco'], unidade,
                     conferido=parcela['endereco'] not in enderecos_anteriores)
         reg.quantidade += q
-        reg.atualizado_em = datetime.now()
+        reg.atualizado_em = agora_br()
         total += q
         parcelas.append({**parcela, 'quantidade': str(q)})
     db.session.add(Movimento(chave=chave, sku=tarefa.sku, unidade=unidade,
@@ -132,7 +133,7 @@ def creditar_recebimento(tarefa, enderecos_anteriores):
         usuario=tarefa.confirmado_por or tarefa.criado_por,
         motivo=f'NF {tarefa.item.numero_nota}',
         detalhes={'tarefa': tarefa.id, 'nota': tarefa.item.numero_nota, 'alocacoes': parcelas},
-        sincronizado_em=datetime.now()))
+        sincronizado_em=agora_br()))
 
 
 def enderecos_atuais(sku):
@@ -249,7 +250,7 @@ def esvaziar(endereco, usuario):
                 relatorio['sem_outro_endereco'].append(sku)
                 continue
             db.session.add(Movimento(
-                chave=f'desativacao:{endereco}:{sku}:{datetime.now().isoformat()}',
+                chave=f'desativacao:{endereco}:{sku}:{agora_br().isoformat()}',
                 sku=sku, unidade='', tipo='Endereço desativado', origem=endereco,
                 destino=None, quantidade=0, usuario=usuario,
                 motivo=f'Endereço {endereco} desativado',
@@ -292,7 +293,7 @@ def sincronizar(sku):
         if isinstance(resposta, dict) and (resposta.get('sucesso') is False or resposta.get('success') is False):
             raise ValueError('GRV recusou a atualização. Tente sincronizar novamente.')
         for mov in pendentes:
-            mov.sincronizado_em = datetime.now()
+            mov.sincronizado_em = agora_br()
             mov.erro = None
         db.session.commit()
     except Exception as exc:

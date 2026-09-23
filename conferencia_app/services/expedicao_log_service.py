@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ExpedicaoConferenciaLog
+from ..tempo import agora_br
 
 
 # Campos de cabecalho auditados (rotulo amigavel -> atributo).
@@ -67,7 +68,7 @@ def registrar_log(
         divergente=bool(divergente),
         pos_faturamento=bool(pos_faturamento),
         detalhes=json.dumps(detalhes, ensure_ascii=False),
-        created_at=datetime.now(),
+        created_at=agora_br(),
     )
     db.session.add(log)
     db.session.flush()

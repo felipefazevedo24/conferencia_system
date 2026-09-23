@@ -43,6 +43,7 @@ def erp(app):
 def pedido(**extra):
     dados = {"solicitante_nome": FUNCIONARIO["nome"],
              "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
+             "data_necessidade": "2026-09-24",
              "itens": [{"material_codigo": "CABO-10", "quantidade": 100,
                         "tipo_operacao": "Garantia"}]}
     dados.update(extra)

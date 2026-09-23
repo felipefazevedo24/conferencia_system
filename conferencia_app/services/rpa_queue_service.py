@@ -17,6 +17,7 @@ from flask import current_app, request
 from ..extensions import db
 from ..models import RpaExecucao, RpaExecutor
 from . import rpa_grv_service
+from ..tempo import agora_br
 
 
 FINAL_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED"}
@@ -67,7 +68,7 @@ def _online(executor: RpaExecutor | None, now: datetime | None = None) -> bool:
     if executor is None:
         return False
     timeout = int(current_app.config.get("RPA_AGENT_HEARTBEAT_TIMEOUT_SECONDS") or 45)
-    return executor.ultima_comunicacao >= (now or datetime.now()) - timedelta(seconds=timeout)
+    return executor.ultima_comunicacao >= (now or agora_br()) - timedelta(seconds=timeout)
 
 
 def status(usuario: str, pode_executar: bool) -> dict[str, Any]:
@@ -144,7 +145,7 @@ def enqueue(data: dict[str, Any], usuario: str) -> dict[str, Any]:
     payload["descricao_agrupamento"] = description
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    recent = datetime.now() - timedelta(seconds=60)
+    recent = agora_br() - timedelta(seconds=60)
     duplicate = (
         RpaExecucao.query.filter_by(ambiente=_environment(), fingerprint=fingerprint)
         .filter(RpaExecucao.criada_em >= recent)
@@ -164,8 +165,8 @@ def enqueue(data: dict[str, Any], usuario: str) -> dict[str, Any]:
         fingerprint=fingerprint,
         payload_json=canonical,
         status="PENDING",
-        criada_em=datetime.now(),
-        atualizada_em=datetime.now(),
+        criada_em=agora_br(),
+        atualizada_em=agora_br(),
     )
     db.session.add(execution)
     db.session.commit()
@@ -214,7 +215,7 @@ def user_execution(execution_id: str, usuario: str, is_admin: bool = False) -> d
 
 
 def heartbeat(agent_id: str, data: dict[str, Any]) -> dict[str, Any]:
-    now = datetime.now()
+    now = agora_br()
     executor = db.session.get(RpaExecutor, agent_id)
     if executor is None:
         executor = RpaExecutor(
@@ -258,7 +259,7 @@ def claim(agent_id: str, heartbeat_data: dict[str, Any]) -> dict[str, Any]:
     )
     if candidate is None:
         return {"ok": True, "job": None}
-    now = datetime.now()
+    now = agora_br()
     updated = (
         RpaExecucao.query.filter_by(id=candidate.id, status="PENDING")
         .update(
@@ -289,8 +290,8 @@ def mark_running(agent_id: str, execution_id: str) -> dict[str, Any]:
     if execution.status != "CLAIMED":
         raise RpaQueueError(409, f"Execução está no estado {execution.status}.")
     execution.status = "RUNNING"
-    execution.iniciada_em = datetime.now()
-    execution.atualizada_em = datetime.now()
+    execution.iniciada_em = agora_br()
+    execution.atualizada_em = agora_br()
     db.session.commit()
     current_app.logger.warning(
         "RPA iniciado | execution_id=%s | executor=%s", execution.id, agent_id
@@ -308,8 +309,8 @@ def finish(agent_id: str, execution_id: str, data: dict[str, Any]) -> dict[str, 
     execution.status = "SUCCEEDED" if success else "FAILED"
     execution.erro = None if success else str(data.get("error") or "Falha informada pelo executor.")[:4000]
     execution.resultado_json = json.dumps(data.get("result") or {}, ensure_ascii=False, default=str)
-    execution.finalizada_em = datetime.now()
-    execution.atualizada_em = datetime.now()
+    execution.finalizada_em = agora_br()
+    execution.atualizada_em = agora_br()
     db.session.commit()
     current_app.logger.warning(
         "RPA finalizado | execution_id=%s | executor=%s | status=%s | gravado=%s",

@@ -32,6 +32,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import IntralogPickingSeparacao
+from ..tempo import agora_br
 
 _URL_PADRAO = "https://columbia.consultoriarf.net/listamaterialseparar"
 
@@ -310,7 +311,7 @@ def confirmar_separacao(
     if registro.separado:
         raise ValueError("Esse material já está separado.")
     registro.separado = True
-    registro.separado_em = datetime.now()
+    registro.separado_em = agora_br()
     registro.separado_por = usuario
     if servico_raiz:
         registro.servico_raiz = _txt(servico_raiz)[:30]

@@ -34,6 +34,7 @@ from ..models import (
     AgendamentoSolicitacao,
     ExpedicaoRomaneio,
 )
+from ..tempo import agora_br
 
 ORIGEM_AUTO_CIF = "AutoCIF"
 ORIGEM_AUTO_DAP = "AutoDAP"
@@ -177,7 +178,7 @@ def _criar_solicitacao(
         _sincronizar_itens,
     )
 
-    agora = datetime.now()
+    agora = agora_br()
     row = AgendamentoSolicitacao(
         tipo=tipo,
         status="Pendente",
@@ -438,7 +439,7 @@ def cancelar_solicitacao_entrega_para_romaneio(
     if not rows:
         return False, None, "Nenhuma solicitacao automatica de entrega ativa para este romaneio."
 
-    agora = datetime.now()
+    agora = agora_br()
     for row in rows:
         status_anterior = row.status
         row.status = "Cancelada"
@@ -550,7 +551,7 @@ def _upsert_coleta_oc(
             anterior = existente.data_desejada
             existente.data_desejada = data_coleta
             existente.prazo_limite = data_coleta
-            existente.atualizado_em = datetime.now()
+            existente.atualizado_em = agora_br()
             _registrar_historico(
                 existente.id,
                 evento="RECALCULADA_AUTO_CIF",

@@ -2,13 +2,14 @@
 from datetime import datetime
 from sqlalchemy.dialects.mysql import LONGBLOB
 from .extensions import db
+from .tempo import agora_br
 
 class ActiveSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), nullable=False, index=True)
     session_id = db.Column(db.String(128), nullable=False, unique=True, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    last_activity = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    last_activity = db.Column(db.DateTime, default=agora_br, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     ip_address = db.Column(db.String(64), nullable=True)
     user_agent = db.Column(db.String(400), nullable=True)
@@ -31,9 +32,9 @@ class Usuario(db.Model):
     convite_enviado_em = db.Column(db.DateTime, nullable=True)
     convite_aceito_em = db.Column(db.DateTime, nullable=True)
     forcar_troca_senha = db.Column(db.Boolean, nullable=False, default=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     criado_por = db.Column(db.String(100), nullable=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100), nullable=True)
 
 
@@ -44,7 +45,7 @@ class UsuarioGestaoAuditoria(db.Model):
     acao = db.Column(db.String(60), nullable=False, index=True)
     detalhes = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.String(64), nullable=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class AvisoAtualizacao(db.Model):
@@ -54,9 +55,9 @@ class AvisoAtualizacao(db.Model):
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     exibir_ate = db.Column(db.DateTime, nullable=True, index=True)
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class PermissaoAcesso(db.Model):
@@ -66,7 +67,7 @@ class PermissaoAcesso(db.Model):
     permission_key = db.Column(db.String(80), nullable=False, index=True)
     allow = db.Column(db.Boolean, nullable=False, default=True)
     updated_by = db.Column(db.String(100))
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint("scope_type", "scope_id", "permission_key", name="_perm_scope_key_uc"),
@@ -85,9 +86,9 @@ class CadastroWorkflowSolicitacao(db.Model):
     dados_json = db.Column(db.Text, nullable=False, default="{}")
     anexos = db.Column(db.Text)
     alerta_duplicidade = db.Column(db.Text)
-    data_abertura = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    data_ultima_movimentacao = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    etapa_iniciada_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data_abertura = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    data_ultima_movimentacao = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    etapa_iniciada_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     concluido_em = db.Column(db.DateTime, nullable=True)
     cancelado_em = db.Column(db.DateTime, nullable=True)
 
@@ -112,7 +113,7 @@ class CadastroWorkflowSolicitacao(db.Model):
 class CadastroWorkflowHistorico(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitacao_id = db.Column(db.Integer, db.ForeignKey("cadastro_workflow_solicitacao.id"), nullable=False, index=True)
-    data_hora = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data_hora = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     usuario = db.Column(db.String(100), nullable=False)
     departamento = db.Column(db.String(30), nullable=False)
     acao = db.Column(db.String(80), nullable=False, index=True)
@@ -126,7 +127,7 @@ class CadastroWorkflowChecklist(db.Model):
     item = db.Column(db.String(120), nullable=False)
     valor = db.Column(db.String(20), nullable=False, default="Nao se aplica")
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint("solicitacao_id", "departamento", "item", name="ux_cadastro_checklist_item"),
@@ -139,7 +140,7 @@ class CadastroWorkflowNotificacao(db.Model):
     usuario = db.Column(db.String(100), nullable=False, index=True)
     mensagem = db.Column(db.String(240), nullable=False)
     lida = db.Column(db.Boolean, nullable=False, default=False, index=True)
-    criada_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criada_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class CadastroWorkflowSLAConfig(db.Model):
@@ -147,7 +148,7 @@ class CadastroWorkflowSLAConfig(db.Model):
     departamento = db.Column(db.String(30), nullable=False, unique=True, index=True)
     horas = db.Column(db.Integer, nullable=False, default=48)
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ItemNota(db.Model):
@@ -166,7 +167,7 @@ class ItemNota(db.Model):
     qtd_real = db.Column(db.Float)
     status = db.Column(db.String(20), default="Pendente", index=True)
     usuario_importacao = db.Column(db.String(100))
-    data_importacao = db.Column(db.DateTime, default=datetime.now)
+    data_importacao = db.Column(db.DateTime, default=agora_br)
     usuario_conferencia = db.Column(db.String(100))
     inicio_conferencia = db.Column(db.DateTime)
     fim_conferencia = db.Column(db.DateTime)
@@ -233,7 +234,7 @@ class ConferenciaRecebimento(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), unique=True, index=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     @property
     def codigo(self):
@@ -251,7 +252,7 @@ class ClassificacaoContabilPadrao(db.Model):
     comentario = db.Column(db.String(500))
     ocorrencias = db.Column(db.Integer, nullable=False, default=0)
     origem = db.Column(db.String(120))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -272,7 +273,7 @@ class PlanoContaDominio(db.Model):
     nome_conta = db.Column(db.String(180), nullable=False)
     tipo_conta = db.Column(db.String(20))
     origem = db.Column(db.String(160))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class ClassificacaoContabilItem(db.Model):
@@ -296,8 +297,8 @@ class ClassificacaoContabilItem(db.Model):
     revisado_em = db.Column(db.DateTime)
     aprovado_por = db.Column(db.String(100))
     aprovado_em = db.Column(db.DateTime)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     item_nota = db.relationship("ItemNota", backref=db.backref("classificacao_contabil", uselist=False))
 
@@ -313,7 +314,7 @@ class ClassificacaoContabilCompetencia(db.Model):
     reaberto_por = db.Column(db.String(100))
     reaberto_em = db.Column(db.DateTime)
     motivo_reabertura = db.Column(db.String(500))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class LogClassificacaoContabil(db.Model):
@@ -326,7 +327,7 @@ class LogClassificacaoContabil(db.Model):
     valor_novo = db.Column(db.Text)
     motivo = db.Column(db.String(500))
     usuario = db.Column(db.String(100))
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class LogDivergencia(db.Model):
@@ -336,7 +337,7 @@ class LogDivergencia(db.Model):
     qtd_esperada = db.Column(db.Float)
     qtd_contada = db.Column(db.Float)
     usuario_erro = db.Column(db.String(100))
-    data_erro = db.Column(db.DateTime, default=datetime.now)
+    data_erro = db.Column(db.DateTime, default=agora_br)
     motivo_tipo = db.Column(db.String(80))
     destino_fisico = db.Column(db.String(80))
     evidencia_path = db.Column(db.String(300))
@@ -356,7 +357,7 @@ class LogTentativaConferencia(db.Model):
     status_item = db.Column(db.String(20), nullable=False)
     motivo = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ChecklistRecebimento(db.Model):
@@ -368,7 +369,7 @@ class ChecklistRecebimento(db.Model):
     avaria_visual = db.Column(db.Boolean, nullable=False, default=False)
     etiqueta_ok = db.Column(db.Boolean, nullable=False, default=False)
     observacao = db.Column(db.String(500))
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class LogReversaoConferencia(db.Model):
@@ -376,7 +377,7 @@ class LogReversaoConferencia(db.Model):
     numero_nota = db.Column(db.String(20), index=True, nullable=False)
     usuario_reversao = db.Column(db.String(100), nullable=False)
     motivo = db.Column(db.String(500), nullable=False)
-    data_reversao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_reversao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class LogEstornoLancamento(db.Model):
@@ -384,7 +385,7 @@ class LogEstornoLancamento(db.Model):
     numero_nota = db.Column(db.String(20), index=True, nullable=False)
     usuario_estorno = db.Column(db.String(100), nullable=False)
     motivo = db.Column(db.String(500), nullable=False)
-    data_estorno = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_estorno = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class LogManifestacaoDestinatario(db.Model):
@@ -395,7 +396,7 @@ class LogManifestacaoDestinatario(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Sucesso")
     detalhe = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class LogEventoFiscalNota(db.Model):
@@ -407,7 +408,7 @@ class LogEventoFiscalNota(db.Model):
     detalhe = db.Column(db.String(1000))
     payload_json = db.Column(db.Text)
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class ProcessoRecebimentoEvento(db.Model):
@@ -424,7 +425,7 @@ class ProcessoRecebimentoEvento(db.Model):
     dados_json = db.Column(db.Text)
     ip_address = db.Column(db.String(64))
     user_agent = db.Column(db.String(400))
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class BoletoContaReceber(db.Model):
@@ -438,7 +439,7 @@ class BoletoContaReceber(db.Model):
     codigo_barras = db.Column(db.String(120), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="Gerado", index=True)
     usuario_geracao = db.Column(db.String(100), nullable=False)
-    data_geracao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_geracao = db.Column(db.DateTime, default=agora_br, nullable=False)
     cpf_cnpj_pagador = db.Column(db.String(18), index=True)
     nome_pagador = db.Column(db.String(200))
     vencimento = db.Column(db.Date)
@@ -452,7 +453,7 @@ class LogExclusaoNota(db.Model):
     fornecedor = db.Column(db.String(100))
     usuario_exclusao = db.Column(db.String(100), nullable=False)
     motivo = db.Column(db.String(500), nullable=False)
-    data_exclusao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_exclusao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class SolicitacaoDevolucaoRecebimento(db.Model):
@@ -465,7 +466,7 @@ class SolicitacaoDevolucaoRecebimento(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
     observacao_admin = db.Column(db.String(500))
     usuario_aprovador = db.Column(db.String(100))
-    data_solicitacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_solicitacao = db.Column(db.DateTime, default=agora_br, nullable=False)
     data_decisao = db.Column(db.DateTime)
     ativa = db.Column(db.Boolean, nullable=False, default=True)
 
@@ -475,7 +476,7 @@ class ConferenciaLock(db.Model):
     numero_nota = db.Column(db.String(20), unique=True, nullable=False, index=True)
     usuario = db.Column(db.String(100), nullable=False)
     lock_until = db.Column(db.DateTime, nullable=False)
-    heartbeat_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    heartbeat_at = db.Column(db.DateTime, nullable=False, default=agora_br)
 
 
 class LogAcessoAdministrativo(db.Model):
@@ -483,7 +484,7 @@ class LogAcessoAdministrativo(db.Model):
     usuario = db.Column(db.String(100), nullable=False)
     rota = db.Column(db.String(200), nullable=False)
     metodo = db.Column(db.String(10), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ExpedicaoConferencia(db.Model):
@@ -492,8 +493,8 @@ class ExpedicaoConferencia(db.Model):
     report_file_path = db.Column(db.String(500), nullable=False)
     status = db.Column(db.String(20), default="Aberta", nullable=False, index=True)
     created_by = db.Column(db.String(100), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
     closed_by = db.Column(db.String(100))
     closed_at = db.Column(db.DateTime)
 
@@ -504,7 +505,7 @@ class ExpedicaoConferenciaDecisao(db.Model):
     tipo = db.Column(db.String(20), nullable=False)  # Recontar|Pendencia
     motivo = db.Column(db.String(500), nullable=False)
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
     ativa = db.Column(db.Boolean, nullable=False, default=True)
 
 
@@ -536,7 +537,7 @@ class ExpedicaoFaturamento(db.Model):
     peso_bruto = db.Column(db.Float)
     observacao = db.Column(db.String(300))
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
 
 
@@ -557,7 +558,7 @@ class ExpedicaoEstorno(db.Model):
     tipo = db.Column(db.String(10), nullable=False)  # Parcial|Total
     motivo = db.Column(db.String(500), nullable=False)
     usuario = db.Column(db.String(100), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ExpedicaoConferenciaSimples(db.Model):
@@ -567,7 +568,7 @@ class ExpedicaoConferenciaSimples(db.Model):
     numero_os = db.Column(db.String(80), index=True)
     ordem_compra = db.Column(db.String(80), index=True)
     conferente = db.Column(db.String(100), nullable=False, index=True)
-    data_conferencia = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data_conferencia = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     numero_nf = db.Column(db.String(160), index=True)
     nome_cliente = db.Column(db.String(160))
     cliente_origem = db.Column(db.String(20), nullable=False, default="Manual")
@@ -588,8 +589,8 @@ class ExpedicaoConferenciaSimples(db.Model):
     retirado_por = db.Column(db.String(160))  # Quem retirou (quando aplicável)
     retirada_justificativa = db.Column(db.String(500))  # Justificativa opcional da retirada
     status = db.Column(db.String(30), nullable=False, default="Pendente de expedição", index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
     expedido_at = db.Column(db.DateTime)
     expedido_by = db.Column(db.String(100))
     # Canhoto - foto obrigatória para finalizar
@@ -616,7 +617,7 @@ class ExpedicaoConferenciaSimplesFoto(db.Model):
     )
     file_name = db.Column(db.String(260), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ExpedicaoConferenciaSimplesEstorno(db.Model):
@@ -633,7 +634,7 @@ class ExpedicaoConferenciaSimplesEstorno(db.Model):
     admin_usuario = db.Column(db.String(100))
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ExpedicaoOrdemFat(db.Model):
@@ -703,8 +704,8 @@ class ExpedicaoOrdemFat(db.Model):
     excluido_by = db.Column(db.String(100))
     excluido_motivo = db.Column(db.String(300))
 
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     itens = db.relationship(
         "ExpedicaoOrdemFatItem",
@@ -826,8 +827,8 @@ class ExpedicaoOrdemST(db.Model):
     excluido_by = db.Column(db.String(100))
     excluido_motivo = db.Column(db.String(300))
 
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     itens = db.relationship(
         "ExpedicaoOrdemSTItem",
@@ -884,7 +885,7 @@ class ExpedicaoConferenciaLog(db.Model):
     pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
     # JSON com o detalhamento das alteracoes (cabecalho + itens).
     detalhes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class SolicitacaoNF(db.Model):
@@ -946,9 +947,21 @@ class SolicitacaoNF(db.Model):
     # time interno; sem esta, o solicitante nao tinha onde explicar o caso.
     observacoes = db.Column(db.String(500))
 
+    # Quando o solicitante precisa do material: hoje ou uma data futura. Junto
+    # com o horario da solicitacao (created_at), decide se o pedido cai fora
+    # do horario comercial com necessidade no mesmo dia - caso em que a NF so'
+    # sai no proximo dia util e um romaneio de seguranca e' gerado (ver
+    # romaneio_id abaixo).
+    data_necessidade = db.Column(db.Date)
+
+    # Preenchido quando a solicitacao foi criada fora do horario comercial com
+    # necessidade no mesmo dia: aponta para o romaneio de expedicao gerado
+    # automaticamente para acompanhar o material que sai sem NF ainda emitida.
+    romaneio_id = db.Column(db.Integer, db.ForeignKey("expedicao_romaneio.id"), index=True)
+
     ip_solicitante = db.Column(db.String(64))
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     itens = db.relationship(
         "SolicitacaoNFItem",
@@ -1015,7 +1028,7 @@ class SolicitacaoNFLog(db.Model):
     status_anterior = db.Column(db.String(20))
     status_novo = db.Column(db.String(20))
     detalhes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class UsuarioFuncionario(db.Model):
@@ -1039,7 +1052,7 @@ class UsuarioFuncionario(db.Model):
     # 'email' quando o vinculo saiu do e-mail corporativo, 'manual' quando a
     # pessoa escolheu o proprio nome na tela.
     origem = db.Column(db.String(20), nullable=False, default="email")
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class SolicitacaoNFAnexo(db.Model):
@@ -1058,7 +1071,7 @@ class SolicitacaoNFAnexo(db.Model):
     tamanho = db.Column(db.Integer, nullable=False, default=0)
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
     enviado_por = db.Column(db.String(160))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class TipoOperacaoNF(db.Model):
@@ -1093,8 +1106,8 @@ class AgendamentoVeiculo(db.Model):
     duracao_padrao_min = db.Column(db.Integer, nullable=False, default=120)
     ordem_exibicao = db.Column(db.Integer, nullable=False, default=0)
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class AgendamentoMotorista(db.Model):
@@ -1107,8 +1120,8 @@ class AgendamentoMotorista(db.Model):
     observacoes = db.Column(db.String(500))
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     usuario_username = db.Column(db.String(80), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False)
+    updated_at = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class AgendamentoFornecedor(db.Model):
@@ -1137,7 +1150,7 @@ class AgendamentoFornecedor(db.Model):
     codigo_integracao = db.Column(db.String(80), index=True)
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     fonte_arquivo = db.Column(db.String(260))
-    importado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    importado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class AgendamentoCliente(db.Model):
@@ -1165,7 +1178,7 @@ class AgendamentoCliente(db.Model):
     codigo_integracao = db.Column(db.String(80), index=True)
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     fonte_arquivo = db.Column(db.String(260))
-    importado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    importado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class AgendamentoSolicitacao(db.Model):
@@ -1178,8 +1191,8 @@ class AgendamentoSolicitacao(db.Model):
     prioridade = db.Column(db.String(20), nullable=False, default="Media", index=True)
     prazo_limite = db.Column(db.DateTime, index=True)
     solicitante = db.Column(db.String(100), nullable=False, index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     documento_tipo = db.Column(db.String(10), nullable=False, index=True)  # OC | NF
     documento_numero = db.Column(db.String(60), nullable=False, index=True)
     numero_oc = db.Column(db.String(60), index=True)
@@ -1271,7 +1284,7 @@ class AgendamentoSolicitacaoHistorico(db.Model):
     usuario = db.Column(db.String(100), nullable=False, index=True)
     detalhe = db.Column(db.String(500))
     payload_json = db.Column(db.Text)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 # ============================================================================
@@ -1313,8 +1326,8 @@ class Viagem(db.Model):
     tempo_total_min = db.Column(db.Integer, default=0)
     # Auditoria
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     iniciado_por = db.Column(db.String(100))
     concluido_por = db.Column(db.String(100))
     cancelado_por = db.Column(db.String(100))
@@ -1352,7 +1365,7 @@ class ViagemParada(db.Model):
     observacao = db.Column(db.String(500))
     assinatura_path = db.Column(db.String(400))  # foto/assinatura digital
     foto_paths = db.Column(db.Text)  # json lista
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ViagemPosicao(db.Model):
@@ -1367,7 +1380,7 @@ class ViagemPosicao(db.Model):
     rumo = db.Column(db.Float)  # graus (0-360)
     precisao_m = db.Column(db.Float)
     bateria_pct = db.Column(db.Integer)
-    registrado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    registrado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     origem = db.Column(db.String(20), default="manual")  # manual|gps|locartrack|motorista_app
 
 
@@ -1387,7 +1400,7 @@ class ViagemEvento(db.Model):
     foto_path = db.Column(db.String(400))
     severidade = db.Column(db.String(20), default="info")  # info|warning|danger|success
     registrado_por = db.Column(db.String(100))
-    registrado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    registrado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 # ============================================================================
@@ -1409,8 +1422,8 @@ class FrotaDocumento(db.Model):
     observacao = db.Column(db.String(500))
     anexo_path = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaManutencao(db.Model):
@@ -1432,7 +1445,7 @@ class FrotaManutencao(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Realizada", index=True)  # Realizada|Agendada|Cancelada
     anexo_path = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaAbastecimento(db.Model):
@@ -1453,7 +1466,7 @@ class FrotaAbastecimento(db.Model):
     tanque_cheio = db.Column(db.Boolean, nullable=False, default=True)
     observacao = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaMulta(db.Model):
@@ -1475,7 +1488,7 @@ class FrotaMulta(db.Model):
     anexo_path = db.Column(db.String(400))
     observacao = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaChecklistDiario(db.Model):
@@ -1486,14 +1499,14 @@ class FrotaChecklistDiario(db.Model):
     veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
     motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
     viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), index=True)
-    data = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    data = db.Column(db.DateTime, nullable=False, default=agora_br, index=True)
     km_atual = db.Column(db.Integer)
     itens_json = db.Column(db.Text, nullable=False)  # [{"item":"Pneus","status":"OK"|"ATENCAO"|"NAO_OK","obs":""}, ...]
     status_geral = db.Column(db.String(20), nullable=False, default="OK", index=True)  # OK|ATENCAO|BLOQUEADO
     observacao = db.Column(db.String(500))
     foto_paths = db.Column(db.Text)  # lista json de paths
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 # ============================================================================
@@ -1509,7 +1522,7 @@ class RecebimentoEnderecamento(db.Model):
     versao_leitura = db.Column(db.Integer, nullable=False, default=1)
     unidade = db.Column(db.String(20))
     status = db.Column(db.String(40), nullable=False, default="Pendente", index=True)
-    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
     criado_por = db.Column(db.String(100), nullable=False)
     concluido_em = db.Column(db.DateTime)
     alocacoes = db.Column(db.JSON)
@@ -1534,7 +1547,7 @@ class RecebimentoEnderecamentoEvento(db.Model):
     tarefa_id = db.Column(db.Integer, db.ForeignKey("recebimento_enderecamento.id"), nullable=False, index=True)
     tipo = db.Column(db.String(40), nullable=False)
     usuario = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
     detalhes = db.Column(db.JSON)
 
 
@@ -1546,7 +1559,7 @@ class EnderecoSaldo(db.Model):
     unidade = db.Column(db.String(20), nullable=False)
     quantidade = db.Column(db.Numeric(18, 6), nullable=False, default=0)
     conferido = db.Column(db.Boolean, nullable=False, default=False)
-    atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
     __table_args__ = (db.UniqueConstraint('sku', 'endereco', name='uq_endereco_saldo'),)
 
 
@@ -1562,7 +1575,7 @@ class EnderecoMovimento(db.Model):
     usuario = db.Column(db.String(100), nullable=False)
     motivo = db.Column(db.String(500))
     detalhes = db.Column(db.JSON)
-    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br, index=True)
     sincronizado_em = db.Column(db.DateTime)
     erro = db.Column(db.String(500))
 
@@ -1582,7 +1595,7 @@ class LocalizacaoArmazem(db.Model):
     capacidade_maxima = db.Column(db.Float, nullable=False, default=100.0)  # kg ou unidades
     capacidade_atual = db.Column(db.Float, nullable=False, default=0.0)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ItemWMS(db.Model):
@@ -1610,7 +1623,7 @@ class ItemWMS(db.Model):
     deposito_id = db.Column(db.Integer, db.ForeignKey("deposito_wms.id"), index=True)  # DEP 01, 02, 03, CLIENTE, TERCEIROS
     origem_estoque_inicial = db.Column(db.Boolean, nullable=False, default=False, index=True)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class MovimentacaoWMS(db.Model):
@@ -1624,7 +1637,7 @@ class MovimentacaoWMS(db.Model):
     qtd_movimentada = db.Column(db.Float, nullable=False)
     motivo = db.Column(db.String(300))
     usuario = db.Column(db.String(100), nullable=False)
-    data_movimentacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_movimentacao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class EstoqueWMS(db.Model):
@@ -1635,7 +1648,7 @@ class EstoqueWMS(db.Model):
     qtd_total = db.Column(db.Float, nullable=False, default=0.0)
     qtd_separada = db.Column(db.Float, nullable=False, default=0.0)  # Reservada para separação/despacho
     qtd_bloqueada = db.Column(db.Float, nullable=False, default=0.0)  # Quarentena, avaria, qualidade
-    data_atualizacao = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    data_atualizacao = db.Column(db.DateTime, default=agora_br, nullable=False, onupdate=agora_br)
     __table_args__ = (db.UniqueConstraint("codigo_item", "localizacao_id", name="_sku_localizacao_uc"),)
 
 
@@ -1651,7 +1664,7 @@ class WMSUnidadeLogistica(db.Model):
     localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
     observacao = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     fechado_em = db.Column(db.DateTime)
 
 
@@ -1668,7 +1681,7 @@ class WMSIntegracaoEvento(db.Model):
     proxima_tentativa_em = db.Column(db.DateTime)
     ultima_erro = db.Column(db.String(500))
     processado_em = db.Column(db.DateTime)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class WMSInventreeVinculo(db.Model):
@@ -1681,8 +1694,8 @@ class WMSInventreeVinculo(db.Model):
     inventree_codigo = db.Column(db.String(120), index=True)
     inventree_path = db.Column(db.String(300))
     metadata_json = db.Column(db.Text)
-    sincronizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    sincronizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, onupdate=agora_br)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     __table_args__ = (db.UniqueConstraint("entidade_tipo", "entidade_chave", name="_wms_inventree_vinculo_uc"),)
 
 
@@ -1699,7 +1712,7 @@ class WMSSkuMestre(db.Model):
     estoque_maximo = db.Column(db.Float, default=0.0)
     endereco_preferencial = db.Column(db.String(80))
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, onupdate=agora_br)
 
 
 class WMSParametroOperacional(db.Model):
@@ -1709,7 +1722,7 @@ class WMSParametroOperacional(db.Model):
     valor = db.Column(db.String(200), nullable=False)
     descricao = db.Column(db.String(300))
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, onupdate=agora_br)
 
 
 class WMSReconciliacaoDivergencia(db.Model):
@@ -1723,7 +1736,7 @@ class WMSReconciliacaoDivergencia(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)  # Aberta|Tratando|Resolvida
     origem = db.Column(db.String(30), nullable=False, default="Recon")
     observacao = db.Column(db.String(400))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     resolvido_em = db.Column(db.DateTime)
 
 
@@ -1735,7 +1748,7 @@ class WMSAlertaOperacional(db.Model):
     referencia = db.Column(db.String(100), index=True)
     descricao = db.Column(db.String(400), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="Aberto", index=True)  # Aberto|Resolvido
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     resolvido_em = db.Column(db.DateTime)
 
 
@@ -1757,7 +1770,7 @@ class WMSTarefaOperacional(db.Model):
     iniciado_por = db.Column(db.String(100))
     concluido_por = db.Column(db.String(100))
     observacao = db.Column(db.String(500))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     iniciado_em = db.Column(db.DateTime)
     concluido_em = db.Column(db.DateTime)
 
@@ -1779,7 +1792,7 @@ class WMSInventarioCiclico(db.Model):
     contado_por = db.Column(db.String(100))
     aprovado_por = db.Column(db.String(100))
     motivo = db.Column(db.String(400))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     contado_em = db.Column(db.DateTime)
     aprovado_em = db.Column(db.DateTime)
 
@@ -1797,8 +1810,8 @@ class LogisticaInventarioInicial(db.Model):
     lote = db.Column(db.String(120))
     observacao = db.Column(db.String(800))
     criado_por = db.Column(db.String(100), nullable=False, index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     # Snapshot do saldo do GRV consultado no exato momento da contagem (logo
     # apos salvar o registro) - null se o codigo nao existe no GRV ou se a
@@ -1866,7 +1879,7 @@ class LogisticaInventarioAjuste(db.Model):
     status_modulo = db.Column(db.String(20), nullable=False, default="Validacao", index=True)  # Validacao|Relatorio|Finance|Fiscal|Concluido
     status_slug = db.Column(db.String(20), nullable=False, default="validacao", index=True)
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     # ── Recontagem no dia da validacao ──────────────────────────────────
     # A validacao acontece dias depois da contagem, e nesse meio tempo o
@@ -2007,7 +2020,7 @@ class LogisticaInventarioRelatorioAjuste(db.Model):
     observacoes_ajuste = db.Column(db.Text)
     observacoes_itens = db.Column(db.Text)
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     criado_por = db.Column(db.String(100), nullable=False)  # "Solicitado por" no rodape do PDF
 
     ajustes = db.relationship("LogisticaInventarioAjuste", backref="relatorio", order_by="LogisticaInventarioAjuste.id")
@@ -2036,7 +2049,7 @@ class LogisticaInventarioAnaliseCausa(db.Model):
     motivo_causa_raiz = db.Column(db.Text)
 
     solicitado_por = db.Column(db.String(100), nullable=False)
-    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    solicitado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     analisado_por = db.Column(db.String(100))
     analisado_em = db.Column(db.DateTime)
@@ -2098,7 +2111,7 @@ class LogisticaConsumoChapaNesting(db.Model):
 
     arquivo_origem = db.Column(db.String(260))
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     criado_por = db.Column(db.String(100))
     concluido_em = db.Column(db.DateTime)
     concluido_por = db.Column(db.String(100))
@@ -2213,9 +2226,9 @@ class ComprasHomologacaoFornecedor(db.Model):
     validade_meses = db.Column(db.Integer, nullable=False, default=12)
     valido_ate = db.Column(db.Date, index=True)
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     criado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
     enviado_em = db.Column(db.DateTime)
     enviado_por = db.Column(db.String(100))
@@ -2271,7 +2284,7 @@ class ComprasHomologacaoFoto(db.Model):
     tamanho_bytes = db.Column(db.Integer)
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
     legenda = db.Column(db.String(250))
-    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
 
 
@@ -2315,8 +2328,8 @@ class IntralogPickingSeparacao(db.Model):
 
     observacao = db.Column(db.Text)
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
 
 class WMSPedidoSeparacao(db.Model):
@@ -2334,7 +2347,7 @@ class WMSPedidoSeparacao(db.Model):
     criado_por = db.Column(db.String(100))
     separado_por = db.Column(db.String(100))
     observacao = db.Column(db.String(400))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     separado_em = db.Column(db.DateTime)
 
 
@@ -2355,7 +2368,7 @@ class ConsertoEstoque(db.Model):
     quantidade_enviada = db.Column(db.Float, nullable=False)
     quantidade_saldo = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(30), nullable=False, default="Em conserto", index=True)
-    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=agora_br, nullable=False)
     usuario_criacao = db.Column(db.String(100), nullable=False)
 
     baixas = db.relationship('ConsertoBaixa', backref='estoque', lazy=True)
@@ -2382,7 +2395,7 @@ class ConsertoAuditoria(db.Model):
     referencia_id = db.Column(db.Integer, nullable=False)
     referencia_tipo = db.Column(db.String(30), nullable=False)  # estoque/baixa
     usuario = db.Column(db.String(100), nullable=False)
-    data_hora = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_hora = db.Column(db.DateTime, default=agora_br, nullable=False)
     detalhes = db.Column(db.String(1000), nullable=True)
 
 class DepositoWMS(db.Model):
@@ -2392,7 +2405,7 @@ class DepositoWMS(db.Model):
     nome = db.Column(db.String(100), nullable=False)  # Ex: "DEP 01 - Almoxarifado"
     descricao = db.Column(db.String(300))
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 # ============================================================================
@@ -2415,7 +2428,7 @@ class FacilitiesColaborador(db.Model):
     grv_codigo = db.Column(db.Integer, index=True)
     grv_identificacao = db.Column(db.String(30), index=True)
     grv_apelido = db.Column(db.String(100), index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FacilitiesProjeto(db.Model):
@@ -2428,7 +2441,7 @@ class FacilitiesProjeto(db.Model):
     cliente_endereco = db.Column(db.String(300))
     observacoes = db.Column(db.Text)
     status = db.Column(db.String(30), nullable=False, default="Em andamento", index=True)  # Em andamento|Pausado|Concluído
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     tarefas = db.relationship("FacilitiesTarefa", backref="projeto", lazy=True)
 
@@ -2448,7 +2461,7 @@ class FacilitiesTarefa(db.Model):
     data_inicio_prevista = db.Column(db.Date)
     data_fim_prevista = db.Column(db.Date)
     atualizado_em = db.Column(db.DateTime)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FacilitiesLimpeza(db.Model):
@@ -2466,7 +2479,7 @@ class FacilitiesLimpeza(db.Model):
     concluido_em = db.Column(db.DateTime)
     concluido_por = db.Column(db.String(100))
     evidencia_foto_path = db.Column(db.String(500))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     colaborador = db.relationship("FacilitiesColaborador", backref="limpezas")
 
@@ -2482,7 +2495,7 @@ class FacilitiesEpiMaterial(db.Model):
     qtd_estoque = db.Column(db.Integer, nullable=False, default=0)
     qtd_minima = db.Column(db.Integer, nullable=False, default=0)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FacilitiesEpiSolicitacao(db.Model):
@@ -2501,7 +2514,7 @@ class FacilitiesEpiSolicitacao(db.Model):
     motivo = db.Column(db.Text)
     status = db.Column(db.String(20), nullable=False, default="solicitado", index=True)  # solicitado|liberado|retirado|negado|cancelado
     motivo_recusa = db.Column(db.Text)
-    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    solicitado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     liberado_em = db.Column(db.DateTime)
     liberado_por_username = db.Column(db.String(100))  # auditoria: quem clicou aprovar/negar
     retirado_em = db.Column(db.DateTime)
@@ -2518,7 +2531,7 @@ class FacilitiesEpiSolicitacao(db.Model):
     estoque_grv_baixado = db.Column(db.Boolean)
     estoque_grv_verificado_em = db.Column(db.DateTime)
     estoque_grv_mensagem = db.Column(db.String(300))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     colaborador = db.relationship("FacilitiesColaborador", foreign_keys=[colaborador_id], backref="solicitacoes_epi")
     solicitante = db.relationship("FacilitiesColaborador", foreign_keys=[solicitante_id])
@@ -2535,14 +2548,14 @@ class FacilitiesEpiCicloTroca(db.Model):
     meses_validade = db.Column(db.Integer, nullable=False, default=6)
     descricao = db.Column(db.String(200))
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FacilitiesAuditLog(db.Model):
     """Log de auditoria para acoes administrativas no modulo Facilities."""
     __tablename__ = "facilities_audit_log"
     id = db.Column(db.Integer, primary_key=True)
-    ts = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    ts = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     usuario = db.Column(db.String(100), index=True)
     entidade = db.Column(db.String(40), nullable=False, index=True)  # epi_solicitacao|limpeza|projeto|tarefa|material|colaborador
     entidade_id = db.Column(db.Integer, index=True)
@@ -2565,7 +2578,7 @@ class FacilitiesLimpezaTemplate(db.Model):
     checklist_json = db.Column(db.Text)  # JSON array de strings
     qr_code = db.Column(db.String(40), unique=True, index=True)  # token QR do ambiente
     ativo = db.Column(db.Boolean, nullable=False, default=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     colaborador = db.relationship("FacilitiesColaborador")
 
@@ -2585,7 +2598,7 @@ class FacilitiesProjetoTarefa(db.Model):
     impedimento = db.Column(db.Text)
     impedimento_em = db.Column(db.DateTime)
     foto_path = db.Column(db.String(500))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_em = db.Column(db.DateTime)
     concluido_em = db.Column(db.DateTime)
 
@@ -2604,7 +2617,7 @@ class FacilitiesEstoqueItem(db.Model):
     localizacao = db.Column(db.String(100))        # Ex: Prateleira A3
     quantidade = db.Column(db.Integer, nullable=False, default=0)
     qtd_minima = db.Column(db.Integer, nullable=False, default=5)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_em = db.Column(db.DateTime)
 
     material = db.relationship("FacilitiesEpiMaterial")
@@ -2623,7 +2636,7 @@ class FacilitiesChamado(db.Model):
     aberto_por = db.Column(db.String(100))         # nome ou usuario
     responsavel = db.Column(db.String(100))        # responsável pela execução
     observacao = db.Column(db.Text)                # última observação de atualização
-    aberto_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    aberto_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime)
     concluido_em = db.Column(db.DateTime)
 
@@ -2650,7 +2663,7 @@ class EmailNFEnviado(db.Model):
     conferencia_id = db.Column(db.Integer, index=True)
     faturamento_id = db.Column(db.Integer, index=True)
     disparado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     enviado_em = db.Column(db.DateTime)
 
 
@@ -2671,7 +2684,7 @@ class EmailEntradaChapa(db.Model):
     erro_mensagem = db.Column(db.String(800))
     disparado_por = db.Column(db.String(100))
     origem = db.Column(db.String(20), nullable=False, default="Sistema", index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     enviado_em = db.Column(db.DateTime)
 
     __table_args__ = (
@@ -2708,7 +2721,7 @@ class CadastroAtualizacaoPublica(db.Model):
     dados_json = db.Column(db.Text)
     status = db.Column(db.String(40), nullable=False, default="Pendente de revisão", index=True)
     origem_ip = db.Column(db.String(60))
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class QualidadeCertificado(db.Model):
@@ -2748,7 +2761,7 @@ class QualidadeCertificado(db.Model):
     status = db.Column(db.String(30), nullable=False, default="Pendente de análise", index=True)
     # Status: "Pendente de análise" | "Laudo emitido" | "Laudo aprovado"
     analista = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     analisado_em = db.Column(db.DateTime)   # data de emissão do laudo (execução)
     aprovado_em = db.Column(db.DateTime)    # data de aprovação pelo supervisor/gerente
     aprovado_por = db.Column(db.String(100))
@@ -2788,7 +2801,7 @@ class ExpedicaoRomaneio(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     numero_romaneio = db.Column(db.String(40), nullable=False, unique=True, index=True)
-    data_romaneio = db.Column(db.Date, nullable=False, default=datetime.now, index=True)
+    data_romaneio = db.Column(db.Date, nullable=False, default=agora_br, index=True)
     orcamento = db.Column(db.String(80), index=True)
     cliente = db.Column(db.String(160))
     
@@ -2838,6 +2851,11 @@ class ExpedicaoRomaneio(db.Model):
     # Status: Rascunho (em construção), Pronto (finalizado), Expedido (já expedido)
     status = db.Column(db.String(30), nullable=False, default="Rascunho", index=True)
 
+    # Romaneio gerado automaticamente pela Assistencia Tecnica (solicitacao
+    # fora do horario comercial, com necessidade no mesmo dia): a NF ainda nao
+    # existe quando o romaneio nasce - ver SolicitacaoNF.romaneio_id.
+    origem_assistencia_tecnica = db.Column(db.Boolean, nullable=False, default=False)
+
     # Carta de correção (CC-e) da modalidade de frete: marcado quando o
     # operador finaliza o romaneio mesmo com NF cuja modalidade declarada
     # diverge do tipo_frete do romaneio. Fica pendente até o Faturamento
@@ -2849,9 +2867,9 @@ class ExpedicaoRomaneio(db.Model):
 
     # Auditoria
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     expedido_por = db.Column(db.String(100))
     expedido_em = db.Column(db.DateTime)
     
@@ -2907,7 +2925,7 @@ class ExpedicaoRomaneioNF(db.Model):
     sem_conferencia_motivo = db.Column(db.String(500))
 
     # Auditoria
-    adicionado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    adicionado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     adicionado_por = db.Column(db.String(100), nullable=False)
     
     __table_args__ = (
@@ -2940,7 +2958,7 @@ class ExpedicaoRomaneioExclusao(db.Model):
     admin_usuario = db.Column(db.String(100))
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class ExpedicaoRomaneioEstorno(db.Model):
@@ -2967,7 +2985,7 @@ class ExpedicaoRomaneioEstorno(db.Model):
     admin_usuario = db.Column(db.String(100))
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class BiaMensagem(db.Model):
@@ -2986,7 +3004,7 @@ class BiaMensagem(db.Model):
     # username (usuario) | role (cargo) | "" (broadcast)
     destino_valor = db.Column(db.String(120), nullable=False, default="", index=True)
     texto = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class BiaMensagemLeitura(db.Model):
@@ -3003,7 +3021,7 @@ class BiaMensagemLeitura(db.Model):
         index=True,
     )
     username = db.Column(db.String(100), nullable=False, index=True)
-    lida_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    lida_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint("mensagem_id", "username", name="ux_bia_mensagem_leitura"),
@@ -3026,7 +3044,7 @@ class ExpedicaoRomaneioFotoCarregamento(db.Model):
     )
     file_name = db.Column(db.String(260), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
-    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=agora_br, nullable=False)
     uploaded_by = db.Column(db.String(100))
 
 
@@ -3061,8 +3079,8 @@ class ExpedicaoCobranca(db.Model):
     respondida_por = db.Column(db.String(100))
     respondida_em = db.Column(db.DateTime)
 
-    criada_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    atualizada_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criada_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizada_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     resolvida_em = db.Column(db.DateTime)
 
     __table_args__ = (
@@ -3093,7 +3111,7 @@ class ExpedicaoCobrancaLog(db.Model):
     tipo = db.Column(db.String(20), nullable=False, default="resposta")
     texto = db.Column(db.String(1000), nullable=False, default="")
     autor = db.Column(db.String(100), default="")
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class PlannerBoard(db.Model):
@@ -3102,8 +3120,8 @@ class PlannerBoard(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False, unique=True, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     colunas = db.relationship(
         "PlannerColumn",
@@ -3129,8 +3147,8 @@ class PlannerColumn(db.Model):
     is_done = db.Column(db.Boolean, nullable=False, default=False, index=True)
     order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     cards = db.relationship(
         "PlannerCard",
@@ -3153,8 +3171,8 @@ class PlannerCard(db.Model):
     order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
     atualizado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     concluido_em = db.Column(db.DateTime, index=True)
 
     labels = db.relationship(
@@ -3186,7 +3204,7 @@ class PlannerLabel(db.Model):
     color = db.Column(db.String(20), nullable=False, default="#0f62c9")
     order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class PlannerCardLabel(db.Model):
@@ -3195,7 +3213,7 @@ class PlannerCardLabel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     card_id = db.Column(db.Integer, db.ForeignKey("planner_card.id"), nullable=False, index=True)
     label_id = db.Column(db.Integer, db.ForeignKey("planner_label.id"), nullable=False, index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
     label = db.relationship("PlannerLabel")
 
@@ -3211,7 +3229,7 @@ class PlannerCardComment(db.Model):
     card_id = db.Column(db.Integer, db.ForeignKey("planner_card.id"), nullable=False, index=True)
     texto = db.Column(db.Text, nullable=False)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class PlannerChecklistItem(db.Model):
@@ -3223,8 +3241,8 @@ class PlannerChecklistItem(db.Model):
     is_done = db.Column(db.Boolean, nullable=False, default=False, index=True)
     order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3268,9 +3286,9 @@ class ComexProcesso(db.Model):
     tipo_operacao = db.Column(db.String(2), nullable=False, default="IM")  # IM | IA
     status_modulo = db.Column(db.String(40), nullable=False, default="OC", index=True)
     status_slug = db.Column(db.String(40), nullable=False, default="oc", index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     criado_por = db.Column(db.String(100), nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100))
 
     # ── Modulo 1: OC (espelha SQL_HIST_OC_HEADER do bridge GRV/Compras) ───
@@ -3522,8 +3540,8 @@ class ComexPoItem(db.Model):
     valor_unitario = db.Column(db.Float)           # UNIT US$
     valor_total = db.Column(db.Float)               # Line Total USD
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ComexCotacao(db.Model):
@@ -3608,7 +3626,7 @@ class ComexCotacao(db.Model):
     token_publico_expira_em = db.Column(db.DateTime)
     email_instrucao_embarque = db.Column(db.String(255))  # e-mail do contato do fornecedor de frete
 
-    link_gerado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    link_gerado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     criado_por = db.Column(db.String(100))
     recebida_em = db.Column(db.DateTime)
 
@@ -3650,8 +3668,8 @@ class ComexFollowUp(db.Model):
     modulo = db.Column(db.String(30), nullable=False, index=True)
     status_ok = db.Column(db.Boolean, nullable=False, default=False)
 
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint("processo_id", "modulo", name="uq_comex_follow_up_processo_modulo"),
@@ -3677,7 +3695,7 @@ class ComexFollowUpLog(db.Model):
     documento_file_name = db.Column(db.String(260))
     documento_file_path = db.Column(db.String(500))
     autor = db.Column(db.String(100), default="")
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class ComexLembrete(db.Model):
@@ -3691,7 +3709,7 @@ class ComexLembrete(db.Model):
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
     tipo = db.Column(db.String(40), nullable=False)  # inicio_desembaraco | entrega
     destinatario = db.Column(db.String(255))
-    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ComexEntregaFoto(db.Model):
@@ -3705,7 +3723,7 @@ class ComexEntregaFoto(db.Model):
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
     file_name = db.Column(db.String(260), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
-    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=agora_br, nullable=False)
     uploaded_by = db.Column(db.String(100))
 
 
@@ -3729,9 +3747,9 @@ class ComexFornecedor(db.Model):
     # em comex_fornecedor_service.py)
     tipo_fornecedor = db.Column(db.String(30), nullable=False, index=True)
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     criado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100))
 
 
@@ -3758,7 +3776,7 @@ class ComexDocumento(db.Model):
     file_path = db.Column(db.String(500), nullable=False)  # "" para documentos guardados em `dados`
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))  # conteudo do arquivo, direto no banco
     mimetype = db.Column(db.String(120))
-    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=agora_br, nullable=False)
     uploaded_by = db.Column(db.String(100))
 
 
@@ -3774,7 +3792,7 @@ class ComexComentario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
     texto = db.Column(db.Text, nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     criado_por = db.Column(db.String(100))
 
 
@@ -3792,7 +3810,7 @@ class DivergenciaPedidoAprovacao(db.Model):
     fornecedor = db.Column(db.String(100))
     detalhe = db.Column(db.Text)  # resumo textual das linhas divergentes, para o card do Teams
     status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente | Aprovado | Rejeitado
-    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    solicitado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     respondido_por = db.Column(db.String(160))
     respondido_em = db.Column(db.DateTime)
     motivo_resposta = db.Column(db.String(500))
@@ -3814,7 +3832,7 @@ class ChapaAuditoria(db.Model):
     ar = db.Column(db.String(100))
     acao = db.Column(db.String(60), nullable=False)
     usuario = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br, index=True)
     antes = db.Column(db.JSON)
     depois = db.Column(db.JSON)
 
@@ -3825,7 +3843,7 @@ class ChapaControleExclusao(db.Model):
     item_nota_id = db.Column(db.Integer, db.ForeignKey('item_nota.id', ondelete='CASCADE'),
                              nullable=False, unique=True)
     usuario = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
 
 
 class ChapaCalculo(db.Model):
@@ -3847,9 +3865,9 @@ class ChapaCalculo(db.Model):
     dimensoes = db.Column(db.Text)               # JSON {espessura, largura, comprimento, diametro, ...}
     peso_por_peca = db.Column(db.Float)          # kg por peça (saída da calculadora)
     criado_por = db.Column(db.String(100))
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
     __table_args__ = (
         db.UniqueConstraint("numero_nota", "item_nota_id", name="ux_chapa_calculo_item"),
@@ -3871,7 +3889,7 @@ class ChapaCalculoLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     chapa_calculo_id = db.Column(db.Integer, db.ForeignKey("chapa_calculo.id"), nullable=False, index=True)
     alterado_por = db.Column(db.String(100))
-    alterado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    alterado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     dados_anteriores = db.Column(db.Text)  # JSON do estado anterior (vazio na criação)
     dados_novos = db.Column(db.Text)       # JSON do estado novo
 
@@ -3886,7 +3904,7 @@ class ProducaoObservacao(db.Model):
     aux_code = db.Column(db.Integer, nullable=False, index=True)
     texto = db.Column(db.Text, nullable=False)
     autor = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
 class ProducaoSequencia(db.Model):
@@ -3900,7 +3918,7 @@ class ProducaoSequencia(db.Model):
     titulo = db.Column(db.String(240), nullable=False)
     instrucoes = db.Column(db.Text)
     criado_por = db.Column(db.String(100), nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class RpaExecutor(db.Model):
@@ -3916,8 +3934,8 @@ class RpaExecutor(db.Model):
     janela_titulo = db.Column(db.String(300))
     janela_hwnd = db.Column(db.String(40))
     erro = db.Column(db.Text)
-    ultima_comunicacao = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
-    atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    ultima_comunicacao = db.Column(db.DateTime, nullable=False, default=agora_br, index=True)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=agora_br, onupdate=agora_br)
 
 
 class RpaExecucao(db.Model):
@@ -3934,11 +3952,11 @@ class RpaExecucao(db.Model):
     tentativas = db.Column(db.Integer, nullable=False, default=0)
     erro = db.Column(db.Text)
     resultado_json = db.Column(db.Text)
-    criada_em = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    criada_em = db.Column(db.DateTime, nullable=False, default=agora_br, index=True)
     reivindicada_em = db.Column(db.DateTime)
     iniciada_em = db.Column(db.DateTime)
     finalizada_em = db.Column(db.DateTime)
-    atualizada_em = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    atualizada_em = db.Column(db.DateTime, nullable=False, default=agora_br, onupdate=agora_br)
 
     __table_args__ = (
         db.Index("ix_rpa_execucao_fila", "ambiente", "status", "criada_em"),

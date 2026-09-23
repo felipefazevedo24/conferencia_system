@@ -23,6 +23,7 @@ from ..services import comex_service as svc
 from ..services import comex_po_pdf
 from ..services.smtp_service import enviar_mensagem_smtp
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
+from ..tempo import agora_br
 
 comex_bp = Blueprint("comex", __name__)
 
@@ -631,7 +632,7 @@ def api_enviar_email_po(processo_id):
         current_app.logger.exception("Falha ao enviar e-mail da PO %s", processo.po_numero)
         return jsonify({"error": f"Falha ao enviar e-mail: {exc}"}), 502
 
-    agora = datetime.now()
+    agora = agora_br()
     processo.po_enviada_em = agora
     processo.po_enviada_por = session.get("username", "desconhecido")
     processo.po_destinatarios_email = "; ".join(destinatarios)
@@ -817,7 +818,7 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         "email_instrucao_embarque": c.email_instrucao_embarque,
         "link_gerado_em": c.link_gerado_em.strftime("%d/%m/%Y %H:%M") if c.link_gerado_em else None,
         "recebida_em": c.recebida_em.strftime("%d/%m/%Y %H:%M") if c.recebida_em else None,
-        "expirado": bool(c.token_publico_expira_em and c.token_publico_expira_em < datetime.now() and c.status == "Pendente"),
+        "expirado": bool(c.token_publico_expira_em and c.token_publico_expira_em < agora_br() and c.status == "Pendente"),
         "criado_por": c.criado_por,
         "volumes": [
             {"numero": v.numero, "comprimento": v.comprimento, "largura": v.largura, "altura": v.altura, "peso": v.peso}

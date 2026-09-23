@@ -31,4 +31,8 @@ os.environ.setdefault("FLASK_ENV", "production")
 os.environ.setdefault("SECRET_KEY", "troque-esta-chave")
 os.environ.setdefault("CONSYSTE_TOKEN", "troque-seu-token")
 
+# Destino ativo da bridge ERP. Configure ERP_LANCAMENTO_API_TOKEN no ambiente
+# privado antes de carregar a aplicação; não inclua o token neste arquivo.
+os.environ.setdefault("ERP_LANCAMENTO_API_URL", "https://wk-dev.tail2061cd.ts.net")
+
 from wsgi import application

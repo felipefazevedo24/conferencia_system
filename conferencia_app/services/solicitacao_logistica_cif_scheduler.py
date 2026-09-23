@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from flask import Flask
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -29,7 +30,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
     resultado = _executar(app)
     with _LOCK:
         _STATE.update(
-            last_run=datetime.now(),
+            last_run=agora_br(),
             last_status="ok",
             last_message="Ciclo CIF concluido.",
             last_resultado=resultado,

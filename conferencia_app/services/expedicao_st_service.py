@@ -22,6 +22,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import ExpedicaoOrdemST, ExpedicaoOrdemSTItem
+from ..tempo import agora_br
 
 
 # Parenteses que carregam a quantidade em pecas (ex.: "(15PÇS - 45KG)").
@@ -215,7 +216,7 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
     atualizadas = 0
     faturadas = 0
     faturadas_sem_conf = 0
-    agora = datetime.now()
+    agora = agora_br()
 
     for cod, rows in grupos.items():
         head = rows[0]
@@ -342,7 +343,7 @@ def marcar_expedido_por_nf(numero_nf, registro_id=None, usuario=None) -> int:
         .all()
     )
     afetadas = 0
-    agora = datetime.now()
+    agora = agora_br()
     for ordem in ordens:
         # Trava de conferencia: ordens faturadas SEM conferencia nao podem ser
         # expedidas ate que a conferencia cega seja realizada.
@@ -377,7 +378,7 @@ def marcar_em_romaneio_por_nf(numero_nf, *, commit=True) -> int:
 
     ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
     afetadas = 0
-    agora = datetime.now()
+    agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_FATURADO:
             ordem.status = STATUS_EM_ROMANEIO
@@ -398,7 +399,7 @@ def reverter_romaneio_por_nf(numero_nf) -> int:
 
     ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
     afetadas = 0
-    agora = datetime.now()
+    agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_EM_ROMANEIO:
             ordem.status = STATUS_FATURADO
@@ -418,7 +419,7 @@ def reverter_expedicao_por_nf(numero_nf) -> int:
 
     ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
     afetadas = 0
-    agora = datetime.now()
+    agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_EXPEDIDO:
             ordem.status = STATUS_EM_ROMANEIO

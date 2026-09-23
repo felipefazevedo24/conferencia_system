@@ -26,6 +26,7 @@ from ..models import (
     ExpedicaoRomaneio,
     ViagemParada,
 )
+from ..tempo import agora_br
 
 ORIGEM_MOTORISTA = "app do motorista"
 # Resultados de parada que representam uma entrega concluida com sucesso.
@@ -129,7 +130,7 @@ def anexar_comprovante_da_parada(
         # Import tardio para evitar import circular (routes -> services -> routes).
         from ..routes.expedicao_romaneio_routes import _registro_conferencia_da_nf
 
-        agora = datetime.now()
+        agora = agora_br()
         total = 0
         # Cada parada corresponde a UMA NF (payload.numero_nf) -> finaliza so o
         # registro daquela NF. Payload antigo (sem numero_nf) finaliza todas.

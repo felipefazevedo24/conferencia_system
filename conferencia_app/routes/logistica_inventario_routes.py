@@ -46,6 +46,7 @@ from ..services.erp_estoque_service import (
     qtde_grv_para,
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
+from ..tempo import agora_br
 
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
@@ -194,7 +195,7 @@ def _montar_payload_material_local() -> dict:
     dados = _gerar_dados_material_local(rows)
     return {
         "sucesso": True,
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora_br().isoformat(),
         "total": len(dados),
         "dados": dados,
     }
@@ -562,7 +563,7 @@ def exportar_inventario_inicial_excel():
     wb.save(stream)
     stream.seek(0)
 
-    nome_arquivo = f"inventario_logistica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    nome_arquivo = f"inventario_logistica_{agora_br().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return send_file(
         stream,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -618,7 +619,7 @@ def criar_inventario_inicial():
         lote=lote[:120] if lote else None,
         observacao=observacao[:800] if observacao else None,
         criado_por=session.get("username", "sistema"),
-        atualizado_em=datetime.now(),
+        atualizado_em=agora_br(),
     )
     db.session.add(row)
     db.session.commit()
@@ -657,7 +658,7 @@ def criar_inventario_inicial():
         custo_medio = custo_medio_para(row.codigo_produto, row.local_codigo, estoque_grv)
         row.qtde_grv_no_momento = qtde_grv
         row.custo_medio_no_momento = custo_medio
-        row.grv_consultado_em = datetime.now()
+        row.grv_consultado_em = agora_br()
         db.session.commit()
         descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
         ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
@@ -901,7 +902,7 @@ def exportar_inventario_ajustes_excel():
     wb.save(stream)
     stream.seek(0)
 
-    nome_arquivo = f"ajustes_estoque_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    nome_arquivo = f"ajustes_estoque_{agora_br().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return send_file(
         stream,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1203,7 +1204,7 @@ def api_atualizar_grv_ajuste(ajuste_id):
             if contagem:
                 contagem.qtde_grv_no_momento = qtde_grv
                 contagem.custo_medio_no_momento = custo_medio
-                contagem.grv_consultado_em = datetime.now()
+                contagem.grv_consultado_em = agora_br()
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -1589,7 +1590,7 @@ def api_chapas_salvar_calculo():
     calc.dimensoes = dimensoes_json
     calc.peso_por_peca = peso_por_peca
     calc.atualizado_por = usuario
-    calc.atualizado_em = datetime.now()
+    calc.atualizado_em = agora_br()
     db.session.flush()
 
     db.session.add(ChapaCalculoLog(

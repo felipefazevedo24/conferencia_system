@@ -58,6 +58,7 @@ from ..services.agendamento_service import (
 )
 from ..services.agendamento_ordem_coleta_pdf import gerar_ordem_coleta_pdf
 from ..services.solicitacao_coleta_service import criar_ou_atualizar_detalhes_coleta, obter_detalhes_coleta
+from ..tempo import agora_br
 
 try:
     from openpyxl import load_workbook
@@ -91,7 +92,7 @@ def _salvar_anexo_solicitacao(arquivo, solicitacao_id: int) -> dict | None:
     extensao = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
     if extensao not in {"pdf", "jpg", "jpeg", "png", "webp"}:
         return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = agora_br().strftime("%Y%m%d_%H%M%S")
     nome_final = f"solicitacao_{solicitacao_id}_{stamp}_{nome}"
     caminho = os.path.join(_solicitacao_anexo_dir(), nome_final)
     arquivo.save(caminho)
@@ -641,7 +642,7 @@ def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, avis
 def _periodo_recebimento(visao: str, mes_ref: str, data_ref: str) -> tuple[date, date, date]:
     if visao == "mes":
         try:
-            mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
+            mes_base = datetime.strptime(mes_ref or agora_br().strftime("%Y-%m"), "%Y-%m")
         except ValueError as exc:
             raise ValueError("Parâmetro 'mes' inválido. Use YYYY-MM.") from exc
         ano = mes_base.year
@@ -1030,7 +1031,7 @@ def recebimento_calendario_programar_coleta():
         return jsonify({"error": str(exc)}), 400
     observacao_coleta = str(payload.get("observacao") or "").strip()
     usuario = session.get("username", "sistema")
-    agora = datetime.now()
+    agora = agora_br()
     fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
     sol = AgendamentoSolicitacao(
         tipo="COLETA",
@@ -1376,7 +1377,7 @@ def _serializar_solicitacao(
         "observacoes": str(registro.observacoes_endereco or "").strip(),
     }
     prazo = registro.prazo_limite
-    atrasada = bool(prazo and prazo < datetime.now() and str(registro.status or "").strip() not in {"Concluida", "Cancelada"})
+    atrasada = bool(prazo and prazo < agora_br() and str(registro.status or "").strip() not in {"Concluida", "Cancelada"})
     return {
         "id": registro.id,
         "codigo": str(registro.codigo or f"LOG-{registro.id}").strip(),
@@ -1664,7 +1665,7 @@ def dashboard_central_viagens():
                 and card.get("status") in {"Alocada", "EmAndamento", "EmRota"}):
             row.status = card["status"] = "Pendente"
             card["status_label"] = status_label_agendamento("Pendente")
-            row.atualizado_em = datetime.now()
+            row.atualizado_em = agora_br()
             alterou_status = True
         if viagem and card.get("status") in {"Pendente", "EmAnalise", "Alocada", "EmAndamento", "EmRota"}:
             status_viagem = str(viagem.get("status") or "").strip()
@@ -1687,7 +1688,7 @@ def dashboard_central_viagens():
                 if sid is not None and sid in rows_por_id:
                     row = rows_por_id[sid]
                     row.status = status_novo
-                    row.atualizado_em = datetime.now()
+                    row.atualizado_em = agora_br()
                     alterou_status = True
 
     if alterou_status:
@@ -1819,7 +1820,7 @@ def central_viagens_criar_coleta_por_oc():
     }
 
     usuario = session.get("username", "sistema")
-    agora = datetime.now()
+    agora = agora_br()
     fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
     sol = AgendamentoSolicitacao(
         tipo="COLETA",
@@ -2044,7 +2045,7 @@ def central_viagens_importar_oc_confirmar():
             ignoradas += 1
             continue
 
-        agora = datetime.now()
+        agora = agora_br()
         sol = AgendamentoSolicitacao(
             tipo="COLETA",
             status="Pendente",
@@ -2117,7 +2118,7 @@ def central_viagens_alterar_prioridade(solicitacao_id: int):
         return jsonify({"error": "Prioridade inválida."}), 400
     anterior = row.prioridade
     row.prioridade = prioridade
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="PRIORIDADE_ALTERADA",
@@ -2140,7 +2141,7 @@ def central_viagens_reorganizar(solicitacao_id: int):
     prioridade = str(payload.get("prioridade") or "").strip()
     if prioridade and prioridade in PRIORIDADES_SOLICITACAO:
         row.prioridade = prioridade
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="REORGANIZADA_CENTRAL",
@@ -2166,10 +2167,10 @@ def central_viagens_cancelar(solicitacao_id: int):
         return jsonify({"error": "Informe o motivo do cancelamento."}), 400
     row.status = "Cancelada"
     row.cancelado_por = session.get("username", "sistema")
-    row.cancelado_em = datetime.now()
+    row.cancelado_em = agora_br()
     row.motivo_cancelamento = motivo
     row.cancelamento_pendente = False
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="CANCELAMENTO_CENTRAL",
@@ -2196,11 +2197,11 @@ def central_viagens_excluir(solicitacao_id: int):
     usuario = session.get("username", "sistema")
     motivo = str(payload.get("motivo") or "").strip() or "Excluida na Central de Viagens."
     status_anterior = str(row.status or "").strip()
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     if status_anterior not in {"Concluida", "Cancelada"}:
         row.status = "Cancelada"
     if not row.cancelado_em:
-        row.cancelado_em = datetime.now()
+        row.cancelado_em = agora_br()
     if not row.cancelado_por:
         row.cancelado_por = usuario
     if not row.motivo_cancelamento:
@@ -2261,11 +2262,11 @@ def central_viagens_excluir_lote():
             continue
 
         status_anterior = str(row.status or "").strip()
-        row.atualizado_em = datetime.now()
+        row.atualizado_em = agora_br()
         if status_anterior not in {"Concluida", "Cancelada"}:
             row.status = "Cancelada"
         if not row.cancelado_em:
-            row.cancelado_em = datetime.now()
+            row.cancelado_em = agora_br()
         if not row.cancelado_por:
             row.cancelado_por = usuario
         if not row.motivo_cancelamento:
@@ -2314,9 +2315,9 @@ def agenda_agendamento_veiculos():
         modo = "semana"
     data_raw = str(request.args.get("data") or "").strip()
     try:
-        data_base = datetime.fromisoformat(f"{data_raw}T00:00" if data_raw else datetime.now().strftime("%Y-%m-%dT00:00"))
+        data_base = datetime.fromisoformat(f"{data_raw}T00:00" if data_raw else agora_br().strftime("%Y-%m-%dT00:00"))
     except ValueError:
-        data_base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        data_base = agora_br().replace(hour=0, minute=0, second=0, microsecond=0)
     inicio = data_base.replace(hour=0, minute=0, second=0, microsecond=0)
     fim = inicio + timedelta(days=1 if modo == "dia" else 7)
     veiculos = {row.id: row for row in listar_veiculos_agendamento()}
@@ -2475,7 +2476,7 @@ def _registrar_historico(
             usuario=usuario,
             detalhe=str(detalhe or "").strip() or None,
             payload_json=_json_text(payload),
-            criado_em=datetime.now(),
+            criado_em=agora_br(),
         )
     )
 
@@ -2689,7 +2690,7 @@ def atualizar_documento_solicitacao(solicitacao_id: int):
     )
     _registrar_historico(row.id, evento="DOCUMENTO_ATUALIZADO", usuario=usuario, detalhe=detalhe_hist)
 
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     db.session.commit()
 
     itens = (
@@ -2790,7 +2791,7 @@ def criar_solicitacao_agendamento():
     origem_documento = "SOLICITACAO_USUARIO"
 
     usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
+    agora = agora_br()
     row = AgendamentoSolicitacao(
         tipo=tipo,
         status="Pendente",
@@ -2891,7 +2892,7 @@ def aprovar_solicitacao_avulsa(solicitacao_id: int):
 
     usuario = session.get("username", "desconhecido")
     row.status = "Aprovada"
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="APROVADA_ADMIN_AVULSA",
@@ -3010,9 +3011,9 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
     row.data_hora_saida_prevista = saida
     row.data_hora_retorno_prevista = retorno
     row.alocado_por = session.get("username", "desconhecido")
-    row.alocado_em = datetime.now()
+    row.alocado_em = agora_br()
     row.status = "Alocada"
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     row.departamento_solicitante = departamento
     observacao = str(payload.get("observacoes_logistica") or "").strip()
     if observacao:
@@ -3179,9 +3180,9 @@ def alocar_solicitacoes_lote_agendamento():
         row.data_hora_saida_prevista = saida
         row.data_hora_retorno_prevista = retorno
         row.alocado_por = usuario
-        row.alocado_em = datetime.now()
+        row.alocado_em = agora_br()
         row.status = "Alocada"
-        row.atualizado_em = datetime.now()
+        row.atualizado_em = agora_br()
         row.departamento_solicitante = departamento
         if observacao:
             row.observacoes_logistica = observacao
@@ -3268,7 +3269,7 @@ def atualizar_status_agendamento(solicitacao_id: int):
         return jsonify({"error": "Não é possível voltar uma solicitação em andamento para pendente."}), 409
 
     row.status = novo_status
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     observacao = str(payload.get("observacoes_logistica") or "").strip()
     if observacao:
         row.observacoes_logistica = observacao
@@ -3293,7 +3294,7 @@ def atualizar_status_agendamento(solicitacao_id: int):
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         row.concluido_por = session.get("username", "desconhecido")
-        row.concluido_em = datetime.now()
+        row.concluido_em = agora_br()
 
     _registrar_historico(row.id, evento="STATUS_ALTERADO", usuario=session.get("username", "desconhecido"), status_anterior=status_atual, status_novo=novo_status, detalhe=observacao or f"Status alterado para {status_label_agendamento(novo_status)}.", payload=payload)
     db.session.commit()
@@ -3326,12 +3327,12 @@ def cancelar_solicitacao_agendamento(solicitacao_id: int):
     if session.get("role") == "Admin":
         row.status = "Cancelada"
         row.cancelado_por = usuario
-        row.cancelado_em = datetime.now()
+        row.cancelado_em = agora_br()
         row.motivo_cancelamento = motivo
         row.cancelamento_pendente = False
         row.cancelamento_solicitado_por = None
         row.cancelamento_motivo_pendente = None
-        row.atualizado_em = datetime.now()
+        row.atualizado_em = agora_br()
         _registrar_historico(
             row.id,
             evento="CANCELAMENTO_ADMIN",
@@ -3349,7 +3350,7 @@ def cancelar_solicitacao_agendamento(solicitacao_id: int):
     row.cancelamento_pendente = True
     row.cancelamento_solicitado_por = usuario
     row.cancelamento_motivo_pendente = motivo
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(row.id, evento="CANCELAMENTO_SOLICITADO", usuario=usuario, status_anterior=status_anterior, detalhe=f"Cancelamento solicitado. Motivo: {motivo}", payload=payload)
     db.session.commit()
     _notificar_solicitante_agendamento(row, "Aprovacao de cancelamento solicitada", f"A logistica solicitou cancelamento. Motivo: {motivo}")
@@ -3374,12 +3375,12 @@ def aprovar_cancelamento_solicitacao(solicitacao_id: int):
     motivo_aprovado = row.cancelamento_motivo_pendente
     row.status = "Cancelada"
     row.cancelado_por = row.cancelamento_solicitado_por
-    row.cancelado_em = datetime.now()
+    row.cancelado_em = agora_br()
     row.motivo_cancelamento = motivo_aprovado
     row.cancelamento_pendente = False
     row.cancelamento_solicitado_por = None
     row.cancelamento_motivo_pendente = None
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(row.id, evento="CANCELAMENTO_APROVADO", usuario=username, status_anterior=status_anterior, status_novo="Cancelada", detalhe=f"Cancelamento aprovado por {username}. Motivo: {motivo_aprovado}")
     db.session.commit()
     _notificar_solicitante_agendamento(row, "Cancelamento aprovado", f"Cancelamento aprovado por {username}.")
@@ -3403,7 +3404,7 @@ def rejeitar_cancelamento_solicitacao(solicitacao_id: int):
     row.cancelamento_pendente = False
     row.cancelamento_solicitado_por = None
     row.cancelamento_motivo_pendente = None
-    row.atualizado_em = datetime.now()
+    row.atualizado_em = agora_br()
     _registrar_historico(row.id, evento="CANCELAMENTO_REJEITADO", usuario=username, detalhe=f"Cancelamento rejeitado por {username}.")
     db.session.commit()
     _notificar_solicitante_agendamento(row, "Cancelamento rejeitado", f"Cancelamento rejeitado por {username}.")
@@ -3416,7 +3417,7 @@ def rejeitar_cancelamento_solicitacao(solicitacao_id: int):
 def motoristas_km_dashboard():
     """Retorna km acumulado por motorista para exibir no dashboard principal."""
     dias = int(request.args.get("dias", 30))
-    desde = datetime.now() - timedelta(days=dias)
+    desde = agora_br() - timedelta(days=dias)
     rows = (
         db.session.query(
             AgendamentoSolicitacao.motorista_id,
@@ -3456,10 +3457,10 @@ def disponibilidade_veiculos():
     data_inicio_str = request.args.get("data_inicio", "")
     data_fim_str = request.args.get("data_fim", "")
     try:
-        data_inicio = datetime.strptime(data_inicio_str, "%Y-%m-%d") if data_inicio_str else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        data_inicio = datetime.strptime(data_inicio_str, "%Y-%m-%d") if data_inicio_str else agora_br().replace(hour=0, minute=0, second=0, microsecond=0)
         data_fim = datetime.strptime(data_fim_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59) if data_fim_str else data_inicio + timedelta(days=7)
     except ValueError:
-        data_inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        data_inicio = agora_br().replace(hour=0, minute=0, second=0, microsecond=0)
         data_fim = data_inicio + timedelta(days=7)
 
     veiculos = AgendamentoVeiculo.query.filter_by(ativo=True).order_by(AgendamentoVeiculo.ordem_exibicao).all()
@@ -3518,9 +3519,9 @@ def sugestao_rota():
     data_str = request.args.get("data", "")
     veiculo_id = request.args.get("veiculo_id", "")
     try:
-        data = datetime.strptime(data_str, "%Y-%m-%d") if data_str else datetime.now()
+        data = datetime.strptime(data_str, "%Y-%m-%d") if data_str else agora_br()
     except ValueError:
-        data = datetime.now()
+        data = agora_br()
     dia_inicio = data.replace(hour=0, minute=0, second=0, microsecond=0)
     dia_fim = dia_inicio + timedelta(days=1)
 
@@ -3606,7 +3607,7 @@ def sugestao_rota():
 
 def _auto_transicao_em_andamento():
     """Muda Alocada -> EmAndamento quando a data de saída prevista chegou."""
-    hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    hoje = agora_br().replace(hour=0, minute=0, second=0, microsecond=0)
     rows = AgendamentoSolicitacao.query.filter(
         AgendamentoSolicitacao.status == "Alocada",
         _filtro_solicitacao_visivel(),
@@ -3615,7 +3616,7 @@ def _auto_transicao_em_andamento():
     ).all()
     for row in rows:
         row.status = "EmAndamento"
-        row.atualizado_em = datetime.now()
+        row.atualizado_em = agora_br()
         _registrar_historico(
             row.id,
             evento="AUTO_EM_ANDAMENTO",
@@ -3677,9 +3678,9 @@ def motorista_finalizar_viagem(solicitacao_id: int):
         return jsonify({"error": "Você precisa iniciar a viagem antes de finalizar."}), 409
     row.status = "Concluida"
     row.concluido_por = username
-    row.concluido_em = datetime.now()
-    row.data_hora_retorno_real = datetime.now()
-    row.atualizado_em = datetime.now()
+    row.concluido_em = agora_br()
+    row.data_hora_retorno_real = agora_br()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="CONCLUIDA_MOTORISTA",
@@ -3713,8 +3714,8 @@ def motorista_iniciar_viagem(solicitacao_id: int):
     if status_atual not in {"Alocada", "EmAndamento"}:
         return jsonify({"error": "Viagem precisa estar alocada para iniciar."}), 409
     row.status = "EmRota"
-    row.data_hora_saida_real = datetime.now()
-    row.atualizado_em = datetime.now()
+    row.data_hora_saida_real = agora_br()
+    row.atualizado_em = agora_br()
     _registrar_historico(
         row.id,
         evento="INICIADA_MOTORISTA",

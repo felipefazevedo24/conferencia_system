@@ -114,11 +114,12 @@ def test_historico_e_preenchido_a_partir_do_cabecalho(banco_sujo):
     itens = {r['id']: r for r in linhas(banco_sujo, 'select * from solicitacao_nf_item')}
     assert len(itens) == 5, 'nenhum item pode ser perdido'
 
-    # Garantia faturada: NF e status copiados, sem controle de retorno.
+    # Garantia faturada: NF e status copiados. A partir do redesenho de
+    # 2026-09, Garantia passou a exigir retorno (só Bonificação não retorna).
     assert itens[1]['tipo_operacao'] == 'Garantia'
     assert itens[1]['status'] == 'Notas fiscais emitidas'
     assert itens[1]['numero_nf'] == 'NF-555'
-    assert itens[1]['necessita_retorno'] == 0
+    assert itens[1]['necessita_retorno'] == 1
     assert itens[1]['quantidade_retornada'] == 0
 
     # Remessa para teste já retornada: venda posterior e retorno cheio.
@@ -137,7 +138,9 @@ def test_rodar_duas_vezes_nao_altera_o_resultado(banco_sujo):
     depois_da_primeira = linhas(banco_sujo, 'select * from solicitacao_nf_item order by id')
     aplicar(banco_sujo, vezes=2)
     assert linhas(banco_sujo, 'select * from solicitacao_nf_item order by id') == depois_da_primeira
-    assert len(linhas(banco_sujo, 'select * from tipo_operacao_nf')) == 6
+    # 4 tipos desde o redesenho de 2026-09 ("Remessa para Conserto" e
+    # "Remessa de retorno de demonstração" saíram da lista de sementes).
+    assert len(linhas(banco_sujo, 'select * from tipo_operacao_nf')) == 4
 
 
 def test_edicao_feita_na_tela_sobrevive_a_nova_execucao(banco_sujo):
@@ -174,7 +177,7 @@ def test_banco_sem_o_modulo_nao_quebra(tmp_path):
     caminho = tmp_path / 'vazio.db'
     sqlite3.connect(caminho).close()
     aplicar(caminho)
-    assert len(linhas(caminho, 'select * from tipo_operacao_nf')) == 6
+    assert len(linhas(caminho, 'select * from tipo_operacao_nf')) == 4
 
 
 def test_script_aplica_e_verifica_sem_iniciar_aplicacao(banco_sujo):

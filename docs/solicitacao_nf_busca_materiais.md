@@ -37,5 +37,22 @@ Solicitação de NF e suas consultas nomeadas. Se a consulta funcionar mas
 retornar vazia, conferir o código interno e a empresa configurada em
 `ERP_ESTOQUE_PG_COMPANY`.
 
+### Migração de endereço da bridge
+
+O resolvedor usado pela solicitação de NF e pelo lançamento considera, para
+URL, token e timeout da bridge: variável de ambiente, configuração Flask e,
+por último, `instance/erp_lancamento_config.json`. Isso impede que a URL de
+um túnel antigo no JSON substitua o destino ativo definido no WSGI.
+
+O endereço ativo informado é `https://wk-dev.tail2061cd.ts.net`. No servidor,
+definir `ERP_LANCAMENTO_API_URL` antes de importar a aplicação e recarregar
+o web app após publicar a correção. O token deve continuar configurado no
+ambiente privado. Nenhuma credencial é incluída nesta documentação.
+
+Uma consulta a `/health` funcionando valida o acesso ao processo; a consulta
+de materiais valida também autenticação,
+rota e acesso ao ERP. Um erro TLS ocorre antes da requisição HTTP chegar à
+bridge e exige verificar a publicação HTTPS do Funnel e a conectividade.
+
 Teste automatizado específico: `tests/test_solicitacao_nf_busca.py`, incluindo
 seleção no Chromium, zeros à esquerda, falha de integração e respostas atrasadas.

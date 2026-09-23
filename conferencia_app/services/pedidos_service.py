@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 
 import requests
+from ..tempo import agora_br
 
 logger = logging.getLogger(__name__)
 
@@ -817,7 +818,7 @@ def _cache_set_linhas_pedido(numero_pedido: str, linhas: list) -> None:
         return
     cache = _load_pedidos_cache()
     cache[str(numero_pedido)] = {
-        "atualizado_em": datetime.now().isoformat(timespec="seconds"),
+        "atualizado_em": agora_br().isoformat(timespec="seconds"),
         "linhas": linhas,
     }
     _save_pedidos_cache(cache)

@@ -11,6 +11,7 @@ from typing import Any
 
 from flask import Flask
 from sqlalchemy import or_
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -30,7 +31,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
 
     # test_request_context: evento() lê a sessão (usuário fica "sistema").
     with app.test_request_context():
-        limite_execucao = datetime.now() - timedelta(minutes=10)
+        limite_execucao = agora_br() - timedelta(minutes=10)
         tarefas = (
             Tarefa.query
             .filter(Tarefa.status == "Aguardando sincronização")
@@ -67,7 +68,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                 app.logger.exception('Retry movimentação: SKU %s', sku)
 
         _STATE.update(
-            last_run=datetime.now(),
+            last_run=agora_br(),
             last_status="ok",
             last_message=f"{ok} sincronizada(s), {falhas} ainda com falha, {puladas} em fluxo.",
         )

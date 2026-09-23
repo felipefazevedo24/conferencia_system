@@ -14,6 +14,7 @@ from datetime import date, datetime
 from typing import Any
 
 from flask import Flask
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -54,7 +55,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             else:
                 app.logger.error("Scheduler NF-e: falha ERP bridge: %s", exc)
                 msg = f"ERP bridge erro: {exc}"
-            _set_status(last_run=datetime.now(), last_status="erro",
+            _set_status(last_run=agora_br(), last_status="erro",
                         last_message=msg)
             return {"ok": False, "erro": str(exc)}
 
@@ -104,7 +105,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                 pendentes += 1
 
         _set_status(
-            last_run=datetime.now(),
+            last_run=agora_br(),
             last_status="ok",
             last_message=(
                 f"{enviadas} enviada(s), {pendentes} pendente(s), {ignoradas} ignorada(s)."

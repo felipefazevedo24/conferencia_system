@@ -19,12 +19,18 @@ branch_labels = None
 depends_on = None
 
 # Tipos que não têm controle de retorno (espelha TIPOS_SEM_RETORNO do
-# solicitacao_nf_service; mudou lá, mude aqui).
-TIPOS_SEM_RETORNO = ('Garantia', 'Bonificação', 'Remessa de retorno de demonstração')
+# solicitacao_nf_service; mudou lá, mude aqui). A partir do redesenho de
+# 2026-09: só Bonificação não retorna — Garantia passou a exigir retorno, e
+# "Remessa para Conserto"/"Remessa de retorno de demonstração" saíram de
+# circulação (ver _ensure_tipo_operacao_nf_ajustes no bootstrap, que corrige
+# os bancos que já tinham os 6 tipos originais semeados).
+TIPOS_SEM_RETORNO = ('Bonificação',)
 
-# Os seis tipos que já existem em produção, com o texto de ajuda ao
+# Os tipos oferecidos hoje na solicitação, com o texto de ajuda ao
 # solicitante. O texto é sugestão inicial: confirme com a Assistência Técnica
-# e com o Fiscal antes de considerar fechado.
+# e com o Fiscal antes de considerar fechado. "Remessa para Conserto" e
+# "Remessa de retorno de demonstração" existiram aqui até o redesenho de
+# 2026-09 e foram removidos da lista (histórico preservado, ver acima).
 TIPOS_INICIAIS = (
     ('Garantia', 1,
      'Envio de material para substituição, reparo ou avaliação técnica de item '
@@ -39,12 +45,6 @@ TIPOS_INICIAIS = (
      'Peças, ferramentas ou equipamentos levados pela equipe técnica para um '
      'atendimento. Pode voltar ou ser consumido no atendimento — a equipe ajusta '
      'item a item.'),
-    ('Remessa para Conserto', 5,
-     'Envio de material para conserto em terceiro. A nota sai antes do material '
-     'e o item deve retornar.'),
-    ('Remessa de retorno de demonstração', 6,
-     'Devolução de material que estava em demonstração. A nota sai antes do '
-     'material e não há retorno a controlar.'),
 )
 
 # Unidade do material junto do item: sem ela a quantidade fica ambígua.

@@ -21,6 +21,7 @@ from ..models import (
     ComprasHomologacaoResposta,
 )
 from . import compras_homologacao_form as form
+from ..tempo import agora_br
 
 # Quantos dias antes do vencimento a homologacao ja entra no alerta.
 DIAS_ALERTA_VENCIMENTO = 30
@@ -222,7 +223,7 @@ def enviar_para_aprovacao(homologacao: Homologacao, usuario: str) -> Homologacao
     validar_para_envio(homologacao)
     recalcular(homologacao)
     homologacao.status = Homologacao.STATUS_EM_APROVACAO
-    homologacao.enviado_em = datetime.now()
+    homologacao.enviado_em = agora_br()
     homologacao.enviado_por = usuario
     db.session.commit()
     return homologacao
@@ -250,7 +251,7 @@ def homologar(homologacao: Homologacao, usuario: str, justificativa: str = "") -
     if homologacao.status != Homologacao.STATUS_EM_APROVACAO:
         raise ValueError("Só uma homologação em aprovação pode ser homologada.")
     recalcular(homologacao)
-    agora = datetime.now()
+    agora = agora_br()
     homologacao.status = Homologacao.STATUS_HOMOLOGADO
     homologacao.decidido_em = agora
     homologacao.decidido_por = usuario
@@ -268,7 +269,7 @@ def reprovar(homologacao: Homologacao, usuario: str, justificativa: str) -> Homo
         raise ValueError("Informe o motivo da reprovação.")
     recalcular(homologacao)
     homologacao.status = Homologacao.STATUS_REPROVADO
-    homologacao.decidido_em = datetime.now()
+    homologacao.decidido_em = agora_br()
     homologacao.decidido_por = usuario
     homologacao.justificativa_decisao = justificativa[:2000]
     homologacao.valido_ate = None
