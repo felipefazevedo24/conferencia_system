@@ -43,10 +43,11 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 
 $arguments = "`"$AgentScript`" --instance $instance"
 $action = New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory $ProjectRoot
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $Usuario
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $Usuario
+$watchdogTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $Usuario -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -Hidden
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Agente RPA do Sync em background ($Ambiente)" -Force | Out-Null
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($logonTrigger, $watchdogTrigger) -Principal $principal -Settings $settings -Description "Agente RPA do Sync em background ($Ambiente)" -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
 $deadline = (Get-Date).AddSeconds(30)
