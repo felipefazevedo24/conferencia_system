@@ -3288,6 +3288,22 @@ class PlannerChecklistItem(db.Model):
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+class PlannerBoardPessoal(db.Model):
+    """Dono de um board pessoal ("Minhas tarefas"). Tabela a parte (em vez
+    de uma coluna "dono" no planner_board) pra nao exigir migration: board
+    sem linha aqui e' o board compartilhado da equipe. Um board por usuario,
+    visivel so' pro dono - nem o Admin enxerga o dos outros pela tela."""
+
+    __tablename__ = "planner_board_pessoal"
+
+    id = db.Column(db.Integer, primary_key=True)
+    board_id = db.Column(db.Integer, db.ForeignKey("planner_board.id"), nullable=False, unique=True, index=True)
+    username = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    board = db.relationship("PlannerBoard")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # COMEX — Gestao de processos de importacao/exportacao
 # ═══════════════════════════════════════════════════════════════════════════

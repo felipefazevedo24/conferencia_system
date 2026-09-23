@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, abort, g, jsonify, render_template, request, session
+from sqlalchemy.exc import IntegrityError
 
 from ..auth import has_permission, is_admin_role, permission_required
 from ..extensions import db
 from ..models import (
     PlannerBoard,
+    PlannerBoardPessoal,
     PlannerCard,
     PlannerCardComment,
     PlannerCardLabel,
@@ -22,12 +24,21 @@ from ..models import (
 
 planner_bp = Blueprint("planner", __name__)
 PERM = "PAGE_PLANEJAMENTO_TAREFAS"
+# "Minhas tarefas": mesmo Kanban, um board privado por usuario.
+PERM_PESSOAL = "PAGE_MINHAS_TAREFAS"
+API_EQUIPE = "/api/planejamento"
+API_PESSOAL = "/api/minhas-tarefas"
 DEFAULT_BOARD_NAME = "Planejamento Sync"
 PRIORIDADES_VALIDAS = {"Baixa", "Media", "Alta", "Critica"}
 DEFAULT_COLUNAS = [
     {"titulo": "Backlog", "color": "#2563eb", "is_done": False},
     {"titulo": "Em andamento", "color": "#f59e0b", "is_done": False},
     {"titulo": "Revisao", "color": "#8b5cf6", "is_done": False},
+    {"titulo": "Concluido", "color": "#10b981", "is_done": True},
+]
+DEFAULT_COLUNAS_PESSOAL = [
+    {"titulo": "A fazer", "color": "#2563eb", "is_done": False},
+    {"titulo": "Em andamento", "color": "#f59e0b", "is_done": False},
     {"titulo": "Concluido", "color": "#10b981", "is_done": True},
 ]
 DEFAULT_LABELS = [
@@ -70,9 +81,9 @@ def _admin_responsaveis() -> list[str]:
     return sorted(set(nomes), key=lambda x: x.casefold())
 
 
-def _seed_default_columns(board: PlannerBoard) -> None:
+def _seed_default_columns(board: PlannerBoard, colunas: list[dict] = DEFAULT_COLUNAS) -> None:
     now = datetime.now()
-    for idx, col in enumerate(DEFAULT_COLUNAS):
+    for idx, col in enumerate(colunas):
         db.session.add(
             PlannerColumn(
                 board_id=board.id,
@@ -125,6 +136,94 @@ def _get_or_create_board() -> PlannerBoard:
     _seed_default_labels(board)
     db.session.commit()
     return board
+
+
+def _modo_pessoal() -> bool:
+    return request.path == "/minhas-tarefas" or request.path.startswith(API_PESSOAL + "/")
+
+
+def _board_pessoal() -> PlannerBoard:
+    """Board do usuario logado - criado no primeiro acesso."""
+    username = _user()
+    dono = PlannerBoardPessoal.query.filter(
+        db.func.lower(PlannerBoardPessoal.username) == username.lower()
+    ).first()
+    if dono:
+        if not dono.board.colunas:
+            _seed_default_columns(dono.board, DEFAULT_COLUNAS_PESSOAL)
+            db.session.commit()
+        return dono.board
+
+    now = datetime.now()
+    board = PlannerBoard(
+        nome=f"Minhas tarefas · {username}"[:120],
+        criado_por=username,
+        criado_em=now,
+        atualizado_em=now,
+    )
+    db.session.add(board)
+    db.session.flush()
+    _seed_default_columns(board, DEFAULT_COLUNAS_PESSOAL)
+    _seed_default_labels(board)
+    db.session.add(PlannerBoardPessoal(board_id=board.id, username=username, criado_em=now))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Duas abas abrindo "Minhas tarefas" ao mesmo tempo: a outra criou.
+        db.session.rollback()
+        return PlannerBoardPessoal.query.filter(
+            db.func.lower(PlannerBoardPessoal.username) == username.lower()
+        ).first().board
+    return board
+
+
+def _board_atual() -> PlannerBoard:
+    """Board que a requisicao enxerga: o pessoal do usuario (rotas
+    /api/minhas-tarefas) ou o da equipe (/api/planejamento)."""
+    if "planner_board" not in g:
+        g.planner_board = _board_pessoal() if _modo_pessoal() else _get_or_create_board()
+    return g.planner_board
+
+
+def _do_board(obj, board_id: int | None):
+    # 404 (e nao 403) pra nao revelar que o id existe em outro board.
+    if obj is None or board_id != _board_atual().id:
+        abort(404)
+    return obj
+
+
+def _coluna_ou_404(column_id: int) -> PlannerColumn:
+    col = db.session.get(PlannerColumn, column_id)
+    return _do_board(col, col.board_id if col else None)
+
+
+def _card_ou_404(card_id: int) -> PlannerCard:
+    card = db.session.get(PlannerCard, card_id)
+    return _do_board(card, card.column.board_id if card else None)
+
+
+def _label_ou_404(label_id: int) -> PlannerLabel:
+    label = db.session.get(PlannerLabel, label_id)
+    return _do_board(label, label.board_id if label else None)
+
+
+def _item_ou_404(item_id: int) -> PlannerChecklistItem:
+    item = db.session.get(PlannerChecklistItem, item_id)
+    return _do_board(item, item.card.column.board_id if item else None)
+
+
+def _rota(sufixo: str, **opcoes):
+    """Registra a mesma view no board da equipe (/api/planejamento, regra de
+    acesso de antes: so' Admin) e no board pessoal (/api/minhas-tarefas,
+    com PAGE_MINHAS_TAREFAS). O board que a view enxerga sai do prefixo
+    da URL - ver _board_atual."""
+    def registrar(fn):
+        planner_bp.add_url_rule(f"{API_EQUIPE}{sufixo}", endpoint=fn.__name__,
+                                view_func=permission_required(PERM, "Admin")(fn), **opcoes)
+        planner_bp.add_url_rule(f"{API_PESSOAL}{sufixo}", endpoint=f"{fn.__name__}_pessoal",
+                                view_func=permission_required(PERM_PESSOAL)(fn), **opcoes)
+        return fn
+    return registrar
 
 
 def _serialize_label(item: PlannerLabel) -> dict:
@@ -245,7 +344,9 @@ def _sync_card_labels(card: PlannerCard, label_ids: list[int]) -> None:
 
     to_add = [label_id for label_id in valid_ids if label_id not in existing]
     if to_add:
-        labels = PlannerLabel.query.filter(PlannerLabel.id.in_(to_add)).all()
+        labels = PlannerLabel.query.filter(
+            PlannerLabel.id.in_(to_add), PlannerLabel.board_id == card.column.board_id
+        ).all()
         for label in labels:
             db.session.add(PlannerCardLabel(card_id=card.id, label_id=label.id, criado_em=datetime.now()))
 
@@ -276,13 +377,26 @@ def planejamento_page():
         "planejamento.html",
         user=session.get("username", "Usuario"),
         user_role=session.get("role", ""),
+        api_base=API_EQUIPE,
+        modo_pessoal=False,
     )
 
 
-@planner_bp.route("/api/planejamento/board", methods=["GET"])
-@permission_required(PERM, "Admin")
+@planner_bp.route("/minhas-tarefas")
+@permission_required(PERM_PESSOAL)
+def minhas_tarefas_page():
+    return render_template(
+        "planejamento.html",
+        user=session.get("username", "Usuario"),
+        user_role=session.get("role", ""),
+        api_base=API_PESSOAL,
+        modo_pessoal=True,
+    )
+
+
+@_rota("/board", methods=["GET"])
 def api_get_board():
-    board = _get_or_create_board()
+    board = _board_atual()
     columns = sorted(board.colunas, key=lambda c: (c.order_index, c.id))
     labels = sorted(board.labels, key=lambda l: (l.order_index, l.id))
     return jsonify({
@@ -292,20 +406,20 @@ def api_get_board():
             "columns": [_serialize_column(c) for c in columns],
             "labels": [_serialize_label(l) for l in labels],
             "kpis": _compute_kpis(board),
-            "responsaveis_admin": _admin_responsaveis(),
+            # No board pessoal o unico responsavel possivel e' o dono.
+            "responsaveis_admin": [_user()] if _modo_pessoal() else _admin_responsaveis(),
         }
     })
 
 
-@planner_bp.route("/api/planejamento/labels", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/labels", methods=["POST"])
 def api_create_label():
     payload = request.get_json(silent=True) or {}
     nome = str(payload.get("nome") or "").strip()
     if not nome:
         return jsonify({"error": "Nome da etiqueta é obrigatório."}), 400
 
-    board = _get_or_create_board()
+    board = _board_atual()
     max_order = db.session.query(db.func.max(PlannerLabel.order_index)).filter_by(board_id=board.id).scalar()
     next_order = int(max_order or 0) + 1 if max_order is not None else 0
 
@@ -323,25 +437,23 @@ def api_create_label():
     return jsonify({"sucesso": True, "label": _serialize_label(label)})
 
 
-@planner_bp.route("/api/planejamento/labels/<int:label_id>", methods=["DELETE"])
-@permission_required(PERM, "Admin")
+@_rota("/labels/<int:label_id>", methods=["DELETE"])
 def api_delete_label(label_id: int):
-    label = PlannerLabel.query.get_or_404(label_id)
+    label = _label_ou_404(label_id)
     PlannerCardLabel.query.filter_by(label_id=label.id).delete()
     db.session.delete(label)
     db.session.commit()
     return jsonify({"sucesso": True})
 
 
-@planner_bp.route("/api/planejamento/columns", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/columns", methods=["POST"])
 def api_create_column():
     payload = request.get_json(silent=True) or {}
     titulo = str(payload.get("titulo") or "").strip()
     if not titulo:
         return jsonify({"error": "Titulo da coluna é obrigatório."}), 400
 
-    board = _get_or_create_board()
+    board = _board_atual()
     max_order = db.session.query(db.func.max(PlannerColumn.order_index)).filter_by(board_id=board.id).scalar()
     next_order = int(max_order or 0) + 1 if max_order is not None else 0
 
@@ -361,15 +473,14 @@ def api_create_column():
     return jsonify({"sucesso": True, "column": _serialize_column(col)})
 
 
-@planner_bp.route("/api/planejamento/columns/reorder", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/columns/reorder", methods=["POST"])
 def api_reorder_columns():
     payload = request.get_json(silent=True) or {}
     ids = payload.get("column_ids") or []
     if not isinstance(ids, list) or not ids:
         return jsonify({"error": "Informe column_ids com a ordem desejada."}), 400
 
-    board = _get_or_create_board()
+    board = _board_atual()
     cols = PlannerColumn.query.filter(PlannerColumn.id.in_(ids), PlannerColumn.board_id == board.id).all()
     col_map = {c.id: c for c in cols}
     if len(col_map) != len(ids):
@@ -385,10 +496,9 @@ def api_reorder_columns():
     return jsonify({"sucesso": True})
 
 
-@planner_bp.route("/api/planejamento/columns/<int:column_id>", methods=["PATCH"])
-@permission_required(PERM, "Admin")
+@_rota("/columns/<int:column_id>", methods=["PATCH"])
 def api_update_column(column_id: int):
-    col = PlannerColumn.query.get_or_404(column_id)
+    col = _coluna_ou_404(column_id)
     payload = request.get_json(silent=True) or {}
 
     titulo = payload.get("titulo")
@@ -416,10 +526,9 @@ def api_update_column(column_id: int):
     return jsonify({"sucesso": True, "column": _serialize_column(col)})
 
 
-@planner_bp.route("/api/planejamento/columns/<int:column_id>", methods=["DELETE"])
-@permission_required(PERM, "Admin")
+@_rota("/columns/<int:column_id>", methods=["DELETE"])
 def api_delete_column(column_id: int):
-    col = PlannerColumn.query.get_or_404(column_id)
+    col = _coluna_ou_404(column_id)
     if col.cards:
         return jsonify({"error": "A coluna ainda possui cards. Mova ou exclua os cards antes."}), 409
 
@@ -436,8 +545,7 @@ def api_delete_column(column_id: int):
     return jsonify({"sucesso": True})
 
 
-@planner_bp.route("/api/planejamento/cards", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/cards", methods=["POST"])
 def api_create_card():
     payload = request.get_json(silent=True) or {}
     titulo = str(payload.get("titulo") or "").strip()
@@ -447,7 +555,7 @@ def api_create_card():
     if not column_id:
         return jsonify({"error": "Coluna da tarefa é obrigatória."}), 400
 
-    col = PlannerColumn.query.get_or_404(int(column_id))
+    col = _coluna_ou_404(int(column_id))
     max_order = db.session.query(db.func.max(PlannerCard.order_index)).filter_by(column_id=col.id).scalar()
     next_order = int(max_order or 0) + 1 if max_order is not None else 0
 
@@ -484,10 +592,9 @@ def api_create_card():
     return jsonify({"sucesso": True, "card": _serialize_card(card, bool(col.is_done))})
 
 
-@planner_bp.route("/api/planejamento/cards/<int:card_id>", methods=["PATCH"])
-@permission_required(PERM, "Admin")
+@_rota("/cards/<int:card_id>", methods=["PATCH"])
 def api_update_card(card_id: int):
-    card = PlannerCard.query.get_or_404(card_id)
+    card = _card_ou_404(card_id)
     payload = request.get_json(silent=True) or {}
 
     if "titulo" in payload:
@@ -510,7 +617,7 @@ def api_update_card(card_id: int):
         card.prioridade = prioridade if prioridade in PRIORIDADES_VALIDAS else "Media"
 
     if "column_id" in payload:
-        target_col = PlannerColumn.query.get_or_404(int(payload.get("column_id")))
+        target_col = _coluna_ou_404(int(payload.get("column_id")))
         if target_col.id != card.column_id:
             source_col_id = card.column_id
             card.column_id = target_col.id
@@ -529,8 +636,7 @@ def api_update_card(card_id: int):
     return jsonify({"sucesso": True, "card": _serialize_card(card, done_column)})
 
 
-@planner_bp.route("/api/planejamento/cards/<int:card_id>/move", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/cards/<int:card_id>/move", methods=["POST"])
 def api_move_card(card_id: int):
     payload = request.get_json(silent=True) or {}
     to_column_id = int(payload.get("to_column_id") or 0)
@@ -539,9 +645,9 @@ def api_move_card(card_id: int):
     if not to_column_id:
         return jsonify({"error": "to_column_id é obrigatório."}), 400
 
-    card = PlannerCard.query.get_or_404(card_id)
+    card = _card_ou_404(card_id)
     from_col_id = card.column_id
-    to_col = PlannerColumn.query.get_or_404(to_column_id)
+    to_col = _coluna_ou_404(to_column_id)
 
     if from_col_id == to_col.id:
         cards = (
@@ -585,10 +691,9 @@ def api_move_card(card_id: int):
     return jsonify({"sucesso": True})
 
 
-@planner_bp.route("/api/planejamento/cards/<int:card_id>/comments", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/cards/<int:card_id>/comments", methods=["POST"])
 def api_add_comment(card_id: int):
-    card = PlannerCard.query.get_or_404(card_id)
+    card = _card_ou_404(card_id)
     payload = request.get_json(silent=True) or {}
     texto = str(payload.get("texto") or "").strip()
     if not texto:
@@ -607,10 +712,9 @@ def api_add_comment(card_id: int):
     return jsonify({"sucesso": True, "comment": _serialize_comment(comment)})
 
 
-@planner_bp.route("/api/planejamento/cards/<int:card_id>/checklist", methods=["POST"])
-@permission_required(PERM, "Admin")
+@_rota("/cards/<int:card_id>/checklist", methods=["POST"])
 def api_add_checklist_item(card_id: int):
-    card = PlannerCard.query.get_or_404(card_id)
+    card = _card_ou_404(card_id)
     payload = request.get_json(silent=True) or {}
     texto = str(payload.get("texto") or "").strip()
     if not texto:
@@ -635,10 +739,9 @@ def api_add_checklist_item(card_id: int):
     return jsonify({"sucesso": True, "item": _serialize_checklist_item(item)})
 
 
-@planner_bp.route("/api/planejamento/checklist/<int:item_id>", methods=["PATCH"])
-@permission_required(PERM, "Admin")
+@_rota("/checklist/<int:item_id>", methods=["PATCH"])
 def api_update_checklist_item(item_id: int):
-    item = PlannerChecklistItem.query.get_or_404(item_id)
+    item = _item_ou_404(item_id)
     payload = request.get_json(silent=True) or {}
 
     if "texto" in payload:
@@ -657,10 +760,9 @@ def api_update_checklist_item(item_id: int):
     return jsonify({"sucesso": True, "item": _serialize_checklist_item(item)})
 
 
-@planner_bp.route("/api/planejamento/checklist/<int:item_id>", methods=["DELETE"])
-@permission_required(PERM, "Admin")
+@_rota("/checklist/<int:item_id>", methods=["DELETE"])
 def api_delete_checklist_item(item_id: int):
-    item = PlannerChecklistItem.query.get_or_404(item_id)
+    item = _item_ou_404(item_id)
     card_id = item.card_id
     db.session.delete(item)
     db.session.flush()
@@ -685,10 +787,9 @@ def api_delete_checklist_item(item_id: int):
     return jsonify({"sucesso": True})
 
 
-@planner_bp.route("/api/planejamento/cards/<int:card_id>", methods=["DELETE"])
-@permission_required(PERM, "Admin")
+@_rota("/cards/<int:card_id>", methods=["DELETE"])
 def api_delete_card(card_id: int):
-    card = PlannerCard.query.get_or_404(card_id)
+    card = _card_ou_404(card_id)
     col_id = card.column_id
     db.session.delete(card)
     db.session.flush()

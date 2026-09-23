@@ -13,6 +13,7 @@ from ..models import (
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
     ItemNota,
+    PlannerBoardPessoal,
     PlannerCard,
     PlannerColumn,
     Usuario,
@@ -425,6 +426,8 @@ def _build_home_metrics() -> dict:
             db.session.query(func.count(PlannerCard.id))
             .join(PlannerColumn, PlannerColumn.id == PlannerCard.column_id)
             .filter(PlannerColumn.is_done.is_(False))
+            # So' o board da equipe: os de "Minhas tarefas" sao privados.
+            .filter(PlannerColumn.board_id.notin_(db.session.query(PlannerBoardPessoal.board_id)))
             .scalar()
             or 0
         )
