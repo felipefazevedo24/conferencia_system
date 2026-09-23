@@ -39,6 +39,53 @@ def test_processo_valido_e_payload_idempotente():
     assert first["norma_extraida"] == "A36"
 
 
+def test_codigo_de_processo_e_a_unidade_de_deduplicacao():
+    items = service.preparar_registros([
+        row(),
+        row(cod_os_completo="9321/002"),
+        row(cod_os_completo="9321/003"),
+    ])
+    assert len(items) == 1
+    assert items[0]["codigo_processo"] == "167245"
+
+
+def test_consulta_retorna_somente_elegiveis_e_aplica_limite_apos_deduplicar(monkeypatch):
+    rows = [row(), row(), row("167241"), row("167240", status_os="CONCLUIDA")]
+    captured = {}
+
+    def fake_fetch_all(_query, params):
+        captured.update(params)
+        return rows
+
+    monkeypatch.setattr(service, "fetch_all", fake_fetch_all)
+    result = service.consultar(limite=2)
+
+    assert [item["codigo_processo"] for item in result] == ["167245", "167241"]
+    assert captured["limite"] == 20
+
+
+def test_diagnostico_contabiliza_etapas_por_codigo():
+    rows = [
+        row(), row(),
+        row("167241", status_os="CONCLUIDA"),
+        row("167240", processo_finalizado=1),
+        row("167239", tipo_servico="DOBRA"),
+    ]
+    result = [item for item in service.preparar_registros(rows) if item["elegivel"]]
+    diagnostic = service.diagnosticar_registros(rows, result)
+
+    assert diagnostic == {
+        "linhas_brutas": 5,
+        "apos_corte_laser": 3,
+        "apos_status_valido": 2,
+        "apos_nao_finalizados": 1,
+        "duplicados_removidos": 1,
+        "apos_deduplicacao": 1,
+        "descartados_por_material": 0,
+        "total_final": 1,
+    }
+
+
 def test_espessura_incompativel_descarta_linha():
     assert service.preparar_registros([row(obs='CORTAR CHAPA A36 ESP 3/8"')]) == []
 

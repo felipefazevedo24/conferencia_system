@@ -54,7 +54,7 @@ window.fetch = async (url, options) => {
     }
     return {ok: true, json: async () => ({payload: {produto: items[0]?.material, produto_chave: items[0]?.produto_chave, espessura_extraida: items[0]?.espessura, norma_extraida: items[0]?.norma, quantidade_itens: codes.length, codigos_destacados_para_agrupamento: codes, cod_os_completo: items.map(item => item.os_completa), descricao_agrupamento: request.description}})};
   }
-  return {ok: true, json: async () => ({resultados: rows})};
+  return {ok: true, json: async () => ({resultados: rows, total: rows.length, total_elegiveis: rows.length})};
 };
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 const get = id => document.getElementById(id);
