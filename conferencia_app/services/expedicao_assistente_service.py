@@ -32,6 +32,7 @@ from ..models import (
 )
 from . import expedicao_fat_service as fat_svc
 from . import expedicao_st_service as st_svc
+from ..tempo import agora_br
 
 
 # "Faturado sem conferência": esconde o backlog antigo (mesma regra da fila da
@@ -151,7 +152,7 @@ def _vencida(dt) -> bool:
     if not dt:
         return False
     try:
-        return dt.date() < datetime.now().date()
+        return dt.date() < agora_br().date()
     except Exception:
         return False
 
@@ -160,7 +161,7 @@ def _dias_desde(dt) -> int | None:
     if not dt:
         return None
     try:
-        return (datetime.now() - dt).days
+        return (agora_br() - dt).days
     except Exception:
         return None
 
@@ -170,7 +171,7 @@ def _hoje(dt) -> bool:
     if not dt:
         return False
     try:
-        return dt.date() == datetime.now().date()
+        return dt.date() == agora_br().date()
     except Exception:
         return False
 
@@ -648,7 +649,7 @@ def analisar(limite_itens: int = 8) -> dict:
         "total_pendencias": total_pendencias,
         "urgentes": urgentes,
         "pendencias": insights,
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora_br().isoformat(),
     }
 
 
@@ -916,7 +917,7 @@ def _recebimento_contexto() -> list[str]:
     """
     from sqlalchemy import func
 
-    hoje = datetime.now().date()
+    hoje = agora_br().date()
     linhas: list[str] = []
     try:
         def _distinct_notas(*filtros) -> int:
@@ -1053,7 +1054,7 @@ def _novos_erros_fiscais(desde: datetime) -> tuple[int, list[str]]:
         )
         for row in falhas_manifestacao:
             nota = str(row.numero_nota or "").strip() or "?"
-            eventos.append((row.data or datetime.now(), f"NF {nota} (manifestação)"))
+            eventos.append((row.data or agora_br(), f"NF {nota} (manifestação)"))
     except Exception:
         pass
 
@@ -1069,7 +1070,7 @@ def _novos_erros_fiscais(desde: datetime) -> tuple[int, list[str]]:
         for row in falhas_fiscais:
             nota = str(row.numero_nota or "").strip() or "?"
             evento = str(row.evento or "evento fiscal").strip()
-            eventos.append((row.data or datetime.now(), f"NF {nota} ({evento})"))
+            eventos.append((row.data or agora_br(), f"NF {nota} ({evento})"))
     except Exception:
         pass
 
@@ -1103,7 +1104,7 @@ def novidades(
     módulos, só os números). Na PRIMEIRA checagem (`desde` vazio) não despeja o
     backlog: apenas devolve o marcador de tempo para o cliente guardar.
     """
-    agora = datetime.now()
+    agora = agora_br()
     if desde is None:
         return {
             "tem_novidades": False,
@@ -1185,7 +1186,7 @@ def novidades(
 def _contexto_llm() -> str:
     from collections import Counter
 
-    agora = datetime.now()
+    agora = agora_br()
     dados = analisar()
     fat = _fat_visiveis()
     st = _st_visiveis()
@@ -1359,7 +1360,7 @@ def registrar_aprendizado(texto: str, autor: str = "") -> bool:
             if novo:
                 fh.write("# Conhecimento aprendido pela Bia\n\n")
                 fh.write("> Fatos ensinados pela equipe durante o uso do sistema.\n\n")
-            carimbo = datetime.now().strftime("%d/%m/%Y %H:%M")
+            carimbo = agora_br().strftime("%d/%m/%Y %H:%M")
             assinatura = f" (por {autor})" if autor else ""
             fh.write(f"- [{carimbo}{assinatura}] {fato}\n")
         _kb_cache["texto"] = None  # invalida o cache
@@ -1613,7 +1614,7 @@ def _interpretar_acao_recebimento(pergunta: str, ctx: dict) -> dict | None:
         rows = ItemNota.query.filter_by(numero_nota=numero, status="Pendente").all()
         if not rows:
             return {"resposta": f"A NF {numero} não está pendente para avanço sem conferência.", "pendencias": [], "sugestoes": SUGESTOES}
-        agora = datetime.now()
+        agora = agora_br()
         for item in rows:
             if not item.inicio_conferencia:
                 item.inicio_conferencia = agora

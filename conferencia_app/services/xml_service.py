@@ -4,6 +4,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ItemNota
+from ..tempo import agora_br
 
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
@@ -421,7 +422,7 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
         somente_cfop_5902 = bool(itens_filtrados) and all(
             str(item["cfop"] or "").strip()[:4] == "5902" for item in itens_filtrados
         )
-        agora_sem_conferencia = datetime.now() if somente_cfop_5902 else None
+        agora_sem_conferencia = agora_br() if somente_cfop_5902 else None
 
         for item in itens_filtrados:
             db.session.add(

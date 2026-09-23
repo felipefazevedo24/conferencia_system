@@ -10,6 +10,8 @@ import time
 import uuid
 from datetime import datetime, date, timedelta
 
+from ..tempo import agora_br
+
 from flask import Blueprint, current_app, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
@@ -71,7 +73,7 @@ def _upsert_colaborador_grv(row: dict) -> FacilitiesColaborador:
                 colab = atual
                 break
     if not colab:
-        colab = FacilitiesColaborador(nome=nome or apelido or str(codigo), criado_em=datetime.now())
+        colab = FacilitiesColaborador(nome=nome or apelido or str(codigo), criado_em=agora_br())
         db.session.add(colab)
 
     colab.nome = nome or colab.nome
@@ -748,7 +750,7 @@ def api_cancelar_epi_solicitacao(id):
 
     data = request.get_json(silent=True) or {}
     solicitacao.status = "cancelado"
-    solicitacao.cancelado_em = datetime.now()
+    solicitacao.cancelado_em = agora_br()
     solicitacao.cancelado_por = (session.get("username") or "")[:100]
     solicitacao.motivo_cancelamento = (data.get("motivo") or "").strip() or None
     db.session.commit()
@@ -855,13 +857,13 @@ def api_aprovar_epi_solicitacao(id):
 
     if acao == "liberar":
         solicitacao.status = "liberado"
-        solicitacao.liberado_em = datetime.now()
+        solicitacao.liberado_em = agora_br()
         solicitacao.liberado_por_username = usuario
         if gestor:
             solicitacao.liberador_id = gestor.id
     elif acao == "negar":
         solicitacao.status = "negado"
-        solicitacao.liberado_em = datetime.now()
+        solicitacao.liberado_em = agora_br()
         solicitacao.liberado_por_username = usuario
         solicitacao.motivo_recusa = (data.get("motivo_recusa") or "").strip() or None
         if gestor:
@@ -928,7 +930,7 @@ def api_acao_lote_epi():
 
     usuario = (session.get("username") or "")[:100]
     gestor = _colaborador_do_usuario_logado()
-    agora = datetime.now()
+    agora = agora_br()
 
     sols = FacilitiesEpiSolicitacao.query.filter(FacilitiesEpiSolicitacao.id.in_(ids)).all()
     processadas = 0
@@ -962,7 +964,7 @@ def api_acao_lote_epi():
 def _verificar_baixa_grv_solicitacao(solicitacao: FacilitiesEpiSolicitacao) -> dict:
     saldo_atual = FacilitiesGRVService.saldo_material(solicitacao.codigo_item)
     solicitacao.estoque_grv_depois = saldo_atual
-    solicitacao.estoque_grv_verificado_em = datetime.now()
+    solicitacao.estoque_grv_verificado_em = agora_br()
     if saldo_atual is None:
         solicitacao.estoque_grv_baixado = False
         solicitacao.estoque_grv_mensagem = "Nao foi possivel consultar o saldo no GRV."
@@ -1031,14 +1033,14 @@ def api_retirar_epi_solicitacao(id):
         numero_ca = (material_grv or {}).get("numero_ca") or ""
 
     solicitacao.status = "retirado"
-    solicitacao.retirado_em = datetime.now()
+    solicitacao.retirado_em = agora_br()
     solicitacao.retirado_por = session.get("username") or ""
     solicitacao.numero_ca_entregue = numero_ca or None
     solicitacao.assinatura_path = nome_arquivo
     solicitacao.estoque_grv_antes = saldo_grv_antes
     solicitacao.estoque_grv_depois = saldo_grv_antes
     solicitacao.estoque_grv_baixado = False
-    solicitacao.estoque_grv_verificado_em = datetime.now()
+    solicitacao.estoque_grv_verificado_em = agora_br()
     solicitacao.estoque_grv_mensagem = "Aguardando baixa no GRV." if saldo_grv_antes is not None else "Saldo GRV indisponivel na retirada."
 
     # Calcula proxima troca baseado em ciclo
@@ -1261,7 +1263,7 @@ def api_concluir_limpeza(id):
                 fp.write(bin_data)
 
     limpeza.concluido = True
-    limpeza.concluido_em = datetime.now()
+    limpeza.concluido_em = agora_br()
     limpeza.concluido_por = session.get("username") or ""
     if nome_arquivo:
         limpeza.evidencia_foto_path = nome_arquivo
@@ -1449,7 +1451,7 @@ def api_atualizar_tarefa(id):
     if "data_fim_prevista" in data:
         tarefa.data_fim_prevista = datetime.strptime(data["data_fim_prevista"], "%Y-%m-%d").date() if data["data_fim_prevista"] else None
     
-    tarefa.atualizado_em = datetime.now()
+    tarefa.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"id": tarefa.id, "status": tarefa.status})
 
@@ -1510,14 +1512,14 @@ def api_dashboard():
     epi_pendentes = FacilitiesEpiSolicitacao.query.filter_by(status="solicitado").count()
     epi_liberados_hoje = FacilitiesEpiSolicitacao.query.filter(
         FacilitiesEpiSolicitacao.status == "liberado",
-        func.date(FacilitiesEpiSolicitacao.liberado_em) == datetime.now().date()
+        func.date(FacilitiesEpiSolicitacao.liberado_em) == agora_br().date()
     ).count()
     
     limpezas_hoje = FacilitiesLimpeza.query.filter(
-        FacilitiesLimpeza.data_agendada == datetime.now().date()
+        FacilitiesLimpeza.data_agendada == agora_br().date()
     ).count()
     limpezas_pendentes = FacilitiesLimpeza.query.filter(
-        FacilitiesLimpeza.data_agendada == datetime.now().date(),
+        FacilitiesLimpeza.data_agendada == agora_br().date(),
         FacilitiesLimpeza.concluido == False
     ).count()
     
@@ -1547,7 +1549,7 @@ def api_dashboard():
     ).count()
 
     # Retiradas pendentes (aprovadas ha >3 dias sem retirar)
-    tres_dias_atras = datetime.now() - timedelta(days=3)
+    tres_dias_atras = agora_br() - timedelta(days=3)
     retiradas_pendentes = FacilitiesEpiSolicitacao.query.filter(
         FacilitiesEpiSolicitacao.status == "liberado",
         FacilitiesEpiSolicitacao.liberado_em < tres_dias_atras,
@@ -1561,7 +1563,7 @@ def api_dashboard():
     ).count()
 
     # Top 5 itens solicitados ultimos 30 dias
-    trinta_dias_atras = datetime.now() - timedelta(days=30)
+    trinta_dias_atras = agora_br() - timedelta(days=30)
     top_itens = (
         db.session.query(
             FacilitiesEpiSolicitacao.nome_item,
@@ -1576,7 +1578,7 @@ def api_dashboard():
     )
 
     # Solicitacoes por dia (ultimos 14 dias)
-    quatorze_dias = datetime.now() - timedelta(days=14)
+    quatorze_dias = agora_br() - timedelta(days=14)
     por_dia_raw = (
         db.session.query(
             func.date(FacilitiesEpiSolicitacao.solicitado_em).label("dia"),
@@ -1589,7 +1591,7 @@ def api_dashboard():
     por_dia_map = {str(r.dia): r.qtd for r in por_dia_raw}
     por_dia = []
     for i in range(13, -1, -1):
-        d = (datetime.now().date() - timedelta(days=i))
+        d = (agora_br().date() - timedelta(days=i))
         por_dia.append({"dia": d.strftime("%d/%m"), "qtd": por_dia_map.get(str(d), 0)})
 
     # Tempo medio aprovacao (horas)
@@ -1761,7 +1763,7 @@ def api_enviar_lembretes_epi():
     except Exception:
         enviar_email_async = None
 
-    tres_dias = datetime.now() - timedelta(days=3)
+    tres_dias = agora_br() - timedelta(days=3)
     sols = (
         FacilitiesEpiSolicitacao.query
         .filter(FacilitiesEpiSolicitacao.status == "liberado")
@@ -1786,7 +1788,7 @@ def api_enviar_lembretes_epi():
                 )
             except Exception:
                 pass
-        s.lembrete_retirada_enviado_em = datetime.now()
+        s.lembrete_retirada_enviado_em = agora_br()
         enviados += 1
     db.session.commit()
     _audit("epi_solicitacao", None, "lembretes_enviados", f"qtd={enviados}")
@@ -1821,7 +1823,7 @@ def _gerar_ficha_pdf_bytes(solicitacoes, colaborador):
         f"<b>Colaborador:</b> {colaborador.nome}<br/>"
         f"<b>Cargo:</b> {colaborador.cargo or '-'} &nbsp;&nbsp; "
         f"<b>Setor:</b> {colaborador.setor or '-'}<br/>"
-        f"<b>Emitido em:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        f"<b>Emitido em:</b> {agora_br().strftime('%d/%m/%Y %H:%M')}",
         styles["Normal"]
     ))
     story.append(Spacer(1, 0.4 * cm))
@@ -1995,7 +1997,7 @@ def api_relatorio_consumo():
     """
     dias  = request.args.get("dias", 90, type=int)
     tipo  = (request.args.get("tipo") or "").lower()
-    desde = datetime.now() - timedelta(days=max(1, dias))
+    desde = agora_br() - timedelta(days=max(1, dias))
 
     q = (
         FacilitiesEpiSolicitacao.query
@@ -2038,7 +2040,7 @@ def api_relatorio_consumo():
 def api_relatorio_consumo_exportar():
     dias = request.args.get("dias", 90, type=int)
     tipo = (request.args.get("tipo") or "").lower()
-    desde = datetime.now() - timedelta(days=max(1, dias))
+    desde = agora_br() - timedelta(days=max(1, dias))
     q = (
         FacilitiesEpiSolicitacao.query
         .filter(FacilitiesEpiSolicitacao.status == "retirado")
@@ -2383,7 +2385,7 @@ def api_atualizar_tarefa_kanban(id):
         if novo and novo != t.status:
             t.status = novo
             if novo == "concluido":
-                t.concluido_em = datetime.now()
+                t.concluido_em = agora_br()
     if "ordem" in d:
         t.ordem = int(d["ordem"] or 0)
     if "responsavel_id" in d:
@@ -2392,7 +2394,7 @@ def api_atualizar_tarefa_kanban(id):
         t.data_inicio = _dt(d["data_inicio"])
     if "data_fim" in d:
         t.data_fim = _dt(d["data_fim"])
-    t.atualizado_em = datetime.now()
+    t.atualizado_em = agora_br()
     db.session.commit()
     _audit("projeto_tarefa", t.id, "atualizar", f"status={t.status}")
     return jsonify({"id": t.id, "status": t.status})
@@ -2431,7 +2433,7 @@ def api_registrar_impedimento(id):
         except Exception:
             nome_foto = None
     t.impedimento = descricao
-    t.impedimento_em = datetime.now()
+    t.impedimento_em = agora_br()
     if nome_foto:
         t.foto_path = nome_foto
     if t.status != "concluido":
@@ -2561,8 +2563,7 @@ def api_atualizar_estoque_item(id):
         item.quantidade = max(0, int(d["quantidade"] or 0))
     if "qtd_minima" in d:
         item.qtd_minima = max(0, int(d["qtd_minima"] or 5))
-    from datetime import datetime as _dt3
-    item.atualizado_em = _dt3.now()
+    item.atualizado_em = agora_br()
     db.session.commit()
     _audit("estoque_item", item.id, "atualizar")
     return jsonify({"id": item.id})
@@ -2589,8 +2590,7 @@ def api_baixa_estoque(id):
     if item.quantidade < qtd:
         return jsonify({"error": f"Estoque insuficiente (disponível: {item.quantidade})"}), 400
     item.quantidade -= qtd
-    from datetime import datetime as _dt3
-    item.atualizado_em = _dt3.now()
+    item.atualizado_em = agora_br()
     db.session.commit()
     obs = (d.get("observacao") or "").strip() or None
     _audit("estoque_item", item.id, "baixa", f"qtd={qtd}" + (f", obs={obs}" if obs else ""))
@@ -2670,7 +2670,6 @@ def api_criar_chamado():
 @login_required
 @permission_required("PAGE_FACILITIES_ADMIN")
 def api_atualizar_status_chamado(id):
-    from datetime import datetime as _dt3
     chamado = FacilitiesChamado.query.get_or_404(id)
     d = request.get_json() or {}
     novo_status = (d.get("status") or "").lower()
@@ -2679,9 +2678,9 @@ def api_atualizar_status_chamado(id):
         return jsonify({"error": f"status inválido: {novo_status}"}), 400
     chamado.status = novo_status
     chamado.observacao = (d.get("observacao") or "").strip() or chamado.observacao
-    chamado.atualizado_em = _dt3.now()
+    chamado.atualizado_em = agora_br()
     if novo_status in ("concluido", "cancelado") and not chamado.concluido_em:
-        chamado.concluido_em = _dt3.now()
+        chamado.concluido_em = agora_br()
     db.session.commit()
     _audit("chamado", chamado.id, f"status→{novo_status}")
     return jsonify({"id": chamado.id, "status": chamado.status})

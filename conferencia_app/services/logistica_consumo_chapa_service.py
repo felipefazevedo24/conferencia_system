@@ -16,6 +16,7 @@ from datetime import datetime
 from ..extensions import db
 from ..models import LogisticaConsumoChapaNesting, LogisticaConsumoChapaPeca
 from .logistica_consumo_chapa_parser import parse_relatorio_nesting_html
+from ..tempo import agora_br
 
 STATUS_SLUGS = {
     "Nesting": "nesting",
@@ -155,7 +156,7 @@ def confirmar_recebimento_nesting(nesting: LogisticaConsumoChapaNesting, usuario
     if nesting.status != "Nesting":
         raise ValueError("O recebimento desse Nesting já foi confirmado.")
     nesting.status = "Nesting Liberado"
-    nesting.confirmado_em = datetime.now()
+    nesting.confirmado_em = agora_br()
     nesting.confirmado_por = usuario
     db.session.commit()
     return nesting
@@ -169,7 +170,7 @@ def concluir_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -> Log
     if nesting.status != "Nesting Liberado":
         raise ValueError("Esse Nesting já está concluído.")
     nesting.status = "Concluido"
-    nesting.concluido_em = datetime.now()
+    nesting.concluido_em = agora_br()
     nesting.concluido_por = usuario
     db.session.commit()
     return nesting
@@ -200,7 +201,7 @@ def marcar_erro_nesting(
         raise ValueError("Informe o motivo da divergência.")
     nesting.status = "Erro"
     nesting.motivo_erro = motivo[:1000]
-    nesting.erro_marcado_em = datetime.now()
+    nesting.erro_marcado_em = agora_br()
     nesting.erro_marcado_por = usuario
     db.session.commit()
     return nesting
@@ -210,7 +211,7 @@ def resolver_erro_nesting(nesting: LogisticaConsumoChapaNesting, usuario: str) -
     if nesting.status != "Erro":
         raise ValueError("Esse Nesting não está marcado como erro.")
     nesting.status = "Nesting Liberado"
-    nesting.erro_resolvido_em = datetime.now()
+    nesting.erro_resolvido_em = agora_br()
     nesting.erro_resolvido_por = usuario
     db.session.commit()
     return nesting
@@ -237,7 +238,7 @@ def confirmar_baixa_peca(peca: LogisticaConsumoChapaPeca, usuario: str) -> Logis
     if peca.baixado:
         raise ValueError("Essa peça já está com a baixa confirmada.")
     peca.baixado = True
-    peca.baixado_em = datetime.now()
+    peca.baixado_em = agora_br()
     peca.baixado_por = usuario
     db.session.commit()
     return peca

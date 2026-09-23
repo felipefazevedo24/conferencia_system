@@ -28,6 +28,7 @@ from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from . import expedicao_photo_storage as storage
+from ..tempo import agora_br
 
 # Sequencia oficial do workflow (usada tanto para avancar quanto para a
 # funcao "estornar" - que percorre a mesma lista na ordem inversa).
@@ -159,7 +160,7 @@ def gerar_id_op(tipo_operacao: str) -> str:
     reflete mais o maior numero ja usado; usar `id DESC` ali causava colisao
     (numero duplicado) quando processos eram renumerados fora de ordem."""
     tipo_operacao = tipo_operacao if tipo_operacao in TIPOS_OPERACAO else "IM"
-    ano = datetime.now().year
+    ano = agora_br().year
     prefixo = f"{tipo_operacao}-{ano}-"
     ultimo = (
         ComexProcesso.query
@@ -379,7 +380,7 @@ def importar_oc(oc_header: dict, usuario: str) -> ComexProcesso:
 
     oc_json = oc_header.get("_oc_json") or {}
 
-    agora = datetime.now()
+    agora = agora_br()
     processo = ComexProcesso(
         id_op=gerar_id_op("IM"),
         tipo_operacao="IM",
@@ -421,7 +422,7 @@ def criar_processo_manual(fornecedor: str, referencia: str, usuario: str) -> Com
     if not fornecedor:
         raise ValueError("Informe o fornecedor.")
 
-    agora = datetime.now()
+    agora = agora_br()
     processo = ComexProcesso(
         id_op=gerar_id_op("IM"),
         tipo_operacao="IM",
@@ -477,7 +478,7 @@ def editar_oc(processo: ComexProcesso, dados: dict, usuario: str) -> ComexProces
     if "dt_lancamento_oc" in dados:
         processo.dt_lancamento_oc = _parse_dt(dt_lancamento)
 
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora_br()
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
@@ -684,7 +685,7 @@ def salvar_po(
         if not _mesmo_fornecedor([processo, *outros]):
             raise ValueError("Só é possível combinar OCs do mesmo fornecedor na mesma PO.")
 
-    agora = datetime.now()
+    agora = agora_br()
     ainda_editavel = processo.po_status != "Finalizada"
     estrategia_mudou = tipo_operacao != processo.tipo_operacao
     if estrategia_mudou:
@@ -764,7 +765,7 @@ def salvar_itens_po(processo: ComexProcesso, itens: list[dict]) -> list[ComexPoI
 
     Substitui a lista inteira a cada chamada (apaga e recria) - mais simples
     e suficiente para o volume tipico de itens de uma PO."""
-    agora = datetime.now()
+    agora = agora_br()
     ComexPoItem.query.filter_by(processo_id=processo.id).delete()
 
     novos = []
@@ -823,7 +824,7 @@ def _to_float(valor):
 
 def apagar_po(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     """Apaga a PO criada, devolvendo o processo para o estagio OC."""
-    agora = datetime.now()
+    agora = agora_br()
     processo.po_numero = None
     processo.po_ocs_vinculadas = None
     processo.pagador_frete = None
@@ -888,10 +889,10 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
     processo.status_modulo = proximo
     processo.status_slug = status_slug(proximo)
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora_br()
     processo.atualizado_por = usuario
     if proximo == "Concluido":
-        agora = datetime.now()
+        agora = agora_br()
         processo.processo_concluido_em = agora
         # Nasce com a data da conclusao e segue editavel no Concluido (o
         # fechamento contabil pode ter sido em outra data). Por isso a
@@ -926,10 +927,10 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
 
     processo.status_modulo = proximo
     processo.status_slug = status_slug(proximo)
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora_br()
     processo.atualizado_por = usuario
     if proximo == "Concluido":
-        agora = datetime.now()
+        agora = agora_br()
         processo.processo_concluido_em = agora
         # Nasce com a data da conclusao e segue editavel no Concluido (o
         # fechamento contabil pode ter sido em outra data). Por isso a
@@ -1143,7 +1144,7 @@ def criar_link_cotacao(
         raise ValueError("Finalize a PO antes de gerar uma cotação.")
 
     token = secrets.token_urlsafe(32)
-    agora = datetime.now()
+    agora = agora_br()
     cotacao = ComexCotacao(
         processo_id=processo.id,
         tipo_frete=tipo_frete,
@@ -1236,7 +1237,7 @@ def obter_cotacao_por_token(token: str) -> ComexCotacao | None:
 def link_cotacao_valido(cotacao: ComexCotacao) -> bool:
     if not cotacao or cotacao.status != "Pendente":
         return False
-    if cotacao.token_publico_expira_em and cotacao.token_publico_expira_em < datetime.now():
+    if cotacao.token_publico_expira_em and cotacao.token_publico_expira_em < agora_br():
         return False
     return True
 
@@ -1304,7 +1305,7 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
     cotacao.custo_total_usd = round(total_usd, 2)
     cotacao.custo_total_brl = round(total_brl, 2)
 
-    agora = datetime.now()
+    agora = agora_br()
     cotacao.termos_aceitos = True
     cotacao.termos_aceitos_em = agora
     cotacao.status = "Recebida"
@@ -1348,7 +1349,7 @@ def definir_taxa_cambio(processo: ComexProcesso, taxa: float | str | None, usuar
     if not valor or valor <= 0:
         raise ValueError("Informe uma taxa de câmbio válida (maior que zero).")
     processo.taxa_cambio_referencia = valor
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora_br()
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
@@ -1416,7 +1417,7 @@ def escolher_cotacao(
     processo = cotacao.processo
     processo.cotacao_vencedora_id = cotacao.id
     processo.cotacao_justificativa = justificativa or None
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora_br()
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
@@ -1451,7 +1452,7 @@ def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> Come
     if _indice_modulo(processo.status_modulo) < _indice_modulo("Cotacao"):
         raise ValueError("A instrução de embarque só pode ser enviada depois da PO finalizada.")
 
-    agora = datetime.now()
+    agora = agora_br()
     primeira_vez = processo.instrucao_enviada_em is None
     _aplicar_campos_operacionais(processo, dados)
     if processo.status_modulo == "Cotacao":

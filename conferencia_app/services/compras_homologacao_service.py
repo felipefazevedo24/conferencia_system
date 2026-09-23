@@ -31,6 +31,7 @@ from ..models import (
     ComprasHomologacaoResposta,
 )
 from . import compras_homologacao_form as form
+from ..tempo import agora_br
 
 # Quantos dias antes do vencimento a homologacao ja entra no alerta.
 DIAS_ALERTA_VENCIMENTO = 30
@@ -245,7 +246,7 @@ def enviar_para_aprovacao(homologacao: Homologacao, usuario: str) -> Homologacao
     validar_para_envio(homologacao)
     recalcular(homologacao)
     homologacao.status = Homologacao.STATUS_EM_APROVACAO
-    homologacao.enviado_em = datetime.now()
+    homologacao.enviado_em = agora_br()
     homologacao.enviado_por = usuario
     db.session.commit()
     return homologacao
@@ -273,7 +274,7 @@ def homologar(homologacao: Homologacao, usuario: str, justificativa: str = "") -
     if homologacao.status != Homologacao.STATUS_EM_APROVACAO:
         raise ValueError("Só uma homologação em aprovação pode ser homologada.")
     recalcular(homologacao)
-    agora = datetime.now()
+    agora = agora_br()
     homologacao.status = Homologacao.STATUS_HOMOLOGADO
     homologacao.decidido_em = agora
     homologacao.decidido_por = usuario
@@ -291,7 +292,7 @@ def reprovar(homologacao: Homologacao, usuario: str, justificativa: str) -> Homo
         raise ValueError("Informe o motivo da reprovação.")
     recalcular(homologacao)
     homologacao.status = Homologacao.STATUS_REPROVADO
-    homologacao.decidido_em = datetime.now()
+    homologacao.decidido_em = agora_br()
     homologacao.decidido_por = usuario
     homologacao.justificativa_decisao = justificativa[:2000]
     homologacao.valido_ate = None
@@ -431,7 +432,7 @@ def situacao_convite(convite: ComprasHomologacaoConvite, agora: datetime | None 
         return "respondido"
     if convite.cancelado_em:
         return "cancelado"
-    if convite.expira_em < (agora or datetime.now()):
+    if convite.expira_em < (agora or agora_br()):
         return "expirado"
     return "pendente"
 
@@ -457,7 +458,7 @@ def enviar_para_fornecedor(homologacao: Homologacao, email: str, usuario: str) -
     if not _EMAIL_RE.match(email):
         raise ValueError("Informe um e-mail válido para o fornecedor.")
 
-    agora = datetime.now()
+    agora = agora_br()
     _cancelar_convites_abertos(homologacao, agora)
     token = secrets.token_urlsafe(32)
     convite = ComprasHomologacaoConvite(
@@ -478,7 +479,7 @@ def enviar_para_fornecedor(homologacao: Homologacao, email: str, usuario: str) -
 def cancelar_envio_fornecedor(homologacao: Homologacao, usuario: str) -> Homologacao:
     if homologacao.status != Homologacao.STATUS_COM_FORNECEDOR:
         raise ValueError("Esta homologação não está com o fornecedor.")
-    _cancelar_convites_abertos(homologacao, datetime.now())
+    _cancelar_convites_abertos(homologacao, agora_br())
     homologacao.status = Homologacao.STATUS_RASCUNHO
     db.session.commit()
     return homologacao
@@ -558,7 +559,7 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
             f"Anexe evidência nos itens respondidos como Sim, Parcial ou Conforme - faltam "
             f"{len(sem_evidencia)} (ex.: {primeira['secao_titulo']}, item {primeira['item']})."
         )
-    convite.respondido_em = datetime.now()
+    convite.respondido_em = agora_br()
     homologacao.status = Homologacao.STATUS_RASCUNHO
     db.session.commit()
     return homologacao

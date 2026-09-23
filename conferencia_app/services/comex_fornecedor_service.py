@@ -12,6 +12,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ComexFornecedor
+from ..tempo import agora_br
 
 TIPOS_FORNECEDOR = ("Freight Forwarder", "Transportador", "Prod/Dist")
 
@@ -91,7 +92,7 @@ def atualizar_fornecedor(fornecedor: ComexFornecedor, dados: dict, usuario: str)
     campos = _validar_dados(dados)
     for chave, valor in campos.items():
         setattr(fornecedor, chave, valor)
-    fornecedor.atualizado_em = datetime.now()
+    fornecedor.atualizado_em = agora_br()
     fornecedor.atualizado_por = usuario
     db.session.commit()
     return fornecedor
@@ -99,7 +100,7 @@ def atualizar_fornecedor(fornecedor: ComexFornecedor, dados: dict, usuario: str)
 
 def alternar_ativo(fornecedor: ComexFornecedor, ativo: bool, usuario: str) -> ComexFornecedor:
     fornecedor.ativo = bool(ativo)
-    fornecedor.atualizado_em = datetime.now()
+    fornecedor.atualizado_em = agora_br()
     fornecedor.atualizado_por = usuario
     db.session.commit()
     return fornecedor

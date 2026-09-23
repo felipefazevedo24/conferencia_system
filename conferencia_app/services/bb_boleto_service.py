@@ -12,6 +12,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import BoletoContaReceber
 from .grv_contas_receber_service import GRVContasReceberService
+from ..tempo import agora_br
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class BBBoletoService:
     @classmethod
     def _get_access_token(cls) -> str | None:
         cached = cls._token_cache.get("token")
-        if cached and cls._token_cache.get("expires_at", 0) > datetime.now().timestamp():
+        if cached and cls._token_cache.get("expires_at", 0) > agora_br().timestamp():
             return cached
 
         client_id = str(current_app.config.get("BB_CLIENT_ID", "")).strip()
@@ -180,7 +181,7 @@ class BBBoletoService:
                 return None
 
             cls._token_cache["token"] = token
-            cls._token_cache["expires_at"] = datetime.now().timestamp() + int(payload.get("expires_in", 3500))
+            cls._token_cache["expires_at"] = agora_br().timestamp() + int(payload.get("expires_in", 3500))
             return token
         except Exception as exc:
             logger.error("BB: erro ao obter token OAuth - %s", exc)
@@ -208,7 +209,7 @@ class BBBoletoService:
             dias = int(current_app.config.get("BB_CONSULTA_DIAS_RETROATIVOS", 730) or 730)
         except (TypeError, ValueError):
             dias = 730
-        hoje = datetime.now()
+        hoje = agora_br()
         params = {
             "gw-dev-app-key": app_key,
             "numeroConvenio": convenio,

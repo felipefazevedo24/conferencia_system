@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from flask import Flask
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -35,7 +36,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             resultado = _exec()
             status = "ok" if not resultado.get("erros") else "parcial"
             _set_status(
-                last_run=datetime.now(),
+                last_run=agora_br(),
                 last_status=status,
                 last_message=resultado.get("mensagem") or "",
                 last_resultado=resultado,
@@ -44,7 +45,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
         except Exception as exc:
             app.logger.exception("Scheduler ERP Lancamento: falha no ciclo")
             _set_status(
-                last_run=datetime.now(),
+                last_run=agora_br(),
                 last_status="erro",
                 last_message=f"Erro: {exc}",
             )

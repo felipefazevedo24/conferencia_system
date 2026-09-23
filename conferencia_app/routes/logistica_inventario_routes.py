@@ -26,6 +26,7 @@ from ..models import (
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
     LogisticaInventarioInicial,
+    LogisticaInventarioLote,
     LogisticaInventarioRelatorioAjuste,
     RELATORIO_AJUSTE_DEPOSITO_TIPOS,
     RELATORIO_AJUSTE_MAX_ITENS,
@@ -46,6 +47,7 @@ from ..services.erp_estoque_service import (
     qtde_grv_para,
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
+from ..tempo import agora_br
 
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
@@ -104,6 +106,7 @@ def _fmt_registro(row: LogisticaInventarioInicial, incluir_grv: bool = False) ->
         "unidade_medida": row.unidade_medida,
         "quantidade": row.quantidade,
         "lote": row.lote or "",
+        "lotes": [{"lote": item.lote, "quantidade": item.quantidade} for item in row.lotes],
         "observacao": row.observacao or "",
         "criado_por": row.criado_por,
         "criado_em": row.criado_em.isoformat() if row.criado_em else None,
@@ -194,7 +197,7 @@ def _montar_payload_material_local() -> dict:
     dados = _gerar_dados_material_local(rows)
     return {
         "sucesso": True,
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora_br().isoformat(),
         "total": len(dados),
         "dados": dados,
     }
@@ -540,7 +543,7 @@ def exportar_inventario_inicial_excel():
             row.codigo_produto,
             row.unidade_medida,
             float(row.quantidade or 0),
-            row.lote or "",
+            ("; ".join(f"{item.lote}: {item.quantidade:g}" for item in row.lotes) if row.lotes else (row.lote or "")),
             row.observacao or "",
             row.criado_por,
         ]
@@ -562,7 +565,7 @@ def exportar_inventario_inicial_excel():
     wb.save(stream)
     stream.seek(0)
 
-    nome_arquivo = f"inventario_logistica_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    nome_arquivo = f"inventario_logistica_{agora_br().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return send_file(
         stream,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -587,10 +590,34 @@ def criar_inventario_inicial():
     if not codigo_produto:
         return jsonify({"error": "Codigo do produto e obrigatorio."}), 400
 
-    try:
-        quantidade = float(str(payload.get("quantidade") or "0").replace(",", "."))
-    except (TypeError, ValueError):
-        return jsonify({"error": "Quantidade invalida."}), 400
+    # Varios lotes na mesma contagem: cada linha e' validada e a quantidade
+    # da contagem passa a ser a SOMA - e' esse total que vai contra o GRV.
+    lotes = []
+    lotes_payload = payload.get("lotes")
+    if isinstance(lotes_payload, list) and lotes_payload:
+        vistos = set()
+        for idx, entrada in enumerate(lotes_payload, start=1):
+            entrada = entrada if isinstance(entrada, dict) else {}
+            nome = str(entrada.get("lote") or "").strip()[:120]
+            if not nome:
+                return jsonify({"error": f"Informe o lote da linha {idx}."}), 400
+            try:
+                qtd = float(str(entrada.get("quantidade") or "0").replace(",", "."))
+            except (TypeError, ValueError):
+                return jsonify({"error": f"Quantidade invalida no lote {nome}."}), 400
+            if not math.isfinite(qtd) or qtd <= 0:
+                return jsonify({"error": f"Quantidade do lote {nome} deve ser maior que zero."}), 400
+            if nome.upper() in vistos:
+                return jsonify({"error": f"Lote {nome} informado duas vezes - some as quantidades numa linha so."}), 400
+            vistos.add(nome.upper())
+            lotes.append((nome, qtd))
+        quantidade = sum(q for _, q in lotes)
+        lote = ", ".join(n for n, _ in lotes)
+    else:
+        try:
+            quantidade = float(str(payload.get("quantidade") or "0").replace(",", "."))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Quantidade invalida."}), 400
 
     if quantidade <= 0:
         return jsonify({"error": "Quantidade deve ser maior que zero."}), 400
@@ -618,8 +645,10 @@ def criar_inventario_inicial():
         lote=lote[:120] if lote else None,
         observacao=observacao[:800] if observacao else None,
         criado_por=session.get("username", "sistema"),
-        atualizado_em=datetime.now(),
+        atualizado_em=agora_br(),
     )
+    for nome, qtd in lotes:
+        row.lotes.append(LogisticaInventarioLote(lote=nome, quantidade=qtd))
     db.session.add(row)
     db.session.commit()
 
@@ -657,7 +686,7 @@ def criar_inventario_inicial():
         custo_medio = custo_medio_para(row.codigo_produto, row.local_codigo, estoque_grv)
         row.qtde_grv_no_momento = qtde_grv
         row.custo_medio_no_momento = custo_medio
-        row.grv_consultado_em = datetime.now()
+        row.grv_consultado_em = agora_br()
         db.session.commit()
         descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
         ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
@@ -901,7 +930,7 @@ def exportar_inventario_ajustes_excel():
     wb.save(stream)
     stream.seek(0)
 
-    nome_arquivo = f"ajustes_estoque_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    nome_arquivo = f"ajustes_estoque_{agora_br().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return send_file(
         stream,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1203,7 +1232,7 @@ def api_atualizar_grv_ajuste(ajuste_id):
             if contagem:
                 contagem.qtde_grv_no_momento = qtde_grv
                 contagem.custo_medio_no_momento = custo_medio
-                contagem.grv_consultado_em = datetime.now()
+                contagem.grv_consultado_em = agora_br()
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -1589,7 +1618,7 @@ def api_chapas_salvar_calculo():
     calc.dimensoes = dimensoes_json
     calc.peso_por_peca = peso_por_peca
     calc.atualizado_por = usuario
-    calc.atualizado_em = datetime.now()
+    calc.atualizado_em = agora_br()
     db.session.flush()
 
     db.session.add(ChapaCalculoLog(

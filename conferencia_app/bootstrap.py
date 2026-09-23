@@ -947,6 +947,10 @@ def _ensure_solicitacao_nf_columns() -> None:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_endereco VARCHAR(400)"))
         if "ordem_faturamento" not in cols:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN ordem_faturamento INTEGER"))
+        if "data_necessidade" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN data_necessidade DATE"))
+        if "romaneio_id" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN romaneio_id INTEGER"))
         conn.commit()
     finally:
         conn.close()
@@ -961,6 +965,7 @@ def _ensure_solicitacao_nf_columns() -> None:
         finally:
             conn.close()
         _ensure_assistencia_tecnica_schema()
+        _ensure_tipo_operacao_nf_ajustes()
 
 
 def _ensure_assistencia_tecnica_schema() -> None:
@@ -990,6 +995,30 @@ def _ensure_assistencia_tecnica_schema() -> None:
     spec.loader.exec_module(migracao)
     with db.engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         migracao.upgrade()
+
+
+def _ensure_tipo_operacao_nf_ajustes() -> None:
+    """Corrige dados de tipo_operacao_nf apos o redesenho de Assistencia
+    Tecnica: 'Remessa para Conserto' e 'Remessa de retorno de demonstracao'
+    saem de circulacao (inativados, nao apagados - o historico continua
+    valido), e 'Garantia' passa a exigir retorno. So' toca nessas linhas
+    especificas; nunca reativa nem desativa nada que o usuario tenha mudado
+    na tela para outros tipos."""
+    if not _has_table("tipo_operacao_nf"):
+        return
+    conn = db.engine.connect()
+    try:
+        conn.execute(db.text(
+            "UPDATE tipo_operacao_nf SET ativo = 0 WHERE nome IN "
+            "('Remessa para Conserto', 'Remessa de retorno de demonstração') AND ativo = 1"
+        ))
+        conn.execute(db.text(
+            "UPDATE tipo_operacao_nf SET requer_retorno_padrao = 1 "
+            "WHERE nome = 'Garantia' AND requer_retorno_padrao = 0"
+        ))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _ensure_expedicao_romaneio_columns() -> None:
@@ -1027,6 +1056,10 @@ def _ensure_expedicao_romaneio_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_uploadado_em DATETIME"))
         if "foto_carregamento_uploadado_por" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_uploadado_por VARCHAR(100)"))
+        if "origem_assistencia_tecnica" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_romaneio ADD COLUMN origem_assistencia_tecnica BOOLEAN NOT NULL DEFAULT 0"
+            ))
         if "cce_modalidade_pendente" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN cce_modalidade_pendente BOOLEAN NOT NULL DEFAULT 0"))
         if "cce_modalidade_aprovado_por" not in cols:

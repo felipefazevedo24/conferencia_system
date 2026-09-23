@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from flask import current_app
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 
@@ -110,7 +111,7 @@ def atualizar_posicao(
     observacao: str = "",
 ) -> dict[str, Any] | None:
     dados = carregar()
-    agora = datetime.now().isoformat(timespec="seconds")
+    agora = agora_br().isoformat(timespec="seconds")
     alvo = None
     for v in dados.get("veiculos", []):
         if str(v.get("id")) == str(veiculo_id):

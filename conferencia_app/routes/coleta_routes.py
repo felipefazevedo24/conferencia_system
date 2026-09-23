@@ -16,6 +16,7 @@ from ..services.solicitacao_coleta_service import (
     obter_anexos,
     tem_estoque_critico,
 )
+from ..tempo import agora_br
 
 coleta_bp = Blueprint("coleta", __name__)
 
@@ -114,7 +115,7 @@ def upload_coleta_anexo(solicitacao_id: int):
         pasta_anexos = os.path.join(current_app.instance_path, "coletas")
         os.makedirs(pasta_anexos, exist_ok=True)
         
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = agora_br().strftime("%Y%m%d_%H%M%S")
         nome_arquivo = f"coleta_{solicitacao_id}_{stamp}_{nome_original}"
         caminho_arquivo = os.path.join(pasta_anexos, nome_arquivo)
         arquivo.save(caminho_arquivo)

@@ -12,6 +12,7 @@ from flask import current_app
 from ..models import Usuario
 from ..schemas.api_schemas import LoginSchema
 from ..services.maintenance_mode_service import get_maintenance_state
+from ..tempo import agora_br
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -67,20 +68,20 @@ def _iniciar_sessao(user: Usuario) -> dict:
     session["username"] = user.username
     session["role"] = user.role
     session.permanent = True
-    session["last_activity"] = datetime.now().isoformat()
+    session["last_activity"] = agora_br().isoformat()
     session["show_update_notice"] = True
     session_id = str(uuid.uuid4())
     session["session_id"] = session_id
     db.session.add(ActiveSession(
         username=user.username,
         session_id=session_id,
-        created_at=datetime.now(),
-        last_activity=datetime.now(),
+        created_at=agora_br(),
+        last_activity=agora_br(),
         is_active=True,
         ip_address=(request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()[:64],
         user_agent=(request.headers.get("User-Agent", "") or "")[:400],
     ))
-    user.ultimo_login_em = datetime.now()
+    user.ultimo_login_em = agora_br()
     db.session.commit()
 
     return {
@@ -130,8 +131,8 @@ def login_page():
 
         key = _attempt_key(username, ip)
         rec = _login_attempts.get(key)
-        if rec and rec.get("blocked_until") and datetime.now() < rec["blocked_until"]:
-            segundos_restantes = max(int((rec["blocked_until"] - datetime.now()).total_seconds()), 1)
+        if rec and rec.get("blocked_until") and agora_br() < rec["blocked_until"]:
+            segundos_restantes = max(int((rec["blocked_until"] - agora_br()).total_seconds()), 1)
             return jsonify({
                 "sucesso": False,
                 "code": "RATE_LIMIT",
@@ -173,7 +174,7 @@ def login_page():
             rec = {"count": 0, "blocked_until": None}
         rec["count"] += 1
         if rec["count"] >= max_attempts:
-            rec["blocked_until"] = datetime.now() + timedelta(minutes=lock_minutes)
+            rec["blocked_until"] = agora_br() + timedelta(minutes=lock_minutes)
             rec["count"] = 0
         _login_attempts[key] = rec
 
@@ -227,19 +228,19 @@ def cadastrar_senha():
         return jsonify({"sucesso": False, "msg": "Convite inválido."}), 400
     if not bool(getattr(user, "ativo", True)):
         return jsonify({"sucesso": False, "msg": "Este usuário está inativo. Procure um administrador."}), 403
-    if user.convite_expires_at and user.convite_expires_at < datetime.now():
+    if user.convite_expires_at and user.convite_expires_at < agora_br():
         return jsonify({"sucesso": False, "msg": "Convite expirado. Solicite um novo envio ao administrador."}), 400
 
     if user.password and not bool(getattr(user, "forcar_troca_senha", False)):
         return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente."}), 409
 
     user.password = generate_password_hash(nova_senha)
-    user.senha_atualizada_em = datetime.now()
+    user.senha_atualizada_em = agora_br()
     user.convite_token_hash = None
     user.convite_expires_at = None
-    user.convite_aceito_em = datetime.now()
+    user.convite_aceito_em = agora_br()
     user.forcar_troca_senha = False
-    user.atualizado_em = datetime.now()
+    user.atualizado_em = agora_br()
     db.session.commit()
 
     payload = _iniciar_sessao(user)
@@ -264,7 +265,7 @@ def validar_convite_ativacao():
         return jsonify({"sucesso": False, "msg": "Convite inválido."}), 404
     if not bool(getattr(user, "ativo", True)):
         return jsonify({"sucesso": False, "msg": "Usuário inativo."}), 403
-    if user.convite_expires_at and user.convite_expires_at < datetime.now():
+    if user.convite_expires_at and user.convite_expires_at < agora_br():
         return jsonify({"sucesso": False, "msg": "Convite expirado."}), 410
 
     return jsonify({

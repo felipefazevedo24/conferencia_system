@@ -31,6 +31,7 @@ from .pedidos_service import (
     label_fonte_pedidos,
     obter_fonte_pedidos_erp_postgres,
 )
+from ..tempo import agora_br
 
 try:
     from openpyxl import load_workbook
@@ -208,7 +209,7 @@ def salvar_motorista_agendamento(payload: dict) -> AgendamentoMotorista:
         except (TypeError, ValueError):
             row = None
     if not row:
-        row = AgendamentoMotorista(created_at=datetime.now())
+        row = AgendamentoMotorista(created_at=agora_br())
         db.session.add(row)
 
     nome = str(payload.get("nome") or "").strip()
@@ -220,7 +221,7 @@ def salvar_motorista_agendamento(payload: dict) -> AgendamentoMotorista:
     row.cnh = str(payload.get("cnh") or "").strip() or None
     row.observacoes = str(payload.get("observacoes") or "").strip() or None
     row.ativo = bool(payload.get("ativo", True))
-    row.updated_at = datetime.now()
+    row.updated_at = agora_br()
     db.session.flush()
     return row
 
@@ -248,15 +249,15 @@ def sincronizar_motoristas_usuarios(*, commit: bool = False) -> None:
         ).first()
         if motorista:
             motorista.usuario_username = username
-            motorista.updated_at = datetime.now()
+            motorista.updated_at = agora_br()
         else:
             # Cria novo motorista vinculado ao usuario
             motorista = AgendamentoMotorista(
                 nome=username,
                 usuario_username=username,
                 ativo=True,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
+                created_at=agora_br(),
+                updated_at=agora_br(),
             )
             db.session.add(motorista)
     if commit:
@@ -541,7 +542,7 @@ def importar_cadastros_excel(tipo: str, arquivo=None, nome_arquivo: str | None =
 
         registros = []
         inconsistencias = []
-        importado_em = datetime.now()
+        importado_em = agora_br()
         arquivo_origem = nome_arquivo or (arquivo.filename if getattr(arquivo, "filename", None) else caminho_padrao.name)
 
         for idx, row in enumerate(rows, start=2):

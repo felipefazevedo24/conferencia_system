@@ -6,10 +6,20 @@ Postgres do ERP (CPS) ja usada por erp_lancamento_service/grv_contas_receber
 para buscar clientes (tcliente) e materiais (tproduto); funcionarios vem de
 FacilitiesGRVService (ja existente).
 
-Apos o faturamento, o status final depende do tipo_operacao: Garantia e
-Bonificacao terminam ali; Teste e Atendimento tecnico "emprestam" o material
-e precisam de controle de retorno (aba "Faturamento avulso" dentro da
+Apos o faturamento, o status final depende de necessita_retorno (por item):
+so' Bonificacao nunca retorna; os demais tipos "emprestam" o material e
+precisam de controle de retorno (aba "Faturamento avulso" dentro da
 Conferencia de Expedicao) ate ele voltar para o estoque.
+
+O tipo de operacao e' opcional na solicitacao (o solicitante nem sempre sabe
+qual e'); em branco, vira TIPO_OPERACAO_PADRAO. Dentro do horario comercial
+(HORARIO_COMERCIAL_INICIO-HORARIO_COMERCIAL_FIM, seg-sex, horario de
+Brasilia - ver ..tempo.agora_br), o fluxo e' o de sempre: separa e depois
+fatura. Fora do horario comercial, se a necessidade e' para o mesmo dia, a
+separacao acontece normalmente mas a NF so' sai no proximo dia util; por
+seguranca, criar_solicitacao gera nesse caso um romaneio de expedicao com o
+protocolo no lugar da NF (ainda inexistente), que marcar_faturada troca pelo
+numero real assim que a nota emite.
 """
 from __future__ import annotations
 
@@ -21,27 +31,49 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import (ExpedicaoOrdemFat, SolicitacaoNF, SolicitacaoNFAnexo,
+from ..models import (ExpedicaoOrdemFat, ExpedicaoRomaneio, ExpedicaoRomaneioNF,
+                      SolicitacaoNF, SolicitacaoNFAnexo,
                       SolicitacaoNFItem, SolicitacaoNFLog)
 from .erp_lancamento_service import _conectar, _resolver_config
 from .facilities_grv_service import FacilitiesGRVService, normalizar_nome
 from . import teams_service
+from ..tempo import agora_br
 
 TIPOS_OPERACAO = (
     "Garantia",
     "Bonificação",
     "Remessa para Teste",
     "Materiais para atendimento técnico no cliente",
-    "Remessa para Conserto",
-    "Remessa de retorno de demonstração",
 )
-# Faturar => Notas fiscais emitidas (sem controle de retorno)
-TIPOS_SEM_RETORNO = ("Garantia", "Bonificação", "Remessa de retorno de demonstração")
+# O solicitante nem sempre sabe qual operacao e' - em branco, cai neste.
+TIPO_OPERACAO_PADRAO = "Materiais para atendimento técnico no cliente"
+# Faturar => Notas fiscais emitidas (sem controle de retorno). So' Bonificacao
+# nao retorna; Garantia passou a exigir retorno no redesenho de 2026-09 (ver
+# _ensure_tipo_operacao_nf_ajustes no bootstrap, que corrige bancos antigos).
+TIPOS_SEM_RETORNO = ("Bonificação",)
+# "Remessa para Conserto" e "Remessa de retorno de demonstração" saíram de
+# TIPOS_OPERACAO no redesenho de 2026-09 (horário comercial passou a decidir
+# se a NF sai antes ou depois, não mais o tipo). As tuplas abaixo continuam
+# com os nomes antigos de proposito: solicitacoes historicas com esses tipos
+# ainda existem no banco e precisam seguir o fluxo original ate' o fim.
+#
 # Apos a separacao vao para "Aguardando faturamento" (a NF sai antes do material,
 # ao contrario dos demais tipos que sao expedidos sem NF).
 TIPOS_AGUARDA_FATURAMENTO = ("Remessa para Conserto", "Remessa de retorno de demonstração")
 # Ao faturar, puxa os dados do destinatario da NF na bridge do ERP.
 TIPOS_PUXA_NF_BRIDGE = ("Remessa para Conserto",)
+
+# Segunda a sexta, 06h-17h, horario de Brasilia (ver ..tempo.agora_br). Fora
+# disso e' fora do horario comercial. Nao considera feriados.
+from datetime import time as _time  # noqa: E402
+HORARIO_COMERCIAL_INICIO = _time(6, 0)
+HORARIO_COMERCIAL_FIM = _time(17, 0)
+
+
+def esta_em_horario_comercial(momento) -> bool:
+    if momento.weekday() > 4:  # 5=sabado, 6=domingo
+        return False
+    return HORARIO_COMERCIAL_INICIO <= momento.time() < HORARIO_COMERCIAL_FIM
 
 STATUS_SOLICITADO = "Solicitado"
 STATUS_EXPEDIDO_SEM_NF = "Expedido sem nota fiscal"
@@ -372,9 +404,7 @@ def _validar_itens(itens_payload: list, tipo_padrao: str = "",
         material = _buscar_material_por_codigo(codigo)
         if not material:
             raise SolicitacaoNFError(f"Material '{codigo}' não encontrado.")
-        tipo = str((bruto or {}).get("tipo_operacao") or tipo_padrao).strip()
-        if not tipo:
-            raise SolicitacaoNFError(f"Escolha a operação do item '{codigo}'.")
+        tipo = str((bruto or {}).get("tipo_operacao") or tipo_padrao).strip() or TIPO_OPERACAO_PADRAO
         if tipo not in validos:
             raise SolicitacaoNFError(f"Tipo de operação inválido no item '{codigo}'.")
         informado = (bruto or {}).get("necessita_retorno")
@@ -438,11 +468,13 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     cada item — o formulário escolhe material a material, porque itens de
     tipos diferentes não entram na mesma nota. Os campos no topo do payload
     continuam aceitos como padrão, para não quebrar chamada antiga."""
+    momento = agora_br()
     funcionario = _validar_solicitante((payload or {}).get("solicitante_nome"))
     cliente = _validar_cliente(
         (payload or {}).get("cliente_codigo"),
         (payload or {}).get("cliente_nome"),
     )
+    data_necessidade = _validar_data_necessidade((payload or {}).get("data_necessidade"))
     anexos = _validar_anexos((payload or {}).get("anexos"))
     informado = (payload or {}).get("necessita_retorno")
     itens = _validar_itens(
@@ -466,6 +498,7 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
         cliente_nome=cliente.get("nome") or "",
         cliente_documento=cliente.get("documento") or "",
         observacoes=str((payload or {}).get("observacoes") or "").strip()[:500] or None,
+        data_necessidade=data_necessidade,
         status=STATUS_SOLICITADO,
         ip_solicitante=(ip or "")[:64],
     )
@@ -500,6 +533,16 @@ def criar_solicitacao(payload: dict, ip: str | None = None) -> SolicitacaoNF:
     ))
     db.session.commit()
 
+    # Fora do horario comercial, com necessidade no mesmo dia: a separacao
+    # acontece normalmente, mas a NF so' sai no proximo dia util. Por
+    # seguranca, o material nao sai sem nenhum documento - ver
+    # _gerar_romaneio_assistencia_tecnica. A presenca de romaneio_id no
+    # retorno e' o proprio sinal de que isso aconteceu (a rota usa isso para
+    # avisar o solicitante e oferecer o download).
+    if data_necessidade == momento.date() and not esta_em_horario_comercial(momento):
+        _gerar_romaneio_assistencia_tecnica(solicitacao, funcionario.get("nome") or "sistema")
+        db.session.commit()
+
     teams_service.notificar_solicitacao_nf(
         "criada",
         solicitacao.protocolo,
@@ -531,9 +574,9 @@ def marcar_separada(solicitacao_id: int, usuario: str, itens_separados: list, ob
     status_anterior = solicitacao.status
     solicitacao.status = _recalcular_status(solicitacao)
     solicitacao.separado_por = usuario
-    solicitacao.separado_at = datetime.now()
+    solicitacao.separado_at = agora_br()
     solicitacao.observacoes_separacao = (observacao or "")[:500]
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
 
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
@@ -596,7 +639,7 @@ def alterar_item(solicitacao_id: int, item_id: int, usuario: str,
         item.data_prevista_retorno = None
 
     solicitacao.status = _recalcular_status(solicitacao)
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id, item_id=item.id, acao="item alterado", usuario=usuario,
         status_anterior=antes["tipo_operacao"], status_novo=item.tipo_operacao,
@@ -618,6 +661,74 @@ def _data(valor):
         return datetime.strptime(valor[:10], "%Y-%m-%d").date()
     except ValueError:
         raise SolicitacaoNFError("Data de retorno inválida.")
+
+
+def _validar_data_necessidade(valor) -> "date":
+    """AAAA-MM-DD do <input type=date>. Obrigatoria: e' ela que decide, junto
+    do horario da solicitacao, se o material sai fora do horario comercial."""
+    valor = str(valor or "").strip()
+    if not valor:
+        raise SolicitacaoNFError("Informe quando o material é necessário.")
+    try:
+        return datetime.strptime(valor[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise SolicitacaoNFError("Data de necessidade inválida.")
+
+
+def _fmt_qtd(valor) -> str:
+    numero = float(valor or 0)
+    return str(int(numero)) if numero == int(numero) else f"{numero:g}"
+
+
+def _gerar_romaneio_assistencia_tecnica(solicitacao, usuario):
+    """Fora do horario comercial, com necessidade no mesmo dia, o material sai
+    hoje mas a NF so' emite no proximo dia util. Por seguranca o material nao
+    viaja sem nenhum documento: gera aqui um romaneio de expedicao com o
+    protocolo da propria solicitacao no lugar da NF (que ainda nao existe),
+    listando os itens nas observacoes. marcar_faturada troca o protocolo pelo
+    numero real assim que a NF sair - mesmo romaneio, mesma linha."""
+    from ..routes.expedicao_romaneio_routes import proximo_numero_romaneio
+
+    itens_txt = "; ".join(
+        f"{item.material_nome} — {_fmt_qtd(item.quantidade)} {item.material_unidade or ''}".strip()
+        for item in solicitacao.itens
+    )[:500]
+
+    romaneio = ExpedicaoRomaneio(
+        numero_romaneio=proximo_numero_romaneio(),
+        data_romaneio=agora_br().date(),
+        status="Rascunho",
+        tipo_frete="FOB",
+        cliente=solicitacao.cliente_nome or "",
+        origem_assistencia_tecnica=True,
+        observacao_1=(f"Assistência Técnica — protocolo {solicitacao.protocolo}. "
+                      "Solicitação fora do horário comercial: a NF só será "
+                      "emitida no próximo dia útil.")[:500],
+        observacao_2=(f"Itens: {itens_txt}" if itens_txt else None),
+        criado_por=usuario,
+    )
+    db.session.add(romaneio)
+    db.session.flush()
+
+    db.session.add(ExpedicaoRomaneioNF(
+        romaneio_id=romaneio.id,
+        numero_nf=solicitacao.protocolo,  # placeholder ate' a NF sair
+        cliente=solicitacao.cliente_nome or "",
+        peso_bruto=0,
+        qtde_volumes=0,
+        adicionado_por=usuario,
+    ))
+    solicitacao.romaneio_id = romaneio.id
+    db.session.add(SolicitacaoNFLog(
+        solicitacao_id=solicitacao.id,
+        acao="romaneio_automatico_gerado",
+        usuario=usuario,
+        status_anterior=solicitacao.status,
+        status_novo=solicitacao.status,
+        detalhes=json.dumps({"romaneio_id": romaneio.id,
+                             "numero_romaneio": romaneio.numero_romaneio}, ensure_ascii=False),
+    ))
+    return romaneio
 
 
 def _status_do_item_apos_faturar(item) -> str:
@@ -676,7 +787,7 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
     if not alvos:
         raise SolicitacaoNFError("Todos os itens desta solicitação já foram faturados.")
 
-    agora = datetime.now()
+    agora = agora_br()
     # O prazo de retorno é do Fiscal, informado junto com a nota, e só faz
     # sentido para o item que volta.
     prazo = _data(data_prevista_retorno) if data_prevista_retorno else None
@@ -686,6 +797,13 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
         item.status = _status_do_item_apos_faturar(item)
         if item.necessita_retorno and prazo:
             item.data_prevista_retorno = prazo
+
+    if solicitacao.romaneio_id:
+        linha_romaneio = ExpedicaoRomaneioNF.query.filter_by(
+            romaneio_id=solicitacao.romaneio_id, numero_nf=solicitacao.protocolo,
+        ).first()
+        if linha_romaneio:
+            linha_romaneio.numero_nf = numero_nf
 
     status_anterior = solicitacao.status
     solicitacao.status = _recalcular_status(solicitacao)
@@ -703,7 +821,7 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
             solicitacao.nf_parceiro_nome = (parceiro.get("nome") or "")[:200] or None
             solicitacao.nf_parceiro_endereco = (parceiro.get("endereco") or "")[:400] or None
 
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
 
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
@@ -756,7 +874,7 @@ def vincular_ordem_faturamento(solicitacao_id: int, usuario: str, cod_ordem_fat)
 
     status_anterior = solicitacao.status
     solicitacao.ordem_faturamento = cod
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
         acao="vinculo_of",
@@ -832,7 +950,7 @@ def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
         raise SolicitacaoNFError("Informe o número da NF de retorno.")
 
     fechar = {int(i) for i in (encerrar or [])}
-    hoje = datetime.now()
+    hoje = agora_br()
     diferencas = []
     for item in esperando:
         informado = retornos is None or item.id in retornos
@@ -868,9 +986,9 @@ def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str,
     solicitacao.status = _recalcular_status(solicitacao)
     solicitacao.numero_nf_retorno = numero_nf_retorno
     solicitacao.retorno_por = usuario
-    solicitacao.retorno_at = datetime.now()
+    solicitacao.retorno_at = agora_br()
     solicitacao.observacoes_retorno = (observacao or "")[:500]
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
 
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
@@ -902,7 +1020,19 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
     if status_atual == STATUS_SOLICITADO:
         raise SolicitacaoNFError("Esta solicitação já está na primeira etapa.")
 
+    romaneio_desfeito = None
     if status_atual in (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT):
+        if solicitacao.romaneio_id:
+            romaneio = ExpedicaoRomaneio.query.get(solicitacao.romaneio_id)
+            if romaneio and romaneio.status != "Rascunho":
+                raise SolicitacaoNFError(
+                    f"Não é possível estornar: o romaneio {romaneio.numero_romaneio} "
+                    "já avançou. Reverta o romaneio antes de estornar a solicitação.")
+            if romaneio:
+                romaneio_desfeito = romaneio.numero_romaneio
+                ExpedicaoRomaneioNF.query.filter_by(romaneio_id=romaneio.id).delete()
+                db.session.delete(romaneio)
+            solicitacao.romaneio_id = None
         novo_status = STATUS_SOLICITADO
         solicitacao.separado_por = None
         solicitacao.separado_at = None
@@ -926,6 +1056,11 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.nf_parceiro_endereco = None
         # Desfaz o vinculo com a OF para nao refaturar automaticamente ao listar.
         solicitacao.ordem_faturamento = None
+        if solicitacao.romaneio_id:
+            linha_romaneio = ExpedicaoRomaneioNF.query.filter_by(
+                romaneio_id=solicitacao.romaneio_id).first()
+            if linha_romaneio:
+                linha_romaneio.numero_nf = solicitacao.protocolo
         for item in solicitacao.itens:
             item.numero_nf = None
             item.data_emissao_nf = None
@@ -951,15 +1086,18 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         raise SolicitacaoNFError("Não é possível estornar esta solicitação.")
 
     solicitacao.status = novo_status
-    solicitacao.updated_at = datetime.now()
+    solicitacao.updated_at = agora_br()
 
+    detalhes_log = {"motivo": motivo}
+    if romaneio_desfeito:
+        detalhes_log["romaneio_desfeito"] = romaneio_desfeito
     db.session.add(SolicitacaoNFLog(
         solicitacao_id=solicitacao.id,
         acao="estorno",
         usuario=usuario,
         status_anterior=status_atual,
         status_novo=novo_status,
-        detalhes=json.dumps({"motivo": motivo}, ensure_ascii=False),
+        detalhes=json.dumps(detalhes_log, ensure_ascii=False),
     ))
     db.session.commit()
 
@@ -1103,7 +1241,7 @@ def _dias_de_atraso(item) -> int:
     """Dias passados do prazo, para o item que ainda não voltou. 0 = em dia."""
     if item.status not in STATUS_PENDENTES_RETORNO or not item.data_prevista_retorno:
         return 0
-    return max(0, (datetime.now().date() - item.data_prevista_retorno).days)
+    return max(0, (agora_br().date() - item.data_prevista_retorno).days)
 
 
 def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
@@ -1118,6 +1256,8 @@ def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
         "cliente_documento": s.cliente_documento,
         "status": s.status,
         "observacoes": s.observacoes,
+        "data_necessidade": _iso(s.data_necessidade),
+        "romaneio_id": s.romaneio_id,
         "anexos": [{"id": a.id, "nome": a.nome_arquivo, "tamanho": a.tamanho}
                    for a in SolicitacaoNFAnexo.query.filter_by(solicitacao_id=s.id)
                    .order_by(SolicitacaoNFAnexo.id)],

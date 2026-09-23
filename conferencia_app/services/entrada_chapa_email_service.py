@@ -17,6 +17,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import EmailEntradaChapa, ItemNota
 from .smtp_service import enviar_mensagem_smtp
+from ..tempo import agora_br
 
 DATA_MINIMA_ENTRADA_CHAPA = date(2026, 5, 13)
 
@@ -354,7 +355,7 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
     _anexar_qtd_chapas_und(numero_nota, itens)
 
     assunto = f"CONTROLE DE LOTE - NF {numero_nota} - AR {numero_ar or 'Nao informado'}"
-    log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=datetime.now())
+    log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=agora_br())
     log.chave_acesso = str(entrada.get("chave_acesso") or "")[:44]
     log.parceiro_nome = str(entrada.get("parceiro_nome") or "")[:220]
     log.cfops = ", ".join(cfops)[:120]
@@ -397,7 +398,7 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
 
         log.status = "Enviado"
         log.tentativas = (log.tentativas or 0) + 1
-        log.enviado_em = datetime.now()
+        log.enviado_em = agora_br()
         db.session.commit()
         return {"sucesso": True, "log_id": log.id}
     except Exception as exc:

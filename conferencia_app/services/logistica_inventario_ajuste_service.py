@@ -33,6 +33,7 @@ from ..models import (
     RELATORIO_AJUSTE_MOTIVOS,
     RELATORIO_AJUSTE_TIPOS,
 )
+from ..tempo import agora_br
 
 STATUS_SLUGS = {
     "Validacao": "validacao",
@@ -247,7 +248,7 @@ def registrar_recontagem(
     ajuste.recontagem_qtde = recontada
     ajuste.recontagem_estoque = estoque
     ajuste.recontagem_diferenca = recontada - estoque
-    ajuste.recontagem_em = datetime.now()
+    ajuste.recontagem_em = agora_br()
     ajuste.recontagem_por = usuario
     # A diferenca se manteve? E' isso que valida a contagem original.
     ajuste.recontagem_divergente = (
@@ -302,7 +303,7 @@ def confirmar_divergencia(
         ajuste.recontagem_justificativa = texto[:500]
 
     ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
-    ajuste.gestor_confirmado_em = datetime.now()
+    ajuste.gestor_confirmado_em = agora_br()
     ajuste.gestor_confirmado_por = usuario
     ajuste.status_modulo = "Relatorio"
     ajuste.status_slug = status_slug("Relatorio")
@@ -474,7 +475,7 @@ def gerar_relatorio_ajuste(
     if deposito_tipo not in RELATORIO_AJUSTE_DEPOSITO_TIPOS:
         raise ValueError("Selecione um tipo de Depósito/Local válido.")
 
-    agora = datetime.now()
+    agora = agora_br()
     sequencial, numero_documento = _proximo_numero_documento(agora.month, agora.year)
 
     relatorio = LogisticaInventarioRelatorioAjuste(
@@ -537,7 +538,7 @@ def descartar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, motiv
     if not motivo:
         raise ValueError("Informe o motivo pra marcar como improcedente.")
     ajuste.gestor_justificativa = motivo[:500]
-    ajuste.gestor_confirmado_em = datetime.now()
+    ajuste.gestor_confirmado_em = agora_br()
     ajuste.gestor_confirmado_por = usuario
     ajuste.status_modulo = "Descartado"
     ajuste.status_slug = status_slug("Descartado")
@@ -554,7 +555,7 @@ def _aplicar_conclusao_finance(
         raise ValueError(f"O item {ajuste.codigo_produto} não está com o Finance.")
     ajuste.finance_documento_grv = documento_grv
     ajuste.finance_observacao = (observacao or "").strip()[:500] or None
-    ajuste.finance_concluido_em = datetime.now()
+    ajuste.finance_concluido_em = agora_br()
     ajuste.finance_concluido_por = usuario
     ajuste.status_modulo = "Fiscal"
     ajuste.status_slug = status_slug("Fiscal")
@@ -616,7 +617,7 @@ def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: 
     if ajuste.status_modulo != "Fiscal":
         raise ValueError("Este ajuste não está com o Fiscal.")
     ajuste.fiscal_nf_numero = (nf_numero or "").strip()[:60] or None
-    ajuste.fiscal_concluido_em = datetime.now()
+    ajuste.fiscal_concluido_em = agora_br()
     ajuste.fiscal_concluido_por = usuario
     ajuste.status_modulo = "Concluido"
     ajuste.status_slug = status_slug("Concluido")
@@ -658,7 +659,7 @@ def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInv
     if proximo is None:
         raise ValueError("Este ajuste já está na última etapa (Concluído) - não há como avançar mais.")
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = usuario or "desconhecido"
     # Preenche os campos de rastreio da etapa que esta sendo pulada, so pra
     # nao deixar a auditoria com "quem/quando" em branco pra uma etapa que
@@ -701,6 +702,6 @@ def preencher_analise_causa(
     analise.motivo_causa_raiz = motivo
     analise.status = "Concluida"
     analise.analisado_por = usuario
-    analise.analisado_em = datetime.now()
+    analise.analisado_em = agora_br()
     db.session.commit()
     return analise

@@ -134,7 +134,7 @@
                 <td>${fmtQtd(r.quantidade)}</td>
                 <td>${(r.qtde_grv === null || r.qtde_grv === undefined) ? '—' : fmtQtd(r.qtde_grv)}</td>
                 <td>${situacaoHtml(r)}</td>
-                <td>${esc(r.lote || '-')}</td>
+                <td>${(r.lotes || []).length ? r.lotes.map((l) => `<div style="white-space:nowrap;">${esc(l.lote)}: <b>${fmtQtd(l.quantidade)}</b></div>`).join('') : esc(r.lote || '-')}</td>
                 <td>${esc(r.observacao || '-')}</td>
                 <td>${esc(r.criado_por || '-')}</td>
             </tr>

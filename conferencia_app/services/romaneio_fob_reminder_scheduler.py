@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from flask import Flask
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -33,7 +34,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
     from .nfe_email_service import enviar_lembrete_coleta_fob
 
     with app.app_context():
-        agora = datetime.now()
+        agora = agora_br()
         janela = timedelta(days=2)
 
         romaneios = (
@@ -95,7 +96,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                     )
 
         _set_status(
-            last_run=datetime.now(),
+            last_run=agora_br(),
             last_status="ok",
             last_message=f"{enviados} lembrete(s) enviado(s), {ignorados} ignorado(s).",
             last_enviados=enviados,

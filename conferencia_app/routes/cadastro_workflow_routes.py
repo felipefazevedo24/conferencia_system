@@ -31,6 +31,7 @@ from ..services.cadastro_workflow_service import (
     sugerir_plano_contas_material,
     tempo_na_etapa,
 )
+from ..tempo import agora_br
 
 
 cadastro_workflow_bp = Blueprint("cadastro_workflow", __name__, url_prefix="/cadastros")
@@ -76,7 +77,7 @@ def _salvar_imagem_produto():
         raise ValueError("Envie a imagem do produto em JPG, PNG ou WEBP.")
     pasta = os.path.join(current_app.instance_path, "cadastro_workflow")
     os.makedirs(pasta, exist_ok=True)
-    nome_final = secure_filename(f"material_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
+    nome_final = secure_filename(f"material_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
     arquivo.save(os.path.join(pasta, nome_final))
     return {
         "nome": nome_original,
@@ -98,7 +99,7 @@ def _salvar_arquivo_anexo(campo: str = "arquivo_anexo"):
         raise ValueError("Formato de anexo não suportado. Envie PDF, DOC, DOCX, XLS, XLSX ou imagem.")
     pasta = os.path.join(current_app.instance_path, "cadastro_workflow")
     os.makedirs(pasta, exist_ok=True)
-    nome_final = secure_filename(f"anexo_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
+    nome_final = secure_filename(f"anexo_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
     arquivo.save(os.path.join(pasta, nome_final))
     return {
         "nome": nome_original,
@@ -311,7 +312,7 @@ def configurar_sla():
                 db.session.add(cfg)
             cfg.horas = horas
             cfg.atualizado_por = session.get("username")
-            cfg.atualizado_em = datetime.now()
+            cfg.atualizado_em = agora_br()
         db.session.commit()
         return redirect(url_for("cadastro_workflow.configurar_sla"))
     return render_template(

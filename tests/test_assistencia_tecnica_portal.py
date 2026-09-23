@@ -24,12 +24,10 @@ def app(tmp_path):
                       "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'portal.db'}"})
     with app.app_context():
         db.create_all()
-        # Os seis tipos ja' vem semeados no start da aplicacao; aqui so' o
-        # texto de ajuda vira algo previsivel e os demais saem da frente.
-        TipoOperacaoNF.query.filter(
-            TipoOperacaoNF.nome.notin_(["Garantia", "Remessa para Teste"])
-        ).update({"ativo": False}, synchronize_session=False)
-        for nome in ("Garantia", "Remessa para Teste"):
+        # Os tipos ja' vem semeados no start da aplicacao (e' o proprio
+        # svc.TIPOS_OPERACAO, ja' sem os dois removidos no redesenho de
+        # 2026-09); aqui so' o texto de ajuda vira algo previsivel.
+        for nome in svc.TIPOS_OPERACAO:
             TipoOperacaoNF.query.filter_by(nome=nome).update(
                 {"descricao_ajuda": f"Ajuda de {nome}.", "ativo": True})
         db.session.commit()
@@ -50,7 +48,7 @@ def erp(app):
 def payload(tipo="Garantia", **extra):
     dados = {"solicitante_nome": FUNCIONARIO["nome"], "tipo_operacao": tipo,
              "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
-             "venda_posterior": False,
+             "venda_posterior": False, "data_necessidade": "2026-09-24",
              "itens": [{"material_codigo": "M1", "quantidade": 2}]}
     dados.update(extra)
     return dados
@@ -61,7 +59,8 @@ def test_tipos_vem_da_tabela_e_o_inativo_nao_aparece(app):
         TipoOperacaoNF.query.filter_by(nome="Garantia").update({"ativo": False})
         db.session.commit()
         nomes = [t["nome"] for t in svc.listar_tipos_operacao()]
-    assert nomes == ["Remessa para Teste"]
+    assert nomes == ["Bonificação", "Remessa para Teste",
+                     "Materiais para atendimento técnico no cliente"]
 
 
 def test_tabela_vazia_cai_nos_tipos_do_codigo(app):
@@ -86,8 +85,10 @@ def test_item_nasce_com_operacao_status_e_retorno_sugerido(app, erp):
 
 
 def test_tipo_sem_retorno_nao_sugere_retorno_no_item(app, erp):
+    """Desde o redesenho de 2026-09, só Bonificação fica sem controle de
+    retorno — Garantia passou a exigir (ver test_item_nasce_com_operacao...)."""
     with app.app_context():
-        solicitacao = svc.criar_solicitacao(payload("Garantia"))
+        solicitacao = svc.criar_solicitacao(payload("Bonificação"))
         item = SolicitacaoNFItem.query.filter_by(solicitacao_id=solicitacao.id).one()
         assert item.necessita_retorno is False
 
@@ -95,8 +96,8 @@ def test_tipo_sem_retorno_nao_sugere_retorno_no_item(app, erp):
 def test_quem_decide_o_retorno_e_o_solicitante(app, erp):
     """O tipo sugere, mas quem pede é quem sabe se aquele material volta."""
     with app.app_context():
-        # Garantia sugere "não volta"; o solicitante diz que volta.
-        volta = svc.criar_solicitacao(payload("Garantia", necessita_retorno=True))
+        # Bonificação sugere "não volta"; o solicitante diz que volta.
+        volta = svc.criar_solicitacao(payload("Bonificação", necessita_retorno=True))
         assert SolicitacaoNFItem.query.filter_by(
             solicitacao_id=volta.id).one().necessita_retorno is True
 
@@ -120,11 +121,14 @@ def test_tipo_invalido_e_recusado(app, erp):
         assert SolicitacaoNF.query.count() == 0
 
 
-def test_tipo_do_codigo_continua_aceito_mesmo_fora_da_tabela(app, erp):
-    """Tipo desativado por engano não pode derrubar o formulário público."""
+def test_tipos_removidos_no_redesenho_nao_sao_mais_aceitos(app, erp):
+    """"Remessa para Conserto" e "Remessa de retorno de demonstração" saíram
+    de circulação no redesenho de 2026-09 — solicitações antigas com esses
+    tipos continuam no banco, mas não dá mais para criar uma nova assim."""
     with app.app_context():
-        solicitacao = svc.criar_solicitacao(payload("Remessa para Conserto"))
-        assert solicitacao.tipo_operacao == "Remessa para Conserto"
+        with pytest.raises(svc.SolicitacaoNFError, match="Tipo de operação"):
+            svc.criar_solicitacao(payload("Remessa para Conserto"))
+        assert SolicitacaoNF.query.count() == 0
 
 
 def test_formulario_publico_responde_sem_login(app):
@@ -147,6 +151,7 @@ def test_operacao_e_venda_sao_de_cada_item(app, erp):
         solicitacao = svc.criar_solicitacao({
             "solicitante_nome": FUNCIONARIO["nome"],
             "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
+            "data_necessidade": "2026-09-24",
             "itens": [
                 {"material_codigo": "M1", "quantidade": 2,
                  "tipo_operacao": "Remessa para Teste", "sera_vendido": True},
@@ -158,23 +163,26 @@ def test_operacao_e_venda_sao_de_cada_item(app, erp):
             solicitacao_id=solicitacao.id).order_by(SolicitacaoNFItem.linha).all()
         assert [i.tipo_operacao for i in itens] == ["Remessa para Teste", "Garantia"]
         assert [i.sera_vendido for i in itens] == [True, False]
-        # O retorno vem sugerido pela operação de cada um.
-        assert [i.necessita_retorno for i in itens] == [True, False]
+        # O retorno vem sugerido pela operação de cada um. Desde o redesenho
+        # de 2026-09, Garantia também exige retorno (só Bonificação não).
+        assert [i.necessita_retorno for i in itens] == [True, True]
         # O cabeçalho guarda o que vale para o primeiro item.
         assert solicitacao.tipo_operacao == "Remessa para Teste"
         assert solicitacao.venda_posterior is True
 
 
-def test_item_sem_operacao_e_recusado(app, erp):
-    """Sem a operação não dá para saber em que nota o item entra."""
+def test_item_sem_operacao_vira_atendimento_tecnico(app, erp):
+    """Desde o redesenho de 2026-09, o solicitante nem sempre sabe qual é a
+    operação — em branco, cai no padrão em vez de travar o pedido."""
     with app.app_context():
-        with pytest.raises(svc.SolicitacaoNFError, match="Escolha a operação"):
-            svc.criar_solicitacao({
-                "solicitante_nome": FUNCIONARIO["nome"],
-                "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
-                "itens": [{"material_codigo": "M1", "quantidade": 1}],
-            })
-        assert SolicitacaoNF.query.count() == 0
+        solicitacao = svc.criar_solicitacao({
+            "solicitante_nome": FUNCIONARIO["nome"],
+            "cliente_codigo": CLIENTE["codigo"], "cliente_nome": CLIENTE["nome"],
+            "data_necessidade": "2026-09-24",
+            "itens": [{"material_codigo": "M1", "quantidade": 1}],
+        })
+        item = SolicitacaoNFItem.query.filter_by(solicitacao_id=solicitacao.id).one()
+        assert item.tipo_operacao == svc.TIPO_OPERACAO_PADRAO
 
 
 FUNCIONARIOS = [

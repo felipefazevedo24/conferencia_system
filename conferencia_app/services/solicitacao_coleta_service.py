@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import current_app
 from sqlalchemy import text
 from ..extensions import db
+from ..tempo import agora_br
 
 
 def criar_ou_atualizar_detalhes_coleta(solicitacao_id, data_liberacao=None, observacao=None, usuario=None):
@@ -12,7 +13,7 @@ def criar_ou_atualizar_detalhes_coleta(solicitacao_id, data_liberacao=None, obse
         query = "SELECT id FROM solicitacao_coleta_detalhes WHERE solicitacao_id = :solicitacao_id"
         result = db.session.execute(text(query), {"solicitacao_id": solicitacao_id}).first()
         
-        agora = datetime.now()
+        agora = agora_br()
         
         if result:
             # Atualizar
@@ -102,7 +103,7 @@ def adicionar_anexo(solicitacao_coleta_id, arquivo_nome, arquivo_path, tipo_arqu
             "tipo_arquivo": tipo_arquivo,
             "tamanho_bytes": tamanho_bytes,
             "uploadado_por": usuario,
-            "uploadado_em": datetime.now()
+            "uploadado_em": agora_br()
         })
         db.session.commit()
         return True

@@ -409,7 +409,9 @@
                                 <span><i class="far fa-user"></i>${escapeHtml(o.solicitante_nome)}</span>
                                 <span><i class="far fa-clock"></i>${fmtDataHora(o.created_at)}</span>
                                 <span><i class="fas fa-boxes"></i>${o.itens.length} ${o.itens.length === 1 ? "item" : "itens"}</span>
+                                ${o.data_necessidade ? `<span><i class="fas fa-calendar-day"></i>Necessário em ${fmtData(o.data_necessidade)}</span>` : ""}
                                 ${o.ordem_faturamento ? `<span><i class="fas fa-link"></i>OF #${o.ordem_faturamento}</span>` : ""}
+                                ${o.romaneio_id ? `<span title="Gerado fora do horário comercial: a NF ainda não existia quando a solicitação foi criada."><i class="fas fa-triangle-exclamation"></i><a href="/expedicao/romaneio/${o.romaneio_id}/visualizar" target="_blank" rel="noopener" style="color:inherit;">Romaneio sem NF</a></span>` : ""}
                                 ${nfMeta}
                             </div>
                         </div>

@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Any
 
 from flask import Flask
+from ..tempo import agora_br
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -57,7 +58,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
 
     ok = "fat_erro" not in resumo and "st_erro" not in resumo
     _set_status(
-        last_run=datetime.now(),
+        last_run=agora_br(),
         last_status="ok" if ok else "parcial",
         last_message=_montar_mensagem(resumo),
         last_resultado=resumo,

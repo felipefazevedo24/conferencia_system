@@ -9,6 +9,7 @@ from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
 from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
+from ..tempo import agora_br
 
 producao_bp = Blueprint("producao", __name__)
 
@@ -283,8 +284,8 @@ def listar_os_abertas():
 @permission_required("PAGE_PRODUCAO")
 def cronograma_entregas():
     try:
-        mes = int(request.args.get("mes", datetime.now().month))
-        ano = int(request.args.get("ano", datetime.now().year))
+        mes = int(request.args.get("mes", agora_br().month))
+        ano = int(request.args.get("ano", agora_br().year))
         if not 1 <= mes <= 12 or not 2000 <= ano <= 2100:
             raise ValueError
     except (TypeError, ValueError):
@@ -422,7 +423,7 @@ def _original_structure(data: dict) -> dict:
         "pending_count": data.get("bloqueados", 0),
         "structure_warnings": data.get("avisos_estrutura", []),
         "current_stage": "Producao",
-        "source": {"calculated_at": datetime.now().isoformat()},
+        "source": {"calculated_at": agora_br().isoformat()},
     }
 
 
@@ -502,7 +503,7 @@ def original_live(numero_os: str, aux_code: int):
 @permission_required("PAGE_PRODUCAO")
 def original_materials(numero_os: str, aux_code: int):
     data = producao_service.obter_materiais(numero_os, aux_code)
-    return jsonify({"order_number": numero_os, "item_aux_code": aux_code, "item_code": str(aux_code), "material_used": any(float(item.get("utilizado") or 0) > 0 for item in data.get("materiais", [])), "materials": [{"id": item.get("id"), "code": item.get("codigo"), "description": item.get("descricao"), "required_quantity": item.get("necessario", 0), "consumed_quantity": item.get("utilizado", 0), "remaining_quantity": item.get("restante", 0), "available_quantity": item.get("disponivel"), "unit": item.get("unidade"), "used": float(item.get("utilizado") or 0) > 0, "consumption_status": "consumed" if float(item.get("restante") or 0) <= 0 else ("partial" if float(item.get("utilizado") or 0) > 0 else "not_used"), "item_code": str(aux_code)} for item in data.get("materiais", [])], "source": {"calculated_at": datetime.now().isoformat()}})
+    return jsonify({"order_number": numero_os, "item_aux_code": aux_code, "item_code": str(aux_code), "material_used": any(float(item.get("utilizado") or 0) > 0 for item in data.get("materiais", [])), "materials": [{"id": item.get("id"), "code": item.get("codigo"), "description": item.get("descricao"), "required_quantity": item.get("necessario", 0), "consumed_quantity": item.get("utilizado", 0), "remaining_quantity": item.get("restante", 0), "available_quantity": item.get("disponivel"), "unit": item.get("unidade"), "used": float(item.get("utilizado") or 0) > 0, "consumption_status": "consumed" if float(item.get("restante") or 0) <= 0 else ("partial" if float(item.get("utilizado") or 0) > 0 else "not_used"), "item_code": str(aux_code)} for item in data.get("materiais", [])], "source": {"calculated_at": agora_br().isoformat()}})
 
 
 def _serve_original_document(numero_os: str, aux_code: int, kind: str, document_id: int):

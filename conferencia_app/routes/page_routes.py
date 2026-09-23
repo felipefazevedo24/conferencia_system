@@ -19,6 +19,7 @@ from ..models import (
     Usuario,
     Viagem,
 )
+from ..tempo import agora_br
 
 
 page_bp = Blueprint("pages", __name__)
@@ -368,7 +369,7 @@ def _fmt_metric(value: int | float, singular: str, plural: str | None = None) ->
 
 
 def _build_home_metrics() -> dict:
-    today = datetime.now().date()
+    today = agora_br().date()
     metrics = {
         "materiais_expedidos": 0,
         "materiais_recebidos": 0,
@@ -565,7 +566,7 @@ def _build_home_highlights(metrics: dict) -> list[dict]:
 
 def _build_priority_actions(modules: list[dict], metrics: dict) -> list[dict]:
     actions = []
-    today = datetime.now().strftime("%d/%m/%Y")
+    today = agora_br().strftime("%d/%m/%Y")
 
     def add_action(module_id: str, title: str, text: str):
         module = next((item for item in modules if item["id"] == module_id), None)
@@ -624,7 +625,7 @@ _PERM_LOGISTICA = ("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO", "
 
 def _serie_entradas_por_dia(dias: int = 14) -> dict:
     """Série diária de notas que entraram (por data de importação)."""
-    today = datetime.now().date()
+    today = agora_br().date()
     inicio = today - timedelta(days=dias - 1)
     contagem: dict[str, int] = {}
     try:
@@ -652,7 +653,7 @@ def _serie_entradas_por_dia(dias: int = 14) -> dict:
 
 def _serie_fluxo_notas_por_dia(dias: int = 14) -> dict:
     """Série diária com entrada de NFs e lançamentos concluídos no ERP."""
-    today = datetime.now().date()
+    today = agora_br().date()
     inicio = today - timedelta(days=dias - 1)
     importadas: dict[str, int] = {}
     lancadas: dict[str, int] = {}
