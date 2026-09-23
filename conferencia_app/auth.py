@@ -1,8 +1,8 @@
 from .models import ActiveSession
 from .extensions import db
+from .tempo import agora_br
 from flask import abort
 from sqlalchemy.exc import OperationalError
-import datetime
 import unicodedata
 # Middleware para atualizar sessão ativa e forçar logout se necessário
 def _recover_db_connection():
@@ -13,7 +13,7 @@ def _recover_db_connection():
 def _load_and_touch_active_session(session_id):
     sessao = ActiveSession.query.filter_by(session_id=session_id).first()
     if sessao and sessao.is_active:
-        sessao.last_activity = datetime.datetime.now()
+        sessao.last_activity = agora_br()
         db.session.commit()
     return sessao
 

@@ -28,6 +28,7 @@ from werkzeug.utils import secure_filename
 from ..services.expedicao_photo_storage import using_drive, upload_bytes_to_drive, upload_to_drive
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 from ..services.nfe_email_service import enviar_aviso_coleta_fob
+from ..tempo import agora_br
 
 expedicao_romaneio_bp = Blueprint("expedicao_romaneio", __name__)
 
@@ -316,7 +317,7 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
         )
         partes.append(
             f"**Solicitado por:** {session.get('username', 'sistema')} · "
-            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            f"{agora_br().strftime('%d/%m/%Y %H:%M')}"
         )
         if getattr(romaneio, "orcamento", None):
             partes.append(f"**Orçamento:** {romaneio.orcamento}")
@@ -359,7 +360,7 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     numero_nf = str(getattr(nf, "numero_nf", "") or "").strip()
     if not numero_nf:
         return None
-    agora = datetime.now()
+    agora = agora_br()
 
     ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
     if ordem is None:
@@ -536,7 +537,7 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
     os.makedirs(fotos_dir, exist_ok=True)
 
     ext = os.path.splitext(secure_filename(comprovante.filename))[1] or ".jpg"
-    nome_arquivo = f"canhoto_romaneio{romaneio_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    nome_arquivo = f"canhoto_romaneio{romaneio_id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
     if using_drive():
         try:
             stored = upload_to_drive(comprovante, nome_arquivo)
@@ -558,7 +559,7 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
         caminho = os.path.join(fotos_dir, nome_arquivo)
         comprovante.save(caminho)
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session["username"]
     total_finalizados = 0
     for nf in romaneio.nfs or []:
@@ -708,7 +709,7 @@ def proximo_numero_romaneio() -> str:
     linhas gera número duplicado sempre que um romaneio anterior é excluído
     (o total cai, mas o número "vago" já pode pertencer a um romaneio que
     ainda existe), disparando IntegrityError na coluna única."""
-    prefixo = f"ROM-{datetime.now().year}-"
+    prefixo = f"ROM-{agora_br().year}-"
     existentes = (
         ExpedicaoRomaneio.query
         .filter(ExpedicaoRomaneio.numero_romaneio.like(f"{prefixo}%"))
@@ -742,7 +743,7 @@ def criar_romaneio():
     
     romaneio = ExpedicaoRomaneio(
         numero_romaneio=numero_romaneio,
-        data_romaneio=datetime.now().date(),
+        data_romaneio=agora_br().date(),
         criado_por=session["username"],
     )
     
@@ -904,7 +905,7 @@ def atualizar_romaneio(romaneio_id):
             romaneio.observacao_3 = str(payload["observacao_3"]).strip()
     
     romaneio.atualizado_por = session["username"]
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
 
     if disparar_aviso_fob:
@@ -1126,7 +1127,7 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None, *, commit=T
         if not romaneio.cliente:
             romaneio.cliente = cliente
 
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     try:
         if commit:
             db.session.commit()
@@ -1189,7 +1190,7 @@ def remover_nf_core(romaneio, nf):
 
     # Atualiza totais pela lista remanescente para manter consistência.
     _recalcular_totais_romaneio(romaneio)
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
 
     db.session.commit()
 
@@ -1248,12 +1249,12 @@ def finalizar_romaneio(romaneio_id):
         )
         romaneio.cce_modalidade_pendente = True
         romaneio.cce_modalidade_aprovado_por = session["username"]
-        romaneio.cce_modalidade_aprovado_em = datetime.now()
+        romaneio.cce_modalidade_aprovado_em = agora_br()
         romaneio.cce_modalidade_detalhe = detalhe[:1000]
 
     romaneio.status = "Pronto"
     romaneio.atualizado_por = session["username"]
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
 
     if divergentes and aprovar:
@@ -1291,8 +1292,8 @@ def expedir_romaneio(romaneio_id):
     
     romaneio.status = "Expedido"
     romaneio.expedido_por = session["username"]
-    romaneio.expedido_em = datetime.now()
-    romaneio.atualizado_em = datetime.now()
+    romaneio.expedido_em = agora_br()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
     
     # Fluxo progressivo: cada ordem cuja NF esta neste romaneio avanca de
@@ -1341,7 +1342,7 @@ def estornar_finalizacao_core(romaneio, autor):
     rota HTTP e pela Bia."""
     romaneio.status = "Rascunho"
     romaneio.atualizado_por = autor
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
 
     _cancelar_solicitacao_entrega_cif(
@@ -1373,7 +1374,7 @@ def estornar_expedicao_core(romaneio, autor):
     romaneio.expedido_por = None
     romaneio.expedido_em = None
     romaneio.atualizado_por = autor
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
 
     for nf in romaneio.nfs or []:
@@ -1401,7 +1402,7 @@ def estornar_expedicao_core(romaneio, autor):
                 reg.canhoto_file_path = None
                 reg.canhoto_uploaded_at = None
                 reg.canhoto_uploaded_by = None
-                reg.updated_at = datetime.now()
+                reg.updated_at = agora_br()
     db.session.commit()
 
 
@@ -1446,7 +1447,7 @@ def editar_romaneio_campos(romaneio, alteracoes, autor):
         romaneio.tipo_frete = frete
 
     romaneio.atualizado_por = autor
-    romaneio.atualizado_em = datetime.now()
+    romaneio.atualizado_em = agora_br()
     db.session.commit()
 
     if disparar_aviso_fob and (romaneio.nfs or []):
@@ -1564,7 +1565,7 @@ def decidir_exclusao_romaneio(exclusao_id, acao):
     payload = request.get_json(silent=True) or {}
     exclusao.admin_usuario = session["username"]
     exclusao.admin_observacao = str(payload.get("observacao") or "").strip() or None
-    exclusao.resolvido_at = datetime.now()
+    exclusao.resolvido_at = agora_br()
 
     if acao == "aprovar":
         romaneio = ExpedicaoRomaneio.query.get(exclusao.romaneio_id)
@@ -1793,7 +1794,13 @@ def visualizar_romaneio(romaneio_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return "Romaneio não encontrado.", 404
+    return _render_romaneio_visualizar(romaneio)
 
+
+def _render_romaneio_visualizar(romaneio):
+    """Corpo de visualizar_romaneio, reaproveitado pelo link público (sem
+    login) que a Assistência Técnica oferece para o romaneio automático
+    gerado fora do horário comercial (ver solicitacao_nf_routes.py)."""
     return render_template(
         "expedicao_romaneio_visualizar.html",
         romaneio=romaneio,
@@ -1830,7 +1837,7 @@ def salvar_assinatura_romaneio(romaneio_id, tipo):
     except Exception:
         return jsonify({"error": "Assinatura inválida."}), 400
 
-    nome_arquivo = f"romaneio{romaneio_id}_{tipo}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+    nome_arquivo = f"romaneio{romaneio_id}_{tipo}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}.png"
 
     if using_drive():
         try:
@@ -1848,7 +1855,7 @@ def salvar_assinatura_romaneio(romaneio_id, tipo):
         with open(caminho, "wb") as f:
             f.write(dados_png)
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session["username"]
     if tipo == "conferente":
         romaneio.assinatura_conferente_file_name = nome_arquivo
@@ -1967,7 +1974,7 @@ def salvar_foto_carregamento_romaneio(romaneio_id):
     except Exception:
         return jsonify({"error": "Foto inválida."}), 400
 
-    nome_arquivo = f"romaneio{romaneio_id}_carregamento_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+    nome_arquivo = f"romaneio{romaneio_id}_carregamento_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}.png"
 
     if using_drive():
         try:
@@ -1983,7 +1990,7 @@ def salvar_foto_carregamento_romaneio(romaneio_id):
         with open(caminho, "wb") as f:
             f.write(dados_png)
 
-    agora = datetime.now()
+    agora = agora_br()
     foto = ExpedicaoRomaneioFotoCarregamento(
         romaneio_id=romaneio.id,
         file_name=nome_arquivo,

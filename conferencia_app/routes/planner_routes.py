@@ -20,6 +20,7 @@ from ..models import (
     PlannerLabel,
     Usuario,
 )
+from ..tempo import agora_br
 
 
 planner_bp = Blueprint("planner", __name__)
@@ -82,7 +83,7 @@ def _admin_responsaveis() -> list[str]:
 
 
 def _seed_default_columns(board: PlannerBoard, colunas: list[dict] = DEFAULT_COLUNAS) -> None:
-    now = datetime.now()
+    now = agora_br()
     for idx, col in enumerate(colunas):
         db.session.add(
             PlannerColumn(
@@ -99,7 +100,7 @@ def _seed_default_columns(board: PlannerBoard, colunas: list[dict] = DEFAULT_COL
 
 
 def _seed_default_labels(board: PlannerBoard) -> None:
-    now = datetime.now()
+    now = agora_br()
     for idx, label in enumerate(DEFAULT_LABELS):
         db.session.add(
             PlannerLabel(
@@ -120,15 +121,15 @@ def _get_or_create_board() -> PlannerBoard:
             _seed_default_columns(board)
         if not board.labels:
             _seed_default_labels(board)
-            board.atualizado_em = datetime.now()
+            board.atualizado_em = agora_br()
             db.session.commit()
         return board
 
     board = PlannerBoard(
         nome=DEFAULT_BOARD_NAME,
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
     )
     db.session.add(board)
     db.session.flush()
@@ -326,7 +327,7 @@ def _reindex_cards(column_id: int) -> None:
         .order_by(PlannerCard.order_index.asc(), PlannerCard.id.asc())
         .all()
     )
-    now = datetime.now()
+    now = agora_br()
     for idx, card in enumerate(cards):
         if card.order_index != idx:
             card.order_index = idx
@@ -348,11 +349,11 @@ def _sync_card_labels(card: PlannerCard, label_ids: list[int]) -> None:
             PlannerLabel.id.in_(to_add), PlannerLabel.board_id == card.column.board_id
         ).all()
         for label in labels:
-            db.session.add(PlannerCardLabel(card_id=card.id, label_id=label.id, criado_em=datetime.now()))
+            db.session.add(PlannerCardLabel(card_id=card.id, label_id=label.id, criado_em=agora_br()))
 
 
 def _create_checklist_items(card: PlannerCard, texts: list[str]) -> None:
-    now = datetime.now()
+    now = agora_br()
     for idx, raw in enumerate(texts):
         texto = str(raw or "").strip()
         if not texto:
@@ -429,10 +430,10 @@ def api_create_label():
         color=(str(payload.get("color") or "#0f62c9")[:20] or "#0f62c9"),
         order_index=next_order,
         criado_por=_user(),
-        criado_em=datetime.now(),
+        criado_em=agora_br(),
     )
     db.session.add(label)
-    board.atualizado_em = datetime.now()
+    board.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "label": _serialize_label(label)})
 
@@ -464,11 +465,11 @@ def api_create_column():
         is_done=_parse_bool(payload.get("is_done")),
         order_index=next_order,
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
     )
     db.session.add(col)
-    board.atualizado_em = datetime.now()
+    board.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "column": _serialize_column(col)})
 
@@ -486,7 +487,7 @@ def api_reorder_columns():
     if len(col_map) != len(ids):
         return jsonify({"error": "Uma ou mais colunas não pertencem ao board."}), 400
 
-    now = datetime.now()
+    now = agora_br()
     for idx, col_id in enumerate(ids):
         col = col_map[col_id]
         col.order_index = idx
@@ -515,13 +516,13 @@ def api_update_column(column_id: int):
     if "is_done" in payload:
         col.is_done = _parse_bool(payload.get("is_done"))
         if col.is_done:
-            now = datetime.now()
+            now = agora_br()
             for card in col.cards:
                 if card.concluido_em is None:
                     card.concluido_em = now
                 card.atualizado_em = now
 
-    col.atualizado_em = datetime.now()
+    col.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "column": _serialize_column(col)})
 
@@ -537,7 +538,7 @@ def api_delete_column(column_id: int):
     db.session.flush()
 
     cols = PlannerColumn.query.filter_by(board_id=board_id).order_by(PlannerColumn.order_index.asc(), PlannerColumn.id.asc()).all()
-    now = datetime.now()
+    now = agora_br()
     for idx, row in enumerate(cols):
         row.order_index = idx
         row.atualizado_em = now
@@ -573,9 +574,9 @@ def api_create_card():
         order_index=next_order,
         criado_por=_user(),
         atualizado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
-        concluido_em=datetime.now() if col.is_done else None,
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
+        concluido_em=agora_br() if col.is_done else None,
     )
     db.session.add(card)
     db.session.flush()
@@ -624,13 +625,13 @@ def api_update_card(card_id: int):
             max_order = db.session.query(db.func.max(PlannerCard.order_index)).filter_by(column_id=target_col.id).scalar()
             card.order_index = int(max_order or 0) + 1 if max_order is not None else 0
             _reindex_cards(source_col_id)
-            card.concluido_em = datetime.now() if target_col.is_done else None
+            card.concluido_em = agora_br() if target_col.is_done else None
 
     if "label_ids" in payload and isinstance(payload.get("label_ids"), list):
         _sync_card_labels(card, payload.get("label_ids") or [])
 
     card.atualizado_por = _user()
-    card.atualizado_em = datetime.now()
+    card.atualizado_em = agora_br()
     db.session.commit()
     done_column = bool(PlannerColumn.query.get(card.column_id).is_done)
     return jsonify({"sucesso": True, "card": _serialize_card(card, done_column)})
@@ -677,7 +678,7 @@ def api_move_card(card_id: int):
         card.column_id = to_col.id
 
     cards.insert(position, card)
-    now = datetime.now()
+    now = agora_br()
     for idx, row in enumerate(cards):
         row.order_index = idx
         row.atualizado_em = now
@@ -703,11 +704,11 @@ def api_add_comment(card_id: int):
         card_id=card.id,
         texto=texto[:8000],
         criado_por=_user(),
-        criado_em=datetime.now(),
+        criado_em=agora_br(),
     )
     db.session.add(comment)
     card.atualizado_por = _user()
-    card.atualizado_em = datetime.now()
+    card.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "comment": _serialize_comment(comment)})
 
@@ -729,12 +730,12 @@ def api_add_checklist_item(card_id: int):
         is_done=False,
         order_index=next_order,
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
     )
     db.session.add(item)
     card.atualizado_por = _user()
-    card.atualizado_em = datetime.now()
+    card.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "item": _serialize_checklist_item(item)})
 
@@ -753,9 +754,9 @@ def api_update_checklist_item(item_id: int):
     if "is_done" in payload:
         item.is_done = _parse_bool(payload.get("is_done"))
 
-    item.atualizado_em = datetime.now()
+    item.atualizado_em = agora_br()
     item.card.atualizado_por = _user()
-    item.card.atualizado_em = datetime.now()
+    item.card.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "item": _serialize_checklist_item(item)})
 
@@ -773,7 +774,7 @@ def api_delete_checklist_item(item_id: int):
         .order_by(PlannerChecklistItem.order_index.asc(), PlannerChecklistItem.id.asc())
         .all()
     )
-    now = datetime.now()
+    now = agora_br()
     for idx, row in enumerate(items):
         row.order_index = idx
         row.atualizado_em = now

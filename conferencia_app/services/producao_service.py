@@ -24,6 +24,7 @@ from werkzeug.local import LocalProxy
 from ..compras import queries
 from ..compras.db import fetch_all, fetch_one
 from .producao_bridge import obter_previews_bridge
+from ..tempo import agora_br
 
 try:
     import pymupdf as fitz
@@ -259,7 +260,7 @@ def obter_dependencias(numero_os: str) -> dict[str, Any]:
             for dependent, prerequisite in sorted(links)
             if dependent in nodes and prerequisite in nodes
         ],
-        "source": {"calculated_at": datetime.now().isoformat()},
+        "source": {"calculated_at": agora_br().isoformat()},
     }
 
 
@@ -334,7 +335,7 @@ def obter_apontamentos(numero_os: str, aux_code: int) -> dict[str, Any]:
         queries.SQL_PRODUCAO_APONTAMENTOS_ITEM,
         {"cod_empresa": 1, "cod_os": ordem["codigo"], "cod_os_aux": aux_code},
     )
-    return {"aux_code": aux_code, "atualizado_em": datetime.now().isoformat(), "apontamentos": [
+    return {"aux_code": aux_code, "atualizado_em": agora_br().isoformat(), "apontamentos": [
         {"operacao": _texto(row.get("operation_code")), "sequencia": row.get("seq_processo_prod"), "operador": _texto(row.get("operator_name")), "inicio": _iso(row.get("started_at")), "maquina": _texto(row.get("machine")), "pausado": bool(row.get("paused"))}
         for row in rows
     ]}

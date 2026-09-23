@@ -35,6 +35,7 @@ from .pedidos_service import buscar_linhas_pedido
 from .cliente_portal_service import gerar_token_nf, portal_base_url
 from .grv_contas_receber_service import GRVContasReceberService
 from .smtp_service import enviar_mensagem_smtp
+from ..tempo import agora_br
 
 
 # ---------- Utilidades ----------
@@ -983,7 +984,7 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password, log_id):
             row = db.session.get(EmailNFEnviado, log_id)
             if row:
                 row.status = "Enviado"
-                row.enviado_em = datetime.now()
+                row.enviado_em = agora_br()
                 row.tentativas = (row.tentativas or 0) + 1
                 db.session.commit()
             app.logger.info("NF-e %s enviada por e-mail (log %s).", msg["Subject"], log_id)
@@ -1940,7 +1941,7 @@ def enviar_aviso_saida_entrega_dap(
     if not sender or not password:
         return {"sucesso": False, "erro": "SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD)."}
 
-    data_saida = datetime.now().strftime("%d/%m/%Y")
+    data_saida = agora_br().strftime("%d/%m/%Y")
 
     assunto_base = f"Mercadoria em Rota de Entrega - Nota Fiscal n\u00ba {nota.numero}"
     assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base

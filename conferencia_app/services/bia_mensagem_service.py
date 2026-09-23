@@ -22,6 +22,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import BiaMensagem, BiaMensagemLeitura, Usuario
+from ..tempo import agora_br
 
 
 SUGESTOES = [
@@ -298,7 +299,7 @@ def mensagens_nao_lidas(
         return []
     user_norm = _normalizar(username)
     role_norm = _normalizar(role)
-    corte = datetime.now() - timedelta(days=dias)
+    corte = agora_br() - timedelta(days=dias)
 
     try:
         candidatas = (

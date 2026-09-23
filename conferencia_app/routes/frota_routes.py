@@ -20,6 +20,7 @@ from ..models import (
     FrotaManutencao,
     FrotaMulta,
 )
+from ..tempo import agora_br
 
 frota_bp = Blueprint("frota", __name__, url_prefix="/api/frota")
 
@@ -85,7 +86,7 @@ def _save_upload(key: str = "anexo") -> str | None:
     ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
     if ext not in ALLOWED_EXTS:
         return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = agora_br().strftime("%Y%m%d_%H%M%S")
     final = f"{stamp}_{nome}"
     path = os.path.join(_upload_dir(), final)
     f.save(path)
@@ -123,7 +124,7 @@ def dashboard():
     manut_proxima = [m for m in manuts if m.proxima_data and hoje <= m.proxima_data <= daqui_30]
 
     # Abastecimento - consumo medio por veiculo (ultimos 90d)
-    inicio = datetime.now() - timedelta(days=90)
+    inicio = agora_br() - timedelta(days=90)
     abast = (
         FrotaAbastecimento.query
         .filter(FrotaAbastecimento.data >= inicio)
@@ -412,7 +413,7 @@ def editar_documento(doc_id: int):
         d.vencimento = _parse_date(p["vencimento"])
     if "observacao" in p:
         d.observacao = str(p["observacao"] or "").strip() or None
-    d.atualizado_em = datetime.now()
+    d.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "documento": _doc_dict(d)})
 
@@ -545,7 +546,7 @@ def criar_abastecimento():
     a = FrotaAbastecimento(
         veiculo_id=veiculo_id,
         motorista_id=_parse_int(p.get("motorista_id")),
-        data=_parse_dt(p.get("data")) or datetime.now(),
+        data=_parse_dt(p.get("data")) or agora_br(),
         km_atual=km,
         litros=litros,
         valor_litro=valor_litro,
@@ -606,7 +607,7 @@ def criar_multa():
         veiculo_id=veiculo_id,
         motorista_id=_parse_int(p.get("motorista_id")),
         auto_infracao=str(p.get("auto_infracao") or "").strip() or None,
-        data_infracao=_parse_dt(p.get("data_infracao")) or datetime.now(),
+        data_infracao=_parse_dt(p.get("data_infracao")) or agora_br(),
         local=str(p.get("local") or "").strip() or None,
         descricao=descricao,
         valor=_parse_float(p.get("valor")),
@@ -704,7 +705,7 @@ def criar_checklist():
     c = FrotaChecklistDiario(
         veiculo_id=veiculo_id,
         motorista_id=_parse_int(p.get("motorista_id")),
-        data=_parse_dt(p.get("data")) or datetime.now(),
+        data=_parse_dt(p.get("data")) or agora_br(),
         km_atual=_parse_int(p.get("km_atual")),
         itens_json=json.dumps(itens, ensure_ascii=False),
         status_geral=status_geral,

@@ -13,6 +13,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import ClassificacaoContabilItem, ClassificacaoContabilPadrao, ItemNota, PlanoContaDominio
+from ..tempo import agora_br
 
 
 ARQUIVOS_PADRAO_2026 = [
@@ -121,7 +122,7 @@ def importar_plano_contas_dominio(path: Path | None = None, forcar: bool = False
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     criadas = 0
     atualizadas = 0
-    agora = datetime.now()
+    agora = agora_br()
     for sheet in workbook.worksheets:
         headers = []
         header_row = None
@@ -253,7 +254,7 @@ def importar_padroes_excel(paths: list[Path] | None = None) -> dict:
             agregadas[key] += 1
             exemplos.setdefault(key, row)
 
-    agora = datetime.now()
+    agora = agora_br()
     criados = 0
     atualizados = 0
     for key, ocorrencias in agregadas.items():
@@ -318,7 +319,7 @@ def importar_padroes_uploads(arquivos) -> dict:
             agregadas[key] += 1
             exemplos.setdefault(key, row)
 
-    agora = datetime.now()
+    agora = agora_br()
     criados = 0
     atualizados = 0
     for key, ocorrencias in agregadas.items():
@@ -375,7 +376,7 @@ def importar_padroes_internos(forcar: bool = False) -> dict:
         }
 
     data = json.loads(BUNDLED_PADROES_PATH.read_text(encoding="utf-8"))
-    agora = datetime.now()
+    agora = agora_br()
     criados = 0
     atualizados = 0
     for row in data.get("padroes", []):
@@ -604,7 +605,7 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False, sincroni
     sugestao = sugerir_classificacao_item(item)
     if sugestao["conta"]:
         sugestao["nome_conta"] = buscar_nome_conta(sugestao["conta"]) or sugestao["nome_conta"]
-    agora = datetime.now()
+    agora = agora_br()
     registro = existente or ClassificacaoContabilItem(item_nota_id=item.id, numero_nota=str(item.numero_nota or ""))
     registro.numero_nota = str(item.numero_nota or "")
     registro.fornecedor = item.fornecedor

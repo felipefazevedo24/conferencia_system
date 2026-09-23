@@ -31,6 +31,7 @@ from ..models import (
 from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
+from ..tempo import agora_br
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
 
@@ -83,7 +84,7 @@ def _save_upload(key: str):
     ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
     if ext not in ALLOWED_EXTS:
         return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = agora_br().strftime("%Y%m%d_%H%M%S")
     final = f"{stamp}_{nome}"
     path = os.path.join(_upload_dir(), final)
     f.save(path)
@@ -141,7 +142,7 @@ def _avisar_saida_entrega_dap(viagem) -> None:
 
 
 def _proximo_codigo() -> str:
-    ano = datetime.now().year
+    ano = agora_br().year
     prefix = f"VG-{ano}-"
     ultima = (
         Viagem.query.filter(Viagem.codigo.like(f"{prefix}%"))
@@ -346,8 +347,8 @@ def garantir_viagem_automatica_romaneio_st(romaneio, *, usuario: str = "sistema"
         retorno_previsto=retorno,
         origem_label="Expedição",
         criado_por=str(usuario or "sistema"),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
         avulsa=True,
         funcionario_responsavel=responsavel[:160],
     )
@@ -417,7 +418,7 @@ def _checklist_liberacao(v: Viagem, paradas: list[ViagemParada] | None = None) -
 
 def _alertas_operacionais(v: Viagem, ult: ViagemPosicao | None = None) -> list[dict]:
     alertas: list[dict] = []
-    agora = datetime.now()
+    agora = agora_br()
     if v.status == "Planejada":
         if v.saida_prevista and v.saida_prevista < agora and not v.liberada:
             alertas.append({"tipo": "danger", "msg": "Saida prevista vencida e viagem nao liberada."})
@@ -438,7 +439,7 @@ def _alertas_operacionais(v: Viagem, ult: ViagemPosicao | None = None) -> list[d
 
 
 def _sla_viagem(v: Viagem, ult: ViagemPosicao | None = None) -> dict:
-    agora = datetime.now()
+    agora = agora_br()
     base = v.saida_prevista
     if v.status == "EmAndamento":
         base = v.retorno_previsto
@@ -470,7 +471,7 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
 
     # tempo corrido
     inicio = v.saida_real or v.saida_prevista
-    fim = v.retorno_real or (datetime.now() if v.status == "EmAndamento" else v.retorno_previsto)
+    fim = v.retorno_real or (agora_br() if v.status == "EmAndamento" else v.retorno_previsto)
     tempo_min = int((fim - inicio).total_seconds() // 60) if inicio and fim else 0
 
     # ultima posicao
@@ -797,9 +798,9 @@ def _sync_solicitacao_viagem(sol: AgendamentoSolicitacao | None, v: Viagem, stat
     sol.data_hora_saida_prevista = sol.data_hora_saida_prevista or v.saida_prevista
     sol.data_hora_retorno_prevista = sol.data_hora_retorno_prevista or v.retorno_previsto
     sol.alocado_por = sol.alocado_por or _user()
-    sol.alocado_em = sol.alocado_em or datetime.now()
+    sol.alocado_em = sol.alocado_em or agora_br()
     sol.status = status
-    sol.atualizado_em = datetime.now()
+    sol.atualizado_em = agora_br()
 
 
 def _sync_solicitacoes_da_viagem(v: Viagem, status: str) -> None:
@@ -849,7 +850,7 @@ def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None, *, viagem_or
     sol.data_hora_retorno_real = None
     sol.alocado_por = None
     sol.alocado_em = None
-    sol.atualizado_em = datetime.now()
+    sol.atualizado_em = agora_br()
 
 
 def _filtro_solicitacao_visivel_viagem():
@@ -881,7 +882,7 @@ def dashboard():
     ).count()
     atrasadas = Viagem.query.filter(
         Viagem.status == "Planejada",
-        Viagem.saida_prevista < datetime.now(),
+        Viagem.saida_prevista < agora_br(),
     ).count()
     km_hoje = db.session.query(func.coalesce(func.sum(Viagem.km_percorrido), 0)).filter(
         Viagem.status == "Concluida",
@@ -908,7 +909,7 @@ def dashboard():
 @viagem_bp.route("/torre-controle", methods=["GET"])
 @permission_required(PERM)
 def torre_controle():
-    agora = datetime.now()
+    agora = agora_br()
     inicio = agora - timedelta(hours=12)
     fim = agora + timedelta(days=2)
     viagens = (
@@ -1034,7 +1035,7 @@ def dados_mapa_frota() -> dict:
         "base": rastreamento.get("base") or {},
         "veiculos": saida,
         "sem_posicao": sem_posicao,
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora_br().isoformat(),
     }
 
 
@@ -1052,9 +1053,9 @@ def agenda_viagens():
     if modo not in {"dia", "semana"}:
         modo = "dia"
     try:
-        base = datetime.strptime(data_raw, "%Y-%m-%d") if data_raw else datetime.now()
+        base = datetime.strptime(data_raw, "%Y-%m-%d") if data_raw else agora_br()
     except ValueError:
-        base = datetime.now()
+        base = agora_br()
     inicio = base.replace(hour=0, minute=0, second=0, microsecond=0)
     fim = inicio + timedelta(days=7 if modo == "semana" else 1)
     viagens = (
@@ -1243,7 +1244,7 @@ def editar(vid: int):
     for campo in ("origem_lat", "origem_lng", "destino_lat", "destino_lng"):
         if campo in p:
             setattr(v, campo, _parse_float(p[campo]))
-    v.atualizado_em = datetime.now()
+    v.atualizado_em = agora_br()
     if v.status in ("Planejada", "EmAndamento"):
         _sync_solicitacoes_da_viagem(v, "EmRota" if v.status == "EmAndamento" else "Alocada")
     _log_evento(
@@ -1289,7 +1290,7 @@ def iniciar(vid: int):
     if v.status != "Planejada":
         return jsonify({"sucesso": False, "msg": f"Viagem não pode ser iniciada (status {v.status})."}), 400
     p = request.get_json(silent=True) or {}
-    v.saida_real = datetime.now()
+    v.saida_real = agora_br()
     v.km_inicial = _parse_int(p.get("km_inicial"))
     v.status = "EmAndamento"
     v.iniciado_por = _user()
@@ -1299,7 +1300,7 @@ def iniciar(vid: int):
     if lat is not None and lng is not None:
         db.session.add(ViagemPosicao(
             viagem_id=v.id, latitude=lat, longitude=lng,
-            origem="motorista_app", registrado_em=datetime.now(),
+            origem="motorista_app", registrado_em=agora_br(),
         ))
     _log_evento(v.id, "INICIO", "Viagem iniciada",
                 descricao=f"KM inicial: {v.km_inicial or '—'}",
@@ -1318,7 +1319,7 @@ def concluir(vid: int):
     if v.status != "EmAndamento":
         return jsonify({"sucesso": False, "msg": f"Viagem não está em andamento (status {v.status})."}), 400
     p = request.get_json(silent=True) or {}
-    v.retorno_real = datetime.now()
+    v.retorno_real = agora_br()
     v.km_final = _parse_int(p.get("km_final"))
     v.status = "Concluida"
     v.concluido_por = _user()
@@ -1351,7 +1352,7 @@ def concluir(vid: int):
     if lat is not None and lng is not None:
         db.session.add(ViagemPosicao(
             viagem_id=v.id, latitude=lat, longitude=lng,
-            origem="motorista_app", registrado_em=datetime.now(),
+            origem="motorista_app", registrado_em=agora_br(),
         ))
     _log_evento(v.id, "FIM", "Viagem concluída",
                 descricao=f"KM final: {v.km_final or '—'} · percorrido: {v.km_percorrido or 0:.1f} km",
@@ -1426,7 +1427,7 @@ def parada_chegar(pid: int):
     if parada.status in {"Nao_realizada", "Cancelada"}:
         return jsonify({"sucesso": False, "msg": "Esta tentativa já foi encerrada. Use a nova parada da solicitação."}), 409
     p = request.get_json(silent=True) or {}
-    parada.chegada_real = datetime.now()
+    parada.chegada_real = agora_br()
     parada.status = "EmAndamento"
     if parada.solicitacao_id:
         sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
@@ -1438,7 +1439,7 @@ def parada_chegar(pid: int):
     if lat is not None and lng is not None:
         db.session.add(ViagemPosicao(
             viagem_id=parada.viagem_id, latitude=lat, longitude=lng,
-            origem="motorista_app", registrado_em=datetime.now(),
+            origem="motorista_app", registrado_em=agora_br(),
         ))
     _log_evento(parada.viagem_id, "CHEGADA",
                 f"Chegada em {parada.parceiro_nome or parada.endereco or 'parada'}",
@@ -1461,7 +1462,7 @@ def parada_concluir(pid: int):
     else:
         p = request.get_json(silent=True) or {}
         foto = None
-    parada.saida_real = datetime.now()
+    parada.saida_real = agora_br()
     parada.status = "Concluida"
     if parada.solicitacao_id:
         sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
@@ -1482,7 +1483,7 @@ def parada_concluir(pid: int):
     if lat is not None and lng is not None:
         db.session.add(ViagemPosicao(
             viagem_id=parada.viagem_id, latitude=lat, longitude=lng,
-            origem="motorista_app", registrado_em=datetime.now(),
+            origem="motorista_app", registrado_em=agora_br(),
         ))
     _log_evento(parada.viagem_id, "SAIDA_PARADA",
                 f"Saída de {parada.parceiro_nome or 'parada'} · {parada.resultado or 'Concluída'}",
@@ -1525,7 +1526,7 @@ def parada_nao_realizada(pid: int):
     if not motivo:
         return jsonify({"sucesso": False, "msg": "Motivo obrigatório."}), 400
     parada.status = "Nao_realizada"
-    parada.saida_real = datetime.now()
+    parada.saida_real = agora_br()
     parada.resultado = str(p.get("resultado") or "Recusado").strip()
     parada.observacao = motivo
     if parada.solicitacao_id:
@@ -1656,8 +1657,8 @@ def parada_realocar(pid: int):
         destino.liberada_por = None
         liberacao_revogada_destino = True
 
-    origem.atualizado_em = datetime.now()
-    destino.atualizado_em = datetime.now()
+    origem.atualizado_em = agora_br()
+    destino.atualizado_em = agora_br()
 
     _log_evento(
         origem.id,
@@ -1727,7 +1728,7 @@ def liberar_viagem(vid: int):
     body = request.get_json(silent=True) or {}
     destino_unico = bool(body.get("destino_unico")) if paradas == 1 else False
     v.liberada = True
-    v.liberada_em = datetime.now()
+    v.liberada_em = agora_br()
     v.liberada_por = _user()
     v.destino_unico = destino_unico
     _log_evento(
@@ -1833,8 +1834,8 @@ def nova_viagem_de_solicitacao(sid: int):
         retorno_previsto=sol.data_hora_retorno_prevista,
         origem_label=str(sol.departamento_solicitante or "Logística").strip() or "Logística",
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
     )
     db.session.add(viagem)
     db.session.flush()
@@ -1888,8 +1889,8 @@ def nova_viagem_avulsa_de_solicitacao(sid: int):
         origem_label=str(sol.departamento_solicitante or "Logística").strip() or "Logística",
         observacao=str(sol.observacoes_solicitante or "").strip() or "Viagem avulsa criada a partir de solicitação.",
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
         avulsa=True,
         funcionario_responsavel=(str(sol.solicitante or "").strip() or str(sol.parceiro_nome or "").strip() or _user())[:160],
     )
@@ -1988,7 +1989,7 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
         v.liberada_por = None
         liberacao_revogada = True
 
-    v.atualizado_em = datetime.now()
+    v.atualizado_em = agora_br()
     _log_evento(
         v.id,
         "PARADA_EXTRA",
@@ -2111,8 +2112,8 @@ def montar_viagem_com_solicitacoes():
                 retorno_previsto=base.data_hora_retorno_prevista,
                 origem_label=str(base.departamento_solicitante or "Logística").strip() or "Logística",
                 criado_por=_user(),
-                criado_em=datetime.now(),
-                atualizado_em=datetime.now(),
+                criado_em=agora_br(),
+                atualizado_em=agora_br(),
             )
             db.session.add(viagem_alvo)
             db.session.flush()
@@ -2165,7 +2166,7 @@ def montar_viagem_com_solicitacoes():
             viagem_alvo.liberada_por = None
             liberacao_revogada = True
 
-        viagem_alvo.atualizado_em = datetime.now()
+        viagem_alvo.atualizado_em = agora_br()
         _log_evento(
             viagem_alvo.id,
             "PARADA_EXTRA",
@@ -2690,7 +2691,7 @@ def assistente_sugerir_motorista():
         return jsonify({"sucesso": False, "msg": "Informe a cidade."}), 400
 
     # 1. Motoristas com histórico recente (últimas 30 dias) nesta cidade
-    dias_atras = datetime.now() - timedelta(days=30)
+    dias_atras = agora_br() - timedelta(days=30)
     historico = (
         db.session.query(Viagem.motorista_id, func.count(Viagem.id).label("qtd"))
         .filter(Viagem.status == "Concluida")
@@ -2794,7 +2795,7 @@ def assistente_criar_viagem():
     if not motorista:
         return jsonify({"sucesso": False, "msg": "Motorista não encontrado."}), 404
 
-    saida_prevista = saida_prevista or (sols[0].data_hora_saida_prevista if sols else None) or datetime.now()
+    saida_prevista = saida_prevista or (sols[0].data_hora_saida_prevista if sols else None) or agora_br()
     retorno_previsto = retorno_previsto or (sols[0].data_hora_retorno_prevista if sols else None) or (saida_prevista + timedelta(hours=8))
 
     viagem = Viagem(
@@ -2809,8 +2810,8 @@ def assistente_criar_viagem():
         retorno_previsto=retorno_previsto,
         origem_label="Assistente de Viagem",
         criado_por=_user(),
-        criado_em=datetime.now(),
-        atualizado_em=datetime.now(),
+        criado_em=agora_br(),
+        atualizado_em=agora_br(),
     )
     db.session.add(viagem)
     db.session.flush()
@@ -2841,7 +2842,7 @@ def assistente_criar_viagem():
         checklist = _checklist_liberacao(viagem, paradas_regs)
         if checklist["ok"]:
             viagem.liberada = True
-            viagem.liberada_em = datetime.now()
+            viagem.liberada_em = agora_br()
             viagem.liberada_por = _user()
             _log_evento(
                 viagem.id,
@@ -2941,7 +2942,7 @@ def motorista_iniciar_publico(vid: int, token: str):
     if v.status == "Planejada":
         if not v.liberada:
             return jsonify({"sucesso": False, "msg": "A viagem ainda nao foi liberada pela logistica."}), 403
-        v.saida_real = datetime.now()
+        v.saida_real = agora_br()
         v.status = "EmAndamento"
         v.iniciado_por = v.motorista_nome or "motorista"
         _sync_solicitacoes_da_viagem(v, "EmRota")
@@ -2958,7 +2959,7 @@ def motorista_iniciar_publico(vid: int, token: str):
                 longitude=lng,
                 precisao_m=_parse_float(data.get("precisao_m")),
                 origem="motorista_app",
-                registrado_em=datetime.now(),
+                registrado_em=agora_br(),
             ))
         _log_evento(
             v.id,
@@ -3011,7 +3012,7 @@ def motorista_concluir_publico(vid: int, token: str):
     data = request.get_json(silent=True) or {}
     km_fin = _parse_int(data.get("km_final"))
     v.km_final = km_fin
-    v.retorno_real = datetime.now()
+    v.retorno_real = agora_br()
     v.status = "Concluida"
     v.concluido_por = v.motorista_nome or "motorista"
     _sync_solicitacoes_da_viagem(v, "Concluida")
@@ -3039,7 +3040,7 @@ def motorista_concluir_publico(vid: int, token: str):
     if lat is not None and lng is not None:
         db.session.add(ViagemPosicao(
             viagem_id=v.id, latitude=lat, longitude=lng,
-            origem="motorista_app", registrado_em=datetime.now(),
+            origem="motorista_app", registrado_em=agora_br(),
         ))
     _log_evento(v.id, "FIM", "Viagem concluida pelo motorista",
                 descricao=f"KM final: {v.km_final or '—'} · percorrido: {v.km_percorrido or 0:.1f} km",
@@ -3120,7 +3121,7 @@ def motorista_chegar_parada(vid: int, token: str, pid: int):
     if p.status == "Concluida":
         return jsonify({"sucesso": True, "msg": "Parada já concluída."})
     data = request.get_json(silent=True) or {}
-    p.chegada_real = datetime.now()
+    p.chegada_real = agora_br()
     p.status = "EmAndamento"
     _log_evento(
         vid,
@@ -3163,7 +3164,7 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
     # (não se aplica quando o resultado é recusa/ausência/não realizada).
     if p.tipo == "ENTREGA" and not nao_realizada and not foto and not p.foto_paths:
         return jsonify({"sucesso": False, "msg": "Anexe a foto do canhoto para concluir a entrega."}), 400
-    p.saida_real = datetime.now()
+    p.saida_real = agora_br()
     if not p.chegada_real:
         p.chegada_real = p.saida_real
     if obs:

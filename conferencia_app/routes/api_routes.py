@@ -1,4 +1,5 @@
 from flask import Blueprint
+from ..tempo import agora_br
 api_bp = Blueprint("api", __name__)
 
 from datetime import datetime
@@ -148,7 +149,7 @@ def alterar_modo_manutencao_admin():
 
 
 def _aviso_atualizacao_ativo():
-    agora = datetime.now()
+    agora = agora_br()
     return (
         AvisoAtualizacao.query
         .filter(AvisoAtualizacao.ativo.is_(True))
@@ -206,7 +207,7 @@ def salvar_aviso_atualizacao_admin():
     aviso.ativo = ativo
     aviso.exibir_ate = exibir_ate
     aviso.atualizado_por = session.get("username")
-    aviso.atualizado_em = datetime.now()
+    aviso.atualizado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(aviso)})
 from ..services.consyste_service import listar_nfes_consyste_por_caixa
@@ -322,7 +323,7 @@ def api_integracao_expedicao_coletas():
         limite = 200
     limite = max(1, min(limite, 1000))
 
-    corte = datetime.now() - timedelta(days=60)
+    corte = agora_br() - timedelta(days=60)
     query = ExpedicaoConferenciaSimples.query
     query = query.filter(ExpedicaoConferenciaSimples.expedido_at.isnot(None))
     query = query.filter(ExpedicaoConferenciaSimples.expedido_at >= corte)
@@ -531,7 +532,7 @@ def _release_lock(numero_nota: str) -> None:
 
 
 def _acquire_lock(numero_nota: str, usuario: str):
-    now = datetime.now()
+    now = agora_br()
     lock_minutes = current_app.config.get("LOCK_TIMEOUT_MINUTES", 25)
     heartbeat_timeout = current_app.config.get("LOCK_HEARTBEAT_SECONDS", 120)
     lock = ConferenciaLock.query.filter_by(numero_nota=str(numero_nota)).first()
@@ -828,7 +829,7 @@ def _etapa_atual_por_itens(itens):
 
 
 def _compute_pending_priority(numero_nota, fornecedor):
-    now = datetime.now()
+    now = agora_br()
     itens = _filter_itens_para_conferencia(ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente").all())
     if not itens:
         return None
@@ -1811,11 +1812,11 @@ def _registrar_auditoria_usuario(alvo_username: str, acao: str, detalhes: dict |
 
 def _gerar_convite_usuario(user: Usuario, horas_validade: int = 24) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
-    expira_em = datetime.now() + timedelta(hours=max(1, int(horas_validade)))
+    expira_em = agora_br() + timedelta(hours=max(1, int(horas_validade)))
     user.convite_token_hash = _hash_invite_token(token)
     user.convite_expires_at = expira_em
-    user.convite_enviado_em = datetime.now()
-    user.atualizado_em = datetime.now()
+    user.convite_enviado_em = agora_br()
+    user.atualizado_em = agora_br()
     user.atualizado_por = session.get("username")
     return token, expira_em
 
@@ -1841,7 +1842,7 @@ def _enviar_convite(user: Usuario, token: str, expira_em: datetime) -> bool:
 
 
 def _fetch_usuarios_overview() -> tuple[list[dict], dict]:
-    now = datetime.now()
+    now = agora_br()
     limite_inativo = now - timedelta(days=30)
 
     rows = (
@@ -1926,9 +1927,9 @@ def registrar():
             password=None,
             role=role,
             ativo=ativo,
-            criado_em=datetime.now(),
+            criado_em=agora_br(),
             criado_por=session.get("username"),
-            atualizado_em=datetime.now(),
+            atualizado_em=agora_br(),
             atualizado_por=session.get("username"),
         )
         token, expira_em = _gerar_convite_usuario(novo, horas_validade=24)
@@ -2094,20 +2095,20 @@ def admin_usuarios_acoes_lote():
 
         if action == "ativar":
             user.ativo = True
-            user.atualizado_em = datetime.now()
+            user.atualizado_em = agora_br()
             user.atualizado_por = session.get("username")
             _registrar_auditoria_usuario(user.username, "ATIVAR_USUARIO", {})
             alterados += 1
         elif action == "inativar":
             user.ativo = False
-            user.atualizado_em = datetime.now()
+            user.atualizado_em = agora_br()
             user.atualizado_por = session.get("username")
             ActiveSession.query.filter_by(username=user.username, is_active=True).update({"is_active": False})  # noqa: E712
             _registrar_auditoria_usuario(user.username, "INATIVAR_USUARIO", {})
             alterados += 1
         elif action == "forcar_troca_senha":
             user.forcar_troca_senha = True
-            user.atualizado_em = datetime.now()
+            user.atualizado_em = agora_br()
             user.atualizado_por = session.get("username")
             _registrar_auditoria_usuario(user.username, "FORCAR_TROCA_SENHA", {})
             alterados += 1
@@ -2149,11 +2150,11 @@ def admin_resetar_senha(username):
     if policy_error:
         return jsonify({"sucesso": False, "msg": policy_error}), 400
     user.password = generate_password_hash(nova_senha)
-    user.senha_atualizada_em = datetime.now()
+    user.senha_atualizada_em = agora_br()
     user.forcar_troca_senha = False
     user.convite_token_hash = None
     user.convite_expires_at = None
-    user.atualizado_em = datetime.now()
+    user.atualizado_em = agora_br()
     user.atualizado_por = session.get("username")
     _registrar_auditoria_usuario(username, "RESETAR_SENHA", {})
     db.session.commit()
@@ -2257,7 +2258,7 @@ def perfil_atualizar_senha():
         return jsonify({"sucesso": False, "msg": "A nova senha deve ser diferente da atual."}), 400
 
     user.password = generate_password_hash(nova_senha)
-    user.senha_atualizada_em = datetime.now()
+    user.senha_atualizada_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "msg": "Senha alterada com sucesso."})
 
@@ -2305,7 +2306,7 @@ _ETAPA_STATUS_MAP = {
 @permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 def documento_entrada_kpis_v2():
     """KPIs reais da página unificada de Documento de Entrada (4 estágios)."""
-    hoje = datetime.now().date()
+    hoje = agora_br().date()
 
     status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
     decisoes_recusadas_variantes = ("xml recusado", "recusado")
@@ -2409,7 +2410,7 @@ def documento_entrada_lista():
     )
 
     if etapa == "importados_hoje":
-        hoje = datetime.now().date()
+        hoje = agora_br().date()
         base_query = base_query.filter(func.date(ItemNota.data_importacao) == hoje)
 
     if busca:
@@ -2730,7 +2731,7 @@ def salvar_permissoes_role(role):
             db.session.add(row)
         row.allow = bool(allow)
         row.updated_by = session.get("username")
-        row.updated_at = datetime.now()
+        row.updated_at = agora_br()
 
     db.session.commit()
     return jsonify({"sucesso": True, "atualizadas": len(permissoes)})
@@ -2780,7 +2781,7 @@ def salvar_permissoes_usuario(username):
             db.session.add(row)
         row.allow = bool(allow)
         row.updated_by = session.get("username")
-        row.updated_at = datetime.now()
+        row.updated_at = agora_br()
 
     _registrar_auditoria_usuario(username, "SALVAR_PERMISSOES_USUARIO", {"total": len(permissoes)})
     db.session.commit()
@@ -3109,11 +3110,11 @@ def consyste_list():
 def _gerar_campos_boleto(numero_nota: str, valor: float):
     numero_digits = _only_digits(numero_nota) or "0"
     valor_centavos = int(round(max(float(valor or 0.0), 0.0) * 100))
-    base = f"{numero_digits}|{valor_centavos}|{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    base = f"{numero_digits}|{valor_centavos}|{agora_br().strftime('%Y%m%d%H%M%S')}"
     hash_digits = str(int(hashlib.sha1(base.encode("utf-8")).hexdigest(), 16))
 
     nosso_numero = (
-        f"{datetime.now().strftime('%y%m%d')}"
+        f"{agora_br().strftime('%y%m%d')}"
         f"{numero_digits.zfill(10)[-10:]}"
         f"{hash_digits[-4:]}"
     )
@@ -3308,7 +3309,7 @@ def analisar_nota_xml_auditor():
     remessa = bool(payload.get("remessa", False))
     sem_conferencia_logistica = bool(payload.get("sem_conferencia_logistica", False))
     usuario = session.get("username", "sistema")
-    agora = datetime.now()
+    agora = agora_br()
 
     diagnostico_resumo = (
         "Diagnóstico fiscal: inconsistências encontradas. Revisar container de pendências antes da decisão."
@@ -3369,7 +3370,7 @@ def registrar_decisao_xml_auditor():
 
     decisao = "XML Aprovado" if autorizado else "XML Recusado"
     usuario = session.get("username", "sistema")
-    agora = datetime.now()
+    agora = agora_br()
     for item in itens:
         item.auditor_decisao = decisao
         item.auditor_justificativa = justificativa[:500] if justificativa else None
@@ -4272,7 +4273,7 @@ def liberar_nota_via_xml_auditor():
             return jsonify({"sucesso": False, "msg": f"Não foi possível sincronizar código interno da OC: {exc}"}), 409
 
     if sem_conferencia_logistica:
-        now = datetime.now()
+        now = agora_br()
         ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
         if ids_alvo:
             ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update(
@@ -4365,7 +4366,7 @@ def divergencia_pedido_webhook_decisao():
 
     registro.status = "Aprovado" if decisao == "aprovado" else "Rejeitado"
     registro.respondido_por = aprovador_email
-    registro.respondido_em = datetime.now()
+    registro.respondido_em = agora_br()
     registro.motivo_resposta = motivo or None
     db.session.commit()
 
@@ -4491,7 +4492,7 @@ def obter_relatorio_expedicao_conferencia():
                 report_file_path=parsed.get("file_path", ""),
                 status="Aberta",
                 created_by=session.get("username", "desconhecido"),
-                updated_at=datetime.now(),
+                updated_at=agora_br(),
             )
             db.session.add(conferencia)
             db.session.flush()
@@ -4705,7 +4706,7 @@ def validar_expedicao_conferencia():
         elif conferencia.status != "Fechada":
             conferencia.status = "Aberta"
 
-        conferencia.updated_at = datetime.now()
+        conferencia.updated_at = agora_br()
         db.session.commit()
         if not is_admin:
             for rec in result.get("ok", []):
@@ -4736,7 +4737,7 @@ def upload_foto_expedicao():
         return jsonify({"error": "arquivo, file_name, item_id e numero_nf sao obrigatorios."}), 400
 
     extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1] or ".jpg"
-    nome_final = secure_filename(f"{file_name}_{numero_nf}_{item_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
+    nome_final = secure_filename(f"{file_name}_{numero_nf}_{item_id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
 
     if using_drive():
         try:
@@ -4889,11 +4890,11 @@ def registrar_faturamento_expedicao():
             )
         )
 
-    conferencia.updated_at = datetime.now()
+    conferencia.updated_at = agora_br()
     aberto = any(max((i.qtd_html or 0) - (i.qtd_faturada or 0), 0) > 0 for i in itens_db.values())
     if not aberto:
         conferencia.status = "Fechada"
-        conferencia.closed_at = datetime.now()
+        conferencia.closed_at = agora_br()
         conferencia.closed_by = session.get("username", "desconhecido")
 
     db.session.commit()
@@ -4976,7 +4977,7 @@ def registrar_decisao_expedicao_conferencia():
     else:
         conferencia.status = "Aberta"
 
-    conferencia.updated_at = datetime.now()
+    conferencia.updated_at = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "status": conferencia.status})
 
@@ -5016,7 +5017,7 @@ def solicitar_autorizacao_expedicao_conferencia():
         )
     )
     conferencia.status = "PendenteDecisao"
-    conferencia.updated_at = datetime.now()
+    conferencia.updated_at = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "status": conferencia.status})
 
@@ -5066,7 +5067,7 @@ def romaneio_expedicao():
         {
             "arquivo": conferencia.report_file_name,
             "status": conferencia.status,
-            "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "gerado_em": agora_br().strftime("%d/%m/%Y %H:%M"),
             "nfs": numeros_nf,
             "total_itens": len(linhas),
             "total_enviado": total_enviado,
@@ -5533,7 +5534,7 @@ def buscar_itens(nota):
     iniciou_conferencia = False
     for item in itens:
         if not item.inicio_conferencia:
-            item.inicio_conferencia = datetime.now()
+            item.inicio_conferencia = agora_br()
             iniciou_conferencia = True
         if not item.usuario_conferencia:
             item.usuario_conferencia = usuario_atual
@@ -5602,7 +5603,7 @@ def lock_heartbeat():
     if lock.usuario != session.get("username"):
         return jsonify({"sucesso": False, "msg": "Lock pertence a outro usuário."}), 409
 
-    now = datetime.now()
+    now = agora_br()
     lock.lock_until = now + timedelta(minutes=current_app.config.get("LOCK_TIMEOUT_MINUTES", 25))
     lock.heartbeat_at = now
     db.session.commit()
@@ -5648,7 +5649,7 @@ def gravar_checklist():
     checklist.avaria_visual = bool(data.get("avaria_visual"))
     checklist.etiqueta_ok = bool(data.get("etiqueta_ok"))
     checklist.observacao = str(data.get("observacao") or "").strip()[:500]
-    checklist.data = datetime.now()
+    checklist.data = agora_br()
 
     item_ref = ItemNota.query.filter_by(numero_nota=numero_nota).first()
     processo_log_svc.registrar_evento(
@@ -5688,7 +5689,7 @@ def upload_evidencia_divergencia():
     os.makedirs(folder, exist_ok=True)
 
     base_name = secure_filename(file.filename or "evidencia")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = agora_br().strftime("%Y%m%d_%H%M%S")
     final_name = f"{numero_nota}_{item_id}_{timestamp}_{base_name}"
     file_path = os.path.join(folder, final_name)
     file.save(file_path)
@@ -5775,7 +5776,7 @@ def validar():
         checklist.avaria_visual = bool(checklist_payload.get("avaria_visual"))
         checklist.etiqueta_ok = bool(checklist_payload.get("etiqueta_ok"))
         checklist.observacao = str(checklist_payload.get("observacao") or "").strip()[:500]
-        checklist.data = datetime.now()
+        checklist.data = agora_br()
 
     for item in itens_db:
         # Persiste a quantidade de chapas (UND) informada pelo conferente para
@@ -5996,7 +5997,7 @@ def validar():
             {
                 "status": "Concluído",
                 "usuario_conferencia": user,
-                "fim_conferencia": datetime.now(),
+                "fim_conferencia": agora_br(),
             }
         )
 
@@ -6108,7 +6109,7 @@ def concluir_sem_conferencia_logistica():
     if not itens_db:
         return jsonify({"sucesso": False, "msg": "NF sem itens pendentes para conferência."}), 404
 
-    agora = datetime.now()
+    agora = agora_br()
     for item in itens_db:
         if not item.inicio_conferencia:
             item.inicio_conferencia = agora
@@ -6315,7 +6316,7 @@ def aprovar_devolucao_recebimento():
     solicitacao.ativa = False
     solicitacao.usuario_aprovador = usuario
     solicitacao.observacao_admin = observacao_admin[:500]
-    solicitacao.data_decisao = datetime.now()
+    solicitacao.data_decisao = agora_br()
     _release_lock(solicitacao.numero_nota)
     db.session.commit()
 
@@ -6376,7 +6377,7 @@ def recusar_devolucao_recebimento():
     solicitacao.ativa = False
     solicitacao.usuario_aprovador = usuario
     solicitacao.observacao_admin = observacao_admin[:500]
-    solicitacao.data_decisao = datetime.now()
+    solicitacao.data_decisao = agora_br()
     _release_lock(solicitacao.numero_nota)
     db.session.commit()
 
@@ -6655,7 +6656,7 @@ def confirmar_lancamento():
             {
                 "status": "Lançado",
                 "usuario_lancamento": session["username"],
-                "data_lancamento": datetime.now(),
+                "data_lancamento": agora_br(),
                 "numero_lancamento": codigo,
             },
             synchronize_session=False,
@@ -7500,7 +7501,7 @@ def conferencia_divergencia_produto():
     if not itens:
         return jsonify({"error": "Nenhum item pendente para esta nota."}), 404
 
-    agora = datetime.now()
+    agora = agora_br()
     for it in itens:
         it.status = "Concluído"
         it.usuario_conferencia = user
@@ -7717,7 +7718,7 @@ def sla_alertas():
 
 
 def _build_sla_dashboard_data():
-    now = datetime.now()
+    now = agora_br()
     pendente_horas = _parse_positive_int(request.args.get("pendente_horas"), default=24, min_value=1, max_value=240)
     fiscal_horas = _parse_positive_int(request.args.get("fiscal_horas"), default=12, min_value=1, max_value=240)
     pendente_alerta = max(int(pendente_horas * 0.8), 1)
@@ -7842,7 +7843,7 @@ def _status_etapa_processo(status: str) -> str:
 def processo_recebimento_painel():
     dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
     limite_fila = _parse_positive_int(request.args.get("limite_fila"), default=30, min_value=5, max_value=100)
-    agora = datetime.now()
+    agora = agora_br()
     corte = agora - timedelta(days=dias)
 
     rows = (
@@ -7993,7 +7994,7 @@ def documento_entrada_kpis():
         dias = 30
     dias = max(1, min(dias, 365))
 
-    corte = datetime.now() - timedelta(days=dias)
+    corte = agora_br() - timedelta(days=dias)
 
     itens = (
         ItemNota.query.filter(
@@ -8124,7 +8125,7 @@ def upload_dashboard_consolidado():
         dias = 30
     dias = max(1, min(dias, 365))
 
-    corte = datetime.now() - timedelta(days=dias)
+    corte = agora_br() - timedelta(days=dias)
 
     itens = (
         ItemNota.query.filter(
@@ -8715,7 +8716,7 @@ def upload_foto_rascunho_expedicao():
     rascunho_id = f"{uuid.uuid4().hex}{ext}"
 
     if using_drive():
-        nome_arquivo = f"rascunho_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{rascunho_id}"
+        nome_arquivo = f"rascunho_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}_{rascunho_id}"
         try:
             stored = upload_to_drive(foto, nome_arquivo)
         except Exception as exc:
@@ -8968,7 +8969,7 @@ def criar_registro_conferencia_simples():
     for foto in fotos_files:
         if foto and foto.filename:
             ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
-            nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            nome_arquivo = f"reg{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
             if using_drive():
                 try:
                     stored = upload_to_drive(foto, nome_arquivo)
@@ -9018,7 +9019,7 @@ def criar_registro_conferencia_simples():
             rascunhos_perdidos.append(safe_id)
             continue
         ext = os.path.splitext(safe_id)[1] or ".jpg"
-        nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+        nome_arquivo = f"reg{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
         destino = os.path.join(fotos_dir, nome_arquivo)
         shutil.move(origem, destino)
         foto_db = ExpedicaoConferenciaSimplesFoto(
@@ -9048,12 +9049,12 @@ def criar_registro_conferencia_simples():
                 db.session.rollback()
                 return jsonify({"error": "A foto do cliente expirou antes de salvar. Tire a foto novamente."}), 400
             ext = os.path.splitext(safe_id)[1] or ".jpg"
-            nome_cliente_arq = f"cliente_reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            nome_cliente_arq = f"cliente_reg{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
             destino = os.path.join(fotos_dir, nome_cliente_arq)
             shutil.move(origem, destino)
             registro.foto_cliente_file_name = nome_cliente_arq
             registro.foto_cliente_file_path = destino
-        registro.foto_cliente_uploaded_at = datetime.now()
+        registro.foto_cliente_uploaded_at = agora_br()
         registro.foto_cliente_uploaded_by = session.get("username", "desconhecido")
 
     if not registro.foto_cliente_file_name and not sem_conferencia and tipo_referencia != "OrdemCompra":
@@ -9106,7 +9107,7 @@ def atualizar_status_conferencia_simples(registro_id):
     motivo = (payload.get("motivo") or "").strip()
     usuario = session.get("username") or "desconhecido"
     is_admin = session.get("role") == "Admin"
-    agora = datetime.now()
+    agora = agora_br()
 
     if status_slug == "expedido":
         if registro.status == "Expedido":
@@ -9205,7 +9206,7 @@ def decidir_estorno_conferencia_simples(estorno_id, acao):
     payload = request.get_json(silent=True) or {}
     observacao = (payload.get("observacao") or "").strip() or None
     usuario = session.get("username") or "admin"
-    agora = datetime.now()
+    agora = agora_br()
 
     estorno.admin_usuario = usuario
     estorno.admin_observacao = observacao
@@ -9303,7 +9304,7 @@ def completar_registro_conferencia_simples(registro_id):
     registro.status = "Pendente de expedição"
     registro.expedido_at = None
     registro.expedido_by = None
-    registro.updated_at = datetime.now()
+    registro.updated_at = agora_br()
 
     # Salva fotos adicionais
     fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
@@ -9319,7 +9320,7 @@ def completar_registro_conferencia_simples(registro_id):
     for foto in fotos_files:
         if foto and foto.filename:
             ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
-            nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            nome_arquivo = f"reg{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
             if using_drive():
                 try:
                     stored = upload_to_drive(foto, nome_arquivo)
@@ -9371,7 +9372,7 @@ def completar_registro_conferencia_simples(registro_id):
             rascunhos_perdidos.append(safe_id)
             continue
         ext = os.path.splitext(safe_id)[1] or ".jpg"
-        nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+        nome_arquivo = f"reg{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
         destino = os.path.join(fotos_dir, nome_arquivo)
         shutil.move(origem, destino)
         foto_db = ExpedicaoConferenciaSimplesFoto(
@@ -9434,7 +9435,7 @@ def upload_canhoto_conferencia_simples(registro_id):
     os.makedirs(fotos_dir, exist_ok=True)
 
     ext = os.path.splitext(secure_filename(canhoto.filename))[1] or ".jpg"
-    nome_arquivo = f"canhoto_{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    nome_arquivo = f"canhoto_{registro.id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
     if using_drive():
         try:
             stored = upload_to_drive(canhoto, nome_arquivo)
@@ -9458,12 +9459,12 @@ def upload_canhoto_conferencia_simples(registro_id):
 
     registro.canhoto_file_name = nome_arquivo
     registro.canhoto_file_path = caminho
-    registro.canhoto_uploaded_at = datetime.now()
+    registro.canhoto_uploaded_at = agora_br()
     registro.canhoto_uploaded_by = session.get("username", "desconhecido")
     registro.status = "Finalizado"
-    registro.finalizado_at = datetime.now()
+    registro.finalizado_at = agora_br()
     registro.finalizado_by = session.get("username", "desconhecido")
-    registro.updated_at = datetime.now()
+    registro.updated_at = agora_br()
     db.session.commit()
 
     return jsonify({
@@ -9626,7 +9627,7 @@ def excluir_canhoto_conferencia_simples(registro_id):
     registro.finalizado_by = None
     if registro.status == "Finalizado":
         registro.status = "Expedido"
-    registro.updated_at = datetime.now()
+    registro.updated_at = agora_br()
 
     db.session.commit()
     return jsonify({"sucesso": True})
@@ -9725,7 +9726,7 @@ def backup_db():
     if not db_path or not os.path.exists(db_path):
         return jsonify({"sucesso": False, "msg": "Banco não encontrado."}), 404
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = agora_br().strftime("%Y%m%d_%H%M%S")
     return send_file(db_path, as_attachment=True, download_name=f"backup_conferencia_{ts}.db")
 
 
@@ -9788,7 +9789,7 @@ def healthcheck():
             {
                 "status": "ok" if db_ok else "degradado",
                 "db": "ok" if db_ok else "erro",
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "time": agora_br().strftime("%Y-%m-%d %H:%M:%S"),
             }
         ),
         200 if db_ok else 503,

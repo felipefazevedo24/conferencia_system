@@ -19,6 +19,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import ItemNota
+from ..tempo import agora_br
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def _registrar_status(numero_nota: str, motivo: str) -> None:
         return
     _STATUS_CONSULTA[str(numero_nota).strip()] = {
         "motivo": motivo,
-        "verificada_em": datetime.now(),
+        "verificada_em": agora_br(),
     }
 
 
@@ -100,6 +101,15 @@ def _carregar_credenciais_arquivo() -> dict[str, Any]:
 def _resolver_config() -> dict[str, Any]:
     arquivo = _carregar_credenciais_arquivo()
     cfg = current_app.config
+
+    def bridge_value(env_name: str, file_name: str, default=""):
+        # O WSGI define o destino ativo da bridge. Um JSON legado não deve
+        # redirecionar a consulta para o túnel antigo após uma migração.
+        for value in (os.environ.get(env_name), cfg.get(env_name), arquivo.get(file_name)):
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return default
+
     return {
         "host": str(arquivo.get("host") or cfg.get("ERP_LANCAMENTO_PG_HOST") or "").strip(),
         "port": int(arquivo.get("port") or cfg.get("ERP_LANCAMENTO_PG_PORT") or 5432),
@@ -107,9 +117,9 @@ def _resolver_config() -> dict[str, Any]:
         "user": str(arquivo.get("user") or cfg.get("ERP_LANCAMENTO_PG_USER") or "").strip(),
         "password": str(arquivo.get("password") or cfg.get("ERP_LANCAMENTO_PG_PASSWORD") or ""),
         "table": str(arquivo.get("table") or cfg.get("ERP_LANCAMENTO_PG_TABLE") or "tcompras").strip(),
-        "api_url": str(arquivo.get("api_url") or cfg.get("ERP_LANCAMENTO_API_URL") or "").strip().rstrip("/"),
-        "api_token": str(arquivo.get("api_token") or cfg.get("ERP_LANCAMENTO_API_TOKEN") or ""),
-        "api_timeout": int(arquivo.get("api_timeout") or cfg.get("ERP_LANCAMENTO_API_TIMEOUT") or 30),
+        "api_url": bridge_value("ERP_LANCAMENTO_API_URL", "api_url").rstrip("/"),
+        "api_token": bridge_value("ERP_LANCAMENTO_API_TOKEN", "api_token"),
+        "api_timeout": int(bridge_value("ERP_LANCAMENTO_API_TIMEOUT", "api_timeout", 30)),
         "usuario_lancamento": str(
             arquivo.get("usuario_lancamento")
             or cfg.get("ERP_LANCAMENTO_USUARIO")
@@ -703,7 +713,7 @@ def _aplicar_campos_grv_item(item: ItemNota, row_grv: dict[str, Any], entrada: d
     _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins", "cst_s06")
     _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "vl_reais_cofins", "vl_reias_cofins", "vcofins_s11", "vcofins_t06", "v_cofins")
     item.tributos_origem = "GRV"
-    item.tributos_grv_atualizado_em = datetime.now()
+    item.tributos_grv_atualizado_em = agora_br()
 
 
 def _garantir_itens_grv(entrada: dict[str, Any]) -> int:
@@ -732,8 +742,8 @@ def _garantir_itens_grv(entrada: dict[str, Any]) -> int:
             status="Lançado",
             usuario_lancamento="GRV",
             numero_lancamento=str(entrada.get("codigo_lancamento") or entrada.get("numero_ar") or "").strip()[:80],
-            data_importacao=datetime.now(),
-            data_lancamento=_parse_dt_nf_api(entrada.get("dt_lancamento")) if isinstance(_parse_dt_nf_api(entrada.get("dt_lancamento")), datetime) else datetime.now(),
+            data_importacao=agora_br(),
+            data_lancamento=_parse_dt_nf_api(entrada.get("dt_lancamento")) if isinstance(_parse_dt_nf_api(entrada.get("dt_lancamento")), datetime) else agora_br(),
             data_emissao=_parse_dt_nf_api(entrada.get("dt_nf")) if isinstance(_parse_dt_nf_api(entrada.get("dt_nf")), datetime) else None,
         )
         _aplicar_campos_grv_item(item, row, entrada)
@@ -1010,11 +1020,11 @@ def _aplicar_lancamento_local(
         _registrar_status(numero_nota, f"Lançamento encontrado no ERP, mas não aplicado: {motivo}")
         return 0
 
-    data_lancamento = _parse_dt_nf_api(dt_lancamento_erp) if dt_lancamento_erp else datetime.now()
+    data_lancamento = _parse_dt_nf_api(dt_lancamento_erp) if dt_lancamento_erp else agora_br()
     update_values: dict[str, Any] = {
         "status": "Lançado",
         "usuario_lancamento": usuario,
-        "data_lancamento": data_lancamento if isinstance(data_lancamento, datetime) else datetime.now(),
+        "data_lancamento": data_lancamento if isinstance(data_lancamento, datetime) else agora_br(),
         "numero_lancamento": codigo,
     }
     rows = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").update(update_values)

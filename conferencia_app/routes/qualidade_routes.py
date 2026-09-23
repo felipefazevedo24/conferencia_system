@@ -24,6 +24,7 @@ from ..auth import has_permission, is_admin_session, login_required, permission_
 from ..extensions import db
 from ..models import QualidadeCertificado, QualidadeCertificadoComponente
 from ..services.qualidade_service import nota_elegivel_para_qualidade, notas_qualidade_visiveis_map
+from ..tempo import agora_br
 
 
 qualidade_bp = Blueprint("qualidade", __name__)
@@ -140,7 +141,7 @@ def _save_foto(key: str = "foto") -> str | None:
     ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
     if ext not in ALLOWED_EXTS:
         return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = agora_br().strftime("%Y%m%d_%H%M%S")
     final = f"{stamp}_{nome}"
     f.save(os.path.join(_upload_dir(), final))
     return final
@@ -368,7 +369,7 @@ def api_analisar_certificado(id):
     registro.os_referencia = os_referencia[:120] if os_referencia else ""
     registro.analista = user
     registro.status = STATUS_EMITIDO
-    registro.analisado_em = datetime.now()
+    registro.analisado_em = agora_br()
 
     db.session.commit()
     return jsonify({"sucesso": True, "msg": "Laudo emitido com sucesso.", "registro": _serialize(registro)})
@@ -425,7 +426,7 @@ def api_aprovar_laudo(id):
 
     registro.status = STATUS_APROVADO
     registro.aprovado_por = aprovador
-    registro.aprovado_em = datetime.now()
+    registro.aprovado_em = agora_br()
     db.session.commit()
     return jsonify({"sucesso": True, "msg": "Laudo aprovado.", "registro": _serialize(registro)})
 

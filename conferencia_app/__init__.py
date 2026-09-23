@@ -6,6 +6,7 @@ import sys
 import time
 import warnings
 from datetime import datetime, timedelta
+from .tempo import agora_br
 
 
 def _compute_build_info() -> str:
@@ -183,7 +184,7 @@ def create_app(test_config=None) -> Flask:
             pass
 
         if "username" in session:
-            now = datetime.now()
+            now = agora_br()
             last_activity_raw = session.get("last_activity")
             if last_activity_raw:
                 last_activity = datetime.fromisoformat(last_activity_raw)

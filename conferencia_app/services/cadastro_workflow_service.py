@@ -17,6 +17,7 @@ from ..models import (
     CadastroWorkflowSolicitacao,
     PlanoContaDominio,
 )
+from ..tempo import agora_br
 
 
 UNIDADES_MEDIDA_MATERIAL = [
@@ -479,12 +480,12 @@ def prazo_restante(solicitacao: CadastroWorkflowSolicitacao) -> dict:
     if solicitacao.departamento_atual not in {"Contabil", "Compras", "Fiscal"}:
         return {"horas": None, "vencida": False, "prazo": None}
     prazo = solicitacao.etapa_iniciada_em + timedelta(hours=get_sla_horas(solicitacao.departamento_atual))
-    restante = prazo - datetime.now()
+    restante = prazo - agora_br()
     return {"horas": round(restante.total_seconds() / 3600, 1), "vencida": restante.total_seconds() < 0, "prazo": prazo}
 
 
 def tempo_na_etapa(solicitacao: CadastroWorkflowSolicitacao) -> str:
-    delta = datetime.now() - solicitacao.etapa_iniciada_em
+    delta = agora_br() - solicitacao.etapa_iniciada_em
     dias = delta.days
     horas = delta.seconds // 3600
     if dias:
@@ -499,7 +500,7 @@ def proximo_numero() -> str:
 
 
 def registrar_evento(solicitacao, usuario, departamento, acao, comentario="", notificar=True):
-    agora = datetime.now()
+    agora = agora_br()
     solicitacao.data_ultima_movimentacao = agora
     db.session.add(
         CadastroWorkflowHistorico(
@@ -865,7 +866,7 @@ def inicializar_checklists(solicitacao):
 
 def atualizar_checklist(solicitacao, departamento, valores: dict, usuario: str):
     inicializar_checklists(solicitacao)
-    agora = datetime.now()
+    agora = agora_br()
     permitidos = {"Sim", "Não", "Não se aplica", "Nao", "Nao se aplica"}
     for chk in solicitacao.checklists:
         if chk.departamento != departamento:
@@ -882,7 +883,7 @@ def mover_etapa(solicitacao, status, etapa, departamento, responsavel=None):
     solicitacao.etapa_atual = etapa
     solicitacao.departamento_atual = departamento
     solicitacao.responsavel_atual = responsavel
-    solicitacao.etapa_iniciada_em = datetime.now()
+    solicitacao.etapa_iniciada_em = agora_br()
 
 
 CATEGORIAS_VISIVEIS = [
@@ -1047,7 +1048,7 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
             raise ValueError("Esta solicitação não está na etapa Fiscal.")
         atualizar_checklist(solicitacao, "Fiscal", form, usuario)
         mover_etapa(solicitacao, "Cadastrado", "Cadastro Concluído", "Concluido", usuario)
-        solicitacao.concluido_em = datetime.now()
+        solicitacao.concluido_em = agora_br()
         registrar_evento(solicitacao, usuario, "Fiscal", "Cadastro concluído", comentario)
     elif acao == "reprovar":
         if role not in {"Compras", "Fiscal", "Admin"}:
@@ -1060,7 +1061,7 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
         if solicitacao.status == "Cadastrado":
             raise ValueError("Solicitação concluída não pode ser cancelada.")
         mover_etapa(solicitacao, "Cancelado", "Encerrado", "Encerrado", usuario)
-        solicitacao.cancelado_em = datetime.now()
+        solicitacao.cancelado_em = agora_br()
         registrar_evento(solicitacao, usuario, "Solicitante", "Solicitação cancelada", comentario or "Cancelada pelo solicitante.")
     else:
         raise ValueError("Ação inválida.")

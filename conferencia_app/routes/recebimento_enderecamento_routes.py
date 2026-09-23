@@ -9,6 +9,7 @@ from ..extensions import db
 from ..models import (ItemNota, LocalizacaoArmazem, RecebimentoEnderecamento as Tarefa,
                       RecebimentoEnderecamentoEvento as Evento)
 from ..services import recebimento_enderecamento_service as svc
+from ..tempo import agora_br
 
 recebimento_enderecamento_bp = Blueprint("recebimento_enderecamento", __name__)
 PERMISSION = "PAGE_RECEBIMENTO_ENDERECAMENTO"
@@ -84,7 +85,7 @@ def listar():
     contadores = {s: (pendencia_real(query) if s == "Pendente" else query)
                   .filter(Tarefa.status == s).count()
                   for s in ("Pendente", "Aguardando sincronização", "Concluído")}
-    inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    inicio = agora_br().replace(hour=0, minute=0, second=0, microsecond=0)
     concluidos_hoje = query.filter(Tarefa.status == "Concluído",
         Tarefa.concluido_em >= inicio, Tarefa.concluido_em < inicio + timedelta(days=1)).count()
     pagina = max(1, request.args.get("pagina", 1, type=int))

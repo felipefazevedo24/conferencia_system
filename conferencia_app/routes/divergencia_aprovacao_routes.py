@@ -30,6 +30,7 @@ from ..models import DivergenciaPedidoAprovacao, ItemNota, Usuario
 from ..auth import has_permission, is_admin_role
 from ..services.pedidos_service import comparar_pedido_com_nf, PedidoERPIndisponivelError
 from ..services.consyste_service import download_documento_consyste
+from ..tempo import agora_br
 
 
 divergencia_aprovacao_bp = Blueprint("divergencia_aprovacao", __name__)
@@ -264,7 +265,7 @@ def decidir_aprovacao(token):
 
     registro.status = "Aprovado" if decisao == "aprovado" else "Rejeitado"
     registro.respondido_por = aprovador.get("nome") or aprovador.get("username")
-    registro.respondido_em = datetime.now()
+    registro.respondido_em = agora_br()
     registro.motivo_resposta = motivo or None
     db.session.commit()
 

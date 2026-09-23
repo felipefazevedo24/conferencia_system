@@ -21,6 +21,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 import tempfile
+from ..tempo import agora_br
 
 try:
     from PIL import Image as _PILImage
@@ -1408,7 +1409,7 @@ def gerar_danfe(xml_bytes: bytes,
             xml_for_engine = _prepare_infadic_for_display(_ensure_cobr_block(xml_bytes))
             logo_file = _resolve_logo_for_fiscal_engine(logo_path=logo_path, logo_url=logo_url)
 
-            printed_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+            printed_at = agora_br().strftime("%d/%m/%Y %H:%M")
             footer_text = f"Impresso em {printed_at} | Powered by Columbia Sync"
 
             cfg = _FiscalDanfeConfig(

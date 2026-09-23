@@ -3,6 +3,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ProcessoRecebimentoEvento
+from ..tempo import agora_br
 
 
 def registrar_evento(
@@ -29,7 +30,7 @@ def registrar_evento(
         dados_json=json.dumps(dados or {}, ensure_ascii=False, default=str),
         ip_address=str(ip_address or "").split(",", 1)[0].strip()[:64] or None,
         user_agent=str(user_agent or "").strip()[:400] or None,
-        created_at=datetime.now(),
+        created_at=agora_br(),
     )
     db.session.add(evento)
     return evento

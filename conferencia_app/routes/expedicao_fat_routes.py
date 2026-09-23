@@ -31,6 +31,7 @@ from ..services import expedicao_etiqueta_service as etiqueta_svc
 from ..services import expedicao_fat_service as svc
 from ..services import expedicao_log_service as log_svc
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
+from ..tempo import agora_br
 
 
 expedicao_fat_bp = Blueprint("expedicao_fat", __name__)
@@ -351,7 +352,7 @@ def _salvar_foto_expedicao(foto, fotos_dir, prefix, registro_id):
     armazenamento, faz fallback para salvar a foto localmente em vez de falhar.
     """
     ext = os.path.splitext(secure_filename(foto.filename or ""))[1] or ".jpg"
-    nome = f"{prefix}_reg{registro_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    nome = f"{prefix}_reg{registro_id}_{agora_br().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
     if using_drive():
         try:
             stored = upload_to_drive(foto, nome)
@@ -474,7 +475,7 @@ def upload_fotos_preexpedicao(cod_ordem_fat):
         return jsonify({"error": "Envie ao menos uma foto do material ou do cliente."}), 400
 
     usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
+    agora = agora_br()
 
     try:
         registro = _obter_ou_criar_registro_rascunho(ordem, usuario)
@@ -519,7 +520,7 @@ def excluir_ordem_conf_cega(cod_ordem_fat):
         return jsonify({"error": "Informe o motivo da exclusão."}), 400
 
     usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
+    agora = agora_br()
     ordem.excluido = True
     ordem.excluido_at = agora
     ordem.excluido_by = usuario
@@ -695,7 +696,7 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
             "itens": resultado_itens,
         }), 200
 
-    agora = datetime.now()
+    agora = agora_br()
     ordem.divergente = ordem_divergente
     ordem.operacao_tipo = operacao_tipo
     ordem.peso_liquido = peso_liquido
@@ -864,7 +865,7 @@ def salvar_parcial_conf_cega(cod_ordem_fat):
     if especie_volumes:
         ordem.especie_volumes = especie_volumes
 
-    ordem.updated_at = datetime.now()
+    ordem.updated_at = agora_br()
     db.session.commit()
 
     return jsonify({
@@ -892,7 +893,7 @@ def finalizar_sem_conferencia_fat(cod_ordem_fat):
     payload = request.get_json(silent=True) or {}
     motivo = str(payload.get("motivo") or "").strip()
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
     ordem.status = svc.STATUS_FINALIZADO_SEM_CONF
@@ -945,7 +946,7 @@ def seguir_sem_contagem_fat(cod_ordem_fat):
     payload = request.get_json(silent=True) or {}
     motivo = str(payload.get("motivo") or "").strip()
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
     ordem.conferente = usuario
@@ -1042,7 +1043,7 @@ def expedir_sem_conferencia_fat(cod_ordem_fat):
     # pontos, entao o import no topo fecharia um ciclo.
     from .expedicao_romaneio_routes import incluir_nf_no_romaneio, proximo_numero_romaneio
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
 
@@ -1146,7 +1147,7 @@ def estornar_conferencia_fat(cod_ordem_fat):
     payload = request.get_json(silent=True) or {}
     motivo = str(payload.get("motivo") or "").strip()
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
 
@@ -1238,7 +1239,7 @@ def corrigir_nf_ordem_fat(cod_ordem_fat):
         }), 400
 
     numero_anterior = ordem.numero_nf
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
 
     ordem.numero_nf = str(nota.get("numero") or numero_novo).strip()
@@ -1299,7 +1300,7 @@ def informar_nf_ordem_fat(cod_ordem_fat):
             "error": f"NF {numero_nf} não encontrada ou não autorizada no ERP. Confira o número antes de informar."
         }), 400
 
-    agora = datetime.now()
+    agora = agora_br()
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
 

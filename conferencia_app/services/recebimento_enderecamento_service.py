@@ -13,6 +13,7 @@ from ..models import (LocalizacaoArmazem, RecebimentoEnderecamento as Tarefa,
                       RecebimentoEnderecamentoEvento as Evento,
                       RecebimentoEnderecamentoTrava as Trava)
 from .erp_estoque_service import buscar_localizacao_produto_grv, atualizar_localizacao_estoque
+from ..tempo import agora_br
 
 
 def enderecos(valor):
@@ -190,7 +191,7 @@ def adquirir_trava(tarefa):
         except IntegrityError:
             db.session.rollback()
     token = str(uuid4())
-    agora = datetime.now()
+    agora = agora_br()
     acquired = Trava.query.filter(Trava.sku == tarefa.sku, or_(
         Trava.expira_em.is_(None), Trava.expira_em < agora)).update({
             "token": token, "expira_em": agora + timedelta(minutes=10)}, synchronize_session=False)
@@ -232,7 +233,7 @@ def sincronizar(tarefa):
     if tarefa.status != "Aguardando sincronização":
         raise ValueError("Confirme as leituras antes de sincronizar.")
     token = adquirir_trava(tarefa)
-    agora = datetime.now()
+    agora = agora_br()
     try:
         db.session.refresh(tarefa)
         if tarefa.status == "Concluído":
@@ -261,7 +262,7 @@ def sincronizar(tarefa):
         from .enderecamento_service import creditar_recebimento
         creditar_recebimento(tarefa, tarefa.enderecos_antes or [])
         tarefa.status = "Concluído"
-        tarefa.concluido_em = datetime.now()
+        tarefa.concluido_em = agora_br()
         tarefa.erro = None
         evento(tarefa, "Sincronizado", {"enviado": enviados})
     except Exception as exc:
