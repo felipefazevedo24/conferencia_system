@@ -8,6 +8,12 @@
     .invc-hint.warn { color: var(--eui-danger-soft-text); }
     .invc-req { color: var(--eui-danger-soft-text); }
     .invc-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    /* Varios lotes na mesma contagem: linhas extras abaixo do 1o lote. */
+    .invc-lotes { display: grid; gap: 8px; }
+    .invc-lote-row { display: grid; grid-template-columns: 28px 1fr 1fr auto; gap: 8px; align-items: center; }
+    .invc-lote-num { font-size: 12px; font-weight: 700; color: var(--eui-muted); text-align: center; }
+    .invc-lotes-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .invc-lotes-total { font-size: 13px; font-weight: 700; color: var(--eui-text); }
     .inv-status { display: none; margin-top: 12px; padding: 10px 12px; border-radius: var(--eui-radius-sm); font-size: 13px; font-weight: 600; }
     .inv-status.show { display: block; }
     .inv-status.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
@@ -60,13 +66,20 @@
                 <div id="inv-unidade-hint" class="invc-hint"></div>
             </div>
             <div class="invc-field">
-                <label for="inv-quantidade">Quantidade</label>
+                <label for="inv-quantidade" id="inv-quantidade-label">Quantidade</label>
                 <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
             </div>
             <div class="invc-field">
-                <label for="inv-lote">Lote <span id="inv-lote-req" class="invc-req" hidden>*</span></label>
+                <label for="inv-lote"><span id="inv-lote-label">Lote</span> <span id="inv-lote-req" class="invc-req" hidden>*</span></label>
                 <input id="inv-lote" class="eui-input" autocomplete="off" placeholder="Informe o lote (opcional)" />
                 <div id="inv-lote-hint" class="invc-hint"></div>
+            </div>
+            <div class="invc-field" style="grid-column: 1 / -1;">
+                <div id="inv-lotes-extra" class="invc-lotes"></div>
+                <div class="invc-lotes-foot">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="inv-add-lote"><i class="fas fa-plus"></i> Adicionar lote</button>
+                    <span id="inv-lotes-total" class="invc-lotes-total"></span>
+                </div>
             </div>
             <div class="invc-field" style="grid-column: 1 / -1;">
                 <label for="inv-obs">Observações</label>
@@ -186,9 +199,53 @@
         document.getElementById('inv-quantidade').value = '';
         document.getElementById('inv-lote').value = '';
         document.getElementById('inv-obs').value = '';
+        document.getElementById('inv-lotes-extra').innerHTML = '';
+        atualizarLotes();
         consultaSeq++;
         aplicarCadastro(null);
         document.getElementById('inv-local').focus();
+    }
+
+    // ── Varios lotes na mesma contagem ─────────────────────────────────
+    // Os campos Lote/Quantidade de cima sao o 1o lote; cada "Adicionar lote"
+    // cria mais uma linha. Com mais de um lote, salva a lista e o servidor
+    // grava a soma como quantidade da contagem (a validacao contra o GRV e'
+    // so' pelo total).
+    function linhasExtras() {
+        return Array.from(document.querySelectorAll('#inv-lotes-extra .invc-lote-row'));
+    }
+
+    function numero(txt) {
+        const n = Number(String(txt || '').trim().replace(',', '.'));
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function atualizarLotes() {
+        const extras = linhasExtras();
+        extras.forEach((row, i) => { row.querySelector('.invc-lote-num').textContent = i + 2; });
+        const multi = extras.length > 0;
+        document.getElementById('inv-quantidade-label').textContent = multi ? 'Quantidade (1º lote)' : 'Quantidade';
+        document.getElementById('inv-lote-label').textContent = multi ? 'Lote (1º)' : 'Lote';
+        const totalEl = document.getElementById('inv-lotes-total');
+        if (!multi) { totalEl.textContent = ''; return; }
+        let total = numero(document.getElementById('inv-quantidade').value);
+        extras.forEach((row) => { total += numero(row.querySelector('[data-lote-qtd]').value); });
+        const un = (unidadeSel.value || '').trim();
+        totalEl.textContent = `Total contado (${extras.length + 1} lotes): ${total.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${un}`;
+    }
+
+    function adicionarLote() {
+        const box = document.getElementById('inv-lotes-extra');
+        box.insertAdjacentHTML('beforeend', `
+            <div class="invc-lote-row">
+                <span class="invc-lote-num"></span>
+                <input class="eui-input" data-lote-nome autocomplete="off" placeholder="Lote" aria-label="Lote">
+                <input class="eui-input" data-lote-qtd type="number" min="0" step="0.001" inputmode="decimal" placeholder="Quantidade" aria-label="Quantidade do lote">
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-remover-lote title="Remover lote" aria-label="Remover lote"><i class="fas fa-trash"></i></button>
+            </div>`);
+        atualizarLotes();
+        const rows = linhasExtras();
+        rows[rows.length - 1].querySelector('[data-lote-nome]').focus();
     }
 
     async function carregarUnidades() {
@@ -210,6 +267,7 @@
         const observacao = (document.getElementById('inv-obs').value || '').trim();
 
         if (!localCodigo) { showStatus('Informe o Local.', 'err'); return; }
+        const extras = linhasExtras();
         if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
         if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }
         if (cadastroAtual && cadastroAtual.controla_lote && !lote) {
@@ -222,6 +280,23 @@
         if (!Number.isFinite(quantidade) || quantidade <= 0) {
             showStatus('Quantidade invalida.', 'err');
             return;
+        }
+
+        let lotes = null;
+        if (extras.length) {
+            if (!lote) {
+                showStatus('Informe o 1º lote (campo Lote).', 'err');
+                document.getElementById('inv-lote').focus();
+                return;
+            }
+            lotes = [{ lote, quantidade }];
+            for (const [i, row] of extras.entries()) {
+                const nome = (row.querySelector('[data-lote-nome]').value || '').trim();
+                const qtd = numero(row.querySelector('[data-lote-qtd]').value);
+                if (!nome) { showStatus(`Informe o lote da linha ${i + 2}.`, 'err'); row.querySelector('[data-lote-nome]').focus(); return; }
+                if (qtd <= 0) { showStatus(`Quantidade do lote ${nome} deve ser maior que zero.`, 'err'); row.querySelector('[data-lote-qtd]').focus(); return; }
+                lotes.push({ lote: nome, quantidade: qtd });
+            }
         }
 
         const btnSalvar = document.getElementById('inv-salvar');
@@ -237,6 +312,7 @@
                     quantidade,
                     lote,
                     observacao,
+                    ...(lotes ? { lotes } : {}),
                 }),
             });
             showStatus('Registro salvo com sucesso.', 'ok');
@@ -341,6 +417,15 @@
     });
 
     document.getElementById('inv-salvar').addEventListener('click', salvarRegistro);
+    document.getElementById('inv-add-lote').addEventListener('click', adicionarLote);
+    document.getElementById('inv-lotes-extra').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-remover-lote]');
+        if (!btn) return;
+        btn.closest('.invc-lote-row').remove();
+        atualizarLotes();
+    });
+    document.getElementById('inv-lotes-extra').addEventListener('input', atualizarLotes);
+    document.getElementById('inv-quantidade').addEventListener('input', atualizarLotes);
     document.getElementById('inv-limpar').addEventListener('click', () => {
         limparFormulario();
         showStatus('Formulario limpo.', 'info');

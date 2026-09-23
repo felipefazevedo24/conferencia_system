@@ -1814,6 +1814,31 @@ class LogisticaInventarioInicial(db.Model):
     # divergencia na tela de Ajuste de Estoque.
     custo_medio_no_momento = db.Column(db.Float)
 
+    # Item controlado por lote contado em mais de um lote na mesma contagem:
+    # o detalhe fica aqui e `quantidade` e' a SOMA dos lotes (e' o total que
+    # vai contra o GRV - a validacao e' so' pelo total). `lote` guarda os
+    # nomes juntos, pras telas/exportacao que ja' mostram esse campo.
+    lotes = db.relationship(
+        "LogisticaInventarioLote",
+        backref="contagem",
+        cascade="all, delete-orphan",
+        order_by="LogisticaInventarioLote.id",
+    )
+
+
+class LogisticaInventarioLote(db.Model):
+    """Uma linha de lote de uma contagem do inventario (ver
+    LogisticaInventarioInicial.lotes)."""
+
+    __tablename__ = "logistica_inventario_lote"
+
+    id = db.Column(db.Integer, primary_key=True)
+    contagem_id = db.Column(
+        db.Integer, db.ForeignKey("logistica_inventario_inicial.id"), nullable=False, index=True
+    )
+    lote = db.Column(db.String(120), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False)
+
 
 class LogisticaInventarioAjuste(db.Model):
     """Fluxo de ajuste de estoque pra itens divergentes do Inventario
