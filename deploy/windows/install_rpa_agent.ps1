@@ -21,7 +21,15 @@ $venv = @(".venv312", ".venv") | Where-Object {
 } | Select-Object -First 1
 if (-not $venv) { throw "pythonw.exe nao encontrado em .venv312 ou .venv." }
 $pythonw = Join-Path $ProjectRoot "$venv\Scripts\pythonw.exe"
+$python = Join-Path $ProjectRoot "$venv\Scripts\python.exe"
+$agentRequirements = Join-Path $ProjectRoot "requirements-rpa-agent.txt"
 if (-not (Test-Path -LiteralPath $AgentScript)) { throw "rpa_agent.py nao encontrado." }
+if (-not (Test-Path -LiteralPath $agentRequirements)) { throw "requirements-rpa-agent.txt nao encontrado." }
+& $python -c "import pywinauto, win32clipboard" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    & $python -m pip install -r $agentRequirements
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao instalar dependencias de UI Automation do agente." }
+}
 New-Item -ItemType Directory -Path (Join-Path $ProjectRoot "logs") -Force | Out-Null
 
 $token = [Environment]::GetEnvironmentVariable($tokenName, "User")
