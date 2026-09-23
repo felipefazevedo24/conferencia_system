@@ -262,6 +262,20 @@ def executar_agrupamento(data: dict[str, Any], usuario: str) -> dict[str, Any]:
                     409,
                     "Abra no CPS a tela Produção > Serviços > Apontamento Agrupado (M83) e tente novamente.",
                 )
+            m83_window = next(
+                window
+                for window in windows
+                if window.get("visivel")
+                and window.get("tela_agrupamento")
+                and int(window.get("largura") or 0) >= 600
+                and int(window.get("altura") or 0) >= 400
+            )
+            current_app.logger.warning(
+                "Janela M83 localizada | id=%s | hwnd=%s | titulo=%s",
+                execution_id,
+                m83_window.get("hwnd"),
+                m83_window.get("titulo"),
+            )
             execution = automator.executar_apontamento_agrupamento(payload, dry_run=False)
         except RpaApiError:
             raise

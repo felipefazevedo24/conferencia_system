@@ -4,6 +4,7 @@ import pytest
 from flask import Flask
 
 from conferencia_app.services import rpa_grv_service as service
+from conferencia_app.compras import config as compras_config
 
 
 ROWS = [
@@ -122,3 +123,66 @@ def test_execucao_exige_confirmacao_descricao_e_desktop(app, monkeypatch):
         service.executar_agrupamento({}, "operador")
     with app.app_context(), pytest.raises(service.RpaApiError, match="descrição do agrupamento"):
         service.executar_agrupamento({"confirmed": True}, "operador")
+
+
+def test_flag_desabilitada_aparece_no_status_e_impede_execucao(app, monkeypatch):
+    app.config["GRV_WEB_RPA_ENABLED"] = False
+    monkeypatch.setattr(service, "obter_desktop_windows_atual", lambda: "Default")
+
+    with app.app_context():
+        current_status = service.status("operador", True)
+        with pytest.raises(service.RpaApiError, match="desativada") as execution_error:
+            service.executar_agrupamento(
+                {"confirmed": True, "description": "Teste"},
+                "operador",
+            )
+
+    assert current_status["rpa_habilitado"] is False
+    assert current_status["rpa_disponivel"] is False
+    assert execution_error.value.status_code == 403
+
+
+def test_launcher_windows_habilita_rpa_antes_de_subir_aplicacao():
+    project_root = service.Path(__file__).resolve().parents[1]
+    root_launcher = (project_root / "iniciar_sync_rpa.cmd").read_text(encoding="utf-8")
+    windows_launcher = (project_root / "deploy" / "windows" / "start.bat").read_text(
+        encoding="utf-8"
+    )
+
+    assert "call deploy\\windows\\start.bat" in root_launcher
+    assert 'set "GRV_WEB_RPA_ENABLED=1"' in windows_launcher
+    assert 'set "SYNC_VENV=.venv312"' in windows_launcher
+    assert 'python -c "import pandas; import sqlalchemy"' in windows_launcher
+    assert windows_launcher.index("GRV_WEB_RPA_ENABLED=1") < windows_launcher.index(
+        "python -m waitress"
+    )
+
+
+def test_conexao_reaproveita_variaveis_do_rpa_original(monkeypatch):
+    aliases = {
+        "GRV_DB_HOST": "grv.local",
+        "GRV_DB_PORT": "5433",
+        "GRV_DB_NAME": "CPS_TESTE",
+        "GRV_DB_USER": "leitura",
+        "GRV_DB_PASSWORD": "segredo-de-teste",
+    }
+    monkeypatch.setattr(
+        compras_config,
+        "_user_environment_value",
+        lambda name: aliases.get(name),
+    )
+    for prefix in ("COMPRAS_PG_", "ERP_LANCAMENTO_PG_"):
+        for suffix in ("HOST", "PORT", "DATABASE", "DB", "USER", "PASSWORD"):
+            monkeypatch.delenv(prefix + suffix, raising=False)
+    for name in aliases:
+        monkeypatch.delenv(name, raising=False)
+    compras_config.clear_settings_cache()
+
+    settings = compras_config.get_settings()
+
+    assert settings.PG_HOST == "grv.local"
+    assert settings.PG_PORT == 5433
+    assert settings.PG_DATABASE == "CPS_TESTE"
+    assert settings.PG_USER == "leitura"
+    assert settings.PG_PASSWORD == "segredo-de-teste"
+    compras_config.clear_settings_cache()

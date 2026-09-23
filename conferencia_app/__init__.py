@@ -2,6 +2,7 @@ from flask import Flask
 from flask import g, jsonify, render_template, request, session
 import os
 import subprocess
+import sys
 import time
 import warnings
 from datetime import datetime, timedelta
@@ -320,5 +321,24 @@ def create_app(test_config=None) -> Flask:
             iniciar_enderecamento_retry(app)
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler Enderecamento Retry")
+
+    if not app.config.get("TESTING"):
+        from .services import rpa_grv_service
+
+        with app.app_context():
+            rpa_status = rpa_grv_service.status(
+                os.environ.get("USERNAME") or os.environ.get("USER") or "usuario_local",
+                True,
+            )
+        app.logger.warning(
+            "RPA GRV | habilitado=%s | desktop_interativo=%s | executor_disponivel=%s | launcher=%s | python=%s | usuario=%s | pid=%s",
+            "SIM" if rpa_status["rpa_habilitado"] else "NAO",
+            "SIM" if rpa_status["desktop_interativo"] else "NAO",
+            "SIM" if rpa_status["rpa_disponivel"] else "NAO",
+            os.environ.get("SYNC_LAUNCHER") or "entrypoint sem identificação",
+            sys.executable,
+            rpa_status["usuario"],
+            os.getpid(),
+        )
 
     return app

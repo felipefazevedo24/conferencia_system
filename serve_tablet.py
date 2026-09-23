@@ -1,4 +1,11 @@
 import os
+import sys
+
+
+if __name__ == "__main__" and "--habilitar-rpa" in sys.argv:
+    os.environ["GRV_WEB_RPA_ENABLED"] = "1"
+    os.environ.setdefault("SYNC_LAUNCHER", "serve_tablet.py --habilitar-rpa")
+    sys.argv.remove("--habilitar-rpa")
 
 from waitress import serve
 

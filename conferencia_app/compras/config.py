@@ -7,12 +7,26 @@ from pathlib import Path
 from flask import current_app, has_app_context
 
 
+def _user_environment_value(name: str):
+    """Lê variáveis persistidas no usuário Windows, como o launcher original."""
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            value, _ = winreg.QueryValueEx(key, name)
+            return value
+    except (FileNotFoundError, OSError):
+        return None
+
+
 def _is_filled(value) -> bool:
     return str(value or "").strip() != ""
 
 
 def _cfg(name: str, default=None):
-    values = [os.environ.get(name)]
+    values = [os.environ.get(name), _user_environment_value(name)]
     if has_app_context():
         values.append(current_app.config.get(name))
     values.append(default)
@@ -83,11 +97,11 @@ class ComprasSettings:
 def get_settings() -> ComprasSettings:
     arquivo = _load_erp_file_config()
     return ComprasSettings(
-        PG_HOST=str(_first_value(_cfg("COMPRAS_PG_HOST"), _cfg("ERP_LANCAMENTO_PG_HOST"), arquivo.get("host"), default="localhost")),
-        PG_PORT=int(_first_value(_cfg("COMPRAS_PG_PORT"), _cfg("ERP_LANCAMENTO_PG_PORT"), arquivo.get("port"), default=5432)),
-        PG_DATABASE=str(_first_value(_cfg("COMPRAS_PG_DATABASE"), _cfg("ERP_LANCAMENTO_PG_DB"), arquivo.get("database"), default="erp")),
-        PG_USER=str(_first_value(_cfg("COMPRAS_PG_USER"), _cfg("ERP_LANCAMENTO_PG_USER"), arquivo.get("user"), default="postgres")),
-        PG_PASSWORD=str(_first_value(_cfg("COMPRAS_PG_PASSWORD"), _cfg("ERP_LANCAMENTO_PG_PASSWORD"), arquivo.get("password"), default="")),
+        PG_HOST=str(_first_value(_cfg("COMPRAS_PG_HOST"), _cfg("ERP_LANCAMENTO_PG_HOST"), _cfg("GRV_DB_HOST"), arquivo.get("host"), default="10.250.100.251")),
+        PG_PORT=int(_first_value(_cfg("COMPRAS_PG_PORT"), _cfg("ERP_LANCAMENTO_PG_PORT"), _cfg("GRV_DB_PORT"), arquivo.get("port"), default=5432)),
+        PG_DATABASE=str(_first_value(_cfg("COMPRAS_PG_DATABASE"), _cfg("ERP_LANCAMENTO_PG_DB"), _cfg("GRV_DB_NAME"), arquivo.get("database"), default="CPS")),
+        PG_USER=str(_first_value(_cfg("COMPRAS_PG_USER"), _cfg("ERP_LANCAMENTO_PG_USER"), _cfg("GRV_DB_USER"), arquivo.get("user"), default="DevLeitura")),
+        PG_PASSWORD=str(_first_value(_cfg("COMPRAS_PG_PASSWORD"), _cfg("ERP_LANCAMENTO_PG_PASSWORD"), _cfg("GRV_DB_PASSWORD"), arquivo.get("password"), default="")),
         PG_COD_EMPRESA=_cfg_int("COMPRAS_PG_COD_EMPRESA", _cfg_int("ERP_ESTOQUE_PG_COMPANY", 1)),
         PG_CONNECT_TIMEOUT=_cfg_int("COMPRAS_PG_CONNECT_TIMEOUT", 8),
         APP_DB_SLOW_MS=_cfg_int("COMPRAS_DB_SLOW_MS", 900),
