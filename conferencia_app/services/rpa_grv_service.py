@@ -319,6 +319,32 @@ def executar_payload_validado(
         except Exception as exc:
             current_app.logger.exception("Falha durante a execução do RPA | id=%s", execution_id)
             raise RpaApiError(500, f"Falha ao executar o RPA: {exc}") from exc
+        if not isinstance(execution, dict):
+            raise RpaApiError(500, "O executor do GRV devolveu um resultado invalido.")
+        expected_count = len(normalized_codes)
+        confirmed = execution.get("gravacao_confirmada") is True
+        inserted_codes = [
+            _normalizar(code) for code in execution.get("codigos_inseridos", [])
+        ]
+        if (
+            execution.get("gravado") is not True
+            or execution.get("comando_gravar_enviado") is not True
+            or not confirmed
+            or execution.get("descricao_validada") is not True
+            or execution.get("modo_edicao_encerrado") is not True
+            or inserted_codes != normalized_codes
+            or int(execution.get("quantidade_codigos") or 0) != expected_count
+        ):
+            current_app.logger.error(
+                "RPA sem confirmacao de gravacao | id=%s | resultado=%s",
+                execution_id,
+                execution,
+            )
+            raise RpaApiError(
+                409,
+                "O GRV nao confirmou o preenchimento integral e a gravacao. "
+                "O apontamento foi marcado como falha para evitar um falso sucesso.",
+            )
         _last_execution = (fingerprint, now)
         current_app.logger.warning(
             "Execução RPA concluída | id=%s | gravado=%s | quantidade=%s",

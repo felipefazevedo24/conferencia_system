@@ -23,7 +23,7 @@ from conferencia_app.services import rpa_grv_service
 
 ROOT = Path(__file__).resolve().parent
 LOGGER = logging.getLogger("sync_rpa_agent")
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 _INSTANCE_MUTEX_HANDLE = None
 
 
@@ -259,7 +259,11 @@ class Agent:
                 result = execution.get("result") or {}
                 self._post(
                     f"/api/rpa/agent/executions/{execution_id}/result",
-                    {"success": result.get("gravado") is True, "result": result},
+                    {
+                        "success": result.get("gravado") is True
+                        and result.get("gravacao_confirmada") is True,
+                        "result": result,
+                    },
                 )
                 LOGGER.warning(
                     "Execução concluída | execution_id=%s | gravado=%s",

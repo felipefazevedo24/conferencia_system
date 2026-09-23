@@ -90,7 +90,15 @@ def test_execucao_reutiliza_automator_e_bloqueia_duplicidade(app, monkeypatch):
 
         def executar_apontamento_agrupamento(self, payload, dry_run):
             calls.append(("execute", payload.copy(), dry_run))
-            return {"gravado": True, "comando_gravar_enviado": True, "quantidade_codigos": 2}
+            return {
+                "gravado": True,
+                "gravacao_confirmada": True,
+                "comando_gravar_enviado": True,
+                "descricao_validada": True,
+                "modo_edicao_encerrado": True,
+                "codigos_inseridos": ["101053", "101088"],
+                "quantidade_codigos": 2,
+            }
 
     monkeypatch.setattr(service, "desktop_permite_rpa", lambda: True)
     monkeypatch.setattr(service, "_load_backend", lambda: SimpleNamespace(GRVRpaAutomator=FakeAutomator))
@@ -110,6 +118,25 @@ def test_execucao_reutiliza_automator_e_bloqueia_duplicidade(app, monkeypatch):
     assert calls[1][1]["descricao_agrupamento"] == "21889 - A36 - 6545"
     assert calls[1][1]["codigos_destacados_para_agrupamento"] == ["101053", "101088"]
     assert duplicate.value.status_code == 409
+
+
+def test_execucao_rejeita_falso_sucesso_do_executor(app, monkeypatch):
+    class FakeAutomator:
+        def __init__(self, **kwargs):
+            pass
+
+        def listar_janelas(self):
+            return [{"visivel": True, "tela_agrupamento": True, "largura": 1920, "altura": 1080}]
+
+        def executar_apontamento_agrupamento(self, payload, dry_run):
+            return {"gravado": True, "comando_gravar_enviado": True, "quantidade_codigos": 2}
+
+    monkeypatch.setattr(service, "desktop_permite_rpa", lambda: True)
+    monkeypatch.setattr(service, "_load_backend", lambda: SimpleNamespace(GRVRpaAutomator=FakeAutomator))
+    payload = _mock_payload(ROWS)
+    payload["descricao_agrupamento"] = "TESTE"
+    with app.app_context(), pytest.raises(service.RpaApiError, match="nao confirmou"):
+        service.executar_payload_validado(payload, "operador")
 
 
 def test_execucao_exige_confirmacao_descricao_e_desktop(app, monkeypatch):
