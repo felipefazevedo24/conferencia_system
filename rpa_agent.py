@@ -23,7 +23,7 @@ from conferencia_app.services import rpa_grv_service
 
 ROOT = Path(__file__).resolve().parent
 LOGGER = logging.getLogger("sync_rpa_agent")
-AGENT_VERSION = "1.2.0"
+AGENT_VERSION = "1.2.1"
 _INSTANCE_MUTEX_HANDLE = None
 
 

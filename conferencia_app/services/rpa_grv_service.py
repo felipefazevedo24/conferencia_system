@@ -18,6 +18,7 @@ from typing import Any
 from flask import current_app
 
 from . import rpa_agrupamento_service
+from .rpa_grv_uia_automator import criar_automator_verificado
 
 
 class RpaApiError(RuntimeError):
@@ -284,7 +285,7 @@ def executar_payload_validado(
             _window_title(),
         )
         try:
-            automator = backend.GRVRpaAutomator(
+            automator = criar_automator_verificado(backend.GRVRpaAutomator)(
                 window_title=_window_title(),
                 executable=None,
                 delay=_delay(),
