@@ -40,7 +40,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "semantic-isometric-cutout-v9"
+_PREVIEW_CACHE_VERSION = "isometric-cutout-v8"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -853,148 +853,6 @@ def _projection_label(value: Any) -> bool:
     return "ISOMETR" in normalized or "EXPLOD" in normalized
 
 
-def _semantic_tokens(value: Any) -> set[str]:
-    """Normalize the small vocabulary commonly used by the drawing title block."""
-    normalized = _normalizar_identificador(value)
-    normalized = re.sub(r"\bFB(?=\s*\d|\b)", "FMB", normalized)
-    normalized = re.sub(r"\bFMB\s+(?=\d)", "FMB", normalized)
-    normalized = re.sub(r"\bV(\d+)\b", r"\1V", normalized)
-    normalized = re.sub(r"\b(\d+)\s*VAOS?\b", r"\1V", normalized)
-    normalized = re.sub(r"\bPARTE\s*([12])\b", r"P\1", normalized)
-    return {
-        token
-        for token in re.findall(r"[A-Z]+\d+[A-Z0-9]*|\d+[A-Z]+[A-Z0-9]*|[A-Z]{3,}", normalized)
-        if token not in {"DESENHO", "PROJETO", "MAQUINA", "ESCALA", "PAGINA"}
-    }
-
-
-def _part_marker(value: Any) -> str | None:
-    normalized = _normalizar_identificador(value)
-    match = re.search(r"(?:\bP\s*|\bPARTE\s*)([12])\b", normalized)
-    return f"P{match.group(1)}" if match else None
-
-
-def _compound_terms(value: Any) -> list[set[str]]:
-    text = _normalizar_identificador(value)
-    if "+" not in text:
-        return []
-    return [_semantic_tokens(part) for part in text.split("+") if _semantic_tokens(part)]
-
-
-def _page_semantic_score(page: Any, rect: Any, context: dict[str, Any] | None) -> tuple[float, list[str]]:
-    """Score meaning without making semantic recognition a hard requirement."""
-    blocks = page.get_text("blocks")
-    page_text = " ".join(str(block[4]) for block in blocks if len(block) > 4)
-    normalized = _normalizar_identificador(page_text)
-    neighborhood = _expand_rect(
-        rect, max(rect.width, rect.height) * 0.18, page.rect
-    )
-    nearby_text = " ".join(
-        str(block[4])
-        for block in blocks
-        if len(block) > 4 and neighborhood.intersects(fitz.Rect(block[:4]))
-    )
-    nearby_tokens = _semantic_tokens(nearby_text)
-    reasons: list[str] = []
-    score = 0.0
-
-    exclusions = (
-        (-100, "lista_materiais", ("LISTA DE MATERIAIS", "LISTA MATERIAL", "LISTA DE ACESSORIOS")),
-        (-50, "nesting", ("NESTING", "PLANO DE CORTE", "DISTRIBUICAO DE CORTE")),
-        (-40, "vista_planificada", ("VISTA DESENVOLVIDA", "VISTA PLANIFICADA", "CHAPA ABERTA")),
-        (-25, "corte_secao", ("CORTE ", "SECAO ", "SECTION ")),
-        (-20, "vista_parcial", ("VISTA PARCIAL", "DETALHE AMPLIADO")),
-        (-20, "fabricacao_2d", ("MATERIA PRIMA", "LASER", "PERFIL INDIVIDUAL")),
-    )
-    for penalty, reason, phrases in exclusions:
-        if any(phrase in normalized for phrase in phrases):
-            score += penalty
-            reasons.append(reason)
-
-    if re.search(r"\b(MONTAGEM|CONJUNTO|ASSEMBLY)\b", normalized):
-        score += 30
-        reasons.append("conjunto_completo")
-
-    if not context:
-        return score, reasons
-
-    description = context.get("subtitulo") or context.get("descricao") or ""
-    expected_tokens = _semantic_tokens(
-        f"{description} {context.get('n_desenho', '')} {context.get('cod_os_completo', '')}"
-    )
-    page_tokens = _semantic_tokens(page_text)
-    matched = expected_tokens & page_tokens
-    if expected_tokens:
-        ratio = len(matched) / len(expected_tokens)
-        if ratio >= 0.35:
-            score += min(25, round(ratio * 25))
-            reasons.append("descricao_correspondente")
-    drawing = _texto_comparavel(context.get("n_desenho"))
-    if drawing and drawing in _texto_comparavel(page_text):
-        score += 20
-        reasons.append("desenho_no_carimbo")
-
-    expected_part = _part_marker(description)
-    page_part = _part_marker(nearby_text) or _part_marker(page_text)
-    part_tokens = nearby_tokens if _part_marker(nearby_text) else page_tokens
-    if expected_part and expected_part in part_tokens:
-        score += 15
-        reasons.append("parte_correspondente")
-    elif expected_part and page_part and page_part != expected_part:
-        score -= 35
-        reasons.append("parte_divergente")
-
-    compound = _compound_terms(description)
-    if compound:
-        nearby_group_matches = sum(bool(group & nearby_tokens) for group in compound)
-        compound_tokens = nearby_tokens if nearby_group_matches else page_tokens
-        matched_groups = sum(bool(group & compound_tokens) for group in compound)
-        if matched_groups == len(compound):
-            score += 15
-            reasons.append("subconjunto_completo")
-        elif matched_groups:
-            score -= 30
-            reasons.append("subconjunto_incompleto")
-
-    if expected_tokens and len(expected_tokens & nearby_tokens) >= min(2, len(expected_tokens)):
-        score += 8
-        reasons.append("legenda_proxima")
-    return score, reasons
-
-
-def _confidence_for_score(score: float) -> str:
-    if score >= 55:
-        return "high"
-    if score >= 25:
-        return "medium"
-    return "low"
-
-
-def _rank_pdf_candidates(pdf: Any, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    ranked: list[dict[str, Any]] = []
-    for page_index in range(pdf.page_count):
-        page = pdf.load_page(page_index)
-        for visual_score, rect, labeled in _page_isometric_candidates(page):
-            semantic_score, reasons = _page_semantic_score(page, rect, context)
-            if labeled and "vista_isometrica" not in reasons:
-                semantic_score += 40
-                reasons.append("vista_isometrica")
-            if visual_score >= 7:
-                reasons.append("caracteristica_tridimensional")
-            total = visual_score + semantic_score
-            ranked.append({
-                "score": round(total, 2),
-                "confidence": _confidence_for_score(total),
-                "motivos": reasons,
-                "page_index": page_index,
-                "rect": rect,
-                "labeled": labeled,
-                "visual_score": visual_score,
-            })
-    ranked.sort(key=lambda candidate: (candidate["score"], candidate["visual_score"]), reverse=True)
-    return ranked
-
-
 def _assembly_view_rect(group: dict[str, Any], groups: list[dict[str, Any]], page_rect: Any) -> tuple[Any, int]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
@@ -1164,7 +1022,7 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
     return unique_candidates
 
 
-def _render_pdf_previews(content: bytes, context: dict[str, Any] | None = None) -> dict[str, bytes]:
+def _render_pdf_previews(content: bytes) -> dict[str, bytes]:
     if fitz is None:
         raise LookupError("Renderizador de PDF nao instalado")
     try:
@@ -1173,46 +1031,38 @@ def _render_pdf_previews(content: bytes, context: dict[str, Any] | None = None) 
                 raise LookupError("Documento sem paginas")
             from .production_images import _largest_placed_image, render_variants
 
-            if not context:
-                labeled = []
-                for page_index in range(pdf.page_count):
-                    page = pdf.load_page(page_index)
-                    if any(len(block) > 4 and _projection_label(block[4]) for block in page.get_text("blocks")):
-                        labeled.extend(
-                            (score, page_index, rect)
-                            for score, rect, is_labeled in _page_isometric_candidates(page)
-                            if is_labeled
-                        )
-                if labeled:
-                    _, page_index, clip = max(labeled, key=lambda candidate: candidate[0])
-                    return _render_clip_previews(pdf.load_page(page_index), clip)
-                for page in pdf:
-                    image = _largest_placed_image(pdf, page)
-                    if image is not None:
-                        return render_variants(image)
-
-            candidates = _rank_pdf_candidates(pdf, context)
-            ambiguous = (
-                len(candidates) > 1
-                and candidates[0]["score"] - candidates[1]["score"] < 0.08
-                and not candidates[0]["labeled"]
-            )
-            if candidates and candidates[0]["score"] >= 1.5 and not ambiguous:
-                selected = candidates[0]
-                return _render_clip_previews(
-                    pdf.load_page(selected["page_index"]), selected["rect"]
-                )
-            # Preserve the former embedded-rendering fallback when vector analysis
-            # cannot identify a useful view with enough confidence.
+            analyzed_pages = {}
+            labeled = []
+            for page_index in range(pdf.page_count):
+                page = pdf.load_page(page_index)
+                if any(len(block) > 4 and _projection_label(block[4]) for block in page.get_text("blocks")):
+                    analyzed_pages[page_index] = _page_isometric_candidates(page)
+                    labeled.extend((score, page_index, rect) for score, rect, is_labeled in analyzed_pages[page_index] if is_labeled)
+            # CAD PDFs can contain a shaded rendering alongside vector dimensions.
+            # Match Estrutura: an explicit isometric view takes priority, then the
+            # embedded rendering, before scoring unlabelled technical linework.
+            if labeled:
+                _, page_index, clip = max(labeled, key=lambda candidate: candidate[0])
+                return _render_clip_previews(pdf.load_page(page_index), clip)
             for page in pdf:
                 image = _largest_placed_image(pdf, page)
                 if image is not None:
                     return render_variants(image)
-            if not candidates or candidates[0]["score"] < 1.5 or ambiguous:
+            candidates = []
+            for page_index in range(pdf.page_count):
+                if page_index not in analyzed_pages:
+                    analyzed_pages[page_index] = _page_isometric_candidates(pdf.load_page(page_index))
+                candidates.extend((score, page_index, rect, is_labeled) for score, rect, is_labeled in analyzed_pages[page_index])
+            candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+            ambiguous = len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08 and not candidates[0][3]
+            if not candidates or candidates[0][0] < 1.5 or ambiguous:
                 for page in pdf:
                     if any(drawing.get("items") for drawing in (page.get_cdrawings() or [])):
                         return _render_document_previews(page)
                 raise LookupError("Vista isometrica nao identificada com confianca")
+            _, page_index, clip, _ = candidates[0]
+            page = pdf.load_page(page_index)
+            return _render_clip_previews(page, clip)
     except LookupError:
         raise
     except Exception as exc:
@@ -1307,14 +1157,10 @@ def _render_raster_previews(content: bytes, filetype: str) -> dict[str, bytes]:
         raise LookupError("Imagem invalida ou ilegivel") from exc
 
 
-def _gerar_previews(
-    content: bytes,
-    filename: str,
-    context: dict[str, Any] | None = None,
-) -> dict[str, bytes]:
+def _gerar_previews(content: bytes, filename: str) -> dict[str, bytes]:
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if suffix == "pdf":
-        return _render_pdf_previews(content, context)
+        return _render_pdf_previews(content)
     if suffix in {"png", "jpg", "jpeg", "webp"}:
         return _render_raster_previews(content, "jpeg" if suffix in {"jpg", "jpeg"} else suffix)
     raise LookupError("Formato sem suporte para previa isometrica")
@@ -1348,7 +1194,6 @@ def _previews_em_cache(
     *,
     document_loader: Callable[[], tuple[bytes, str]] | None = None,
     preview_loader: Callable[[], dict[str, bytes] | None] | None = None,
-    render_context: dict[str, Any] | None = None,
 ) -> dict[str, bytes] | None:
     with _PREVIEW_LOCK:
         cached = _PREVIEW_CACHE.get(cache_key)
@@ -1373,10 +1218,7 @@ def _previews_em_cache(
                 result = preview_loader() if preview_loader is not None else None
                 if result is None:
                     payload, name = document_loader() if document_loader is not None else (content, filename)
-                    if render_context:
-                        result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name, render_context).result()
-                    else:
-                        result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
+                    result = _PREVIEW_EXECUTOR.submit(_gerar_previews, payload, name).result()
                 future.set_result(result)
             except BaseException as exc:
                 future.set_exception(exc)
@@ -1463,23 +1305,18 @@ def obter_preview(numero_os: str, aux_code: int, variant: str = "thumbnail", wai
         str(document.get("source_aux_code")),
         str(document.get("content_revision") or "unknown"),
         _texto(context.get("revisao_desenho")),
-        _texto_comparavel(context.get("subtitulo")),
-        _texto_comparavel(context.get("cod_os_completo")),
-        _texto_comparavel(context.get("n_desenho")),
-        _part_marker(context.get("subtitulo")) or "",
     )
     if document.get("content_revision"):
         cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
         previews = _previews_em_cache(
             cache_key, document_loader=load_document,
-            preview_loader=lambda: obter_previews_bridge(document, _PREVIEW_CACHE_VERSION, context),
-            render_context=context,
+            preview_loader=lambda: obter_previews_bridge(document, _PREVIEW_CACHE_VERSION),
         )
     else:
         content, filename = load_document()
         identity += (hashlib.sha256(content).hexdigest(),)
         cache_key = hashlib.sha256("|".join(identity).encode("utf-8")).hexdigest()
-        previews = _previews_em_cache(cache_key, content, filename, render_context=context)
+        previews = _previews_em_cache(cache_key, content, filename)
     return previews[variant] if previews else None, "image/png", cache_key
 
 

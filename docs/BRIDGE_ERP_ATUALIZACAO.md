@@ -210,15 +210,15 @@ findstr /C:"_PREVIEW_CACHE_VERSION =" conferencia_app\services\producao_service.
 start_erp_bridge_tailscale.bat
 ```
 
-O comando findstr deve mostrar `semantic-isometric-cutout-v9`. Essa versao considera
-descricao, P1/P2, subconjuntos com `+`, Lista de Materiais, vistas principais alongadas,
-perspectivas cilindricas e montadas sem legenda, separacao de cotas e partes separadas de vistas explodidas, preservando os componentes do recorte. Os arquivos de
+O comando findstr deve mostrar `isometric-cutout-v8`. Essa versao considera
+vistas principais alongadas, perspectivas cilindricas e montadas sem legenda,
+separacao de cotas e partes separadas de vistas explodidas, preservando os componentes do recorte. Os arquivos de
 servico devem ser atualizados juntos, pois o tratamento de imagens possui
 um novo parametro opcional usado pelo servico de Producao.
 
 No PythonAnywhere, publicar tambem o adaptador `static/js/producao_panel.js`
 e a pagina `static/producao_original/index.html`, alem dos servicos. Fazer
-Reload e reabrir a tela. A chave v9 invalida automaticamente as previas antigas.
+Reload e reabrir a tela. A chave v8 invalida automaticamente as previas antigas.
 Nao ha mudanca de credenciais, dependencias ou esquema do banco. Manter a
 janela do servidor da VM aberta e testar a peca na Producao apos o Reload;
 `OPTIONS` verifica apenas a existencia da rota, nao a qualidade do recorte.
