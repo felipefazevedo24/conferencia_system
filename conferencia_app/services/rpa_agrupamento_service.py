@@ -12,6 +12,11 @@ from ..compras.db import fetch_all
 
 _logger = logging.getLogger(__name__)
 
+# Chapas em polegada podem usar no cadastro do material a medida métrica
+# nominal comercial. Ex.: 7/8" = 22,225 mm, mas o GRV cadastra 22,00 mm.
+# A tolerância cobre esse arredondamento sem aproximar bitolas vizinhas.
+_TOLERANCIA_ESPESSURA_MM = 0.25
+
 
 def _texto(value: Any) -> str:
     return str(value).strip() if value is not None else ""
@@ -95,7 +100,10 @@ def _pontuacao(material: str, norma: str, espessura: str, obs: str) -> int:
             before_parenthesis = _normalizar_polegada(material.split("(", 1)[0])
             fraction = re.search(r"(?<!\d)(\d+(?:[.,]\d+/\d+|/\d+)?)\s*(?:\"|$)", before_parenthesis)
             material_mm = _polegada(fraction.group(1).replace(",", ".")) if fraction else None
-        if material_mm is None or not any(abs(material_mm - value) <= 0.2 for value in thicknesses):
+        if material_mm is None or not any(
+            abs(material_mm - value) <= _TOLERANCIA_ESPESSURA_MM
+            for value in thicknesses
+        ):
             return 0
     tokens = [token for token in re.split(r"[^A-Z0-9]+", norma) if token and token not in {"CHAPA", "SAE", "ASTM"}]
     norm_matches = bool(tokens) and all(token in _chave(obs) for token in tokens)
