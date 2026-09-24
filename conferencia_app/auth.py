@@ -149,7 +149,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
     },
-    "PCP": {
+    "Produção": {
         "PAGE_PRODUCAO",
         "EXECUTE_RPA_GRV",
     },
@@ -173,8 +173,16 @@ def _normalize_role_key(role: str | None) -> str:
     return txt.strip().casefold()
 
 
+def canonicalize_role(role: str | None) -> str:
+    """Retorna o nome atual do perfil, aceitando nomes legados do banco."""
+    role = str(role or "").strip()
+    if _normalize_role_key(role) == "pcp":
+        return "Produção"
+    return role
+
+
 def get_base_role_permissions(role: str) -> dict:
-    role = (role or "").strip()
+    role = canonicalize_role(role)
     allowed = BASE_ROLE_PERMISSIONS.get(role)
     if allowed is None:
         target = _normalize_role_key(role)
