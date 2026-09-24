@@ -23,6 +23,7 @@ from ..services.smtp_service import enviar_mensagem_smtp
 compras_homologacao_bp = Blueprint("compras_homologacao", __name__)
 
 PERMISSION = "PAGE_COMPRAS_HOMOLOGACAO"
+CLASSIFICACAO_EM_ANALISE = "Em análise"
 
 
 def _dt(valor):
@@ -39,7 +40,14 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "categoria_compra": homologacao.categoria_compra,
         "status": homologacao.status,
         "nota": homologacao.nota,
-        "classificacao": homologacao.classificacao,
+        # Com o fornecedor as respostas ainda estao sendo preenchidas por ele -
+        # a nota parcial nao classifica nada. So' na exibicao: o valor gravado
+        # continua sendo o calculado e volta a aparecer quando retorna pro Rascunho.
+        "classificacao": (
+            CLASSIFICACAO_EM_ANALISE
+            if homologacao.status == Homologacao.STATUS_COM_FORNECEDOR
+            else homologacao.classificacao
+        ),
         "validade_meses": homologacao.validade_meses,
         "valido_ate": homologacao.valido_ate.isoformat() if homologacao.valido_ate else None,
         "validade_situacao": validade["situacao"],

@@ -58,6 +58,7 @@
     .hf-classe.aprovado { background: #dcfce7; color: #166534; }
     .hf-classe.ressalvas { background: #fef3c7; color: #92400e; }
     .hf-classe.reprovado { background: #fee2e2; color: #991b1b; }
+    .hf-classe.analise { background: #e0e7ff; color: #3730a3; }
 
     .hf-badge { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
     .hf-badge.rascunho { background: #f1f5f9; color: #475569; }
@@ -181,7 +182,7 @@
     const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
 
     const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado", "Com fornecedor": "fornecedor" };
-    const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado" };
+    const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado", "Em análise": "analise" };
     const SLUG_OPT = { "Sim": "", "Conforme": "", "Parcial": "meio", "Não": "neg", "Nao": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
 
     let filtroStatus = "", filtroValidade = "", modelo = null, atual = null;
@@ -354,7 +355,8 @@
 
     function desenharNota() {
         const n = notaLocal();
-        const classe = n >= 0.75001 ? "Aprovado" : n >= 0.55001 ? "Aprovado com ressalvas" : "Reprovado";
+        const classe = atual.status === "Com fornecedor" ? "Em análise"
+            : n >= 0.75001 ? "Aprovado" : n >= 0.55001 ? "Aprovado com ressalvas" : "Reprovado";
         $("hf-nota-box").innerHTML = `
             <div><div class="hf-nota-label">Nota</div><div class="hf-nota-valor">${pct(n)}</div></div>
             <span class="hf-classe ${SLUG_CLASSE[classe]}">${classe}</span>
