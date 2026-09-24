@@ -155,7 +155,7 @@
         next.addEventListener('click', () => changeMonth(1));
         period.append(previous, month, year, next);
 
-        const label = element('label', 'delivery-classification-label', 'Classificação');
+        const label = element('label', 'delivery-classification-label', 'Setor');
         const classification = element('select', 'delivery-classification');
         const all = element('option', '', 'Todas'); all.value = ''; classification.append(all);
         state.classes.forEach((name) => {
@@ -177,7 +177,12 @@
             clearTimeout(searchTimer);
             searchTimer = setTimeout(loadDeliveries, 300);
         });
-        wrapper.append(period, label, search);
+        const explosion = element('button', 'delivery-explosion-button', 'Explosão visual do mês');
+        explosion.type = 'button';
+        explosion.addEventListener('click', () => window.dispatchEvent(new CustomEvent('delivery-explosion:open', {
+            detail: { month: state.month, year: state.year, classification: state.classification, search: state.search.trim() }
+        })));
+        wrapper.append(period, label, search, explosion);
         return wrapper;
     }
 

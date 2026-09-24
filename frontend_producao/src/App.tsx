@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssemblyMap } from "./components/AssemblyMap";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { DeliveryExplosion, type DeliveryExplosionRequest } from "./components/DeliveryExplosion";
 import { Header } from "./components/Header";
 import { LoadingState } from "./components/LoadingState";
 import { SequencePanel } from "./components/SequencePanel";
@@ -59,6 +60,7 @@ export default function App() {
   const [navigationDepth, setNavigationDepth] = useState(currentNavigationDepth);
   const [mapView, setMapView] = useState<"structure" | "dependencies">(currentMapView);
   const [showAllDependencies, setShowAllDependencies] = useState(currentDependencyScope);
+  const [deliveryExplosion, setDeliveryExplosion] = useState<DeliveryExplosionRequest | null>(null);
   const loadedStructureOrder = useRef<string | null>(null);
 
   const structure = useQuery({
@@ -82,6 +84,14 @@ export default function App() {
     [structure.data?.nodes]
   );
   const selectedNode = selectedId ? nodesById.get(selectedId) ?? null : null;
+
+  useEffect(() => {
+    const openDeliveryExplosion = (event: Event) => {
+      setDeliveryExplosion((event as CustomEvent<DeliveryExplosionRequest>).detail);
+    };
+    window.addEventListener("delivery-explosion:open", openDeliveryExplosion);
+    return () => window.removeEventListener("delivery-explosion:open", openDeliveryExplosion);
+  }, []);
 
   useEffect(() => {
     const state = browserHistoryState();
@@ -195,7 +205,18 @@ export default function App() {
         onBack={goBack}
       />
 
-      {!selectedOrder && (
+      {deliveryExplosion && (
+        <DeliveryExplosion
+          {...deliveryExplosion}
+          onClose={() => setDeliveryExplosion(null)}
+          onSelectOrder={(number, itemCode) => {
+            setDeliveryExplosion(null);
+            selectOrder(number, itemCode);
+          }}
+        />
+      )}
+
+      {!deliveryExplosion && !selectedOrder && (
         <main className="welcome-state">
           <Search size={42} />
           <h1>Selecione uma Ordem de Serviço</h1>
@@ -203,9 +224,9 @@ export default function App() {
         </main>
       )}
 
-      {selectedOrder && structure.isLoading && <LoadingState />}
+      {!deliveryExplosion && selectedOrder && structure.isLoading && <LoadingState />}
 
-      {selectedOrder && structure.isError && (
+      {!deliveryExplosion && selectedOrder && structure.isError && (
         <main className="error-state">
           <AlertCircle size={42} />
           <h1>Não foi possível carregar a OS {selectedOrder}</h1>
@@ -217,7 +238,7 @@ export default function App() {
         </main>
       )}
 
-      {structure.data && (
+      {!deliveryExplosion && structure.data && (
         <main
           className={`workspace${treeCollapsed ? " tree-collapsed" : ""}${
             detailsCollapsed ? " details-collapsed" : ""
