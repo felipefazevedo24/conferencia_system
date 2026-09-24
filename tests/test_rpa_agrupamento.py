@@ -39,14 +39,14 @@ def test_processo_valido_e_payload_idempotente():
     assert first["norma_extraida"] == "A36"
 
 
-def test_codigo_de_processo_e_a_unidade_de_deduplicacao():
-    items = service.preparar_registros([
+def test_codigo_de_processo_e_a_unidade_de_deduplicacao(monkeypatch):
+    monkeypatch.setattr(service, "fetch_all", lambda *_args, **_kwargs: [
         row(),
         row(cod_os_completo="9321/002"),
         row(cod_os_completo="9321/003"),
     ])
-    assert len(items) == 1
-    assert items[0]["codigo_processo"] == "167245"
+    items = service.consultar()
+    assert [item["codigo_processo"] for item in items] == ["167245"]
 
 
 def test_consulta_retorna_somente_elegiveis_e_aplica_limite_apos_deduplicar(monkeypatch):

@@ -103,8 +103,8 @@ def _pontuacao(material: str, norma: str, espessura: str, obs: str) -> int:
 
 
 def preparar_registros(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Seleciona uma unica melhor chapa por codigo de processo."""
-    by_process: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    """Seleciona a melhor chapa por processo, conforme pontuacao do RPA."""
+    by_process: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         material = _texto(row.get("material"))
         codigo = _texto(row.get("codigo"))
@@ -136,16 +136,15 @@ def preparar_registros(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                             and not item["processo_finalizado"]
                             and _chave(item["tipo_servico"]).startswith("CORTE LASER"))
         item["pontuacao"] = _pontuacao(material, norma, espessura, item["observacao"])
-        by_process[codigo].append(item)
+        by_process[(item["os_completa"], codigo)].append(item)
     result = []
     for candidates in by_process.values():
         top_score = max(item["pontuacao"] for item in candidates)
-        if top_score <= 0:
-            continue
-        item = next(candidate for candidate in candidates if candidate["pontuacao"] == top_score)
-        item["elegivel"] = bool(item["elegivel"])
-        item.pop("pontuacao")
-        result.append(item)
+        for item in candidates:
+            if item["pontuacao"] == top_score and top_score > 0:
+                item["elegivel"] = bool(item["elegivel"])
+                item.pop("pontuacao")
+                result.append(item)
     return result
 
 
@@ -191,7 +190,11 @@ def consultar(busca: str = "", limite: int = 500) -> list[dict[str, Any]]:
         "limite": min(limite * 10, 10000),
     })
     prepared = preparar_registros(rows)
-    eligible = [item for item in prepared if item["elegivel"]]
+    eligible_by_code: dict[str, dict[str, Any]] = {}
+    for item in prepared:
+        if item["elegivel"]:
+            eligible_by_code.setdefault(item["codigo_processo"], item)
+    eligible = list(eligible_by_code.values())
     diagnostic = diagnosticar_registros(rows, eligible)
     _logger.info(
         "rpa_agrupamento_consulta busca=%r linhas_brutas=%s apos_corte_laser=%s "
