@@ -613,6 +613,10 @@ def _coletar_comex() -> dict:
         idx = _COMEX_STATUS_PARA_BASKET.get(p.status_modulo)
         if idx is None:
             continue  # status fora do fluxo modelado (ex.: legado/futuro) - nao exibido na torre
+        # Na basket "Entregue" o processo ja esta finalizado - nao ha o que
+        # cobrar, entao o controle de ultima interacao nao aparece.
+        if _COMEX_BASKETS[idx]["titulo"] == "Entregue":
+            ultima_interacao = None
         colunas_cards[idx].append(
             {
                 "processo_id": p.id,
