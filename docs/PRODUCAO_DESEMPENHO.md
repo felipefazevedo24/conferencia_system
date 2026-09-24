@@ -31,11 +31,11 @@ As melhorias ficam no modulo de Producao do servidor web, em seu adaptador de in
 
 ## Reconhecimento das vistas
 
-O renderizador `semantic-isometric-cutout-v9` usa a descricao do item, a geometria e as anotacoes do PDF para selecionar a vista, sem depender de uma posicao fixa na folha:
+O renderizador `bom-safe-semantic-cutout-v10` usa a descricao do item, a geometria e as anotacoes do PDF para selecionar a vista, sem depender de uma posicao fixa na folha:
 
 - Legendas de vista isometrica ou explodida continuam tendo prioridade quando associadas a um candidato utilizavel.
-- Titulo, numero do desenho, descricao, P1/P2 e os termos separados por `+` participam do ranking. Variacoes FB/FMB, 6V/V6/6 VAOS e PARTE 1/P1 sao normalizadas.
-- Lista de Materiais, nesting, vistas planificadas, cortes e vistas parciais recebem penalidades. A pontuacao produz internamente `score`, `confidence` e `motivos`, mas nao bloqueia o fallback.
+- Titulo, numero do desenho, descricao, P1/P2/PB1/PB2 e os termos separados por `+` participam do ranking. Variacoes FB/FMB, 6V/V6/6 VAOS, SHOE ASSY, GRID P/B e CAST. C/PORT. SP sao normalizadas.
+- Lista de Materiais/BOM e tabelas com estrutura equivalente sao inelegiveis para previa, mesmo quando contem uma pequena ilustracao. Nesting, vistas planificadas, cortes e vistas parciais continuam recebendo penalidades.
 - Sem legenda, o detector considera as direcoes das arestas e curvas. Quadrilateros `qu` e retangulos `re` do PyMuPDF sao tratados como quatro arestas; linhas horizontais e verticais isoladas tambem participam do agrupamento.
 - Uma vista principal alongada, como uma barra, pode ser selecionada mesmo sem diagonais. O recorte usa uma margem curta para nao incorporar a cota paralela ou a secao transversal.
 - Molduras de folha e tabelas com texto sao excluidas dos candidatos. Cotas coloridas e tracejadas sao desconsideradas quando existe geometria neutra suficiente. A contagem de palavras considera palavras dentro da regiao, mesmo quando o bloco de texto ultrapassa sua borda.
@@ -43,7 +43,7 @@ O renderizador `semantic-isometric-cutout-v9` usa a descricao do item, a geometr
 - Perspectivas cilindricas recebem evidencia especifica: um contorno curvo fechado eliptico e duas arestas paralelas, separadas e tangentes aos contornos nas duas extremidades. Isso nao exige duas direcoes obliquas. Circulos concentricos com linhas de cota nao recebem esse bonus.
 - Para uma perspectiva com partes separadas, o recorte pode incluir componentes menores proximos, alinhados e com direcoes compativeis, alem de pequenos elementos curvos sem texto. Componentes que nao atendem a esses criterios nao sao unidos; duas vistas completas equivalentes permanecem ambiguas.
 - O recorte vetorial preserva todos os componentes nele contidos, sem descartar automaticamente as pecas menores. Uma vista explodida permanece explodida; nao e reconstruida uma montagem 3D inexistente no documento.
-- Quando ainda nao existe um candidato seguro, a pagina original identificada pode ser exibida como ultimo recurso. A folha inteira nao e o resultado normal dos casos acima. Arquivos invalidos ou sem conteudo grafico continuam sendo sinalizados.
+- Quando nao existe um candidato tecnico seguro, a interface mostra `Previa indisponivel`. Nao ha fallback para primeira pagina, folha inteira, Lista de Materiais ou imagem arbitraria.
 
 Este e um reconhecimento heuristico, nao uma garantia de interpretar todos os desenhos ou PDFs digitalizados. Os exemplos enviados na conversa eram capturas; os testes reproduzem os padroes em PDFs sinteticos. Os PDFs originais precisam ser conferidos antes de afirmar que o recorte de cada arquivo real esta correto. As marcacoes vermelhas das capturas nao sao usadas como regra de recorte.
 
@@ -57,7 +57,7 @@ Na verificacao adicional de 15/09/2026, um PDF sintetico com 500 registros vetor
 
 Os testes de fila simulam 50 itens concorrentes e verificam a admissao limitada, a liberacao de vagas para a selecao atual e a entrega imediata de trabalhos ja concluidos.
 
-O reconhecimento tem testes de perfil longo sem legenda, perspectiva montada em diferentes posicoes da folha, vistas rotuladas, tabelas, arestas `qu`, componentes separados e ambiguidade entre vistas equivalentes. A versao v9 acrescenta o ranking semantico de P1/P2, subconjuntos com `+`, aliases tecnicos e exclusao de Lista de Materiais, preservando os testes geometricos da v8. Os testes verificam limites do recorte e preservacao dos pixels das partes, alem do percurso HTTP e dos caches existentes. Os PDFs originais dos exemplos precisam ser validados no ERP; os casos automatizados usam PDFs sinteticos.
+O reconhecimento tem testes de perfil longo sem legenda, perspectiva montada em diferentes posicoes da folha, vistas rotuladas, tabelas, arestas `qu`, componentes separados e ambiguidade entre vistas equivalentes. A versao v10 acrescenta exclusao rigida de BOM, reconhecimento estrutural de tabelas de materiais, aliases de conjuntos e diferenciacao PB1/PB2. Os testes verificam limites do recorte e preservacao dos pixels das partes, alem do percurso HTTP e dos caches existentes. Os PDFs originais dos exemplos precisam ser validados no ERP; os casos automatizados usam PDFs sinteticos.
 
 Executar a partir de `conferencia_system`, usando o Python 3.12 do ambiente do projeto:
 
@@ -76,9 +76,9 @@ Aplicar a Parte 1 do procedimento de atualizacao no PythonAnywhere e a atualizac
 
 Atualizar somente o servidor web mantem a compatibilidade, mas nao ativa o processamento junto ao ERP enquanto a VM nao receber o novo endpoint. Nao rodar `git pull` completo na VM e nao sobrescrever arquivos locais sem backup.
 
-Com o endpoint ja ativo, publicar os servicos `producao_service.py`, `production_images.py` e a versao atual de `producao_bridge.py` tanto no servidor web quanto na VM. No servidor web, publicar tambem `static/js/producao_panel.js` e `static/producao_original/index.html`, que atualizam a chave do navegador para v9. Fazer Reload do web app e reiniciar a bridge. Nao e necessario reinstalar PyMuPDF/Pillow nem alterar banco ou credenciais. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
+Com o endpoint ja ativo, publicar os servicos `producao_service.py`, `production_images.py` e a versao atual de `producao_bridge.py` tanto no servidor web quanto na VM. No servidor web, publicar tambem `static/js/producao_panel.js` e `static/producao_original/index.html`, que atualizam a chave do navegador para v10. Fazer Reload do web app e reiniciar a bridge. Nao e necessario reinstalar PyMuPDF/Pillow nem alterar banco ou credenciais. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
 
-Nao publicar apenas `producao_service.py` em uma instalacao anterior a v7: ele chama `render_variants(..., preserve_components=True)`, cuja assinatura esta em `production_images.py` desde aquela versao. A chave v9 invalida imagens e falhas antigas sem apagar arquivos manualmente. Durante uma atualizacao parcial entre web e bridge, versoes diferentes acionam o fallback local em vez de aceitar uma previa de outra versao.
+Nao publicar apenas `producao_service.py` em uma instalacao anterior a v7: ele chama `render_variants(..., preserve_components=True)`, cuja assinatura esta em `production_images.py` desde aquela versao. A chave v10 invalida imagens e falhas antigas sem apagar arquivos manualmente. Durante uma atualizacao parcial entre web e bridge, versoes diferentes acionam o fallback local em vez de aceitar uma previa de outra versao.
 
 O cliente e a bridge registram `producao_bridge_preview`/`producao_preview_bridge` em nivel INFO, com tempo e quantidade de bytes, sem token ou conteudo do documento. A resposta interna da bridge inclui `Server-Timing`, `X-Original-Bytes` e `X-Production-Preview-Version` para diagnostico.
 

@@ -120,7 +120,7 @@
     function previewSource(image, detail) {
         const source = new URL(image.getAttribute('src'), window.location.href);
         source.searchParams.delete('_preview');
-        source.searchParams.set('renderer', 'semantic-isometric-cutout-v9');
+        source.searchParams.set('renderer', 'bom-safe-semantic-cutout-v10');
         if (detail) source.searchParams.set('variant', 'detail');
         return `${source.pathname}${source.search}`;
     }

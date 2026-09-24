@@ -389,6 +389,80 @@ def test_vocabulario_do_item_normaliza_aliases_tecnicos():
     assert {"FMB14CM", "P25MM", "6V", "P1"} <= actual
 
 
+@pytest.mark.parametrize(("description", "tokens", "variant"), [
+    ("SHOE ASSY", {"SAPATA", "CONJUNTO"}, set()),
+    ("GRID P/B", {"GRID", "PB"}, set()),
+    ("FP RET H4 25V GRID P/B", {"FP", "RET", "H4", "25V", "GRID", "PB"}, set()),
+    ("CAST. C/PORT. SP", {"CASTELO", "COM", "PORTA", "SAPATA"}, set()),
+    ("GRID P/B2", {"GRID", "PB2"}, {"PB2"}),
+])
+def test_vocabulario_normaliza_descricoes_reais_de_conjuntos(description, tokens, variant):
+    assert tokens <= producao_service._semantic_tokens(description)
+    assert producao_service._variant_markers(description) == variant
+    assert producao_service._description_requires_assembly(description)
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_lista_de_materiais_e_inelegivel_mesmo_com_vista_embutida():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        bom = pdf.new_page(width=700, height=600)
+        bom.insert_text((30, 40), "LISTA DE MATERIAIS")
+        valid = pdf.new_page(width=700, height=600)
+        valid.insert_text((30, 40), "VISTA ISOMETRICA SHOE ASSEMBLY")
+        clip = fitz.Rect(100, 100, 450, 450)
+        with patch.object(producao_service, "_page_isometric_candidates", return_value=[(8.0, clip, True)]):
+            ranked = producao_service._rank_pdf_candidates(pdf, {"subtitulo": "SHOE ASSY"})
+
+    assert [candidate["page_index"] for candidate in ranked] == [1]
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_lista_de_materiais_estrutural_sem_titulo_e_inelegivel():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=700, height=600)
+        page.insert_text((40, 60), "ITEM CODIGO DESCRICAO QTDE MATERIAL ESPESSURA LARGURA COMPRIMENTO")
+        for row in range(8):
+            page.draw_line((40, 100 + row * 35), (650, 100 + row * 35))
+        for column in range(7):
+            page.draw_line((40 + column * 100, 100), (40 + column * 100, 345))
+        eligibility = producao_service._page_preview_eligibility(page)
+
+    assert eligibility["eligible_for_preview"] is False
+    assert eligibility["reason"] == "bill_of_materials_structure"
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_pdf_apenas_com_lista_de_materiais_fica_sem_previa():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((30, 40), "BILL OF MATERIALS")
+        page.draw_rect(fitz.Rect(100, 100, 400, 400))
+        content = pdf.tobytes()
+
+    with pytest.raises(LookupError, match="Vista isometrica"):
+        producao_service._render_pdf_previews(content, {"subtitulo": "SHOE ASSY"})
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_variante_pb2_prevalece_sobre_pb1():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        pb1 = pdf.new_page()
+        pb1.insert_text((30, 40), "VISTA ISOMETRICA GRID PB1")
+        pb2 = pdf.new_page()
+        pb2.insert_text((30, 40), "VISTA ISOMETRICA GRID PB2")
+        clip = fitz.Rect(80, 90, 360, 390)
+        with patch.object(producao_service, "_page_isometric_candidates", return_value=[(8.0, clip, True)]):
+            ranked = producao_service._rank_pdf_candidates(pdf, {"subtitulo": "GRID P/B2"})
+
+    assert ranked[0]["page_index"] == 1
+    assert "variante_correspondente" in ranked[0]["motivos"]
+    assert "variante_divergente" in ranked[1]["motivos"]
+
+
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_ranqueamento_semantico_prefere_p1_completa_e_rejeita_lista_de_materiais():
     fitz = producao_service.fitz
@@ -414,8 +488,7 @@ def test_ranqueamento_semantico_prefere_p1_completa_e_rejeita_lista_de_materiais
     assert ranked[0]["page_index"] == 2
     assert ranked[0]["confidence"] == "high"
     assert {"vista_isometrica", "parte_correspondente", "conjunto_completo"} <= set(ranked[0]["motivos"])
-    assert next(item for item in ranked if item["page_index"] == 0)["score"] < ranked[0]["score"]
-    assert "lista_materiais" in next(item for item in ranked if item["page_index"] == 0)["motivos"]
+    assert {item["page_index"] for item in ranked} == {1, 2}
 
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
@@ -549,11 +622,8 @@ def test_perspectivas_independentes_equivalentes_nao_sao_unidas_como_explodida()
         assert all(candidate[1].width < 220 for candidate in candidates)
         assert abs(candidates[0][0] - candidates[1][0]) < 0.08
         with patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma das vistas equivalentes")):
-            previews = producao_service._render_pdf_previews(pdf.tobytes())
-        from PIL import Image
-
-        with Image.open(io.BytesIO(previews["detail"])) as image:
-            assert image.info["preview_kind"] == "original-document"
+            with pytest.raises(LookupError, match="Vista isometrica"):
+                producao_service._render_pdf_previews(pdf.tobytes())
 
 
 def test_render_de_componentes_separados_preserva_todas_as_pecas():
@@ -692,9 +762,7 @@ def test_pdf_sem_vista_isometrica_e_arquivo_invalido_falham_discretamente():
 
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 @pytest.mark.parametrize("ambiguous", [False, True])
-def test_pdf_sem_recorte_seguro_mostra_desenho_original_identificado(ambiguous):
-    from PIL import Image
-
+def test_pdf_sem_recorte_seguro_nao_faz_fallback_para_folha_inteira(ambiguous):
     fitz = producao_service.fitz
     with fitz.open() as pdf:
         cover = pdf.new_page(width=700, height=600)
@@ -709,16 +777,8 @@ def test_pdf_sem_recorte_seguro_mostra_desenho_original_identificado(ambiguous):
         patch.object(producao_service, "_page_isometric_candidates", return_value=candidates),
         patch.object(producao_service, "_render_clip_previews", side_effect=AssertionError("Nao escolher uma vista ambigua")),
     ):
-        previews = producao_service._render_pdf_previews(content)
-    for variant, maximum in (("thumbnail", 720), ("detail", 1600)):
-        with Image.open(io.BytesIO(previews[variant])) as image:
-            assert image.info["preview_kind"] == "original-document"
-            assert image.info["page_number"] == "2"
-            assert max(image.size) <= maximum
-            assert image.crop((0, 0, image.width, max(40, round(maximum * 0.06)))).convert("L").getextrema()[0] < 100
-            colors = image.get_flattened_data()
-            assert any(red > 200 and green < 80 and blue < 80 for red, green, blue in colors)
-            assert any(blue > 200 and red < 80 and green < 80 for red, green, blue in image.get_flattened_data())
+        with pytest.raises(LookupError, match="Vista isometrica"):
+            producao_service._render_pdf_previews(content)
 
 
 @pytest.mark.parametrize("function_name, args, media_type", [
@@ -736,7 +796,7 @@ def test_renderizadores_sem_pymupdf_informam_dependencia_ausente(function_name, 
             getattr(producao_service, function_name)(*args)
 
 
-def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
+def test_render_incorporado_validado_preserva_fundo_transparente():
     from PIL import Image, ImageDraw
 
     image = Image.new("RGB", (360, 480), "white")
@@ -752,7 +812,8 @@ def test_render_incorporado_tem_prioridade_sobre_cotas_e_fundo_transparente():
             shape.draw_line((40, y), (300, y + 80))
         shape.finish(color=(0, 0, 0), width=1)
         shape.commit()
-        with patch.object(producao_service, "_page_isometric_candidates", side_effect=AssertionError("Imagem incorporada nao deve analisar a geometria sem rotulo")):
+        embedded_rect = producao_service.fitz.Rect(420, 90, 600, 330)
+        with patch.object(producao_service, "_page_isometric_candidates", return_value=[(8.0, embedded_rect, False)]):
             previews = producao_service._render_pdf_previews(pdf.tobytes())
 
     thumb = Image.open(io.BytesIO(previews["thumbnail"]))
@@ -1225,6 +1286,13 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
     web_app = Flask("preview_web_http_test", instance_path=str(tmp_path))
     worker.start()
     try:
+        if document_kind == "orthogonal":
+            with web_app.app_context():
+                with pytest.raises(LookupError, match="indisponivel"):
+                    service.obter_preview("9959", 4)
+            assert renderer.call_count == len(sizes) == 1
+            raw_download.assert_not_called()
+            return
         with web_app.app_context():
             started = time.perf_counter()
             thumbnail = service.obter_preview("9959", 4)
@@ -1240,10 +1308,7 @@ def test_preview_bridge_http_completo_transfere_imagens_sem_pdf(bridge_preview_c
         for result in (thumbnail, detail):
             with Image.open(io.BytesIO(result[0])) as preview:
                 assert preview.format == "PNG"
-                assert preview.mode == ("RGBA" if document_kind == "embedded" else "RGB")
-                if document_kind == "orthogonal":
-                    assert preview.info["preview_kind"] == "original-document"
-                    assert preview.info["page_number"] == "1"
+                assert preview.mode == "RGBA"
                 assert min(preview.size) > 1
         assert thumbnail[2] == detail[2]
         assert renderer.call_count == len(sizes) == 1
