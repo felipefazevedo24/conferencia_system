@@ -18,6 +18,7 @@ import base64
 from contextlib import closing, nullcontext
 import hashlib
 import io
+import json
 import os
 import re
 import sys
@@ -1650,6 +1651,18 @@ def create_app() -> Flask:
             return jsonify({"erro": "parametros_invalidos"}), 400
         if payload.get("renderer_version") != producao_service._PREVIEW_CACHE_VERSION:
             return jsonify({"erro": "renderizador_incompativel"}), 409
+        raw_context = payload.get("render_context") or {}
+        if not isinstance(raw_context, dict) or any(
+            not isinstance(value, str) or len(value) > 500 for value in raw_context.values()
+        ):
+            return jsonify({"erro": "parametros_invalidos"}), 400
+        allowed_context = {
+            "subtitulo", "n_desenho", "cod_os_completo", "revisao_desenho",
+            "posicao_desenho", "segmento",
+        }
+        render_context = {
+            key: value for key, value in raw_context.items() if key in allowed_context
+        }
         if producao_service.fitz is None:
             return jsonify({"erro": "renderizador_nao_instalado"}), 501
         try:
@@ -1685,6 +1698,7 @@ def create_app() -> Flask:
                 "bridge", str(id(app)), str(cfg["host"]), str(cfg["database"]),
                 kind, *(str(params[name]) for name in ("cod_empresa", "cod_os", "cod_os_aux", "document_id")),
                 revision, producao_service._PREVIEW_CACHE_VERSION,
+                hashlib.sha256(json.dumps(render_context, sort_keys=True).encode("utf-8")).hexdigest(),
             ))
             cache_key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
@@ -1699,7 +1713,11 @@ def create_app() -> Flask:
                     raise LookupError("Documento excede o limite da previa")
                 return bytes(content), str(row.get("nome_arquivo") or "documento")
 
-            previews = producao_service._previews_em_cache(cache_key, document_loader=load_document)
+            previews = producao_service._previews_em_cache(
+                cache_key,
+                document_loader=load_document,
+                render_context=render_context,
+            )
             if previews is None:
                 return jsonify({"erro": "previa_em_processamento"}), 503
             output = io.BytesIO()

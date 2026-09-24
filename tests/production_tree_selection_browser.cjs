@@ -166,6 +166,7 @@ const server=http.createServer((req,res)=>{
     await call('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     await call('Page.navigate',{url:base+'/producao'}); await sleep(500);
     await wait("return !!d.querySelector('.workspace') && d.querySelectorAll('.sequence-operation-card').length===8;");
+    assert(await inner("const card=w.getComputedStyle(d.querySelector('.assembly-node'));const preview=w.getComputedStyle(d.querySelector('.node-thumbnail'));const image=d.querySelector('.node-thumbnail img');return parseFloat(card.minHeight)>=210&&parseFloat(preview.height)>=110&&parseFloat(preview.width)>180&&(!image||w.getComputedStyle(image).objectFit==='contain');"));
 
     if(largeStructureMode) {
       await wait("return d.querySelectorAll('.tree-row').length===301;");

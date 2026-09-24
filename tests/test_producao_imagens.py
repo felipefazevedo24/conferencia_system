@@ -381,6 +381,68 @@ def test_circulos_com_cotas_nao_sao_evidencia_de_cilindro():
         assert not producao_service._is_cylindrical_view(producao_service._drawing_segments(items), [item[1:5] for item in items if item[0] == "c"], fitz.Rect(145, 80, 300, 295))
 
 
+def test_vocabulario_do_item_normaliza_aliases_tecnicos():
+    expected = producao_service._semantic_tokens("FB 14CM P25MM V6 - PARTE 1")
+    actual = producao_service._semantic_tokens("FMB14CM P25MM 6 VAOS (P1)")
+
+    assert {"FMB14CM", "P25MM", "6V", "P1"} <= expected
+    assert {"FMB14CM", "P25MM", "6V", "P1"} <= actual
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_ranqueamento_semantico_prefere_p1_completa_e_rejeita_lista_de_materiais():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        materials = pdf.new_page()
+        materials.insert_text((30, 40), "LISTA DE MATERIAIS FMB14CM P25MM 6V PARTE 1")
+        part_two = pdf.new_page()
+        part_two.insert_text((30, 40), "VISTA ISOMETRICA FMB14CM P25MM 6V PARTE 2")
+        part_one = pdf.new_page()
+        part_one.insert_text((30, 40), "VISTA ISOMETRICA MONTAGEM FMB14CM P25MM 6V PARTE 1")
+        clip = fitz.Rect(80, 90, 360, 390)
+
+        with patch.object(
+            producao_service,
+            "_page_isometric_candidates",
+            return_value=[(8.0, clip, True)],
+        ):
+            ranked = producao_service._rank_pdf_candidates(
+                pdf,
+                {"subtitulo": "FMB14CM P25MM 6V - (P1)"},
+            )
+
+    assert ranked[0]["page_index"] == 2
+    assert ranked[0]["confidence"] == "high"
+    assert {"vista_isometrica", "parte_correspondente", "conjunto_completo"} <= set(ranked[0]["motivos"])
+    assert next(item for item in ranked if item["page_index"] == 0)["score"] < ranked[0]["score"]
+    assert "lista_materiais" in next(item for item in ranked if item["page_index"] == 0)["motivos"]
+
+
+@pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
+def test_ranqueamento_semantico_exige_os_dois_lados_do_subconjunto():
+    fitz = producao_service.fitz
+    with fitz.open() as pdf:
+        base = pdf.new_page()
+        base.insert_text((30, 40), "VISTA ISOMETRICA BASE")
+        assembly = pdf.new_page()
+        assembly.insert_text((30, 40), "VISTA DE CONJUNTO MONTAGEM BASE CASTELO")
+        clip = fitz.Rect(80, 90, 360, 390)
+
+        with patch.object(
+            producao_service,
+            "_page_isometric_candidates",
+            return_value=[(7.0, clip, False)],
+        ):
+            ranked = producao_service._rank_pdf_candidates(
+                pdf,
+                {"subtitulo": "BASE + CASTELO"},
+            )
+
+    assert ranked[0]["page_index"] == 1
+    assert "subconjunto_completo" in ranked[0]["motivos"]
+    assert "subconjunto_incompleto" in ranked[1]["motivos"]
+
+
 @pytest.mark.skipif(producao_service.fitz is None, reason="PyMuPDF nao instalado")
 def test_perfil_longitudinal_sem_rotulo_e_preferido_a_secao_e_tabela():
     fitz = producao_service.fitz
@@ -1490,7 +1552,9 @@ def test_aviso_de_previa_fica_limitado_a_miniatura():
 
     assert ".node-thumbnail {" in css
     assert "position: relative;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
-    assert "width: 54px;" in css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+    rule = css.split(".node-thumbnail {", 1)[1].split("}", 1)[0]
+    assert "width: 100%;" in rule
+    assert "height: 116px;" in rule
 
 
 def test_versao_do_renderizador_no_navegador_acompanha_o_servico():

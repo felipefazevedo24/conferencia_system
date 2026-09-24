@@ -18,7 +18,7 @@ As melhorias ficam no modulo de Producao do servidor web, em seu adaptador de in
 - O endpoint exige autenticacao, restringe a empresa a 1 e executa consultas somente leitura. A revisao e conferida antes e depois da leitura do arquivo, e as conexoes PostgreSQL sao fechadas antes de renderizar.
 - A bridge reaproveita as duas imagens pela identidade e revisao do documento. O servidor web tambem as armazena em memoria e em `instance/producao_previews`, fora dos arquivos publicos.
 - O cache em disco compartilha as previas prontas entre trabalhadores e sobrevive ao Reload. Armazena somente as duas imagens, com limite de 256 pacotes e 128 MiB, expirando apos sete dias sem acesso. As gravacoes sao atomicas e a limpeza ocorre nas gravacoes seguintes. Falha de disco ou pacote corrompido nao impede o carregamento pelo caminho normal.
-- A chave do disco inclui origem da bridge, hash da credencial, empresa, OS/item de origem, documento, revisao e versao do renderizador. A revisao ainda e obtida pelos metadados com cache de 10 segundos; os sete dias de retencao nao substituem essa verificacao.
+- A chave do disco inclui origem da bridge, hash da credencial, empresa, OS/item de origem, documento, revisao, contexto normalizado do item e versao do renderizador. A revisao ainda e obtida pelos metadados com cache de 10 segundos; os sete dias de retencao nao substituem essa verificacao.
 - Bridge antiga, renderizador incompativel ou bibliotecas ausentes acionam o caminho local automaticamente. A disponibilidade e testada novamente em cinco minutos, ou imediatamente apos Reload do web app. Falhas de autenticacao ou de confirmacao de leitura segura nao sao ignoradas.
 - O cache da imagem pronta e consultado antes de baixar o arquivo, usando origem, codigo, revisao do documento, revisao do desenho e aplicativo como identidade.
 - Miniatura e detalhe compartilham download e renderizacao. Uma revisao nova gera outra imagem; documentos sem revisao continuam sendo conferidos pelo hash do conteudo.
@@ -31,9 +31,11 @@ As melhorias ficam no modulo de Producao do servidor web, em seu adaptador de in
 
 ## Reconhecimento das vistas
 
-O renderizador `isometric-cutout-v8` usa a geometria e as anotacoes do PDF para selecionar a vista, sem depender de uma posicao fixa na folha:
+O renderizador `semantic-isometric-cutout-v9` usa a descricao do item, a geometria e as anotacoes do PDF para selecionar a vista, sem depender de uma posicao fixa na folha:
 
 - Legendas de vista isometrica ou explodida continuam tendo prioridade quando associadas a um candidato utilizavel.
+- Titulo, numero do desenho, descricao, P1/P2 e os termos separados por `+` participam do ranking. Variacoes FB/FMB, 6V/V6/6 VAOS e PARTE 1/P1 sao normalizadas.
+- Lista de Materiais, nesting, vistas planificadas, cortes e vistas parciais recebem penalidades. A pontuacao produz internamente `score`, `confidence` e `motivos`, mas nao bloqueia o fallback.
 - Sem legenda, o detector considera as direcoes das arestas e curvas. Quadrilateros `qu` e retangulos `re` do PyMuPDF sao tratados como quatro arestas; linhas horizontais e verticais isoladas tambem participam do agrupamento.
 - Uma vista principal alongada, como uma barra, pode ser selecionada mesmo sem diagonais. O recorte usa uma margem curta para nao incorporar a cota paralela ou a secao transversal.
 - Molduras de folha e tabelas com texto sao excluidas dos candidatos. Cotas coloridas e tracejadas sao desconsideradas quando existe geometria neutra suficiente. A contagem de palavras considera palavras dentro da regiao, mesmo quando o bloco de texto ultrapassa sua borda.
@@ -55,7 +57,7 @@ Na verificacao adicional de 15/09/2026, um PDF sintetico com 500 registros vetor
 
 Os testes de fila simulam 50 itens concorrentes e verificam a admissao limitada, a liberacao de vagas para a selecao atual e a entrega imediata de trabalhos ja concluidos.
 
-O reconhecimento tem testes de perfil longo sem legenda, perspectiva montada em diferentes posicoes da folha, vistas rotuladas, tabelas, arestas `qu`, componentes separados e ambiguidade entre vistas equivalentes. A versao v8 acrescenta cilindros em duas orientacoes e com caminhos PDF agrupados ou separados, a exclusao de cotas da pontuacao e a preservacao das arestas tangentes perto de textos. Os testes verificam limites do recorte e preservacao dos pixels das partes, alem do percurso HTTP e dos caches existentes. O PDF original 229.160.105.06 nao estava disponivel; o caso do mangote foi reproduzido em PDF sintetico, nao validado no arquivo do ERP.
+O reconhecimento tem testes de perfil longo sem legenda, perspectiva montada em diferentes posicoes da folha, vistas rotuladas, tabelas, arestas `qu`, componentes separados e ambiguidade entre vistas equivalentes. A versao v9 acrescenta o ranking semantico de P1/P2, subconjuntos com `+`, aliases tecnicos e exclusao de Lista de Materiais, preservando os testes geometricos da v8. Os testes verificam limites do recorte e preservacao dos pixels das partes, alem do percurso HTTP e dos caches existentes. Os PDFs originais dos exemplos precisam ser validados no ERP; os casos automatizados usam PDFs sinteticos.
 
 Executar a partir de `conferencia_system`, usando o Python 3.12 do ambiente do projeto:
 
@@ -74,9 +76,9 @@ Aplicar a Parte 1 do procedimento de atualizacao no PythonAnywhere e a atualizac
 
 Atualizar somente o servidor web mantem a compatibilidade, mas nao ativa o processamento junto ao ERP enquanto a VM nao receber o novo endpoint. Nao rodar `git pull` completo na VM e nao sobrescrever arquivos locais sem backup.
 
-Com o endpoint ja ativo, publicar os servicos `producao_service.py`, `production_images.py` e a versao atual de `producao_bridge.py` tanto no servidor web quanto na VM. No servidor web, publicar tambem `static/js/producao_panel.js` e `static/producao_original/index.html`, que atualizam a chave do navegador para v8. Fazer Reload do web app e reiniciar a bridge. Nao e necessario reinstalar PyMuPDF/Pillow nem alterar banco ou credenciais. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
+Com o endpoint ja ativo, publicar os servicos `producao_service.py`, `production_images.py` e a versao atual de `producao_bridge.py` tanto no servidor web quanto na VM. No servidor web, publicar tambem `static/js/producao_panel.js` e `static/producao_original/index.html`, que atualizam a chave do navegador para v9. Fazer Reload do web app e reiniciar a bridge. Nao e necessario reinstalar PyMuPDF/Pillow nem alterar banco ou credenciais. O processo web precisa de permissao de escrita na pasta `instance`, que ja e usada pela aplicacao; o cache e criado automaticamente.
 
-Nao publicar apenas `producao_service.py` em uma instalacao anterior a v7: ele chama `render_variants(..., preserve_components=True)`, cuja assinatura esta em `production_images.py` desde aquela versao. A chave v8 invalida imagens e falhas antigas sem apagar arquivos manualmente. Durante uma atualizacao parcial entre web e bridge, versoes diferentes acionam o fallback local em vez de aceitar uma previa de outra versao.
+Nao publicar apenas `producao_service.py` em uma instalacao anterior a v7: ele chama `render_variants(..., preserve_components=True)`, cuja assinatura esta em `production_images.py` desde aquela versao. A chave v9 invalida imagens e falhas antigas sem apagar arquivos manualmente. Durante uma atualizacao parcial entre web e bridge, versoes diferentes acionam o fallback local em vez de aceitar uma previa de outra versao.
 
 O cliente e a bridge registram `producao_bridge_preview`/`producao_preview_bridge` em nivel INFO, com tempo e quantidade de bytes, sem token ou conteudo do documento. A resposta interna da bridge inclui `Server-Timing`, `X-Original-Bytes` e `X-Production-Preview-Version` para diagnostico.
 

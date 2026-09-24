@@ -12,7 +12,7 @@ import {
   type NodeProps
 } from "@xyflow/react";
 import { Box } from "lucide-react";
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import { formatQuantity } from "../lib/format";
 import { visibleNodeIds } from "../lib/tree";
@@ -44,6 +44,42 @@ type AssemblyCardData = {
 
 type AssemblyFlowNode = Node<AssemblyCardData, "assembly">;
 
+function ProgressiveThumbnail({ src, description }: { src: string; description: string }) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const requestUrl = useMemo(() => {
+    const separator = src.includes("?") ? "&" : "?";
+    return `${src}${separator}preview_attempt=${attempt}`;
+  }, [attempt, src]);
+
+  useEffect(() => {
+    setAttempt(0);
+    setFailed(false);
+  }, [src]);
+
+  if (failed) return <Box size={29} aria-label="Desenho indisponível" />;
+
+  return (
+    <img
+      src={requestUrl}
+      alt={`Desenho técnico de ${description}`}
+      loading="lazy"
+      onLoad={(event) => {
+        const image = event.currentTarget;
+        if (image.naturalWidth > 1 || attempt >= 8) return;
+        window.setTimeout(() => setAttempt((current) => current + 1), 1_250);
+      }}
+      onError={() => {
+        if (attempt < 3) {
+          window.setTimeout(() => setAttempt((current) => current + 1), 1_250);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
+
 const AssemblyCard = memo(function AssemblyCard({
   data
 }: NodeProps<AssemblyFlowNode>) {
@@ -56,21 +92,14 @@ const AssemblyCard = memo(function AssemblyCard({
       aria-label={`${item.code}: ${item.description}`}
     >
       <Handle type="target" position={Position.Top} />
+      <div className="node-thumbnail">
+        {item.thumbnail_url ? (
+          <ProgressiveThumbnail src={item.thumbnail_url} description={item.description} />
+        ) : (
+          <Box size={29} aria-label="Item sem desenho" />
+        )}
+      </div>
       <div className="node-main">
-        <div className="node-thumbnail">
-          {item.thumbnail_url ? (
-            <img
-              src={item.thumbnail_url}
-              alt=""
-              loading="lazy"
-              onError={(event) => {
-                event.currentTarget.style.display = "none";
-              }}
-            />
-          ) : (
-            <Box size={29} />
-          )}
-        </div>
         <div>
           <strong>{item.code}</strong>
           <span>{item.description}</span>
@@ -204,7 +233,7 @@ function layoutGraph(
     marginx: 24,
     marginy: 24
   });
-  for (const item of visibleItems) graph.setNode(item.id, { width: 218, height: 138 });
+  for (const item of visibleItems) graph.setNode(item.id, { width: 230, height: 222 });
   const edges: Edge[] = [];
   for (const item of visibleItems) {
     if (item.parent_id && visible.has(item.parent_id)) {
@@ -225,8 +254,8 @@ function layoutGraph(
       id: item.id,
       type: "assembly",
       position: {
-        x: position.x - 109,
-        y: position.y - 69
+        x: position.x - 115,
+        y: position.y - 111
       },
       data: {
         item,

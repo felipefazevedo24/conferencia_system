@@ -136,7 +136,11 @@ def _write_disk_cache(path: Path | None, previews: dict[str, bytes]) -> None:
                 pass
 
 
-def obter_previews_bridge(document: dict[str, Any], renderer_version: str) -> dict[str, bytes] | None:
+def obter_previews_bridge(
+    document: dict[str, Any],
+    renderer_version: str,
+    context: dict[str, Any] | None = None,
+) -> dict[str, bytes] | None:
     settings = get_settings()
     if not settings.USE_API_BRIDGE or not settings.API_URL:
         return None
@@ -158,6 +162,13 @@ def obter_previews_bridge(document: dict[str, Any], renderer_version: str) -> di
         "kind": str(document["source_kind"]),
         "content_revision": str(document["content_revision"]),
         "renderer_version": renderer_version,
+        "render_context": {
+            key: str((context or {}).get(key) or "")[:500]
+            for key in (
+                "subtitulo", "n_desenho", "cod_os_completo", "revisao_desenho",
+                "posicao_desenho", "segmento",
+            )
+        },
     }
     cache_path = _disk_cache_path(payload, key)
     cached = _read_disk_cache(cache_path)
