@@ -40,7 +40,7 @@ STATUS_LABELS = {
     "nao_iniciado": "Nao iniciado",
 }
 
-_PREVIEW_CACHE_VERSION = "bom-safe-semantic-cutout-v10"
+_PREVIEW_CACHE_VERSION = "semantic-isometric-cutout-v9"
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 _PREVIEW_CACHE_LIMIT = 64
 _PREVIEW_CACHE: OrderedDict[str, dict[str, bytes]] = OrderedDict()
@@ -856,13 +856,6 @@ def _projection_label(value: Any) -> bool:
 def _semantic_tokens(value: Any) -> set[str]:
     """Normalize the small vocabulary commonly used by the drawing title block."""
     normalized = _normalizar_identificador(value)
-    normalized = re.sub(r"\bSHOE\s+ASS(?:Y|EMBLY)\b", "SAPATA CONJUNTO", normalized)
-    normalized = re.sub(r"\bASSY\b", "ASSEMBLY", normalized)
-    normalized = re.sub(r"\bCAST\.?\b", "CASTELO", normalized)
-    normalized = re.sub(r"\bPORT\.?\s*SP\b", "PORTA SAPATA", normalized)
-    normalized = re.sub(r"\bP\s*/\s*B\s*([12])\b", r"PB\1", normalized)
-    normalized = re.sub(r"\bP\s*/\s*B\b", "PB", normalized)
-    normalized = re.sub(r"\bC\s*/\s*(?=[A-Z])", "COM ", normalized)
     normalized = re.sub(r"\bFB(?=\s*\d|\b)", "FMB", normalized)
     normalized = re.sub(r"\bFMB\s+(?=\d)", "FMB", normalized)
     normalized = re.sub(r"\bV(\d+)\b", r"\1V", normalized)
@@ -870,7 +863,7 @@ def _semantic_tokens(value: Any) -> set[str]:
     normalized = re.sub(r"\bPARTE\s*([12])\b", r"P\1", normalized)
     return {
         token
-        for token in re.findall(r"[A-Z]+\d+[A-Z0-9]*|\d+[A-Z]+[A-Z0-9]*|\b(?:FP|PB)\b|[A-Z]{3,}", normalized)
+        for token in re.findall(r"[A-Z]+\d+[A-Z0-9]*|\d+[A-Z]+[A-Z0-9]*|[A-Z]{3,}", normalized)
         if token not in {"DESENHO", "PROJETO", "MAQUINA", "ESCALA", "PAGINA"}
     }
 
@@ -881,95 +874,11 @@ def _part_marker(value: Any) -> str | None:
     return f"P{match.group(1)}" if match else None
 
 
-def _variant_markers(value: Any) -> set[str]:
-    normalized = _normalizar_identificador(value)
-    normalized = re.sub(r"\bP\s*/\s*B\s*([12])\b", r"PB\1", normalized)
-    normalized = re.sub(r"\bPARTE\s*([12])\b", r"P\1", normalized)
-    return set(re.findall(r"\b(?:PB[12]|P[12])\b", normalized))
-
-
-def _description_requires_assembly(value: Any) -> bool:
-    normalized = _normalizar_identificador(value)
-    return bool(
-        "+" in normalized
-        or re.search(r"\b(?:ASSY|ASSEMBLY|CONJUNTO|MONTAGEM|GRID)\b", normalized)
-        or re.search(r"\bC\s*/\s*[A-Z]", normalized)
-    )
-
-
-def _required_component_groups(value: Any) -> list[set[str]]:
-    normalized = _normalizar_identificador(value)
-    groups = _compound_terms(value)
-    tokens = _semantic_tokens(value)
-    if "SHOE" in normalized or "SAPATA" in tokens:
-        groups.append({"SAPATA"})
-    if re.search(r"\bCAST\.?\b|\bCASTELO\b", normalized) and re.search(
-        r"\bPORT\.?\s*SP\b|\bPORTA[ -]?SAPATA\b", normalized
-    ):
-        groups.extend(({"CASTELO"}, {"PORTA"}, {"SAPATA"}))
-    if "GRID" in tokens:
-        groups.append({"GRID"})
-    unique: list[set[str]] = []
-    for group in groups:
-        if group and group not in unique:
-            unique.append(group)
-    return unique
-
-
 def _compound_terms(value: Any) -> list[set[str]]:
     text = _normalizar_identificador(value)
     if "+" not in text:
         return []
     return [_semantic_tokens(part) for part in text.split("+") if _semantic_tokens(part)]
-
-
-_BOM_TITLES = (
-    "LISTA DE MATERIAIS",
-    "LISTA DE MATERIAL",
-    "LISTA MATERIAL",
-    "MATERIAL LIST",
-    "MATERIALS LIST",
-    "PARTS LIST",
-    "BILL OF MATERIAL",
-    "BILL OF MATERIALS",
-)
-_BOM_FIELDS = {
-    "ITEM", "CODIGO", "DESCRICAO", "QTDE", "QTD", "QUANTIDADE",
-    "MATERIAL", "ESPESSURA", "LARGURA", "COMPRIMENTO", "PESO",
-}
-
-
-def _page_preview_eligibility(page: Any) -> dict[str, Any]:
-    """Hard gate: a BOM page can provide metadata, never a preview image."""
-    page_text = " ".join(
-        str(block[4]) for block in page.get_text("blocks") if len(block) > 4
-    )
-    normalized = _normalizar_identificador(page_text)
-    compact = re.sub(r"[^A-Z0-9]+", " ", normalized).strip()
-    title_match = next((title for title in _BOM_TITLES if title in compact), None)
-    if title_match or re.search(r"(?:^|\s)BOM(?:\s|$)", compact):
-        return {
-            "eligible_for_preview": False,
-            "reason": "bill_of_materials",
-            "evidence": title_match or "BOM",
-        }
-
-    words = {word for word in compact.split() if word}
-    fields = sorted(_BOM_FIELDS & words)
-    table_rules = 0
-    for drawing in page.get_drawings():
-        for start, end in _drawing_segments(drawing.get("items") or []):
-            horizontal = abs(float(end.y) - float(start.y)) <= 1
-            vertical = abs(float(end.x) - float(start.x)) <= 1
-            if (horizontal or vertical) and abs(end - start) >= min(page.rect.width, page.rect.height) * 0.08:
-                table_rules += 1
-    if len(fields) >= 7 or (len(fields) >= 5 and table_rules >= 6):
-        return {
-            "eligible_for_preview": False,
-            "reason": "bill_of_materials_structure",
-            "evidence": fields,
-        }
-    return {"eligible_for_preview": True, "reason": None, "evidence": []}
 
 
 def _page_semantic_score(page: Any, rect: Any, context: dict[str, Any] | None) -> tuple[float, list[str]]:
@@ -990,7 +899,7 @@ def _page_semantic_score(page: Any, rect: Any, context: dict[str, Any] | None) -
     score = 0.0
 
     exclusions = (
-        (-100, "lista_acessorios", ("LISTA DE ACESSORIOS",)),
+        (-100, "lista_materiais", ("LISTA DE MATERIAIS", "LISTA MATERIAL", "LISTA DE ACESSORIOS")),
         (-50, "nesting", ("NESTING", "PLANO DE CORTE", "DISTRIBUICAO DE CORTE")),
         (-40, "vista_planificada", ("VISTA DESENVOLVIDA", "VISTA PLANIFICADA", "CHAPA ABERTA")),
         (-25, "corte_secao", ("CORTE ", "SECAO ", "SECTION ")),
@@ -1035,25 +944,6 @@ def _page_semantic_score(page: Any, rect: Any, context: dict[str, Any] | None) -
         score -= 35
         reasons.append("parte_divergente")
 
-    expected_variants = _variant_markers(description)
-    nearby_variants = _variant_markers(nearby_text)
-    page_variants = _variant_markers(page_text)
-    candidate_variants = nearby_variants or page_variants
-    variant_conflict = any(
-        any(
-            candidate != expected
-            and candidate.startswith("PB") == expected.startswith("PB")
-            for candidate in candidate_variants
-        )
-        for expected in expected_variants
-    )
-    if expected_variants and expected_variants <= candidate_variants:
-        score += 25
-        reasons.append("variante_correspondente")
-    elif expected_variants and variant_conflict:
-        score -= 60
-        reasons.append("variante_divergente")
-
     compound = _compound_terms(description)
     if compound:
         nearby_group_matches = sum(bool(group & nearby_tokens) for group in compound)
@@ -1065,17 +955,6 @@ def _page_semantic_score(page: Any, rect: Any, context: dict[str, Any] | None) -
         elif matched_groups:
             score -= 30
             reasons.append("subconjunto_incompleto")
-
-    required_groups = _required_component_groups(description)
-    nearby_required = sum(bool(group & nearby_tokens) for group in required_groups)
-    semantic_scope = nearby_tokens if nearby_required else page_tokens
-    matched_required = sum(bool(group & semantic_scope) for group in required_groups)
-    if required_groups and matched_required == len(required_groups):
-        score += 30
-        reasons.append("tipo_principal_correspondente")
-    elif required_groups and matched_required:
-        score -= 35
-        reasons.append("conjunto_incompleto")
 
     if expected_tokens and len(expected_tokens & nearby_tokens) >= min(2, len(expected_tokens)):
         score += 8
@@ -1095,9 +974,6 @@ def _rank_pdf_candidates(pdf: Any, context: dict[str, Any] | None = None) -> lis
     ranked: list[dict[str, Any]] = []
     for page_index in range(pdf.page_count):
         page = pdf.load_page(page_index)
-        eligibility = _page_preview_eligibility(page)
-        if not eligibility["eligible_for_preview"]:
-            continue
         for visual_score, rect, labeled in _page_isometric_candidates(page):
             semantic_score, reasons = _page_semantic_score(page, rect, context)
             if labeled and "vista_isometrica" not in reasons:
@@ -1105,11 +981,6 @@ def _rank_pdf_candidates(pdf: Any, context: dict[str, Any] | None = None) -> lis
                 reasons.append("vista_isometrica")
             if visual_score >= 7:
                 reasons.append("caracteristica_tridimensional")
-                if context and _description_requires_assembly(
-                    context.get("subtitulo") or context.get("descricao") or ""
-                ):
-                    semantic_score += 12
-                    reasons.append("montagem_visual")
             total = visual_score + semantic_score
             ranked.append({
                 "score": round(total, 2),
@@ -1122,23 +993,6 @@ def _rank_pdf_candidates(pdf: Any, context: dict[str, Any] | None = None) -> lis
             })
     ranked.sort(key=lambda candidate: (candidate["score"], candidate["visual_score"]), reverse=True)
     return ranked
-
-
-def _candidate_is_valid(candidate: dict[str, Any], context: dict[str, Any] | None) -> bool:
-    rejected_reasons = {"variante_divergente", "conjunto_incompleto", "subconjunto_incompleto"}
-    if rejected_reasons & set(candidate["motivos"]):
-        return False
-    description = (context or {}).get("subtitulo") or (context or {}).get("descricao") or ""
-    if candidate["labeled"]:
-        if _description_requires_assembly(description) and not {
-            "tipo_principal_correspondente", "descricao_correspondente",
-        } & set(candidate["motivos"]):
-            return False
-        return candidate["score"] >= 35
-    minimum_visual = 7.0 if _description_requires_assembly(description) else 5.0
-    if candidate["visual_score"] < minimum_visual:
-        return False
-    return candidate["score"] >= minimum_visual
 
 
 def _assembly_view_rect(group: dict[str, Any], groups: list[dict[str, Any]], page_rect: Any) -> tuple[Any, int]:
@@ -1299,7 +1153,7 @@ def _page_isometric_candidates(page: Any) -> list[tuple[float, Any, bool]]:
         coverage = (rect.width * rect.height) / page_area
         if not rect.is_empty and 0.06 <= coverage <= 0.72:
             label_score, labeled = _isometric_label_score(rect, labels, page_rect)
-            score = 7 + min(coverage, 0.4) * 3 + label_score
+            score = 3 + min(coverage, 0.4) * 3 + label_score
             candidates.append((score, _expand_rect(rect, max(rect.width, rect.height) * 0.04, page_rect), labeled))
 
     unique_candidates = []
@@ -1317,18 +1171,48 @@ def _render_pdf_previews(content: bytes, context: dict[str, Any] | None = None) 
         with fitz.open(stream=content, filetype="pdf") as pdf:
             if pdf.page_count == 0:
                 raise LookupError("Documento sem paginas")
+            from .production_images import _largest_placed_image, render_variants
+
+            if not context:
+                labeled = []
+                for page_index in range(pdf.page_count):
+                    page = pdf.load_page(page_index)
+                    if any(len(block) > 4 and _projection_label(block[4]) for block in page.get_text("blocks")):
+                        labeled.extend(
+                            (score, page_index, rect)
+                            for score, rect, is_labeled in _page_isometric_candidates(page)
+                            if is_labeled
+                        )
+                if labeled:
+                    _, page_index, clip = max(labeled, key=lambda candidate: candidate[0])
+                    return _render_clip_previews(pdf.load_page(page_index), clip)
+                for page in pdf:
+                    image = _largest_placed_image(pdf, page)
+                    if image is not None:
+                        return render_variants(image)
+
             candidates = _rank_pdf_candidates(pdf, context)
             ambiguous = (
                 len(candidates) > 1
                 and candidates[0]["score"] - candidates[1]["score"] < 0.08
                 and not candidates[0]["labeled"]
             )
-            if candidates and not ambiguous and _candidate_is_valid(candidates[0], context):
+            if candidates and candidates[0]["score"] >= 1.5 and not ambiguous:
                 selected = candidates[0]
                 return _render_clip_previews(
                     pdf.load_page(selected["page_index"]), selected["rect"]
                 )
-            raise LookupError("Vista isometrica nao identificada com confianca")
+            # Preserve the former embedded-rendering fallback when vector analysis
+            # cannot identify a useful view with enough confidence.
+            for page in pdf:
+                image = _largest_placed_image(pdf, page)
+                if image is not None:
+                    return render_variants(image)
+            if not candidates or candidates[0]["score"] < 1.5 or ambiguous:
+                for page in pdf:
+                    if any(drawing.get("items") for drawing in (page.get_cdrawings() or [])):
+                        return _render_document_previews(page)
+                raise LookupError("Vista isometrica nao identificada com confianca")
     except LookupError:
         raise
     except Exception as exc:
