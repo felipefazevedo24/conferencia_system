@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import argparse
 from contextlib import contextmanager
+from datetime import datetime
 import getpass
 import logging
 import os
@@ -23,7 +24,7 @@ from conferencia_app.services import rpa_grv_service
 
 ROOT = Path(__file__).resolve().parent
 LOGGER = logging.getLogger("sync_rpa_agent")
-AGENT_VERSION = "1.2.1"
+AGENT_VERSION = "1.3.0"
 _INSTANCE_MUTEX_HANDLE = None
 
 
@@ -119,7 +120,7 @@ class Agent:
         if not self.token:
             raise RuntimeError("RPA_AGENT_TOKEN não está configurado no usuário Windows.")
         self.poll_seconds = max(
-            2.0, float(_instance_env("RPA_AGENT_POLL_SECONDS", instance, "5"))
+            2.0, float(_instance_env("RPA_AGENT_POLL_SECONDS", instance, "2"))
         )
         self.session = requests.Session()
         self.heartbeat_session = requests.Session()
@@ -189,8 +190,10 @@ class Agent:
         failed = False
         while not self.stop_event.wait(10):
             try:
+                current = self._diagnose()
                 with self.state_lock:
-                    payload = dict(self.state)
+                    self.state = current
+                    payload = dict(current)
                 self._post("/api/rpa/agent/heartbeat", payload, heartbeat=True)
                 if failed:
                     LOGGER.info("Heartbeat restabelecido | ambiente=%s", self.instance)
@@ -216,9 +219,8 @@ class Agent:
         backoff = (2, 5, 10, 30, 60)
         while not self.stop_event.is_set():
             try:
-                current = self._diagnose()
                 with self.state_lock:
-                    self.state = current
+                    current = dict(self.state)
                 response = self._post("/api/rpa/agent/claim", current)
                 job = response.get("job")
                 if failures:
@@ -238,16 +240,25 @@ class Agent:
                 self.stop_event.wait(delay)
 
     def _execute(self, job: dict) -> None:
+        received_at = time.perf_counter()
         execution_id = str(job.get("execution_id") or "")
         payload = job.get("payload")
         requested_by = str(job.get("requested_by") or "usuario_sync")
         if not execution_id or not isinstance(payload, dict):
             raise RuntimeError("Trabalho recebido sem execution_id ou payload.")
+        queue_wait_ms = None
+        try:
+            created_at = datetime.fromisoformat(str(job.get("created_at") or ""))
+            now = datetime.now(created_at.tzinfo) if created_at.tzinfo else datetime.now()
+            queue_wait_ms = max(0, round((now - created_at).total_seconds() * 1000))
+        except (TypeError, ValueError):
+            pass
         LOGGER.warning(
-            "Execução recebida | execution_id=%s | usuario=%s | codigos=%s",
+            "Execução recebida | execution_id=%s | usuario=%s | codigos=%s | fila_ms=%s",
             execution_id,
             requested_by,
             ",".join(payload.get("codigos_destacados_para_agrupamento") or []),
+            queue_wait_ms,
         )
         with _exclusive_grv_execution():
             self._post(f"/api/rpa/agent/executions/{execution_id}/running", {})
@@ -266,9 +277,11 @@ class Agent:
                     },
                 )
                 LOGGER.warning(
-                    "Execução concluída | execution_id=%s | gravado=%s",
+                    "Execução concluída | execution_id=%s | gravado=%s | agente_total_ms=%s | timings_ms=%s",
                     execution_id,
                     result.get("gravado"),
+                    round((time.perf_counter() - received_at) * 1000),
+                    result.get("timings_ms") or {},
                 )
             except Exception as exc:
                 LOGGER.exception("Execução falhou | execution_id=%s", execution_id)

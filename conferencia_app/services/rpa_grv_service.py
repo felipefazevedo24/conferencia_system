@@ -291,6 +291,7 @@ def executar_payload_validado(
                 delay=_delay(),
                 gravar_sem_confirmar=True,
             )
+            automator.execution_id = execution_id
             windows = automator.listar_janelas()
             if not _m83_visible(windows):
                 raise RpaApiError(
@@ -348,10 +349,11 @@ def executar_payload_validado(
             )
         _last_execution = (fingerprint, now)
         current_app.logger.warning(
-            "Execução RPA concluída | id=%s | gravado=%s | quantidade=%s",
+            "Execução RPA concluída | id=%s | gravado=%s | quantidade=%s | timings_ms=%s",
             execution_id,
             execution.get("gravado"),
             execution.get("quantidade_codigos"),
+            execution.get("timings_ms") or {},
         )
         return {
             "ok": True,

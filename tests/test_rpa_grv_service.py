@@ -89,7 +89,7 @@ def test_execucao_reutiliza_automator_e_bloqueia_duplicidade(app, monkeypatch):
             return [{"visivel": True, "tela_agrupamento": True, "largura": 1920, "altura": 1080}]
 
         def executar_apontamento_agrupamento(self, payload, dry_run):
-            calls.append(("execute", payload.copy(), dry_run))
+            calls.append(("execute", payload.copy(), dry_run, self.execution_id))
             return {
                 "gravado": True,
                 "gravacao_confirmada": True,
@@ -117,6 +117,7 @@ def test_execucao_reutiliza_automator_e_bloqueia_duplicidade(app, monkeypatch):
     assert result["result"]["gravado"] is True
     assert calls[1][1]["descricao_agrupamento"] == "21889 - A36 - 6545"
     assert calls[1][1]["codigos_destacados_para_agrupamento"] == ["101053", "101088"]
+    assert calls[1][3] == result["execution_id"]
     assert duplicate.value.status_code == 409
 
 
