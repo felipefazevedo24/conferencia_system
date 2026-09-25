@@ -28,6 +28,10 @@
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
     .vt-type.entrega { background: #ecfdf3; color: #067647; }
     .vt-stock-alert { color: var(--eui-danger); margin-left: 6px; }
+    .vt-row-correios td { background: #e0f2fe; }
+    .vt-row-correios:hover td { background: #bae6fd; }
+    .vt-liberacao-pendente { color: #eab308; margin-left: 6px; }
+    .vt-correios-tag { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 2px 7px; margin-left: 6px; background: #bae6fd; color: #075985; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -225,6 +229,10 @@
           <textarea id="oc-observacao" class="eui-input" rows="2" placeholder="Ex.: aguardar separação, doca ou condição especial."></textarea>
         </div>
             </div>
+            <label class="eui-field" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="oc-correios">
+        <span class="eui-field__label" style="margin:0;">Coleta nos Correios</span>
+            </label>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
             </div>
@@ -494,6 +502,20 @@ function isAvulsaNaoAprovada(row) {
   return !['Aprovada', 'Alocada', 'EmAndamento', 'EmRota', 'Concluida'].includes(status);
 }
 
+function classeLinhaColeta(row) {
+  return row && row.correios ? 'vt-row-correios' : '';
+}
+
+function marcadoresColeta(row) {
+  if (!row || String(row.tipo || '').toUpperCase() !== 'COLETA') return '';
+  let html = '';
+  if (row.aguardando_liberacao) {
+    html += `<i class="fas fa-triangle-exclamation vt-liberacao-pendente" title="Coleta ainda não liberada. Liberada a partir de ${row.data_liberacao_label || '-'}."></i>`;
+  }
+  if (row.correios) html += '<span class="vt-correios-tag" title="Coleta nos Correios">CORREIOS</span>';
+  return html;
+}
+
 function renderSolicitacaoRow(row) {
   const tipo = String(row.tipo || '').toUpperCase();
   const doc = tipo === 'COLETA'
@@ -506,10 +528,10 @@ function renderSolicitacaoRow(row) {
   const dataCol = row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-';
   const expanded = state.expandedIds.includes(Number(row.id));
   return `
-    <tr class="vt-solicitacao-row" data-row-id="${row.id}">
+    <tr class="vt-solicitacao-row ${classeLinhaColeta(row)}" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
       <td><span class="vt-type ${typeClass}">${tipo || '-'}</span></td>
-      <td>${doc}</td>
+      <td>${doc}${marcadoresColeta(row)}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
       <td>${motorista}</td>
@@ -820,10 +842,10 @@ function renderTable() {
         ? (row.data_desejada_label || row.prazo_limite_label || '-')
         : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
       return `
-        <tr>
+        <tr class="${classeLinhaColeta(row)}">
           <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
           <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
-          <td>${doc}</td>
+          <td>${doc}${marcadoresColeta(row)}</td>
           <td>${row.parceiro_nome || '-'}</td>
           <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
           <td>${motorista}</td>
@@ -862,10 +884,10 @@ function renderTable() {
           ? (row.data_desejada_label || row.prazo_limite_label || '-')
           : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
         return `
-          <tr>
+          <tr class="${classeLinhaColeta(row)}">
             <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
             <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
-            <td>${doc}</td>
+            <td>${doc}${marcadoresColeta(row)}</td>
             <td>${row.parceiro_nome || '-'}</td>
             <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
             <td>${motorista}</td>
@@ -2040,6 +2062,7 @@ async function confirmarImportacaoOc() {
   body.append('numero_oc', numeroOc);
   body.append('data_liberacao', dataLiberacao);
   body.append('observacao', observacao);
+  if (document.getElementById('oc-correios').checked) body.append('correios', '1');
   if (anexo) body.append('anexo', anexo);
   const r = await fetch('/api/logistica/central-viagens/oc/criar', {
     method: 'POST',
@@ -2057,6 +2080,7 @@ async function confirmarImportacaoOc() {
   document.getElementById('oc-anexo').value = '';
   document.getElementById('oc-data-liberacao').value = '';
   document.getElementById('oc-observacao').value = '';
+  document.getElementById('oc-correios').checked = false;
   closeModal('modalImportar');
   loadDashboard();
 }

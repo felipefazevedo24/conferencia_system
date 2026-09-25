@@ -31,6 +31,7 @@ from ..models import (
 from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
+from ..services.solicitacao_coleta_service import validar_liberacao_coleta
 from ..tempo import agora_br
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
@@ -1792,6 +1793,9 @@ def nova_viagem_de_solicitacao(sid: int):
     bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
     if bloqueio_avulsa:
         return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
+    bloqueio_liberacao = validar_liberacao_coleta(sol)
+    if bloqueio_liberacao:
+        return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
     if not sol.veiculo_id:
         return jsonify({"sucesso": False, "msg": "Alocar veículo na solicitação antes de montar a viagem."}), 400
 
@@ -1926,6 +1930,9 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
     if bloqueio_avulsa:
         return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
+    bloqueio_liberacao = validar_liberacao_coleta(sol)
+    if bloqueio_liberacao:
+        return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
 
     vinculo = (
         db.session.query(ViagemParada.id, ViagemParada.viagem_id, Viagem.codigo)
@@ -2041,6 +2048,9 @@ def montar_viagem_com_solicitacoes():
         bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
         if bloqueio_avulsa:
             return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id}: {bloqueio_avulsa}"}), 409
+        bloqueio_liberacao = validar_liberacao_coleta(sol)
+        if bloqueio_liberacao:
+            return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
         if not sol.veiculo_id or not sol.motorista_id:
             return jsonify({"sucesso": False, "msg": f"Defina veículo e motorista da solicitação {sol.codigo or sol.id} antes de montar viagem."}), 409
 
@@ -2776,6 +2786,9 @@ def assistente_criar_viagem():
         bloqueio_avulsa = _validar_aprovacao_avulsa(sol)
         if bloqueio_avulsa:
             return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id}: {bloqueio_avulsa}"}), 409
+        bloqueio_liberacao = validar_liberacao_coleta(sol)
+        if bloqueio_liberacao:
+            return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
 
     # Validar conflito de recursos
     conflito = _validar_conflito_recurso(

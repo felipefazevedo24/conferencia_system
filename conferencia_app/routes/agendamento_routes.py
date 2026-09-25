@@ -57,7 +57,12 @@ from ..services.agendamento_service import (
     status_label_agendamento,
 )
 from ..services.agendamento_ordem_coleta_pdf import gerar_ordem_coleta_pdf
-from ..services.solicitacao_coleta_service import criar_ou_atualizar_detalhes_coleta, obter_detalhes_coleta
+from ..services.solicitacao_coleta_service import (
+    coleta_aguardando_liberacao,
+    criar_ou_atualizar_detalhes_coleta,
+    obter_detalhes_coleta,
+    validar_liberacao_coleta,
+)
 from ..tempo import agora_br
 
 try:
@@ -1420,6 +1425,8 @@ def _serializar_solicitacao(
             if detalhes_coleta and detalhes_coleta.get("data_liberacao") else ""
         ),
         "status_liberacao": str((detalhes_coleta or {}).get("status_liberacao") or "").strip(),
+        "aguardando_liberacao": coleta_aguardando_liberacao(detalhes_coleta),
+        "correios": bool(payload_origem.get("correios")),
         "observacoes_logistica": str(registro.observacoes_logistica or "").strip(),
         "motivo_cancelamento": str(registro.motivo_cancelamento or "").strip(),
         "data_desejada": registro.data_desejada.isoformat(timespec="minutes") if registro.data_desejada else "",
@@ -1773,6 +1780,8 @@ def central_viagens_criar_coleta_por_oc():
     prioridade = str((form.get("prioridade") if form else None) or payload.get("prioridade") or "Media").strip()
     data_liberacao_raw = str((form.get("data_liberacao") if form else None) or payload.get("data_liberacao") or "").strip()
     observacao_coleta = str((form.get("observacao") if form else None) or payload.get("observacao") or "").strip()
+    correios_raw = (form.get("correios") if form else None) or payload.get("correios")
+    correios = str(correios_raw or "").strip().lower() in {"1", "true", "on", "sim"}
     if prioridade not in PRIORIDADES_SOLICITACAO:
         prioridade = "Media"
     if not numero_oc:
@@ -1843,6 +1852,9 @@ def central_viagens_criar_coleta_por_oc():
                 "numero_oc": numero_oc,
                 "fonte": fonte,
                 "warning": consulta.get("warning") or "",
+                # Fica no payload (e não numa coluna) só para a Central pintar a linha;
+                # evita migration numa tabela de produção por um sinalizador visual.
+                "correios": correios,
             }
         ),
     )
@@ -2914,6 +2926,9 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if str(row.status or "").strip() in {"Concluida", "Cancelada"}:
         return jsonify({"error": "Não é possível alocar uma solicitação finalizada."}), 409
+    bloqueio_liberacao = validar_liberacao_coleta(row)
+    if bloqueio_liberacao:
+        return jsonify({"error": bloqueio_liberacao}), 409
 
     payload = request.get_json(silent=True) or {}
     try:
@@ -3116,6 +3131,9 @@ def alocar_solicitacoes_lote_agendamento():
     for row in rows:
         if str(row.status or "").strip() in {"Concluida", "Cancelada"}:
             return jsonify({"error": f"Solicitação {row.codigo or row.id} já está finalizada e não pode ser alocada."}), 409
+        bloqueio_liberacao = validar_liberacao_coleta(row)
+        if bloqueio_liberacao:
+            return jsonify({"error": bloqueio_liberacao}), 409
 
     buffer_min = int(
         getattr(veiculo, "janela_conflito_min", 0)

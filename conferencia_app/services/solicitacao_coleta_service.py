@@ -88,6 +88,31 @@ def obter_detalhes_coleta(solicitacao_id):
         return None
 
 
+def coleta_aguardando_liberacao(detalhes, agora=None):
+    """True enquanto a data "coleta liberada a partir de" ainda não chegou.
+
+    Calculado na hora, e não lido de `status_liberacao`: aquela coluna é gravada
+    uma única vez na criação e nunca é atualizada quando a data passa."""
+    data_liberacao = (detalhes or {}).get("data_liberacao")
+    if not isinstance(data_liberacao, datetime):
+        return False
+    return data_liberacao > (agora or agora_br())
+
+
+def validar_liberacao_coleta(solicitacao):
+    """Mensagem de bloqueio se a coleta ainda não pode ser alocada; None se pode."""
+    if str(getattr(solicitacao, "tipo", "") or "").strip() != "COLETA":
+        return None
+    detalhes = obter_detalhes_coleta(solicitacao.id)
+    if not coleta_aguardando_liberacao(detalhes):
+        return None
+    documento = str(solicitacao.numero_oc or solicitacao.codigo or solicitacao.id).strip()
+    return (
+        f"A coleta da OC {documento} só está liberada a partir de "
+        f"{detalhes['data_liberacao'].strftime('%d/%m/%Y %H:%M')}."
+    )
+
+
 def adicionar_anexo(solicitacao_coleta_id, arquivo_nome, arquivo_path, tipo_arquivo=None, tamanho_bytes=None, usuario=None):
     """Adiciona um anexo a uma solicitação de coleta."""
     try:
