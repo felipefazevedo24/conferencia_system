@@ -389,14 +389,19 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_ASSISTENCIA_TECNICA') %}
+                {% if can_access('PAGE_ASSISTENCIA_TECNICA') or can_access('PAGE_ASSISTENCIA_PRODUCAO_PECAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-assistencia-tecnica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-screwdriver-wrench"></i><span>Assistência Técnica</span></span>
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-assistencia-tecnica">
+                        {% if can_access('PAGE_ASSISTENCIA_TECNICA') %}
                         <a href="/assistencia-tecnica" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Solicitações de NF</a>
+                        {% endif %}
+                        {% if can_access('PAGE_ASSISTENCIA_PRODUCAO_PECAS') %}
+                        <a href="/assistencia-tecnica/producao-pecas" class="list-group-item list-group-item-action"><i class="fas fa-gears"></i> Produção de Peças</a>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}

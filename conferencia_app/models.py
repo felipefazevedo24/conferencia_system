@@ -4063,3 +4063,80 @@ class RpaExecucao(db.Model):
     __table_args__ = (
         db.Index("ix_rpa_execucao_fila", "ambiente", "status", "criada_em"),
     )
+
+
+class AssistenciaProducaoPeca(db.Model):
+    """Solicitacao de Producao de Pecas (Assistencia Tecnica).
+
+    Nasce so' pelo EDI (POST /api/edi/assistencia-tecnica/producao-pecas, com
+    token) - nao ha cadastro manual na tela. Depois a equipe so' efetiva o
+    status: Pendente -> Em andamento -> Em producao -> Concluido. Da pra
+    estornar uma etapa (engano) e cancelar com motivo enquanto nao concluiu.
+    Cada movimento fica em AssistenciaProducaoPecaHistorico.
+
+    Os dados do EDI sao gravados como vieram. A consulta ao ERP (codigo da
+    peca e, se veio, codigo do cliente) e' feita no recebimento e so'
+    complementa: `erp_verificado_em` nulo = ERP indisponivel na hora;
+    preenchido com `descricao_erp` nulo = codigo nao encontrado no ERP.
+    """
+
+    __tablename__ = "assistencia_producao_peca"
+
+    STATUS_PENDENTE = "Pendente"
+    STATUS_EM_ANDAMENTO = "Em andamento"
+    STATUS_EM_PRODUCAO = "Em produção"
+    STATUS_CONCLUIDO = "Concluído"
+    STATUS_CANCELADO = "Cancelado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Identificador do sistema de origem - evita duplicar quando o EDI reenvia.
+    id_externo = db.Column(db.String(100), unique=True, index=True)
+
+    cliente = db.Column(db.String(200), nullable=False)
+    cliente_codigo = db.Column(db.String(40))
+    maquina = db.Column(db.String(200), nullable=False)
+    codigo = db.Column(db.String(60), nullable=False, index=True)
+    descricao = db.Column(db.String(300), nullable=False)
+    motivo = db.Column(db.String(300), nullable=False)
+    comentario = db.Column(db.Text)
+    prazo = db.Column(db.Date, nullable=False)
+    solicitante = db.Column(db.String(120), nullable=False)
+
+    imagem = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    imagem_nome = db.Column(db.String(260))
+    imagem_content_type = db.Column(db.String(80))
+
+    descricao_erp = db.Column(db.String(300))
+    cliente_nome_erp = db.Column(db.String(200))
+    erp_verificado_em = db.Column(db.DateTime)
+
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDENTE, index=True)
+    recebido_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+    atualizado_em = db.Column(db.DateTime)
+    atualizado_por = db.Column(db.String(100))
+    motivo_cancelamento = db.Column(db.String(500))
+
+    historico = db.relationship(
+        "AssistenciaProducaoPecaHistorico",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+        order_by="AssistenciaProducaoPecaHistorico.id",
+    )
+
+
+class AssistenciaProducaoPecaHistorico(db.Model):
+    """Cada efetivacao/estorno/cancelamento de uma Solicitacao de Producao de
+    Pecas - quem, quando, de onde pra onde e o motivo (quando ha)."""
+
+    __tablename__ = "assistencia_producao_peca_historico"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer, db.ForeignKey("assistencia_producao_peca.id"), nullable=False, index=True
+    )
+    acao = db.Column(db.String(20), nullable=False)  # recebido / efetivado / estornado / cancelado
+    status_de = db.Column(db.String(20))
+    status_para = db.Column(db.String(20), nullable=False)
+    motivo = db.Column(db.String(500))
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
