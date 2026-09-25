@@ -57,6 +57,7 @@ PERMISSION_CATALOG = {
     "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
     "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
     "PAGE_ASSISTENCIA_TECNICA": "Assistência Técnica > Solicitações de NF (separação, faturamento e retorno)",
+    "PAGE_ASSISTENCIA_PRODUCAO_PECAS": "Assistência Técnica > Solicitação de Produção de Peças (efetivar, estornar e cancelar)",
     "MANAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Gerenciar romaneios (editar, estornar e excluir)",
     "PAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
