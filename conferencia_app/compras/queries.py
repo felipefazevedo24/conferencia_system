@@ -485,6 +485,149 @@ WHERE pointing.cod_empresa = %(cod_empresa)s AND pointing.cod_os = %(cod_os)s
 ORDER BY pointing.seq_processo_prod NULLS LAST, started_at, pointing.codigo
 """
 
+# CPM: uma leitura em lote por orcamento. A consulta traz todas as OS, pecas e
+# operacoes vinculadas sem executar uma consulta por OS/componente.
+SQL_PRODUCAO_CPM_ORCAMENTO_ATIVIDADES = """
+WITH RECURSIVE target AS (
+    SELECT codigo, n_orcamento, versao, dt_previsao_entrega
+    FROM public.torcamento
+    WHERE cod_empresa = %(cod_empresa)s
+      AND (codigo::text = %(orcamento)s OR n_orcamento::text = %(orcamento)s)
+    ORDER BY CASE WHEN codigo::text = %(orcamento)s THEN 0 ELSE 1 END, codigo DESC
+    LIMIT 1
+), seed AS (
+    SELECT target.codigo AS cod_orcamento, service.codigo AS cod_os
+    FROM target JOIN public.tos service
+      ON service.cod_empresa = %(cod_empresa)s AND service.cod_orcamento = target.codigo
+    UNION
+    SELECT target.codigo, generated.cod_os
+    FROM target JOIN public.torcamento_servico_gerados generated
+      ON generated.cod_empresa = %(cod_empresa)s
+     AND generated.cod_orcamento = target.codigo AND COALESCE(generated.cancelado, 0) = 0
+    UNION
+    SELECT target.codigo, request.cod_os
+    FROM target JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s AND request.numero_orcamento = target.n_orcamento
+), linked AS (
+    SELECT cod_orcamento, cod_os FROM seed
+    UNION
+    SELECT linked.cod_orcamento, generated.cod_os
+    FROM linked
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s AND request.cod_os = linked.cod_os
+    JOIN public.tos_solicitacao_necessidade generated
+      ON generated.cod_empresa = request.cod_empresa
+     AND generated.guid_solicitacao = request.guid_pai
+    WHERE generated.cod_os IS NOT NULL
+), orders AS (
+    SELECT DISTINCT cod_os FROM linked WHERE cod_os IS NOT NULL
+)
+SELECT target.codigo AS cod_orcamento, target.n_orcamento, target.versao,
+       target.dt_previsao_entrega, service.codigo AS cod_os, service.n_os,
+       service.cliente, service.titulo, service.u_classificacao,
+       item.codigo AS cod_os_aux, item.cod_os_completo, item.subtitulo,
+       item.os_pai, item.predecessora1, item.predecessora2,
+       process.codigo AS cod_processo, process.tiposervico,
+       process.seq AS seq_processo, process.finalizado,
+       process.concluido, process.processo_travado, process.data_inicio,
+       process.dt_incio_previsto, process.dt_termino_previsto,
+       process.dt_finalizacao, process.hs_realizadas,
+       COALESCE(NULLIF(BTRIM(process.maquina), ''), '') AS maquina,
+       COALESCE(NULLIF(to_jsonb(process)->>'hs_previstas', ''),
+                NULLIF(to_jsonb(process)->>'hs_prevista', ''),
+                NULLIF(to_jsonb(process)->>'tempo_previsto', ''),
+                NULLIF(to_jsonb(process)->>'horas_previstas', '')) AS duracao_prevista_horas
+FROM target
+LEFT JOIN orders ON TRUE
+LEFT JOIN public.tos service
+  ON service.cod_empresa = %(cod_empresa)s AND service.codigo = orders.cod_os
+ AND UPPER(BTRIM(service.n_os)) NOT LIKE 'E%%'
+LEFT JOIN public.tos_aux item
+  ON item.cod_empresa = service.cod_empresa AND item.cod_os = service.codigo
+LEFT JOIN public.tpro_pro process
+  ON process.cod_empresa = item.cod_empresa AND process.cod_os = item.cod_os
+ AND process.cod_os_aux = item.codigo
+ORDER BY service.n_os, item.codigo, process.seq NULLS LAST, process.codigo
+"""
+
+
+SQL_PRODUCAO_CPM_ORCAMENTO_COMPRAS = """
+WITH RECURSIVE target AS (
+    SELECT codigo, n_orcamento
+    FROM public.torcamento
+    WHERE cod_empresa = %(cod_empresa)s
+      AND (codigo::text = %(orcamento)s OR n_orcamento::text = %(orcamento)s)
+    ORDER BY CASE WHEN codigo::text = %(orcamento)s THEN 0 ELSE 1 END, codigo DESC
+    LIMIT 1
+), seed AS (
+    SELECT target.codigo AS cod_orcamento, service.codigo AS cod_os
+    FROM target JOIN public.tos service
+      ON service.cod_empresa = %(cod_empresa)s AND service.cod_orcamento = target.codigo
+    UNION
+    SELECT target.codigo, generated.cod_os
+    FROM target JOIN public.torcamento_servico_gerados generated
+      ON generated.cod_empresa = %(cod_empresa)s
+     AND generated.cod_orcamento = target.codigo AND COALESCE(generated.cancelado, 0) = 0
+    UNION
+    SELECT target.codigo, request.cod_os
+    FROM target JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s AND request.numero_orcamento = target.n_orcamento
+), linked AS (
+    SELECT cod_orcamento, cod_os FROM seed
+    UNION
+    SELECT linked.cod_orcamento, generated.cod_os
+    FROM linked
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = %(cod_empresa)s AND request.cod_os = linked.cod_os
+    JOIN public.tos_solicitacao_necessidade generated
+      ON generated.cod_empresa = request.cod_empresa
+     AND generated.guid_solicitacao = request.guid_pai
+    WHERE generated.cod_os IS NOT NULL
+), orders AS (
+    SELECT DISTINCT cod_os FROM linked WHERE cod_os IS NOT NULL
+), purchase_ref AS (
+    SELECT DISTINCT ON (purchase.cod_empresa, purchase.cod_ordem_compra)
+           purchase.cod_empresa, purchase.cod_ordem_compra,
+           purchase.dt_recebimento, purchase.fornecedor,
+           COALESCE(to_jsonb(purchase)->>'dt_previsao_entrega',
+                    to_jsonb(purchase)->>'dt_previsao',
+                    to_jsonb(purchase)->>'dt_prometida',
+                    to_jsonb(purchase)->>'previsao_entrega') AS promised_raw
+    FROM public.tcompras purchase
+    WHERE purchase.cod_empresa = %(cod_empresa)s
+    ORDER BY purchase.cod_empresa, purchase.cod_ordem_compra,
+             COALESCE(purchase.dt_lancamento, purchase.dt_recebimento) DESC NULLS LAST,
+             purchase.codigo DESC
+)
+SELECT target.codigo AS cod_orcamento, target.n_orcamento,
+       service.n_os, link.cod_os, link.cod_os_aux,
+       link.cod_ord_compra AS pedido, link.cod_solicitacao AS solicitacao, link.cod_produto,
+       product.codigo_interno AS material_codigo,
+       COALESCE(product.nome, material.produto) AS material_descricao,
+       COALESCE(link.qtde, 0) - COALESCE(link.qtde_devolucao, 0) AS quantidade,
+       material.unidade, purchase.fornecedor, purchase.dt_recebimento,
+       CASE WHEN COALESCE(purchase.promised_raw, '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            THEN SUBSTRING(purchase.promised_raw FROM 1 FOR 10)::date END AS data_prometida
+FROM target
+JOIN orders ON TRUE
+JOIN public.tos service
+  ON service.cod_empresa = %(cod_empresa)s AND service.codigo = orders.cod_os
+JOIN public.tcom_aux_os link
+  ON link.cod_empresa = service.cod_empresa AND link.cod_os = service.codigo
+ AND COALESCE(link.cancelado, 0) = 0
+LEFT JOIN public.tlis_mat material
+  ON material.cod_empresa = link.cod_empresa AND material.cod_os = link.cod_os
+ AND material.cod_os_aux = link.cod_os_aux AND material.cod_produto = link.cod_produto
+LEFT JOIN public.tproduto product
+  ON product.cod_empresa = link.cod_empresa AND product.codigo = link.cod_produto
+LEFT JOIN purchase_ref purchase
+  ON purchase.cod_empresa = link.cod_empresa
+ AND purchase.cod_ordem_compra = link.cod_ord_compra
+WHERE COALESCE(link.cod_ord_compra, 0) <> 0 OR COALESCE(link.cod_solicitacao, 0) <> 0
+ORDER BY link.cod_ord_compra NULLS LAST, link.cod_solicitacao NULLS LAST,
+         service.n_os, link.cod_os_aux, link.cod_produto
+"""
+
 SQL_PRODUCAO_RNCS_OS = """
 SELECT cod_os_aux, codigo, titulo, status_rnc, dt_fechamento
 FROM public.tn_conformidade

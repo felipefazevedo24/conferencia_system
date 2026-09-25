@@ -7,7 +7,7 @@
         tab: 'estrutura', month: now.getMonth() + 1, year: now.getFullYear(),
         classification: '', search: '', deliveries: [], classes: [],
         openBudget: null, loading: false, loaded: false, classesLoaded: false,
-        error: '', request: 0, scrollTop: 0
+        error: '', request: 0, scrollTop: 0, cpm: new Map(), cpmLoading: new Set(), cpmErrors: new Map()
     };
     const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -21,6 +21,11 @@
     let renderScheduled = false;
 
     function deliveryLabel(delivery) {
+        const cpm = state.cpm.get(String(delivery.orcamento));
+        if (cpm) return ({
+            ATRASO_PROJETADO: 'Atraso projetado', CRITICO: 'Crítico', RISCO_ALTO: 'Risco alto',
+            ATENCAO: 'Atenção', NORMAL: 'No prazo', RISCO_NAO_CALCULAVEL: 'Risco não calculável'
+        })[cpm.summary.status] || cpm.summary.status;
         const date = delivery.data_entrega?.slice(0, 10);
         if (!date) return 'Sem data';
         if (delivery.percentual === 100 || /conclu|finaliz/i.test(delivery.status || '')) return 'Concluído';
@@ -39,6 +44,36 @@
         if (!date) return '—';
         const [year, month, day] = date.split('-');
         return `${day}/${month}/${year}`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '—';
+        return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+    }
+
+    function formatMinutes(value) {
+        if (value === null || value === undefined) return '—';
+        const absolute = Math.abs(value);
+        return `${value < 0 ? '-' : ''}${Math.floor(absolute / 60)}h${absolute % 60 ? ` ${absolute % 60}min` : ''}`;
+    }
+
+    async function loadCpm(delivery) {
+        const budget = String(delivery.orcamento);
+        if (state.cpm.has(budget) || state.cpmLoading.has(budget)) return;
+        state.cpmLoading.add(budget);
+        state.cpmErrors.delete(budget);
+        scheduleRender();
+        try {
+            const response = await fetch(`/api/cpm/orcamento/${encodeURIComponent(budget)}`);
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Falha no cálculo CPM.');
+            state.cpm.set(budget, data);
+        } catch (error) {
+            state.cpmErrors.set(budget, error.message || 'Falha no cálculo CPM.');
+        } finally {
+            state.cpmLoading.delete(budget);
+            scheduleRender();
+        }
     }
 
     function selectedOrder() {
@@ -200,6 +235,7 @@
             state.scrollTop = toggle.closest('.delivery-list')?.scrollTop || 0;
             state.openBudget = open ? null : key;
             if (!open) {
+                loadCpm(delivery);
                 const initial = delivery.os.find((order) => order.principal) || delivery.os[0];
                 if (initial) selectOS(initial.numero);
             }
@@ -226,6 +262,21 @@
             card.append(progress);
         }
         if (open) {
+            const cpm = state.cpm.get(String(delivery.orcamento));
+            const cpmBox = element('div', 'delivery-cpm-card');
+            if (state.cpmLoading.has(String(delivery.orcamento))) {
+                cpmBox.append(element('p', 'delivery-message', 'Calculando caminho crítico...'));
+            } else if (state.cpmErrors.has(String(delivery.orcamento))) {
+                cpmBox.append(element('p', 'delivery-message delivery-error', state.cpmErrors.get(String(delivery.orcamento))));
+            } else if (cpm) {
+                const grid = element('div', 'delivery-cpm-grid');
+                [['Conclusão', formatDateTime(cpm.summary.projected_finish)], ['Folga', formatMinutes(cpm.summary.total_float_minutes)], ['Processos críticos', cpm.summary.critical_process_count], ['Compras críticas', cpm.summary.critical_purchase_count]].forEach(([label, value]) => {
+                    const item = element('span', ''); item.append(element('small', '', label), element('strong', '', String(value))); grid.append(item);
+                });
+                cpmBox.append(grid, element('div', `delivery-cpm-label cpm-${cpm.summary.status.toLowerCase()}`, deliveryLabel(delivery)));
+                cpm.warnings?.slice(0, 2).forEach((warning) => cpmBox.append(element('p', 'delivery-cpm-warning', warning)));
+            }
+            card.append(cpmBox);
             const orders = element('div', 'delivery-orders');
             orders.append(element('div', 'delivery-orders-title', 'OS vinculadas'));
             if (!delivery.os.length) orders.append(element('p', 'delivery-message', 'Orçamento sem OS vinculada.'));

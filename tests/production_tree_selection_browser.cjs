@@ -94,6 +94,12 @@ const server=http.createServer((req,res)=>{
   }
   if(url.pathname.startsWith('/api/')) {
     requests.push(url.pathname);
+    if(url.pathname.startsWith('/api/cpm/orcamento/')) {
+      const budget=url.pathname.split('/').at(-1)==='graph'?url.pathname.split('/').at(-2):url.pathname.split('/').at(-1);
+      const activities=['005','002','003','006'].map((suffix,index)=>({id:`PROC:${index}`,name:index===2?'Solda':'Corte',kind:'process',component_id:String(index),resource_id:index===2?'Solda 02':'Laser 01',order_number:'9958',early_start:'2026-09-25T08:00:00',early_finish:'2026-09-25T10:00:00',late_start:'2026-09-25T08:00:00',late_finish:'2026-09-25T10:00:00',duration_minutes:120,duration_label:null,total_float_minutes:index===2?0:480,is_critical:index===2,status:index===2?'CRITICO':'RISCO_ALTO',critical_reason:index===2?'recurso sobrecarregado':null,completed:false,predecessor_ids:[],metadata:{component_code:`9958/${suffix}`,operation_code:String(index)}}));
+      res.setHeader('Content-Type','application/json');
+      return res.end(JSON.stringify({budget:{id:72,number:Number(budget),version:'',contractual_delivery:'2026-09-25T17:00:00',orders:['9958','9959']},summary:{projected_finish:'2026-09-25T16:00:00',contractual_delivery:'2026-09-25T17:00:00',total_float_minutes:60,pending_process_count:4,critical_process_count:1,critical_purchase_count:1,status:'CRITICO',calculable:true},projected_finish:'2026-09-25T16:00:00',status:'CRITICO',activities,critical_path:['PROC:2'],purchases:[],warnings:[]}));
+    }
     if(cronogramaMode && url.pathname==='/api/producao/cronograma-entregas/classificacoes') {
       res.setHeader('Content-Type','application/json');
       return res.end(JSON.stringify({classificacoes:fullStructureMode?['MOLDE']:['CMS','Moldes']}));
@@ -284,6 +290,9 @@ const server=http.createServer((req,res)=>{
       await inner("[...d.querySelectorAll('.map-view-switch button')].find(b=>b.textContent==='Estrutura da OS').click();");
       await wait("return d.querySelectorAll('.assembly-node').length===4;");
       await wait("return d.querySelectorAll('.react-flow__edge').length===3;");
+      await wait("return [...d.querySelectorAll('.assembly-node')].some(n=>n.textContent.includes('9958/003')&&n.textContent.includes('CRÍTICO')&&n.textContent.includes('Folga 0h')); ");
+      await inner("[...d.querySelectorAll('.assembly-node')].find(n=>n.textContent.includes('9958/003')).click();");
+      await wait("return d.querySelector('.details-panel')?.textContent.includes('Status CPM')&&d.querySelector('.details-panel')?.textContent.includes('recurso sobrecarregado');");
       assert(await inner("return [...d.querySelectorAll('.assembly-node')].find(n=>n.textContent.includes('9958/003')).textContent.includes('10');"));
       const artifact=path.join(project,'tmp_producao_contexto');fs.mkdirSync(artifact,{recursive:true});
       fs.writeFileSync(path.join(artifact,'estrutura.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
@@ -295,7 +304,7 @@ const server=http.createServer((req,res)=>{
       await inner("[...d.querySelectorAll('.dependency-node')].find(b=>b.textContent.includes('OS 9959')).click();");
       await wait("return d.querySelector('.tree-row strong')?.textContent==='9959/005';");
       assert.deepEqual(exceptions,[]);
-      console.log('PASS: orçamento 7175, duas OS, filtros, navegação e hierarquia das peças (dados simulados)');
+      console.log('PASS: orçamento 7175, CPM, duas OS, filtros, navegação e hierarquia das peças (dados simulados)');
       await call('Browser.close');return;
     }
 

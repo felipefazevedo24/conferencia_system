@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { api } from "../lib/api";
+import { api, type CpmActivity } from "../lib/api";
 import { formatBytes, formatQuantity } from "../lib/format";
 import type {
   AssemblyNode,
@@ -25,11 +25,14 @@ interface DetailsPanelProps {
   orderNumber: string;
   selectedNode: AssemblyNode | null;
   onLocate: (node: AssemblyNode) => void;
+  cpmActivities?: CpmActivity[];
 }
+
+const EMPTY_CPM_ACTIVITIES: CpmActivity[] = [];
 
 type DetailsTab = "details" | "materials";
 
-export function DetailsPanel({ orderNumber, selectedNode, onLocate }: DetailsPanelProps) {
+export function DetailsPanel({ orderNumber, selectedNode, onLocate, cpmActivities = EMPTY_CPM_ACTIVITIES }: DetailsPanelProps) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailsTab>("details");
   const detail = useQuery({
@@ -88,6 +91,7 @@ export function DetailsPanel({ orderNumber, selectedNode, onLocate }: DetailsPan
           copied={copied}
           onCopied={setCopied}
           onLocate={onLocate}
+          cpmActivities={cpmActivities.filter((activity) => activity.metadata.component_code === selectedNode.code)}
         />
       )}
       {activeTab === "materials" && (
@@ -128,7 +132,8 @@ function DetailsTabContent({
   materialError,
   copied,
   onCopied,
-  onLocate
+  onLocate,
+  cpmActivities
 }: {
   data: ItemDetail;
   materialUsed: boolean | undefined;
@@ -137,6 +142,7 @@ function DetailsTabContent({
   copied: boolean;
   onCopied: (copied: boolean) => void;
   onLocate: (node: AssemblyNode) => void;
+  cpmActivities: CpmActivity[];
 }) {
   const allDocuments = [...data.drawings, ...data.documents];
   const primaryDocument = allDocuments.find((document) => document.is_primary)
@@ -163,6 +169,10 @@ function DetailsTabContent({
         </div>
         <DetailRow label="Motivo do status" value={data.node.state_reason} />
         <DetailRow label="Status no GRV" value={data.node.source_status ?? "—"} />
+        <DetailRow label="Status CPM" value={cpmActivities.find((activity) => activity.is_critical && !activity.completed) ? "CRÍTICO" : cpmActivities[0]?.status.replaceAll("_", " ") ?? "Sem cálculo"} />
+        <DetailRow label="Folga CPM" value={formatCpmFloat(cpmActivities)} />
+        <DetailRow label="Próximo processo" value={cpmActivities.find((activity) => !activity.completed)?.name ?? "—"} />
+        <DetailRow label="Impacto na entrega" value={cpmActivities.find((activity) => activity.is_critical && !activity.completed)?.critical_reason ?? "Sem impacto crítico calculado"} />
         <div className="detail-row material-used-row">
           <span>Material utilizado</span>
           <strong aria-label={
@@ -231,6 +241,13 @@ function DetailsTabContent({
       </div>
     </div>
   );
+}
+
+function formatCpmFloat(activities: CpmActivity[]) {
+  if (!activities.length) return "—";
+  const value = Math.min(...activities.map((activity) => activity.total_float_minutes));
+  const absolute = Math.abs(value);
+  return `${value < 0 ? "-" : ""}${Math.floor(absolute / 60)}h${absolute % 60 ? ` ${absolute % 60}min` : ""}`;
 }
 
 function versionThumbnailUrl(

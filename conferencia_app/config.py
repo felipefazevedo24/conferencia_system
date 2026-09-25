@@ -86,6 +86,9 @@ class Config:
     _database_url = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
     SQLALCHEMY_DATABASE_URI = _database_url or f"sqlite:///{_db_path.as_posix()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    CPM_CRITICAL_TOLERANCE_MINUTES = int(os.environ.get("CPM_CRITICAL_TOLERANCE_MINUTES", "30"))
+    CPM_HIGH_RISK_MINUTES = int(os.environ.get("CPM_HIGH_RISK_MINUTES", "480"))
+    CPM_ATTENTION_MINUTES = int(os.environ.get("CPM_ATTENTION_MINUTES", "1440"))
     GRV_WEB_RPA_ENABLED = os.environ.get("GRV_WEB_RPA_ENABLED", "0") == "1"
     GRV_RPA_BACKEND_PATH = os.environ.get("GRV_RPA_BACKEND_PATH", "")
     GRV_RPA_WINDOW_TITLE = os.environ.get("GRV_RPA_WINDOW_TITLE", r".*CPS.*COLUMBIA.*")
