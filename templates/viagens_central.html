@@ -31,7 +31,9 @@
     .vt-row-correios td { background: #e0f2fe; }
     .vt-row-correios:hover td { background: #bae6fd; }
     .vt-liberacao-pendente { color: #eab308; margin-left: 6px; }
-    .vt-correios-tag { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 2px 7px; margin-left: 6px; background: #bae6fd; color: #075985; }
+    .vt-type.correios { background: #bae6fd; color: #075985; }
+    .vt-header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .vt-header-actions .eui-btn { min-height: 40px; padding: 0 16px; text-decoration: none; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -82,8 +84,8 @@
             <h1 class="eui-page-header__title"><i class="fas fa-route"></i> Central de Viagens</h1>
             <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--primary"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
+        <div class="vt-header-actions">
+          <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--ghost"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}
@@ -506,15 +508,41 @@ function classeLinhaColeta(row) {
   return row && row.correios ? 'vt-row-correios' : '';
 }
 
+function tipoBadge(row, typeClass, label) {
+  if (row && row.correios) return '<span class="vt-type correios" title="Coleta nos Correios">CORREIOS</span>';
+  return `<span class="vt-type ${typeClass}">${label || '-'}</span>`;
+}
+
+// Hora de Brasília no mesmo formato de data_liberacao ("AAAA-MM-DDTHH:MM"),
+// para comparar como texto sem depender do fuso do computador do gestor.
+function agoraBrasiliaIso() {
+  const partes = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}`;
+}
+
+// Calculado no navegador a cada render: o valor que vem do servidor congela
+// no carregamento e a Central não recarrega sozinha.
+function coletaAguardandoLiberacao(row) {
+  const liberacao = String(row?.data_liberacao || '').slice(0, 16);
+  return !!liberacao && liberacao > agoraBrasiliaIso();
+}
+
 function marcadoresColeta(row) {
   if (!row || String(row.tipo || '').toUpperCase() !== 'COLETA') return '';
-  let html = '';
-  if (row.aguardando_liberacao) {
-    html += `<i class="fas fa-triangle-exclamation vt-liberacao-pendente" title="Coleta ainda não liberada. Liberada a partir de ${row.data_liberacao_label || '-'}."></i>`;
-  }
-  if (row.correios) html += '<span class="vt-correios-tag" title="Coleta nos Correios">CORREIOS</span>';
-  return html;
+  if (!coletaAguardandoLiberacao(row)) return '';
+  return `<i class="fas fa-triangle-exclamation vt-liberacao-pendente" title="Coleta ainda não liberada. Liberada a partir de ${row.data_liberacao_label || '-'}."></i>`;
 }
+
+// Tira o triângulo quando a hora chega, sem esperar o gestor recarregar a página.
+let assinaturaLiberacao = null;
+setInterval(() => {
+  const atual = (state.coletas || []).filter(coletaAguardandoLiberacao).map((r) => r.id).join(',');
+  if (assinaturaLiberacao !== null && atual !== assinaturaLiberacao) renderTable();
+  assinaturaLiberacao = atual;
+}, 30000);
 
 function renderSolicitacaoRow(row) {
   const tipo = String(row.tipo || '').toUpperCase();
@@ -530,7 +558,7 @@ function renderSolicitacaoRow(row) {
   return `
     <tr class="vt-solicitacao-row ${classeLinhaColeta(row)}" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-      <td><span class="vt-type ${typeClass}">${tipo || '-'}</span></td>
+      <td>${tipoBadge(row, typeClass, tipo)}</td>
       <td>${doc}${marcadoresColeta(row)}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
@@ -844,7 +872,7 @@ function renderTable() {
       return `
         <tr class="${classeLinhaColeta(row)}">
           <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-          <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
+          <td>${tipoBadge(row, typeClass, state.tab)}</td>
           <td>${doc}${marcadoresColeta(row)}</td>
           <td>${row.parceiro_nome || '-'}</td>
           <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
@@ -886,7 +914,7 @@ function renderTable() {
         return `
           <tr class="${classeLinhaColeta(row)}">
             <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-            <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
+            <td>${tipoBadge(row, typeClass, state.tab)}</td>
             <td>${doc}${marcadoresColeta(row)}</td>
             <td>${row.parceiro_nome || '-'}</td>
             <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
