@@ -6,18 +6,14 @@
 {% block extra_head %}
 <style>
     .ch-wrap { display: grid; gap: 16px; }
-    .ch-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-    .ch-search { flex: 1; min-width: 280px; position: relative; }
+    .ch-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; width: 100%; }
+    .ch-search { flex: 1; min-width: 240px; position: relative; }
     .ch-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); }
     .ch-search input { padding-left: 36px; width: 100%; }
-    .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ch-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
     .ch-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
-    .ch-table-wrap { overflow-x: auto; }
-    .ch-code { font-weight: 800; color: var(--eui-text); }
-    .ch-desc { font-size: 12px; color: var(--eui-text-soft); max-width: 320px; }
     .ch-muted { color: var(--eui-muted); font-size: 12px; }
-    .ch-num { font-weight: 800; color: var(--eui-text); white-space: nowrap; }
-    .ch-diff { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+    .ch-diff { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
     .ch-diff.ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
     .ch-diff.bad { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .ch-diff.none { background: var(--eui-surface-2); color: var(--eui-muted); }
@@ -25,87 +21,119 @@
     .ch-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
     .ch-tab { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 14px; border-radius: 7px; cursor: pointer; }
     .ch-tab.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
-    .ch-group { border: 1px solid var(--eui-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
-    .ch-group.open { box-shadow: var(--eui-shadow-sm); }
-    .ch-group__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; width: 100%; padding: 14px 16px; background: var(--eui-surface-2); border: 0; cursor: pointer; text-align: left; }
-    .ch-group__head:hover { filter: brightness(0.98); }
-    .ch-group__id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .ch-group__chev { color: var(--eui-muted); width: 14px; text-align: center; }
-    .ch-group__count { font-size: 11px; font-weight: 800; color: var(--eui-muted); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 2px 8px; }
-    .ch-group__kpis { display: flex; gap: 8px; flex-wrap: wrap; }
-    .ch-chip { font-size: 11.5px; color: var(--eui-text-soft); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
-    .ch-chip b { color: var(--eui-text); }
-    .ch-chip--on { border-color: color-mix(in srgb, var(--eui-primary) 45%, var(--eui-border)); background: color-mix(in srgb, var(--eui-primary) 8%, var(--eui-surface)); }
-    .ch-group__count--warn { color: var(--eui-warning, #b45309); background: color-mix(in srgb, var(--eui-warning, #f59e0b) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
-    .ch-tag-cli { font-size: 10.5px; font-weight: 700; color: #7c3aed; background: color-mix(in srgb, #7c3aed 12%, transparent); border: 1px solid color-mix(in srgb, #7c3aed 35%, var(--eui-border)); border-radius: 999px; padding: 2px 9px; display: inline-flex; align-items: center; gap: 5px; max-width: 320px; }
-    .ch-tag-cli span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ch-group__title { display: grid; gap: 1px; }
-    .ch-group__tiles { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
-    .ch-gstat { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-    .ch-gstat + .ch-gstat { border-left: 1px solid var(--eui-border); padding-left: 14px; }
-    .ch-gstat__lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--eui-muted); }
-    .ch-gstat__kg { font-size: 12.5px; font-weight: 700; color: var(--eui-text); }
-    .ch-gstat__und { font-size: 11px; font-weight: 500; color: var(--eui-text-soft); }
-    .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: color-mix(in srgb, var(--eui-primary) 5%, var(--eui-surface)); border-bottom: 1px solid var(--eui-border); }
-    .ch-os__t { font-size: 12px; font-weight: 600; color: var(--eui-text); margin-right: 4px; }
-    .ch-os__i { font-size: 11.5px; color: var(--eui-text-soft); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 999px; padding: 3px 9px; }
-    .ch-os__i b { color: var(--eui-text); }
-    .ch-group__body { padding: 12px; display: grid; gap: 10px; background: var(--eui-surface); border-top: 1px solid var(--eui-border); }
-    .ch-lote { border: 1px solid var(--eui-border); border-radius: 10px; overflow: hidden; }
-    .ch-lote__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--eui-surface-2); }
-    .ch-lote__id { display: grid; gap: 2px; }
-    .ch-lote__lote { font-weight: 800; color: var(--eui-text); font-size: 13px; }
-    .ch-lote__meta { font-size: 11px; color: var(--eui-muted); }
-    .ch-lote__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .ch-lote__peso { font-size: 11px; font-weight: 700; color: var(--eui-text-soft); }
-    .ch-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--eui-border); }
-    .ch-metric { background: var(--eui-surface); padding: 10px 12px; font-size: 13px; color: var(--eui-text-soft); }
-    .ch-metric span { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-bottom: 3px; }
-    .ch-metric b { color: var(--eui-text); }
-    .ch-metric--on { background: var(--eui-primary-soft); }
 
-    .ch-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(2px); display: none; align-items: flex-start; justify-content: center; z-index: 4000; padding: 30px 14px; overflow-y: auto; }
-    .ch-overlay.open { display: flex; }
-    .ch-modal { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; width: 100%; max-width: 620px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    /* Tabela: uma linha por código, colunas alinhadas pra bater o olho no disponível. */
+    .ch-cols { display: grid; grid-template-columns: minmax(260px, 2.4fr) 80px 70px repeat(3, minmax(120px, 1fr)); align-items: center; gap: 12px; }
+    .ch-thead { padding: 10px 16px; border-bottom: 1px solid var(--eui-border); background: var(--eui-surface-2); position: sticky; top: 0; z-index: 1; }
+    .ch-th { border: 0; background: transparent; padding: 0; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); text-align: left; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+    .ch-th.num { justify-content: flex-end; width: 100%; }
+    .ch-th.sorted { color: var(--eui-primary); }
+    .ch-row { border-bottom: 1px solid var(--eui-border); }
+    .ch-row__main { width: 100%; padding: 12px 16px; background: var(--eui-surface); border: 0; text-align: left; cursor: pointer; color: inherit; }
+    .ch-row__main:hover { background: var(--eui-surface-2); }
+    .ch-row.open .ch-row__main { background: var(--eui-primary-soft); }
+    .ch-item { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .ch-item__chev { color: var(--eui-muted); width: 12px; margin-top: 3px; flex: none; transition: transform .15s; }
+    .ch-row.open .ch-item__chev { transform: rotate(90deg); }
+    .ch-item__txt { display: grid; gap: 2px; min-width: 0; }
+    .ch-code { font-weight: 800; font-size: 14px; color: var(--eui-text); }
+    .ch-desc { font-size: 12px; color: var(--eui-text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ch-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }
+    .ch-tags .eui-badge { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+    .ch-esp { font-weight: 700; font-size: 13px; color: var(--eui-text); }
+    .ch-lotes { font-size: 12px; color: var(--eui-text-soft); }
+    .ch-val { text-align: right; display: grid; gap: 1px; }
+    .ch-val b { font-size: 15px; font-weight: 800; color: var(--eui-text); }
+    .ch-val small { font-size: 11.5px; color: var(--eui-muted); }
+    .ch-val--disp b { color: var(--eui-success); font-size: 17px; }
+    .ch-val--zero b { color: var(--eui-muted); }
+    .ch-lbl-m { display: none; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--eui-muted); }
+
+    .ch-row__body { padding: 4px 16px 14px 38px; background: var(--eui-primary-soft); display: grid; gap: 8px; }
+    .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--eui-text-soft); padding: 4px 0; }
+    .ch-os b { color: var(--eui-text); }
+    .ch-lote { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: minmax(200px, 1.6fr) minmax(140px, 1fr) minmax(170px, 1fr) auto; gap: 12px; align-items: center; }
+    .ch-lote__lote { font-weight: 800; color: var(--eui-text); font-size: 13px; overflow-wrap: anywhere; }
+    .ch-lote__meta { font-size: 11.5px; color: var(--eui-muted); }
+    .ch-lote__rec { font-size: 12.5px; color: var(--eui-text-soft); }
+    .ch-lote__rec b { color: var(--eui-text); }
+    .ch-lote__calc { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--eui-text-soft); }
+    .ch-lote__acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; position: relative; }
+    .ch-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 200px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; box-shadow: var(--eui-shadow-md, 0 10px 30px rgba(0,0,0,.18)); padding: 6px; display: none; }
+    .ch-menu.open { display: grid; }
+    .ch-menu button { border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--eui-text); cursor: pointer; display: flex; gap: 8px; align-items: center; }
+    .ch-menu button:hover { background: var(--eui-surface-2); }
+    .ch-menu .danger { color: var(--eui-danger); }
+
+    /* Todos os modais são <dialog>: ficam na camada do topo, acima do menu
+       lateral e de qualquer ancestral com transform, então o fundo cobre a tela. */
+    .ch-dialog { width: min(620px, calc(100% - 24px)); margin: auto; padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; max-height: calc(100dvh - 24px); overflow: auto; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .ch-dialog::backdrop { background: rgba(15,23,42,.55); backdrop-filter: blur(2px); }
+    .ch-dialog--wide { width: min(880px, calc(100% - 24px)); }
+    .ch-dialog--sm { width: min(480px, calc(100% - 24px)); }
+    .ch-dialog p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
     .ch-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--eui-border); }
     .ch-modal__title { font-size: 15px; font-weight: 800; color: var(--eui-text); display: flex; align-items: center; gap: 8px; }
-    .ch-modal__close { border: 0; background: transparent; color: var(--eui-muted); font-size: 18px; cursor: pointer; }
+    .ch-modal__close { border: 0; background: transparent; color: var(--eui-muted); font-size: 20px; cursor: pointer; line-height: 1; }
     .ch-modal__body { padding: 18px 20px; display: grid; gap: 16px; }
-    .ch-modal__foot { padding: 14px 20px; border-top: 1px solid var(--eui-border); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .ch-modal__foot { padding: 14px 20px; border-top: 1px solid var(--eui-border); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ch-error { color: var(--eui-danger); font-size: 12.5px; font-weight: 600; }
+    .ch-warn { color: var(--eui-warning-soft-text); background: var(--eui-warning-soft); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-weight: 600; }
 
-    .ch-iteminfo { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 16px; padding: 12px 14px; background: var(--eui-surface-2); border-radius: 10px; font-size: 12px; }
-    .ch-iteminfo b { display: block; color: var(--eui-text); font-size: 13px; }
+    .ch-iteminfo { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 16px; padding: 12px 14px; background: var(--eui-surface-2); border-radius: 10px; font-size: 12px; }
+    .ch-iteminfo b { display: block; color: var(--eui-text); font-size: 13px; overflow-wrap: anywhere; }
     .ch-iteminfo span { color: var(--eui-muted); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
-
     .ch-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .ch-field label { display: block; font-size: 11px; font-weight: 800; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
-    .ch-field input, .ch-field select { width: 100%; }
+    .ch-field input, .ch-field select, .ch-field textarea { width: 100%; }
     .ch-dims { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
-
     .ch-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px; border-radius: 10px; background: var(--eui-primary-soft); }
     .ch-result > div { text-align: center; }
     .ch-result span { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
     .ch-result b { display: block; font-size: 20px; font-weight: 800; color: var(--eui-text); margin-top: 2px; }
     .ch-result .ch-diff { font-size: 15px; margin-top: 4px; }
-
     .ch-conv { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--eui-text-soft); flex-wrap: wrap; }
     .ch-conv input { width: 90px; }
     .ch-logs { margin-top: 4px; font-size: 12px; color: var(--eui-text-soft); display: grid; gap: 8px; }
     .ch-log { border-left: 3px solid var(--eui-border); padding: 6px 10px; background: var(--eui-surface-2); border-radius: 6px; }
     .ch-log b { color: var(--eui-text); }
-    .ch-delete-dialog { width: min(520px, calc(100% - 24px)); padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; max-height: calc(100dvh - 24px); overflow: auto; }
-    .ch-delete-dialog::backdrop { background: rgba(15,23,42,.6); backdrop-filter: blur(2px); }
-    .ch-delete-dialog p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
-    .ch-delete-btn { color: var(--eui-danger); }
     #ch-delete-confirm { background: var(--eui-danger); color: #fff; }
     #ch-delete-confirm:disabled, #ch-delete-cancel:disabled { opacity: .55; cursor: wait; }
-    .ch-audit-dialog { width: min(880px, calc(100% - 24px)); }
-    .ch-audit-entry { border: 1px solid var(--eui-border); border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
-    .ch-audit-values { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .ch-audit-values>div { background: var(--eui-surface-2); border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
-    .ch-audit-values p { font-size: 12px; margin-top: 5px; }
-    .ch-audit-list { display: grid; gap: 12px; }
-    @media(max-width:600px) { .ch-audit-values { grid-template-columns: 1fr; } }
+
+    /* Histórico: uma linha por evento, mostrando só o que mudou (antes → depois). */
+    .ch-audit-list { display: grid; }
+    .ch-audit-entry { display: grid; grid-template-columns: 150px 1fr; gap: 4px 16px; padding: 12px 2px; border-bottom: 1px solid var(--eui-border); }
+    .ch-audit-entry:last-child { border-bottom: 0; }
+    .ch-audit-when { font-size: 12px; color: var(--eui-text-soft); }
+    .ch-audit-when b { display: block; color: var(--eui-text); font-size: 12.5px; }
+    .ch-audit-what { display: grid; gap: 4px; min-width: 0; }
+    .ch-audit-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    .ch-audit-title b { color: var(--eui-text); }
+    .ch-audit-ref { font-size: 11.5px; color: var(--eui-muted); overflow-wrap: anywhere; }
+    .ch-audit-chg { font-size: 12.5px; color: var(--eui-text-soft); }
+    .ch-audit-chg s { color: var(--eui-muted); }
+    .ch-audit-chg b { color: var(--eui-text); }
+    .ch-audit-motivo { font-size: 12.5px; color: var(--eui-text); background: var(--eui-surface-2); border-radius: 6px; padding: 6px 10px; }
+    .ch-audit-filter { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .ch-audit-filter input { flex: 1; min-width: 200px; }
+
+    @media (max-width: 900px) {
+        .ch-thead { display: none; }
+        .ch-cols { grid-template-columns: repeat(3, 1fr); }
+        .ch-cols > .ch-item { grid-column: 1 / -1; }
+        .ch-esp, .ch-lotes { display: none; }
+        .ch-val { text-align: left; }
+        .ch-lbl-m { display: block; }
+        .ch-row__body { padding-left: 16px; }
+        .ch-lote { grid-template-columns: 1fr; }
+        .ch-lote__acts { justify-content: flex-start; }
+        .ch-menu { left: 0; right: auto; }
+        .ch-audit-entry { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+        .ch-actions { margin-left: 0; }
+        .ch-grid2, .ch-result { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock %}
 
@@ -140,119 +168,175 @@
                 </div>
                 <div class="ch-actions">
                     <button type="button" class="eui-btn eui-btn--ghost" id="ch-audit-open"><i class="fas fa-clock-rotate-left"></i> Histórico de alterações</button>
-                    <span class="ch-muted" id="ch-updated"></span>
-                    <button class="eui-btn eui-btn--ghost" id="ch-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <button type="button" class="eui-btn eui-btn--ghost" id="ch-refresh"><i class="fas fa-rotate"></i> <span id="ch-updated">Atualizar</span></button>
                 </div>
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
             <div class="ch-state" id="ch-state">Carregando chapas...</div>
-            <div id="ch-groups"></div>
+            <div id="ch-table" style="display:none;">
+                <div class="ch-thead ch-cols">
+                    <button type="button" class="ch-th" data-sort="codigo">Código / descrição <i class="fas fa-sort"></i></button>
+                    <button type="button" class="ch-th" data-sort="espessura">Esp. (mm) <i class="fas fa-sort"></i></button>
+                    <button type="button" class="ch-th" data-sort="lotes">Lotes <i class="fas fa-sort"></i></button>
+                    <button type="button" class="ch-th num" data-sort="estoque">Em estoque <i class="fas fa-sort"></i></button>
+                    <button type="button" class="ch-th num" data-sort="reservado">Reservado <i class="fas fa-sort"></i></button>
+                    <button type="button" class="ch-th num" data-sort="disponivel">Disponível <i class="fas fa-sort"></i></button>
+                </div>
+                <div id="ch-groups"></div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Modal calculadora -->
-<dialog id="ch-audit-dialog" class="ch-delete-dialog ch-audit-dialog" aria-labelledby="ch-audit-title">
-    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-audit-title"><i class="fas fa-clock-rotate-left"></i> Histórico de alterações</div><button type="button" class="eui-btn eui-btn--ghost" id="ch-audit-close">Fechar</button></div>
-    <div class="ch-modal__body"><label for="ch-audit-search" class="ch-muted">Buscar NF, código, AR, usuário ou ação</label><input id="ch-audit-search" class="eui-input" type="search" placeholder="Ex.: exclusão, unidades, NF ou código">
-        <p class="ch-muted">Exclusões, unidades e cálculos registrados a partir da ativação desta auditoria. Os históricos anteriores de cálculo continuam disponíveis na calculadora.</p>
-        <div id="ch-audit-list" class="ch-audit-list" aria-live="polite"></div></div>
-    <div class="ch-modal__foot"><button type="button" id="ch-audit-prev" class="eui-btn eui-btn--ghost">Anterior</button><span id="ch-audit-page" class="ch-muted"></span><button type="button" id="ch-audit-next" class="eui-btn eui-btn--ghost">Próxima</button></div>
+<dialog id="ch-audit-dialog" class="ch-dialog ch-dialog--wide" aria-labelledby="ch-audit-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-audit-title"><i class="fas fa-clock-rotate-left"></i> <span id="ch-audit-title-txt">Histórico de alterações</span></div><button type="button" class="ch-modal__close" id="ch-audit-close" aria-label="Fechar">&times;</button></div>
+    <div class="ch-modal__body">
+        <div class="ch-audit-filter">
+            <input id="ch-audit-search" class="eui-input" type="search" placeholder="Buscar NF, código, AR, usuário ou ação" aria-label="Buscar no histórico">
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="ch-audit-all" style="display:none;"><i class="fas fa-xmark"></i> Ver todos os itens</button>
+        </div>
+        <div id="ch-audit-list" class="ch-audit-list" aria-live="polite"></div>
+    </div>
+    <div class="ch-modal__foot"><button type="button" id="ch-audit-prev" class="eui-btn eui-btn--ghost eui-btn--sm"><i class="fas fa-chevron-left"></i> Anterior</button><span id="ch-audit-page" class="ch-muted"></span><button type="button" id="ch-audit-next" class="eui-btn eui-btn--ghost eui-btn--sm">Próxima <i class="fas fa-chevron-right"></i></button></div>
 </dialog>
 {% if pode_excluir_chapas %}
-<dialog id="ch-delete-dialog" class="ch-delete-dialog" aria-labelledby="ch-delete-title">
+<dialog id="ch-delete-dialog" class="ch-dialog ch-dialog--sm" aria-labelledby="ch-delete-title">
     <div class="ch-modal__head"><div class="ch-modal__title" id="ch-delete-title"><i class="fas fa-trash-can"></i> Excluir do controle de chapas</div></div>
-    <div class="ch-modal__body"><p id="ch-delete-item"></p><p class="ch-muted">O item será removido deste controle, inclusive do histórico de zerados. A NF, os dados da conferência e os cálculos serão preservados. O saldo no GRV não será alterado.</p><p id="ch-delete-error" role="alert" class="ch-delete-btn"></p></div>
+    <div class="ch-modal__body"><p id="ch-delete-item" style="white-space:pre-line;"></p><p class="ch-muted">O item será removido deste controle, inclusive do histórico de zerados. A NF, os dados da conferência e os cálculos serão preservados. O saldo no GRV não será alterado.</p><p id="ch-delete-error" role="alert" class="ch-error"></p></div>
     <div class="ch-modal__foot"><button type="button" id="ch-delete-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-delete-confirm" class="eui-btn eui-btn--danger">Excluir do controle</button></div>
 </dialog>
-{% endif %}
-<div class="ch-overlay" id="ch-calc-overlay">
-    <div class="ch-modal">
-        <div class="ch-modal__head">
-            <div class="ch-modal__title"><i class="fas fa-calculator"></i> Calcular peso da chapa</div>
-            <button type="button" class="ch-modal__close" onclick="fecharCalc()">&times;</button>
-        </div>
-        <div class="ch-modal__body">
-            <div class="ch-iteminfo" id="ch-calc-item"></div>
-            <div class="ch-grid2">
-                <div class="ch-field">
-                    <label>Tipo de material</label>
-                    <select class="eui-select" id="ch-material" onchange="recalcular()"></select>
-                </div>
-                <div class="ch-field">
-                    <label>Formato</label>
-                    <select class="eui-select" id="ch-formato" onchange="montarCamposFormato(); recalcular();"></select>
-                </div>
-            </div>
-            <div class="ch-dims" id="ch-dims"></div>
-            <div class="ch-result">
-                <div><span>Peso por peça</span><b id="ch-res-peca">—</b></div>
-                <div><span>Peso total (× UND)</span><b id="ch-res-total">—</b></div>
-                <div><span>Diferença vs NF</span><div id="ch-res-diff" class="ch-diff none">—</div></div>
-            </div>
-            <div class="ch-conv">
-                <i class="fas fa-ruler-combined"></i> Conversor:
-                <input class="eui-input" id="ch-conv-pol" type="number" step="0.0001" placeholder="pol." oninput="converterPolMm('pol')">
-                <span>pol =</span>
-                <input class="eui-input" id="ch-conv-mm" type="number" step="0.01" placeholder="mm" oninput="converterPolMm('mm')">
-                <span>mm</span>
-            </div>
-            <div>
-                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ch-btn-logs" onclick="alternarLogs()"><i class="fas fa-clock-rotate-left"></i> Ver histórico de alterações</button>
-                <div class="ch-logs" id="ch-logs" style="display:none;"></div>
-            </div>
-            <div class="ch-muted" id="ch-calc-msg" style="color:var(--eui-danger);"></div>
-        </div>
-        <div class="ch-modal__foot">
-            <button type="button" class="eui-btn eui-btn--ghost" onclick="fecharCalc()">Cancelar</button>
-            <button type="button" class="eui-btn eui-btn--primary" id="ch-btn-salvar" onclick="salvarCalc()"><i class="fas fa-check"></i> Salvar cálculo</button>
-        </div>
+<dialog id="ch-und-dialog" class="ch-dialog ch-dialog--sm" aria-labelledby="ch-und-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-und-title"><i class="fas fa-pen-to-square"></i> Alterar quantidade recebida</div><button type="button" class="ch-modal__close" id="ch-und-close" aria-label="Fechar">&times;</button></div>
+    <div class="ch-modal__body">
+        <div class="ch-iteminfo" id="ch-und-item"></div>
+        <div class="ch-field"><label for="ch-und-valor">Nova quantidade (UND)</label><input class="eui-input" id="ch-und-valor" type="number" min="1" step="1" inputmode="numeric"></div>
+        <div class="ch-muted" id="ch-und-preview"></div>
+        <div class="ch-field"><label for="ch-und-motivo">Motivo da alteração</label><textarea class="eui-textarea" id="ch-und-motivo" rows="2" maxlength="300" placeholder="Ex.: recontagem física, NF lançada em linha única no GRV..."></textarea></div>
+        <p class="ch-muted">Altera também a UND da conferência de recebimento desta NF. Fica registrado no histórico de alterações.</p>
+        <p id="ch-und-error" role="alert" class="ch-error"></p>
     </div>
-</div>
+    <div class="ch-modal__foot"><button type="button" id="ch-und-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-und-save" class="eui-btn eui-btn--primary"><i class="fas fa-check"></i> Salvar quantidade</button></div>
+</dialog>
+{% endif %}
+<dialog id="ch-calc-dialog" class="ch-dialog" aria-labelledby="ch-calc-title">
+    <div class="ch-modal__head">
+        <div class="ch-modal__title" id="ch-calc-title"><i class="fas fa-calculator"></i> Calcular peso da chapa</div>
+        <button type="button" class="ch-modal__close" onclick="fecharCalc()" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="ch-modal__body">
+        <div class="ch-iteminfo" id="ch-calc-item"></div>
+        <div class="ch-grid2">
+            <div class="ch-field">
+                <label for="ch-material">Tipo de material</label>
+                <select class="eui-select" id="ch-material" onchange="recalcular()"></select>
+            </div>
+            <div class="ch-field">
+                <label for="ch-formato">Formato</label>
+                <select class="eui-select" id="ch-formato" onchange="montarCamposFormato(); recalcular();"></select>
+            </div>
+        </div>
+        <div class="ch-dims" id="ch-dims"></div>
+        <div class="ch-result">
+            <div><span>Peso por peça</span><b id="ch-res-peca">—</b></div>
+            <div><span>Peso total (× UND)</span><b id="ch-res-total">—</b></div>
+            <div><span>Diferença vs NF</span><div id="ch-res-diff" class="ch-diff none">—</div></div>
+        </div>
+        <div class="ch-warn" id="ch-calc-warn" style="display:none;"></div>
+        <div class="ch-conv">
+            <i class="fas fa-ruler-combined"></i> Conversor:
+            <input class="eui-input" id="ch-conv-pol" type="number" step="0.0001" placeholder="pol." oninput="converterPolMm('pol')" aria-label="Polegadas">
+            <span>pol =</span>
+            <input class="eui-input" id="ch-conv-mm" type="number" step="0.01" placeholder="mm" oninput="converterPolMm('mm')" aria-label="Milímetros">
+            <span>mm</span>
+        </div>
+        <div>
+            <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ch-btn-logs" onclick="alternarLogs()"><i class="fas fa-clock-rotate-left"></i> Ver histórico do cálculo</button>
+            <div class="ch-logs" id="ch-logs" style="display:none;"></div>
+        </div>
+        <div class="ch-error" id="ch-calc-msg"></div>
+    </div>
+    <div class="ch-modal__foot">
+        <button type="button" class="eui-btn eui-btn--ghost" onclick="fecharCalc()">Cancelar</button>
+        <button type="button" class="eui-btn eui-btn--primary" id="ch-btn-salvar" onclick="salvarCalc()"><i class="fas fa-check"></i> Salvar cálculo</button>
+    </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
+    const PODE_ADMIN = {{ 'true' if pode_excluir_chapas else 'false' }};
+    // Acima disso a medida quase sempre está digitada errada (ex.: 1510 no lugar de 1,51).
+    const LIMITE_AVISO_PCT = 50;
     let timer = null;
     let cache = [];
     let densidades = {};
     let saldoCod = {};
     let reservasOs = {};
     let linhaAtual = null;
+    let avisoConfirmado = false;
     let cargaVersao = 0;
-    let auditoriaPagina = 1, auditoriaVersao = 0, auditoriaTimer;
+    let auditoriaPagina = 1, auditoriaVersao = 0, auditoriaTimer, auditoriaItem = null;
+    let ordem = { campo: 'codigo', desc: false };
 
-    function valoresAuditoria(valores) {
-        if (!valores) return '<p>Sem registro anterior</p>';
-        const labels = {und:'Quantidade (UND)', no_controle:'Visível no controle', kg_nf:'Peso da NF (KG)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (KG)'};
-        const dimensoes = {espessura:'Espessura', largura:'Largura', comprimento:'Comprimento', diametro:'Diâmetro', parede:'Parede', lado:'Lado', altura:'Altura', aba:'Aba', bitola:'Bitola'};
-        return Object.entries(valores).map(([campo,valor]) => {
-            if (campo === 'dimensoes' && valor && typeof valor === 'object') valor = Object.entries(valor).map(([k,v]) => `${dimensoes[k] || k}: ${v}`).join(' · ');
-            if (typeof valor === 'boolean') valor = valor ? 'Sim' : 'Não';
-            return `<p><b>${esc(labels[campo] || campo)}:</b> ${esc(valor == null ? 'Não informado' : String(valor))}</p>`;
-        }).join('');
+    const LABELS_AUDIT = {und:'UND', no_controle:'Visível no controle', kg_nf:'Peso da NF (kg)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (kg)', consolidado_em:'Consolidado no item'};
+    const LABELS_DIM = {espessura:'Esp.', largura:'Larg.', comprimento:'Comp.', diametro:'Diâm.', parede:'Parede', lado:'Lado', altura:'Altura', aba:'Aba', bitola:'Bitola'};
+    function valorAudit(campo, valor) {
+        if (valor == null || valor === '') return '—';
+        if (campo === 'dimensoes' && typeof valor === 'object') return Object.entries(valor).map(([k, v]) => `${LABELS_DIM[k] || k} ${v}`).join(' · ');
+        if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
+        if (typeof valor === 'number') return fmt(valor, 3);
+        return String(valor);
+    }
+    function mudancasAudit(antes, depois) {
+        antes = antes || {}; depois = depois || {};
+        const campos = [...new Set([...Object.keys(antes), ...Object.keys(depois)])].filter((c) => c !== 'motivo');
+        const linhas = campos
+            .filter((c) => JSON.stringify(antes[c]) !== JSON.stringify(depois[c]))
+            .map((c) => {
+                const rotulo = esc(LABELS_AUDIT[c] || c);
+                // Só no "antes" (ex.: UND na exclusão) é contexto, não mudança: sem seta.
+                if (!(c in depois)) return `<div class="ch-audit-chg">${rotulo}: ${esc(valorAudit(c, antes[c]))}</div>`;
+                return `<div class="ch-audit-chg">${rotulo}: ${c in antes ? `<s>${esc(valorAudit(c, antes[c]))}</s> → ` : ''}<b>${esc(valorAudit(c, depois[c]))}</b></div>`;
+            });
+        return linhas.join('');
     }
     async function carregarAuditoria() {
         const versao = ++auditoriaVersao;
-        $('ch-audit-list').textContent = 'Carregando histórico...';
+        $('ch-audit-list').innerHTML = '<span class="ch-muted">Carregando histórico...</span>';
+        const params = {q: $('ch-audit-search').value, pagina: auditoriaPagina};
+        if (auditoriaItem) params.item_id = auditoriaItem.item_id;
         try {
-            const resp = await fetch('/api/logistica/chapas/auditoria?' + new URLSearchParams({q:$('ch-audit-search').value, pagina:auditoriaPagina}));
+            const resp = await fetch('/api/logistica/chapas/auditoria?' + new URLSearchParams(params));
             const data = await resp.json();
             if (versao !== auditoriaVersao) return;
             if (!resp.ok) throw new Error(data.error || 'Não foi possível carregar o histórico.');
             $('ch-audit-list').innerHTML = data.logs.length ? data.logs.map((log) => `<article class="ch-audit-entry">
-                <b>${esc(log.acao)}</b><span class="ch-muted">${esc(new Date(log.data).toLocaleString('pt-BR'))} · ${esc(log.usuario)}</span>
-                <p>${esc(log.codigo || '-')} · ${esc(log.descricao || '')}</p><span class="ch-muted">NF ${esc(log.nf || '-')} · AR ${esc(log.ar || '-')} · Item ${log.item_id}</span>
-                <div class="ch-audit-values"><div><b>Antes</b>${valoresAuditoria(log.antes)}</div><div><b>Depois</b>${valoresAuditoria(log.depois)}</div></div></article>`).join('') : '<span class="ch-muted">Nenhum registro para este filtro.</span>';
+                <div class="ch-audit-when"><b>${esc(new Date(log.data).toLocaleString('pt-BR', {dateStyle: 'short', timeStyle: 'short'}))}</b>${esc(log.usuario)}</div>
+                <div class="ch-audit-what">
+                    <div class="ch-audit-title"><span class="eui-badge eui-badge--primary">${esc(log.acao)}</span><b>${esc(log.codigo || '-')}</b></div>
+                    <div class="ch-audit-ref">NF ${esc(log.nf || '-')} · AR ${esc(log.ar || '-')} · ${esc(log.descricao || '')}</div>
+                    ${mudancasAudit(log.antes, log.depois)}
+                    ${log.depois && log.depois.motivo ? `<div class="ch-audit-motivo"><b>Motivo:</b> ${esc(log.depois.motivo)}</div>` : ''}
+                </div></article>`).join('') : '<span class="ch-muted">Nenhum registro para este filtro.</span>';
             $('ch-audit-page').textContent = `Página ${data.pagina} · ${data.total} registro(s)`;
             $('ch-audit-prev').disabled = auditoriaPagina === 1;
             $('ch-audit-next').disabled = auditoriaPagina * 40 >= data.total;
         } catch(e) { if (versao === auditoriaVersao) $('ch-audit-list').textContent = e.message; }
     }
-    $('ch-audit-open').onclick = () => { auditoriaPagina=1; $('ch-audit-dialog').showModal(); carregarAuditoria(); };
+    function abrirAuditoria(linha) {
+        auditoriaItem = linha || null;
+        auditoriaPagina = 1;
+        $('ch-audit-search').value = '';
+        $('ch-audit-title-txt').textContent = linha ? `Histórico do lote ${linha.lote || linha.item_id}` : 'Histórico de alterações';
+        $('ch-audit-all').style.display = linha ? '' : 'none';
+        $('ch-audit-dialog').showModal();
+        carregarAuditoria();
+    }
+    $('ch-audit-open').onclick = () => abrirAuditoria(null);
+    $('ch-audit-all').onclick = () => abrirAuditoria(null);
     $('ch-audit-close').onclick = () => $('ch-audit-dialog').close();
     $('ch-audit-prev').onclick = () => { auditoriaPagina--; carregarAuditoria(); };
     $('ch-audit-next').onclick = () => { auditoriaPagina++; carregarAuditoria(); };
@@ -290,11 +374,11 @@
     function esc(v) { return String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
     function diffHtml(pct) {
-        if (pct === null || pct === undefined) return '<span class="ch-diff none">—</span>';
+        if (pct === null || pct === undefined) return '<span class="ch-diff none">sem cálculo</span>';
         const cls = Math.abs(pct) > 2 ? 'bad' : 'ok';
         const sinal = pct > 0 ? '+' : '';
         const ic = Math.abs(pct) > 2 ? 'fa-triangle-exclamation' : 'fa-check';
-        return `<span class="ch-diff ${cls}"><i class="fas ${ic}"></i> ${sinal}${fmt(pct, 1)}%</span>`;
+        return `<span class="ch-diff ${cls}" title="Peso calculado × UND comparado com o peso da NF"><i class="fas ${ic}"></i> ${sinal}${fmt(pct, 1)}%</span>`;
     }
 
     function setDiffEl(el, pct) {
@@ -309,27 +393,24 @@
     let abaAtual = 'estoque';
     const expandido = new Set();
 
-    function loteCard(i) {
-        const par = (und, kg) => `<b>${und == null ? '—' : fmt(und, 1)}</b> und · <b>${kg == null ? '—' : fmt(kg, 1)}</b> kg`;
+    function loteRow(i) {
+        const par = (und, kg) => `${und == null ? '—' : fmt(und, 0)} und · ${kg == null ? '—' : fmt(kg, 0)} kg`;
+        const menu = [
+            `<button type="button" data-acao="historico" data-item="${i.item_id}"><i class="fas fa-clock-rotate-left"></i> Histórico do lote</button>`,
+            PODE_ADMIN ? `<button type="button" data-acao="und" data-item="${i.item_id}"><i class="fas fa-pen-to-square"></i> Alterar UND recebida</button>` : '',
+            PODE_ADMIN ? `<button type="button" class="danger" data-acao="excluir" data-item="${i.item_id}"><i class="fas fa-trash-can"></i> Excluir do controle</button>` : '',
+        ].join('');
         return `<div class="ch-lote">
-            <div class="ch-lote__head">
-                <div class="ch-lote__id">
-                    <span class="ch-lote__lote"><i class="fas fa-hashtag"></i> ${esc(i.lote || '-')}</span>
-                    <span class="ch-lote__meta">AR ${esc(i.ar || '-')} · NF ${esc(i.numero_nota || '-')} · Conf.: ${esc(i.conferente || '-')}</span>
-                </div>
-                <div class="ch-lote__right">
-                    ${diffHtml(i.pct_diferenca)}
-                    <span class="ch-lote__peso">${i.peso_por_peca != null ? fmt(i.peso_por_peca, 1) + ' kg/peça' : 'sem cálculo'}</span>
-                    <button class="eui-btn eui-btn--primary eui-btn--sm" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Editar cálculo' : 'Calcular'}</button>
-                    {% if pode_excluir_chapas %}<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm ch-delete-btn" data-excluir-item="${i.item_id}" aria-label="Excluir item do controle de chapas"><i class="fas fa-trash-can"></i> Excluir</button>{% endif %}
-                </div>
+            <div>
+                <div class="ch-lote__lote"><i class="fas fa-hashtag"></i> ${esc(i.lote || '-')}</div>
+                <div class="ch-lote__meta">AR ${esc(i.ar || '-')} · NF ${esc(i.numero_nota || '-')} · Conf.: ${esc(i.conferente || '-')}</div>
             </div>
-            <div class="ch-metrics">
-                <div class="ch-metric"><span>Recebido (NF)</span>${par(i.und, i.kg_nf)}</div>
-                <div class="ch-metric"><span>Baixadas</span>${par(i.chapas_baixadas, i.kg_saida)}</div>
-                <div class="ch-metric ch-metric--on"><span>Em estoque</span>${par(i.chapas_em_estoque, i.kg_saldo)}</div>
-                <div class="ch-metric"><span>Reservadas</span>${par(i.chapas_reservadas, i.kg_reservado)}</div>
-                <div class="ch-metric ch-metric--on"><span>Disponíveis</span>${par(i.chapas_disponiveis, i.kg_disponivel)}</div>
+            <div class="ch-lote__rec"><span class="ch-muted">Recebido</span><br><b>${par(i.und, i.kg_nf)}</b></div>
+            <div class="ch-lote__calc">${diffHtml(i.pct_diferenca)}${i.peso_por_peca != null ? `<span>${fmt(i.peso_por_peca, 1)} kg/peça</span>` : ''}</div>
+            <div class="ch-lote__acts">
+                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-acao="calc" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Cálculo' : 'Calcular'}</button>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-menu="${i.item_id}" aria-label="Mais ações do lote" aria-haspopup="true"><i class="fas fa-ellipsis"></i></button>
+                <div class="ch-menu" data-menu-box="${i.item_id}">${menu}</div>
             </div>
         </div>`;
     }
@@ -338,6 +419,18 @@
     function pesoDoCodigo(cod) {
         const r = cache.find((i) => i.codigo === cod && i.peso_por_peca);
         return r ? Number(r.peso_por_peca) : null;
+    }
+    function espessuraDoCodigo(rows) {
+        const r = rows.find((i) => i.dimensoes && Number(i.dimensoes.espessura) > 0);
+        return r ? Number(r.dimensoes.espessura) : null;
+    }
+
+    // Sem peso/peça cadastrado não dá pra converter kg em chapas: mostra só o kg.
+    function valorCol(kg, cod, rotulo, disp) {
+        const p = pesoDoCodigo(cod);
+        const und = p ? kg / p : null;
+        const zero = !(kg > 0.0001);
+        return `<div class="ch-val ${disp ? 'ch-val--disp' : ''} ${zero ? 'ch-val--zero' : ''}"><span class="ch-lbl-m">${rotulo}</span><b>${und == null ? fmt(kg, 0) + ' kg' : fmt(und, 0) + ' und'}</b><small>${und == null ? 'sem peso/peça' : fmt(kg, 0) + ' kg'}</small></div>`;
     }
 
     function render() {
@@ -361,75 +454,117 @@
         const itens = cache.filter((i) => (abaAtual === 'historico' ? i.historico : !i.historico));
         if (!itens.length) {
             $('ch-groups').innerHTML = '';
+            $('ch-table').style.display = 'none';
             $('ch-state').style.display = 'block';
             $('ch-state').textContent = abaAtual === 'historico' ? 'Nenhum item zerado (histórico vazio).' : 'Nenhuma chapa em estoque.';
             return;
         }
         $('ch-state').style.display = 'none';
-        const grupos = {};
-        itens.forEach((i) => { (grupos[i.codigo] = grupos[i.codigo] || { desc: i.descricao, rows: [] }).rows.push(i); });
-        const tile = (label, kg, cod) => {
-            const p = pesoDoCodigo(cod);
-            const u = p ? kg / p : null;
-            return `<span class="ch-gstat"><span class="ch-gstat__lbl">${label}</span><b class="ch-gstat__kg">${fmt(kg, 0)} kg</b><span class="ch-gstat__und">${u == null ? '' : '· ' + fmt(u, 0) + ' und'}</span></span>`;
-        };
-        $('ch-groups').innerHTML = Object.entries(grupos).map(([cod, g]) => {
-            const s = saldoCod[cod];
+        $('ch-table').style.display = '';
+        const mapa = {};
+        itens.forEach((i) => { (mapa[i.codigo] = mapa[i.codigo] || { cod: i.codigo, desc: i.descricao, rows: [] }).rows.push(i); });
+        const grupos = Object.values(mapa).map((g) => {
+            const s = saldoCod[g.cod];
             const recebidoKg = g.rows.reduce((a, i) => a + (i.kg_nf || 0), 0);
-            const emEstoqueKg = s ? s.em_estoque_kg : recebidoKg;
-            const reservadoKg = s ? s.reservado_kg : 0;
-            const dispKg = s ? s.disponivel_kg : recebidoKg;
-            const aberto = expandido.has(cod);
-            const os = reservasOs[cod] || [];
+            return Object.assign(g, {
+                s,
+                estoque: s ? s.em_estoque_kg : recebidoKg,
+                reservado: s ? s.reservado_kg : 0,
+                disponivel: s ? s.disponivel_kg : recebidoKg,
+                espessura: espessuraDoCodigo(g.rows),
+                lotes: g.rows.length,
+            });
+        });
+        const dir = ordem.desc ? -1 : 1;
+        grupos.sort((a, b) => {
+            if (ordem.campo === 'codigo') return a.cod.localeCompare(b.cod, 'pt-BR', { numeric: true }) * dir;
+            const va = a[ordem.campo], vb = b[ordem.campo];
+            return ((va ?? -Infinity) - (vb ?? -Infinity)) * dir;
+        });
+        document.querySelectorAll('.ch-th').forEach((th) => {
+            const on = th.dataset.sort === ordem.campo;
+            th.classList.toggle('sorted', on);
+            th.querySelector('i').className = 'fas ' + (on ? (ordem.desc ? 'fa-sort-down' : 'fa-sort-up') : 'fa-sort');
+        });
+
+        $('ch-groups').innerHTML = grupos.map((g) => {
+            const aberto = expandido.has(g.cod);
+            const os = reservasOs[g.cod] || [];
             const osHtml = os.length
-                ? `<div class="ch-os"><span class="ch-os__t"><i class="fas fa-clipboard-list"></i> Reservado por OS</span>${os.map((o) => `<span class="ch-os__i">OS ${esc(o.os || o.documento || '-')} · <b>${fmt(o.kg || o.qtde || 0, 0)}</b> kg</span>`).join('')}</div>`
+                ? `<div class="ch-os"><i class="fas fa-clipboard-list"></i> <b>Reservado por OS:</b>${os.map((o) => `<span class="eui-badge eui-badge--neutral">OS ${esc(o.os || o.documento || '-')} · ${fmt(o.kg || o.qtde || 0, 0)} kg</span>`).join('')}</div>`
                 : '';
-            return `<div class="ch-group ${aberto ? 'open' : ''}">
-                <button type="button" class="ch-group__head" data-cod="${esc(cod)}">
-                    <div class="ch-group__id">
-                        <i class="fas fa-chevron-${aberto ? 'down' : 'right'} ch-group__chev"></i>
-                        <div class="ch-group__title">
-                            <span class="ch-code">${esc(cod)}</span>
-                            <span class="ch-desc">${esc(g.desc || '')}</span>
+            const tags = [
+                g.s && g.s.terceiro ? `<span class="eui-badge eui-badge--violet" title="${esc(g.s.cliente || 'Material de cliente')}"><i class="fas fa-user-tag"></i> ${esc(g.s.cliente || 'cliente')}</span>` : '',
+                g.s ? '' : '<span class="eui-badge eui-badge--warning" title="A consulta de saldo ao GRV não respondeu; mostrando o peso recebido na NF">saldo GRV indisponível</span>',
+            ].join('');
+            return `<div class="ch-row ${aberto ? 'open' : ''}">
+                <button type="button" class="ch-row__main ch-cols" data-cod="${esc(g.cod)}" aria-expanded="${aberto}">
+                    <div class="ch-item">
+                        <i class="fas fa-chevron-right ch-item__chev"></i>
+                        <div class="ch-item__txt">
+                            <span class="ch-code">${esc(g.cod)}</span>
+                            <span class="ch-desc" title="${esc(g.desc || '')}">${esc(g.desc || '')}</span>
+                            ${tags ? `<div class="ch-tags">${tags}</div>` : ''}
                         </div>
-                        <span class="ch-group__count">${g.rows.length} lote(s)</span>
-                        ${s && s.terceiro ? `<span class="ch-tag-cli" title="${s.cliente ? esc(s.cliente) : 'Material de cliente'}"><i class="fas fa-user-tag"></i> <span>${s.cliente ? esc(s.cliente) : 'cliente'}</span></span>` : ''}
-                        ${s ? '' : '<span class="ch-group__count ch-group__count--warn">saldo GRV indisponível</span>'}
                     </div>
-                    <div class="ch-group__tiles">
-                        ${tile('Em estoque', emEstoqueKg, cod)}
-                        ${tile('Reservado', reservadoKg, cod)}
-                        ${tile('Disponível', dispKg, cod)}
-                    </div>
+                    <span class="ch-esp">${g.espessura != null ? fmt(g.espessura, 2) : '—'}</span>
+                    <span class="ch-lotes">${g.lotes}</span>
+                    ${valorCol(g.estoque, g.cod, 'Em estoque')}
+                    ${valorCol(g.reservado, g.cod, 'Reservado')}
+                    ${valorCol(g.disponivel, g.cod, 'Disponível', true)}
                 </button>
-                <div class="ch-group__body" ${aberto ? '' : 'style="display:none;"'}>${osHtml}${g.rows.map(loteCard).join('')}</div>
+                ${aberto ? `<div class="ch-row__body">${osHtml}${g.rows.map(loteRow).join('')}</div>` : ''}
             </div>`;
         }).join('');
-        document.querySelectorAll('.ch-group__head').forEach((h) => h.addEventListener('click', () => {
-            const cod = h.dataset.cod;
-            if (expandido.has(cod)) expandido.delete(cod); else expandido.add(cod);
-            render();
-        }));
-        document.querySelectorAll('#ch-groups button[data-item]').forEach((btn) => btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
-            if (linha) abrirCalc(linha);
-        }));
-        {% if pode_excluir_chapas %}
-        document.querySelectorAll('#ch-groups button[data-excluir-item]').forEach((btn) => btn.addEventListener('click', () => {
-            const linha = cache.find((x) => String(x.item_id) === btn.dataset.excluirItem);
-            if (!linha) return;
-            itemExcluir = linha;
-            $('ch-delete-item').textContent = `${linha.codigo || 'Item'} · ${linha.descricao || ''}\nNF ${linha.numero_nota || '-'} · AR ${linha.ar || 'Não informado'} · Lote ${linha.lote || '-'}`;
-            $('ch-delete-error').textContent = '';
-            $('ch-delete-dialog').showModal();
-            $('ch-delete-cancel').focus();
-        }));
-        {% endif %}
     }
 
+    function fecharMenus(exceto) {
+        document.querySelectorAll('.ch-menu.open').forEach((m) => { if (m !== exceto) m.classList.remove('open'); });
+    }
+    // Um único listener pra lista inteira: o render refaz o HTML a cada carga.
+    $('ch-groups').addEventListener('click', (e) => {
+        const head = e.target.closest('.ch-row__main');
+        if (head) {
+            const cod = head.dataset.cod;
+            if (expandido.has(cod)) expandido.delete(cod); else expandido.add(cod);
+            render();
+            return;
+        }
+        const toggle = e.target.closest('[data-menu]');
+        if (toggle) {
+            const box = document.querySelector(`[data-menu-box="${toggle.dataset.menu}"]`);
+            fecharMenus(box);
+            box.classList.toggle('open');
+            return;
+        }
+        const btn = e.target.closest('[data-acao]');
+        if (!btn) return;
+        fecharMenus();
+        const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
+        if (!linha) return;
+        if (btn.dataset.acao === 'calc') abrirCalc(linha);
+        else if (btn.dataset.acao === 'historico') abrirAuditoria(linha);
+        else if (btn.dataset.acao === 'und') abrirUnd(linha);
+        else if (btn.dataset.acao === 'excluir') abrirExcluir(linha);
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.ch-lote__acts')) fecharMenus(); });
+    document.querySelectorAll('.ch-th').forEach((th) => th.addEventListener('click', () => {
+        const campo = th.dataset.sort;
+        ordem = ordem.campo === campo ? { campo, desc: !ordem.desc } : { campo, desc: campo !== 'codigo' };
+        render();
+    }));
+
+    // Só existem pra Admin; pros demais o menu nem mostra essas ações.
+    let abrirExcluir = () => {}, abrirUnd = () => {};
     {% if pode_excluir_chapas %}
     let itemExcluir = null, excluindo = false;
+    abrirExcluir = (linha) => {
+        itemExcluir = linha;
+        $('ch-delete-item').textContent = `${linha.codigo || 'Item'} · ${linha.descricao || ''}\nNF ${linha.numero_nota || '-'} · AR ${linha.ar || 'Não informado'} · Lote ${linha.lote || '-'}`;
+        $('ch-delete-error').textContent = '';
+        $('ch-delete-dialog').showModal();
+        $('ch-delete-cancel').focus();
+    };
     $('ch-delete-cancel').onclick = () => { if (!excluindo) $('ch-delete-dialog').close(); };
     $('ch-delete-dialog').addEventListener('cancel', (e) => { if (excluindo) e.preventDefault(); });
     $('ch-delete-confirm').onclick = async () => {
@@ -449,16 +584,66 @@
             cache = cache.filter((i) => i.item_id !== id);
             render();
             $('ch-delete-dialog').close();
-            $('ch-updated').textContent = 'Item excluído do controle de chapas.';
         } catch (e) { $('ch-delete-error').textContent = e.message; }
         finally { excluindo = false; $('ch-delete-confirm').disabled = $('ch-delete-cancel').disabled = false; }
+    };
+
+    let itemUnd = null, salvandoUnd = false;
+    function previewUnd() {
+        const und = Number($('ch-und-valor').value);
+        $('ch-und-preview').textContent = (itemUnd && und > 0 && itemUnd.kg_nf > 0)
+            ? `${fmt(itemUnd.kg_nf, 0)} kg ÷ ${fmt(und, 0)} und = ${fmt(itemUnd.kg_nf / und, 2)} kg por chapa` : '';
+    }
+    abrirUnd = (linha) => {
+        itemUnd = linha;
+        $('ch-und-item').innerHTML = `
+            <div><span>Código</span><b>${esc(linha.codigo || '-')}</b></div>
+            <div><span>NF</span><b>${esc(linha.numero_nota || '-')}</b></div>
+            <div><span>Lote</span><b>${esc(linha.lote || '-')}</b></div>
+            <div><span>KG (NF)</span><b>${fmt(linha.kg_nf, 2)}</b></div>
+            <div><span>UND atual</span><b>${fmt(linha.und, 0)}</b></div>`;
+        $('ch-und-valor').value = linha.und || '';
+        $('ch-und-motivo').value = '';
+        $('ch-und-error').textContent = '';
+        previewUnd();
+        $('ch-und-dialog').showModal();
+        $('ch-und-valor').select();
+    };
+    $('ch-und-valor').oninput = previewUnd;
+    const fecharUnd = () => { if (!salvandoUnd) $('ch-und-dialog').close(); };
+    $('ch-und-cancel').onclick = fecharUnd;
+    $('ch-und-close').onclick = fecharUnd;
+    $('ch-und-dialog').addEventListener('cancel', (e) => { if (salvandoUnd) e.preventDefault(); });
+    $('ch-und-save').onclick = async () => {
+        if (!itemUnd || salvandoUnd) return;
+        const und = Number($('ch-und-valor').value);
+        const motivo = $('ch-und-motivo').value.trim();
+        if (!(und > 0)) { $('ch-und-error').textContent = 'Informe uma quantidade maior que zero.'; return; }
+        if (!motivo) { $('ch-und-error').textContent = 'Informe o motivo da alteração.'; $('ch-und-motivo').focus(); return; }
+        salvandoUnd = true;
+        $('ch-und-save').disabled = $('ch-und-cancel').disabled = true;
+        try {
+            const resp = await fetch(`/api/logistica/chapas/${itemUnd.item_id}/und`, {
+                method: 'PATCH', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({und, motivo}),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível salvar. Tente novamente.');
+            salvandoUnd = false;
+            $('ch-und-dialog').close();
+            carregar();
+        } catch (e) { $('ch-und-error').textContent = e.message; }
+        finally { salvandoUnd = false; $('ch-und-save').disabled = $('ch-und-cancel').disabled = false; }
     };
     {% endif %}
 
     async function carregar() {
         const versao = ++cargaVersao;
-        $('ch-state').style.display = 'block';
-        $('ch-state').textContent = 'Carregando chapas...';
+        if (!cache.length) {
+            $('ch-state').style.display = 'block';
+            $('ch-state').textContent = 'Carregando chapas...';
+        }
+        $('ch-updated').textContent = 'Atualizando...';
         const params = new URLSearchParams();
         const q = $('ch-busca').value.trim();
         if (q) params.set('q', q);
@@ -472,18 +657,22 @@
             saldoCod = data.saldo_codigo || {};
             reservasOs = data.reservas_os || {};
             render();
-            $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+            $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
         } catch (e) {
             if (versao !== cargaVersao) return;
+            cache = [];
             $('ch-groups').replaceChildren();
+            $('ch-table').style.display = 'none';
             $('ch-state').style.display = 'block';
             $('ch-state').textContent = e.message || 'Falha ao carregar chapas.';
+            $('ch-updated').textContent = 'Tentar de novo';
         }
     }
 
     // ---- Calculadora ----
     function abrirCalc(linha) {
         linhaAtual = linha;
+        avisoConfirmado = false;
         $('ch-calc-msg').textContent = '';
         $('ch-logs').style.display = 'none';
         $('ch-calc-item').innerHTML = `
@@ -492,14 +681,13 @@
             <div><span>Lote</span><b>${esc(linha.lote || '-')}</b></div>
             <div><span>KG (NF)</span><b>${fmt(linha.kg_nf, 2)}</b></div>
             <div><span>UND</span><b>${fmt(linha.und, 0)}</b></div>`;
-        // selects
         $('ch-material').innerHTML = Object.entries(MATERIAIS).map(([k, v]) => `<option value="${k}">${v.label} (${v.densidade} g/cm³)</option>`).join('');
         $('ch-formato').innerHTML = Object.entries(FORMATOS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
         $('ch-material').value = linha.material && MATERIAIS[linha.material] ? linha.material : 'aco_carbono';
         $('ch-formato').value = linha.formato && FORMATOS[linha.formato] ? linha.formato : 'chapa';
         montarCamposFormato(linha.dimensoes || {});
         recalcular();
-        $('ch-calc-overlay').classList.add('open');
+        $('ch-calc-dialog').showModal();
     }
 
     function montarCamposFormato(valores) {
@@ -507,8 +695,8 @@
         const dims = valores || coletarDims();
         $('ch-dims').innerHTML = (fmtCfg?.campos || []).map((campo) => `
             <div class="ch-field">
-                <label>${CAMPO_LABEL[campo] || campo}</label>
-                <input class="eui-input ch-dim" data-campo="${campo}" type="number" step="0.01" min="0" value="${dims && dims[campo] != null ? dims[campo] : ''}" oninput="recalcular()">
+                <label for="ch-dim-${campo}">${CAMPO_LABEL[campo] || campo}</label>
+                <input class="eui-input ch-dim" id="ch-dim-${campo}" data-campo="${campo}" type="number" step="0.01" min="0" value="${dims && dims[campo] != null ? dims[campo] : ''}" oninput="recalcular()">
             </div>`).join('');
     }
 
@@ -530,23 +718,39 @@
         return area * comprimento * mat.densidade / 1e6; // kg
     }
 
-    function recalcular() {
-        const dims = coletarDims();
-        const peca = pesoPorPeca($('ch-material').value, $('ch-formato').value, dims);
+    function pctAtual() {
+        const peca = pesoPorPeca($('ch-material').value, $('ch-formato').value, coletarDims());
         const und = Number(linhaAtual?.und || 0);
-        $('ch-res-peca').textContent = peca != null ? fmt(peca, 3) + ' kg' : '—';
-        const total = (peca != null && und > 0) ? peca * und : null;
-        $('ch-res-total').textContent = total != null ? fmt(total, 2) + ' kg' : '—';
         const kg = Number(linhaAtual?.kg_nf || 0);
-        const pct = (total != null && kg > 0) ? (total - kg) / kg * 100 : null;
+        const total = (peca != null && und > 0) ? peca * und : null;
+        return { peca, total, pct: (total != null && kg > 0) ? (total - kg) / kg * 100 : null };
+    }
+
+    function recalcular() {
+        const { peca, total, pct } = pctAtual();
+        $('ch-res-peca').textContent = peca != null ? fmt(peca, 3) + ' kg' : '—';
+        $('ch-res-total').textContent = total != null ? fmt(total, 2) + ' kg' : '—';
         setDiffEl($('ch-res-diff'), pct);
+        // Mexeu nas medidas depois do aviso: precisa confirmar de novo.
+        avisoConfirmado = false;
+        const suspeito = pct != null && Math.abs(pct) > LIMITE_AVISO_PCT;
+        $('ch-calc-warn').style.display = suspeito ? '' : 'none';
+        $('ch-calc-warn').innerHTML = suspeito
+            ? `<i class="fas fa-triangle-exclamation"></i> O peso calculado ficou ${fmt(Math.abs(pct), 0)}% ${pct > 0 ? 'acima' : 'abaixo'} da NF. Confira as medidas (estão em mm) e a UND.` : '';
+        $('ch-btn-salvar').innerHTML = '<i class="fas fa-check"></i> Salvar cálculo';
     }
 
     async function salvarCalc() {
         if (!linhaAtual) return;
         const dims = coletarDims();
-        const peca = pesoPorPeca($('ch-material').value, $('ch-formato').value, dims);
+        const { peca, pct } = pctAtual();
         if (peca == null) { $('ch-calc-msg').textContent = 'Preencha as dimensões para calcular o peso.'; return; }
+        if (pct != null && Math.abs(pct) > LIMITE_AVISO_PCT && !avisoConfirmado) {
+            avisoConfirmado = true;
+            $('ch-btn-salvar').innerHTML = '<i class="fas fa-check"></i> Salvar mesmo assim';
+            $('ch-calc-warn').scrollIntoView({ block: 'nearest' });
+            return;
+        }
         const btn = $('ch-btn-salvar'); btn.disabled = true;
         try {
             const resp = await fetch('/api/logistica/chapas/calculo', {
@@ -601,7 +805,8 @@
         }
     }
 
-    function fecharCalc() { $('ch-calc-overlay').classList.remove('open'); linhaAtual = null; }
+    function fecharCalc() { if ($('ch-calc-dialog').open) $('ch-calc-dialog').close(); }
+    $('ch-calc-dialog').addEventListener('close', () => { linhaAtual = null; });
 
     // expõe funções usadas em onclick/oninput inline
     window.recalcular = recalcular;
@@ -619,13 +824,13 @@
         abaAtual = btn.dataset.tab || 'estoque';
         render();
     }));
-    $('ch-calc-overlay').addEventListener('click', (e) => { if (e.target === $('ch-calc-overlay')) fecharCalc(); });
+    // Clique no fundo (fora da caixa) fecha os dialogs que não estão salvando.
+    ['ch-calc-dialog', 'ch-audit-dialog'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target === $(id)) $(id).close(); }));
 
     // Atualiza sozinho: quando você volta pra aba (ex.: acabou de dar baixa no
-    // ERP) e a cada 60s. Pula se a calculadora estiver aberta, pra não atrapalhar.
+    // ERP) e a cada 60s. Pula se algum modal estiver aberto, pra não atrapalhar.
     function autoAtualizar() {
-        if ($('ch-calc-overlay').classList.contains('open')) return;
-        if ($('ch-delete-dialog')?.open) return;
+        if (document.querySelector('dialog[open]')) return;
         carregar();
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) autoAtualizar(); });

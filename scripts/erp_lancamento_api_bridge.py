@@ -1136,6 +1136,128 @@ def _safe_ident(name: str) -> str:
     return ident
 
 
+# Consumo pelo kardex do GRV (public.tproduto_cardex), mapeado contra os dados
+# reais em 25/09/2026. tipo_movimento e' numerico:
+#   0 entrada | 1 saida | 2 transferencia | 3-6 reserva/solicitacao (nao move
+#   estoque) | 8 inventario retroativo | 9 troca de material.
+# Entra como consumo, so' no deposito 1 (o mesmo do saldo da tela):
+#   - saida e transferencia de TSAIDA_E, TOS, TPRODUTO e TNOTA_FISCAL. A
+#     transferencia 1 -> 2/3 ("em producao") E' o consumo da fabrica. O estorno
+#     vem com sinal positivo no mesmo tipo e abate sozinho na soma;
+#   - ajuste de inventario (TINVENT_DEP): o GRV zera o saldo (tipo 1) e lanca o
+#     contado (tipo 0), entao so' o LIQUIDO negativo e' consumo. Somar so' o
+#     tipo 1 contaria o estoque inteiro como consumido.
+# Fica de fora: entrada de compra/producao, cancelamento de NF de ENTRADA
+# (desfaz um recebimento, nao e' consumo) e estorno de entrada de orcamento.
+SQL_CONSUMO_CARDEX = """
+    with mov as (
+        select
+            regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo,
+            c.dt_hora_movimentacao::date as dia,
+            coalesce(c.qtde_movimentada, 0)::double precision as qtde,
+            -- Documento da saida: o estorno cita o mesmo "SAIDA COD. N" da
+            -- saida original, entao agrupar por ele desconta o estorno.
+            coalesce(
+                substring(upper(coalesce(c.obs, '')) from 'SA.DA C.D[.] ([0-9]+)'),
+                c.chave_primaria_link,
+                c.id
+            ) as documento,
+            case
+                when upper(coalesce(c.tabela_link, '')) = 'TINVENT_DEP' and c.tipo_movimento in (0, 1)
+                    then 'ajuste'
+                when c.tipo_movimento in (1, 2)
+                     and upper(coalesce(c.tabela_link, '')) in ('TSAIDA_E', 'TOS', 'TPRODUTO')
+                    then 'saida'
+                when c.tipo_movimento in (1, 2)
+                     and upper(coalesce(c.tabela_link, '')) = 'TNOTA_FISCAL'
+                     and position('NF DE ENTRADA' in upper(coalesce(c.obs, ''))) = 0
+                    then 'saida'
+            end as classe
+        from public.tproduto_cardex c
+        join public.tproduto p
+          on p.cod_empresa = c.cod_empresa and p.codigo = c.cod_produto
+        where c.cod_empresa = %s
+          and c.cod_deposito = 1
+          and c.tipo_movimento in (0, 1, 2)
+          and c.dt_hora_movimentacao >= %s::date
+          and c.dt_hora_movimentacao < (%s::date + 1)
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+    )
+    ,
+    totais as (
+        select
+            codigo,
+            sum(case when classe = 'saida' then qtde else 0 end) as saida_liquida,
+            sum(case when classe = 'ajuste' then qtde else 0 end) as ajuste_liquido,
+            count(distinct case when classe = 'saida' and qtde < 0 then dia end) as dias_saida
+        from mov
+        where classe is not null
+        group by codigo
+    ),
+    por_documento as (
+        select codigo, documento, sum(qtde) as liquido, max(dia) as dia
+        from mov
+        where classe = 'saida'
+        group by codigo, documento
+    ),
+    maior as (
+        -- Maior saida que ficou (ja sem estorno): a tela mostra pra explicar
+        -- quando um lancamento pontual puxa a media de consumo.
+        select distinct on (codigo) codigo, -liquido as maior_saida, dia as maior_saida_dia
+        from por_documento
+        where liquido < 0
+        order by codigo, liquido asc
+    )
+    select t.codigo, t.saida_liquida, t.ajuste_liquido, t.dias_saida, m.maior_saida, m.maior_saida_dia
+    from totais t
+    left join maior m on m.codigo = t.codigo
+"""
+
+
+def _consumo_cardex(
+    cur,
+    *,
+    data_inicio: date,
+    data_fim: date,
+    empresa: int,
+    codigos: list[str],
+    janela_dias: int,
+) -> dict[str, dict[str, Any]] | None:
+    """Consumo por codigo lido do kardex. None se a tabela nao existir."""
+    cur.execute("select to_regclass('public.tproduto_cardex') is not null")
+    linha = cur.fetchone()
+    if not linha or not linha[0]:
+        return None
+    cur.execute(SQL_CONSUMO_CARDEX, (empresa, data_inicio, data_fim, codigos))
+    por_codigo = {}
+    for codigo, saida_liquida, ajuste_liquido, dias_saida, maior_saida, maior_saida_dia in cur.fetchall():
+        por_codigo[str(codigo or "")] = (
+            float(saida_liquida or 0),
+            float(ajuste_liquido or 0),
+            int(dias_saida or 0),
+            float(maior_saida or 0),
+            maior_saida_dia.isoformat() if maior_saida_dia else None,
+        )
+
+    consumos: dict[str, dict[str, Any]] = {}
+    for codigo in codigos:
+        saida_liquida, ajuste_liquido, dias_saida, maior_saida, maior_saida_data = por_codigo.get(
+            codigo, (0.0, 0.0, 0, 0.0, None)
+        )
+        # Saida e ajuste separados: um ajuste positivo (achou material no
+        # inventario) nao pode apagar o consumo real do periodo.
+        saida_total = max(0.0, -saida_liquida) + max(0.0, -ajuste_liquido)
+        consumos[codigo] = {
+            "consumo_medio_diario": round(saida_total / float(janela_dias), 6),
+            "saida_total_periodo": round(saida_total, 6),
+            "dias_com_saida": dias_saida,
+            "estoque_medio_periodo": 0.0,
+            "maior_saida": round(maior_saida, 6),
+            "maior_saida_data": maior_saida_data,
+        }
+    return consumos
+
+
 def _detectar_fonte_kardex(
     cur,
     *,
@@ -1176,6 +1298,10 @@ def _detectar_fonte_kardex(
           on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
         where coalesce(h.dt_efetiva::date, h.data::date) between %s and %s
           and i.cod_empresa = %s
+          -- So saida do deposito 1, o mesmo do saldo da tela. A transferencia
+          -- 1 -> 2/3 ("em producao") E' o consumo da fabrica e entra; saida de
+          -- outros depositos nao mexe no saldo mostrado e nao pode entrar.
+          and i.cod_deposito = 1
           and {codigo_produto_normalizado} = any(%s::text[])
     """
     fontes = [{
@@ -2110,6 +2236,26 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
+                    consumos_cardex = _consumo_cardex(
+                        cur,
+                        data_inicio=data_inicio,
+                        data_fim=data_fim,
+                        empresa=empresa,
+                        codigos=codigos,
+                        janela_dias=janela_dias,
+                    )
+                    if consumos_cardex is not None:
+                        return jsonify(
+                            {
+                                "sucesso": True,
+                                "empresa": empresa,
+                                "janela_dias": janela_dias,
+                                "inicio": data_inicio.isoformat(),
+                                "fim": data_fim.isoformat(),
+                                "fonte": "public.tproduto_cardex",
+                                "consumos": consumos_cardex,
+                            }
+                        )
                     fonte = _detectar_fonte_kardex(
                         cur,
                         data_inicio=data_inicio,
@@ -2181,6 +2327,9 @@ def create_app() -> Flask:
                     "PED_COMPRA",
                     "EM ANALISE",
                     "PLANEJADO",
+                    # Na tsaida_e o tipo e' o status do documento: so "CONCLUSAO
+                    # SAIDA" baixou estoque; "DIGITACAO DA SAIDA" ainda e' rascunho.
+                    "DIGITACAO",
                 )
                 texto_mov = unicodedata.normalize("NFKD", tipo_mov)
                 texto_mov = "".join(char for char in texto_mov if not unicodedata.combining(char))

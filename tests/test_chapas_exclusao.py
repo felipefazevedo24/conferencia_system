@@ -89,9 +89,13 @@ def test_exige_login_confirmacao_e_item_existente(app):
 def test_botao_somente_admin(app):
     with app.app_context():
         app.jinja_env.globals.update(can_access=lambda key:True)
-    assert b'data-excluir-item' in client_for(app).get('/logistica/estoque/chapas').data
+    admin=client_for(app).get('/logistica/estoque/chapas').data
+    assert b'id="ch-delete-dialog"' in admin and b'id="ch-und-dialog"' in admin
+    assert b'const PODE_ADMIN = true' in admin
     result=client_for(app,'Logística').get('/logistica/estoque/chapas')
-    assert result.status_code == 200 and b'data-excluir-item' not in result.data
+    assert result.status_code == 200
+    assert b'id="ch-delete-dialog"' not in result.data and b'id="ch-und-dialog"' not in result.data
+    assert b'const PODE_ADMIN = false' in result.data
 
 
 def test_migration_idempotente_e_cascade(app):
@@ -210,25 +214,114 @@ def test_exclusao_no_navegador_com_cancelamento_e_recarregamento(app):
             page=browser.new_page(viewport={'width':1366,'height':900})
             errors=[];page.on('pageerror', lambda error:errors.append(str(error)))
             page.goto(f'http://127.0.0.1:{server.server_port}/logistica/estoque/chapas')
-            page.locator('.ch-group__head').click()
-            page.locator('[data-excluir-item="1"]').click()
+            excluir=lambda item: page.locator(f'[data-acao="excluir"][data-item="{item}"]')
+            page.locator('.ch-row__main').click()
+            page.locator('[data-menu="1"]').click()
+            excluir(1).click()
             pw.expect(page.locator('#ch-delete-dialog')).to_be_visible()
             pw.expect(page.locator('#ch-delete-item')).to_contain_text('AR Não informado')
             page.locator('#ch-delete-cancel').click()
-            pw.expect(page.locator('[data-excluir-item="1"]')).to_be_visible()
-            page.locator('[data-excluir-item="1"]').click()
+            page.locator('[data-menu="1"]').click()
+            excluir(1).click()
             page.locator('#ch-delete-confirm').click()
-            pw.expect(page.locator('[data-excluir-item="1"]')).to_have_count(0)
-            pw.expect(page.locator('[data-excluir-item="2"]')).to_be_visible()
+            pw.expect(excluir(1)).to_have_count(0)
+            pw.expect(excluir(2)).to_have_count(1)
             page.locator('#ch-audit-open').click()
             pw.expect(page.locator('#ch-audit-list')).to_contain_text('Exclusão do controle')
-            pw.expect(page.locator('#ch-audit-list')).to_contain_text('Quantidade (UND): 2')
+            pw.expect(page.locator('#ch-audit-list')).to_contain_text('UND: 2')
             pw.expect(page.locator('#ch-audit-list')).to_contain_text('teste')
             page.locator('#ch-audit-close').click()
-            page.reload();page.locator('.ch-group__head').click()
-            pw.expect(page.locator('[data-excluir-item="1"]')).to_have_count(0)
-            role[0]='Logística';page.reload();page.locator('.ch-group__head').click()
-            pw.expect(page.locator('[data-excluir-item]')).to_have_count(0)
+            page.reload();page.locator('.ch-row__main').click()
+            pw.expect(excluir(1)).to_have_count(0)
+            role[0]='Logística';page.reload();page.locator('.ch-row__main').click()
+            pw.expect(page.locator('[data-acao="excluir"], [data-acao="und"]')).to_have_count(0)
+            pw.expect(page.locator('[data-acao="calc"]')).to_have_count(1)
+            assert errors == []
+            browser.close()
+    finally:
+        server.shutdown();thread.join(timeout=5)
+
+
+def test_admin_altera_und_com_motivo_e_reflete_na_conferencia(app):
+    client=client_for(app)
+    assert client.patch('/api/logistica/chapas/1/und',json={'und':7}).status_code==400
+    assert client.patch('/api/logistica/chapas/1/und',json={'und':0,'motivo':'x'}).status_code==400
+    assert client.patch('/api/logistica/chapas/1/und',json={'und':'abc','motivo':'x'}).status_code==400
+    assert client.patch('/api/logistica/chapas/999/und',json={'und':7,'motivo':'x'}).status_code==404
+    for _ in range(2):
+        r=client.patch('/api/logistica/chapas/1/und',json={'und':'7','motivo':'Recontagem fisica'})
+        assert r.status_code==200 and r.get_json()['und']==7
+    with app.app_context():
+        # Mesmo campo que a conferência de recebimento lê: não há cópia pra sincronizar.
+        assert db.session.get(ItemNota,1).qtd_chapas_und==7
+        log=ChapaAuditoria.query.one()
+        assert log.acao=='Unidades alteradas no controle' and log.usuario=='teste'
+        assert log.antes=={'und':2} and log.depois=={'und':7,'motivo':'Recontagem fisica'}
+    item=[i for i in client.get('/api/logistica/chapas').get_json()['itens'] if i['item_id']==1][0]
+    assert item['und']==7
+    with app.app_context():
+        db.session.get(ItemNota,1).qtd_chapas_und=None;db.session.commit()
+    assert client.patch('/api/logistica/chapas/1/und',json={'und':7,'motivo':'x'}).status_code==409
+
+
+@pytest.mark.parametrize('role', ['Logística', 'Fiscal', 'Conferente'])
+def test_outros_papeis_nao_alteram_und(app, role):
+    r=client_for(app, role).patch('/api/logistica/chapas/1/und', json={'und':9,'motivo':'x'})
+    assert r.status_code == 403
+    with app.app_context():
+        assert db.session.get(ItemNota,1).qtd_chapas_und == 2 and ChapaAuditoria.query.count() == 0
+
+
+def test_tela_calculo_und_e_aviso_no_navegador(app):
+    from werkzeug.serving import make_server
+    pw=pytest.importorskip('playwright.sync_api')
+    @app.before_request
+    def login():
+        session['username']='teste';session['role']='Admin'
+    @app.context_processor
+    def context():
+        return dict(can_access=lambda key:True, user='teste', asset_version='test')
+    server=make_server('127.0.0.1',0,app)
+    thread=Thread(target=server.serve_forever,daemon=True);thread.start()
+    try:
+        with pw.sync_playwright() as p:
+            if not Path(p.chromium.executable_path).exists():
+                pytest.skip('Chromium não instalado')
+            browser=p.chromium.launch(headless=True)
+            page=browser.new_page(viewport={'width':1366,'height':900})
+            errors=[];page.on('pageerror', lambda error:errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/logistica/estoque/chapas')
+            page.locator('.ch-row__main').click()
+            # Calculadora é <dialog> modal: fica na camada do topo, cobrindo a tela toda.
+            page.locator('[data-acao="calc"][data-item="1"]').click()
+            assert page.evaluate("document.getElementById('ch-calc-dialog').matches(':modal')")
+            page.locator('#ch-dim-espessura').fill('1510')
+            page.locator('#ch-dim-largura').fill('1000')
+            page.locator('#ch-dim-comprimento').fill('2000')
+            pw.expect(page.locator('#ch-calc-warn')).to_contain_text('Confira as medidas')
+            page.locator('#ch-btn-salvar').click()
+            pw.expect(page.locator('#ch-btn-salvar')).to_contain_text('Salvar mesmo assim')
+            page.keyboard.press('Escape')
+            pw.expect(page.locator('#ch-calc-dialog')).not_to_be_visible()
+            with app.app_context():
+                assert ChapaCalculo.query.one().peso_por_peca == 25
+            page.locator('[data-menu="1"]').click()
+            page.locator('[data-acao="und"][data-item="1"]').click()
+            pw.expect(page.locator('#ch-und-dialog')).to_be_visible()
+            page.locator('#ch-und-valor').fill('4')
+            pw.expect(page.locator('#ch-und-preview')).to_contain_text('12,5 kg por chapa')
+            page.locator('#ch-und-save').click()
+            pw.expect(page.locator('#ch-und-error')).to_contain_text('motivo')
+            page.locator('#ch-und-motivo').fill('Recontagem')
+            page.locator('#ch-und-save').click()
+            pw.expect(page.locator('#ch-und-dialog')).not_to_be_visible()
+            pw.expect(page.locator('.ch-lote:has([data-item="1"])')).to_contain_text('4 und')
+            with app.app_context():
+                assert db.session.get(ItemNota,1).qtd_chapas_und == 4
+            page.locator('[data-menu="1"]').click()
+            page.locator('[data-acao="historico"][data-item="1"]').click()
+            pw.expect(page.locator('#ch-audit-list')).to_contain_text('Motivo: Recontagem')
+            pw.expect(page.locator('#ch-audit-list .ch-audit-entry')).to_have_count(1)
             assert errors == []
             browser.close()
     finally:
