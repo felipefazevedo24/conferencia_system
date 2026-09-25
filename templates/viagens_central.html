@@ -41,10 +41,12 @@
     .vt-oc-section__title span { width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--eui-primary-soft); color: var(--eui-primary); font-size: 12px; }
     .vt-oc-busca { display: flex; gap: 8px; }
     .vt-oc-busca .eui-input { flex: 1; min-width: 0; }
-    .vt-oc-correios { display: flex; align-items: center; gap: 10px; align-self: end; min-height: 40px; padding: 8px 12px; border: 1px solid var(--eui-border); border-radius: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; }
-    .vt-oc-correios:has(input:checked) { border-color: #7dd3fc; background: #e0f2fe; }
-    .vt-oc-correios strong { display: block; font-size: 13px; color: var(--eui-text); }
-    .vt-oc-correios small { display: block; font-size: 11px; color: var(--eui-text-muted); }
+    .vt-oc-correios { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--eui-text); }
+    .vt-oc-correios:has(input:checked) { border-color: var(--eui-primary); }
+    /* Subgrid: rótulos e campos lado a lado dividem a mesma linha, então a caixa
+       dos Correios fica exatamente da altura do campo de data nativo. */
+    .vt-oc-linha { grid-template-rows: auto auto; row-gap: 6px; }
+    .vt-oc-linha > .eui-field { grid-row: span 2; grid-template-rows: subgrid; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -237,15 +239,17 @@
             </section>
             <section class="vt-oc-section">
                 <div class="vt-oc-section__title"><span>2</span> Dados da coleta</div>
-                <div class="vt-grid-2">
+                <div class="vt-grid-2 vt-oc-linha">
                     <div class="eui-field">
                         <label class="eui-field__label" for="oc-data-liberacao">Coleta liberada a partir de <b>*</b></label>
                         <input type="datetime-local" id="oc-data-liberacao" class="eui-input" required>
                     </div>
-                    <label class="vt-oc-correios" for="oc-correios">
-                        <input type="checkbox" id="oc-correios">
-                        <span><strong><i class="fas fa-envelope"></i> Coleta nos Correios</strong><small>A linha fica destacada em azul na Central.</small></span>
-                    </label>
+                    <div class="eui-field">
+                        <label class="eui-field__label" for="oc-correios">Local da coleta</label>
+                        <label class="eui-input vt-oc-correios" for="oc-correios">
+                            <input type="checkbox" id="oc-correios"> Coleta nos Correios
+                        </label>
+                    </div>
                 </div>
                 <div class="eui-field">
                     <label class="eui-field__label" for="oc-observacao">Observação da coleta</label>
@@ -1368,7 +1372,10 @@ function estoqueDetalheHtml(oc) {
 
 let timerRenderEstoque = null;
 async function carregarEstoqueColetas() {
-  const pendentes = Array.from(new Set(state.coletas.map(ocDaColeta).filter(Boolean)))
+  // Só coletas ainda na fila (sem viagem, não finalizadas): o painel devolve
+  // também o histórico, e consultar tudo derrubava centenas de chamadas na bridge.
+  const naFila = state.coletas.filter((row) => !row.viagem && !['Concluida', 'Cancelada'].includes(String(row.status || '').trim()));
+  const pendentes = Array.from(new Set(naFila.map(ocDaColeta).filter(Boolean)))
     .filter((oc) => !estoquePorOc[oc]);
   pendentes.forEach((oc) => { estoquePorOc[oc] = { status: 'carregando' }; });
   // Poucas consultas simultâneas para não sobrecarregar a bridge do ERP.
