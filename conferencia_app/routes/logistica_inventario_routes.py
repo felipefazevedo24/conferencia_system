@@ -1373,26 +1373,46 @@ def _chapa_lotes_por_item(itens) -> dict[int, str]:
         entradas = buscar_entradas_chapa_lote(itens) or []
     except Exception:
         return {}
-    # Indexa lote por (numero_nota, codigo/descricao normalizados).
-    por_chave: dict[tuple[str, str], str] = {}
+    # O GRV tem um lote por LINHA (NF 71663: 00549 nos lotes -1 a -5). Guardar
+    # um lote por (NF, código) dava o último lote a todas as linhas do código.
+    # Cada linha do GRV entra numa lista por (NF, código/descrição) - o mesmo
+    # objeto nas duas chaves, pra que usar por uma chave valha pra outra.
+    linhas: dict[tuple[str, str], list[dict]] = {}
+    vistas: set[tuple[str, str, str]] = set()
     for entrada in entradas:
         nota = str(entrada.get("numero_nota") or "").strip()
         for it in entrada.get("itens") or []:
             lote = str(it.get("lote") or "").strip()
             if not lote:
                 continue
+            identidade = (nota, lote, _normalizar_busca(it.get("cod_interno")))
+            if identidade in vistas:
+                continue
+            vistas.add(identidade)
+            try:
+                qtd = float(it.get("quantidade") or 0)
+            except (TypeError, ValueError):
+                qtd = 0.0
+            linha = {"lote": lote, "qtd": qtd, "usada": False}
             for campo in (it.get("cod_interno"), it.get("descricao")):
                 chave = _normalizar_busca(campo)
                 if chave:
-                    por_chave[(nota, chave)] = lote
+                    linhas.setdefault((nota, chave), []).append(linha)
     saida: dict[int, str] = {}
-    for item in itens:
+    # Ordem de id: com quantidades iguais (dois 1,35 t), a primeira linha da NF
+    # fica com o primeiro lote - determinístico entre recargas.
+    for item in sorted(itens, key=lambda i: i.id):
         nota = str(item.numero_nota or "").strip()
+        qtd = float(item.qtd_real or 0)
         for campo in (item.codigo_grv, item.codigo, item.descricao):
-            lote = por_chave.get((nota, _normalizar_busca(campo)))
-            if lote:
-                saida[item.id] = lote
-                break
+            candidatas = linhas.get((nota, _normalizar_busca(campo))) or []
+            if not candidatas:
+                continue
+            livres = [l for l in candidatas if not l["usada"]] or candidatas
+            linha = next((l for l in livres if abs(l["qtd"] - qtd) < 1e-6), livres[0])
+            linha["usada"] = True
+            saida[item.id] = linha["lote"]
+            break
     return saida
 
 

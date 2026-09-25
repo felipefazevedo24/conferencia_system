@@ -326,3 +326,38 @@ def test_tela_calculo_und_e_aviso_no_navegador(app):
             browser.close()
     finally:
         server.shutdown();thread.join(timeout=5)
+
+
+def test_lote_por_linha_do_grv_com_dados_reais_da_nf_71663(monkeypatch):
+    # Retorno real do GRV (25/09/2026): um lote por linha, e a mesma entrada
+    # repetida uma vez por linha da NF. Antes todas as linhas do 00549 ficavam com -5.
+    from types import SimpleNamespace
+    from conferencia_app.services import erp_lancamento_service
+    grv = [('19-01-00549', 1.35, 1), ('19-01-00549', 1.51, 2), ('19-01-00549', 1.52, 3),
+           ('19-01-00549', 1.35, 4), ('19-01-00549', 1.34, 5), ('19-01-00558', 1.79, 6),
+           ('19-01-00558', 1.8, 7), ('19-01-00558', 2.02, 8)]
+    entrada = {'numero_nota': '71663', 'itens': [
+        {'cod_interno': c, 'descricao': 'CHAPA A36', 'quantidade': q, 'lote': f'71663-16/09/2026-{n}'} for c, q, n in grv]}
+    monkeypatch.setattr(erp_lancamento_service, 'buscar_entradas_chapa_lote', lambda itens: [entrada] * 8)
+    sync = [(5170, '19-01-00558', 1.79), (5171, '19-01-00558', 1.8), (5172, '19-01-00549', 1.35),
+            (5173, '19-01-00549', 1.35), (5174, '19-01-00549', 1.34), (5175, '19-01-00549', 1.51),
+            (5176, '19-01-00549', 1.52), (5177, '19-01-00558', 2.02)]
+    itens = [SimpleNamespace(id=i, numero_nota='71663', codigo_grv=c, codigo=c, descricao='CHAPA A36', qtd_real=q)
+             for i, c, q in reversed(sync)]
+    lotes = {k: v.rsplit('-', 1)[1] for k, v in routes._chapa_lotes_por_item(itens).items()}
+    assert lotes == {5170: '6', 5171: '7', 5172: '1', 5173: '4', 5174: '5', 5175: '2', 5176: '3', 5177: '8'}
+
+
+def test_pareamento_com_pedido_nao_troca_codigo_de_linha_lancada(app):
+    from conferencia_app.routes.api_routes import _sincronizar_codigo_interno_por_pedido
+    with app.app_context():
+        lancado, pendente = db.session.get(ItemNota, 1), db.session.get(ItemNota, 2)
+        lancado.codigo_grv = '19-01-00549'
+        pendente.status = 'Pendente'
+        db.session.commit()
+        resultado = {'pares': [{'item_id': 1, 'po_index': 0, 'po_codigo_material': '19-01-00564'},
+                               {'item_id': 2, 'po_index': 1, 'po_codigo_material': '19-01-00564'}]}
+        _sincronizar_codigo_interno_por_pedido('123', 'PED-1', resultado)
+        assert db.session.get(ItemNota, 1).codigo_grv == '19-01-00549'
+        assert db.session.get(ItemNota, 1).linha_po_vinculada == 0
+        assert db.session.get(ItemNota, 2).codigo_grv == '19-01-00564'

@@ -446,16 +446,22 @@ def _consultar_entradas_grv_payload_via_api(cfg: dict[str, Any], entradas_payloa
 
 
 def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) -> list[dict[str, Any]]:
-    entradas_payload = [
-        {
+    entradas_payload = []
+    vistas = set()
+    for item in itens or []:
+        if not str(item.numero_lancamento or item.numero_nota or item.chave_acesso or "").strip():
+            continue
+        entrada = {
             "numero_ar": str(item.numero_lancamento or "").strip(),
             "codigo_lancamento": str(item.numero_lancamento or "").strip(),
             "numero_nota": str(item.numero_nota or "").strip(),
             "chave": str(item.chave_acesso or "").strip(),
         }
-        for item in itens or []
-        if str(item.numero_lancamento or item.numero_nota or item.chave_acesso or "").strip()
-    ]
+        # Uma consulta por NF, não por linha: a NF de 8 linhas ia 8 vezes pra bridge.
+        identidade = tuple(entrada.values())
+        if identidade not in vistas:
+            vistas.add(identidade)
+            entradas_payload.append(entrada)
     return _consultar_entradas_grv_payload_via_api(cfg, entradas_payload)
 
 

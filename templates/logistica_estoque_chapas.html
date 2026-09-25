@@ -281,7 +281,7 @@
     let auditoriaPagina = 1, auditoriaVersao = 0, auditoriaTimer, auditoriaItem = null;
     let ordem = { campo: 'codigo', desc: false };
 
-    const LABELS_AUDIT = {und:'UND', no_controle:'Visível no controle', kg_nf:'Peso da NF (kg)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (kg)', consolidado_em:'Consolidado no item'};
+    const LABELS_AUDIT = {codigo:'Código GRV', und:'UND', no_controle:'Visível no controle', kg_nf:'Peso da NF (kg)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (kg)', consolidado_em:'Consolidado no item'};
     const LABELS_DIM = {espessura:'Esp.', largura:'Larg.', comprimento:'Comp.', diametro:'Diâm.', parede:'Parede', lado:'Lado', altura:'Altura', aba:'Aba', bitola:'Bitola'};
     function valorAudit(campo, valor) {
         if (valor == null || valor === '') return '—';
