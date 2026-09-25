@@ -731,7 +731,8 @@ ENTRADA_CHAPA_SQL = """
         a.qtde_estoque,
         a.unidade_estoque,
         a.codigo_na_fabrica,
-        lot.qtde_movimentada as lote_qtde_movimentada
+        lot.qtde_movimentada as lote_qtde_movimentada,
+        a.usuario as usuario_lancamento
     from public.tcompras c
     left join public.tfornece f
       on f.cod_empresa = c.cod_empresa
@@ -969,7 +970,37 @@ CONSERTO_RETORNOS_SQL = """
 """
 
 
-_CAMPOS_LOTE_CHAPA = ("guid_linha", "qtde_estoque", "unidade_estoque", "codigo_na_fabrica", "lote_qtde_movimentada")
+_CAMPOS_LOTE_CHAPA = ("guid_linha", "qtde_estoque", "unidade_estoque", "codigo_na_fabrica", "lote_qtde_movimentada", "usuario_lancamento")
+
+
+# Baixas de um lote de chapa (kardex do lote no Controle de Chapas), mapeado
+# contra os dados reais em 25/09/2026: a saída amarra o lote na
+# tsaida_loteserie (descricao = lote, qtde_movimentada = o que saiu DESTE lote;
+# qtde é o total do lote, não serve), guid_pai -> tsaidaax (linha: OS, depósitos)
+# e tsaidaax.cod_rel -> tsaida_e (cabeçalho: data e quem retirou). O GRV não
+# guarda o usuário do sistema que digitou a saída, só o funcionário que retirou.
+SQL_MOVIMENTOS_CHAPA_LOTE = """
+    select s.codigo as saida,
+           coalesce(s.dt_efetiva, s.data) as data,
+           coalesce(nullif(s.tipo_movimento_estoque, ''), '') as tipo,
+           coalesce(nullif(s.funcionario_retirou, ''), '') as retirado_por,
+           coalesce(nullif(i.cod_os_completo, ''), '') as os,
+           coalesce(nullif(i.descricao_os, ''), '') as descricao_os,
+           i.cod_deposito as deposito,
+           i.cod_deposito_destino as deposito_destino,
+           coalesce(nullif(i.unidade, ''), 'KG') as unidade,
+           coalesce(ls.qtde_movimentada, 0)::double precision as qtde
+    from public.tsaida_loteserie ls
+    join public.tsaidaax i on i.cod_empresa = ls.cod_empresa and i.guid_linha = ls.guid_pai
+    join public.tproduto p on p.cod_empresa = i.cod_empresa and p.codigo = i.cod_produto
+    left join public.tsaida_e s on s.cod_empresa = i.cod_empresa and s.codigo = i.cod_rel
+    where ls.cod_empresa = %s
+      and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %s
+      and trim(ls.descricao::text) = %s
+      and coalesce(ls.qtde_movimentada, 0) <> 0
+    order by coalesce(s.dt_efetiva, s.data) nulls last, s.codigo
+    limit 500
+"""
 
 
 def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
@@ -2992,6 +3023,32 @@ def create_app() -> Flask:
             })
         except Exception as exc:
             app.logger.exception("Falha ao consultar saldo de chapa por lote no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/chapa-lote-movimentos")
+    def consultar_movimentos_chapa_lote():
+        """Baixas de UM lote de chapa. Entrada: {"codigo", "lote", "empresa"}."""
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        payload = request.get_json(silent=True) or {}
+        codigo = re.sub(r"[^A-Z0-9]", "", str(payload.get("codigo") or "").strip().upper())
+        lote = str(payload.get("lote") or "").strip()
+        if not codigo or not lote:
+            return jsonify({"sucesso": False, "erro": "codigo_e_lote_obrigatorios"}), 400
+        try:
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(SQL_MOVIMENTOS_CHAPA_LOTE, (int(payload.get("empresa") or 1), codigo, lote))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            for row in rows:
+                row["data"] = _date_to_api(row.get("data"))
+            return jsonify({"sucesso": True, "movimentos": _json_safe(rows)})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar movimentos do lote de chapa")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/chapa-diag")

@@ -1461,6 +1461,8 @@ def _chapa_montar_lotes(itens, entradas) -> list[dict] | None:
                 "chaves": {_chapa_codnorm(it.get("cod_interno")), _chapa_codnorm(it.get("codigo_na_fabrica"))} - {""},
                 "qtd_compra": float(it.get("quantidade") or 0),
                 "ar": str(entrada.get("codigo_lancamento") or entrada.get("numero_ar") or "").strip(),
+                "dt_lancamento": entrada.get("dt_lancamento"),
+                "usuario_grv": str(it.get("usuario_lancamento") or "").strip(),
                 "lotes": [], "itens": [],
             })
             fator = _FATOR_PESO_KG.get(re.sub(r"[^A-Z]", "", str(it.get("unidade_estoque") or "KG").upper()), 1.0)
@@ -1503,6 +1505,7 @@ def _chapa_montar_lotes(itens, entradas) -> list[dict] | None:
                 lotes.append({
                     "codigo": linha["codigo"], "descricao": linha["descricao"], "numero_nota": nota,
                     "ar": linha["ar"], "lote": lote["lote"], "kg": lote["kg"], "fonte": "grv",
+                    "dt_lancamento": linha["dt_lancamento"], "usuario_grv": linha["usuario_grv"],
                     # Linha com mais de um lote: UND e cálculo ficam no primeiro.
                     "itens": linha["itens"] if n == 0 else [],
                 })
@@ -1624,6 +1627,7 @@ def api_chapas_listar():
             "codigo_norm": _codnorm(lt["codigo"]), "descricao": lt["descricao"],
             "fornecedor": (principal.fornecedor if principal else "") or "", "ar": lt["ar"],
             "lote": lt["lote"], "lote_original": lt["lote_original"],
+            "dt_lancamento": lt.get("dt_lancamento"), "usuario_grv": lt.get("usuario_grv") or "",
             "conferente": ", ".join(dict.fromkeys(i.usuario_conferencia for i in do_lote if i.usuario_conferencia)),
             "unidade_nf": (principal.unidade_comercial if principal else "") or "",
             "kg_nf": lt["kg"], "und": und,
@@ -1655,6 +1659,7 @@ def api_chapas_listar():
             "fonte": l["fonte"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
             "descricao": l["descricao"], "fornecedor": l["fornecedor"], "ar": l["ar"],
             "lote": l["lote"], "lote_original": l["lote_original"],
+            "dt_lancamento": l["dt_lancamento"], "usuario_grv": l["usuario_grv"],
             "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
             "kg_nf": kg_nf, "und": und,
             "kg_saida": round(kg_saida, 2), "kg_saldo": round(kg_saldo, 2),
@@ -1784,6 +1789,17 @@ def api_chapas_alterar_und(item_id):
                   {'und': anterior}, {'und': und, 'motivo': motivo})
     db.session.commit()
     return jsonify(sucesso=True, und=und)
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/movimentos', methods=['GET'])
+@permission_required(PERMISSION)
+def api_chapas_movimentos():
+    codigo = str(request.args.get('codigo') or '').strip()
+    lote = str(request.args.get('lote') or '').strip()
+    if not codigo or not lote:
+        return jsonify(error='Informe código e lote.'), 400
+    from ..services.erp_estoque_service import buscar_movimentos_chapa_lote
+    return jsonify(buscar_movimentos_chapa_lote(codigo, lote))
 
 
 @logistica_inventario_bp.route('/api/logistica/chapas/lote', methods=['PUT'])

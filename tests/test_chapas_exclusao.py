@@ -492,3 +492,51 @@ def test_tolerancia_de_divergencia_e_5_por_cento(app):
     app.jinja_env.globals.update(can_access=lambda key: True)
     html = client.get('/logistica/estoque/chapas').data.decode()
     assert 'Divergência &gt; 5%' in html and 'const TOLERANCIA_PCT = 5.0' in html
+
+
+def test_bridge_movimentos_do_lote_com_dados_reais(monkeypatch):
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from scripts import erp_lancamento_api_bridge as bridge
+    monkeypatch.setattr(bridge, '_config', lambda: {'host': 'h', 'database': 'd', 'user': 'u'})
+    monkeypatch.setattr(bridge, '_authorized', lambda cfg: True)
+    conn = MagicMock()
+    cursor = conn.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cursor.description = [(c,) for c in ('saida', 'data', 'tipo', 'retirado_por', 'os', 'descricao_os',
+                                         'deposito', 'deposito_destino', 'unidade', 'qtde')]
+    # Saída real 54858 (GRV, 23/09/2026) do lote 70387-10/07/2026-2.
+    cursor.fetchall.return_value = [(54858, datetime(2026, 9, 23), 'CONCLUSÃO SAÍDA', 'PAULO RICARDO DE CASTRO FONSEC',
+                                     '10629/001', '26-MFP78-ALT-3017 *CL | 6,35MM A36', 1, 2, 'KG', 29.58)]
+    conectou = {}
+    monkeypatch.setattr(bridge, '_conectar', lambda cfg, readonly=False: conectou.update(readonly=readonly) or conn)
+    client = bridge.create_app().test_client()
+    assert client.post('/api/erp/chapa-lote-movimentos', json={'codigo': '19-01-00558'}).status_code == 400
+    data = client.post('/api/erp/chapa-lote-movimentos', json={'codigo': '19-01-00558', 'lote': ' 70387-10/07/2026-2 '}).get_json()
+    assert conectou['readonly'] is True
+    assert cursor.execute.call_args[0][1] == (1, '190100558', '70387-10/07/2026-2')
+    mov = data['movimentos'][0]
+    assert data['sucesso'] and mov['saida'] == 54858 and mov['data'].startswith('2026-09-23')
+    assert mov['os'] == '10629/001' and mov['retirado_por'].startswith('PAULO') and mov['qtde'] == 29.58
+
+
+def test_sql_movimentos_liga_lote_saida_e_cabecalho():
+    from scripts import erp_lancamento_api_bridge as bridge
+    sql = bridge.SQL_MOVIMENTOS_CHAPA_LOTE
+    assert 'ls.qtde_movimentada' in sql and 'i.guid_linha = ls.guid_pai' in sql and 's.codigo = i.cod_rel' in sql
+    assert 'a.usuario as usuario_lancamento' in bridge.ENTRADA_CHAPA_SQL
+
+
+def test_rota_de_movimentos_nao_derruba_a_tela(app, monkeypatch):
+    from conferencia_app.services import erp_estoque_service as svc
+    client = client_for(app, 'Logística')
+    assert client.get('/api/logistica/chapas/movimentos?codigo=X').status_code == 400
+    with app.app_context():
+        # Sem bridge configurada: responde vazio com o sinalizador, sem erro.
+        assert svc.buscar_movimentos_chapa_lote('X', 'L') == {'disponivel': False, 'movimentos': []}
+    chamadas = []
+    monkeypatch.setattr(svc, 'buscar_movimentos_chapa_lote',
+                        lambda codigo, lote: chamadas.append((codigo, lote)) or {'disponivel': True, 'movimentos': [{'saida': 1}]})
+    r = client.get('/api/logistica/chapas/movimentos?codigo=19-01-00558&lote=70387-10/07/2026-2')
+    assert r.status_code == 200 and r.get_json()['movimentos'] == [{'saida': 1}]
+    assert chamadas == [('19-01-00558', '70387-10/07/2026-2')]
+    assert app.test_client().get('/api/logistica/chapas/movimentos?codigo=X&lote=L').status_code in (302, 401)

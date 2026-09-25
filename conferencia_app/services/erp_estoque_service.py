@@ -375,6 +375,29 @@ def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[st
         return vazio
 
 
+def buscar_movimentos_chapa_lote(codigo: str, lote: str, empresa: int = 1) -> dict[str, Any]:
+    """Baixas de um lote de chapa no GRV (kardex do lote). Nunca lança:
+    bridge fora ou desatualizada devolve {"disponivel": False} e a tela avisa."""
+    try:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            return {"disponivel": False, "movimentos": []}
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/chapa-lote-movimentos",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "codigo": codigo, "lote": lote},
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            return {"disponivel": False, "movimentos": []}
+        return {"disponivel": True, "movimentos": data.get("movimentos") or []}
+    except Exception:
+        current_app.logger.warning("Nao foi possivel consultar movimentos do lote de chapa.", exc_info=True)
+        return {"disponivel": False, "movimentos": []}
+
+
 def diagnosticar_chapa_lote(saida_numero: str, codigo: str, empresa: int = 1) -> dict[str, Any]:
     """Chama o diagnostico da bridge pra descobrir, no GRV real, a tabela que
     amarra a SAIDA ao LOTE e as reservas por OS. So leitura de metadados."""

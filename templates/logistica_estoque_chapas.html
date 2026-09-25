@@ -52,9 +52,10 @@
     .ch-row__body { padding: 4px 16px 14px 38px; background: var(--eui-primary-soft); display: grid; gap: 8px; }
     .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--eui-text-soft); padding: 4px 0; }
     .ch-os b { color: var(--eui-text); }
-    .ch-lote { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px 0; display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(170px, 1fr) auto; gap: 10px 12px; align-items: center; overflow: hidden; }
+    .ch-lote { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px 0; display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(170px, 1fr) auto; gap: 10px 12px; align-items: center; }
     /* Movimento do lote: do recebido ao disponível, com o consumido no meio. */
-    .ch-mov { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 -12px; border-top: 1px solid var(--eui-border); }
+    /* Sem overflow:hidden no card (cortava o menu ⋯): os cantos de baixo vêm daqui. */
+    .ch-mov { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 -12px; border-top: 1px solid var(--eui-border); border-radius: 0 0 9px 9px; overflow: hidden; }
     .ch-mov > div { padding: 8px 12px; font-size: 12.5px; color: var(--eui-text-soft); }
     .ch-mov > div + div { border-left: 1px solid var(--eui-border); }
     .ch-mov span { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-bottom: 2px; }
@@ -68,7 +69,7 @@
     .ch-lote__rec b { color: var(--eui-text); }
     .ch-lote__calc { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--eui-text-soft); }
     .ch-lote__acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; position: relative; }
-    .ch-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 200px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; box-shadow: var(--eui-shadow-md, 0 10px 30px rgba(0,0,0,.18)); padding: 6px; display: none; }
+    .ch-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 200px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; box-shadow: var(--eui-shadow-md, 0 10px 30px rgba(0,0,0,.18)); padding: 6px; display: none; }
     .ch-menu.open { display: grid; }
     .ch-menu button { border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--eui-text); cursor: pointer; display: flex; gap: 8px; align-items: center; }
     .ch-menu button:hover { background: var(--eui-surface-2); }
@@ -125,6 +126,18 @@
     .ch-audit-motivo { font-size: 12.5px; color: var(--eui-text); background: var(--eui-surface-2); border-radius: 6px; padding: 6px 10px; }
     .ch-audit-filter { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .ch-audit-filter input { flex: 1; min-width: 200px; }
+
+    .ch-kx { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ch-kx th { text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); padding: 6px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .ch-kx td { padding: 8px; border-bottom: 1px solid var(--eui-border); vertical-align: top; color: var(--eui-text-soft); }
+    .ch-kx td b { color: var(--eui-text); }
+    .ch-kx .num { text-align: right; white-space: nowrap; }
+    .ch-kx .in b { color: var(--eui-success); }
+    .ch-kx .out b { color: var(--eui-danger); }
+    .ch-kx small { display: block; color: var(--eui-muted); font-size: 11px; }
+    .ch-kx-wrap { overflow-x: auto; }
+    .ch-kx-tot { display: flex; gap: 18px; flex-wrap: wrap; justify-content: flex-end; font-size: 12.5px; color: var(--eui-text-soft); }
+    .ch-kx-tot b { color: var(--eui-text); }
 
     @media (max-width: 900px) {
         .ch-thead { display: none; }
@@ -243,6 +256,14 @@
     <div class="ch-modal__foot"><button type="button" id="ch-und-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-und-save" class="eui-btn eui-btn--primary"><i class="fas fa-check"></i> Salvar quantidade</button></div>
 </dialog>
 {% endif %}
+<dialog id="ch-kx-dialog" class="ch-dialog ch-dialog--wide" aria-labelledby="ch-kx-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-kx-title"><i class="fas fa-right-left"></i> Movimentação do lote</div><button type="button" class="ch-modal__close" id="ch-kx-close" aria-label="Fechar">&times;</button></div>
+    <div class="ch-modal__body">
+        <div class="ch-iteminfo" id="ch-kx-item"></div>
+        <div id="ch-kx-body" aria-live="polite"></div>
+        <p class="ch-muted">Baixas lidas do GRV (saídas amarradas a este lote). O GRV registra quem <b>retirou</b> o material, não o usuário que digitou a saída.</p>
+    </div>
+</dialog>
 <dialog id="ch-calc-dialog" class="ch-dialog" aria-labelledby="ch-calc-title">
     <div class="ch-modal__head">
         <div class="ch-modal__title" id="ch-calc-title"><i class="fas fa-calculator"></i> Calcular peso da chapa</div>
@@ -427,6 +448,7 @@
             PODE_ADMIN ? `<button type="button" data-acao="lote" data-item="${i.item_id}"><i class="fas fa-hashtag"></i> Corrigir nº do lote</button>` : '',
             PODE_ADMIN ? `<button type="button" class="danger" data-acao="excluir" data-item="${i.item_id}"><i class="fas fa-trash-can"></i> Excluir do controle</button>` : '',
         ].join('');
+        const btnMov = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-acao="mov" data-lote-key="${esc(chaveLote(i))}"><i class="fas fa-right-left"></i> Movimentação</button>`;
         const linhasNf = (i.itens_ids || []).length;
         const origem = [
             linhasNf > 1 ? `<span class="eui-badge eui-badge--info" title="Linhas do XML lançadas neste lote do GRV; a UND é a soma delas">${linhasNf} linhas da NF</span>` : '',
@@ -440,7 +462,8 @@
                 ${origem ? `<div class="ch-tags">${origem}</div>` : ''}
             </div>
             <div class="ch-lote__calc">${diffHtml(i.pct_diferenca)}${i.peso_por_peca != null ? `<span>${fmt(i.peso_por_peca, 1)} kg/peça</span>` : ''}</div>
-            ${!i.item_id ? '<div class="ch-lote__acts ch-muted">UND e cálculo no 1º lote da linha</div>' : `<div class="ch-lote__acts">
+            ${!i.item_id ? `<div class="ch-lote__acts">${btnMov}</div>` : `<div class="ch-lote__acts">
+                ${btnMov}
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-acao="calc" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Cálculo' : 'Calcular'}</button>
                 <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-menu="${i.item_id}" aria-label="Mais ações do lote" aria-haspopup="true"><i class="fas fa-ellipsis"></i></button>
                 <div class="ch-menu" data-menu-box="${i.item_id}">${menu}</div>
@@ -558,6 +581,58 @@
         }).join('');
     }
 
+    function chaveLote(i) { return `${i.numero_nota}|${i.codigo}|${i.lote}`; }
+
+    let kxVersao = 0;
+    async function abrirMovimentos(lt) {
+        const versao = ++kxVersao;
+        $('ch-kx-item').innerHTML = `
+            <div><span>Código</span><b>${esc(lt.codigo || '-')}</b></div>
+            <div><span>Lote</span><b>${esc(lt.lote || '-')}</b></div>
+            <div><span>NF · AR</span><b>${esc(lt.numero_nota || '-')} · ${esc(lt.ar || '-')}</b></div>
+            <div><span>Recebido</span><b>${fmt(lt.kg_nf, 0)} kg</b></div>`;
+        $('ch-kx-body').innerHTML = '<span class="ch-muted">Consultando o GRV...</span>';
+        $('ch-kx-dialog').showModal();
+        let data;
+        try {
+            const resp = await fetch('/api/logistica/chapas/movimentos?' + new URLSearchParams({codigo: lt.codigo, lote: lt.lote}));
+            data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Falha ao consultar.');
+        } catch (e) { data = {disponivel: false, movimentos: []}; }
+        if (versao !== kxVersao) return;
+        const peso = Number(lt.peso_por_peca) || null;
+        const und = (kg) => peso ? `<small>≈ ${fmt(kg / peso, 1)} und</small>` : '';
+        const quando = (v) => v ? new Date(v).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '—';
+        const fator = (u) => /^(T|TO|TON)$/i.test(String(u || '').trim()) ? 1000 : 1;
+        let saldo = Number(lt.kg_nf) || 0, consumido = 0;
+        const linhas = [`<tr>
+            <td>${quando(lt.dt_lancamento)}</td>
+            <td><b>Entrada</b><small>NF ${esc(lt.numero_nota || '-')} · AR ${esc(lt.ar || '-')}</small></td>
+            <td>—</td>
+            <td class="num in"><b>+${fmt(saldo, 1)} kg</b>${und(saldo)}</td>
+            <td class="num"><b>${fmt(saldo, 1)} kg</b></td>
+            <td>${lt.usuario_grv ? `Lançado por <b>${esc(lt.usuario_grv)}</b>` : '—'}</td></tr>`];
+        (data.movimentos || []).forEach((m) => {
+            const kg = Number(m.qtde || 0) * fator(m.unidade);
+            saldo -= kg; consumido += kg;
+            const deps = m.deposito != null ? `<small>Depósito ${esc(m.deposito)}${m.deposito_destino != null ? ' → ' + esc(m.deposito_destino) : ''}</small>` : '';
+            linhas.push(`<tr>
+                <td>${quando(m.data)}</td>
+                <td><b>${esc(m.tipo || 'Saída')}</b><small>Saída nº ${esc(m.saida ?? '-')}</small>${deps}</td>
+                <td>${m.os ? `<b>OS ${esc(m.os)}</b><small>${esc(m.descricao_os || '')}</small>` : '—'}</td>
+                <td class="num out"><b>−${fmt(kg, 1)} kg</b>${und(kg)}</td>
+                <td class="num"><b>${fmt(saldo, 1)} kg</b></td>
+                <td>${m.retirado_por ? `Retirado por <b>${esc(m.retirado_por)}</b>` : '—'}</td></tr>`);
+        });
+        const aviso = data.disponivel ? '' : '<div class="ch-warn" style="margin-bottom:10px"><i class="fas fa-triangle-exclamation"></i> Não foi possível consultar as baixas no GRV (bridge fora do ar ou desatualizada). Mostrando só a entrada.</div>';
+        const vazio = (data.disponivel && !(data.movimentos || []).length) ? '<p class="ch-muted" style="margin-top:8px">Nenhuma baixa deste lote no GRV.</p>' : '';
+        $('ch-kx-body').innerHTML = `${aviso}<div class="ch-kx-wrap"><table class="ch-kx">
+            <thead><tr><th>Data</th><th>Movimento</th><th>OS</th><th class="num">Quantidade</th><th class="num">Saldo do lote</th><th>Quem</th></tr></thead>
+            <tbody>${linhas.join('')}</tbody></table></div>${vazio}
+            <div class="ch-kx-tot" style="margin-top:10px"><span>Consumido: <b>${fmt(consumido, 1)} kg</b></span><span>Saldo pelas baixas: <b>${fmt(saldo, 1)} kg</b></span></div>`;
+    }
+    $('ch-kx-close').onclick = () => $('ch-kx-dialog').close();
+
     function fecharMenus(exceto) {
         document.querySelectorAll('.ch-menu.open').forEach((m) => { if (m !== exceto) m.classList.remove('open'); });
     }
@@ -580,6 +655,11 @@
         const btn = e.target.closest('[data-acao]');
         if (!btn) return;
         fecharMenus();
+        if (btn.dataset.acao === 'mov') {
+            const lt = cache.find((x) => chaveLote(x) === btn.dataset.loteKey);
+            if (lt) abrirMovimentos(lt);
+            return;
+        }
         const linha = cache.find((x) => String(x.item_id) === btn.dataset.item);
         if (!linha) return;
         if (btn.dataset.acao === 'calc') abrirCalc(linha);
@@ -918,7 +998,7 @@
         render();
     }));
     // Clique no fundo (fora da caixa) fecha os dialogs que não estão salvando.
-    ['ch-calc-dialog', 'ch-audit-dialog'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target === $(id)) $(id).close(); }));
+    ['ch-calc-dialog', 'ch-audit-dialog', 'ch-kx-dialog'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target === $(id)) $(id).close(); }));
 
     // Atualiza sozinho: quando você volta pra aba (ex.: acabou de dar baixa no
     // ERP) e a cada 60s. Pula se algum modal estiver aberto, pra não atrapalhar.
