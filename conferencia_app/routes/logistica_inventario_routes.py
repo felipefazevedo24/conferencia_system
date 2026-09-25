@@ -1611,6 +1611,36 @@ def api_chapas_excluir(item_id):
     return jsonify(sucesso=True, message='Item excluído do controle de chapas.')
 
 
+@logistica_inventario_bp.route('/api/logistica/chapas/<int:item_id>/und', methods=['PATCH'])
+@roles_required('Admin')
+def api_chapas_alterar_und(item_id):
+    # Grava no mesmo campo que o conferente preenche (ItemNota.qtd_chapas_und):
+    # a conferência de recebimento passa a mostrar o valor corrigido sem cópia.
+    dados = request.get_json(silent=True) or {}
+    try:
+        und = float(str(dados.get('und') or '').replace(',', '.'))
+    except ValueError:
+        und = 0.0
+    motivo = str(dados.get('motivo') or '').strip()[:300]
+    if not und > 0:
+        return jsonify(error='Informe uma quantidade de chapas maior que zero.'), 400
+    if not motivo:
+        return jsonify(error='Informe o motivo da alteração.'), 400
+    item = ItemNota.query.filter_by(id=item_id).with_for_update().first()
+    if not item:
+        return jsonify(error='Item não encontrado.'), 404
+    if not item.qtd_chapas_und or item.qtd_chapas_und <= 0:
+        return jsonify(error='Este item não faz parte do controle de chapas.'), 409
+    anterior = item.qtd_chapas_und
+    if anterior != und:
+        from ..services.chapa_auditoria_service import registrar
+        item.qtd_chapas_und = und
+        registrar(item, 'Unidades alteradas no controle', session['username'],
+                  {'und': anterior}, {'und': und, 'motivo': motivo})
+    db.session.commit()
+    return jsonify(sucesso=True, und=und)
+
+
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])
 @permission_required(PERMISSION)
 def api_chapas_salvar_calculo():
