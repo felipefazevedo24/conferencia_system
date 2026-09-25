@@ -211,46 +211,45 @@ def criar_automator_verificado(base_class: type[Any]) -> type[Any]:
 
             self._timed("status", action)
 
+        def _campo_descricao(self, form, *, refresh: bool = False):
+            """Localiza a Descrição no cabeçalho, fora dos editores da grade."""
+            controls = self._controls(form, refresh=refresh)
+            grid_tops = [
+                c.rectangle().top
+                for c in controls
+                if c.element_info.class_name == "TcxGridSite"
+            ]
+            grid_top = min(grid_tops) if grid_tops else float("inf")
+            edits = [
+                c for c in controls
+                if c.element_info.control_type == "Edit"
+                and c.element_info.class_name == "TcxCustomInnerTextEdit"
+                and c.rectangle().top < grid_top
+                and c.rectangle().width() > 500
+            ]
+            if not edits:
+                raise RuntimeError("Campo Descrição da M83 não localizado no cabeçalho.")
+            return max(edits, key=lambda c: c.rectangle().width())
+
         def preencher_descricao(self, hwnd: int, descricao: str) -> None:
             from pywinauto import keyboard
 
             def action() -> None:
                 form = self._form(hwnd)
-                edits = [
-                    c for c in self._controls(form)
-                    if c.element_info.control_type == "Edit"
-                    and c.element_info.class_name == "TcxCustomInnerTextEdit"
-                ]
-                if not edits:
-                    raise RuntimeError("Campo Descrição da M83 não localizado.")
-                field = max(edits, key=lambda c: c.rectangle().width())
+                field = self._campo_descricao(form, refresh=True)
                 expected = descricao.strip().casefold()
                 if self._value(field).casefold() != expected:
-                    direct = False
-                    try:
-                        field.iface_value.SetValue(descricao)
-                        direct = True
-                    except Exception:
-                        pass
-                    if direct:
-                        try:
-                            self._wait_until(
-                                lambda: self._value(field).casefold() == expected,
-                                timeout=0.6,
-                                message="SetValue não confirmou a descrição.",
-                            )
-                        except RuntimeError:
-                            direct = False
-                    if not direct:
-                        field.click_input()
-                        keyboard.send_keys("^a{BACKSPACE}")
-                        _clipboard(descricao)
-                        keyboard.send_keys("^v")
-                        self._wait_until(
-                            lambda: self._value(field).casefold() == expected,
-                            timeout=max(3.0, self.delay * 6),
-                            message="A descrição não foi preenchida integralmente na M83.",
-                        )
+                    field.click_input()
+                    keyboard.send_keys("^a{BACKSPACE}")
+                    _clipboard(descricao)
+                    keyboard.send_keys("^v{TAB}")
+                    self._wait_until(
+                        lambda: self._value(
+                            self._campo_descricao(self._form(hwnd), refresh=True)
+                        ).casefold() == expected,
+                        timeout=max(3.0, self.delay * 6),
+                        message="A descrição não foi preenchida e confirmada na M83.",
+                    )
                 self._description_validated = True
 
             self._timed("descricao", action)
@@ -362,14 +361,8 @@ def criar_automator_verificado(base_class: type[Any]) -> type[Any]:
 
         def _validar_antes_de_gravar(self, hwnd: int, descricao: str) -> None:
             form = self._form(hwnd)
-            controls = self._controls(form)
-            edits = [
-                c for c in controls
-                if c.element_info.control_type == "Edit"
-                and c.element_info.class_name == "TcxCustomInnerTextEdit"
-                and c.rectangle().width() > 1000
-            ]
-            if not edits or self._value(edits[0]).casefold() != descricao.casefold():
+            field = self._campo_descricao(form, refresh=True)
+            if self._value(field).casefold() != descricao.casefold():
                 raise RuntimeError(
                     "A descrição não foi preenchida integralmente na M83; gravação cancelada."
                 )
@@ -447,9 +440,12 @@ def criar_automator_verificado(base_class: type[Any]) -> type[Any]:
 
                 self.novo_apontamento(hwnd)
                 self.selecionar_status_liberado(hwnd)
-                self.preencher_descricao(hwnd, descricao)
                 self.selecionar_empresa_columbia(hwnd)
                 self.inserir_codigos_processos(hwnd, codigos)
+                # A grade DevExpress recria editores durante a inclusão dos
+                # processos. Preenche a descrição por último para que o valor
+                # seja confirmado no cabeçalho e não se perca ao mudar o foco.
+                self.preencher_descricao(hwnd, descricao)
                 self._timed(
                     "validacao_pre_gravacao",
                     lambda: self._validar_antes_de_gravar(hwnd, descricao),

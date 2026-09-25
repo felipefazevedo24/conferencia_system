@@ -17,6 +17,7 @@ from datetime import timedelta
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
+from marshmallow import ValidationError
 from sqlalchemy import String, case, cast, func, literal, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -1945,6 +1946,8 @@ def registrar():
                 "msg": "Usuário criado e convite processado com sucesso." if email_enviado else "Usuário criado. SMTP não configurado para envio automático.",
             }
         )
+    except ValidationError as e:
+        return jsonify({"sucesso": False, "msg": "Dados inválidos para cadastro.", "erros": e.messages}), 400
     except Exception as e:
         db.session.rollback()
         import traceback

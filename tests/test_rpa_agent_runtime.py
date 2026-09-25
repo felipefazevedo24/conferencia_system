@@ -178,5 +178,5 @@ def test_sequencia_otimizada_preserva_validacoes_e_confirmacoes(monkeypatch):
     assert result["timings_ms"]["total"] >= 0
     assert events[:10] == [
         "localizar", "ativar", "monitor_start", "novo", "status",
-        "descricao", "empresa", "codigos", "validar", "gravar",
+        "empresa", "codigos", "descricao", "validar", "gravar",
     ]
