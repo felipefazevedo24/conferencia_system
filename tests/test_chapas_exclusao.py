@@ -95,6 +95,7 @@ def test_botao_somente_admin(app):
     result=client_for(app,'Logística').get('/logistica/estoque/chapas')
     assert result.status_code == 200
     assert b'id="ch-delete-dialog"' not in result.data and b'id="ch-und-dialog"' not in result.data
+    assert b'id="ch-lote-dialog"' not in result.data
     assert b'const PODE_ADMIN = false' in result.data
 
 
@@ -436,3 +437,58 @@ def test_bridge_sem_campos_de_lote_usa_montagem_antiga(app, monkeypatch):
     assert data['lotes_do_grv'] is False
     assert sorted(l['item_id'] for l in data['itens']) == [1, 2]
     assert all(l['itens_ids'] == [l['item_id']] for l in data['itens'])
+
+
+def test_admin_corrige_lote_e_consumo_segue_o_lote_corrigido(app, monkeypatch):
+    monkeypatch.setattr(routes, '_chapa_buscar_entradas', lambda itens: _grv_71663_e_21728())
+    monkeypatch.setattr(erp_estoque_service, 'buscar_saldo_chapa_por_lote', lambda codigos: {'por_lote': [
+        {'codigo': '19-01-00599', 'lote': '21728-LOTE-FISICO', 'kg_saida': 954, 'kg_reservado': 100}]})
+    with app.app_context():
+        db.session.add(ItemNota(id=5194, numero_nota='21728', codigo='19-01-00599', codigo_grv='19-01-00599',
+                                descricao='CHAPA', qtd_real=5954, unidade_comercial='KG', qtd_chapas_und=112, status='Lançado'))
+        db.session.commit()
+    client = client_for(app)
+    lote = lambda: [l for l in client.get('/api/logistica/chapas').get_json()['itens'] if l['numero_nota'] == '21728'][0]
+    assert lote()['lote'] == '21728-21/09/2026-1' and lote()['kg_saida'] == 0
+    corpo = {'item_id': 5194, 'numero_nota': '21728', 'codigo': '19-01-00599',
+             'lote_original': '21728-21/09/2026-1', 'lote': '21728-LOTE-FISICO'}
+    assert client.put('/api/logistica/chapas/lote', json=corpo).status_code == 400  # sem motivo
+    assert client.put('/api/logistica/chapas/lote', json={**corpo, 'item_id': 1, 'motivo': 'x'}).status_code == 404
+    for _ in range(2):
+        assert client.put('/api/logistica/chapas/lote', json={**corpo, 'motivo': 'Etiqueta física'}).status_code == 200
+    atual = lote()
+    assert atual['lote'] == '21728-LOTE-FISICO' and atual['lote_original'] == '21728-21/09/2026-1'
+    assert atual['kg_saida'] == 954 and atual['kg_reservado'] == 100 and atual['kg_saldo'] == 5000
+    assert client.get('/api/logistica/chapas?q=LOTE-FISICO').get_json()['itens'][0]['item_id'] == 5194
+    with app.app_context():
+        log = ChapaAuditoria.query.one()
+        assert log.acao == 'Lote corrigido' and log.antes == {'lote': '21728-21/09/2026-1'}
+        assert log.depois == {'lote': '21728-LOTE-FISICO', 'lote_grv': '21728-21/09/2026-1', 'motivo': 'Etiqueta física'}
+    # Voltar ao lote do GRV desfaz a correção.
+    assert client.put('/api/logistica/chapas/lote', json={**corpo, 'lote': '21728-21/09/2026-1', 'motivo': 'Desfaz'}).status_code == 200
+    assert lote()['lote'] == '21728-21/09/2026-1'
+    with app.app_context():
+        from conferencia_app.models import ChapaLoteCorrecao
+        assert ChapaLoteCorrecao.query.count() == 0 and ChapaAuditoria.query.count() == 2
+
+
+@pytest.mark.parametrize('role', ['Logística', 'Fiscal', 'Conferente'])
+def test_outros_papeis_nao_corrigem_lote(app, role):
+    r = client_for(app, role).put('/api/logistica/chapas/lote', json={
+        'item_id': 1, 'numero_nota': '123', 'codigo': 'CH-1', 'lote_original': 'A', 'lote': 'B', 'motivo': 'x'})
+    assert r.status_code == 403
+
+
+def test_tolerancia_de_divergencia_e_5_por_cento(app):
+    with app.app_context():
+        # Item 1: 2 und x 25 kg/peça = 50 kg, igual à NF. Com 26,5 kg/peça dá +6%; com 26 dá +4%.
+        calc = ChapaCalculo.query.one()
+        calc.peso_por_peca = 26; db.session.commit()
+    client = client_for(app)
+    assert client.get('/api/logistica/chapas').get_json()['resumo']['com_divergencia'] == 0
+    with app.app_context():
+        ChapaCalculo.query.one().peso_por_peca = 26.5; db.session.commit()
+    assert client.get('/api/logistica/chapas').get_json()['resumo']['com_divergencia'] == 1
+    app.jinja_env.globals.update(can_access=lambda key: True)
+    html = client.get('/logistica/estoque/chapas').data.decode()
+    assert 'Divergência &gt; 5%' in html and 'const TOLERANCIA_PCT = 5.0' in html

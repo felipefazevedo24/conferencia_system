@@ -22,6 +22,7 @@ from ..models import (
     ChapaCalculoLog,
     ChapaControleExclusao,
     ChapaAuditoria,
+    ChapaLoteCorrecao,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -1357,6 +1358,10 @@ CHAPA_DENSIDADES = {
 }
 
 
+# Diferença aceitável entre peso calculado (peso/peça × UND) e o peso recebido.
+CHAPA_TOLERANCIA_PCT = 5.0
+
+
 def _chapa_kg_do_item(item) -> float:
     """Peso da NF em KG (a NF de chapa vem em KG ou T; T converte para KG)."""
     unidade = re.sub(r"[^A-Z]", "", str(item.unidade_comercial or "").upper())
@@ -1538,6 +1543,7 @@ def estoque_chapas_page():
         user=session["username"],
         user_role=session.get("role", ""),
         pode_excluir_chapas=is_admin_session(),
+        tolerancia_pct=CHAPA_TOLERANCIA_PCT,
     )
 
 
@@ -1572,6 +1578,11 @@ def api_chapas_listar():
             "kg": _chapa_kg_do_item(i), "fonte": "xml", "itens": [i],
         } for i in itens]
     fonte_grv = any(l["fonte"] == "grv" for l in lotes)
+    correcoes = {(c.numero_nota, _chapa_codnorm(c.codigo), c.lote_original): c.lote_corrigido
+                 for c in ChapaLoteCorrecao.query.all()}
+    for lt in lotes:
+        lt["lote_original"] = lt["lote"]
+        lt["lote"] = correcoes.get((str(lt["numero_nota"] or ""), _chapa_codnorm(lt["codigo"]), lt["lote"]), lt["lote"])
 
     # Saldo/saída/reservado por LOTE (best-effort do GRV; vazio se a bridge não responder).
     try:
@@ -1612,7 +1623,7 @@ def api_chapas_listar():
             "numero_nota": lt["numero_nota"], "codigo": lt["codigo"],
             "codigo_norm": _codnorm(lt["codigo"]), "descricao": lt["descricao"],
             "fornecedor": (principal.fornecedor if principal else "") or "", "ar": lt["ar"],
-            "lote": lt["lote"],
+            "lote": lt["lote"], "lote_original": lt["lote_original"],
             "conferente": ", ".join(dict.fromkeys(i.usuario_conferencia for i in do_lote if i.usuario_conferencia)),
             "unidade_nf": (principal.unidade_comercial if principal else "") or "",
             "kg_nf": lt["kg"], "und": und,
@@ -1643,7 +1654,8 @@ def api_chapas_listar():
             "item_id": l["item_id"], "itens_ids": l["itens_ids"], "und_outros": l["und_outros"],
             "fonte": l["fonte"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
             "descricao": l["descricao"], "fornecedor": l["fornecedor"], "ar": l["ar"],
-            "lote": l["lote"], "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
+            "lote": l["lote"], "lote_original": l["lote_original"],
+            "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
             "kg_nf": kg_nf, "und": und,
             "kg_saida": round(kg_saida, 2), "kg_saldo": round(kg_saldo, 2),
             "kg_reservado": round(kg_res, 2), "kg_disponivel": round(kg_disp, 2),
@@ -1660,7 +1672,7 @@ def api_chapas_listar():
         }
         if termo:
             alvo = _normalizar_busca(" ".join(str(v) for v in [
-                out["codigo"], out["descricao"], out["lote"],
+                out["codigo"], out["descricao"], out["lote"], out["lote_original"],
                 out["numero_nota"], out["ar"], out["fornecedor"], out["conferente"],
             ]))
             if termo not in alvo:
@@ -1702,7 +1714,7 @@ def api_chapas_listar():
         "total_kg": total_estoque_kg,
         "reservado_kg": total_reservado_kg,
         "disponivel_kg": total_disponivel_kg,
-        "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
+        "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > CHAPA_TOLERANCIA_PCT),
     }
     return jsonify({
         "resumo": resumo, "densidades": CHAPA_DENSIDADES,
@@ -1772,6 +1784,43 @@ def api_chapas_alterar_und(item_id):
                   {'und': anterior}, {'und': und, 'motivo': motivo})
     db.session.commit()
     return jsonify(sucesso=True, und=und)
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/lote', methods=['PUT'])
+@roles_required('Admin')
+def api_chapas_corrigir_lote():
+    """Corrige o nº do lote na tela (só no Sync). Lote vazio ou igual ao do GRV desfaz."""
+    dados = request.get_json(silent=True) or {}
+    nota = str(dados.get('numero_nota') or '').strip()[:20]
+    codigo = str(dados.get('codigo') or '').strip()[:120]
+    original = str(dados.get('lote_original') or '').strip()[:100]
+    novo = str(dados.get('lote') or '').strip()[:100] or original
+    motivo = str(dados.get('motivo') or '').strip()[:300]
+    if not nota or not codigo or not original:
+        return jsonify(error='Lote não identificado. Recarregue a tela e tente de novo.'), 400
+    if not motivo:
+        return jsonify(error='Informe o motivo da correção.'), 400
+    # A auditoria é por linha da NF; o lote precisa ter uma no Sync (a principal).
+    item = db.session.get(ItemNota, dados.get('item_id')) if isinstance(dados.get('item_id'), int) else None
+    if not item or str(item.numero_nota or '').strip() != nota:
+        return jsonify(error='Item não encontrado para este lote.'), 404
+    correcao = ChapaLoteCorrecao.query.filter_by(numero_nota=nota, codigo=codigo, lote_original=original).first()
+    anterior = correcao.lote_corrigido if correcao else original
+    if novo == anterior:
+        return jsonify(sucesso=True, lote=novo)
+    if novo == original:
+        db.session.delete(correcao)
+    elif correcao:
+        correcao.lote_corrigido = novo
+        correcao.usuario = session['username']
+    else:
+        db.session.add(ChapaLoteCorrecao(numero_nota=nota, codigo=codigo, lote_original=original,
+                                         lote_corrigido=novo, usuario=session['username']))
+    from ..services.chapa_auditoria_service import registrar
+    registrar(item, 'Lote corrigido', session['username'],
+              {'lote': anterior}, {'lote': novo, 'lote_grv': original, 'motivo': motivo})
+    db.session.commit()
+    return jsonify(sucesso=True, lote=novo)
 
 
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])

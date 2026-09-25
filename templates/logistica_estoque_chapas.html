@@ -52,7 +52,16 @@
     .ch-row__body { padding: 4px 16px 14px 38px; background: var(--eui-primary-soft); display: grid; gap: 8px; }
     .ch-os { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--eui-text-soft); padding: 4px 0; }
     .ch-os b { color: var(--eui-text); }
-    .ch-lote { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: minmax(200px, 1.6fr) minmax(140px, 1fr) minmax(170px, 1fr) auto; gap: 12px; align-items: center; }
+    .ch-lote { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px 0; display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(170px, 1fr) auto; gap: 10px 12px; align-items: center; overflow: hidden; }
+    /* Movimento do lote: do recebido ao disponível, com o consumido no meio. */
+    .ch-mov { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); margin: 0 -12px; border-top: 1px solid var(--eui-border); }
+    .ch-mov > div { padding: 8px 12px; font-size: 12.5px; color: var(--eui-text-soft); }
+    .ch-mov > div + div { border-left: 1px solid var(--eui-border); }
+    .ch-mov span { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-bottom: 2px; }
+    .ch-mov b { color: var(--eui-text); }
+    .ch-mov .ch-mov--consumo b { color: var(--eui-warning-soft-text); }
+    .ch-mov .ch-mov--disp { background: var(--eui-success-soft); }
+    .ch-mov .ch-mov--disp b { color: var(--eui-success-soft-text); }
     .ch-lote__lote { font-weight: 800; color: var(--eui-text); font-size: 13px; overflow-wrap: anywhere; }
     .ch-lote__meta { font-size: 11.5px; color: var(--eui-muted); }
     .ch-lote__rec { font-size: 12.5px; color: var(--eui-text-soft); }
@@ -126,6 +135,9 @@
         .ch-lbl-m { display: block; }
         .ch-row__body { padding-left: 16px; }
         .ch-lote { grid-template-columns: 1fr; }
+        .ch-mov { grid-template-columns: repeat(2, 1fr); }
+        .ch-mov > div + div { border-left: 0; }
+        .ch-mov > div { border-top: 1px solid var(--eui-border); }
         .ch-lote__acts { justify-content: flex-start; }
         .ch-menu { left: 0; right: auto; }
         .ch-audit-entry { grid-template-columns: 1fr; }
@@ -152,7 +164,7 @@
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Chapas em estoque</span><span class="eui-stat__value" id="ch-k-chapas">0</span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-weight-hanging"></i></div><div class="eui-stat__body"><span class="eui-stat__label">KG em estoque</span><span class="eui-stat__value" id="ch-k-kg">0</span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Disponíveis</span><span class="eui-stat__value" id="ch-k-disp">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Divergência &gt; 2%</span><span class="eui-stat__value" id="ch-k-div">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Divergência &gt; {{ tolerancia_pct|round|int }}%</span><span class="eui-stat__value" id="ch-k-div">0</span></div></div>
     </div>
 
     <div class="eui-card">
@@ -206,6 +218,17 @@
     <div class="ch-modal__head"><div class="ch-modal__title" id="ch-delete-title"><i class="fas fa-trash-can"></i> Excluir do controle de chapas</div></div>
     <div class="ch-modal__body"><p id="ch-delete-item" style="white-space:pre-line;"></p><p class="ch-muted">O item será removido deste controle, inclusive do histórico de zerados. A NF, os dados da conferência e os cálculos serão preservados. O saldo no GRV não será alterado.</p><p id="ch-delete-error" role="alert" class="ch-error"></p></div>
     <div class="ch-modal__foot"><button type="button" id="ch-delete-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-delete-confirm" class="eui-btn eui-btn--danger">Excluir do controle</button></div>
+</dialog>
+<dialog id="ch-lote-dialog" class="ch-dialog ch-dialog--sm" aria-labelledby="ch-lote-title">
+    <div class="ch-modal__head"><div class="ch-modal__title" id="ch-lote-title"><i class="fas fa-hashtag"></i> Corrigir nº do lote</div><button type="button" class="ch-modal__close" id="ch-lote-close" aria-label="Fechar">&times;</button></div>
+    <div class="ch-modal__body">
+        <div class="ch-iteminfo" id="ch-lote-item"></div>
+        <div class="ch-field"><label for="ch-lote-valor">Lote correto</label><input class="eui-input" id="ch-lote-valor" type="text" maxlength="100" autocomplete="off"></div>
+        <div class="ch-field"><label for="ch-lote-motivo">Motivo da correção</label><textarea class="eui-textarea" id="ch-lote-motivo" rows="2" maxlength="300" placeholder="Ex.: lote lançado errado no GRV, etiqueta física diferente..."></textarea></div>
+        <p class="ch-muted">Muda só no Sync: a tela e a busca de consumo/reserva passam a usar este lote. O GRV não é alterado. Para desfazer, deixe o lote igual ao do GRV.</p>
+        <p id="ch-lote-error" role="alert" class="ch-error"></p>
+    </div>
+    <div class="ch-modal__foot"><button type="button" id="ch-lote-cancel" class="eui-btn eui-btn--ghost">Cancelar</button><button type="button" id="ch-lote-save" class="eui-btn eui-btn--primary"><i class="fas fa-check"></i> Salvar lote</button></div>
 </dialog>
 <dialog id="ch-und-dialog" class="ch-dialog ch-dialog--sm" aria-labelledby="ch-und-title">
     <div class="ch-modal__head"><div class="ch-modal__title" id="ch-und-title"><i class="fas fa-pen-to-square"></i> Alterar quantidade recebida</div><button type="button" class="ch-modal__close" id="ch-und-close" aria-label="Fechar">&times;</button></div>
@@ -269,6 +292,7 @@
 (function () {
     const $ = (id) => document.getElementById(id);
     const PODE_ADMIN = {{ 'true' if pode_excluir_chapas else 'false' }};
+    const TOLERANCIA_PCT = {{ tolerancia_pct }};
     // Acima disso a medida quase sempre está digitada errada (ex.: 1510 no lugar de 1,51).
     const LIMITE_AVISO_PCT = 50;
     let timer = null;
@@ -283,7 +307,7 @@
     let auditoriaPagina = 1, auditoriaVersao = 0, auditoriaTimer, auditoriaItem = null;
     let ordem = { campo: 'codigo', desc: false };
 
-    const LABELS_AUDIT = {codigo:'Código GRV', und:'UND', no_controle:'Visível no controle', kg_nf:'Peso da NF (kg)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (kg)', consolidado_em:'Consolidado no item'};
+    const LABELS_AUDIT = {lote:'Lote', lote_grv:'Lote no GRV', codigo:'Código GRV', und:'UND', no_controle:'Visível no controle', kg_nf:'Peso da NF (kg)', material:'Material', formato:'Formato', dimensoes:'Medidas (mm)', peso_por_peca:'Peso por peça (kg)', consolidado_em:'Consolidado no item'};
     const LABELS_DIM = {espessura:'Esp.', largura:'Larg.', comprimento:'Comp.', diametro:'Diâm.', parede:'Parede', lado:'Lado', altura:'Altura', aba:'Aba', bitola:'Bitola'};
     function valorAudit(campo, valor) {
         if (valor == null || valor === '') return '—';
@@ -377,16 +401,16 @@
 
     function diffHtml(pct) {
         if (pct === null || pct === undefined) return '<span class="ch-diff none">sem cálculo</span>';
-        const cls = Math.abs(pct) > 2 ? 'bad' : 'ok';
+        const cls = Math.abs(pct) > TOLERANCIA_PCT ? 'bad' : 'ok';
         const sinal = pct > 0 ? '+' : '';
-        const ic = Math.abs(pct) > 2 ? 'fa-triangle-exclamation' : 'fa-check';
+        const ic = Math.abs(pct) > TOLERANCIA_PCT ? 'fa-triangle-exclamation' : 'fa-check';
         return `<span class="ch-diff ${cls}" title="Peso calculado × UND comparado com o peso da NF"><i class="fas ${ic}"></i> ${sinal}${fmt(pct, 1)}%</span>`;
     }
 
     function setDiffEl(el, pct) {
         if (!el) return;
         if (pct === null || pct === undefined) { el.className = 'ch-diff none'; el.textContent = '—'; return; }
-        const bad = Math.abs(pct) > 2;
+        const bad = Math.abs(pct) > TOLERANCIA_PCT;
         el.className = 'ch-diff ' + (bad ? 'bad' : 'ok');
         const sinal = pct > 0 ? '+' : '';
         el.innerHTML = `<i class="fas ${bad ? 'fa-triangle-exclamation' : 'fa-check'}"></i> ${sinal}${fmt(pct, 1)}%`;
@@ -396,15 +420,17 @@
     const expandido = new Set();
 
     function loteRow(i) {
-        const par = (und, kg) => `${und == null ? '—' : fmt(und, 0)} und · ${kg == null ? '—' : fmt(kg, 0)} kg`;
+        const par = (und, kg) => `<b>${und == null ? '—' : fmt(und, 0)}</b> und · <b>${kg == null ? '—' : fmt(kg, 0)}</b> kg`;
         const menu = [
             `<button type="button" data-acao="historico" data-item="${i.item_id}"><i class="fas fa-clock-rotate-left"></i> Histórico do lote</button>`,
             PODE_ADMIN ? `<button type="button" data-acao="und" data-item="${i.item_id}"><i class="fas fa-pen-to-square"></i> Alterar UND recebida</button>` : '',
+            PODE_ADMIN ? `<button type="button" data-acao="lote" data-item="${i.item_id}"><i class="fas fa-hashtag"></i> Corrigir nº do lote</button>` : '',
             PODE_ADMIN ? `<button type="button" class="danger" data-acao="excluir" data-item="${i.item_id}"><i class="fas fa-trash-can"></i> Excluir do controle</button>` : '',
         ].join('');
         const linhasNf = (i.itens_ids || []).length;
         const origem = [
             linhasNf > 1 ? `<span class="eui-badge eui-badge--info" title="Linhas do XML lançadas neste lote do GRV; a UND é a soma delas">${linhasNf} linhas da NF</span>` : '',
+            (i.lote_original && i.lote !== i.lote_original) ? `<span class="eui-badge eui-badge--violet" title="Corrigido no Sync; o GRV continua com o lote original">corrigido · GRV: ${esc(i.lote_original)}</span>` : '',
             (lotesDoGrv && i.fonte === 'xml') ? '<span class="eui-badge eui-badge--warning" title="Não achamos esta linha da NF no lançamento do GRV; peso e lote vêm do XML">não achado no GRV</span>' : '',
         ].join('');
         return `<div class="ch-lote">
@@ -413,13 +439,19 @@
                 <div class="ch-lote__meta">AR ${esc(i.ar || '-')} · NF ${esc(i.numero_nota || '-')} · Conf.: ${esc(i.conferente || '-')}</div>
                 ${origem ? `<div class="ch-tags">${origem}</div>` : ''}
             </div>
-            <div class="ch-lote__rec"><span class="ch-muted">Recebido</span><br><b>${par(i.item_id ? i.und : null, i.kg_nf)}</b></div>
             <div class="ch-lote__calc">${diffHtml(i.pct_diferenca)}${i.peso_por_peca != null ? `<span>${fmt(i.peso_por_peca, 1)} kg/peça</span>` : ''}</div>
             ${!i.item_id ? '<div class="ch-lote__acts ch-muted">UND e cálculo no 1º lote da linha</div>' : `<div class="ch-lote__acts">
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-acao="calc" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Cálculo' : 'Calcular'}</button>
                 <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-menu="${i.item_id}" aria-label="Mais ações do lote" aria-haspopup="true"><i class="fas fa-ellipsis"></i></button>
                 <div class="ch-menu" data-menu-box="${i.item_id}">${menu}</div>
             </div>`}
+            <div class="ch-mov">
+                <div><span>Recebido</span>${par(i.item_id ? i.und : null, i.kg_nf)}</div>
+                <div class="ch-mov--consumo"><span>Consumido</span>${par(i.chapas_baixadas, i.kg_saida)}</div>
+                <div><span>Em estoque</span>${par(i.chapas_em_estoque, i.kg_saldo)}</div>
+                <div><span>Reservado</span>${par(i.chapas_reservadas, i.kg_reservado)}</div>
+                <div class="ch-mov--disp"><span>Disponível</span>${par(i.chapas_disponiveis, i.kg_disponivel)}</div>
+            </div>
         </div>`;
     }
 
@@ -457,7 +489,7 @@
         $('ch-k-chapas').textContent = fmt(undEstoque, 0);
         $('ch-k-kg').textContent = fmt(kgEstoque, 1);
         $('ch-k-disp').textContent = fmt(undDisp, 0);
-        $('ch-k-div').textContent = cache.filter((i) => i.pct_diferenca != null && Math.abs(i.pct_diferenca) > 2).length;
+        $('ch-k-div').textContent = cache.filter((i) => i.pct_diferenca != null && Math.abs(i.pct_diferenca) > TOLERANCIA_PCT).length;
 
         const itens = cache.filter((i) => (abaAtual === 'historico' ? i.historico : !i.historico));
         if (!itens.length) {
@@ -553,6 +585,7 @@
         if (btn.dataset.acao === 'calc') abrirCalc(linha);
         else if (btn.dataset.acao === 'historico') abrirAuditoria(linha);
         else if (btn.dataset.acao === 'und') abrirUnd(linha);
+        else if (btn.dataset.acao === 'lote') abrirLote(linha);
         else if (btn.dataset.acao === 'excluir') abrirExcluir(linha);
     });
     document.addEventListener('click', (e) => { if (!e.target.closest('.ch-lote__acts')) fecharMenus(); });
@@ -563,7 +596,7 @@
     }));
 
     // Só existem pra Admin; pros demais o menu nem mostra essas ações.
-    let abrirExcluir = () => {}, abrirUnd = () => {};
+    let abrirExcluir = () => {}, abrirUnd = () => {}, abrirLote = () => {};
     {% if pode_excluir_chapas %}
     let itemExcluir = null, excluindo = false;
     abrirExcluir = (linha) => {
@@ -599,6 +632,47 @@
             $('ch-delete-dialog').close();
         } catch (e) { $('ch-delete-error').textContent = e.message; }
         finally { excluindo = false; $('ch-delete-confirm').disabled = $('ch-delete-cancel').disabled = false; }
+    };
+
+    let itemLote = null, salvandoLote = false;
+    abrirLote = (linha) => {
+        itemLote = linha;
+        $('ch-lote-item').innerHTML = `
+            <div><span>Código</span><b>${esc(linha.codigo || '-')}</b></div>
+            <div><span>NF</span><b>${esc(linha.numero_nota || '-')}</b></div>
+            <div><span>Lote no GRV</span><b>${esc(linha.lote_original || '-')}</b></div>
+            <div><span>Lote na tela</span><b>${esc(linha.lote || '-')}</b></div>`;
+        $('ch-lote-valor').value = linha.lote || '';
+        $('ch-lote-motivo').value = '';
+        $('ch-lote-error').textContent = '';
+        $('ch-lote-dialog').showModal();
+        $('ch-lote-valor').select();
+    };
+    const fecharLote = () => { if (!salvandoLote) $('ch-lote-dialog').close(); };
+    $('ch-lote-cancel').onclick = fecharLote;
+    $('ch-lote-close').onclick = fecharLote;
+    $('ch-lote-dialog').addEventListener('cancel', (e) => { if (salvandoLote) e.preventDefault(); });
+    $('ch-lote-save').onclick = async () => {
+        if (!itemLote || salvandoLote) return;
+        const lote = $('ch-lote-valor').value.trim();
+        const motivo = $('ch-lote-motivo').value.trim();
+        if (!lote) { $('ch-lote-error').textContent = 'Informe o lote.'; return; }
+        if (!motivo) { $('ch-lote-error').textContent = 'Informe o motivo da correção.'; $('ch-lote-motivo').focus(); return; }
+        salvandoLote = true;
+        $('ch-lote-save').disabled = $('ch-lote-cancel').disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/chapas/lote', {
+                method: 'PUT', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({item_id: itemLote.item_id, numero_nota: itemLote.numero_nota, codigo: itemLote.codigo,
+                                      lote_original: itemLote.lote_original, lote, motivo}),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível salvar. Tente novamente.');
+            salvandoLote = false;
+            $('ch-lote-dialog').close();
+            carregar();
+        } catch (e) { $('ch-lote-error').textContent = e.message; }
+        finally { salvandoLote = false; $('ch-lote-save').disabled = $('ch-lote-cancel').disabled = false; }
     };
 
     let itemUnd = null, salvandoUnd = false;

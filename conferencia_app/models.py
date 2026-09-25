@@ -3948,6 +3948,26 @@ class ChapaControleExclusao(db.Model):
     criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
 
 
+class ChapaLoteCorrecao(db.Model):
+    """Nº de lote corrigido pelo Admin no Controle de Chapas (só no Sync; o GRV não muda).
+
+    Presa ao lote como o GRV o devolve (NF + código + lote original), não à
+    linha do XML: o vínculo XML -> lote é recalculado a cada carga. O lote
+    corrigido é o que a tela mostra e o usado pra achar consumo/reserva do lote.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False)
+    codigo = db.Column(db.String(120), nullable=False)
+    lote_original = db.Column(db.String(100), nullable=False)
+    lote_corrigido = db.Column(db.String(100), nullable=False)
+    usuario = db.Column(db.String(100), nullable=False)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=agora_br, onupdate=agora_br)
+
+    __table_args__ = (
+        db.UniqueConstraint('numero_nota', 'codigo', 'lote_original', name='ux_chapa_lote_correcao'),
+    )
+
+
 class ChapaCalculo(db.Model):
     """Cálculo de peso de uma chapa (por lote/NF) no Controle de Chapas.
 
