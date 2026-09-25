@@ -724,7 +724,14 @@ ENTRADA_CHAPA_SQL = """
         coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
         coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
         coalesce(nullif(a.lote, ''), nullif(lot.descricao, '')) as lote,
-        a.guid_linha
+        a.guid_linha,
+        -- Controle de Chapas: o peso que entrou no LOTE (unidade de estoque) e o
+        -- código do fornecedor, que liga a linha do XML à linha do GRV. A qtde
+        -- acima é a da unidade de compra (1,35 T), não a do lote (1.345 KG).
+        a.qtde_estoque,
+        a.unidade_estoque,
+        a.codigo_na_fabrica,
+        lot.qtde_movimentada as lote_qtde_movimentada
     from public.tcompras c
     left join public.tfornece f
       on f.cod_empresa = c.cod_empresa
@@ -962,6 +969,9 @@ CONSERTO_RETORNOS_SQL = """
 """
 
 
+_CAMPOS_LOTE_CHAPA = ("guid_linha", "qtde_estoque", "unidade_estoque", "codigo_na_fabrica", "lote_qtde_movimentada")
+
+
 def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
     if not rows:
         return None
@@ -1008,6 +1018,8 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
             "tipo_controle": row.get("tipo_controle") or 0,
             "controle_lote_serie": row.get("controle_lote_serie") or 0,
             "lote": row.get("lote") or "",
+            # Só a consulta de entrada traz estes campos; a de "desde" segue igual.
+            **{campo: row.get(campo) for campo in _CAMPOS_LOTE_CHAPA if campo in row},
         })
     return {
         "codigo_lancamento": cab.get("codigo_lancamento") or numero_ar,

@@ -18,7 +18,7 @@ def app(tmp_path, monkeypatch):
     app.config.update(TESTING=True, SECRET_KEY='test', SQLALCHEMY_DATABASE_URI=f'sqlite:///{tmp_path/"chapas.db"}')
     db.init_app(app)
     app.register_blueprint(routes.logistica_inventario_bp)
-    monkeypatch.setattr(routes, '_chapa_lotes_por_item', lambda itens: {})
+    monkeypatch.setattr(routes, '_chapa_lotes_por_item', lambda itens, entradas=None: {})
     monkeypatch.setattr(erp_estoque_service, 'buscar_saldo_chapa_por_lote', lambda codigos: {})
     with app.app_context():
         db.create_all()
@@ -361,3 +361,78 @@ def test_pareamento_com_pedido_nao_troca_codigo_de_linha_lancada(app):
         assert db.session.get(ItemNota, 1).codigo_grv == '19-01-00549'
         assert db.session.get(ItemNota, 1).linha_po_vinculada == 0
         assert db.session.get(ItemNota, 2).codigo_grv == '19-01-00564'
+
+
+def _grv_71663_e_21728():
+    # Linhas reais do GRV (DBeaver, 25/09/2026). qtde é a unidade de COMPRA;
+    # o lote -4 entrou com 1.345 kg (qtde_movimentada), não os 1.350 do XML.
+    linhas_71663 = [(1, '19-01-00549', 1.35), (2, '19-01-00549', 1.51), (3, '19-01-00549', 1.52),
+                    (4, '19-01-00549', 1.35), (5, '19-01-00549', 1.34), (6, '19-01-00558', 1.79),
+                    (7, '19-01-00558', 1.8), (8, '19-01-00558', 2.02)]
+    return [
+        {'numero_nota': '71663', 'codigo_lancamento': '17089', 'itens': [{
+            'numero_item': n, 'guid_linha': f'G71663-{n}', 'cod_interno': c, 'descricao': 'CHAPA A36',
+            'codigo_na_fabrica': 'CFQ047518000005' if c.endswith('549') else 'CFQ063018000001',
+            'quantidade': q, 'unidade': 'TO', 'qtde_estoque': 1345 if n == 4 else q * 1000,
+            'unidade_estoque': 'KG', 'lote_qtde_movimentada': 1345 if n == 4 else q * 1000,
+            'lote': f'71663-16/09/2026-{n}'} for n, c, q in linhas_71663]},
+        {'numero_nota': '21728', 'codigo_lancamento': '17096', 'itens': [{
+            'numero_item': 1, 'guid_linha': 'G21728-1', 'cod_interno': '19-01-00599',
+            'descricao': 'CHAPA SAE FINA FRIA 1006 / 1008 1,90MM', 'codigo_na_fabrica': 'CFF019012000003',
+            'quantidade': 5954, 'unidade': 'KG', 'qtde_estoque': 5954, 'unidade_estoque': 'KG',
+            'lote_qtde_movimentada': 5954, 'lote': '21728-21/09/2026-1'}]},
+    ]
+
+
+def test_lote_do_grv_e_a_base_do_controle_com_dados_reais(app, monkeypatch):
+    # Linhas do Sync como estão em produção: 5173 com codigo_grv errado pelo
+    # pareamento com o pedido; 21728 com 5 linhas no código do fornecedor.
+    sync = [(5170, '71663', '19-01-00558', '19-01-00558', 1.79, 'TO', 8), (5171, '71663', '19-01-00558', '19-01-00558', 1.8, 'TO', 9),
+            (5172, '71663', '19-01-00549', '19-01-00549', 1.35, 'TO', 9), (5173, '71663', '19-01-00549', '19-01-00564', 1.35, 'TO', 8),
+            (5174, '71663', '19-01-00549', '19-01-00549', 1.34, 'TO', 8), (5175, '71663', '19-01-00549', '19-01-00549', 1.51, 'TO', 8),
+            (5176, '71663', '19-01-00549', '19-01-00549', 1.52, 'TO', 8), (5177, '71663', '19-01-00558', '19-01-00558', 2.02, 'TO', 9),
+            (5194, '21728', '19-01-00599', '19-01-00599', 5954.0, 'KG', 18), (5195, '21728', 'CFF019012000003', None, 0.96, 'T', 18),
+            (5196, '21728', 'CFF019012000003', None, 0.956, 'T', 18), (5197, '21728', 'CFF019012000003', None, 0.96, 'T', 18),
+            (5198, '21728', 'CFF019012000003', None, 1.062, 'T', 20), (5199, '21728', 'CFF019012000003', None, 1.058, 'T', 20)]
+    with app.app_context():
+        for id_, nota, cod, grv, qtd, un, und in sync:
+            db.session.add(ItemNota(id=id_, numero_nota=nota, codigo=cod, codigo_grv=grv, descricao='CHAPA',
+                                    qtd_real=qtd, unidade_comercial=un, qtd_chapas_und=und, status='Lançado',
+                                    usuario_conferencia='ROBDAC'))
+        db.session.add(ChapaCalculo(item_nota_id=5194, numero_nota='21728', codigo='19-01-00599', peso_por_peca=53.2))
+        db.session.commit()
+    monkeypatch.setattr(routes, '_chapa_buscar_entradas', lambda itens: _grv_71663_e_21728() * 3)
+    data = client_for(app).get('/api/logistica/chapas').get_json()
+    assert data['lotes_do_grv'] is True
+    por_lote = {l['lote']: l for l in data['itens']}
+
+    lote4 = por_lote['71663-16/09/2026-4']
+    assert lote4['kg_nf'] == 1345 and lote4['codigo'] == '19-01-00549' and lote4['itens_ids'] == [5173]
+    ligacoes = {l['lote'].rsplit('-', 1)[1]: l['itens_ids'] for l in data['itens'] if l['numero_nota'] == '71663'}
+    assert ligacoes == {'1': [5172], '2': [5175], '3': [5176], '4': [5173], '5': [5174],
+                        '6': [5170], '7': [5171], '8': [5177]}
+    assert not any(l['codigo'] == '19-01-00564' for l in data['itens'])
+
+    nf21728 = [l for l in data['itens'] if l['numero_nota'] == '21728']
+    assert len(nf21728) == 1
+    lote = nf21728[0]
+    assert lote['codigo'] == '19-01-00599' and lote['kg_nf'] == 5954 and lote['und'] == 112
+    assert sorted(lote['itens_ids']) == [5194, 5195, 5196, 5197, 5198, 5199]
+    assert lote['item_id'] == 5194 and lote['und_outros'] == 94 and lote['peso_por_peca'] == 53.2
+
+    # Itens da fixture (NF 123) não existem no GRV: continuam aparecendo, pelo XML.
+    orfaos = [l for l in data['itens'] if l['numero_nota'] == '123']
+    assert {l['item_id'] for l in orfaos} == {1, 2} and all(l['fonte'] == 'xml' for l in orfaos)
+
+
+def test_bridge_sem_campos_de_lote_usa_montagem_antiga(app, monkeypatch):
+    antiga = _grv_71663_e_21728()
+    for e in antiga:
+        for it in e['itens']:
+            for campo in ('qtde_estoque', 'unidade_estoque', 'codigo_na_fabrica', 'lote_qtde_movimentada', 'guid_linha'):
+                it.pop(campo)
+    monkeypatch.setattr(routes, '_chapa_buscar_entradas', lambda itens: antiga)
+    data = client_for(app).get('/api/logistica/chapas').get_json()
+    assert data['lotes_do_grv'] is False
+    assert sorted(l['item_id'] for l in data['itens']) == [1, 2]
+    assert all(l['itens_ids'] == [l['item_id']] for l in data['itens'])

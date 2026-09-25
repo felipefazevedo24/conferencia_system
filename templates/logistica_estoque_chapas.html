@@ -173,6 +173,7 @@
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
+            <div class="ch-warn" id="ch-fonte-aviso" style="display:none;margin:12px 16px 0;"><i class="fas fa-triangle-exclamation"></i> Não foi possível ler os lotes no GRV agora: lotes e pesos abaixo vêm do XML da NF e podem não bater com o GRV.</div>
             <div class="ch-state" id="ch-state">Carregando chapas...</div>
             <div id="ch-table" style="display:none;">
                 <div class="ch-thead ch-cols">
@@ -275,6 +276,7 @@
     let densidades = {};
     let saldoCod = {};
     let reservasOs = {};
+    let lotesDoGrv = false;
     let linhaAtual = null;
     let avisoConfirmado = false;
     let cargaVersao = 0;
@@ -400,18 +402,24 @@
             PODE_ADMIN ? `<button type="button" data-acao="und" data-item="${i.item_id}"><i class="fas fa-pen-to-square"></i> Alterar UND recebida</button>` : '',
             PODE_ADMIN ? `<button type="button" class="danger" data-acao="excluir" data-item="${i.item_id}"><i class="fas fa-trash-can"></i> Excluir do controle</button>` : '',
         ].join('');
+        const linhasNf = (i.itens_ids || []).length;
+        const origem = [
+            linhasNf > 1 ? `<span class="eui-badge eui-badge--info" title="Linhas do XML lançadas neste lote do GRV; a UND é a soma delas">${linhasNf} linhas da NF</span>` : '',
+            (lotesDoGrv && i.fonte === 'xml') ? '<span class="eui-badge eui-badge--warning" title="Não achamos esta linha da NF no lançamento do GRV; peso e lote vêm do XML">não achado no GRV</span>' : '',
+        ].join('');
         return `<div class="ch-lote">
             <div>
                 <div class="ch-lote__lote"><i class="fas fa-hashtag"></i> ${esc(i.lote || '-')}</div>
                 <div class="ch-lote__meta">AR ${esc(i.ar || '-')} · NF ${esc(i.numero_nota || '-')} · Conf.: ${esc(i.conferente || '-')}</div>
+                ${origem ? `<div class="ch-tags">${origem}</div>` : ''}
             </div>
-            <div class="ch-lote__rec"><span class="ch-muted">Recebido</span><br><b>${par(i.und, i.kg_nf)}</b></div>
+            <div class="ch-lote__rec"><span class="ch-muted">Recebido</span><br><b>${par(i.item_id ? i.und : null, i.kg_nf)}</b></div>
             <div class="ch-lote__calc">${diffHtml(i.pct_diferenca)}${i.peso_por_peca != null ? `<span>${fmt(i.peso_por_peca, 1)} kg/peça</span>` : ''}</div>
-            <div class="ch-lote__acts">
+            ${!i.item_id ? '<div class="ch-lote__acts ch-muted">UND e cálculo no 1º lote da linha</div>' : `<div class="ch-lote__acts">
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-acao="calc" data-item="${i.item_id}"><i class="fas fa-calculator"></i> ${i.calculo_id ? 'Cálculo' : 'Calcular'}</button>
                 <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-menu="${i.item_id}" aria-label="Mais ações do lote" aria-haspopup="true"><i class="fas fa-ellipsis"></i></button>
                 <div class="ch-menu" data-menu-box="${i.item_id}">${menu}</div>
-            </div>
+            </div>`}
         </div>`;
     }
 
@@ -560,7 +568,9 @@
     let itemExcluir = null, excluindo = false;
     abrirExcluir = (linha) => {
         itemExcluir = linha;
-        $('ch-delete-item').textContent = `${linha.codigo || 'Item'} · ${linha.descricao || ''}\nNF ${linha.numero_nota || '-'} · AR ${linha.ar || 'Não informado'} · Lote ${linha.lote || '-'}`;
+        const n = (linha.itens_ids || [linha.item_id]).length;
+        $('ch-delete-item').textContent = `${linha.codigo || 'Item'} · ${linha.descricao || ''}\nNF ${linha.numero_nota || '-'} · AR ${linha.ar || 'Não informado'} · Lote ${linha.lote || '-'}`
+            + (n > 1 ? `\nO lote junta ${n} linhas da NF; todas saem do controle.` : '');
         $('ch-delete-error').textContent = '';
         $('ch-delete-dialog').showModal();
         $('ch-delete-cancel').focus();
@@ -569,19 +579,22 @@
     $('ch-delete-dialog').addEventListener('cancel', (e) => { if (excluindo) e.preventDefault(); });
     $('ch-delete-confirm').onclick = async () => {
         if (!itemExcluir || excluindo) return;
-        const id = itemExcluir.item_id;
+        const ids = itemExcluir.itens_ids && itemExcluir.itens_ids.length ? itemExcluir.itens_ids : [itemExcluir.item_id];
         excluindo = true;
         $('ch-delete-confirm').disabled = $('ch-delete-cancel').disabled = true;
         $('ch-delete-error').textContent = '';
         try {
-            const resp = await fetch(`/api/logistica/chapas/${id}`, {
-                method: 'DELETE', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({confirmacao_item_id:id}),
-            });
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível excluir. Tente novamente.');
+            // A rota exclui uma linha da NF por vez (com confirmação do id); o lote pode juntar várias.
+            for (const id of ids) {
+                const resp = await fetch(`/api/logistica/chapas/${id}`, {
+                    method: 'DELETE', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({confirmacao_item_id:id}),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível excluir. Tente novamente.');
+            }
             cargaVersao++;
-            cache = cache.filter((i) => i.item_id !== id);
+            cache = cache.filter((i) => i.item_id !== itemExcluir.item_id);
             render();
             $('ch-delete-dialog').close();
         } catch (e) { $('ch-delete-error').textContent = e.message; }
@@ -600,8 +613,9 @@
             <div><span>Código</span><b>${esc(linha.codigo || '-')}</b></div>
             <div><span>NF</span><b>${esc(linha.numero_nota || '-')}</b></div>
             <div><span>Lote</span><b>${esc(linha.lote || '-')}</b></div>
-            <div><span>KG (NF)</span><b>${fmt(linha.kg_nf, 2)}</b></div>
-            <div><span>UND atual</span><b>${fmt(linha.und, 0)}</b></div>`;
+            <div><span>KG do lote</span><b>${fmt(linha.kg_nf, 2)}</b></div>
+            <div><span>UND atual</span><b>${fmt(linha.und, 0)}</b></div>`
+            + ((linha.itens_ids || []).length > 1 ? `<div style="grid-column:1/-1"><span>Lote com ${linha.itens_ids.length} linhas da NF</span><b style="font-weight:500;font-size:12px">Informe o total do lote; a diferença é lançada na linha principal.</b></div>` : '');
         $('ch-und-valor').value = linha.und || '';
         $('ch-und-motivo').value = '';
         $('ch-und-error').textContent = '';
@@ -619,13 +633,16 @@
         const und = Number($('ch-und-valor').value);
         const motivo = $('ch-und-motivo').value.trim();
         if (!(und > 0)) { $('ch-und-error').textContent = 'Informe uma quantidade maior que zero.'; return; }
+        // A rota grava por linha da NF: a principal fica com o total menos o que as outras já têm.
+        const outros = Number(itemUnd.und_outros || 0);
+        if (!(und - outros > 0)) { $('ch-und-error').textContent = `O lote já tem ${fmt(outros, 0)} und nas outras linhas da NF; o total precisa ser maior.`; return; }
         if (!motivo) { $('ch-und-error').textContent = 'Informe o motivo da alteração.'; $('ch-und-motivo').focus(); return; }
         salvandoUnd = true;
         $('ch-und-save').disabled = $('ch-und-cancel').disabled = true;
         try {
             const resp = await fetch(`/api/logistica/chapas/${itemUnd.item_id}/und`, {
                 method: 'PATCH', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({und, motivo}),
+                body: JSON.stringify({und: und - outros, motivo}),
             });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok || !data.sucesso) throw new Error(data.error || 'Não foi possível salvar. Tente novamente.');
@@ -656,6 +673,8 @@
             cache = data.itens || [];
             saldoCod = data.saldo_codigo || {};
             reservasOs = data.reservas_os || {};
+            lotesDoGrv = !!data.lotes_do_grv;
+            $('ch-fonte-aviso').style.display = (cache.length && !lotesDoGrv) ? '' : 'none';
             render();
             $('ch-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
         } catch (e) {
