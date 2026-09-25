@@ -44,6 +44,28 @@ export interface DeliveryStructureNode {
 
 export interface DeliveryStructure { nos: DeliveryStructureNode[]; }
 
+export interface CpmActivity {
+  id: string; name: string; kind: "process" | "purchase";
+  component_id: string | null; resource_id: string | null; order_number: string | null;
+  early_start: string; early_finish: string; late_start: string; late_finish: string;
+  duration_minutes: number | null; duration_label: string | null; total_float_minutes: number;
+  is_critical: boolean; status: string; critical_reason: string | null; completed: boolean;
+  metadata: { component_code?: string; component_description?: string; duration_source?: string; operation_code?: string };
+}
+
+export interface CpmPurchase {
+  activity_id: string; purchase_order: number | string; supplier: string | null;
+  material_code: string | null; material: string | null; needed_date: string;
+  promised_date: string | null; float_minutes: number | null; impact_minutes: number | null; status: string;
+}
+
+export interface CpmBudget {
+  budget: { id: number; number: number | string; version: string; contractual_delivery: string; orders: string[] };
+  summary: { projected_finish: string; contractual_delivery: string; total_float_minutes: number | null; pending_process_count: number; critical_process_count: number; critical_purchase_count: number; status: string; calculable: boolean };
+  projected_finish: string; status: string; activities: CpmActivity[];
+  critical_path: string[]; purchases: CpmPurchase[]; warnings: string[];
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 class ApiError extends Error {
@@ -93,6 +115,25 @@ export const api = {
     return fetch(`/api/producao/os/${encodeURIComponent(orderNumber)}`, { signal }).then(async (response) => {
       const payload = await response.json() as DeliveryStructure & { error?: string };
       if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao carregar a estrutura da OS.");
+      return payload;
+    });
+  },
+
+  getCpmBudget(budget: string, signal?: AbortSignal) {
+    return fetch(`/api/cpm/orcamento/${encodeURIComponent(budget)}`, { signal }).then(async (response) => {
+      const payload = await response.json() as CpmBudget & { error?: string };
+      if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao calcular o caminho critico.");
+      return payload;
+    });
+  },
+
+  simulateCpm(budget: string, activity: string, delayMinutes: number) {
+    return fetch("/api/cpm/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orcamento: budget, atividade: activity, atraso_minutos: delayMinutes })
+    }).then(async (response) => {
+      const payload = await response.json() as CpmBudget & { error?: string };
+      if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao simular o atraso.");
       return payload;
     });
   },

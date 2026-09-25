@@ -8,7 +8,8 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
-from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
+from ..services import producao_service, production_cpm_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
+from ..services.cpm_service import CircularDependencyError, CpmError
 from ..tempo import agora_br
 
 producao_bp = Blueprint("producao", __name__)
@@ -308,6 +309,75 @@ def cronograma_classificacoes():
     except Exception:
         current_app.logger.exception("Falha ao consultar classificações do cronograma")
         return jsonify({"error": "Não foi possível consultar as classificações no GRV."}), 503
+
+
+def _cpm_error(exc: Exception):
+    if isinstance(exc, LookupError):
+        return jsonify({"error": str(exc)}), 404
+    if isinstance(exc, CircularDependencyError):
+        current_app.logger.error("Dependencia circular no CPM: %s", exc)
+        return jsonify({"error": str(exc), "code": "circular_dependency"}), 422
+    if isinstance(exc, CpmError):
+        return jsonify({"error": str(exc), "code": "invalid_cpm_data"}), 400
+    current_app.logger.exception("Falha no calculo CPM")
+    return jsonify({"error": "Nao foi possivel calcular o CPM com os dados do GRV."}), 503
+
+
+@producao_bp.get("/api/cpm/orcamento/<orcamento>")
+@permission_required("PAGE_PRODUCAO")
+def cpm_orcamento(orcamento: str):
+    try:
+        return jsonify(production_cpm_service.calculate_budget(orcamento))
+    except Exception as exc:
+        return _cpm_error(exc)
+
+
+@producao_bp.get("/api/cpm/orcamento/<orcamento>/graph")
+@permission_required("PAGE_PRODUCAO")
+def cpm_orcamento_graph(orcamento: str):
+    try:
+        return jsonify(production_cpm_service.graph_payload(orcamento))
+    except Exception as exc:
+        return _cpm_error(exc)
+
+
+@producao_bp.get("/api/cpm/compras-criticas")
+@permission_required("PAGE_PRODUCAO")
+def cpm_compras_criticas():
+    orcamento = str(request.args.get("orcamento") or "").strip()
+    if not orcamento:
+        return jsonify({"error": "Informe o orcamento para calcular a necessidade real dos materiais."}), 400
+    try:
+        payload = production_cpm_service.calculate_budget(orcamento)
+        statuses = set(filter(None, str(request.args.get("status") or "").upper().split(",")))
+        purchases = payload["purchases"]
+        if statuses:
+            purchases = [item for item in purchases if item["status"] in statuses]
+        purchases.sort(key=lambda item: (
+            item["float_minutes"] is None,
+            item["float_minutes"] if item["float_minutes"] is not None else 10**12,
+        ))
+        return jsonify({"orcamento": payload["budget"], "compras": purchases})
+    except Exception as exc:
+        return _cpm_error(exc)
+
+
+@producao_bp.post("/api/cpm/simulate")
+@permission_required("PAGE_PRODUCAO")
+def cpm_simulate():
+    body = request.get_json(silent=True) or {}
+    orcamento = str(body.get("orcamento") or "").strip()
+    atividade = str(body.get("atividade") or "").strip()
+    try:
+        atraso = int(body.get("atraso_minutos"))
+    except (TypeError, ValueError):
+        atraso = -1
+    if not orcamento or not atividade or atraso < 0 or atraso > 90 * 24 * 60:
+        return jsonify({"error": "Informe orcamento, atividade e atraso_minutos valido."}), 400
+    try:
+        return jsonify(production_cpm_service.simulate_budget(orcamento, atividade, atraso))
+    except Exception as exc:
+        return _cpm_error(exc)
 
 
 @producao_bp.get("/api/producao/os/<path:numero_os>")
