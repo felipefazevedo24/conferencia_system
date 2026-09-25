@@ -34,6 +34,17 @@
     .vt-type.correios { background: #bae6fd; color: #075985; }
     .vt-header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .vt-header-actions .eui-btn { min-height: 40px; padding: 0 16px; text-decoration: none; }
+    .vt-oc-body { gap: 16px; }
+    .vt-oc-section { display: grid; gap: 10px; }
+    .vt-oc-section + .vt-oc-section { border-top: 1px solid var(--eui-border); padding-top: 16px; }
+    .vt-oc-section__title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--eui-text); }
+    .vt-oc-section__title span { width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--eui-primary-soft); color: var(--eui-primary); font-size: 12px; }
+    .vt-oc-busca { display: flex; gap: 8px; }
+    .vt-oc-busca .eui-input { flex: 1; min-width: 0; }
+    .vt-oc-correios { display: flex; align-items: center; gap: 10px; align-self: end; min-height: 40px; padding: 8px 12px; border: 1px solid var(--eui-border); border-radius: 10px; cursor: pointer; text-transform: none; letter-spacing: normal; }
+    .vt-oc-correios:has(input:checked) { border-color: #7dd3fc; background: #e0f2fe; }
+    .vt-oc-correios strong { display: block; font-size: 13px; color: var(--eui-text); }
+    .vt-oc-correios small { display: block; font-size: 11px; color: var(--eui-text-muted); }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -203,52 +214,53 @@
 </div>
 
 <div id="modalImportar" class="vt-modal">
-    <div class="vt-modal__box">
+    <div class="vt-modal__box" style="max-width:760px;">
         <div class="vt-modal__head">
-      <strong>Gerar Coleta por OC</strong>
+            <strong><i class="fas fa-file-import"></i> Gerar Coleta por OC</strong>
             <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalImportar')"><i class="fas fa-xmark"></i></button>
         </div>
-        <div class="vt-modal__body">
-            <div class="eui-field">
-        <label class="eui-field__label">Número da Ordem de Compra (OC)</label>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <input type="text" id="oc-numero" class="eui-input" placeholder="Ex.: 123456" style="flex:1; min-width:220px;">
-          <button class="eui-btn eui-btn--ghost" onclick="consultarOcBridge()"><i class="fas fa-magnifying-glass"></i> Consultar</button>
-        </div>
-            </div>
-            <div class="eui-field">
-        <label class="eui-field__label">Anexo opcional para impressão</label>
-        <input type="file" id="oc-anexo" class="eui-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
-        <div class="vt-mini">Se informado, o documento fica anexado à solicitação e pode ser aberto/imresso pelo gestor.</div>
-            </div>
-            <div style="display:grid; grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr); gap:12px;">
-        <div class="eui-field">
-          <label class="eui-field__label">Coleta liberada a partir de <b>*</b></label>
-          <input type="datetime-local" id="oc-data-liberacao" class="eui-input" required>
-        </div>
-        <div class="eui-field">
-          <label class="eui-field__label">Observação da coleta</label>
-          <textarea id="oc-observacao" class="eui-input" rows="2" placeholder="Ex.: aguardar separação, doca ou condição especial."></textarea>
-        </div>
-            </div>
-            <label class="eui-field" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        <input type="checkbox" id="oc-correios">
-        <span class="eui-field__label" style="margin:0;">Coleta nos Correios</span>
-            </label>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
-            </div>
-            <div id="importState" class="vt-mini"></div>
-            <div id="importErrors" class="vt-mini" style="color:var(--eui-danger);"></div>
-            <div class="vt-preview">
+        <div class="vt-modal__body vt-oc-body">
+            <section class="vt-oc-section">
+                <div class="vt-oc-section__title"><span>1</span> Ordem de Compra</div>
+                <div class="vt-oc-busca">
+                    <input type="text" id="oc-numero" class="eui-input" placeholder="Número da OC. Ex.: 123456">
+                    <button class="eui-btn eui-btn--ghost" onclick="consultarOcBridge()"><i class="fas fa-magnifying-glass"></i> Consultar</button>
+                </div>
+                <div id="importState" class="vt-mini"></div>
+                <div id="importErrors" class="vt-mini" style="color:var(--eui-danger);"></div>
+                <div class="vt-preview">
                     <table class="erp-table">
-                  <thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível de estoque</th></tr></thead>
-          <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar.</td></tr></tbody>
-                </table>
-            </div>
+                        <thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível de estoque</th></tr></thead>
+                        <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar.</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="vt-oc-section">
+                <div class="vt-oc-section__title"><span>2</span> Dados da coleta</div>
+                <div class="vt-grid-2">
+                    <div class="eui-field">
+                        <label class="eui-field__label" for="oc-data-liberacao">Coleta liberada a partir de <b>*</b></label>
+                        <input type="datetime-local" id="oc-data-liberacao" class="eui-input" required>
+                    </div>
+                    <label class="vt-oc-correios" for="oc-correios">
+                        <input type="checkbox" id="oc-correios">
+                        <span><strong><i class="fas fa-envelope"></i> Coleta nos Correios</strong><small>A linha fica destacada em azul na Central.</small></span>
+                    </label>
+                </div>
+                <div class="eui-field">
+                    <label class="eui-field__label" for="oc-observacao">Observação da coleta</label>
+                    <textarea id="oc-observacao" class="eui-input" rows="2" placeholder="Ex.: aguardar separação, doca ou condição especial."></textarea>
+                </div>
+                <div class="eui-field">
+                    <label class="eui-field__label" for="oc-anexo">Anexo para impressão <span class="vt-mini">(opcional)</span></label>
+                    <input type="file" id="oc-anexo" class="eui-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    <div class="vt-mini">O documento fica anexado à solicitação e pode ser aberto ou impresso pelo gestor.</div>
+                </div>
+            </section>
         </div>
         <div class="vt-modal__foot">
             <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalImportar')">Fechar</button>
+            <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
         </div>
     </div>
 </div>
@@ -509,8 +521,10 @@ function classeLinhaColeta(row) {
 }
 
 function tipoBadge(row, typeClass, label) {
-  if (row && row.correios) return '<span class="vt-type correios" title="Coleta nos Correios">CORREIOS</span>';
-  return `<span class="vt-type ${typeClass}">${label || '-'}</span>`;
+  const badge = row && row.correios
+    ? '<span class="vt-type correios" title="Coleta nos Correios">CORREIOS</span>'
+    : `<span class="vt-type ${typeClass}">${label || '-'}</span>`;
+  return badge + alertaEstoqueHtml(row);
 }
 
 // Hora de Brasília no mesmo formato de data_liberacao ("AAAA-MM-DDTHH:MM"),
@@ -581,9 +595,9 @@ function renderSolicitacaoDetalhe(row) {
       <div class="vt-detail-item"><strong>Local</strong>${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}</div>
       <div class="vt-detail-item"><strong>${row.responsavel_origem_label || 'Responsável pela origem'}</strong>${row.responsavel_origem || '-'}</div>
       <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
-      <div class="vt-detail-item"><strong>Observações</strong>${row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
+      <div class="vt-detail-item"><strong>Observações</strong>${row.observacao_coleta || row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
     </div>
-    ${row.tipo === 'COLETA' && oc ? `<div id="estoque-solicitacao-${row.id}" class="vt-mini" style="margin-top:14px;">Consultando estoque por item...</div>` : ''}
+    ${row.tipo === 'COLETA' && oc ? estoqueDetalheHtml(oc) : ''}
   </td></tr>`;
 }
 
@@ -739,14 +753,13 @@ function renderTable() {
       });
     });
     body.querySelectorAll('.vt-expand-btn').forEach((button) => {
-      button.addEventListener('click', async () => {
+      button.addEventListener('click', () => {
         const id = Number(button.dataset.expandId);
         const expanded = state.expandedIds.includes(id);
         state.expandedIds = expanded
           ? state.expandedIds.filter((item) => item !== id)
           : [...state.expandedIds, id];
         renderTable();
-        if (!expanded) await carregarEstoqueSolicitacao(id);
       });
     });
     atualizarSelecionadasUI();
@@ -1205,6 +1218,7 @@ async function loadDashboard() {
   renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
   renderFilters();
   renderTable();
+  carregarEstoqueColetas();
 
   if (state.tab === 'VIAGENS') {
     await loadViagens(true);
@@ -1323,29 +1337,59 @@ function tabelaEstoqueOc(itens) {
   return `<div style="margin-top:14px;"><strong>Estoque por item da OC</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Item</th><th>Qtd. OC</th><th>Saldo disponível GRV</th><th>Consumo/dia</th><th>Cobertura</th><th>Nível</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
 }
 
-async function carregarEstoqueSolicitacao(id) {
-  const row = rowById(id);
-  const oc = String(row?.numero_oc || row?.documento_numero || '').trim();
-  const destino = document.getElementById(`estoque-solicitacao-${id}`);
-  if (!row || row.tipo !== 'COLETA' || !oc || !destino) return;
-  const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(oc)}`);
-  const d = await r.json().catch(() => ({}));
-  if (!document.getElementById(`estoque-solicitacao-${id}`)) return;
-  if (!r.ok) {
-    destino.textContent = d.error || 'Não foi possível consultar o estoque desta OC.';
-    return;
+// Estoque por OC consultado uma única vez por abertura da tela. O cache vive
+// na página: redesenhar a tabela não consulta de novo, e só OC nova (criada
+// depois) é buscada.
+const estoquePorOc = {};
+
+function ocDaColeta(row) {
+  if (!row || String(row.tipo || '').toUpperCase() !== 'COLETA') return '';
+  return String(row.numero_oc || row.documento_numero || '').trim();
+}
+
+function alertaEstoqueHtml(row) {
+  const info = estoquePorOc[ocDaColeta(row)];
+  if (!info || info.status !== 'ok') return '';
+  const criticos = info.itens.filter((item) => item.nivel === 'critico').length;
+  if (!criticos) return '';
+  return `<i class="fas fa-triangle-exclamation vt-stock-alert" title="${criticos} item(ns) com cobertura crítica."></i>`;
+}
+
+function estoqueDetalheHtml(oc) {
+  const info = estoquePorOc[oc];
+  if (!info || info.status === 'carregando') {
+    return '<div class="vt-mini" style="margin-top:14px;">Consultando estoque por item...</div>';
   }
-  const criticos = (d.estoque_itens || []).filter((item) => item.nivel === 'critico');
-  if (criticos.length) {
-    const tipoCell = document.querySelector(`.vt-solicitacao-row[data-row-id="${id}"] td:nth-child(2)`);
-    if (tipoCell && !tipoCell.querySelector('.vt-stock-alert')) {
-      const alerta = document.createElement('i');
-      alerta.className = 'fas fa-triangle-exclamation vt-stock-alert';
-      alerta.title = `${criticos.length} item(ns) com cobertura critica.`;
-      tipoCell.appendChild(alerta);
+  if (info.status === 'erro') {
+    return `<div class="vt-mini" style="margin-top:14px;">${info.erro}</div>`;
+  }
+  return tabelaEstoqueOc(info.itens) || '<div class="vt-mini" style="margin-top:14px;">Não há itens com código para consultar o estoque desta OC.</div>';
+}
+
+let timerRenderEstoque = null;
+async function carregarEstoqueColetas() {
+  const pendentes = Array.from(new Set(state.coletas.map(ocDaColeta).filter(Boolean)))
+    .filter((oc) => !estoquePorOc[oc]);
+  pendentes.forEach((oc) => { estoquePorOc[oc] = { status: 'carregando' }; });
+  // Poucas consultas simultâneas para não sobrecarregar a bridge do ERP.
+  const fila = [...pendentes];
+  const trabalhador = async () => {
+    while (fila.length) {
+      const oc = fila.shift();
+      try {
+        const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(oc)}`);
+        const d = await r.json().catch(() => ({}));
+        estoquePorOc[oc] = r.ok
+          ? { status: 'ok', itens: d.estoque_itens || [] }
+          : { status: 'erro', erro: d.error || 'Não foi possível consultar o estoque desta OC.' };
+      } catch (e) {
+        estoquePorOc[oc] = { status: 'erro', erro: 'Não foi possível consultar o estoque desta OC.' };
+      }
+      clearTimeout(timerRenderEstoque);
+      timerRenderEstoque = setTimeout(renderTable, 300);
     }
-  }
-  destino.outerHTML = tabelaEstoqueOc(d.estoque_itens) || '<div class="vt-mini" style="margin-top:14px;">Não há itens com código para consultar o estoque desta OC.</div>';
+  };
+  await Promise.all(Array.from({ length: Math.min(3, fila.length) }, trabalhador));
 }
 
 async function acaoVisualizar(id) {
