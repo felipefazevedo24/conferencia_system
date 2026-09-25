@@ -441,11 +441,11 @@ def criar_automator_verificado(base_class: type[Any]) -> type[Any]:
                 self.novo_apontamento(hwnd)
                 self.selecionar_status_liberado(hwnd)
                 self.selecionar_empresa_columbia(hwnd)
-                self.inserir_codigos_processos(hwnd, codigos)
-                # A grade DevExpress recria editores durante a inclusão dos
-                # processos. Preenche a descrição por último para que o valor
-                # seja confirmado no cabeçalho e não se perca ao mudar o foco.
+                # Sequência operacional da M83: a descrição do agrupado deve
+                # ser confirmada no cabeçalho antes de iniciar a grade de
+                # Processos Produtivos.
                 self.preencher_descricao(hwnd, descricao)
+                self.inserir_codigos_processos(hwnd, codigos)
                 self._timed(
                     "validacao_pre_gravacao",
                     lambda: self._validar_antes_de_gravar(hwnd, descricao),
