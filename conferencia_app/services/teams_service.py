@@ -258,3 +258,39 @@ def notificar_divergencia_pedido(
 
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
 
+
+def notificar_relatorio_ajuste_inventario(
+    numero_documento: str,
+    qtd_itens: int,
+    gerado_por: str,
+    *,
+    tipo_ajuste: str | None = None,
+    motivo_ajuste: str | None = None,
+    deposito: str | None = None,
+    link: str | None = None,
+    env_var: str = "TEAMS_WEBHOOK_INVENTARIO_FINANCE_URL",
+    config_key: str = "webhook_inventario_finance",
+) -> None:
+    """Avisa o Finance que um relatorio de ajuste de inventario (FORM-08.52)
+    foi gerado e os itens estao disponiveis pra ajuste no ERP."""
+    app = current_app._get_current_object()
+    url = _webhook_url(env_var, config_key)
+    if not url:
+        app.logger.info("TEAMS: webhook do inventario/finance nao configurado; aviso ignorado (%s).", numero_documento)
+        return
+
+    linha = f"Relatório {numero_documento} · {qtd_itens} item(ns)"
+    partes = [f"Gerado por: {gerado_por}"]
+    if tipo_ajuste:
+        partes.append(f"Tipo: {tipo_ajuste}")
+    if motivo_ajuste:
+        partes.append(f"Motivo: {motivo_ajuste}")
+    if deposito:
+        partes.append(f"Depósito: {deposito}")
+    subinfo = " · ".join(partes) + "\n\nDisponível para ajuste no ERP."
+    payload = _card_payload("📋 Ajuste de inventário para o Finance", linha, subinfo, mencionar_canal=True)
+    if link:
+        payload["attachments"][0]["content"]["actions"] = [
+            {"type": "Action.OpenUrl", "title": "Abrir ajustes de inventário", "url": link}
+        ]
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()

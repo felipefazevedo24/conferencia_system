@@ -34,6 +34,7 @@ from ..models import (
     RELATORIO_AJUSTE_TIPOS,
 )
 from ..services.logistica_inventario_relatorio_pdf import gerar_relatorio_ajuste_pdf
+from ..services import teams_service
 from ..services.erp_estoque_service import (
     descricao_para,
     LocalizacaoEstoqueNaoEncontrada,
@@ -1105,6 +1106,18 @@ def api_gerar_relatorio_ajuste():
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+    # Aviso no Teams pro Finance - assincrono, falha no webhook nao afeta o relatorio.
+    base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+    teams_service.notificar_relatorio_ajuste_inventario(
+        relatorio.numero_documento,
+        len(ajuste_ids),
+        session.get("username", "desconhecido"),
+        tipo_ajuste=relatorio.tipo_ajuste,
+        motivo_ajuste=relatorio.motivo_ajuste,
+        deposito=" - ".join(x for x in (relatorio.deposito_tipo, relatorio.deposito_local) if x),
+        link=f"{base}/logistica/inventario/ajustes",
+    )
 
     return jsonify({
         "message": f"Relatório {relatorio.numero_documento} gerado - {len(ajuste_ids)} item(ns) enviado(s) pro Finance.",
