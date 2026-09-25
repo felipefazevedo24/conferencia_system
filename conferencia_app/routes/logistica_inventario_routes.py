@@ -79,17 +79,14 @@ def _normalizar_busca(texto: str | None) -> str:
     return re.sub(r"\s+", " ", valor)
 
 
-def _unidade_estoque_discreta(unidade: str | None) -> bool:
-    codigo = re.sub(r"[^A-Z]", "", str(unidade or "").upper())
-    return codigo in {"UN", "UND", "UNIDADE", "PC", "PCA", "PECA", "CX", "CAIXA", "KIT"}
-
-
 def _nivel_cobertura(saldo_disponivel: float | None, consumo_diario: float) -> tuple[int | None, str, str]:
     if saldo_disponivel is None:
         return None, "sem_estoque", "Sem registro no GRV"
     if consumo_diario <= 0:
         return None, "sem_consumo", "Sem consumo no periodo"
-    dias = int(math.ceil(float(saldo_disponivel or 0) / consumo_diario))
+    # Arredonda pra baixo: "3,2 dias" de saldo nao cobre o 4o dia. Arredondar
+    # pra cima fazia o item parecer 1 dia mais seguro do que esta.
+    dias = int(math.floor(float(saldo_disponivel or 0) / consumo_diario))
     critico = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7))
     atencao = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15))
     if dias <= critico:
@@ -362,12 +359,16 @@ def estoque_materia_prima_api():
     rows = candidatos
     codigos = [row["codigo"] for row in rows]
     consumo_por_codigo = {}
+    # 90 dias (decisao da logistica em 25/09/2026): materia-prima baixa em
+    # lotes e 30 dias oscilava demais e marcava "sem consumo" item de giro lento.
+    janela_consumo_dias = 90
     reservas_por_codigo = {}
     ordens_compra_por_codigo = {}
     if codigos:
         try:
-            consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=refresh)
+            consumo = buscar_consumo_kardex_grv(codigos=codigos, janela_dias=janela_consumo_dias, forcar_atualizacao=refresh)
             consumo_por_codigo = consumo.get("por_codigo") or {}
+            janela_consumo_dias = int(consumo.get("janela_dias") or janela_consumo_dias)
         except Exception:
             current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
             consumo_por_codigo = {}
@@ -379,12 +380,19 @@ def estoque_materia_prima_api():
 
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
-        consumo_diario = float((consumo_por_codigo.get(codigo_key) or {}).get("consumo_medio_diario") or 0)
-        if consumo_diario > 0 and _unidade_estoque_discreta(row["unidade"]):
-            consumo_diario = float(math.ceil(consumo_diario))
+        consumo_item = consumo_por_codigo.get(codigo_key) or {}
+        # Sem arredondar o consumo de item em UN pra cima: 3 pecas em 30 dias
+        # (0,1/dia) virava 1/dia e a cobertura ficava 10x menor que a real.
+        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
         cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
         reservas = reservas_por_codigo.get(codigo_key, [])
         row["consumo_diario"] = consumo_diario
+        # Expostos pra tela mostrar de onde veio a media: 1 saida grande no mes
+        # e consumo continuo dao a mesma media, mas merecem leitura diferente.
+        row["saida_total_periodo"] = float(consumo_item.get("saida_total_periodo") or 0)
+        row["dias_com_saida"] = int(consumo_item.get("dias_com_saida") or 0)
+        row["maior_saida"] = float(consumo_item.get("maior_saida") or 0)
+        row["maior_saida_data"] = consumo_item.get("maior_saida_data") or None
         row["cobertura_dias"] = cobertura_dias
         row["nivel"] = nivel
         row["nivel_label"] = nivel_label
@@ -403,7 +411,9 @@ def estoque_materia_prima_api():
         ]
 
     if visao in {"materia_prima", "revenda"}:
-        codigos_reposicao = [row["codigo"] for row in rows if row["nivel"] in ("critico", "atencao")]
+        # Todo item com consumo, nao so critico/atencao: a cobertura projetada
+        # com OC precisa valer pra lista inteira.
+        codigos_reposicao = [row["codigo"] for row in rows if row["consumo_diario"] > 0]
         if codigos_reposicao:
             try:
                 ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao)
@@ -412,6 +422,14 @@ def estoque_materia_prima_api():
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
         row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
+        # Projetada = disponivel + pendente das OCs abertas. O nivel continua no
+        # fisico: OC em aberto nao impede faltar material antes da entrega.
+        pendente_oc = sum(float(oc.get("quantidade_pendente") or 0) for oc in row["ordens_compra_abertas"])
+        row["quantidade_pendente_oc"] = pendente_oc
+        row["cobertura_projetada_dias"] = (
+            int(math.floor((float(row["saldo_disponivel"] or 0) + pendente_oc) / row["consumo_diario"]))
+            if pendente_oc > 0 and row["consumo_diario"] > 0 else None
+        )
 
     if nivel_filtro:
         rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
@@ -426,17 +444,19 @@ def estoque_materia_prima_api():
         row.get("cobertura_dias") or 999999,
         row["codigo"],
     ))
-    rows = rows[:limite]
-
+    # Contagens antes do corte do limite: senao "Itens" mostrava sempre o
+    # proprio limite (300) e os demais KPIs ignoravam o que ficou de fora.
     resumo = {
-        "itens": len(rows),
+        "itens": min(len(rows), limite),
         "total_filtrado": len(rows),
         "criticos": sum(1 for row in rows if row.get("nivel") == "critico"),
+        "criticos_sem_oc": sum(1 for row in rows if row.get("nivel") == "critico" and not row.get("ordens_compra_abertas")),
         "atencao": sum(1 for row in rows if row.get("nivel") == "atencao"),
         "sem_consumo": sum(1 for row in rows if row.get("nivel") == "sem_consumo"),
         "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
     }
+    rows = rows[:limite]
     return jsonify({
         "visao": visao,
         "visao_label": visao_cfg["label"],
@@ -445,6 +465,9 @@ def estoque_materia_prima_api():
         "resumo": resumo,
         "items": rows,
         "limit": limite,
+        "janela_consumo_dias": janela_consumo_dias,
+        "dias_critico": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7)),
+        "dias_atencao": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15)),
     })
 
 

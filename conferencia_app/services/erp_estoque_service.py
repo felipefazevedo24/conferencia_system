@@ -246,6 +246,8 @@ def buscar_consumo_kardex_grv(
                 "saida_total_periodo": float(payload.get("saida_total_periodo") or 0),
                 "dias_com_saida": float(payload.get("dias_com_saida") or 0),
                 "estoque_medio_periodo": float(payload.get("estoque_medio_periodo") or 0),
+                "maior_saida": float(payload.get("maior_saida") or 0),
+                "maior_saida_data": payload.get("maior_saida_data") or None,
             }
 
     resultado = {
