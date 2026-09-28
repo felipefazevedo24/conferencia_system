@@ -1301,6 +1301,260 @@ def _consumo_cardex(
     return consumos
 
 
+# Planejamento de estoque (minimo sugerido / lote economico no Sync). Mesma
+# regra de consumo do SQL_CONSUMO_CARDEX, mas mes a mes desde o inicio do
+# kardex (18/06/2019), e marcando a saida para OS cujo material foi COMPRADO
+# para aquela OS (tcom_aux_os liga OC, OS e produto): a logistica quer ver
+# quanto do consumo e' compra sob encomenda (decisao de 28/09/2026).
+_SQL_PLANEJAMENTO_BASE = """
+    with prod as (
+        select p.codigo as cod_produto,
+               regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo
+        from public.tproduto p
+        where p.cod_empresa = %(empresa)s
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%(codigos)s::text[])
+    ),
+    mov as (
+        select
+            pr.codigo,
+            c.cod_produto,
+            c.dt_hora_movimentacao::date as dia,
+            coalesce(c.qtde_movimentada, 0)::double precision as qtde,
+            coalesce(
+                substring(upper(coalesce(c.obs, '')) from 'SA.DA C.D[.] ([0-9]+)'),
+                c.chave_primaria_link,
+                c.id
+            ) as documento,
+            substring(upper(coalesce(c.obs, '')) from 'OS: ?([0-9]+/[0-9]+)') as os,
+            case
+                when upper(coalesce(c.tabela_link, '')) = 'TINVENT_DEP' and c.tipo_movimento in (0, 1)
+                    then 'ajuste'
+                when c.tipo_movimento in (1, 2)
+                     and upper(coalesce(c.tabela_link, '')) in ('TSAIDA_E', 'TOS', 'TPRODUTO')
+                    then 'saida'
+                when c.tipo_movimento in (1, 2)
+                     and upper(coalesce(c.tabela_link, '')) = 'TNOTA_FISCAL'
+                     and position('NF DE ENTRADA' in upper(coalesce(c.obs, ''))) = 0
+                    then 'saida'
+            end as classe
+        from public.tproduto_cardex c
+        join prod pr on pr.cod_produto = c.cod_produto
+        where c.cod_empresa = %(empresa)s
+          and c.cod_deposito = 1
+          and c.tipo_movimento in (0, 1, 2)
+          and c.dt_hora_movimentacao >= %(inicio)s::date
+    ),
+    os_compra as (
+        select distinct x.cod_produto, x.cod_os_completo as os
+        from public.tcom_aux_os x
+        join prod pr on pr.cod_produto = x.cod_produto
+        where x.cod_empresa = %(empresa)s
+          and coalesce(x.cancelado, 0) = 0
+          and coalesce(x.cod_ord_compra, 0) <> 0
+          and x.cod_os_completo is not null
+    ),
+    doc as (
+        -- Por documento de saida, como no SQL_CONSUMO_CARDEX: o estorno cita a
+        -- saida original e se anula na soma.
+        select m.codigo, m.documento, max(m.dia) as dia, sum(m.qtde) as liquido,
+               bool_or(oc.os is not null) as para_os
+        from mov m
+        left join os_compra oc on oc.cod_produto = m.cod_produto and oc.os = m.os
+        where m.classe = 'saida'
+        group by m.codigo, m.documento
+    )
+"""
+
+SQL_PLANEJAMENTO_MENSAL = _SQL_PLANEJAMENTO_BASE + """
+    ,
+    ajuste as (
+        -- Inventario: so' o liquido negativo do mes e' consumo (o GRV zera o
+        -- saldo e lanca o contado; somar so' a baixa contaria o estoque todo).
+        select codigo, to_char(dia, 'YYYY-MM') as mes, sum(qtde) as liquido
+        from mov where classe = 'ajuste'
+        group by codigo, to_char(dia, 'YYYY-MM')
+    )
+    select codigo, mes, sum(saida) as saida, sum(saida_os) as saida_os
+    from (
+        select codigo, to_char(dia, 'YYYY-MM') as mes, -liquido as saida,
+               case when para_os then -liquido else 0 end as saida_os
+        from doc where liquido < 0
+        union all
+        select codigo, mes, -liquido, 0 from ajuste where liquido < 0
+    ) s
+    group by codigo, mes
+    order by codigo, mes
+"""
+
+SQL_PLANEJAMENTO_RETIRADAS = _SQL_PLANEJAMENTO_BASE + """
+    -- Tamanho de uma retirada nos ultimos 24 meses: e' o que dimensiona o
+    -- minimo de item esporadico, onde media diaria nao significa nada.
+    select codigo, count(*) as retiradas,
+           percentile_cont(0.5) within group (order by -liquido) as p50,
+           percentile_cont(0.8) within group (order by -liquido) as p80
+    from doc
+    where liquido < 0 and dia >= (current_date - 730)
+    group by codigo
+"""
+
+# Lead time = data da OC ate a entrada no deposito 1. A entrada (TCOMPRAS no
+# kardex) liga na OC por tcom_ordem_compra - tcompras.cod_ordem_compra quase
+# nunca vem preenchido (2 de 16.260 em 28/09/2026).
+SQL_PLANEJAMENTO_LEAD_TIME = """
+    with prod as (
+        select p.codigo as cod_produto,
+               regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo
+        from public.tproduto p
+        where p.cod_empresa = %(empresa)s
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%(codigos)s::text[])
+    ),
+    entrada as (
+        -- O estorno da entrada vem no mesmo documento com sinal negativo:
+        -- entrada estornada inteira some.
+        select pr.codigo, c.cod_produto,
+               split_part(c.chave_primaria_link, ';', 2)::int as cod_compra,
+               max(c.dt_hora_movimentacao) as dt_entrada
+        from public.tproduto_cardex c
+        join prod pr on pr.cod_produto = c.cod_produto
+        where c.cod_empresa = %(empresa)s
+          and c.cod_deposito = 1
+          and c.tipo_movimento = 0
+          and upper(coalesce(c.tabela_link, '')) = 'TCOMPRAS'
+          and c.chave_primaria_link ~ '^[0-9]+;[0-9]+$'
+          and c.dt_hora_movimentacao >= %(inicio)s::date
+        group by pr.codigo, c.cod_produto, split_part(c.chave_primaria_link, ';', 2)
+        having sum(coalesce(c.qtde_movimentada, 0)) > 0
+    )
+    select e.codigo, e.dt_entrada::date as dt_entrada, oc.dt_oc::date as dt_oc,
+           (e.dt_entrada::date - oc.dt_oc::date) as dias, oc.codigo_oc, oc.fornecedor, oc.para_os
+    from entrada e
+    join lateral (
+        -- NF com mais de uma OC do mesmo produto (4%% dos casos): a mais
+        -- recente anterior a entrada e' a que foi atendida por ela.
+        select o.codigo as codigo_oc, o.data as dt_oc,
+               coalesce(nullif(trim(o.fornecedor), ''), '') as fornecedor,
+               exists (
+                   select 1 from public.tcom_aux_os x
+                   where x.cod_empresa = o.cod_empresa and x.cod_ord_compra = o.codigo
+                     and x.cod_produto = e.cod_produto and coalesce(x.cancelado, 0) = 0
+                     and coalesce(x.cod_os, 0) <> 0
+               ) as para_os
+        from public.tcom_ordem_compra co
+        join public.tord_com o on o.cod_empresa = co.cod_empresa and o.codigo = co.cod_ordem_compra
+        where co.cod_empresa = %(empresa)s
+          and co.cod_compra = e.cod_compra
+          and coalesce(o.cancelado, 0) = 0
+          and o.data <= e.dt_entrada
+          and exists (
+              select 1 from public.tord_aux a
+              where a.cod_empresa = o.cod_empresa and a.cod_ord_compra = o.codigo and a.cod_produto = e.cod_produto
+          )
+        order by o.data desc
+        limit 1
+    ) oc on true
+    order by e.codigo, e.dt_entrada
+"""
+
+SQL_PLANEJAMENTO_CADASTRO = """
+    with prod as (
+        select p.codigo as cod_produto, p.preco_custo, p.unidade,
+               regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo
+        from public.tproduto p
+        where p.cod_empresa = %(empresa)s
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%(codigos)s::text[])
+    ),
+    oc_12m as (
+        select a.cod_produto, o.codigo,
+               exists (
+                   select 1 from public.tcom_aux_os x
+                   where x.cod_empresa = o.cod_empresa and x.cod_ord_compra = o.codigo
+                     and x.cod_produto = a.cod_produto and coalesce(x.cancelado, 0) = 0
+                     and coalesce(x.cod_os, 0) <> 0
+               ) as para_os
+        from public.tord_aux a
+        join prod pr on pr.cod_produto = a.cod_produto
+        join public.tord_com o on o.cod_empresa = a.cod_empresa and o.codigo = a.cod_ord_compra
+        where a.cod_empresa = %(empresa)s
+          and coalesce(o.cancelado, 0) = 0
+          and o.data >= (current_date - 365)
+        group by a.cod_produto, o.codigo, o.cod_empresa
+    ),
+    primeiro as (
+        select c.cod_produto, min(c.dt_hora_movimentacao)::date as primeira_mov
+        from public.tproduto_cardex c
+        join prod pr on pr.cod_produto = c.cod_produto
+        where c.cod_empresa = %(empresa)s and c.cod_deposito = 1 and c.tipo_movimento in (0, 1, 2)
+        group by c.cod_produto
+    )
+    select pr.codigo, pr.preco_custo, pr.unidade, pm.primeira_mov,
+           count(o.codigo) filter (where not o.para_os) as oc_estoque_12m,
+           count(o.codigo) filter (where o.para_os) as oc_para_os_12m
+    from prod pr
+    left join primeiro pm on pm.cod_produto = pr.cod_produto
+    left join oc_12m o on o.cod_produto = pr.cod_produto
+    group by pr.codigo, pr.preco_custo, pr.unidade, pm.primeira_mov
+"""
+
+
+def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date) -> dict[str, dict[str, Any]]:
+    """Historico cru por codigo; as contas (classificacao, minimo, lote) ficam
+    no Sync, que tem os parametros e pode mudar sem redeploy da VM."""
+    params = {"empresa": empresa, "codigos": codigos, "inicio": inicio}
+    por_codigo: dict[str, dict[str, Any]] = {
+        codigo: {
+            "serie_mensal": [],
+            "retiradas_24m": {"quantidade": 0, "p50": None, "p80": None},
+            "lead_times": [],
+            "preco_custo": None,
+            "unidade": "",
+            "primeira_movimentacao": None,
+            "oc_estoque_12m": 0,
+            "oc_para_os_12m": 0,
+        }
+        for codigo in codigos
+    }
+
+    cur.execute(SQL_PLANEJAMENTO_MENSAL, params)
+    for codigo, mes, saida, saida_os in cur.fetchall():
+        if codigo in por_codigo:
+            por_codigo[codigo]["serie_mensal"].append(
+                {"mes": mes, "saida": round(float(saida or 0), 6), "saida_os": round(float(saida_os or 0), 6)}
+            )
+
+    cur.execute(SQL_PLANEJAMENTO_RETIRADAS, params)
+    for codigo, retiradas, p50, p80 in cur.fetchall():
+        if codigo in por_codigo:
+            por_codigo[codigo]["retiradas_24m"] = {
+                "quantidade": int(retiradas or 0),
+                "p50": round(float(p50), 6) if p50 is not None else None,
+                "p80": round(float(p80), 6) if p80 is not None else None,
+            }
+
+    cur.execute(SQL_PLANEJAMENTO_LEAD_TIME, params)
+    for codigo, dt_entrada, dt_oc, dias, codigo_oc, fornecedor, para_os in cur.fetchall():
+        if codigo in por_codigo:
+            por_codigo[codigo]["lead_times"].append({
+                "dt_entrada": dt_entrada.isoformat() if dt_entrada else None,
+                "dt_oc": dt_oc.isoformat() if dt_oc else None,
+                "dias": int(dias or 0),
+                "ordem_compra": str(codigo_oc or ""),
+                "fornecedor": str(fornecedor or ""),
+                "para_os": bool(para_os),
+            })
+
+    cur.execute(SQL_PLANEJAMENTO_CADASTRO, params)
+    for codigo, preco_custo, unidade, primeira_mov, oc_estoque, oc_para_os in cur.fetchall():
+        if codigo in por_codigo:
+            por_codigo[codigo].update({
+                "preco_custo": float(preco_custo) if preco_custo is not None else None,
+                "unidade": str(unidade or "").strip(),
+                "primeira_movimentacao": primeira_mov.isoformat() if primeira_mov else None,
+                "oc_estoque_12m": int(oc_estoque or 0),
+                "oc_para_os_12m": int(oc_para_os or 0),
+            })
+    return por_codigo
+
+
 def _detectar_fonte_kardex(
     cur,
     *,
@@ -2428,6 +2682,50 @@ def create_app() -> Flask:
             )
         except Exception as exc:
             app.logger.exception("Falha ao consultar consumo do kardex no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/planejamento")
+    def consultar_estoque_planejamento():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigos_raw = payload.get("codigos") or []
+            if not isinstance(codigos_raw, list):
+                return jsonify({"sucesso": False, "erro": "codigos_deve_ser_lista"}), 400
+            codigos = []
+            vistos = set()
+            for codigo in codigos_raw:
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if chave and chave not in vistos:
+                    vistos.add(chave)
+                    codigos.append(chave)
+            if not codigos:
+                return jsonify({"sucesso": True, "itens": {}})
+
+            # Historico inteiro do kardex (comeca em 18/06/2019): item de giro
+            # lento precisa de todo o historico pra aparecer (pedido da logistica).
+            inicio = date(2019, 1, 1)
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    itens = _planejamento_estoque(cur, empresa=empresa, codigos=codigos, inicio=inicio)
+            return jsonify({
+                "sucesso": True,
+                "empresa": empresa,
+                "inicio": inicio.isoformat(),
+                "gerado_em": date.today().isoformat(),
+                "itens": itens,
+            })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar planejamento de estoque no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/conserto")

@@ -4016,6 +4016,28 @@ class ChapaCalculoLog(db.Model):
     dados_novos = db.Column(db.Text)       # JSON do estado novo
 
 
+class EstoquePlanejamentoParametro(db.Model):
+    """Parâmetros do estoque mínimo / lote econômico sugeridos na tela de Estoque.
+
+    Linha única, editada só por Admin. As sugestões em si não são gravadas:
+    saem do histórico do GRV a cada carga, então nunca ficam fora de sincronia.
+    Os padrões (custo do pedido, 25% a.a., 98/95/90% por curva ABC) foram
+    combinados com a logística em 28/09/2026; o custo do pedido é provisório.
+    """
+
+    __tablename__ = "estoque_planejamento_parametro"
+
+    id = db.Column(db.Integer, primary_key=True)
+    custo_pedido = db.Column(db.Float, nullable=False, default=150.0)
+    taxa_manutencao_pct = db.Column(db.Float, nullable=False, default=25.0)
+    nivel_servico_a_pct = db.Column(db.Float, nullable=False, default=98.0)
+    nivel_servico_b_pct = db.Column(db.Float, nullable=False, default=95.0)
+    nivel_servico_c_pct = db.Column(db.Float, nullable=False, default=90.0)
+    lead_time_padrao_dias = db.Column(db.Integer, nullable=False, default=15)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
 class ProducaoObservacao(db.Model):
     """Observacao operacional da estrutura, mantida no banco do Sync."""
 

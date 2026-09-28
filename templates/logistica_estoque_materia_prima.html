@@ -66,12 +66,41 @@
     .mp-legend { font-size: 12px; color: var(--eui-muted); }
     .mp-pico { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
     .erp-table th.mp-right, .erp-table td.mp-right { text-align: right; }
+    /* Planejamento: mínimo / lote sugeridos a partir do histórico do GRV. */
+    .mp-badge.esporadico { background: var(--eui-surface-2); color: var(--eui-text-soft); border: 1px solid var(--eui-border); }
+    .mp-cov__fill.esporadico { background: var(--eui-info); }
+    .mp-aviso { margin: 12px 16px 0; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .mp-sug { display: grid; gap: 3px; min-width: 190px; font-size: 12px; color: var(--eui-text-soft); }
+    .mp-sug b { color: var(--eui-text); }
+    .mp-sug__grv { color: var(--eui-muted); font-size: 11px; }
+    .mp-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+    .mp-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 7px; font-size: 10.5px; font-weight: 800; white-space: nowrap; background: var(--eui-surface-2); color: var(--eui-text-soft); border: 1px solid var(--eui-border); }
+    .mp-chip.abc-A { background: var(--eui-primary-soft); color: var(--eui-primary); border-color: transparent; }
+    .mp-chip.conf-alta { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border-color: transparent; }
+    .mp-chip.conf-media { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); border-color: transparent; }
+    .mp-chip.conf-baixa { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border-color: transparent; }
+    .mp-chip.os { background: var(--eui-violet-soft, var(--eui-info-soft)); color: var(--eui-violet-soft-text, var(--eui-info-soft-text)); border-color: transparent; }
+    .mp-calc { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .mp-calc__box { border: 1px solid var(--eui-border); border-radius: 8px; background: var(--eui-surface); padding: 10px 12px; font-size: 12px; color: var(--eui-text-soft); display: grid; gap: 3px; }
+    .mp-calc__box > span:first-child { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
+    .mp-calc__box b { color: var(--eui-text); }
+    .mp-dialog { width: min(520px, calc(100% - 24px)); margin: auto; padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .mp-dialog::backdrop { background: rgba(15,23,42,.55); }
+    .mp-dialog__head, .mp-dialog__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; }
+    .mp-dialog__head { border-bottom: 1px solid var(--eui-border); font-weight: 800; }
+    .mp-dialog__foot { border-top: 1px solid var(--eui-border); justify-content: flex-end; }
+    .mp-dialog__body { padding: 16px 18px; display: grid; gap: 12px; }
+    .mp-dialog__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mp-dialog label { display: block; font-size: 11px; font-weight: 800; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+    .mp-dialog input { width: 100%; }
+    .mp-erro { color: var(--eui-danger); font-size: 12.5px; font-weight: 600; }
     @media (max-width: 820px) {
         .mp-toolbar { align-items: stretch; }
         .mp-search { width: 100%; }
         .mp-filters__end { margin-left: 0; width: 100%; }
         .mp-filters__end .eui-btn { flex: 1; justify-content: center; }
         .mp-reserva { grid-template-columns: 1fr; gap: 7px; }
+        .mp-dialog__grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -82,8 +111,9 @@
         <div>
             <div class="eui-page-header__eyebrow">LOGÍSTICA · INVENTÁRIO</div>
             <h1 class="eui-page-header__title"><i class="fas fa-boxes-stacked"></i> Estoque</h1>
-            <p class="eui-page-header__sub">Saldos do depósito 1 no GRV. Cobertura = saldo disponível ÷ consumo médio diário dos últimos <span id="mp-janela">90</span> dias.</p>
+            <p class="eui-page-header__sub" id="mp-metodo">Saldos do depósito 1 no GRV. Cobertura = saldo disponível ÷ consumo médio diário dos últimos <span id="mp-janela">90</span> dias.</p>
         </div>
+        <button class="eui-btn eui-btn--ghost" id="mp-param-open" type="button" style="display:none;"><i class="fas fa-sliders"></i> Parâmetros do planejamento</button>
     </header>
 
     <div class="eui-stats" id="mp-kpis">
@@ -100,6 +130,7 @@
                     <button class="mp-view-btn active" type="button" data-visao="materia_prima">Matéria-prima</button>
                     <button class="mp-view-btn" type="button" data-visao="revenda">Material para revenda</button>
                     <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
+                    <button class="mp-view-btn" type="button" data-visao="insumos">Insumos da produção</button>
                     <a class="mp-view-btn mp-view-link" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>
                 </div>
                 <div class="mp-search">
@@ -113,6 +144,7 @@
                     <option value="critico">Crítico</option>
                     <option value="atencao">Monitorar</option>
                     <option value="normal">Adequado</option>
+                    <option value="esporadico">Demanda esporádica</option>
                     <option value="sem_consumo">Sem consumo</option>
                 </select>
                 <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
@@ -125,6 +157,7 @@
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
+            <div class="mp-aviso" id="mp-plan-aviso" style="display:none;"><i class="fas fa-triangle-exclamation"></i> O histórico do GRV não respondeu agora: mínimo e lote sugeridos indisponíveis, e a cobertura voltou ao cálculo simples dos últimos 90 dias.</div>
             <div class="mp-state" id="mp-state">Carregando estoque...</div>
             <div class="mp-table-wrap">
                 <table class="erp-table" id="mp-table" style="display:none;">
@@ -132,8 +165,9 @@
                         <tr>
                             <th>Material</th>
                             <th class="mp-right">Disponível</th>
-                            <th class="mp-right">Consumo/dia</th>
+                            <th class="mp-right" id="mp-th-consumo">Consumo/dia</th>
                             <th>Cobertura</th>
+                            <th id="mp-th-sugestao" style="display:none;">Mínimo / lote sugeridos</th>
                             <th>Nível</th>
                             <th id="mp-th-reservas" style="display:none; text-align:right;">Reservas</th>
                         </tr>
@@ -144,6 +178,26 @@
         </div>
     </div>
 </div>
+
+<dialog id="mp-param-dialog" class="mp-dialog" aria-labelledby="mp-param-title">
+    <form method="dialog" id="mp-param-form">
+        <div class="mp-dialog__head"><span id="mp-param-title"><i class="fas fa-sliders"></i> Parâmetros do planejamento</span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-param-close" aria-label="Fechar">&times;</button></div>
+        <div class="mp-dialog__body">
+            <div class="mp-dialog__grid">
+                <div><label for="mp-p-custo">Custo de emitir um pedido (R$)</label><input class="eui-input" id="mp-p-custo" name="custo_pedido" type="number" step="0.01" min="0.01"></div>
+                <div><label for="mp-p-taxa">Custo de manter estoque (% a.a.)</label><input class="eui-input" id="mp-p-taxa" name="taxa_manutencao_pct" type="number" step="0.1" min="1" max="100"></div>
+                <div><label for="mp-p-a">Nível de serviço curva A (%)</label><input class="eui-input" id="mp-p-a" name="nivel_servico_a_pct" type="number" step="0.1" min="50" max="99.9"></div>
+                <div><label for="mp-p-b">Nível de serviço curva B (%)</label><input class="eui-input" id="mp-p-b" name="nivel_servico_b_pct" type="number" step="0.1" min="50" max="99.9"></div>
+                <div><label for="mp-p-c">Nível de serviço curva C (%)</label><input class="eui-input" id="mp-p-c" name="nivel_servico_c_pct" type="number" step="0.1" min="50" max="99.9"></div>
+                <div><label for="mp-p-lt">Lead time padrão (dias)</label><input class="eui-input" id="mp-p-lt" name="lead_time_padrao_dias" type="number" step="1" min="1" max="365"></div>
+            </div>
+            <p class="mp-muted" style="margin:0;">Custo do pedido e custo de manter entram no lote econômico. O nível de serviço define a margem de segurança do mínimo de cada curva ABC. O lead time padrão só vale para item sem nenhuma entrega com OC no histórico.</p>
+            <p class="mp-muted" id="mp-param-meta" style="margin:0;"></p>
+            <p class="mp-erro" id="mp-param-erro" role="alert" style="margin:0;"></p>
+        </div>
+        <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-param-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-param-save"><i class="fas fa-check"></i> Salvar</button></div>
+    </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -155,6 +209,8 @@
     let expanded = new Set();
     let janelaDias = 90;
     let diasAtencao = 15;
+    let planejamentoAtivo = false;
+    let parametros = null;
 
     function fmt(valor, casas = 3) {
         return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
@@ -171,7 +227,7 @@
 
     function badge(item) {
         const nivel = item.nivel || 'normal';
-        const icon = nivel === 'critico' ? 'fa-triangle-exclamation' : (nivel === 'atencao' ? 'fa-clock' : (nivel === 'sem_consumo' ? 'fa-circle-info' : 'fa-circle-check'));
+        const icon = nivel === 'critico' ? 'fa-triangle-exclamation' : (nivel === 'atencao' ? 'fa-clock' : (nivel === 'sem_consumo' ? 'fa-circle-info' : (nivel === 'esporadico' ? 'fa-wave-square' : 'fa-circle-check')));
         return `<span class="mp-badge ${nivel}"><i class="fas ${icon}"></i>${item.nivel_label || '-'}</span>`;
     }
 
@@ -211,6 +267,12 @@
     }
 
     function consumoCell(item) {
+        const p = item.planejamento;
+        if (p) {
+            // Com o histórico, consumo por mês: por dia não significa nada pra item que sai 1x a cada tanto.
+            if (p.tipo_demanda === 'sem_giro') return '<span class="mp-muted">—</span>';
+            return `<span class="mp-num">${fmt(p.consumo_mensal, 2)} ${esc(item.unidade || '')}/mês</span><span class="mp-sub">${p.meses_com_saida_24m} de ${p.meses_analisados_24m} meses com saída</span>`;
+        }
         if (!item.consumo_diario) return '<span class="mp-muted">—</span>';
         const dias = Number(item.dias_com_saida || 0);
         // Poucos dias com saida = media puxada por 1 ou 2 baixas grandes; vale mostrar.
@@ -219,19 +281,105 @@
     }
 
     function cobertura(item) {
+        const p = item.planejamento;
+        if (p && p.tipo_demanda === 'sem_giro') return '<span class="mp-muted">Sem consumo em 12 meses</span>';
+        if (p && p.cobertura_dias == null) {
+            // Esporádico: a pergunta é se o saldo aguenta a próxima retirada, não quantos dias dura.
+            if (!p.retirada_tipica) return '<span class="mp-muted">—</span>';
+            const pctRet = Number(p.cobre_retirada_pct || 0);
+            return `<div class="mp-cov" title="Retirada típica: ${fmt(p.retirada_tipica, 2)} ${esc(item.unidade || '')} (80% das retiradas de 24 meses foram até esse tamanho)">
+                <span class="mp-num">${fmt(pctRet, 0)}% de 1 retirada</span>
+                <span class="mp-cov__bar"><span class="mp-cov__fill esporadico" style="width:${Math.max(3, Math.min(100, pctRet))}%"></span></span>
+                <span class="mp-sub">retirada típica ${fmt(p.retirada_tipica, 0)} ${esc(item.unidade || '')}</span>
+            </div>`;
+        }
         if (!item.consumo_diario) return `<span class="mp-muted">Sem consumo em ${janelaDias} dias</span>`;
         const dias = Number(item.cobertura_dias || 0);
-        const escala = Math.max(diasAtencao * 2, 1);
+        // Com planejamento o nível é relativo ao lead time do item: a barra também.
+        const escala = p ? Math.max(Number(p.lead_time_dias || 0) * 2, 1) : Math.max(diasAtencao * 2, 1);
         const pct = Math.max(3, Math.min(100, (dias / escala) * 100));
         const nivel = esc(item.nivel || 'normal');
         const projetada = item.cobertura_projetada_dias != null
             ? `<span class="mp-sub" title="Disponível + ${fmt(item.quantidade_pendente_oc)} pendente em OC aberta"><i class="fas fa-cart-shopping"></i> ${item.cobertura_projetada_dias} dia(s) com OC</span>`
             : '';
+        const lt = p ? `<span class="mp-sub">lead time ${fmt(p.lead_time_dias, 0)} dia(s)</span>` : '';
         return `<div class="mp-cov" title="${fmt(item.saldo_disponivel)} ÷ ${fmt(item.consumo_diario)}/dia">
             <span class="mp-num">${dias} dia(s)</span>
             <span class="mp-cov__bar"><span class="mp-cov__fill ${nivel}" style="width:${pct}%"></span></span>
-            ${projetada}
+            ${lt}${projetada}
         </div>`;
+    }
+
+    const CONFIANCA = { alta: 'Confiança alta', media: 'Confiança média', baixa: 'Confiança baixa' };
+
+    function chipsPlanejamento(p) {
+        return `<div class="mp-chips">
+            <span class="mp-chip abc-${esc(p.classe_abc)}" title="Nível de serviço ${fmt(p.nivel_servico_pct, 1)}%">Curva ${esc(p.classe_abc)}</span>
+            <span class="mp-chip">${esc(p.tipo_demanda_label)}</span>
+            <span class="mp-chip conf-${esc(p.confianca)}" title="${esc((p.confianca_motivos || []).join(' · '))}">${CONFIANCA[p.confianca] || ''}</span>
+            ${p.consumo_os_pct_12m > 0 ? `<span class="mp-chip os" title="Parte do consumo de 12 meses que foi material comprado para a própria OS">${fmt(p.consumo_os_pct_12m, 0)}% comprado p/ OS</span>` : ''}
+            ${p.candidato_estoque ? `<span class="mp-chip os" title="${p.oc_para_os_12m} OCs para OS em 12 meses"><i class="fas fa-lightbulb"></i> Candidato a estoque</span>` : ''}
+        </div>`;
+    }
+
+    function sugestaoCell(item) {
+        const p = item.planejamento;
+        if (!p) return '<span class="mp-muted">—</span>';
+        const un = esc(item.unidade || '');
+        const grv = (v) => Number(v || 0) > 0 ? `${fmt(v, 2)} ${un}` : 'não cadastrado';
+        if (p.tipo_demanda === 'sem_giro') {
+            return `<div class="mp-sug"><span><b>Não estocar</b></span><span class="mp-sug__grv">GRV: mín. ${grv(item.estoque_minimo)}</span>${chipsPlanejamento(p)}</div>`;
+        }
+        const lote = p.lote_economico_sugerido != null ? `${fmt(p.lote_economico_sugerido, 2)} ${un}` : '—';
+        return `<div class="mp-sug">
+            <span>Mín. <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b> <span class="mp-sug__grv">· GRV ${grv(item.estoque_minimo)}</span></span>
+            <span>Lote <b>${lote}</b> <span class="mp-sug__grv">· GRV ${grv(item.lote_economico)}</span></span>
+            ${chipsPlanejamento(p)}
+        </div>`;
+    }
+
+    function mesAno(iso) {
+        const partes = String(iso || '').split('-');
+        return partes.length >= 2 ? `${partes[1]}/${partes[0]}` : '-';
+    }
+
+    // Mostra a conta inteira: a sugestão só vale se der pra conferir de onde veio.
+    function calculoHtml(item) {
+        const p = item.planejamento;
+        if (!p) return '';
+        const un = esc(item.unidade || '');
+        const ltMeses = Number(p.lead_time_dias || 0) / 30.4;
+        const demanda = `<div class="mp-calc__box"><span>Demanda · ${esc(p.tipo_demanda_label)}</span>
+            <span><b>${p.meses_com_saida_24m}</b> de ${p.meses_analisados_24m} meses com saída (24 meses)</span>
+            <span><b>${p.meses_com_saida_total}</b> meses com saída desde ${mesAno(p.primeira_movimentacao)}</span>
+            <span>Consumo 12 meses: <b>${fmt(p.consumo_12m, 2)} ${un}</b> (${fmt(p.consumo_mensal, 2)}/mês)</span>
+            ${p.adi != null ? `<span>Intervalo médio ${fmt(p.adi, 2)} mês · variação CV² ${fmt(p.cv2, 2)}</span>` : ''}</div>`;
+        const lead = `<div class="mp-calc__box"><span>Lead time (OC → entrada)</span>
+            ${p.lead_time_fonte === 'historico'
+                ? `<span><b>${fmt(p.lead_time_dias, 1)} dias</b> em média</span><span>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)} dias</span>`
+                : `<span><b>${fmt(p.lead_time_dias, 0)} dias</b> (padrão)</span><span>Nenhuma entrega com OC no histórico</span>`}</div>`;
+        let minimo;
+        if (p.tipo_demanda === 'sem_giro') {
+            minimo = '<span>Nada saiu em 12 meses: não há o que repor.</span>';
+        } else if (p.estoque_seguranca != null) {
+            minimo = `<span>${fmt(p.consumo_mensal, 2)}/mês × ${fmt(ltMeses, 2)} mês de lead time</span>
+                <span>+ segurança <b>${fmt(p.estoque_seguranca, 2)} ${un}</b> (curva ${esc(p.classe_abc)}, ${fmt(p.nivel_servico_pct, 1)}%)</span>
+                <span>= <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b></span>`;
+        } else {
+            minimo = `<span>1 retirada típica: <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b></span>
+                <span>80% das ${p.retiradas_24m} retiradas de 24 meses foram até esse tamanho. Média diária não serve pra demanda esporádica.</span>`;
+        }
+        const pr = parametros || {};
+        const lote = p.lote_economico_sugerido == null
+            ? `<span>${p.custo_unitario == null ? 'Sem custo no GRV: não dá pra calcular.' : '—'}</span>`
+            : `<span>√(2 × ${fmt(p.consumo_mensal * 12, 2)} ${un}/ano × R$ ${fmt(pr.custo_pedido, 2)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))</span>
+               <span>= <b>${fmt(p.lote_economico_sugerido, 2)} ${un}</b>${p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico' ? ' (nunca menor que 1 retirada comum)' : ''}</span>`;
+        const os = `<div class="mp-calc__box"><span>Compra para OS (12 meses)</span>
+            <span><b>${fmt(p.consumo_os_pct_12m, 1)}%</b> do consumo foi material comprado para a própria OS</span>
+            <span>${p.oc_para_os_12m} OC(s) para OS · ${p.oc_estoque_12m} para estoque</span>
+            ${p.candidato_estoque ? '<span><b>Candidato a item de estoque:</b> comprado para OS com frequência.</span>' : ''}</div>`;
+        const conf = `<div class="mp-calc__box"><span>${CONFIANCA[p.confianca] || 'Confiança'}</span>${(p.confianca_motivos || []).map((m) => `<span>${esc(m)}</span>`).join('')}</div>`;
+        return `<div class="mp-calc">${demanda}${lead}<div class="mp-calc__box"><span>Estoque mínimo sugerido</span>${minimo}</div><div class="mp-calc__box"><span>Lote econômico sugerido</span>${lote}</div>${os}${conf}</div>`;
     }
 
     function reservasHtml(item) {
@@ -264,15 +412,15 @@
             <span>Reservado: <strong>${fmt(item.saldo_reservado)} ${unidade}</strong></span>
             <span>Total: <strong>${fmt(item.saldo_total)} ${unidade}</strong></span>
             <span>Consumo médio/dia: <strong>${fmt(item.consumo_diario)} ${unidade}</strong></span>
-            <span>Saída no período: <strong>${fmt(item.saida_total_periodo)} ${unidade}</strong></span>
-            <span>Maior saída: <strong>${item.maior_saida ? `${fmt(item.maior_saida)} ${unidade}${item.maior_saida_data ? ' em ' + dataBr(item.maior_saida_data) : ''}` : '-'}</strong></span>
+            <span>Saída em ${janelaDias} dias: <strong>${fmt(item.saida_total_periodo)} ${unidade}</strong></span>
+            <span>Maior saída em ${janelaDias} dias: <strong>${item.maior_saida ? `${fmt(item.maior_saida)} ${unidade}${item.maior_saida_data ? ' em ' + dataBr(item.maior_saida_data) : ''}` : '-'}</strong></span>
             <span>Estoque mínimo: <strong>${fmt(item.estoque_minimo)} ${unidade}</strong></span>
             <span>Lote econômico: <strong>${fmt(item.lote_economico)} ${unidade}</strong></span>
         </div>`;
     }
 
     function ordensCompraHtml(item) {
-        if (!['materia_prima', 'revenda'].includes(visaoAtual)) return '';
+        if (!['materia_prima', 'revenda', 'insumos'].includes(visaoAtual)) return '';
         const ordens = item.ordens_compra_abertas || [];
         if (item.nivel !== 'critico' && !ordens.length) return '';
         if (!ordens.length) {
@@ -285,8 +433,8 @@
     function detailRow(item) {
         if (!expanded.has(item.codigo)) return '';
         const reservas = `<div class="mp-reserva-resumo"><i class="fas fa-lock"></i> Quantidade reservada: <strong>${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</strong></div><strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
-        const colspan = visaoAtual === 'produto_acabado' ? 6 : 5;
-        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${ordensCompraHtml(item)}${reservas}</td></tr>`;
+        const colspan = 5 + (visaoAtual === 'produto_acabado' ? 1 : 0) + (planejamentoAtivo ? 1 : 0);
+        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${calculoHtml(item)}${ordensCompraHtml(item)}${reservas}</td></tr>`;
     }
 
     function render(data) {
@@ -294,15 +442,28 @@
         janelaDias = Number(data.janela_consumo_dias || 90);
         diasAtencao = Number(data.dias_atencao || 15);
         const diasCritico = Number(data.dias_critico || 7);
-        $('mp-janela').textContent = janelaDias;
-        $('mp-legenda').textContent = `Crítico ≤ ${diasCritico} dias · Monitorar ≤ ${diasAtencao} dias`;
+        planejamentoAtivo = !!data.planejamento_ativo;
+        parametros = data.parametros_planejamento || parametros;
+        $('mp-param-open').style.display = data.pode_editar_parametros ? '' : 'none';
+        $('mp-plan-aviso').style.display = data.planejamento_indisponivel ? '' : 'none';
+        $('mp-th-sugestao').style.display = planejamentoAtivo ? '' : 'none';
+        $('mp-th-consumo').textContent = planejamentoAtivo ? 'Consumo' : 'Consumo/dia';
+        if (planejamentoAtivo) {
+            $('mp-metodo').textContent = 'Saldos do depósito 1 no GRV. Consumo, mínimo e lote sugeridos pelo histórico do kardex desde 2019 (últimos 12 meses fechados), com lead time medido de cada OC até a entrada.';
+            $('mp-legenda').textContent = `Crítico: acaba antes do lead time · Monitorar: abaixo do mínimo sugerido · ${resumo.esporadicos || 0} de demanda esporádica`;
+            $('mp-k-criticos-hint').textContent = 'Acabam antes da reposição chegar';
+            $('mp-k-atencao-hint').textContent = 'Abaixo do mínimo sugerido';
+        } else {
+            $('mp-metodo').innerHTML = `Saldos do depósito 1 no GRV. Cobertura = saldo disponível ÷ consumo médio diário dos últimos <span id="mp-janela">${janelaDias}</span> dias.`;
+            $('mp-legenda').textContent = `Crítico ≤ ${diasCritico} dias · Monitorar ≤ ${diasAtencao} dias`;
+            $('mp-k-criticos-hint').textContent = `Até ${diasCritico} dias de cobertura`;
+            $('mp-k-atencao-hint').textContent = `Até ${diasAtencao} dias de cobertura`;
+        }
         $('mp-k-itens').textContent = resumo.itens || 0;
         const total = Number(resumo.total_filtrado || 0);
         $('mp-k-itens-hint').textContent = total > Number(resumo.itens || 0) ? `de ${total} encontrados` : '';
         $('mp-k-criticos').textContent = resumo.criticos || 0;
-        $('mp-k-criticos-hint').textContent = `Até ${diasCritico} dias de cobertura`;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
-        $('mp-k-atencao-hint').textContent = `Até ${diasAtencao} dias de cobertura`;
         $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
 
         const items = data.items || [];
@@ -327,6 +488,7 @@
                 <td class="mp-right">${saldoCell(item)}</td>
                 <td class="mp-right">${consumoCell(item)}</td>
                 <td>${cobertura(item)}</td>
+                ${planejamentoAtivo ? `<td>${sugestaoCell(item)}</td>` : ''}
                 <td><div class="mp-nivel-cell">${badge(item)}${ocInline(item)}</div></td>
                 ${expandCell(item)}
             </tr>
@@ -398,6 +560,50 @@
             carregar(false);
         });
     });
+    // Parâmetros do planejamento: o botão só aparece pra Admin e a rota confere de novo.
+    const CAMPOS_PARAM = { 'mp-p-custo': 'custo_pedido', 'mp-p-taxa': 'taxa_manutencao_pct', 'mp-p-a': 'nivel_servico_a_pct', 'mp-p-b': 'nivel_servico_b_pct', 'mp-p-c': 'nivel_servico_c_pct', 'mp-p-lt': 'lead_time_padrao_dias' };
+    async function abrirParametros() {
+        $('mp-param-erro').textContent = '';
+        try {
+            const resp = await fetch('/api/logistica/estoque/planejamento/parametros');
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar os parâmetros.');
+            parametros = data.parametros;
+        } catch (err) {
+            $('mp-param-erro').textContent = err.message;
+        }
+        const pr = parametros || {};
+        Object.entries(CAMPOS_PARAM).forEach(([id, campo]) => { $(id).value = pr[campo] ?? ''; });
+        $('mp-param-meta').textContent = pr.atualizado_por
+            ? `Alterado por ${pr.atualizado_por} em ${new Date(pr.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
+            : 'Valores padrão (ainda não alterados). O custo do pedido é provisório.';
+        $('mp-param-dialog').showModal();
+    }
+    $('mp-param-open').addEventListener('click', abrirParametros);
+    $('mp-param-close').addEventListener('click', () => $('mp-param-dialog').close());
+    $('mp-param-cancel').addEventListener('click', () => $('mp-param-dialog').close());
+    $('mp-param-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const corpo = {};
+        Object.entries(CAMPOS_PARAM).forEach(([id, campo]) => { corpo[campo] = $(id).value; });
+        $('mp-param-save').disabled = true;
+        $('mp-param-erro').textContent = '';
+        try {
+            const resp = await fetch('/api/logistica/estoque/planejamento/parametros', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar.');
+            parametros = data.parametros;
+            $('mp-param-dialog').close();
+            carregar(false);
+        } catch (err) {
+            $('mp-param-erro').textContent = err.message;
+        } finally {
+            $('mp-param-save').disabled = false;
+        }
+    });
+
     // Recalcula a cobertura automaticamente: a cada 5 min com a aba visivel e
     // ao voltar pra aba (cobre a tela deixada aberta por dias com numero congelado).
     setInterval(() => { if (!document.hidden) carregar(false, true); }, 300000);

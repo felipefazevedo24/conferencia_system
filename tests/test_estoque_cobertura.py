@@ -18,10 +18,12 @@ def _consultar(tmp_path, itens, consumos, ordens=None, query=""):
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
+    # Estes testes cobrem o calculo de 90 dias: bridge sem o planejamento.
     with patch.object(routes, "buscar_estoque_grv", return_value=_estoque(itens)), \
          patch.object(routes, "buscar_consumo_kardex_grv", return_value={"por_codigo": consumos, "janela_dias": 30}), \
          patch.object(routes, "buscar_reservas_produto_acabado_grv", return_value={}), \
-         patch.object(routes, "buscar_ordens_compra_abertas_grv", return_value=ordens or {}):
+         patch.object(routes, "buscar_ordens_compra_abertas_grv", return_value=ordens or {}), \
+         patch.object(routes, "buscar_planejamento_grv", side_effect=RuntimeError("bridge antiga")):
         resp = client.get("/api/logistica/estoque?visao=materia_prima" + query)
     assert resp.status_code == 200
     return resp.get_json()

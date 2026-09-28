@@ -139,7 +139,11 @@
     .ch-kx-tot { display: flex; gap: 18px; flex-wrap: wrap; justify-content: flex-end; font-size: 12.5px; color: var(--eui-text-soft); }
     .ch-kx-tot b { color: var(--eui-text); }
 
-    @media (max-width: 900px) {
+    /* A troca tabela → cards olha a largura do CONTEÚDO, não da tela: no tablet
+       deitado (1024px) o menu lateral come ~300px e a tabela cortava justamente
+       as colunas Reservado e Disponível. */
+    .ch-wrap { container-type: inline-size; }
+    @container (max-width: 900px) {
         .ch-thead { display: none; }
         .ch-cols { grid-template-columns: repeat(3, 1fr); }
         .ch-cols > .ch-item { grid-column: 1 / -1; }
@@ -151,12 +155,32 @@
         .ch-mov { grid-template-columns: repeat(2, 1fr); }
         .ch-mov > div + div { border-left: 0; }
         .ch-mov > div { border-top: 1px solid var(--eui-border); }
+        /* 5 blocos em 2 colunas: o Disponível (o que importa) fecha a linha inteira em vez de sobrar pela metade. */
+        .ch-mov > .ch-mov--disp { grid-column: 1 / -1; }
         .ch-lote__acts { justify-content: flex-start; }
         .ch-menu { left: 0; right: auto; }
+    }
+    @container (max-width: 600px) {
+        /* KPIs em 2×2 e compactos: empilhados, os 4 ocupavam a tela inteira do celular antes da primeira chapa. */
+        .ch-wrap > .eui-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .ch-wrap .eui-stat { padding: 10px 12px; gap: 10px; }
+        .ch-wrap .eui-stat__icon { width: 32px; height: 32px; font-size: 13px; }
+        .ch-wrap .eui-stat__label { font-size: 10px; }
+        .ch-wrap .eui-stat__value { font-size: 19px; }
+        .ch-tabs { display: flex; width: 100%; }
+        .ch-tab { flex: 1; padding: 10px 8px; }
+        .ch-search { min-width: 100%; }
+        /* Os dois botões dividem a linha; antes o "Atualizado às..." saía cortado pela direita. */
+        .ch-actions { margin-left: 0; width: 100%; }
+        .ch-actions .eui-btn { flex: 1 1 0; min-width: 0; justify-content: center; white-space: normal; font-size: 12px; padding-left: 8px; padding-right: 8px; gap: 6px; }
+        .ch-desc { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .ch-row__main { padding: 12px; }
+        .ch-row__body { padding: 4px 10px 12px; }
+    }
+    @media (max-width: 900px) {
         .ch-audit-entry { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
-        .ch-actions { margin-left: 0; }
         .ch-grid2, .ch-result { grid-template-columns: 1fr; }
     }
 </style>

@@ -43,12 +43,14 @@ from ..services.erp_estoque_service import (
     buscar_consumo_kardex_grv,
     buscar_estoque_grv,
     buscar_ordens_compra_abertas_grv,
+    buscar_planejamento_grv,
     buscar_reservas_produto_acabado_grv,
     cadastro_para,
     custo_medio_para,
     qtde_grv_para,
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
+from ..services import estoque_planejamento_service as planejamento_svc
 from ..tempo import agora_br
 
 
@@ -71,7 +73,11 @@ ESTOQUE_VISOES = {
     "materia_prima": {"label": "Matéria-prima", "familia": "N - 01 - MATÉRIA-PRIMA"},
     "revenda": {"label": "Material para revenda", "familia": "N - 00 - MERCADORIA PARA REVENDA"},
     "produto_acabado": {"label": "Produto acabado", "familia": "N - 04 - PRODUTOS"},
+    "insumos": {"label": "Insumos da produção", "familia": "N - 06 - INSUMOS DA PRODUÇÃO"},
 }
+# Visoes de material comprado e consumido: tem planejamento (minimo/lote) e OC.
+# Produto acabado fica de fora - e' fabricado, nao comprado.
+VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos"}
 
 
 def _normalizar_busca(texto: str | None) -> str:
@@ -330,9 +336,16 @@ def estoque_materia_prima_api():
     estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
     familia_alvo = _normalizar_busca(visao_cfg["familia"])
     candidatos = []
+    # Familia inteira, antes da busca e do filtro de saldo: a curva ABC do
+    # planejamento e' relativa ao conjunto e nao pode mudar a cada busca.
+    familia_itens = {}
     for codigo, item in (estoque.get("por_codigo") or {}).items():
         if _normalizar_busca(item.get("familia")) != familia_alvo:
             continue
+        familia_itens[re.sub(r"[^A-Z0-9]", "", codigo.upper())] = {
+            "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
+            "custo_medio": item.get("custo_medio"),
+        }
         saldo_total = float(item.get("qtde_total") or 0)
         saldo_disponivel = float(item.get("qtde_disponivel") or 0)
         saldo_reservado = float(item.get("qtde_reservada") or 0)
@@ -411,7 +424,31 @@ def estoque_materia_prima_api():
             for reserva in reservas[:20]
         ]
 
-    if visao in {"materia_prima", "revenda"}:
+    # Planejamento (historico desde 2019): quando responde, substitui a
+    # cobertura pela media de 90 dias, que marcava item esporadico como
+    # critico. Bridge antiga ou fora do ar: a tela segue no calculo de 90 dias.
+    planejamento_ativo = False
+    parametros_planejamento = None
+    if visao in VISOES_PLANEJAMENTO and familia_itens:
+        try:
+            historicos = buscar_planejamento_grv(codigos=list(familia_itens))
+            parametros_planejamento = planejamento_svc.obter_parametros()
+            planejamento = planejamento_svc.calcular_planejamento(familia_itens, historicos, parametros_planejamento)
+            planejamento_ativo = True
+        except Exception:
+            current_app.logger.warning("Nao foi possivel calcular o planejamento de estoque.", exc_info=True)
+            planejamento = {}
+        for row in rows:
+            plano = planejamento.get(re.sub(r"[^A-Z0-9]", "", row["codigo"].upper()))
+            if not plano:
+                continue
+            row["planejamento"] = plano
+            row["consumo_diario"] = plano["consumo_diario"]
+            row["cobertura_dias"] = plano["cobertura_dias"]
+            row["nivel"] = plano["nivel"]
+            row["nivel_label"] = plano["nivel_label"]
+
+    if visao in VISOES_PLANEJAMENTO:
         # Todo item com consumo, nao so critico/atencao: a cobertura projetada
         # com OC precisa valer pra lista inteira.
         codigos_reposicao = [row["codigo"] for row in rows if row["consumo_diario"] > 0]
@@ -429,7 +466,8 @@ def estoque_materia_prima_api():
         row["quantidade_pendente_oc"] = pendente_oc
         row["cobertura_projetada_dias"] = (
             int(math.floor((float(row["saldo_disponivel"] or 0) + pendente_oc) / row["consumo_diario"]))
-            if pendente_oc > 0 and row["consumo_diario"] > 0 else None
+            # Item esporadico nao tem cobertura em dias; com OC tambem nao.
+            if pendente_oc > 0 and row["consumo_diario"] > 0 and row["cobertura_dias"] is not None else None
         )
 
     if nivel_filtro:
@@ -437,7 +475,7 @@ def estoque_materia_prima_api():
     if somente_estoque_minimo:
         rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
 
-    prioridade_nivel = {"critico": 0, "atencao": 1, "sem_consumo": 2, "sem_estoque": 3, "normal": 4}
+    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5}
     rows.sort(key=lambda row: (
         0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
         prioridade_nivel.get(str(row.get("nivel") or ""), 9),
@@ -454,6 +492,7 @@ def estoque_materia_prima_api():
         "criticos_sem_oc": sum(1 for row in rows if row.get("nivel") == "critico" and not row.get("ordens_compra_abertas")),
         "atencao": sum(1 for row in rows if row.get("nivel") == "atencao"),
         "sem_consumo": sum(1 for row in rows if row.get("nivel") == "sem_consumo"),
+        "esporadicos": sum(1 for row in rows if row.get("nivel") == "esporadico"),
         "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
     }
@@ -469,7 +508,32 @@ def estoque_materia_prima_api():
         "janela_consumo_dias": janela_consumo_dias,
         "dias_critico": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7)),
         "dias_atencao": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15)),
+        "planejamento_ativo": planejamento_ativo,
+        # Aviso na tela quando a visao tem planejamento mas a bridge nao respondeu.
+        "planejamento_indisponivel": visao in VISOES_PLANEJAMENTO and bool(familia_itens) and not planejamento_ativo,
+        "parametros_planejamento": parametros_planejamento,
+        "pode_editar_parametros": is_admin_session(),
     })
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["GET"])
+@permission_required(PERMISSION)
+def estoque_planejamento_parametros():
+    return jsonify({"parametros": planejamento_svc.obter_parametros(), "pode_editar": is_admin_session()})
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["PUT"])
+@permission_required(PERMISSION)
+def estoque_planejamento_parametros_salvar():
+    # Custo do pedido e niveis de servico mudam a sugestao de compra de todo
+    # mundo: so' Admin mexe (pedido da logistica em 28/09/2026).
+    if not is_admin_session():
+        return jsonify({"error": "Apenas administradores podem alterar os parâmetros do planejamento."}), 403
+    try:
+        parametros = planejamento_svc.salvar_parametros(request.get_json(silent=True) or {}, session.get("username") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"sucesso": True, "parametros": parametros})
 
 
 @logistica_inventario_bp.route("/logistica/inventario-inicial")
