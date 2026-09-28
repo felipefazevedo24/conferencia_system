@@ -24,6 +24,10 @@ _CACHE: dict[str, Any] = {"dados": None, "expira_em": 0.0}
 _CACHE_TTL_SEGUNDOS = 300
 _KARDEX_CACHE: dict[str, Any] = {"dados": {}, "expira_em": 0.0}
 _KARDEX_CACHE_TTL_SEGUNDOS = 900
+# Historico mensal desde 2019: muda devagar e a consulta e' pesada. Uma vez
+# por dia basta (o "Atualizar" da tela nao forca esta).
+_PLANEJAMENTO_CACHE: dict[str, Any] = {}
+_PLANEJAMENTO_CACHE_TTL_SEGUNDOS = 12 * 3600
 
 
 def _bridge_config() -> dict[str, Any]:
@@ -260,6 +264,48 @@ def buscar_consumo_kardex_grv(
     _KARDEX_CACHE["dados"] = dados_cache
     _KARDEX_CACHE["expira_em"] = agora + _KARDEX_CACHE_TTL_SEGUNDOS
     return resultado
+
+
+def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, dict[str, Any]]:
+    """Historico por codigo pro planejamento (serie mensal de consumo, tamanho
+    das retiradas, lead times OC -> entrada, custo). Chave = codigo sem
+    pontuacao, igual ao kardex. Levanta excecao se a bridge nao responder -
+    quem chama decide o fallback."""
+    codigos_norm = sorted({
+        re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper()) for codigo in codigos or []
+    } - {""})
+    if not codigos_norm:
+        return {}
+
+    cache_key = f"{empresa}:{'|'.join(codigos_norm)}"
+    agora = time.monotonic()
+    em_cache = _PLANEJAMENTO_CACHE.get(cache_key)
+    if em_cache and agora < em_cache["expira_em"]:
+        return em_cache["dados"]
+
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar planejamento no GRV.")
+
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/planejamento",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigos": codigos_norm},
+        # A consulta desde 2019 leva ~5 s no GRV; o timeout padrao da bridge e' curto pra ela.
+        timeout=max(float(cfg["timeout"] or 0), 60.0),
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de planejamento."))
+
+    dados = data.get("itens") or {}
+    # A rota sempre pede a familia inteira (1 chave por visao); o limite so'
+    # evita acumular memoria se um dia vier outra combinacao de codigos.
+    if len(_PLANEJAMENTO_CACHE) > 4:
+        _PLANEJAMENTO_CACHE.clear()
+    _PLANEJAMENTO_CACHE[cache_key] = {"dados": dados, "expira_em": agora + _PLANEJAMENTO_CACHE_TTL_SEGUNDOS}
+    return dados
 
 
 def buscar_reservas_produto_acabado_grv(
