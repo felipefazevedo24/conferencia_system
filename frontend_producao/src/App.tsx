@@ -79,14 +79,6 @@ export default function App() {
     retry: 1
   });
 
-  const cpm = useQuery({
-    queryKey: ["cpm-budget", dependencies.data?.budget_number],
-    queryFn: ({ signal }) => api.getCpmBudget(String(dependencies.data!.budget_number), signal),
-    enabled: Boolean(dependencies.data?.budget_number),
-    staleTime: 20_000,
-    retry: 1
-  });
-
   const nodesById = useMemo(
     () => indexNodes(structure.data?.nodes ?? []),
     [structure.data?.nodes]
@@ -297,7 +289,6 @@ export default function App() {
               onViewChange={setMapView}
               showAllDependencies={showAllDependencies}
               onShowAllDependenciesChange={setShowAllDependencies}
-              cpmActivities={cpm.data?.activities ?? []}
             />
             <div className="map-sequence-divider">
               <button
@@ -342,7 +333,6 @@ export default function App() {
             orderNumber={selectedOrder}
             selectedNode={selectedNode}
             onLocate={selectNode}
-            cpmActivities={cpm.data?.activities ?? []}
           />
         </main>
       )}

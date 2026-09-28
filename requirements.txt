@@ -18,4 +18,3 @@ beautifulsoup4
 pymupdf
 Pillow
 pandas
-tzdata

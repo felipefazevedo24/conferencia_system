@@ -15,7 +15,6 @@ import { Box } from "lucide-react";
 import { memo, useEffect, useMemo } from "react";
 
 import { formatQuantity } from "../lib/format";
-import type { CpmActivity } from "../lib/api";
 import { visibleNodeIds } from "../lib/tree";
 import type { AssemblyNode, OrderDependencyMap as DependencyMap } from "../types";
 import { OrderDependencyMap } from "./OrderDependencyMap";
@@ -35,14 +34,12 @@ interface AssemblyMapProps {
   onViewChange: (view: "structure" | "dependencies") => void;
   showAllDependencies: boolean;
   onShowAllDependenciesChange: (showAll: boolean) => void;
-  cpmActivities: CpmActivity[];
 }
 
 type AssemblyCardData = {
   item: AssemblyNode;
   selected: boolean;
   onSelect: (node: AssemblyNode) => void;
-  cpm: CpmActivity[];
 };
 
 type AssemblyFlowNode = Node<AssemblyCardData, "assembly">;
@@ -50,9 +47,7 @@ type AssemblyFlowNode = Node<AssemblyCardData, "assembly">;
 const AssemblyCard = memo(function AssemblyCard({
   data
 }: NodeProps<AssemblyFlowNode>) {
-  const { item, selected, onSelect, cpm } = data;
-  const critical = cpm.find((activity) => activity.is_critical && !activity.completed);
-  const totalFloat = cpm.length ? Math.min(...cpm.map((activity) => activity.total_float_minutes)) : null;
+  const { item, selected, onSelect } = data;
   return (
     <button
       type="button"
@@ -85,12 +80,6 @@ const AssemblyCard = memo(function AssemblyCard({
         <small>Qtde: {formatQuantity(item.quantity)}</small>
         <StatusBadge state={item.state} reason={item.state_reason} />
       </div>
-      {cpm.length > 0 && (
-        <div className={`node-cpm${critical ? " critical" : ""}`}>
-          <strong>{critical ? "CRÍTICO" : cpm[0].status.replaceAll("_", " ")}</strong>
-          <span>Folga {formatCpmMinutes(totalFloat)}</span>
-        </div>
-      )}
       <Handle type="source" position={Position.Bottom} />
     </button>
   );
@@ -124,23 +113,11 @@ export function AssemblyMap({
   view,
   onViewChange,
   showAllDependencies,
-  onShowAllDependenciesChange,
-  cpmActivities
+  onShowAllDependenciesChange
 }: AssemblyMapProps) {
-  const cpmByComponent = useMemo(() => {
-    const index = new Map<string, CpmActivity[]>();
-    for (const activity of cpmActivities) {
-      const code = activity.metadata.component_code;
-      if (!code) continue;
-      const current = index.get(code) ?? [];
-      current.push(activity);
-      index.set(code, current);
-    }
-    return index;
-  }, [cpmActivities]);
   const layout = useMemo(
-    () => layoutGraph(nodes, expanded, onSelect, cpmByComponent),
-    [cpmByComponent, expanded, nodes, onSelect]
+    () => layoutGraph(nodes, expanded, onSelect),
+    [expanded, nodes, onSelect]
   );
   const flowNodes = useMemo(
     () => layout.flowNodes.map((node) => ({
@@ -214,8 +191,7 @@ export function AssemblyMap({
 function layoutGraph(
   items: AssemblyNode[],
   expanded: ReadonlySet<string>,
-  onSelect: (node: AssemblyNode) => void,
-  cpmByComponent: ReadonlyMap<string, CpmActivity[]>
+  onSelect: (node: AssemblyNode) => void
 ): { flowNodes: AssemblyFlowNode[]; edges: Edge[] } {
   const visible = visibleNodeIds(items, expanded);
   const visibleItems = items.filter((item) => visible.has(item.id));
@@ -228,7 +204,7 @@ function layoutGraph(
     marginx: 24,
     marginy: 24
   });
-  for (const item of visibleItems) graph.setNode(item.id, { width: 218, height: 158 });
+  for (const item of visibleItems) graph.setNode(item.id, { width: 218, height: 138 });
   const edges: Edge[] = [];
   for (const item of visibleItems) {
     if (item.parent_id && visible.has(item.parent_id)) {
@@ -250,21 +226,14 @@ function layoutGraph(
       type: "assembly",
       position: {
         x: position.x - 109,
-        y: position.y - 79
+        y: position.y - 69
       },
       data: {
         item,
         selected: false,
-        onSelect,
-        cpm: cpmByComponent.get(item.code) ?? []
+        onSelect
       }
     };
   });
   return { flowNodes, edges };
-}
-
-function formatCpmMinutes(value: number | null) {
-  if (value === null) return "—";
-  const absolute = Math.abs(value);
-  return `${value < 0 ? "-" : ""}${Math.floor(absolute / 60)}h${absolute % 60 ? ` ${absolute % 60}min` : ""}`;
 }
