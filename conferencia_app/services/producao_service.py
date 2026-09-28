@@ -1514,12 +1514,8 @@ def _operacao_payload(row: dict[str, Any]) -> dict[str, Any]:
         "finalizada": bool(row.get("finalizado") or row.get("concluido") or row.get("dt_finalizacao")),
         "travada": bool(row.get("processo_travado")),
         "inicio": _iso(row.get("data_inicio")),
-        "inicio_previsto": _iso(row.get("dt_incio_previsto")),
-        "fim_previsto": _iso(row.get("dt_termino_previsto")),
         "fim": _iso(row.get("dt_finalizacao")),
         "maquina": _texto(row.get("maquina_real") or row.get("maquina")),
-        "horas_realizadas": row.get("hs_realizadas") or 0,
-        "duracao_prevista_horas": row.get("duracao_prevista_horas"),
     }
 
 

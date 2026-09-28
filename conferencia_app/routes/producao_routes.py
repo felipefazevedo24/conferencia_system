@@ -8,8 +8,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from ..auth import permission_required
 from ..extensions import db
 from ..models import ProducaoObservacao, ProducaoSequencia
-from ..services import producao_service, production_cpm_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
-from ..services.cpm_service import CircularDependencyError, CpmError
+from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
 from ..tempo import agora_br
 
 producao_bp = Blueprint("producao", __name__)
@@ -311,62 +310,6 @@ def cronograma_classificacoes():
         return jsonify({"error": "Não foi possível consultar as classificações no GRV."}), 503
 
 
-def _cpm_error(exc: Exception):
-    if isinstance(exc, LookupError):
-        return jsonify({"detail": str(exc)}), 404
-    if isinstance(exc, CircularDependencyError):
-        current_app.logger.error("Dependencia circular no CPM da producao: %s", exc)
-        return jsonify({"detail": str(exc), "code": "circular_dependency"}), 422
-    if isinstance(exc, CpmError):
-        return jsonify({"detail": str(exc), "code": "invalid_cpm_data"}), 400
-    current_app.logger.exception("Falha no calculo CPM da producao")
-    return jsonify({"detail": "Nao foi possivel calcular o CPM com os dados do GRV."}), 503
-
-
-@producao_bp.get("/api/v1/orders/<path:numero_os>/cpm")
-@permission_required("PAGE_PRODUCAO")
-def cpm_order(numero_os: str):
-    try:
-        return jsonify(production_cpm_service.calculate_order(numero_os))
-    except Exception as exc:
-        return _cpm_error(exc)
-
-
-@producao_bp.get("/api/v1/orders/<path:numero_os>/items/<int:aux_code>/cpm")
-@permission_required("PAGE_PRODUCAO")
-def cpm_component(numero_os: str, aux_code: int):
-    try:
-        return jsonify(production_cpm_service.component_payload(numero_os, aux_code))
-    except Exception as exc:
-        return _cpm_error(exc)
-
-
-@producao_bp.get("/api/v1/orders/<path:numero_os>/cpm/processes/<path:activity_id>")
-@permission_required("PAGE_PRODUCAO")
-def cpm_process(numero_os: str, activity_id: str):
-    try:
-        return jsonify(production_cpm_service.process_payload(numero_os, activity_id))
-    except Exception as exc:
-        return _cpm_error(exc)
-
-
-@producao_bp.post("/api/v1/orders/<path:numero_os>/cpm/simulate")
-@permission_required("PAGE_PRODUCAO")
-def cpm_simulate(numero_os: str):
-    body = request.get_json(silent=True) or {}
-    activity_id = str(body.get("activity_id") or "").strip()
-    try:
-        delay_minutes = int(body.get("delay_minutes"))
-    except (TypeError, ValueError):
-        delay_minutes = -1
-    if not activity_id or delay_minutes < 0 or delay_minutes > 90 * 24 * 60:
-        return jsonify({"detail": "Informe activity_id e delay_minutes valido."}), 400
-    try:
-        return jsonify(production_cpm_service.simulate_order(numero_os, activity_id, delay_minutes))
-    except Exception as exc:
-        return _cpm_error(exc)
-
-
 @producao_bp.get("/api/producao/os/<path:numero_os>")
 @permission_required("PAGE_PRODUCAO")
 def estrutura_os(numero_os: str):
@@ -525,7 +468,7 @@ def original_item(numero_os: str, aux_code: int):
     if not node:
         return jsonify({"detail": "Item nao encontrado"}), 404
     original = _original_node(node, data["nos"], numero_os)
-    operations = [{"code": op.get("codigo"), "name": op.get("nome"), "sequence": op.get("sequencia"), "finalized": op.get("finalizada"), "locked": op.get("travada"), "started_at": op.get("inicio"), "planned_start": op.get("inicio_previsto"), "planned_end": op.get("fim_previsto"), "finished_at": op.get("fim"), "machine": op.get("maquina"), "first_report_at": None, "last_report_at": None} for op in node.get("operacoes", [])]
+    operations = [{"code": op.get("codigo"), "name": op.get("nome"), "sequence": op.get("sequencia"), "finalized": op.get("finalizada"), "locked": op.get("travada"), "started_at": op.get("inicio"), "planned_start": None, "planned_end": None, "finished_at": op.get("fim"), "machine": op.get("maquina"), "first_report_at": None, "last_report_at": None} for op in node.get("operacoes", [])]
     try:
         documents = producao_service.obter_documentos(
             numero_os,

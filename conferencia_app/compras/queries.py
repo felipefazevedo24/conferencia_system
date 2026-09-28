@@ -433,10 +433,6 @@ SELECT process.cod_os_aux, process.codigo, process.tiposervico,
              process.dt_finalizacao, process.hs_realizadas,
              process.maquina, process.pcp_dt_primeiro_apont,
              process.pcp_dt_ultimo_apont,
-             COALESCE(NULLIF(to_jsonb(process)->>'hs_previstas', ''),
-                      NULLIF(to_jsonb(process)->>'hs_prevista', ''),
-                      NULLIF(to_jsonb(process)->>'tempo_previsto', ''),
-                      NULLIF(to_jsonb(process)->>'horas_previstas', '')) AS duracao_prevista_horas,
              COALESCE(reported_machines.machine, NULLIF(btrim(process.maquina), '')) AS maquina_real
 FROM public.tpro_pro process
 LEFT JOIN reported_machines
@@ -462,67 +458,6 @@ WHERE material.cod_empresa = %(cod_empresa)s
     AND material.cod_os = %(cod_os)s
     AND material.cod_os_aux = %(cod_os_aux)s
 ORDER BY material.cod_interno, material.produto, material.guid_linha
-"""
-
-# Compras da OS em uma unica leitura. A linha permanece vinculada ao item para
-# que um mesmo pedido tenha criticidade calculada por componente/necessidade.
-SQL_PRODUCAO_CPM_COMPRAS_OS = """
-WITH purchase_ref AS (
-    SELECT DISTINCT ON (purchase.cod_empresa, purchase.cod_ordem_compra)
-           purchase.cod_empresa, purchase.cod_ordem_compra,
-           purchase.dt_recebimento, purchase.fornecedor,
-           COALESCE(to_jsonb(purchase)->>'dt_previsao_entrega',
-                    to_jsonb(purchase)->>'dt_previsao',
-                    to_jsonb(purchase)->>'dt_prometida',
-                    to_jsonb(purchase)->>'previsao_entrega') AS promised_raw
-    FROM public.tcompras purchase
-    WHERE purchase.cod_empresa = %(cod_empresa)s
-    ORDER BY purchase.cod_empresa, purchase.cod_ordem_compra,
-             COALESCE(purchase.dt_lancamento, purchase.dt_recebimento) DESC NULLS LAST,
-             purchase.codigo DESC
-)
-SELECT link.cod_os_aux, link.cod_ord_compra AS pedido,
-       link.cod_solicitacao AS solicitacao, link.cod_produto,
-       product.codigo_interno AS material_codigo,
-       COALESCE(product.nome, material.produto) AS material_descricao,
-       COALESCE(link.qtde, 0) - COALESCE(link.qtde_devolucao, 0) AS quantidade,
-       material.unidade, purchase.fornecedor, purchase.dt_recebimento,
-       CASE WHEN COALESCE(purchase.promised_raw, '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-            THEN SUBSTRING(purchase.promised_raw FROM 1 FOR 10)::date END AS data_prometida
-FROM public.tcom_aux_os link
-LEFT JOIN public.tlis_mat material
-  ON material.cod_empresa = link.cod_empresa AND material.cod_os = link.cod_os
- AND material.cod_os_aux = link.cod_os_aux AND material.cod_produto = link.cod_produto
-LEFT JOIN public.tproduto product
-  ON product.cod_empresa = link.cod_empresa AND product.codigo = link.cod_produto
-LEFT JOIN purchase_ref purchase
-  ON purchase.cod_empresa = link.cod_empresa
- AND purchase.cod_ordem_compra = link.cod_ord_compra
-WHERE link.cod_empresa = %(cod_empresa)s AND link.cod_os = %(cod_os)s
-  AND COALESCE(link.cancelado, 0) = 0
-  AND (COALESCE(link.cod_ord_compra, 0) <> 0 OR COALESCE(link.cod_solicitacao, 0) <> 0)
-ORDER BY link.cod_ord_compra NULLS LAST, link.cod_solicitacao NULLS LAST,
-         link.cod_os_aux, link.cod_produto
-"""
-
-
-# Fila atual agregada apenas para os recursos usados pela OS selecionada.
-SQL_PRODUCAO_CPM_FILAS_OS = """
-WITH resources AS (
-    SELECT DISTINCT NULLIF(BTRIM(maquina), '') AS recurso
-    FROM public.tpro_pro
-    WHERE cod_empresa = %(cod_empresa)s AND cod_os = %(cod_os)s
-), pending AS (
-    SELECT NULLIF(BTRIM(process.maquina), '') AS recurso,
-           COUNT(*) FILTER (WHERE COALESCE(process.finalizado::int, 0) = 0
-                              AND COALESCE(process.concluido::int, 0) = 0
-                              AND process.dt_finalizacao IS NULL) AS fila
-    FROM public.tpro_pro process
-    JOIN resources ON resources.recurso = NULLIF(BTRIM(process.maquina), '')
-    WHERE process.cod_empresa = %(cod_empresa)s
-    GROUP BY NULLIF(BTRIM(process.maquina), '')
-)
-SELECT recurso, fila FROM pending WHERE recurso IS NOT NULL
 """
 
 SQL_PRODUCAO_APONTAMENTOS_ITEM = """

@@ -11,7 +11,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssemblyMap } from "./components/AssemblyMap";
-import { CpmPanel } from "./components/CpmPanel";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { DeliveryExplosion, type DeliveryExplosionRequest } from "./components/DeliveryExplosion";
 import { Header } from "./components/Header";
@@ -61,8 +60,6 @@ export default function App() {
   const [navigationDepth, setNavigationDepth] = useState(currentNavigationDepth);
   const [mapView, setMapView] = useState<"structure" | "dependencies">(currentMapView);
   const [showAllDependencies, setShowAllDependencies] = useState(currentDependencyScope);
-  const [showCriticalPath, setShowCriticalPath] = useState(false);
-  const [selectedCpmActivityId, setSelectedCpmActivityId] = useState<string | null>(null);
   const [deliveryExplosion, setDeliveryExplosion] = useState<DeliveryExplosionRequest | null>(null);
   const loadedStructureOrder = useRef<string | null>(null);
 
@@ -79,15 +76,6 @@ export default function App() {
     queryFn: ({ signal }) => api.getOrderDependencies(selectedOrder, signal),
     enabled: Boolean(selectedOrder),
     staleTime: 20_000,
-    retry: 1
-  });
-
-  const cpm = useQuery({
-    queryKey: ["cpm-order", selectedOrder],
-    queryFn: ({ signal }) => api.getCpmOrder(selectedOrder, signal),
-    enabled: Boolean(selectedOrder),
-    staleTime: 15_000,
-    refetchInterval: 30_000,
     retry: 1
   });
 
@@ -202,7 +190,6 @@ export default function App() {
   const selectNode = useCallback((node: AssemblyNode) => {
     setRequestedItemCode(null);
     setSelectedId(node.id);
-    setSelectedCpmActivityId(null);
     setExpanded((current) => expandPath(current, node));
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
@@ -302,9 +289,6 @@ export default function App() {
               onViewChange={setMapView}
               showAllDependencies={showAllDependencies}
               onShowAllDependenciesChange={setShowAllDependencies}
-              cpmActivities={cpm.data?.activities ?? []}
-              showCriticalPath={showCriticalPath}
-              onShowCriticalPathChange={setShowCriticalPath}
             />
             <div className="map-sequence-divider">
               <button
@@ -329,9 +313,6 @@ export default function App() {
             <SequencePanel
               orderNumber={selectedOrder}
               selectedNode={selectedNode}
-              cpmActivities={cpm.data?.activities ?? []}
-              selectedCpmActivityId={selectedCpmActivityId}
-              onSelectCpmActivity={setSelectedCpmActivityId}
             />
           </div>
           <div className="workspace-divider details-divider">
@@ -348,23 +329,11 @@ export default function App() {
               {detailsCollapsed ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
             </button>
           </div>
-          <div className="right-sidebar">
-            <CpmPanel
-              orderNumber={selectedOrder}
-              selectedNode={selectedNode}
-              selectedActivityId={selectedCpmActivityId}
-              onSelectActivity={setSelectedCpmActivityId}
-              data={cpm.data}
-              loading={cpm.isLoading}
-              error={cpm.isError}
-              onRetry={() => void cpm.refetch()}
-            />
-            <DetailsPanel
-              orderNumber={selectedOrder}
-              selectedNode={selectedNode}
-              onLocate={selectNode}
-            />
-          </div>
+          <DetailsPanel
+            orderNumber={selectedOrder}
+            selectedNode={selectedNode}
+            onLocate={selectNode}
+          />
         </main>
       )}
     </div>
