@@ -1290,8 +1290,12 @@ def api_estornar_ajuste(ajuste_id):
     ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
     if not ajuste:
         return jsonify({"error": "Ajuste não encontrado."}), 404
-    ajuste = ajuste_svc.estornar_para_validacao(ajuste)
-    return jsonify({"message": "Ajuste estornado para validação.", "ajuste": _fmt_ajuste(ajuste)})
+    try:
+        ajuste = ajuste_svc.estornar_etapa(ajuste)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Ajuste estornado para \"{LABEL_STATUS_AJUSTE.get(ajuste.status_modulo, ajuste.status_modulo)}\".",
+                    "ajuste": _fmt_ajuste(ajuste)})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/pular-etapa", methods=["POST"])

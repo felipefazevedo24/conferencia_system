@@ -3724,16 +3724,17 @@ def test_admin_atualiza_grv_individualmente_e_estorna_ajuste_de_qualquer_etapa(t
         ajuste.fiscal_nf_numero = "NF-2"
         db.session.commit()
 
+    # Estorno volta UMA etapa so' (Concluido -> Fiscal) e limpa so' o Fiscal.
     resposta_estorno = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/estornar")
     assert resposta_estorno.status_code == 200
     with app.app_context():
         ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
-        assert ajuste.status_modulo == "Validacao"
-        assert ajuste.status_slug == "validacao"
-        assert ajuste.gestor_confirmado_por is None
-        assert ajuste.finance_concluido_por is None
+        assert ajuste.status_modulo == "Fiscal"
+        assert ajuste.status_slug == "fiscal"
         assert ajuste.fiscal_concluido_por is None
         assert ajuste.fiscal_nf_numero is None
+        assert ajuste.finance_concluido_por == "finance"
+        assert ajuste.gestor_confirmado_por == "gestor"
 
 
 def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_por_vez(tmp_path):

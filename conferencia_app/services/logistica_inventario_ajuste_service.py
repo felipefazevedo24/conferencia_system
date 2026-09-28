@@ -625,19 +625,45 @@ def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: 
     return ajuste
 
 
-def estornar_para_validacao(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjuste:
-    """Reabre um ajuste em qualquer etapa, devolvendo-o para Validacao."""
-    ajuste.gestor_justificativa = None
-    ajuste.gestor_confirmado_em = None
-    ajuste.gestor_confirmado_por = None
-    ajuste.finance_observacao = None
-    ajuste.finance_concluido_em = None
-    ajuste.finance_concluido_por = None
-    ajuste.fiscal_nf_numero = None
-    ajuste.fiscal_concluido_em = None
-    ajuste.fiscal_concluido_por = None
-    ajuste.status_modulo = "Validacao"
-    ajuste.status_slug = status_slug("Validacao")
+def etapa_anterior(atual: str) -> str | None:
+    # Descartado sai de Validacao (descartar_divergencia), entao volta pra ela.
+    if atual == "Descartado":
+        return "Validacao"
+    try:
+        idx = MODULOS_SEQUENCIA.index(atual)
+    except ValueError:
+        return None
+    return MODULOS_SEQUENCIA[idx - 1] if idx > 0 else None
+
+
+def estornar_etapa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjuste:
+    """Volta o ajuste SEMPRE uma etapa so' (espelho do Pular Etapa), limpando
+    apenas o que a etapa desfeita gravou - as anteriores ficam intactas.
+
+    Finance -> Relatorio mantem o vinculo com o FORM-08.52 ja' gerado (o PDF
+    do documento nao muda); o item so' troca de documento se entrar num
+    relatorio novo."""
+    anterior = etapa_anterior(ajuste.status_modulo)
+    if anterior is None:
+        raise ValueError("Este ajuste já está na primeira etapa (Validação) - não há como estornar.")
+
+    atual = ajuste.status_modulo
+    if atual == "Concluido":
+        ajuste.fiscal_nf_numero = None
+        ajuste.fiscal_concluido_em = None
+        ajuste.fiscal_concluido_por = None
+    elif atual == "Fiscal":
+        ajuste.finance_documento_grv = None
+        ajuste.finance_observacao = None
+        ajuste.finance_concluido_em = None
+        ajuste.finance_concluido_por = None
+    elif atual in ("Relatorio", "Descartado"):
+        ajuste.gestor_justificativa = None
+        ajuste.gestor_confirmado_em = None
+        ajuste.gestor_confirmado_por = None
+
+    ajuste.status_modulo = anterior
+    ajuste.status_slug = status_slug(anterior)
     db.session.commit()
     return ajuste
 
