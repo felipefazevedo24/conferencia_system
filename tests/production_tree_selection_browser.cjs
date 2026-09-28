@@ -9,7 +9,8 @@ const budgetContext = process.argv.includes('--budget-context');
 const fullStructureMode = process.argv.includes('--cronograma-estrutura');
 const largeStructureMode = process.argv.includes('--estrutura-grande');
 const cronogramaScrollMode = process.argv.includes('--cronograma-scroll');
-const cronogramaMode = process.argv.includes('--cronograma') || fullStructureMode || cronogramaScrollMode;
+const deliveryExplosionMode = process.argv.includes('--explosao-entregas');
+const cronogramaMode = process.argv.includes('--cronograma') || fullStructureMode || cronogramaScrollMode || deliveryExplosionMode;
 const recognitionPreviews = process.argv.includes('--recognition-previews');
 const cylinderPreviews = process.argv.includes('--cylinder-previews');
 const slowPreviewMode = process.argv.includes('--slow-previews');
@@ -175,6 +176,24 @@ const server=http.createServer((req,res)=>{
       assert.equal(requests.filter(path=>path.endsWith('/structure')).length,1);
       assert.deepEqual(exceptions,[]);
       console.log('PASS: 301 itens e três níveis completos, sem consulta por filho (dados simulados)');
+      await call('Browser.close');return;
+    }
+
+    if(deliveryExplosionMode) {
+      await inner("[...d.querySelectorAll('.delivery-tabs button')].find(b=>b.textContent.includes('Cronograma')).click();");
+      await wait("return d.querySelectorAll('.delivery-card').length===2;");
+      await inner("d.querySelector('.delivery-explosion-button').click();");
+      await wait("return !!d.querySelector('.delivery-explosion') && d.querySelectorAll('.delivery-budget-node').length===2;");
+      assert(await inner("return [...d.querySelectorAll('.delivery-budget-node')].every(button=>button.getAttribute('aria-expanded')==='false');"));
+      assert(await inner("return d.querySelectorAll('.delivery-orders-map').length===0;"));
+      await inner("d.querySelector('.delivery-budget-node').click();");
+      await wait("return d.querySelector('.delivery-budget-node').getAttribute('aria-expanded')==='true' && d.querySelectorAll('.delivery-orders-map').length===1;");
+      await inner("d.querySelector('.delivery-budget-node').click();");
+      await wait("return d.querySelector('.delivery-budget-node').getAttribute('aria-expanded')==='false' && d.querySelectorAll('.delivery-orders-map').length===0;");
+      assert.equal(await inner("return d.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay') ? 'ERROR_OVERLAY' : 'OK';"),'OK');
+      assert(await inner("return d.body.innerText.trim().length>0;"));
+      assert.deepEqual(exceptions,[]);
+      console.log('PASS: explosao inicia recolhida, expande e retorna ao estado inicial (dados simulados)');
       await call('Browser.close');return;
     }
 
