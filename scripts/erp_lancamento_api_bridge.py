@@ -1496,6 +1496,57 @@ SQL_PLANEJAMENTO_CADASTRO = """
 """
 
 
+# Todos os fornecimentos (itens de OC) de um produto, com a 1a entrada no
+# deposito 1 de cada OC. preco_unitario e' da UNIDADE DE COMPRA (PC de 6 m,
+# CX com 12): o Sync converte por qtde_compra/qtde pra comparar fornecedores.
+# Entrada estornada inteira (liquido <= 0 no documento) nao conta.
+SQL_FORNECIMENTOS_PRODUTO = """
+    with prod as (
+        select p.codigo as cod_produto
+        from public.tproduto p
+        where p.cod_empresa = %(empresa)s
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %(codigo)s
+    )
+    select o.codigo as ordem_compra, o.data::date as dt_oc, o.cod_fornecedor,
+           coalesce(nullif(trim(f.razao_social), ''), nullif(trim(f.nome), ''), nullif(trim(o.fornecedor), ''), 'Fornecedor nao informado') as fornecedor,
+           regexp_replace(coalesce(f.cgc, ''), '[^0-9]', '', 'g') as cnpj,
+           a.qtde, a.qtde_compra, a.unidade as unidade_compra, a.unidade_est, a.preco_unitario, a.qtde_entregue,
+           exists (
+               select 1 from public.tcom_aux_os x
+               where x.cod_empresa = o.cod_empresa and x.cod_ord_compra = o.codigo
+                 and x.cod_produto = a.cod_produto and coalesce(x.cancelado, 0) = 0
+                 and coalesce(x.cod_os, 0) <> 0
+           ) as para_os,
+           ent.dt_entrada
+    from public.tord_aux a
+    join prod pr on pr.cod_produto = a.cod_produto
+    join public.tord_com o on o.cod_empresa = a.cod_empresa and o.codigo = a.cod_ord_compra
+    left join public.tfornece f on f.cod_empresa = o.cod_empresa and f.codigo = o.cod_fornecedor
+    left join lateral (
+        select min(e.dt) as dt_entrada
+        from (
+            select min(k.dt_hora_movimentacao)::date as dt, sum(coalesce(k.qtde_movimentada, 0)) as liquido
+            from public.tcom_ordem_compra co
+            join public.tproduto_cardex k
+              on k.cod_empresa = co.cod_empresa
+             and upper(coalesce(k.tabela_link, '')) = 'TCOMPRAS'
+             and k.chave_primaria_link = co.cod_empresa::text || ';' || co.cod_compra::text
+             and k.cod_produto = a.cod_produto
+             and k.cod_deposito = 1
+             and k.tipo_movimento = 0
+            where co.cod_empresa = o.cod_empresa and co.cod_ordem_compra = o.codigo
+              and k.dt_hora_movimentacao >= o.data
+            group by co.cod_compra
+        ) e
+        where e.liquido > 0
+    ) ent on true
+    where a.cod_empresa = %(empresa)s
+      and coalesce(o.cancelado, 0) = 0
+      and o.data >= %(inicio)s::date
+    order by o.data desc, o.codigo desc
+"""
+
+
 def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date) -> dict[str, dict[str, Any]]:
     """Historico cru por codigo; as contas (classificacao, minimo, lote) ficam
     no Sync, que tem os parametros e pode mudar sem redeploy da VM."""
@@ -2726,6 +2777,33 @@ def create_app() -> Flask:
             })
         except Exception as exc:
             app.logger.exception("Falha ao consultar planejamento de estoque no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/fornecimentos")
+    def consultar_estoque_fornecimentos():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigo = re.sub(r"[^A-Z0-9]", "", str(payload.get("codigo") or "").strip().upper())
+            if not codigo:
+                return jsonify({"sucesso": False, "erro": "codigo_obrigatorio"}), 400
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(SQL_FORNECIMENTOS_PRODUTO, {"empresa": empresa, "codigo": codigo, "inicio": date(2019, 1, 1)})
+                    cols = [desc[0] for desc in cur.description]
+                    linhas = [_json_safe(dict(zip(cols, row))) for row in cur.fetchall()]
+            return jsonify({"sucesso": True, "codigo": codigo, "fornecimentos": linhas})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/conserto")

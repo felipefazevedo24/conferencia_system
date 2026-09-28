@@ -342,3 +342,137 @@ def calcular_planejamento(
         )
         for codigo, item in itens.items()
     }
+
+
+# ------------------------------------------------------------- fornecimentos
+
+# Fornecedor "atual" = vendeu o item nos últimos 24 meses; os demais ficam
+# listados, mas apagados e fora da comparação.
+MESES_FORNECEDOR_ATUAL = 24
+# Preço envelhece rápido: a chapa A36 5/8" foi de R$ 5,30 a 6,60/kg entre
+# 12/2025 e 07/2026, e o R$ 5,50 de 06/2025 de outro fornecedor ganhava o
+# "menor preço" de todo mundo. Só compara preço de compra dos últimos 6 meses.
+MESES_PRECO_COMPARAVEL = 6
+# 1 entrega não mede prazo de ninguém (1 dia numa entrega de 2025 levava o
+# "mais rápido"): exige pelo menos 2.
+MIN_ENTREGAS_MAIS_RAPIDO = 2
+
+
+def _data(valor: Any) -> date | None:
+    if not valor:
+        return None
+    try:
+        return date.fromisoformat(str(valor)[:10])
+    except ValueError:
+        return None
+
+
+def _meses_antes(hoje: date, meses: int) -> date:
+    ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - meses, 12)
+    return date(ano, mes + 1, min(hoje.day, 28))
+
+
+def _chave_fornecedor(linha: dict[str, Any]) -> str:
+    """Mesma empresa com duas filiais vira um fornecedor só (a CECOFER tem os
+    cadastros 577 e 843, CNPJ 33.699.114/0001 e /0002). Sem CNPJ, o código."""
+    cnpj = str(linha.get("cnpj") or "")
+    if len(cnpj) == 14:
+        return f"cnpj:{cnpj[:8]}"
+    return f"cod:{linha.get('cod_fornecedor') or linha.get('fornecedor')}"
+
+
+def _preco_unidade_estoque(linha: dict[str, Any]) -> float | None:
+    """preco_unitario vem na unidade de COMPRA (PÇ de 6 m, CX com 12 und):
+    total da linha ÷ quantidade na unidade de estoque."""
+    preco = float(linha.get("preco_unitario") or 0)
+    if preco <= 0:
+        return None
+    qtde = float(linha.get("qtde") or 0)
+    qtde_compra = float(linha.get("qtde_compra") or 0)
+    if qtde > 0 and qtde_compra > 0:
+        return preco * qtde_compra / qtde
+    return preco
+
+
+def resumir_fornecimentos(linhas: list[dict[str, Any]], hoje: date | None = None) -> dict[str, Any]:
+    hoje = hoje or agora_br().date()
+    fornecimentos = []
+    for linha in linhas or []:
+        dt_oc = _data(linha.get("dt_oc"))
+        dt_entrada = _data(linha.get("dt_entrada"))
+        qtde = float(linha.get("qtde") or 0)
+        entregue = float(linha.get("qtde_entregue") or 0)
+        if dt_entrada and entregue >= qtde - 1e-6:
+            situacao = "entregue"
+        elif dt_entrada or entregue > 0:
+            situacao = "parcial"
+        else:
+            situacao = "aberta"
+        fornecimentos.append({
+            "ordem_compra": str(linha.get("ordem_compra") or ""),
+            "dt_oc": dt_oc.isoformat() if dt_oc else None,
+            "dt_entrada": dt_entrada.isoformat() if dt_entrada else None,
+            "lead_time_dias": (dt_entrada - dt_oc).days if dt_oc and dt_entrada else None,
+            "fornecedor": str(linha.get("fornecedor") or ""),
+            "chave_fornecedor": _chave_fornecedor(linha),
+            "quantidade": qtde,
+            "quantidade_compra": float(linha.get("qtde_compra") or 0) or None,
+            "unidade_compra": str(linha.get("unidade_compra") or ""),
+            "preco_compra": float(linha.get("preco_unitario") or 0) or None,
+            "preco_unidade_estoque": _preco_unidade_estoque(linha),
+            "situacao": situacao,
+            "para_os": bool(linha.get("para_os")),
+        })
+    fornecimentos.sort(key=lambda f: (f["dt_oc"] or "", f["ordem_compra"]), reverse=True)
+
+    grupos: dict[str, list[dict[str, Any]]] = {}
+    for f in fornecimentos:
+        grupos.setdefault(f["chave_fornecedor"], []).append(f)
+    limite_atual = _meses_antes(hoje, MESES_FORNECEDOR_ATUAL)
+    limite_preco = _meses_antes(hoje, MESES_PRECO_COMPARAVEL)
+    fornecedores = []
+    for chave, itens in grupos.items():
+        # itens já vem do mais recente pro mais antigo
+        ultima = itens[0]
+        com_preco = next((f for f in itens if f["preco_unidade_estoque"]), None)
+        prazos_recentes = [
+            f["lead_time_dias"] for f in itens
+            if f["lead_time_dias"] is not None and _data(f["dt_oc"]) and (hoje - _data(f["dt_oc"])).days <= DIAS_JANELA_LEAD_TIME
+        ]
+        prazos = prazos_recentes or [f["lead_time_dias"] for f in itens if f["lead_time_dias"] is not None]
+        fornecedores.append({
+            "chave": chave,
+            "fornecedor": ultima["fornecedor"],
+            "fornecimentos": len(itens),
+            "entregas_com_prazo": len(prazos),
+            "lead_time_medio": round(mean(prazos), 1) if prazos else None,
+            "ultimo_preco": round(com_preco["preco_unidade_estoque"], 6) if com_preco else None,
+            "ultimo_preco_data": com_preco["dt_oc"] if com_preco else None,
+            "ultima_compra": ultima["dt_oc"],
+            "atual": bool(_data(ultima["dt_oc"]) and _data(ultima["dt_oc"]) >= limite_atual),
+            "mais_rapido": False,
+            "menor_preco": False,
+        })
+
+    atuais = [f for f in fornecedores if f["atual"]]
+    com_prazo = [f for f in atuais if f["lead_time_medio"] is not None and f["entregas_com_prazo"] >= MIN_ENTREGAS_MAIS_RAPIDO]
+    # Com 1 fornecedor só não há o que comparar: nada de selo.
+    if len(com_prazo) >= 2:
+        min(com_prazo, key=lambda f: (f["lead_time_medio"], -f["entregas_com_prazo"]))["mais_rapido"] = True
+    com_preco = [f for f in atuais if f["ultimo_preco"] and _data(f["ultimo_preco_data"]) >= limite_preco]
+    if len(com_preco) >= 2:
+        min(com_preco, key=lambda f: f["ultimo_preco"])["menor_preco"] = True
+    for f in fornecedores:
+        f["recomendado"] = f["mais_rapido"] and f["menor_preco"]
+    fornecedores.sort(key=lambda f: (
+        not f["recomendado"], not (f["mais_rapido"] or f["menor_preco"]), not f["atual"],
+        f["lead_time_medio"] if f["lead_time_medio"] is not None else 9999,
+        f["ultimo_preco"] or float("inf"),
+    ))
+    return {
+        "fornecedores": fornecedores,
+        "fornecimentos": fornecimentos,
+        "meses_fornecedor_atual": MESES_FORNECEDOR_ATUAL,
+        "meses_preco_comparavel": MESES_PRECO_COMPARAVEL,
+        "min_entregas_mais_rapido": MIN_ENTREGAS_MAIS_RAPIDO,
+    }

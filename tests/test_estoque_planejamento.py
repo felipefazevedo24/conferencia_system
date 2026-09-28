@@ -301,3 +301,108 @@ def test_visao_insumos_filtra_a_familia_06_e_tem_planejamento(tmp_path):
     assert mock_oc.call_args.kwargs["codigos"] == ["19-06-00001"]
     html = client.get("/logistica/estoque").get_data(as_text=True)
     assert 'data-visao="insumos"' in html
+
+
+# ----------------------------------------------------------- fornecimentos
+
+# OCs reais do metalon (GRV, 28/09/2026). CECOFER aparece com 2 cadastros
+# (577 e 843) do mesmo CNPJ-raiz: tem que virar 1 fornecedor.
+FORNECIMENTOS_METALON = [
+    {"ordem_compra": 11867, "dt_oc": "2026-06-18", "cod_fornecedor": 843, "fornecedor": "CECOFER FERRO E AÇO EIRELI", "cnpj": "33699114000201",
+     "qtde": 23564.16, "qtde_compra": 23564.16, "unidade_compra": "MM", "preco_unitario": 0.0272, "qtde_entregue": 23564.16, "para_os": True, "dt_entrada": "2026-07-01"},
+    {"ordem_compra": 10982, "dt_oc": "2026-03-06", "cod_fornecedor": 577, "fornecedor": "CECOFER FERRO E ACO LTDA", "cnpj": "33699114000120",
+     "qtde": 6000.0, "qtde_compra": 6000.0, "unidade_compra": "MM", "preco_unitario": 0.0285, "qtde_entregue": 6000.0, "para_os": False, "dt_entrada": "2026-03-09"},
+    {"ordem_compra": 9171, "dt_oc": "2025-07-28", "cod_fornecedor": 1873, "fornecedor": "METALON TUBOS DE AÇO LTDA", "cnpj": "39765154000100",
+     "qtde": 18000.0, "qtde_compra": 18000.0, "unidade_compra": "MM", "preco_unitario": 0.0352, "qtde_entregue": 18000.0, "para_os": False, "dt_entrada": "2025-08-14"},
+]
+
+
+def test_fornecedores_agrupa_filiais_e_marca_mais_rapido_e_menor_preco():
+    resumo = svc.resumir_fornecimentos(FORNECIMENTOS_METALON, hoje=HOJE)
+    assert len(resumo["fornecedores"]) == 2
+    cecofer, metalon = resumo["fornecedores"]
+    assert cecofer["fornecimentos"] == 2
+    assert cecofer["fornecedor"] == "CECOFER FERRO E AÇO EIRELI"  # nome da compra mais recente
+    assert cecofer["lead_time_medio"] == 8.0  # 13 e 3 dias
+    assert cecofer["ultimo_preco"] == 0.0272
+    # METALON: 1 entrega e preço de 07/2025 - não concorre; sozinha, a CECOFER não ganha selo.
+    assert cecofer["recomendado"] is False and cecofer["mais_rapido"] is False
+    assert metalon["mais_rapido"] is False and metalon["menor_preco"] is False
+    assert resumo["fornecimentos"][0]["situacao"] == "entregue"
+
+
+def test_selos_exigem_2_entregas_e_preco_dos_ultimos_6_meses():
+    # Compras reais da chapa A36 5/8" (19-01-00563), resumidas.
+    def oc(n, forn, cnpj, dt_oc, dt_ent, preco):
+        return {"ordem_compra": n, "dt_oc": dt_oc, "cod_fornecedor": n, "fornecedor": forn, "cnpj": cnpj, "qtde": 1000.0,
+                "qtde_compra": 1000.0, "unidade_compra": "KG", "preco_unitario": preco, "qtde_entregue": 1000.0, "dt_entrada": dt_ent}
+    linhas = [
+        oc(1, "BRASTIL", "11111111000100", "2025-04-15", "2025-04-16", 8.29),        # 1 entrega de 1 dia
+        oc(2, "MANETONI", "22222222000100", "2025-06-17", "2025-06-23", 5.5),        # preço de 15 meses atrás
+        oc(3, "ACOS FATIMA", "33333333000100", "2026-07-23", "2026-07-23", 6.6),
+        oc(4, "ACOS FATIMA", "33333333000100", "2026-07-22", "2026-07-27", 6.6),
+        oc(5, "RIO DOCE", "44444444000100", "2026-06-02", "2026-06-15", 6.21),
+        oc(6, "RIO DOCE", "44444444000100", "2026-05-15", "2026-06-01", 6.23),
+    ]
+    por_nome = {f["fornecedor"]: f for f in svc.resumir_fornecimentos(linhas, hoje=HOJE)["fornecedores"]}
+    assert por_nome["ACOS FATIMA"]["mais_rapido"] is True
+    assert por_nome["RIO DOCE"]["menor_preco"] is True
+    assert por_nome["BRASTIL"]["mais_rapido"] is False
+    assert por_nome["MANETONI"]["menor_preco"] is False
+
+
+def test_preco_convertido_para_unidade_de_estoque():
+    # OC real 12594: PC a R$ 223,30, 4 barras = 24.000,96 mm.
+    linha = {"ordem_compra": 12594, "dt_oc": "2026-09-01", "cod_fornecedor": 222, "fornecedor": "X", "cnpj": "",
+             "qtde": 24000.96, "qtde_compra": 4.0, "unidade_compra": "PC", "preco_unitario": 223.3, "qtde_entregue": 0}
+    [f] = svc.resumir_fornecimentos([linha], hoje=HOJE)["fornecimentos"]
+    assert f["preco_unidade_estoque"] == pytest.approx(223.3 * 4 / 24000.96)
+    assert f["situacao"] == "aberta"
+    assert f["chave_fornecedor"] == "cod:222"
+
+
+def test_fornecedor_antigo_nao_concorre_e_um_so_nao_ganha_selo():
+    antigo = {**FORNECIMENTOS_METALON[2], "dt_oc": "2021-01-10", "dt_entrada": "2021-01-12", "preco_unitario": 0.001}
+    resumo = svc.resumir_fornecimentos([FORNECIMENTOS_METALON[0], antigo], hoje=HOJE)
+    atual = next(f for f in resumo["fornecedores"] if f["atual"])
+    velho = next(f for f in resumo["fornecedores"] if not f["atual"])
+    # Preço de 2021 não se compara; e com 1 fornecedor atual não há o que comparar.
+    assert velho["menor_preco"] is False and velho["mais_rapido"] is False
+    assert atual["menor_preco"] is False and atual["mais_rapido"] is False
+
+
+def test_rota_fornecimentos_e_grv_fora_nao_derruba(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with patch.object(routes, "buscar_fornecimentos_grv", return_value=FORNECIMENTOS_METALON) as mock_f:
+        data = client.get("/api/logistica/estoque/fornecimentos?codigo=19-01-00591").get_json()
+    assert mock_f.call_args.args[0] == "19-01-00591"
+    assert data["disponivel"] is True
+    assert len(data["fornecimentos"]) == 3
+    with patch.object(routes, "buscar_fornecimentos_grv", side_effect=RuntimeError("bridge fora")):
+        resp = client.get("/api/logistica/estoque/fornecimentos?codigo=19-01-00591")
+    assert resp.status_code == 200
+    assert resp.get_json()["disponivel"] is False
+    assert client.get("/api/logistica/estoque/fornecimentos").status_code == 400
+    html = client.get("/logistica/estoque").get_data(as_text=True)
+    assert 'id="mp-forn-dialog"' in html
+    assert "function abrirFornecimentos" in html
+
+
+def test_bridge_fornecimentos(monkeypatch):
+    from scripts import erp_lancamento_api_bridge as bridge
+
+    monkeypatch.setattr(bridge, "_config", lambda: {"host": "h", "database": "d", "user": "u"})
+    monkeypatch.setattr(bridge, "_authorized", lambda cfg: True)
+    conn = MagicMock()
+    cursor = conn.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cursor.description = [("ordem_compra",), ("dt_oc",), ("fornecedor",)]
+    cursor.fetchall.return_value = [(11867, date(2026, 6, 18), "CECOFER")]
+    monkeypatch.setattr(bridge, "_conectar", lambda cfg, readonly=False: conn)
+    client = bridge.create_app().test_client()
+    data = client.post("/api/erp/estoque/fornecimentos", json={"codigo": "19-01-00591"}).get_json()
+    assert data["codigo"] == "190100591"
+    assert data["fornecimentos"] == [{"ordem_compra": 11867, "dt_oc": "2026-06-18", "fornecedor": "CECOFER"}]
+    assert cursor.execute.call_args.args[1]["codigo"] == "190100591"
+    assert client.post("/api/erp/estoque/fornecimentos", json={}).status_code == 400

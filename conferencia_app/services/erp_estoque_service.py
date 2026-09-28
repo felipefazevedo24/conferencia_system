@@ -308,6 +308,28 @@ def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, d
     return dados
 
 
+def buscar_fornecimentos_grv(codigo: str, empresa: int = 1) -> list[dict[str, Any]]:
+    """Todos os itens de OC do produto desde 2019, com a data da 1a entrada
+    de cada OC. Consulta de 1 item, sob demanda (botao na tela): sem cache."""
+    chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+    if not chave:
+        return []
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar fornecimentos no GRV.")
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/fornecimentos",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigo": chave},
+        timeout=cfg["timeout"],
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de fornecimentos."))
+    return data.get("fornecimentos") or []
+
+
 def buscar_reservas_produto_acabado_grv(
     codigos: list[str],
     empresa: int = 1,

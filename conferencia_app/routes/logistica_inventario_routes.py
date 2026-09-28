@@ -41,6 +41,7 @@ from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
     buscar_consumo_kardex_grv,
+    buscar_fornecimentos_grv,
     buscar_estoque_grv,
     buscar_ordens_compra_abertas_grv,
     buscar_planejamento_grv,
@@ -514,6 +515,21 @@ def estoque_materia_prima_api():
         "parametros_planejamento": parametros_planejamento,
         "pode_editar_parametros": is_admin_session(),
     })
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/fornecimentos", methods=["GET"])
+@permission_required(PERMISSION)
+def estoque_fornecimentos():
+    codigo = str(request.args.get("codigo") or "").strip()
+    if not codigo:
+        return jsonify({"error": "Informe o código do item."}), 400
+    try:
+        linhas = buscar_fornecimentos_grv(codigo)
+    except Exception:
+        # GRV fora do ar nao derruba a tela: a janela avisa e fica vazia.
+        current_app.logger.warning("Nao foi possivel consultar fornecimentos de %s.", codigo, exc_info=True)
+        return jsonify({"disponivel": False, "fornecedores": [], "fornecimentos": []})
+    return jsonify({"disponivel": True, **planejamento_svc.resumir_fornecimentos(linhas)})
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["GET"])
