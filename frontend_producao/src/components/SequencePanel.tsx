@@ -13,6 +13,7 @@ import {
 import { Fragment, useEffect, useMemo, useRef } from "react";
 
 import { api } from "../lib/api";
+import type { CpmActivity } from "../lib/api";
 import type {
   AssemblyNode,
   OperationDetail,
@@ -22,6 +23,9 @@ import type {
 interface SequencePanelProps {
   orderNumber: string;
   selectedNode: AssemblyNode | null;
+  cpmActivities: CpmActivity[];
+  selectedCpmActivityId: string | null;
+  onSelectCpmActivity: (activityId: string | null) => void;
 }
 
 type OperationState =
@@ -34,7 +38,10 @@ type OperationState =
 
 export function SequencePanel({
   orderNumber,
-  selectedNode
+  selectedNode,
+  cpmActivities,
+  selectedCpmActivityId,
+  onSelectCpmActivity
 }: SequencePanelProps) {
   const queryClient = useQueryClient();
   const previousLiveSignature = useRef<string | null>(null);
@@ -87,6 +94,9 @@ export function SequencePanel({
     void detail.refetch();
     void queryClient.invalidateQueries({
       queryKey: ["structure", orderNumber]
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["cpm-order", orderNumber]
     });
   }, [detail, liveSignature, orderNumber, queryClient]);
   const operations = useMemo(
@@ -163,6 +173,9 @@ export function SequencePanel({
                 position={index + 1}
                 liveStatus={findLiveStatus(live.data?.operations, operation)}
                 calculatedAt={live.data?.source.calculated_at}
+                cpmActivity={findCpmActivity(cpmActivities, selectedNode.aux_code, operation)}
+                selected={findCpmActivity(cpmActivities, selectedNode.aux_code, operation)?.id === selectedCpmActivityId}
+                onSelect={onSelectCpmActivity}
               />
               {index < operations.length - 1 && (
                 <div className="sequence-connector" aria-hidden="true">
@@ -182,13 +195,19 @@ function OperationCard({
   itemCode,
   position,
   liveStatus,
-  calculatedAt
+  calculatedAt,
+  cpmActivity,
+  selected,
+  onSelect
 }: {
   operation: OperationDetail;
   itemCode: string;
   position: number;
   liveStatus?: OperationLiveStatus;
   calculatedAt?: string;
+  cpmActivity?: CpmActivity;
+  selected: boolean;
+  onSelect: (activityId: string | null) => void;
 }) {
   const state = operationState(operation, liveStatus);
   const status = operationStatus(state);
@@ -208,8 +227,17 @@ function OperationCard({
   const machine = activeMachines.join(" / ") || operation.machine;
   return (
     <article
-      className={`sequence-operation-card ${state}`}
+      className={`sequence-operation-card ${state}${cpmActivity ? ` cpm-linked cpm-${cpmActivity.status.toLowerCase().replaceAll("_", "-")}` : ""}${selected ? " cpm-selected" : ""}`}
       aria-label={`${position}. ${operation.name}: ${status.label}`}
+      role={cpmActivity ? "button" : undefined}
+      tabIndex={cpmActivity ? 0 : undefined}
+      onClick={() => cpmActivity && onSelect(cpmActivity.id)}
+      onKeyDown={(event) => {
+        if (cpmActivity && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onSelect(cpmActivity.id);
+        }
+      }}
     >
       <div className="sequence-card-heading">
         <span className="sequence-number">{position}</span>
@@ -242,8 +270,32 @@ function OperationCard({
         {status.icon}
         <span>{status.label}</span>
       </div>
+      {cpmActivity && (
+        <div className="sequence-cpm-status">
+          <strong>{cpmActivity.is_critical ? "CAMINHO CRÍTICO" : cpmActivity.status.replaceAll("_", " ")}</strong>
+          <span>Folga {formatCpmMinutes(cpmActivity.total_float_minutes)}</span>
+        </div>
+      )}
     </article>
   );
+}
+
+function findCpmActivity(
+  activities: CpmActivity[],
+  auxCode: number,
+  operation: OperationDetail
+) {
+  return activities.find((activity) =>
+    activity.kind === "process" &&
+    activity.metadata.component_aux_code === auxCode &&
+    ((activity.metadata.operation_code && activity.metadata.operation_code === operation.code) ||
+      (activity.metadata.operation_sequence != null && activity.metadata.operation_sequence === operation.sequence))
+  );
+}
+
+function formatCpmMinutes(value: number) {
+  const absolute = Math.abs(value);
+  return `${value < 0 ? "-" : ""}${Math.floor(absolute / 60)}h${absolute % 60 ? ` ${absolute % 60}min` : ""}`;
 }
 
 function SequenceMessage({ text }: { text: string }) {

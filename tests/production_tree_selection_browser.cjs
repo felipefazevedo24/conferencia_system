@@ -5,6 +5,7 @@ const {spawn} = require('node:child_process');
 const assert = require('node:assert/strict');
 const project = path.resolve(__dirname, '..');
 const performanceMode = process.argv.includes('--performance');
+const cpmMode = process.argv.includes('--cpm');
 const budgetContext = process.argv.includes('--budget-context');
 const fullStructureMode = process.argv.includes('--cronograma-estrutura');
 const largeStructureMode = process.argv.includes('--estrutura-grande');
@@ -50,6 +51,16 @@ const largeStructureNodes=Array.from({length:301},(_,index)=>{
     thumbnail_url:null};
 });
 const operations = Array.from({length:8}, (_,i)=>({code:String(i+1), name:['Corte e preparação de matéria-prima','Usinagem de precisão e ajuste dimensional do componente','Inspeção dimensional','Montagem do subconjunto'][i%4], sequence:i+1, finalized:i===0, locked:i===3, machine:'Centro de usinagem CNC — máquina de produção 02', started_at:null}));
+const cpmActivities=operations.map((operation,index)=>({
+  id:`PROC:1:${operation.code}`,name:operation.name,kind:'process',component_id:'1',resource_id:operation.machine,
+  predecessor_ids:index?[`PROC:1:${index}`]:[],successor_ids:index<operations.length-1?[`PROC:1:${index+2}`]:[],
+  early_start:`2026-09-21T${String(8+index).padStart(2,'0')}:00:00`,early_finish:`2026-09-21T${String(9+index).padStart(2,'0')}:00:00`,
+  late_start:`2026-09-21T${String(8+index).padStart(2,'0')}:00:00`,late_finish:`2026-09-21T${String(9+index).padStart(2,'0')}:00:00`,
+  duration_minutes:60,duration_label:null,queue_minutes:0,schedule_float_minutes:index<2?0:600,total_float_minutes:index<2?0:600,
+  is_critical:index<2,status:index<2?'CRITICO':'ATENCAO',critical_reason:index<2?'Fila do recurso':null,completed:index===0,
+  metadata:{operation_code:operation.code,operation_sequence:operation.sequence,component_aux_code:1,component_code:'CJ-7807',component_description:'Conjunto principal de montagem',duration_source:'tempo_previsto_grv',queue_count:12,estimated_wait_minutes:index===1?120:0}
+}));
+const cpmPayload=number=>({order:{number,title:'Conjunto industrial',target_finish:'2026-09-22T17:00:00'},summary:{status:'CRITICO',calculable:true,projected_finish:'2026-09-22T12:00:00',target_finish:'2026-09-22T17:00:00',total_float_minutes:300,pending_process_count:7,critical_process_count:1,critical_purchase_count:1,bottleneck:'Centro de usinagem CNC — máquina de produção 02'},activities:cpmActivities,purchases:[{activity_id:'COMPRA:78451:1',successor_id:'PROC:1:1',component_aux_code:1,purchase_order:78451,purchase_request:null,supplier:'Aços SA',material_code:'A36',material:'CHAPA A36',promised_date:'2026-09-22T08:00:00',needed_date:'2026-09-21T08:00:00',float_minutes:-480,impact_minutes:480,status:'ATRASO_PROJETADO',is_critical:true}],critical_path:['PROC:1:1','PROC:1:2'],warnings:[]});
 let apiMode='normal';
 const requests=[];
 function payload(url) {
@@ -60,6 +71,8 @@ function payload(url) {
     : fullStructureMode&&number==='9961'
     ? fullStructureNodes.find(item=>item.aux_code===Number(parts[6]))
     : nodes[Number(parts[6])-1])||nodes[1];
+  if(url.pathname.endsWith('/cpm')) return cpmPayload(number);
+  if(url.pathname.endsWith('/cpm/simulate')) return {...cpmPayload(number),projected_finish:'2026-09-23T12:00:00',project_float_minutes:-180,status:'ATRASO_PROJETADO',simulation:{activity_id:'PROC:1:2',delay_minutes:120,previous_projected_finish:'2026-09-22T12:00:00',previous_project_float_minutes:300,previous_status:'CRITICO',affected_activity_ids:['PROC:1:2']}};
   if(largeStructureMode && url.pathname.endsWith('/structure'))
     return {order:{number,title:'Estrutura grande'},nodes:largeStructureNodes,roots:['1'],progress:{percentage:0,finalized_operations:0,total_operations:0},pending_count:0,current_stage:'Produção',source};
   if(fullStructureMode && url.pathname.endsWith('/structure') && number==='9961')
@@ -166,6 +179,22 @@ const server=http.createServer((req,res)=>{
     await call('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     await call('Page.navigate',{url:base+'/producao'}); await sleep(500);
     await wait("return !!d.querySelector('.workspace') && d.querySelectorAll('.sequence-operation-card').length===8;");
+
+    if(cpmMode) {
+      await wait("return d.querySelector('.cpm-panel')?.textContent.includes('ANÁLISE CPM') && d.querySelectorAll('.sequence-cpm-status').length===8;");
+      assert(await inner("return d.querySelector('.cpm-panel').textContent.includes('Fila do recurso') && d.querySelector('.cpm-panel').textContent.includes('PC 78451');"));
+      await click('.critical-path-toggle');
+      await wait("return d.querySelectorAll('.assembly-node.cpm-node-dimmed').length>0;");
+      await inner("d.querySelectorAll('.sequence-operation-card')[1].click();");
+      await wait("return d.querySelectorAll('.sequence-operation-card.cpm-selected').length===1;");
+      await inner("const sections=[...d.querySelectorAll('.cpm-section')];const simulation=sections.find(s=>s.textContent.includes('Simular atraso'));simulation.open=true;simulation.querySelector('button').click();");
+      await wait("return d.querySelector('.cpm-simulation-result')?.textContent.includes('Nova conclusão');");
+      const screenshot=await call('Page.captureScreenshot',{format:'png'});
+      assert(screenshot.data.length>10000,'captura visual CPM vazia');
+      assert.deepEqual(exceptions,[]);
+      console.log('PASS: painel CPM, caminho crítico, seleção e simulação renderizados sem erros');
+      await call('Browser.close');return;
+    }
 
     if(largeStructureMode) {
       await wait("return d.querySelectorAll('.tree-row').length===301;");
@@ -322,5 +351,11 @@ const server=http.createServer((req,res)=>{
     await wait("const row=d.querySelector('.tree-row.selected');if(!row)return false;const r=row.getBoundingClientRect();const s=d.querySelector('.tree-scroll').getBoundingClientRect();return r.height>0 && r.top>=s.top && r.bottom<=s.bottom;");
     console.log('PASS: compact tree tab reveals selection');
     assert.deepEqual(exceptions,[]);await call('Browser.close');
-  }finally {if(ws)ws.close();chrome.kill();server.close();}
+  }finally {
+    if(ws)ws.close();
+    chrome.kill();
+    server.close();
+    await sleep(300);
+    try { fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100}); } catch {}
+  }
 })().catch(e=>{console.error(e);process.exitCode=1;});

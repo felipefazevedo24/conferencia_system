@@ -11,10 +11,11 @@ import {
   type Node,
   type NodeProps
 } from "@xyflow/react";
-import { Box } from "lucide-react";
+import { Box, Route } from "lucide-react";
 import { memo, useEffect, useMemo } from "react";
 
 import { formatQuantity } from "../lib/format";
+import type { CpmActivity } from "../lib/api";
 import { visibleNodeIds } from "../lib/tree";
 import type { AssemblyNode, OrderDependencyMap as DependencyMap } from "../types";
 import { OrderDependencyMap } from "./OrderDependencyMap";
@@ -34,12 +35,17 @@ interface AssemblyMapProps {
   onViewChange: (view: "structure" | "dependencies") => void;
   showAllDependencies: boolean;
   onShowAllDependenciesChange: (showAll: boolean) => void;
+  cpmActivities: CpmActivity[];
+  showCriticalPath: boolean;
+  onShowCriticalPathChange: (show: boolean) => void;
 }
 
 type AssemblyCardData = {
   item: AssemblyNode;
   selected: boolean;
   onSelect: (node: AssemblyNode) => void;
+  cpm: CpmActivity[];
+  dimmed: boolean;
 };
 
 type AssemblyFlowNode = Node<AssemblyCardData, "assembly">;
@@ -47,11 +53,14 @@ type AssemblyFlowNode = Node<AssemblyCardData, "assembly">;
 const AssemblyCard = memo(function AssemblyCard({
   data
 }: NodeProps<AssemblyFlowNode>) {
-  const { item, selected, onSelect } = data;
+  const { item, selected, onSelect, cpm, dimmed } = data;
+  const pending = cpm.filter((activity) => !activity.completed && activity.kind === "process");
+  const critical = pending.some((activity) => activity.is_critical);
+  const status = [...pending].sort((left, right) => left.total_float_minutes - right.total_float_minutes)[0];
   return (
     <button
       type="button"
-      className={`assembly-node${selected ? " selected" : ""}`}
+      className={`assembly-node${selected ? " selected" : ""}${critical ? " cpm-node-critical" : ""}${dimmed ? " cpm-node-dimmed" : ""}`}
       onClick={() => onSelect(item)}
       aria-label={`${item.code}: ${item.description}`}
     >
@@ -80,6 +89,13 @@ const AssemblyCard = memo(function AssemblyCard({
         <small>Qtde: {formatQuantity(item.quantity)}</small>
         <StatusBadge state={item.state} reason={item.state_reason} />
       </div>
+      {status && (
+        <div className={`node-cpm cpm-${status.status.toLowerCase().replaceAll("_", "-")}`}>
+          <Route size={12} />
+          <strong>{critical ? "CAMINHO CRÍTICO" : status.status.replaceAll("_", " ")}</strong>
+          <span>Folga {formatMinutes(status.total_float_minutes)}</span>
+        </div>
+      )}
       <Handle type="source" position={Position.Bottom} />
     </button>
   );
@@ -113,11 +129,23 @@ export function AssemblyMap({
   view,
   onViewChange,
   showAllDependencies,
-  onShowAllDependenciesChange
+  onShowAllDependenciesChange,
+  cpmActivities,
+  showCriticalPath,
+  onShowCriticalPathChange
 }: AssemblyMapProps) {
+  const cpmByComponent = useMemo(() => {
+    const index = new Map<number, CpmActivity[]>();
+    for (const activity of cpmActivities) {
+      const auxCode = activity.metadata.component_aux_code;
+      if (auxCode === undefined) continue;
+      index.set(auxCode, [...(index.get(auxCode) ?? []), activity]);
+    }
+    return index;
+  }, [cpmActivities]);
   const layout = useMemo(
-    () => layoutGraph(nodes, expanded, onSelect),
-    [expanded, nodes, onSelect]
+    () => layoutGraph(nodes, expanded, onSelect, cpmByComponent, showCriticalPath),
+    [cpmByComponent, expanded, nodes, onSelect, showCriticalPath]
   );
   const flowNodes = useMemo(
     () => layout.flowNodes.map((node) => ({
@@ -148,6 +176,15 @@ export function AssemblyMap({
               Dependências
             </button>
           </div>
+          <button
+            type="button"
+            className={`critical-path-toggle${showCriticalPath ? " active" : ""}`}
+            aria-pressed={showCriticalPath}
+            disabled={cpmActivities.length === 0}
+            onClick={() => onShowCriticalPathChange(!showCriticalPath)}
+          >
+            <Route size={14} /> Mostrar caminho crítico
+          </button>
           <span className="source-label">Fonte: GRV</span>
         </div>
       </div>
@@ -191,7 +228,9 @@ export function AssemblyMap({
 function layoutGraph(
   items: AssemblyNode[],
   expanded: ReadonlySet<string>,
-  onSelect: (node: AssemblyNode) => void
+  onSelect: (node: AssemblyNode) => void,
+  cpmByComponent: ReadonlyMap<number, CpmActivity[]>,
+  showCriticalPath: boolean
 ): { flowNodes: AssemblyFlowNode[]; edges: Edge[] } {
   const visible = visibleNodeIds(items, expanded);
   const visibleItems = items.filter((item) => visible.has(item.id));
@@ -204,7 +243,7 @@ function layoutGraph(
     marginx: 24,
     marginy: 24
   });
-  for (const item of visibleItems) graph.setNode(item.id, { width: 218, height: 138 });
+  for (const item of visibleItems) graph.setNode(item.id, { width: 218, height: 158 });
   const edges: Edge[] = [];
   for (const item of visibleItems) {
     if (item.parent_id && visible.has(item.parent_id)) {
@@ -226,14 +265,23 @@ function layoutGraph(
       type: "assembly",
       position: {
         x: position.x - 109,
-        y: position.y - 69
+        y: position.y - 79
       },
       data: {
         item,
         selected: false,
-        onSelect
+        onSelect,
+        cpm: cpmByComponent.get(item.aux_code) ?? [],
+        dimmed: showCriticalPath && !(cpmByComponent.get(item.aux_code) ?? []).some(
+          (activity) => activity.is_critical && !activity.completed
+        )
       }
     };
   });
   return { flowNodes, edges };
+}
+
+function formatMinutes(value: number) {
+  const absolute = Math.abs(value);
+  return `${value < 0 ? "-" : ""}${Math.floor(absolute / 60)}h${absolute % 60 ? ` ${absolute % 60}min` : ""}`;
 }
