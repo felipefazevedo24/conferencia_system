@@ -373,6 +373,10 @@
         Validacao: "Aguardando gestor", Relatorio: "Aguardando relatório", Finance: "Aguardando Finance",
         Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Dif. Improcedente",
     };
+    // Estorno volta sempre UMA etapa (ver estornar_etapa no service).
+    const ETAPA_ANTERIOR = {
+        Relatorio: "Validacao", Finance: "Relatorio", Fiscal: "Finance", Concluido: "Fiscal", Descartado: "Validacao",
+    };
     function badgeStatus(a) {
         const cor = CORES_STATUS[a.status_modulo] || "#475569";
         return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
@@ -610,7 +614,8 @@
         if (pular) itens += (itens ? "<hr>" : "") + pular;
         if (PODE_ADMIN) {
             itens += (itens ? "<hr>" : "") + it("atualizar-grv", "fa-arrows-rotate", "Atualizar quantidade GRV");
-            itens += it("estornar", "fa-rotate-left", "Estornar para validação", true);
+            const anterior = ETAPA_ANTERIOR[a.status_modulo];
+            if (anterior) itens += it("estornar", "fa-rotate-left", `Estornar para "${LABEL_STATUS[anterior]}"`, true);
         }
         return itens || '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
     }
@@ -781,7 +786,8 @@
                 if (!confirm("Consultar agora a quantidade atual deste item no PostgreSQL/GRV? Apenas este ajuste será atualizado.")) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/atualizar-grv`, { method: "POST" });
             } else if (act === "estornar") {
-                if (!confirm("Estornar este ajuste para Validação? As confirmações de gestor, Finance e Fiscal serão limpas.")) return;
+                const anterior = ETAPA_ANTERIOR[statusDoItem(id)];
+                if (!confirm(`Estornar este ajuste uma etapa, para "${LABEL_STATUS[anterior] || anterior}"? Só os dados da etapa atual serão limpos.`)) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
             } else {
                 return;
