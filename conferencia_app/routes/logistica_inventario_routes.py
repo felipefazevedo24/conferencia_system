@@ -22,6 +22,7 @@ from ..models import (
     ChapaCalculoLog,
     ChapaControleExclusao,
     ChapaAuditoria,
+    ChapaLoteCorrecao,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -79,17 +80,14 @@ def _normalizar_busca(texto: str | None) -> str:
     return re.sub(r"\s+", " ", valor)
 
 
-def _unidade_estoque_discreta(unidade: str | None) -> bool:
-    codigo = re.sub(r"[^A-Z]", "", str(unidade or "").upper())
-    return codigo in {"UN", "UND", "UNIDADE", "PC", "PCA", "PECA", "CX", "CAIXA", "KIT"}
-
-
 def _nivel_cobertura(saldo_disponivel: float | None, consumo_diario: float) -> tuple[int | None, str, str]:
     if saldo_disponivel is None:
         return None, "sem_estoque", "Sem registro no GRV"
     if consumo_diario <= 0:
         return None, "sem_consumo", "Sem consumo no periodo"
-    dias = int(math.ceil(float(saldo_disponivel or 0) / consumo_diario))
+    # Arredonda pra baixo: "3,2 dias" de saldo nao cobre o 4o dia. Arredondar
+    # pra cima fazia o item parecer 1 dia mais seguro do que esta.
+    dias = int(math.floor(float(saldo_disponivel or 0) / consumo_diario))
     critico = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7))
     atencao = int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15))
     if dias <= critico:
@@ -362,12 +360,16 @@ def estoque_materia_prima_api():
     rows = candidatos
     codigos = [row["codigo"] for row in rows]
     consumo_por_codigo = {}
+    # 90 dias (decisao da logistica em 25/09/2026): materia-prima baixa em
+    # lotes e 30 dias oscilava demais e marcava "sem consumo" item de giro lento.
+    janela_consumo_dias = 90
     reservas_por_codigo = {}
     ordens_compra_por_codigo = {}
     if codigos:
         try:
-            consumo = buscar_consumo_kardex_grv(codigos=codigos, forcar_atualizacao=refresh)
+            consumo = buscar_consumo_kardex_grv(codigos=codigos, janela_dias=janela_consumo_dias, forcar_atualizacao=refresh)
             consumo_por_codigo = consumo.get("por_codigo") or {}
+            janela_consumo_dias = int(consumo.get("janela_dias") or janela_consumo_dias)
         except Exception:
             current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
             consumo_por_codigo = {}
@@ -379,12 +381,19 @@ def estoque_materia_prima_api():
 
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
-        consumo_diario = float((consumo_por_codigo.get(codigo_key) or {}).get("consumo_medio_diario") or 0)
-        if consumo_diario > 0 and _unidade_estoque_discreta(row["unidade"]):
-            consumo_diario = float(math.ceil(consumo_diario))
+        consumo_item = consumo_por_codigo.get(codigo_key) or {}
+        # Sem arredondar o consumo de item em UN pra cima: 3 pecas em 30 dias
+        # (0,1/dia) virava 1/dia e a cobertura ficava 10x menor que a real.
+        consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
         cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
         reservas = reservas_por_codigo.get(codigo_key, [])
         row["consumo_diario"] = consumo_diario
+        # Expostos pra tela mostrar de onde veio a media: 1 saida grande no mes
+        # e consumo continuo dao a mesma media, mas merecem leitura diferente.
+        row["saida_total_periodo"] = float(consumo_item.get("saida_total_periodo") or 0)
+        row["dias_com_saida"] = int(consumo_item.get("dias_com_saida") or 0)
+        row["maior_saida"] = float(consumo_item.get("maior_saida") or 0)
+        row["maior_saida_data"] = consumo_item.get("maior_saida_data") or None
         row["cobertura_dias"] = cobertura_dias
         row["nivel"] = nivel
         row["nivel_label"] = nivel_label
@@ -403,7 +412,9 @@ def estoque_materia_prima_api():
         ]
 
     if visao in {"materia_prima", "revenda"}:
-        codigos_reposicao = [row["codigo"] for row in rows if row["nivel"] in ("critico", "atencao")]
+        # Todo item com consumo, nao so critico/atencao: a cobertura projetada
+        # com OC precisa valer pra lista inteira.
+        codigos_reposicao = [row["codigo"] for row in rows if row["consumo_diario"] > 0]
         if codigos_reposicao:
             try:
                 ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao)
@@ -412,6 +423,14 @@ def estoque_materia_prima_api():
     for row in rows:
         codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
         row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
+        # Projetada = disponivel + pendente das OCs abertas. O nivel continua no
+        # fisico: OC em aberto nao impede faltar material antes da entrega.
+        pendente_oc = sum(float(oc.get("quantidade_pendente") or 0) for oc in row["ordens_compra_abertas"])
+        row["quantidade_pendente_oc"] = pendente_oc
+        row["cobertura_projetada_dias"] = (
+            int(math.floor((float(row["saldo_disponivel"] or 0) + pendente_oc) / row["consumo_diario"]))
+            if pendente_oc > 0 and row["consumo_diario"] > 0 else None
+        )
 
     if nivel_filtro:
         rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
@@ -426,17 +445,19 @@ def estoque_materia_prima_api():
         row.get("cobertura_dias") or 999999,
         row["codigo"],
     ))
-    rows = rows[:limite]
-
+    # Contagens antes do corte do limite: senao "Itens" mostrava sempre o
+    # proprio limite (300) e os demais KPIs ignoravam o que ficou de fora.
     resumo = {
-        "itens": len(rows),
+        "itens": min(len(rows), limite),
         "total_filtrado": len(rows),
         "criticos": sum(1 for row in rows if row.get("nivel") == "critico"),
+        "criticos_sem_oc": sum(1 for row in rows if row.get("nivel") == "critico" and not row.get("ordens_compra_abertas")),
         "atencao": sum(1 for row in rows if row.get("nivel") == "atencao"),
         "sem_consumo": sum(1 for row in rows if row.get("nivel") == "sem_consumo"),
         "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
     }
+    rows = rows[:limite]
     return jsonify({
         "visao": visao,
         "visao_label": visao_cfg["label"],
@@ -445,6 +466,9 @@ def estoque_materia_prima_api():
         "resumo": resumo,
         "items": rows,
         "limit": limite,
+        "janela_consumo_dias": janela_consumo_dias,
+        "dias_critico": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7)),
+        "dias_atencao": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15)),
     })
 
 
@@ -1334,43 +1358,165 @@ CHAPA_DENSIDADES = {
 }
 
 
+# Diferença aceitável entre peso calculado (peso/peça × UND) e o peso recebido.
+CHAPA_TOLERANCIA_PCT = 5.0
+
+
 def _chapa_kg_do_item(item) -> float:
     """Peso da NF em KG (a NF de chapa vem em KG ou T; T converte para KG)."""
     unidade = re.sub(r"[^A-Z]", "", str(item.unidade_comercial or "").upper())
     return float(item.qtd_real or 0) * _FATOR_PESO_KG.get(unidade, 1.0)
 
 
-def _chapa_lotes_por_item(itens) -> dict[int, str]:
-    """Best-effort: mapa item_id -> lote (do GRV). Fallback fica com a AR."""
+def _chapa_buscar_entradas(itens) -> list[dict]:
     try:
         from ..services.erp_lancamento_service import buscar_entradas_chapa_lote
+        return buscar_entradas_chapa_lote(itens) or []
     except Exception:
-        return {}
-    try:
-        entradas = buscar_entradas_chapa_lote(itens) or []
-    except Exception:
-        return {}
-    # Indexa lote por (numero_nota, codigo/descricao normalizados).
-    por_chave: dict[tuple[str, str], str] = {}
+        return []
+
+
+def _chapa_lotes_por_item(itens, entradas=None) -> dict[int, str]:
+    """Best-effort: mapa item_id -> lote (do GRV). Fallback fica com a AR."""
+    if entradas is None:
+        entradas = _chapa_buscar_entradas(itens)
+    # O GRV tem um lote por LINHA (NF 71663: 00549 nos lotes -1 a -5). Guardar
+    # um lote por (NF, código) dava o último lote a todas as linhas do código.
+    # Cada linha do GRV entra numa lista por (NF, código/descrição) - o mesmo
+    # objeto nas duas chaves, pra que usar por uma chave valha pra outra.
+    linhas: dict[tuple[str, str], list[dict]] = {}
+    vistas: set[tuple[str, str, str]] = set()
     for entrada in entradas:
         nota = str(entrada.get("numero_nota") or "").strip()
         for it in entrada.get("itens") or []:
             lote = str(it.get("lote") or "").strip()
             if not lote:
                 continue
+            identidade = (nota, lote, _normalizar_busca(it.get("cod_interno")))
+            if identidade in vistas:
+                continue
+            vistas.add(identidade)
+            try:
+                qtd = float(it.get("quantidade") or 0)
+            except (TypeError, ValueError):
+                qtd = 0.0
+            linha = {"lote": lote, "qtd": qtd, "usada": False}
             for campo in (it.get("cod_interno"), it.get("descricao")):
                 chave = _normalizar_busca(campo)
                 if chave:
-                    por_chave[(nota, chave)] = lote
+                    linhas.setdefault((nota, chave), []).append(linha)
     saida: dict[int, str] = {}
-    for item in itens:
+    # Ordem de id: com quantidades iguais (dois 1,35 t), a primeira linha da NF
+    # fica com o primeiro lote - determinístico entre recargas.
+    for item in sorted(itens, key=lambda i: i.id):
         nota = str(item.numero_nota or "").strip()
+        qtd = float(item.qtd_real or 0)
         for campo in (item.codigo_grv, item.codigo, item.descricao):
-            lote = por_chave.get((nota, _normalizar_busca(campo)))
-            if lote:
-                saida[item.id] = lote
-                break
+            candidatas = linhas.get((nota, _normalizar_busca(campo))) or []
+            if not candidatas:
+                continue
+            livres = [l for l in candidatas if not l["usada"]] or candidatas
+            linha = next((l for l in livres if abs(l["qtd"] - qtd) < 1e-6), livres[0])
+            linha["usada"] = True
+            saida[item.id] = linha["lote"]
+            break
     return saida
+
+
+def _chapa_codnorm(c) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(c or "").upper())
+
+
+def _chapa_montar_lotes(itens, entradas) -> list[dict] | None:
+    """Um registro por LOTE do GRV, com as linhas do XML (Sync) penduradas nele.
+
+    O GRV é a fonte do código, do lote e do peso que entrou no lote
+    (tcom_aux_loteserie.qtde_movimentada, em unidade de estoque). O Sync só
+    traz o que o GRV não tem: UND contada, conferente e cálculo de peso.
+    Antes a tela partia do XML e adivinhava o lote, o que dava peso do XML
+    (1.350 no lugar de 1.345), lote repetido e NF de N linhas lançada em 1
+    linha no GRV aparecendo como dois materiais.
+
+    Devolve None se a bridge não trouxe os campos de lote (fora do ar ou ainda
+    não atualizada): aí a rota usa a montagem antiga.
+    """
+    if not any("lote_qtde_movimentada" in it for e in entradas for it in (e.get("itens") or [])):
+        return None
+
+    # Linhas do GRV por NF. A consulta devolve uma linha por lote e a mesma
+    # entrada vem repetida quando pedida por mais de uma linha do XML.
+    linhas_por_nota: dict[str, dict[str, dict]] = {}
+    lotes_vistos: set[tuple[str, str, str]] = set()
+    for entrada in entradas:
+        nota = str(entrada.get("numero_nota") or "").strip()
+        for it in entrada.get("itens") or []:
+            chave_linha = str(it.get("guid_linha") or it.get("numero_item") or "")
+            lote = str(it.get("lote") or "").strip()
+            if not lote or (nota, chave_linha, lote) in lotes_vistos:
+                continue
+            lotes_vistos.add((nota, chave_linha, lote))
+            linha = linhas_por_nota.setdefault(nota, {}).setdefault(chave_linha, {
+                "codigo": str(it.get("cod_interno") or "").strip(),
+                "descricao": str(it.get("descricao") or "").strip(),
+                "chaves": {_chapa_codnorm(it.get("cod_interno")), _chapa_codnorm(it.get("codigo_na_fabrica"))} - {""},
+                "qtd_compra": float(it.get("quantidade") or 0),
+                "ar": str(entrada.get("codigo_lancamento") or entrada.get("numero_ar") or "").strip(),
+                "dt_lancamento": entrada.get("dt_lancamento"),
+                "usuario_grv": str(it.get("usuario_lancamento") or "").strip(),
+                "lotes": [], "itens": [],
+            })
+            fator = _FATOR_PESO_KG.get(re.sub(r"[^A-Z]", "", str(it.get("unidade_estoque") or "KG").upper()), 1.0)
+            qtd_lote = it.get("lote_qtde_movimentada")
+            if not qtd_lote:
+                # Lote sem quantidade própria: vale o total da linha em unidade de estoque.
+                qtd_lote = it.get("qtde_estoque") or 0
+            linha["lotes"].append({"lote": lote, "kg": float(qtd_lote) * fator})
+
+    # Liga cada linha do XML a uma linha do GRV da mesma NF. item.codigo é o
+    # código do fornecedor (= codigo_na_fabrica) ou o código GRV já aplicado
+    # pela sincronização com o GRV; codigo_grv fica por último porque o
+    # pareamento com o pedido de compra já o gravou errado (NF 71663).
+    # Quantidade igual desempata linhas do mesmo código (dois lotes de 1,35 t);
+    # sem quantidade igual, várias linhas do XML podem cair numa só do GRV.
+    orfaos = []
+    for item in sorted(itens, key=lambda i: i.id):
+        linhas = list((linhas_por_nota.get(str(item.numero_nota or "").strip()) or {}).values())
+        qtd = float(item.qtd_real or 0)
+        escolhida = None
+        for campo in (item.codigo, item.codigo_grv):
+            chave = _chapa_codnorm(campo)
+            candidatas = [l for l in linhas if chave and chave in l["chaves"]]
+            if not candidatas:
+                continue
+            ordem = sorted(candidatas, key=lambda l: (abs(l["qtd_compra"] - qtd) >= 1e-6, bool(l["itens"])))
+            escolhida = ordem[0]
+            break
+        if escolhida is None:
+            orfaos.append(item)
+        else:
+            escolhida["itens"].append(item)
+
+    lotes = []
+    for nota, linhas in linhas_por_nota.items():
+        for linha in linhas.values():
+            if not linha["itens"]:
+                continue  # só entra o que o conferente marcou como chapa
+            for n, lote in enumerate(linha["lotes"]):
+                lotes.append({
+                    "codigo": linha["codigo"], "descricao": linha["descricao"], "numero_nota": nota,
+                    "ar": linha["ar"], "lote": lote["lote"], "kg": lote["kg"], "fonte": "grv",
+                    "dt_lancamento": linha["dt_lancamento"], "usuario_grv": linha["usuario_grv"],
+                    # Linha com mais de um lote: UND e cálculo ficam no primeiro.
+                    "itens": linha["itens"] if n == 0 else [],
+                })
+    for item in orfaos:
+        lotes.append({
+            "codigo": item.codigo_grv or item.codigo, "descricao": item.descricao,
+            "numero_nota": item.numero_nota, "ar": item.numero_lancamento or "",
+            "lote": item.numero_lancamento or "", "kg": _chapa_kg_do_item(item),
+            "fonte": "xml", "itens": [item],
+        })
+    return lotes
 
 
 def _chapa_serializar_calculo(calc: ChapaCalculo | None) -> dict:
@@ -1400,6 +1546,7 @@ def estoque_chapas_page():
         user=session["username"],
         user_role=session.get("role", ""),
         pode_excluir_chapas=is_admin_session(),
+        tolerancia_pct=CHAPA_TOLERANCIA_PCT,
     )
 
 
@@ -1423,17 +1570,31 @@ def api_chapas_listar():
         .all()
     )
     calc_por_item = {c.item_nota_id: c for c in ChapaCalculo.query.all() if c.item_nota_id is not None}
-    lote_por_item = _chapa_lotes_por_item(itens)
+    entradas = _chapa_buscar_entradas(itens)
+    lotes = _chapa_montar_lotes(itens, entradas)
+    if lotes is None:
+        # Bridge fora ou sem os campos de lote: uma linha por item do XML, como antes.
+        lote_por_item = _chapa_lotes_por_item(itens, entradas)
+        lotes = [{
+            "codigo": i.codigo_grv or i.codigo, "descricao": i.descricao, "numero_nota": i.numero_nota,
+            "ar": i.numero_lancamento or "", "lote": lote_por_item.get(i.id) or i.numero_lancamento or "",
+            "kg": _chapa_kg_do_item(i), "fonte": "xml", "itens": [i],
+        } for i in itens]
+    fonte_grv = any(l["fonte"] == "grv" for l in lotes)
+    correcoes = {(c.numero_nota, _chapa_codnorm(c.codigo), c.lote_original): c.lote_corrigido
+                 for c in ChapaLoteCorrecao.query.all()}
+    for lt in lotes:
+        lt["lote_original"] = lt["lote"]
+        lt["lote"] = correcoes.get((str(lt["numero_nota"] or ""), _chapa_codnorm(lt["codigo"]), lt["lote"]), lt["lote"])
 
     # Saldo/saída/reservado por LOTE (best-effort do GRV; vazio se a bridge não responder).
     try:
         from ..services.erp_estoque_service import buscar_saldo_chapa_por_lote
-        saldo_info = buscar_saldo_chapa_por_lote([(i.codigo_grv or i.codigo) for i in itens])
+        saldo_info = buscar_saldo_chapa_por_lote([l["codigo"] for l in lotes])
     except Exception:
         saldo_info = {"por_lote": [], "por_codigo": {}, "fontes": {}}
 
-    def _codnorm(c):
-        return re.sub(r"[^A-Z0-9]", "", str(c or "").upper())
+    _codnorm = _chapa_codnorm
 
     # Saída/reservado SÓ por lote exato. Nada de distribuir o total do código
     # (isso somava o histórico inteiro do GRV num lote novo e zerava ele).
@@ -1449,22 +1610,30 @@ def api_chapas_listar():
     reservas_os_map = {_codnorm(c): (lst or []) for c, lst in (saldo_info.get("reservas_os") or {}).items()}
 
     linhas = []
-    for i in itens:
-        codigo = i.codigo_grv or i.codigo
-        calc = calc_por_item.get(i.id)
-        calc_dict = _chapa_serializar_calculo(calc)
-        lote = lote_por_item.get(i.id) or i.numero_lancamento or ""
-        info = por_lote.get((_codnorm(codigo), str(lote).strip()), {})
+    for lt in lotes:
+        do_lote = lt["itens"]
+        # Principal = a linha do XML que carrega o cálculo (e recebe as ações);
+        # as demais só somam UND. Lote extra de uma linha do GRV não tem nenhuma.
+        principal = next((i for i in do_lote if i.id in calc_por_item), do_lote[0] if do_lote else None)
+        calc = calc_por_item.get(principal.id) if principal else None
+        und = sum(float(i.qtd_chapas_und or 0) for i in do_lote)
+        info = por_lote.get((_codnorm(lt["codigo"]), str(lt["lote"]).strip()), {})
         linhas.append({
-            "item_id": i.id, "numero_nota": i.numero_nota, "codigo": codigo,
-            "codigo_norm": _codnorm(codigo), "descricao": i.descricao,
-            "fornecedor": i.fornecedor or "", "ar": i.numero_lancamento or "",
-            "lote": lote,
-            "conferente": i.usuario_conferencia or "", "unidade_nf": i.unidade_comercial or "",
-            "kg_nf": _chapa_kg_do_item(i), "und": float(i.qtd_chapas_und or 0),
+            "item_id": principal.id if principal else None,
+            "itens_ids": [i.id for i in do_lote],
+            "und_outros": und - float(principal.qtd_chapas_und or 0) if principal else 0.0,
+            "fonte": lt["fonte"],
+            "numero_nota": lt["numero_nota"], "codigo": lt["codigo"],
+            "codigo_norm": _codnorm(lt["codigo"]), "descricao": lt["descricao"],
+            "fornecedor": (principal.fornecedor if principal else "") or "", "ar": lt["ar"],
+            "lote": lt["lote"], "lote_original": lt["lote_original"],
+            "dt_lancamento": lt.get("dt_lancamento"), "usuario_grv": lt.get("usuario_grv") or "",
+            "conferente": ", ".join(dict.fromkeys(i.usuario_conferencia for i in do_lote if i.usuario_conferencia)),
+            "unidade_nf": (principal.unidade_comercial if principal else "") or "",
+            "kg_nf": lt["kg"], "und": und,
             "peso": float(calc.peso_por_peca) if (calc and calc.peso_por_peca) else None,
             "kg_saida": info.get("kg_saida", 0.0), "kg_reservado": info.get("kg_reservado", 0.0),
-            **calc_dict,
+            **_chapa_serializar_calculo(calc),
         })
 
     itens_out = []
@@ -1486,9 +1655,12 @@ def api_chapas_listar():
         # Sem dado do GRV (bridge fora), mantém em estoque (nunca falso-histórico).
         historico = bool(real_cod is not None and float(real_cod.get("qtde_total") or 0) <= 0.0001)
         out = {
-            "item_id": l["item_id"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
+            "item_id": l["item_id"], "itens_ids": l["itens_ids"], "und_outros": l["und_outros"],
+            "fonte": l["fonte"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],
             "descricao": l["descricao"], "fornecedor": l["fornecedor"], "ar": l["ar"],
-            "lote": l["lote"], "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
+            "lote": l["lote"], "lote_original": l["lote_original"],
+            "dt_lancamento": l["dt_lancamento"], "usuario_grv": l["usuario_grv"],
+            "conferente": l["conferente"], "unidade_nf": l["unidade_nf"],
             "kg_nf": kg_nf, "und": und,
             "kg_saida": round(kg_saida, 2), "kg_saldo": round(kg_saldo, 2),
             "kg_reservado": round(kg_res, 2), "kg_disponivel": round(kg_disp, 2),
@@ -1505,7 +1677,7 @@ def api_chapas_listar():
         }
         if termo:
             alvo = _normalizar_busca(" ".join(str(v) for v in [
-                out["codigo"], out["descricao"], out["lote"],
+                out["codigo"], out["descricao"], out["lote"], out["lote_original"],
                 out["numero_nota"], out["ar"], out["fornecedor"], out["conferente"],
             ]))
             if termo not in alvo:
@@ -1547,12 +1719,13 @@ def api_chapas_listar():
         "total_kg": total_estoque_kg,
         "reservado_kg": total_reservado_kg,
         "disponivel_kg": total_disponivel_kg,
-        "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > 2.0),
+        "com_divergencia": sum(1 for l in itens_out if l["pct_diferenca"] is not None and abs(l["pct_diferenca"]) > CHAPA_TOLERANCIA_PCT),
     }
     return jsonify({
         "resumo": resumo, "densidades": CHAPA_DENSIDADES,
         "itens": itens_out, "saldo_codigo": saldo_codigo_out,
         "reservas_os": reservas_os_out, "fontes": saldo_info.get("fontes") or {},
+        "lotes_do_grv": fonte_grv,
     })
 
 
@@ -1586,6 +1759,84 @@ def api_chapas_excluir(item_id):
                   {'no_controle': False})
     db.session.commit()
     return jsonify(sucesso=True, message='Item excluído do controle de chapas.')
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/<int:item_id>/und', methods=['PATCH'])
+@roles_required('Admin')
+def api_chapas_alterar_und(item_id):
+    # Grava no mesmo campo que o conferente preenche (ItemNota.qtd_chapas_und):
+    # a conferência de recebimento passa a mostrar o valor corrigido sem cópia.
+    dados = request.get_json(silent=True) or {}
+    try:
+        und = float(str(dados.get('und') or '').replace(',', '.'))
+    except ValueError:
+        und = 0.0
+    motivo = str(dados.get('motivo') or '').strip()[:300]
+    if not und > 0:
+        return jsonify(error='Informe uma quantidade de chapas maior que zero.'), 400
+    if not motivo:
+        return jsonify(error='Informe o motivo da alteração.'), 400
+    item = ItemNota.query.filter_by(id=item_id).with_for_update().first()
+    if not item:
+        return jsonify(error='Item não encontrado.'), 404
+    if not item.qtd_chapas_und or item.qtd_chapas_und <= 0:
+        return jsonify(error='Este item não faz parte do controle de chapas.'), 409
+    anterior = item.qtd_chapas_und
+    if anterior != und:
+        from ..services.chapa_auditoria_service import registrar
+        item.qtd_chapas_und = und
+        registrar(item, 'Unidades alteradas no controle', session['username'],
+                  {'und': anterior}, {'und': und, 'motivo': motivo})
+    db.session.commit()
+    return jsonify(sucesso=True, und=und)
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/movimentos', methods=['GET'])
+@permission_required(PERMISSION)
+def api_chapas_movimentos():
+    codigo = str(request.args.get('codigo') or '').strip()
+    lote = str(request.args.get('lote') or '').strip()
+    if not codigo or not lote:
+        return jsonify(error='Informe código e lote.'), 400
+    from ..services.erp_estoque_service import buscar_movimentos_chapa_lote
+    return jsonify(buscar_movimentos_chapa_lote(codigo, lote))
+
+
+@logistica_inventario_bp.route('/api/logistica/chapas/lote', methods=['PUT'])
+@roles_required('Admin')
+def api_chapas_corrigir_lote():
+    """Corrige o nº do lote na tela (só no Sync). Lote vazio ou igual ao do GRV desfaz."""
+    dados = request.get_json(silent=True) or {}
+    nota = str(dados.get('numero_nota') or '').strip()[:20]
+    codigo = str(dados.get('codigo') or '').strip()[:120]
+    original = str(dados.get('lote_original') or '').strip()[:100]
+    novo = str(dados.get('lote') or '').strip()[:100] or original
+    motivo = str(dados.get('motivo') or '').strip()[:300]
+    if not nota or not codigo or not original:
+        return jsonify(error='Lote não identificado. Recarregue a tela e tente de novo.'), 400
+    if not motivo:
+        return jsonify(error='Informe o motivo da correção.'), 400
+    # A auditoria é por linha da NF; o lote precisa ter uma no Sync (a principal).
+    item = db.session.get(ItemNota, dados.get('item_id')) if isinstance(dados.get('item_id'), int) else None
+    if not item or str(item.numero_nota or '').strip() != nota:
+        return jsonify(error='Item não encontrado para este lote.'), 404
+    correcao = ChapaLoteCorrecao.query.filter_by(numero_nota=nota, codigo=codigo, lote_original=original).first()
+    anterior = correcao.lote_corrigido if correcao else original
+    if novo == anterior:
+        return jsonify(sucesso=True, lote=novo)
+    if novo == original:
+        db.session.delete(correcao)
+    elif correcao:
+        correcao.lote_corrigido = novo
+        correcao.usuario = session['username']
+    else:
+        db.session.add(ChapaLoteCorrecao(numero_nota=nota, codigo=codigo, lote_original=original,
+                                         lote_corrigido=novo, usuario=session['username']))
+    from ..services.chapa_auditoria_service import registrar
+    registrar(item, 'Lote corrigido', session['username'],
+              {'lote': anterior}, {'lote': novo, 'lote_grv': original, 'motivo': motivo})
+    db.session.commit()
+    return jsonify(sucesso=True, lote=novo)
 
 
 @logistica_inventario_bp.route("/api/logistica/chapas/calculo", methods=["POST"])

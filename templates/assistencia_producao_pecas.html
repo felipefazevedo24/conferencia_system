@@ -1,0 +1,310 @@
+{% extends 'base.html' %}
+{% block title %}Produção de Peças{% endblock %}
+{% block shell_title %}Assistência Técnica{% endblock %}
+{% block extra_head %}
+<style>
+.pp-module { display: grid; gap: 18px; }
+.pp-stats { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.pp-stats .eui-stat.is-active { outline: 2px solid var(--eui-primary, #0f62c9); outline-offset: -2px; }
+
+.pp-card { border: 1px solid var(--eui-border, #e3e8ef); border-radius: 14px; background: var(--eui-surface, #fff); overflow: hidden; }
+.pp-card + .pp-card { margin-top: 12px; }
+.pp-card.is-open { border-color: var(--eui-primary, #0f62c9); box-shadow: 0 12px 34px rgba(15,98,201,.12); }
+.pp-card__head { display: grid; grid-template-columns: 4px 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; cursor: pointer; }
+.pp-card__accent { align-self: stretch; border-radius: 4px; background: #f59e0b; }
+.pp-card[data-status="Em andamento"] .pp-card__accent { background: #3b82f6; }
+.pp-card[data-status="Em produção"] .pp-card__accent { background: #8b5cf6; }
+.pp-card[data-status="Concluído"] .pp-card__accent { background: #16a34a; }
+.pp-card[data-status="Cancelado"] .pp-card__accent { background: #94a3b8; }
+.pp-card__title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--eui-text, #0f172a); min-width: 0; }
+.pp-card__title .sep { color: var(--eui-text-muted, #94a3b8); }
+.pp-card__meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; font-size: 12px; color: var(--eui-text-muted, #64748b); }
+.pp-card__meta i { margin-right: 4px; opacity: .8; }
+.pp-card__meta .is-late { color: var(--eui-danger, #b91c1c); font-weight: 700; }
+.pp-card__right { display: flex; align-items: center; gap: 10px; }
+.pp-card__detail { display: none; padding: 0 16px 16px; border-top: 1px solid var(--eui-border, #eef0f3); }
+.pp-card.is-open .pp-card__detail { display: block; }
+
+.pp-steps { display: flex; align-items: center; margin: 14px 0 6px; overflow-x: auto; padding-bottom: 4px; }
+.pp-step { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; color: var(--eui-text-muted, #94a3b8); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.pp-step__dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--eui-surface-3, #eef1f6); color: #94a3b8; font-size: 10px; }
+.pp-step.is-done { color: #15803d; }
+.pp-step.is-done .pp-step__dot { background: #16a34a; color: #fff; }
+.pp-step.is-current { color: var(--eui-primary, #0f62c9); }
+.pp-step.is-current .pp-step__dot { background: var(--eui-primary, #0f62c9); color: #fff; box-shadow: 0 0 0 4px rgba(15,98,201,.14); }
+.pp-step__bar { width: 26px; height: 2px; background: var(--eui-border, #e3e8ef); margin: 0 4px; flex: 0 0 auto; }
+.pp-step__bar.is-done { background: #16a34a; }
+
+.pp-grid { display: grid; grid-template-columns: 1fr 220px; gap: 16px; margin-top: 12px; }
+@media (max-width: 760px) { .pp-grid { grid-template-columns: 1fr; } }
+.pp-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 18px; }
+.pp-field .k { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-text-muted, #64748b); }
+.pp-field .v { font-size: 13px; color: var(--eui-text, #0f172a); overflow-wrap: anywhere; }
+.pp-field .erp { display: block; font-size: 11.5px; color: #15803d; margin-top: 2px; }
+.pp-aviso { margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.pp-texto { margin-top: 12px; background: var(--eui-surface-2, #f8fafc); border-left: 3px solid var(--eui-primary, #0f62c9); border-radius: 0 8px 8px 0; padding: 10px 12px; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
+.pp-img { display: block; width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--eui-border, #e3e8ef); border-radius: 10px; background: #f8fafc; }
+.pp-sem-img { display: grid; place-items: center; height: 120px; border: 1px dashed var(--eui-border, #e3e8ef); border-radius: 10px; color: var(--eui-text-muted, #94a3b8); font-size: 12px; }
+
+.pp-section-title { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-text-muted, #64748b); margin: 16px 0 6px; }
+.pp-hist { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.pp-hist li { padding: 5px 0; border-bottom: 1px dashed var(--eui-border, #eef0f3); color: var(--eui-text, #334155); }
+.pp-hist li:last-child { border-bottom: none; }
+.pp-hist small { color: var(--eui-text-muted, #64748b); }
+
+.pp-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--eui-border, #e3e8ef); }
+.pp-motivo { display: none; margin-top: 10px; }
+.pp-motivo.is-open { display: grid; gap: 8px; }
+.pp-motivo .row { display: flex; justify-content: flex-end; gap: 8px; }
+
+.pp-toast { position: fixed; right: 20px; bottom: 20px; z-index: 2000; padding: 10px 16px; border-radius: 10px; color: #fff; font-size: 13px; background: #16a34a; box-shadow: 0 10px 30px rgba(0,0,0,.18); display: none; }
+.pp-toast.is-error { background: #dc2626; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="pp-module">
+ <header class="eui-page-header">
+  <div>
+   <div class="eui-page-header__eyebrow">Assistência Técnica</div>
+   <h1 class="eui-page-header__title"><i class="fas fa-gears"></i> Solicitação de Produção de Peças</h1>
+   <p class="eui-page-header__sub">Recebidas por EDI. Aqui só se efetiva o andamento:
+    Pendente → Em andamento → Em produção → Concluído.</p>
+  </div>
+ </header>
+
+ <div class="eui-toolbar" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
+  <div style="position:relative; flex:1; min-width:220px; max-width:420px;">
+   <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+   <input type="search" id="pp-busca" class="eui-input" autocomplete="off" style="width:100%; padding-left:34px;"
+    placeholder="Buscar por protocolo, cliente, máquina, código ou solicitante…">
+  </div>
+  <button class="eui-btn eui-btn--ghost" id="pp-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+ </div>
+
+ <div class="eui-stats pp-stats" id="pp-stats">
+  <div class="eui-stat is-clickable" data-status="Pendente">
+   <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
+   <div class="eui-stat__body"><span class="eui-stat__label">Pendentes</span><span class="eui-stat__value" data-count="Pendente">0</span></div>
+  </div>
+  <div class="eui-stat is-clickable" data-status="Em andamento">
+   <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-person-running"></i></div>
+   <div class="eui-stat__body"><span class="eui-stat__label">Em andamento</span><span class="eui-stat__value" data-count="Em andamento">0</span></div>
+  </div>
+  <div class="eui-stat is-clickable" data-status="Em produção">
+   <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-industry"></i></div>
+   <div class="eui-stat__body"><span class="eui-stat__label">Em produção</span><span class="eui-stat__value" data-count="Em produção">0</span></div>
+  </div>
+  <div class="eui-stat is-clickable" data-status="Concluído">
+   <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div>
+   <div class="eui-stat__body"><span class="eui-stat__label">Concluídas</span><span class="eui-stat__value" data-count="Concluído">0</span></div>
+  </div>
+  <div class="eui-stat is-clickable" data-status="Cancelado">
+   <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-ban"></i></div>
+   <div class="eui-stat__body"><span class="eui-stat__label">Canceladas</span><span class="eui-stat__value" data-count="Cancelado">0</span></div>
+  </div>
+ </div>
+
+ <div class="eui-card">
+  <div class="eui-card__body" id="pp-lista">
+   <div class="eui-empty"><i class="fas fa-circle-notch fa-spin"></i><strong>Carregando…</strong></div>
+  </div>
+ </div>
+ <div class="pp-toast" id="pp-toast"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+    const API = "/api/assistencia-tecnica/producao-pecas";
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
+    const BADGE = { "Pendente": "warning", "Em andamento": "info", "Em produção": "violet", "Concluído": "success", "Cancelado": "neutral" };
+    const ACAO = { recebido: "Recebida por EDI", efetivado: "Efetivada", estornado: "Estornada", cancelado: "Cancelada" };
+
+    let dados = [], fluxo = [], filtro = "", abertos = new Set();
+
+    function toast(msg, erro) {
+        const t = $("pp-toast");
+        t.textContent = msg;
+        t.classList.toggle("is-error", !!erro);
+        t.style.display = "block";
+        clearTimeout(t._h);
+        t._h = setTimeout(() => { t.style.display = "none"; }, 3500);
+    }
+
+    async function carregar() {
+        try {
+            const r = await fetch(API);
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error || "Falha ao carregar.");
+            dados = j.solicitacoes || [];
+            fluxo = j.fluxo || [];
+            render();
+        } catch (e) {
+            $("pp-lista").innerHTML = `<div class="eui-empty"><i class="fas fa-triangle-exclamation"></i><strong>${esc(e.message)}</strong></div>`;
+        }
+    }
+
+    function passos(s) {
+        const atual = fluxo.indexOf(s.status);
+        return `<div class="pp-steps">` + fluxo.map((st, i) => {
+            const cls = s.status === "Cancelado" ? "" : i < atual || s.status === "Concluído" ? "is-done" : i === atual ? "is-current" : "";
+            const bar = i ? `<span class="pp-step__bar ${cls === "is-done" || cls === "is-current" ? "is-done" : ""}"></span>` : "";
+            return `${bar}<span class="pp-step ${cls}"><span class="pp-step__dot">${cls === "is-done" ? '<i class="fas fa-check"></i>' : i + 1}</span>${esc(st)}</span>`;
+        }).join("") + `</div>`;
+    }
+
+    function avisoErp(s) {
+        const avisos = [];
+        if (s.situacao_erp === "nao_verificado") avisos.push("O ERP estava indisponível quando a solicitação chegou - código não verificado.");
+        if (s.situacao_erp === "nao_encontrado") avisos.push(`Código ${esc(s.codigo)} não encontrado no ERP.`);
+        if (s.situacao_erp !== "nao_verificado" && s.cliente_codigo && !s.cliente_nome_erp) avisos.push(`Cliente ${esc(s.cliente_codigo)} não encontrado no ERP.`);
+        return avisos.map((a) => `<div class="pp-aviso"><i class="fas fa-triangle-exclamation"></i> ${a}</div>`).join("");
+    }
+
+    function card(s) {
+        const aberto = abertos.has(s.id);
+        const campo = (k, v, extra) => `<div class="pp-field"><span class="k">${k}</span><span class="v">${v ? esc(v) : "—"}</span>${extra || ""}</div>`;
+        const acoes = [];
+        if (s.proximo_status) acoes.push(`<button class="eui-btn eui-btn--primary eui-btn--sm" data-act="efetivar"><i class="fas fa-circle-check"></i> Efetivar: ${esc(s.proximo_status)}</button>`);
+        if (s.status_anterior) acoes.push(`<button class="eui-btn eui-btn--ghost eui-btn--sm" data-act="abrir-estornar"><i class="fas fa-rotate-left"></i> Estornar para ${esc(s.status_anterior)}</button>`);
+        if (s.pode_cancelar) acoes.push(`<button class="eui-btn eui-btn--danger eui-btn--sm" data-act="abrir-cancelar"><i class="fas fa-ban"></i> Cancelar</button>`);
+
+        return `
+        <div class="pp-card ${aberto ? "is-open" : ""}" data-id="${s.id}" data-status="${esc(s.status)}">
+          <div class="pp-card__head" data-act="toggle">
+            <span class="pp-card__accent"></span>
+            <div style="min-width:0">
+              <div class="pp-card__title"><b>${esc(s.protocolo)}</b><span class="sep">·</span><b>${esc(s.codigo)}</b><span>${esc(s.descricao)}</span></div>
+              <div class="pp-card__meta">
+                <span><i class="fas fa-building"></i>${esc(s.cliente)}</span>
+                <span><i class="fas fa-gear"></i>${esc(s.maquina)}</span>
+                <span><i class="fas fa-user"></i>${esc(s.solicitante)}</span>
+                <span class="${s.atrasada ? "is-late" : ""}"><i class="fas fa-calendar"></i>Prazo ${dataBR(s.prazo)}${s.atrasada ? " (atrasada)" : ""}</span>
+              </div>
+            </div>
+            <div class="pp-card__right">
+              <span class="eui-badge eui-badge--${BADGE[s.status] || "neutral"}">${esc(s.status)}</span>
+              <i class="fas fa-chevron-down" style="color:var(--eui-text-muted,#94a3b8)"></i>
+            </div>
+          </div>
+          <div class="pp-card__detail">
+            ${passos(s)}
+            ${avisoErp(s)}
+            <div class="pp-grid">
+              <div>
+                <div class="pp-fields">
+                  ${campo("Cliente", s.cliente, s.cliente_nome_erp ? `<span class="erp"><i class="fas fa-database"></i> ERP: ${esc(s.cliente_nome_erp)}</span>` : "")}
+                  ${campo("Máquina", s.maquina)}
+                  ${campo("Código", s.codigo)}
+                  ${campo("Descrição", s.descricao, s.descricao_erp ? `<span class="erp"><i class="fas fa-database"></i> ERP: ${esc(s.descricao_erp)}</span>` : "")}
+                  ${campo("Motivo", s.motivo)}
+                  ${campo("Prazo", dataBR(s.prazo))}
+                  ${campo("Solicitante", s.solicitante)}
+                  ${campo("Recebida em", s.recebido_em)}
+                </div>
+                ${s.comentario ? `<div class="pp-texto">${esc(s.comentario)}</div>` : ""}
+                ${s.motivo_cancelamento ? `<div class="pp-aviso"><i class="fas fa-ban"></i> Cancelada: ${esc(s.motivo_cancelamento)}</div>` : ""}
+              </div>
+              <div>
+                ${s.tem_imagem
+                    ? `<a href="${API}/${s.id}/imagem" target="_blank" rel="noopener"><img class="pp-img" loading="lazy" src="${API}/${s.id}/imagem" alt="Imagem da peça"></a>`
+                    : `<div class="pp-sem-img">Sem imagem da peça</div>`}
+              </div>
+            </div>
+            <div class="pp-section-title">Histórico</div>
+            <ul class="pp-hist">
+              ${(s.historico || []).slice().reverse().map((h) => `<li><b>${ACAO[h.acao] || esc(h.acao)}</b>: ${h.status_de ? esc(h.status_de) + " → " : ""}${esc(h.status_para)}
+                  <small>· ${esc(h.usuario)} · ${esc(h.criado_em)}</small>${h.motivo ? `<br><small>Motivo: ${esc(h.motivo)}</small>` : ""}</li>`).join("")}
+            </ul>
+            ${acoes.length ? `<div class="pp-actions">${acoes.join("")}</div>` : ""}
+            <div class="pp-motivo" data-motivo>
+              <textarea class="eui-textarea" rows="2" placeholder=""></textarea>
+              <div class="row">
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-act="fechar-motivo">Voltar</button>
+                <button class="eui-btn eui-btn--sm" data-act="confirmar-motivo"></button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function render() {
+        const termo = ($("pp-busca").value || "").trim().toLowerCase();
+        document.querySelectorAll("[data-count]").forEach((el) => {
+            el.textContent = dados.filter((s) => s.status === el.dataset.count).length;
+        });
+        document.querySelectorAll("#pp-stats .eui-stat").forEach((el) => el.classList.toggle("is-active", el.dataset.status === filtro));
+        const lista = dados.filter((s) => {
+            if (filtro && s.status !== filtro) return false;
+            if (!termo) return true;
+            return [s.protocolo, s.cliente, s.maquina, s.codigo, s.descricao, s.solicitante, s.id_externo]
+                .some((v) => String(v || "").toLowerCase().includes(termo));
+        });
+        $("pp-lista").innerHTML = lista.length
+            ? lista.map(card).join("")
+            : `<div class="eui-empty"><i class="fas fa-inbox"></i><strong>Nenhuma solicitação${filtro ? " em " + esc(filtro) : ""}.</strong></div>`;
+    }
+
+    async function acao(id, rota, corpo) {
+        try {
+            const r = await fetch(`${API}/${id}/${rota}`, {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo || {}),
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error || "Falha na operação.");
+            const i = dados.findIndex((s) => s.id === id);
+            if (i >= 0) dados[i] = j.solicitacao;
+            render();
+            toast(`${j.solicitacao.protocolo}: ${j.solicitacao.status}`);
+        } catch (e) {
+            toast(e.message, true);
+            carregar();
+        }
+    }
+
+    $("pp-lista").addEventListener("click", (ev) => {
+        const alvo = ev.target.closest("[data-act]");
+        const el = ev.target.closest(".pp-card");
+        if (!alvo || !el) return;
+        const id = Number(el.dataset.id);
+        const s = dados.find((x) => x.id === id);
+        const caixa = el.querySelector("[data-motivo]");
+        const act = alvo.dataset.act;
+        if (act === "toggle") {
+            abertos.has(id) ? abertos.delete(id) : abertos.add(id);
+            el.classList.toggle("is-open");
+        } else if (act === "efetivar") {
+            if (confirm(`Efetivar ${s.protocolo} para "${s.proximo_status}"?`)) acao(id, "efetivar", { status_atual: s.status });
+        } else if (act === "abrir-estornar" || act === "abrir-cancelar") {
+            const cancelar = act === "abrir-cancelar";
+            caixa.dataset.rota = cancelar ? "cancelar" : "estornar";
+            caixa.querySelector("textarea").value = "";
+            caixa.querySelector("textarea").placeholder = cancelar ? "Motivo do cancelamento (obrigatório)" : "Motivo do estorno (opcional)";
+            const btn = caixa.querySelector('[data-act="confirmar-motivo"]');
+            btn.className = "eui-btn eui-btn--sm " + (cancelar ? "eui-btn--danger" : "eui-btn--primary");
+            btn.textContent = cancelar ? "Confirmar cancelamento" : `Confirmar estorno para ${s.status_anterior}`;
+            caixa.classList.add("is-open");
+            caixa.querySelector("textarea").focus();
+        } else if (act === "fechar-motivo") {
+            caixa.classList.remove("is-open");
+        } else if (act === "confirmar-motivo") {
+            const motivo = caixa.querySelector("textarea").value.trim();
+            if (caixa.dataset.rota === "cancelar" && !motivo) { toast("Informe o motivo do cancelamento.", true); return; }
+            acao(id, caixa.dataset.rota, { motivo });
+        }
+    });
+
+    $("pp-stats").addEventListener("click", (ev) => {
+        const st = ev.target.closest(".eui-stat");
+        if (!st) return;
+        filtro = filtro === st.dataset.status ? "" : st.dataset.status;
+        render();
+    });
+    $("pp-busca").addEventListener("input", render);
+    $("pp-atualizar").addEventListener("click", carregar);
+    carregar();
+})();
+</script>
+{% endblock %}

@@ -3742,7 +3742,11 @@ def _sincronizar_codigo_interno_por_pedido(
         # pelo pedido vai em codigo_grv (mesmo padrão usado em erp_lancamento_service
         # e classificacao_contabil_service: item.codigo_grv or item.codigo).
         codigo_material = str(par.get("po_codigo_material") or "").strip()
-        if codigo_material and item.codigo_grv != codigo_material:
+        # Depois de lançada, o código que vale é o que entrou no GRV (vem de
+        # _aplicar_codigos_grv). O pareamento com o pedido roda até ao só abrir
+        # a NF e, com bitolas parecidas no mesmo pedido, trocava o código de
+        # linha já lançada (NF 71663: chapa 3/16" virou 3/8").
+        if codigo_material and item.codigo_grv != codigo_material and item.status != "Lançado":
             item.codigo_grv = codigo_material[:80]
             atualizou = True
 
