@@ -235,7 +235,7 @@ def test_tela_tem_coluna_de_sugestao_e_dialogo_de_parametros(tmp_path):
     html = client.get("/logistica/estoque").get_data(as_text=True)
     assert 'id="mp-th-sugestao"' in html
     assert 'id="mp-param-dialog"' in html
-    assert "function calculoHtml" in html
+    assert "function abaCalculo" in html
     assert '<option value="esporadico">' in html
 
 
@@ -386,7 +386,7 @@ def test_rota_fornecimentos_e_grv_fora_nao_derruba(tmp_path):
     assert resp.get_json()["disponivel"] is False
     assert client.get("/api/logistica/estoque/fornecimentos").status_code == 400
     html = client.get("/logistica/estoque").get_data(as_text=True)
-    assert 'id="mp-forn-dialog"' in html
+    assert 'id="mp-painel"' in html
     assert "function abrirFornecimentos" in html
 
 
@@ -406,3 +406,25 @@ def test_bridge_fornecimentos(monkeypatch):
     assert data["fornecimentos"] == [{"ordem_compra": 11867, "dt_oc": "2026-06-18", "fornecedor": "CECOFER"}]
     assert cursor.execute.call_args.args[1]["codigo"] == "190100591"
     assert client.post("/api/erp/estoque/fornecimentos", json={}).status_code == 400
+
+
+def test_compras_ve_estoque_sem_abrir_contagem_nem_chapas(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "COMPRAS_TESTE", "Compras")
+
+    html = client.get("/logistica/estoque").get_data(as_text=True)
+    assert 'id="mp-table"' in html
+    # Menu: Estoque sim; link de Inventário e aba de Chapas não.
+    assert 'href="/logistica/estoque"' in html
+    assert 'href="/logistica/inventario"' not in html
+    assert 'href="/logistica/estoque/chapas"' not in html
+    with patch.object(routes, "buscar_fornecimentos_grv", return_value=[]):
+        assert client.get("/api/logistica/estoque/fornecimentos?codigo=1901").status_code == 200
+    assert client.get("/api/logistica/estoque/planejamento/parametros").get_json()["pode_editar"] is False
+
+    # O que a permissão de inventário abre continua fechado.
+    assert client.get("/logistica/inventario/novo").status_code == 403
+    assert client.post("/api/logistica/inventario-inicial", json={}).status_code == 403
+    assert client.get("/logistica/estoque/chapas").status_code == 403
+    assert client.put("/api/logistica/estoque/planejamento/parametros", json={}).status_code == 403

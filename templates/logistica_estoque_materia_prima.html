@@ -7,115 +7,100 @@
 <style>
     .mp-wrap { display: grid; gap: 16px; }
     .mp-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-    .mp-search { flex: 1; min-width: 280px; position: relative; }
+    .mp-search { flex: 1; min-width: 260px; position: relative; }
     .mp-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); }
     .mp-search input { padding-left: 36px; width: 100%; }
-    .mp-views { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
-    .mp-view-btn { border: 0; background: transparent; color: var(--eui-muted); font-weight: 800; font-size: 12px; padding: 8px 12px; border-radius: 7px; cursor: pointer; }
-    .mp-view-btn.active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
-    .mp-view-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
-    .mp-view-link:hover { color: var(--eui-primary); }
-    .mp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--eui-text-soft); }
-    .mp-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
-    .mp-item-main { display: grid; gap: 3px; }
-    .mp-code { font-weight: 800; color: var(--eui-text); }
-    .mp-desc { font-size: 12px; color: var(--eui-text-soft); max-width: 460px; }
-    .mp-locs { font-size: 11px; color: var(--eui-muted); }
-    .mp-num { font-weight: 800; color: var(--eui-text); white-space: nowrap; }
-    .mp-muted { color: var(--eui-muted); font-size: 12px; }
-    .mp-badge { border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-    .mp-badge.normal { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
-    .mp-badge.atencao { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .mp-badge.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
-    .mp-badge.sem_consumo { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
-    .mp-badge.sem_estoque { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .mp-nivel-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-    .mp-oc-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 800; background: var(--eui-info-soft); color: var(--eui-info-soft-text); white-space: nowrap; }
-    .mp-reservas { display: grid; gap: 8px; margin-top: 8px; min-width: 220px; }
-    .mp-reserva-resumo { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 10px; border-radius: 6px; background: var(--eui-primary-soft); color: var(--eui-text-soft); font-size: 12px; }
-    .mp-reserva-resumo strong { color: var(--eui-primary); }
-    .mp-reserva { display: grid; grid-template-columns: minmax(130px, auto) minmax(180px, 1fr) minmax(180px, 1fr); gap: 8px 18px; border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: 6px; padding: 10px 12px; background: var(--eui-surface); font-size: 12px; color: var(--eui-text-soft); }
-    .mp-reserva__quantidade { font-size: 14px; font-weight: 800; color: var(--eui-text); }
-    .mp-reserva__campo { display: grid; gap: 2px; }
-    .mp-reserva__rotulo { color: var(--eui-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
-    .mp-reserva__valor { color: var(--eui-text-soft); font-weight: 700; }
-    .mp-oc-status { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--eui-border); border-radius: 6px; font-size: 12px; }
-    .mp-oc-status--open { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
-    .mp-oc-status--none { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
-    .mp-oc-list { display: grid; gap: 5px; margin: 8px 0 0; color: var(--eui-text-soft); }
-    .mp-expand-btn { width: 30px; height: 30px; border: 1px solid var(--eui-border); border-radius: 6px; background: var(--eui-surface); color: var(--eui-primary); cursor: pointer; }
-    .mp-expand-btn:hover { background: var(--eui-primary-soft); }
-    .mp-item-row { cursor: pointer; }
-    .mp-item-row:hover td { background: var(--eui-primary-soft); }
-    .mp-detail-row td { background: var(--eui-surface-2); padding: 14px 18px; }
-    .mp-item-details { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; color: var(--eui-text-soft); font-size: 12px; }
-    .mp-item-details strong { color: var(--eui-text); }
-    .mp-table-wrap { overflow-x: auto; }
+    .mp-views { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); flex-wrap: wrap; }
+    .mp-view-btn { border: 0; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .mp-view-btn.active { background: var(--eui-surface); color: var(--eui-text); box-shadow: var(--eui-shadow-sm); }
+    .mp-view-btn:hover { color: var(--eui-text); }
     .mp-head { display: grid; gap: 12px; }
-    .mp-filters { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; }
+    .mp-filters { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; }
     .mp-filters .eui-select { width: auto; min-width: 180px; }
-    .mp-filters .mp-check { text-transform: none; letter-spacing: normal; margin: 0; }
+    .mp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--eui-text-soft); margin: 0; text-transform: none; letter-spacing: normal; }
     .mp-filters__end { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-    .mp-sub { display: block; margin-top: 3px; font-size: 11px; color: var(--eui-muted); white-space: nowrap; }
-    .mp-cov { display: grid; gap: 4px; min-width: 150px; }
-    .mp-cov__bar { position: relative; height: 6px; border-radius: 999px; background: var(--eui-surface-2); border: 1px solid var(--eui-border); overflow: hidden; }
-    .mp-cov__fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
-    .mp-cov__fill.critico { background: var(--eui-danger); }
-    .mp-cov__fill.atencao { background: var(--eui-warning); }
-    .mp-cov__fill.normal { background: var(--eui-success); }
-    .mp-legend { font-size: 12px; color: var(--eui-muted); }
-    .mp-pico { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .erp-table th.mp-right, .erp-table td.mp-right { text-align: right; }
-    /* Planejamento: mínimo / lote sugeridos a partir do histórico do GRV. */
-    .mp-badge.esporadico { background: var(--eui-surface-2); color: var(--eui-text-soft); border: 1px solid var(--eui-border); }
-    .mp-cov__fill.esporadico { background: var(--eui-info); }
+    .mp-muted { color: var(--eui-muted); font-size: 12px; }
+    .mp-state { padding: 18px; color: var(--eui-muted); font-size: 13px; }
     .mp-aviso { margin: 12px 16px 0; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .mp-sug { display: grid; gap: 3px; min-width: 190px; font-size: 12px; color: var(--eui-text-soft); }
-    .mp-sug b { color: var(--eui-text); }
-    .mp-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
-    .mp-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 7px; font-size: 10.5px; font-weight: 800; white-space: nowrap; background: var(--eui-surface-2); color: var(--eui-text-soft); border: 1px solid var(--eui-border); }
-    .mp-chip.abc-A { background: var(--eui-primary-soft); color: var(--eui-primary); border-color: transparent; }
-    .mp-chip.conf-alta { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border-color: transparent; }
-    .mp-chip.conf-media { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); border-color: transparent; }
-    .mp-chip.conf-baixa { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border-color: transparent; }
-    .mp-chip.os { background: var(--eui-violet-soft, var(--eui-info-soft)); color: var(--eui-violet-soft-text, var(--eui-info-soft-text)); border-color: transparent; }
-    .mp-calc { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
-    .mp-calc__box { border: 1px solid var(--eui-border); border-radius: 8px; background: var(--eui-surface); padding: 10px 12px; font-size: 12px; color: var(--eui-text-soft); display: grid; gap: 3px; }
-    .mp-calc__box > span:first-child { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
-    .mp-calc__box b { color: var(--eui-text); }
+
+    /* Lista densa: 1 linha por item, altura fixa, números alinhados. A cor
+       fica só no status - o resto é neutro pra dar pra comparar de cima a baixo. */
+    .mp-table-wrap { overflow-x: auto; }
+    .mp-grid { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .mp-grid th { position: sticky; top: 0; z-index: 1; background: var(--eui-surface-2); text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); padding: 9px 10px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .mp-grid td { padding: 0 10px; height: 42px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); white-space: nowrap; }
+    .mp-grid .num { text-align: right; }
+    .mp-grid tbody tr { cursor: pointer; }
+    .mp-grid tbody tr:hover td { background: var(--eui-surface-2); }
+    .mp-grid tbody tr.selecionado td { background: var(--eui-primary-soft); }
+    .mp-grid .c-cod { font-weight: 700; color: var(--eui-text); }
+    .mp-grid .c-desc { width: 100%; max-width: 0; min-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .mp-grid .c-un { color: var(--eui-muted); font-size: 12px; }
+    .mp-grid .c-forte { font-weight: 700; color: var(--eui-text); }
+    .mp-grid .c-seta { width: 28px; color: var(--eui-muted); text-align: right; }
+    .mp-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--eui-text); }
+    .mp-bola { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--eui-muted); }
+    .mp-bola.critico { background: var(--eui-danger); }
+    .mp-bola.atencao, .mp-bola.sem_estoque { background: var(--eui-warning); }
+    .mp-bola.normal { background: var(--eui-success); }
+    .mp-bola.esporadico { background: transparent; border: 1.5px solid var(--eui-muted); }
+    .mp-bola.sem_consumo { background: var(--eui-border-strong, var(--eui-border)); }
+    .mp-oc-ico { color: var(--eui-muted); font-size: 11px; margin-left: 2px; }
+
+    /* Painel lateral: o detalhe abre ao lado, a lista não se mexe. */
+    .mp-painel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 2300; background: var(--eui-surface); border-left: 1px solid var(--eui-border); box-shadow: -12px 0 40px rgba(15, 23, 42, .18); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .18s ease; }
+    .mp-painel.aberto { transform: none; }
+    .mp-painel__head { padding: 16px 20px 0; border-bottom: 1px solid var(--eui-border); }
+    .mp-painel__topo { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .mp-painel__cod { font-size: 12px; font-weight: 700; color: var(--eui-muted); letter-spacing: .02em; }
+    .mp-painel__titulo { margin: 2px 0 4px; font-size: 16px; font-weight: 700; color: var(--eui-text); line-height: 1.3; }
+    .mp-painel__fechar { border: 0; background: transparent; color: var(--eui-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+    .mp-painel__fechar:hover { color: var(--eui-text); }
+    .mp-abas { display: flex; gap: 18px; margin-top: 12px; }
+    .mp-aba { border: 0; background: transparent; padding: 10px 0; font-size: 13px; font-weight: 600; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .mp-aba.ativa { color: var(--eui-text); border-bottom-color: var(--eui-primary); }
+    .mp-painel__corpo { flex: 1; overflow-y: auto; padding: 18px 20px 24px; }
+    .mp-secao { margin: 0 0 18px; }
+    .mp-secao:last-child { margin-bottom: 0; }
+    .mp-secao__titulo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin: 0 0 8px; }
+    .mp-kv { display: grid; grid-template-columns: 1fr auto; gap: 0; font-size: 13px; }
+    .mp-kv > div { display: contents; }
+    .mp-kv dt, .mp-kv dd { margin: 0; padding: 7px 0; border-bottom: 1px solid var(--eui-border); }
+    .mp-kv dt { color: var(--eui-text-soft); }
+    .mp-kv dd { text-align: right; color: var(--eui-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .mp-kv dd small { display: block; font-weight: 400; color: var(--eui-muted); font-size: 11.5px; }
+    .mp-nota { font-size: 12.5px; color: var(--eui-text-soft); line-height: 1.55; margin: 0; }
+    .mp-nota b { color: var(--eui-text); }
+    .mp-caixa { border: 1px solid var(--eui-border); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: var(--eui-text-soft); }
+    .mp-caixa--alerta { border-color: transparent; background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .mp-caixa b { color: inherit; }
+    .mp-conta { font-size: 12.5px; color: var(--eui-text-soft); line-height: 1.7; }
+    .mp-conta b { color: var(--eui-text); }
+    .mp-tab { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .mp-tab th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); padding: 6px 6px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .mp-tab td { padding: 7px 6px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); vertical-align: top; }
+    .mp-tab td b { color: var(--eui-text); font-weight: 600; }
+    .mp-tab .num { text-align: right; white-space: nowrap; }
+    .mp-tab small { display: block; color: var(--eui-muted); font-size: 11px; }
+    .mp-tab tr.inativo td { opacity: .55; }
+    .mp-selo { display: block; margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--eui-success-soft-text); }
+    .mp-reserva { border-bottom: 1px solid var(--eui-border); padding: 9px 0; font-size: 12.5px; color: var(--eui-text-soft); display: grid; gap: 2px; }
+    .mp-reserva b { color: var(--eui-text); }
+
     .mp-dialog { width: min(520px, calc(100% - 24px)); margin: auto; padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
     .mp-dialog::backdrop { background: rgba(15,23,42,.55); }
     .mp-dialog__head, .mp-dialog__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; }
-    .mp-dialog__head { border-bottom: 1px solid var(--eui-border); font-weight: 800; }
+    .mp-dialog__head { border-bottom: 1px solid var(--eui-border); font-weight: 700; }
     .mp-dialog__foot { border-top: 1px solid var(--eui-border); justify-content: flex-end; }
     .mp-dialog__body { padding: 16px 18px; display: grid; gap: 12px; }
     .mp-dialog__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .mp-dialog label { display: block; font-size: 11px; font-weight: 800; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+    .mp-dialog label { display: block; font-size: 11px; font-weight: 700; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
     .mp-dialog input { width: 100%; }
     .mp-erro { color: var(--eui-danger); font-size: 12.5px; font-weight: 600; }
-    .mp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--eui-muted); }
-    .mp-dot.conf-alta { background: var(--eui-success); }
-    .mp-dot.conf-media { background: var(--eui-warning); }
-    .mp-dot.conf-baixa { background: var(--eui-danger); }
-    .mp-sug__lote { padding-left: 14px; }
-    .mp-forn-btn { border: 0; background: transparent; padding: 0; color: var(--eui-primary); font-size: 11.5px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
-    .mp-forn-btn:hover { text-decoration: underline; }
-    .mp-dialog--wide { width: min(980px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
-    .mp-forn-sec { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin: 4px 0 0; }
-    .mp-forn-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    .mp-forn-table th { text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); padding: 6px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
-    .mp-forn-table td { padding: 8px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); vertical-align: top; }
-    .mp-forn-table td b { color: var(--eui-text); }
-    .mp-forn-table .num { text-align: right; white-space: nowrap; }
-    .mp-forn-table small { display: block; color: var(--eui-muted); font-size: 11px; }
-    .mp-forn-table tr.inativo td { opacity: .6; }
-    .mp-forn-wrap { overflow-x: auto; }
     @media (max-width: 820px) {
-        .mp-toolbar { align-items: stretch; }
         .mp-search { width: 100%; }
         .mp-filters__end { margin-left: 0; width: 100%; }
         .mp-filters__end .eui-btn { flex: 1; justify-content: center; }
-        .mp-reserva { grid-template-columns: 1fr; gap: 7px; }
         .mp-dialog__grid { grid-template-columns: 1fr; }
     }
 </style>
@@ -127,7 +112,7 @@
         <div>
             <div class="eui-page-header__eyebrow">LOGÍSTICA · INVENTÁRIO</div>
             <h1 class="eui-page-header__title"><i class="fas fa-boxes-stacked"></i> Estoque</h1>
-            <p class="eui-page-header__sub" id="mp-metodo">Saldos do depósito 1 no GRV. Cobertura = saldo disponível ÷ consumo médio diário dos últimos <span id="mp-janela">90</span> dias.</p>
+            <p class="eui-page-header__sub" id="mp-metodo">Saldos do depósito 1 no GRV.</p>
         </div>
         <button class="eui-btn eui-btn--ghost" id="mp-param-open" type="button" style="display:none;"><i class="fas fa-sliders"></i> Parâmetros do planejamento</button>
     </header>
@@ -144,10 +129,11 @@
             <div class="mp-toolbar">
                 <div class="mp-views" role="group" aria-label="Visão do estoque">
                     <button class="mp-view-btn active" type="button" data-visao="materia_prima">Matéria-prima</button>
-                    <button class="mp-view-btn" type="button" data-visao="revenda">Material para revenda</button>
+                    <button class="mp-view-btn" type="button" data-visao="revenda">Revenda</button>
                     <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
                     <button class="mp-view-btn" type="button" data-visao="insumos">Insumos da produção</button>
-                    <a class="mp-view-btn mp-view-link" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>
+                    {# Controle de Chapas edita cálculo: só com a permissão de inventário, não com a de consulta. #}
+                    {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>{% endif %}
                 </div>
                 <div class="mp-search">
                     <i class="fas fa-magnifying-glass"></i>
@@ -155,20 +141,19 @@
                 </div>
             </div>
             <div class="mp-filters">
-                <select class="eui-select" id="mp-nivel">
-                    <option value="">Todos os níveis</option>
+                <select class="eui-select" id="mp-nivel" aria-label="Status">
+                    <option value="">Todos os status</option>
                     <option value="critico">Crítico</option>
-                    <option value="atencao">Monitorar</option>
+                    <option value="atencao">Monitorar / abaixo do mínimo</option>
                     <option value="normal">Adequado</option>
                     <option value="esporadico">Demanda esporádica</option>
                     <option value="sem_consumo">Sem consumo</option>
                 </select>
-                <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo</label>
+                <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo no GRV</label>
                 <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
-                <span class="mp-legend" id="mp-legenda"></span>
                 <div class="mp-filters__end">
-                    <span class="mp-muted" id="mp-updated" title="A cobertura é recalculada a cada atualização"></span>
-                    <button class="eui-btn eui-btn--ghost" id="mp-refresh"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <span class="mp-muted" id="mp-updated"></span>
+                    <button class="eui-btn eui-btn--ghost" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>
         </div>
@@ -176,24 +161,29 @@
             <div class="mp-aviso" id="mp-plan-aviso" style="display:none;"><i class="fas fa-triangle-exclamation"></i> O histórico do GRV não respondeu agora: mínimo e lote sugeridos indisponíveis, e a cobertura voltou ao cálculo simples dos últimos 90 dias.</div>
             <div class="mp-state" id="mp-state">Carregando estoque...</div>
             <div class="mp-table-wrap">
-                <table class="erp-table" id="mp-table" style="display:none;">
-                    <thead>
-                        <tr>
-                            <th>Material</th>
-                            <th class="mp-right">Disponível</th>
-                            <th class="mp-right" id="mp-th-consumo">Consumo/dia</th>
-                            <th>Cobertura</th>
-                            <th id="mp-th-sugestao" style="display:none;">Mínimo / lote sugeridos</th>
-                            <th>Nível</th>
-                            <th id="mp-th-reservas" style="display:none; text-align:right;">Reservas</th>
-                        </tr>
-                    </thead>
+                <table class="mp-grid" id="mp-table" style="display:none;">
+                    <thead id="mp-head"></thead>
                     <tbody id="mp-body"></tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
+
+<aside class="mp-painel" id="mp-painel" aria-labelledby="mp-painel-titulo" aria-hidden="true">
+    <div class="mp-painel__head">
+        <div class="mp-painel__topo">
+            <div>
+                <div class="mp-painel__cod" id="mp-painel-cod"></div>
+                <h2 class="mp-painel__titulo" id="mp-painel-titulo"></h2>
+                <div class="mp-muted" id="mp-painel-sub"></div>
+            </div>
+            <button type="button" class="mp-painel__fechar" id="mp-painel-fechar" aria-label="Fechar">&times;</button>
+        </div>
+        <nav class="mp-abas" id="mp-abas" role="tablist"></nav>
+    </div>
+    <div class="mp-painel__corpo" id="mp-painel-corpo" aria-live="polite"></div>
+</aside>
 
 <dialog id="mp-param-dialog" class="mp-dialog" aria-labelledby="mp-param-title">
     <form method="dialog" id="mp-param-form">
@@ -214,25 +204,26 @@
         <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-param-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-param-save"><i class="fas fa-check"></i> Salvar</button></div>
     </form>
 </dialog>
-<dialog id="mp-forn-dialog" class="mp-dialog mp-dialog--wide" aria-labelledby="mp-forn-title">
-    <div class="mp-dialog__head"><span id="mp-forn-title"><i class="fas fa-truck"></i> Fornecimentos</span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-forn-close" aria-label="Fechar">&times;</button></div>
-    <div class="mp-dialog__body" id="mp-forn-body" aria-live="polite"></div>
-</dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
+    const VISOES_COMPRA = ['materia_prima', 'revenda', 'insumos'];
     let timer = null;
     let visaoAtual = 'materia_prima';
-    let expanded = new Set();
     let janelaDias = 90;
     let diasAtencao = 15;
+    let diasCritico = 7;
     let planejamentoAtivo = false;
     let parametros = null;
+    let itens = [];
+    let selecionado = null;   // código do item aberto no painel
+    let abaAtual = 'resumo';
+    const fornCache = {};     // fornecimentos já consultados (por código), até recarregar a página
 
-    function fmt(valor, casas = 3) {
+    function fmt(valor, casas = 2) {
         return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
     }
 
@@ -245,35 +236,168 @@
             .replace(/'/g, '&#39;');
     }
 
-    function badge(item) {
-        const nivel = item.nivel || 'normal';
-        const icon = nivel === 'critico' ? 'fa-triangle-exclamation' : (nivel === 'atencao' ? 'fa-clock' : (nivel === 'sem_consumo' ? 'fa-circle-info' : (nivel === 'esporadico' ? 'fa-wave-square' : 'fa-circle-check')));
-        return `<span class="mp-badge ${nivel}"><i class="fas ${icon}"></i>${item.nivel_label || '-'}</span>`;
-    }
-
-    function ocInline(item) {
-        const ordens = item.ordens_compra_abertas || [];
-        if (!ordens.length) return '';
-        const nums = ordens.map((o) => esc(o.ordem_compra || '')).filter(Boolean);
-        if (!nums.length) return '';
-        const label = nums.length === 1 ? `OC ${nums[0]}` : `OC ${nums[0]} +${nums.length - 1}`;
-        const title = nums.map((n) => `OC ${n}`).join(', ') + ' · reposição em andamento';
-        return `<span class="mp-oc-chip" title="${title}"><i class="fas fa-cart-shopping"></i> ${label}</span>`;
-    }
-
-    function saldoCell(item) {
-        const un = esc(item.unidade || '');
-        const reservado = Number(item.saldo_reservado || 0);
-        const sub = reservado > 0
-            ? `<span class="mp-sub">${fmt(reservado)} reservado · ${fmt(item.saldo_total)} total</span>`
-            : '';
-        return `<span class="mp-num">${fmt(item.saldo_disponivel)} ${un}</span>${sub}`;
-    }
-
     function dataBr(iso) {
         const partes = String(iso || '').split('-');
         return partes.length === 3 ? `${partes[2]}/${partes[1]}` : '';
     }
+
+    function dataCompleta(iso) {
+        const partes = String(iso || '').slice(0, 10).split('-');
+        return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : '—';
+    }
+
+    function mesAno(iso) {
+        const partes = String(iso || '').split('-');
+        return partes.length >= 2 ? `${partes[1]}/${partes[0]}` : '-';
+    }
+
+    // ------------------------------------------------------------ status
+
+    function statusCurto(item) {
+        const nivel = item.nivel || 'normal';
+        const rotulos = {
+            critico: 'Crítico',
+            atencao: planejamentoAtivo && item.planejamento ? 'Abaixo do mínimo' : 'Monitorar',
+            normal: 'Adequado',
+            esporadico: 'Esporádica',
+            sem_consumo: 'Sem consumo',
+            sem_estoque: 'Sem registro',
+        };
+        return rotulos[nivel] || item.nivel_label || '-';
+    }
+
+    function ocTitulo(item) {
+        const ordens = item.ordens_compra_abertas || [];
+        return ordens.map((o) => `OC ${o.ordem_compra}`).join(', ');
+    }
+
+    function statusCell(item) {
+        const nivel = esc(item.nivel || 'normal');
+        const oc = (item.ordens_compra_abertas || []).length
+            ? `<i class="fas fa-cart-shopping mp-oc-ico" title="${esc(ocTitulo(item))} · reposição em andamento"></i>`
+            : '';
+        return `<span class="mp-status" title="${esc(item.nivel_label || '')}"><span class="mp-bola ${nivel}"></span>${esc(statusCurto(item))}${oc}</span>`;
+    }
+
+    // ------------------------------------------------------------ lista
+
+    function consumoTexto(item) {
+        const p = item.planejamento;
+        if (p) return p.tipo_demanda === 'sem_giro' ? '—' : fmt(p.consumo_mensal);
+        return item.consumo_diario ? fmt(item.consumo_diario, 3) : '—';
+    }
+
+    function coberturaTexto(item) {
+        const p = item.planejamento;
+        if (p && p.tipo_demanda === 'sem_giro') return '—';
+        // Esporádico: a pergunta é se o saldo aguenta a próxima retirada, não quantos dias dura.
+        if (p && p.cobertura_dias == null) {
+            if (!p.retirada_tipica) return '—';
+            // Abaixo de 1 retirada, em %; acima, quantas retiradas o saldo cobre ("487% ret." não se lê).
+            const pct = Number(p.cobre_retirada_pct || 0);
+            return pct < 100 ? `${fmt(pct, 0)}% ret.` : `${fmt(pct / 100, 1)} ret.`;
+        }
+        if (!item.consumo_diario) return '—';
+        return `${item.cobertura_dias} d`;
+    }
+
+    function coberturaTitulo(item) {
+        const p = item.planejamento;
+        if (p && p.cobertura_dias == null && p.retirada_tipica) {
+            return `Saldo cobre ${fmt(p.cobre_retirada_pct, 1)}% de uma retirada típica (${fmt(p.retirada_tipica)} ${item.unidade || ''})`;
+        }
+        const partes = [];
+        if (p) partes.push(`Lead time ${fmt(p.lead_time_dias, 0)} dia(s)`);
+        if (item.cobertura_projetada_dias != null) partes.push(`${item.cobertura_projetada_dias} dia(s) contando OC aberta`);
+        return partes.join(' · ');
+    }
+
+    function renderCabecalho() {
+        const plano = planejamentoAtivo;
+        const pa = visaoAtual === 'produto_acabado';
+        const statusAjuda = plano
+            ? 'Crítico: acaba antes do lead time · Abaixo do mínimo: passou do ponto de pedido · Esporádica: demanda irregular, ver % de 1 retirada'
+            : `Crítico: até ${diasCritico} dias · Monitorar: até ${diasAtencao} dias de cobertura`;
+        $('mp-head').innerHTML = `<tr>
+            <th>Código</th>
+            <th>Descrição</th>
+            <th>Un</th>
+            <th class="num">Disponível</th>
+            <th class="num" id="mp-th-consumo">${plano ? 'Consumo/mês' : 'Consumo/dia'}</th>
+            <th class="num" title="${plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`}">Cobertura</th>
+            ${plano ? '<th class="num" id="mp-th-sugestao">Mín. sugerido</th><th class="num">Lote sugerido</th>' : ''}
+            ${pa ? '<th class="num">Reservas</th>' : ''}
+            <th title="${esc(statusAjuda)}">Status</th>
+            <th class="c-seta" aria-hidden="true"></th>
+        </tr>`;
+    }
+
+    function linha(item) {
+        const p = item.planejamento;
+        const sel = item.codigo === selecionado ? ' selecionado' : '';
+        const minimo = p ? (p.tipo_demanda === 'sem_giro' ? 'não estocar' : fmt(p.estoque_minimo_sugerido)) : '';
+        const lote = p ? (p.lote_economico_sugerido != null ? fmt(p.lote_economico_sugerido) : '—') : '';
+        return `<tr class="mp-item-row${sel}" data-codigo="${esc(item.codigo || '')}">
+            <td class="c-cod">${esc(item.codigo || '-')}</td>
+            <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
+            <td class="c-un">${esc(item.unidade || '')}</td>
+            <td class="num c-forte">${fmt(item.saldo_disponivel)}</td>
+            <td class="num">${consumoTexto(item)}</td>
+            <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
+            ${planejamentoAtivo ? `<td class="num">${p ? minimo : '—'}</td><td class="num">${p ? lote : '—'}</td>` : ''}
+            ${visaoAtual === 'produto_acabado' ? `<td class="num">${(item.reservas || []).length || '—'}</td>` : ''}
+            <td>${statusCell(item)}</td>
+            <td class="c-seta"><i class="fas fa-chevron-right"></i></td>
+        </tr>`;
+    }
+
+    function render(data) {
+        const resumo = data.resumo || {};
+        janelaDias = Number(data.janela_consumo_dias || 90);
+        diasAtencao = Number(data.dias_atencao || 15);
+        diasCritico = Number(data.dias_critico || 7);
+        planejamentoAtivo = !!data.planejamento_ativo;
+        parametros = data.parametros_planejamento || parametros;
+        $('mp-param-open').style.display = data.pode_editar_parametros ? '' : 'none';
+        $('mp-plan-aviso').style.display = data.planejamento_indisponivel ? '' : 'none';
+        $('mp-metodo').textContent = planejamentoAtivo
+            ? 'Saldos do depósito 1 no GRV. Mínimo e lote sugeridos pelo histórico do kardex desde 2019.'
+            : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
+        $('mp-k-criticos-hint').textContent = planejamentoAtivo ? 'Acabam antes da reposição chegar' : `Até ${diasCritico} dias de cobertura`;
+        $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'Abaixo do mínimo sugerido' : `Até ${diasAtencao} dias de cobertura`;
+        $('mp-k-itens').textContent = resumo.itens || 0;
+        const total = Number(resumo.total_filtrado || 0);
+        $('mp-k-itens-hint').textContent = total > Number(resumo.itens || 0) ? `de ${total} encontrados` : '';
+        $('mp-k-criticos').textContent = resumo.criticos || 0;
+        $('mp-k-atencao').textContent = resumo.atencao || 0;
+        $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
+
+        itens = data.items || [];
+        if (!itens.length) {
+            $('mp-table').style.display = 'none';
+            $('mp-state').style.display = 'block';
+            $('mp-state').textContent = 'Nenhum item encontrado.';
+            fecharPainel();
+            return;
+        }
+        $('mp-state').style.display = 'none';
+        $('mp-table').style.display = 'table';
+        renderCabecalho();
+        $('mp-body').innerHTML = itens.map(linha).join('');
+        // Atualização em segundo plano: o painel aberto acompanha os números novos.
+        if (selecionado) {
+            const atual = itens.find((i) => i.codigo === selecionado);
+            if (atual) renderPainel(atual, false); else fecharPainel();
+        }
+    }
+
+    // ------------------------------------------------------------ painel
+
+    function kv(pares) {
+        return `<dl class="mp-kv">${pares.filter(Boolean).map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+    }
+
+    const CONFIANCA = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 
     // Uma saida que e' metade ou mais do consumo do periodo esta puxando a
     // media: avisa sem mexer no numero (decisao da logistica em 25/09/2026).
@@ -283,257 +407,239 @@
         if (maior <= 0 || total <= 0 || maior / total < 0.5) return '';
         const pct = Math.round((maior / total) * 100);
         const quando = dataBr(item.maior_saida_data);
-        return `<span class="mp-pico" title="Uma única saída responde por ${pct}% do consumo dos últimos ${janelaDias} dias"><i class="fas fa-triangle-exclamation"></i> Inclui saída de ${fmt(maior, 0)} ${esc(item.unidade || '')}${quando ? ' em ' + quando : ''}</span>`;
+        return `<p class="mp-nota" style="margin-top:8px">Uma única saída (${fmt(maior, 0)} ${esc(item.unidade || '')}${quando ? ' em ' + quando : ''}) responde por <b>${pct}%</b> do consumo dos últimos ${janelaDias} dias.</p>`;
     }
 
-    function consumoCell(item) {
-        const p = item.planejamento;
-        if (p) {
-            // Com o histórico, consumo por mês: por dia não significa nada pra item que sai 1x a cada tanto.
-            if (p.tipo_demanda === 'sem_giro') return '<span class="mp-muted">—</span>';
-            return `<span class="mp-num" title="${p.meses_com_saida_24m} de ${p.meses_analisados_24m} meses com saída">${fmt(p.consumo_mensal, 2)} ${esc(item.unidade || '')}/mês</span>`;
-        }
-        if (!item.consumo_diario) return '<span class="mp-muted">—</span>';
-        const dias = Number(item.dias_com_saida || 0);
-        // Poucos dias com saida = media puxada por 1 ou 2 baixas grandes; vale mostrar.
-        const sub = dias ? `${dias} dia(s) com saída em ${janelaDias}` : '';
-        return `<span class="mp-num">${fmt(item.consumo_diario)} ${esc(item.unidade || '')}</span>${sub ? `<span class="mp-sub">${sub}</span>` : ''}${picoSaida(item)}`;
-    }
-
-    function cobertura(item) {
-        const p = item.planejamento;
-        if (p && p.tipo_demanda === 'sem_giro') return '<span class="mp-muted">Sem consumo em 12 meses</span>';
-        if (p && p.cobertura_dias == null) {
-            // Esporádico: a pergunta é se o saldo aguenta a próxima retirada, não quantos dias dura.
-            if (!p.retirada_tipica) return '<span class="mp-muted">—</span>';
-            const pctRet = Number(p.cobre_retirada_pct || 0);
-            return `<div class="mp-cov" title="Retirada típica: ${fmt(p.retirada_tipica, 2)} ${esc(item.unidade || '')} (80% das retiradas de 24 meses foram até esse tamanho)">
-                <span class="mp-num">${fmt(pctRet, 0)}% de 1 retirada</span>
-                <span class="mp-cov__bar"><span class="mp-cov__fill esporadico" style="width:${Math.max(3, Math.min(100, pctRet))}%"></span></span>
-            </div>`;
-        }
-        if (!item.consumo_diario) return `<span class="mp-muted">Sem consumo em ${janelaDias} dias</span>`;
-        const dias = Number(item.cobertura_dias || 0);
-        // Com planejamento o nível é relativo ao lead time do item: a barra também.
-        const escala = p ? Math.max(Number(p.lead_time_dias || 0) * 2, 1) : Math.max(diasAtencao * 2, 1);
-        const pct = Math.max(3, Math.min(100, (dias / escala) * 100));
-        const nivel = esc(item.nivel || 'normal');
-        const projetada = item.cobertura_projetada_dias != null
-            ? `<span class="mp-sub" title="Disponível + ${fmt(item.quantidade_pendente_oc)} pendente em OC aberta"><i class="fas fa-cart-shopping"></i> ${item.cobertura_projetada_dias} dia(s) com OC</span>`
-            : '';
-        const lt = p ? ` · lead time ${fmt(p.lead_time_dias, 0)} dia(s)` : '';
-        return `<div class="mp-cov" title="${fmt(item.saldo_disponivel)} ÷ ${fmt(item.consumo_diario)}/dia${lt}">
-            <span class="mp-num">${dias} dia(s)</span>
-            <span class="mp-cov__bar"><span class="mp-cov__fill ${nivel}" style="width:${pct}%"></span></span>
-            ${projetada}
-        </div>`;
-    }
-
-    const CONFIANCA = { alta: 'Confiança alta', media: 'Confiança média', baixa: 'Confiança baixa' };
-
-    function chipsPlanejamento(p) {
-        return `<div class="mp-chips">
-            <span class="mp-chip abc-${esc(p.classe_abc)}" title="Nível de serviço ${fmt(p.nivel_servico_pct, 1)}%">Curva ${esc(p.classe_abc)}</span>
-            <span class="mp-chip">${esc(p.tipo_demanda_label)}</span>
-            <span class="mp-chip conf-${esc(p.confianca)}" title="${esc((p.confianca_motivos || []).join(' · '))}">${CONFIANCA[p.confianca] || ''}</span>
-            ${p.consumo_os_pct_12m > 0 ? `<span class="mp-chip os" title="Parte do consumo de 12 meses que foi material comprado para a própria OS">${fmt(p.consumo_os_pct_12m, 0)}% comprado p/ OS</span>` : ''}
-            ${p.candidato_estoque ? `<span class="mp-chip os" title="${p.oc_para_os_12m} OCs para OS em 12 meses"><i class="fas fa-lightbulb"></i> Candidato a estoque</span>` : ''}
-        </div>`;
-    }
-
-    function sugestaoCell(item) {
-        const p = item.planejamento;
-        if (!p) return '<span class="mp-muted">—</span>';
+    function ocHtml(item) {
+        if (!VISOES_COMPRA.includes(visaoAtual)) return '';
+        const ordens = item.ordens_compra_abertas || [];
         const un = esc(item.unidade || '');
-        // Só os números na linha; selos, GRV e a conta ficam no detalhe (a linha tinha tag demais).
-        const dot = `<span class="mp-dot conf-${esc(p.confianca)}" title="${esc(CONFIANCA[p.confianca] || '')}: ${esc((p.confianca_motivos || []).join(' · '))}"></span>`;
-        if (p.tipo_demanda === 'sem_giro') return `<div class="mp-sug"><span>${dot}<b>Não estocar</b></span></div>`;
-        const lote = p.lote_economico_sugerido != null ? `${fmt(p.lote_economico_sugerido, 2)} ${un}` : '—';
-        return `<div class="mp-sug">
-            <span>${dot}Mín. <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b></span>
-            <span class="mp-sug__lote">Lote <b>${lote}</b></span>
-        </div>`;
+        if (!ordens.length) {
+            return item.nivel === 'critico'
+                ? '<div class="mp-secao"><div class="mp-caixa mp-caixa--alerta"><b>Sem OC em aberto.</b> Este item crítico ainda não tem reposição registrada.</div></div>'
+                : '';
+        }
+        const pendente = ordens.reduce((t, o) => t + Number(o.quantidade_pendente || 0), 0);
+        return `<div class="mp-secao"><p class="mp-secao__titulo">Reposição em andamento · ${fmt(pendente)} ${un} pendente</p>
+            <table class="mp-tab"><tbody>${ordens.map((o) => `<tr>
+                <td><b>OC ${esc(o.ordem_compra || '-')}</b><small>${esc(o.fornecedor || 'Fornecedor não informado')}</small></td>
+                <td class="num"><b>${fmt(o.quantidade_pendente)} ${un}</b>${o.prazo_entrega ? `<small>Prev. ${esc(o.prazo_entrega)}</small>` : ''}</td>
+            </tr>`).join('')}</tbody></table></div>`;
     }
 
-    function mesAno(iso) {
-        const partes = String(iso || '').split('-');
-        return partes.length >= 2 ? `${partes[1]}/${partes[0]}` : '-';
+    function abaResumo(item) {
+        const p = item.planejamento;
+        const un = esc(item.unidade || '');
+        const q = (v) => `${fmt(v)} ${un}`;
+        const grv = (v) => Number(v || 0) > 0 ? q(v) : 'não cadastrado';
+        const saldo = kv([
+            ['Disponível', q(item.saldo_disponivel)],
+            ['Reservado', q(item.saldo_reservado)],
+            ['Total no depósito', q(item.saldo_total)],
+            ['Localização', esc((item.localizacoes || []).join(', ') || 'Sem localização')],
+        ]);
+        let situacao;
+        if (p) {
+            situacao = kv([
+                ['Status', esc(item.nivel_label || '')],
+                ['Consumo', p.tipo_demanda === 'sem_giro' ? 'sem saída em 12 meses' : `${fmt(p.consumo_mensal)} ${un}/mês<small>${p.meses_com_saida_24m} de ${p.meses_analisados_24m} meses com saída</small>`],
+                ['Cobertura', p.cobertura_dias != null ? `${p.cobertura_dias} dia(s)<small>lead time ${fmt(p.lead_time_dias, 0)} dia(s)</small>` : (p.retirada_tipica ? `${fmt(p.cobre_retirada_pct, 1)}% de 1 retirada<small>retirada típica ${q(p.retirada_tipica)}</small>` : '—')],
+                item.cobertura_projetada_dias != null ? ['Cobertura com OC', `${item.cobertura_projetada_dias} dia(s)`] : null,
+            ]);
+            const planejamento = kv([
+                ['Mínimo sugerido', p.tipo_demanda === 'sem_giro' ? 'não estocar' : `${q(p.estoque_minimo_sugerido)}<small>GRV: ${grv(item.estoque_minimo)}</small>`],
+                ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
+                ['Curva ABC', `${esc(p.classe_abc)}<small>nível de serviço ${fmt(p.nivel_servico_pct, 1)}%</small>`],
+                ['Tipo de demanda', esc(p.tipo_demanda_label)],
+                ['Confiança da sugestão', `${CONFIANCA[p.confianca] || '-'}<small>${esc((p.confianca_motivos || []).join(' · '))}</small>`],
+                p.consumo_os_pct_12m > 0 ? ['Comprado para OS (12 meses)', `${fmt(p.consumo_os_pct_12m, 1)}% do consumo${p.candidato_estoque ? '<small>candidato a item de estoque</small>' : ''}`] : null,
+            ]);
+            return `<div class="mp-secao"><p class="mp-secao__titulo">Saldo</p>${saldo}</div>
+                <div class="mp-secao"><p class="mp-secao__titulo">Situação</p>${situacao}</div>
+                ${ocHtml(item)}
+                <div class="mp-secao"><p class="mp-secao__titulo">Planejamento</p>${planejamento}</div>`;
+        }
+        situacao = kv([
+            ['Status', esc(item.nivel_label || '')],
+            ['Consumo médio/dia', item.consumo_diario ? `${fmt(item.consumo_diario, 3)} ${un}` : '—'],
+            ['Cobertura', item.consumo_diario ? `${item.cobertura_dias} dia(s)` : '—'],
+            [`Saída em ${janelaDias} dias`, q(item.saida_total_periodo)],
+            [`Maior saída em ${janelaDias} dias`, item.maior_saida ? `${q(item.maior_saida)}${item.maior_saida_data ? '<small>' + dataBr(item.maior_saida_data) + '</small>' : ''}` : '—'],
+            ['Mínimo no GRV', grv(item.estoque_minimo)],
+            ['Lote no GRV', grv(item.lote_economico)],
+        ]);
+        return `<div class="mp-secao"><p class="mp-secao__titulo">Saldo</p>${saldo}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Situação</p>${situacao}${picoSaida(item)}</div>
+            ${ocHtml(item)}`;
     }
 
     // Mostra a conta inteira: a sugestão só vale se der pra conferir de onde veio.
-    function calculoHtml(item) {
+    function abaCalculo(item) {
         const p = item.planejamento;
-        if (!p) return '';
         const un = esc(item.unidade || '');
         const ltMeses = Number(p.lead_time_dias || 0) / 30.4;
-        const demanda = `<div class="mp-calc__box"><span>Demanda · ${esc(p.tipo_demanda_label)}</span>
-            <span><b>${p.meses_com_saida_24m}</b> de ${p.meses_analisados_24m} meses com saída (24 meses)</span>
-            <span><b>${p.meses_com_saida_total}</b> meses com saída desde ${mesAno(p.primeira_movimentacao)}</span>
-            <span>Consumo 12 meses: <b>${fmt(p.consumo_12m, 2)} ${un}</b> (${fmt(p.consumo_mensal, 2)}/mês)</span>
-            ${p.adi != null ? `<span>Intervalo médio ${fmt(p.adi, 2)} mês · variação CV² ${fmt(p.cv2, 2)}</span>` : ''}</div>`;
-        const lead = `<div class="mp-calc__box"><span>Lead time (OC → entrada)</span>
-            ${p.lead_time_fonte === 'historico'
-                ? `<span><b>${fmt(p.lead_time_dias, 1)} dias</b> em média</span><span>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)} dias</span>`
-                : `<span><b>${fmt(p.lead_time_dias, 0)} dias</b> (padrão)</span><span>Nenhuma entrega com OC no histórico</span>`}</div>`;
+        const demanda = kv([
+            ['Meses com saída (24 meses)', `${p.meses_com_saida_24m} de ${p.meses_analisados_24m}`],
+            ['Meses com saída desde o início', `${p.meses_com_saida_total}<small>desde ${mesAno(p.primeira_movimentacao)}</small>`],
+            ['Consumo 12 meses', `${fmt(p.consumo_12m)} ${un}<small>${fmt(p.consumo_mensal)}/mês</small>`],
+            p.adi != null ? ['Intervalo médio · variação (CV²)', `${fmt(p.adi)} mês · ${fmt(p.cv2)}`] : null,
+            ['Classificação', esc(p.tipo_demanda_label)],
+        ]);
+        const lead = kv([
+            ['Lead time médio (OC → entrada)', p.lead_time_fonte === 'historico' ? `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)}</small>` : `${fmt(p.lead_time_dias, 0)} dia(s)<small>padrão: nenhuma entrega com OC</small>`],
+        ]);
         let minimo;
         if (p.tipo_demanda === 'sem_giro') {
-            minimo = '<span>Nada saiu em 12 meses: não há o que repor.</span>';
+            minimo = '<p class="mp-nota">Nada saiu em 12 meses: não há o que repor.</p>';
         } else if (p.estoque_seguranca != null) {
-            minimo = `<span>${fmt(p.consumo_mensal, 2)}/mês × ${fmt(ltMeses, 2)} mês de lead time</span>
-                <span>+ segurança <b>${fmt(p.estoque_seguranca, 2)} ${un}</b> (curva ${esc(p.classe_abc)}, ${fmt(p.nivel_servico_pct, 1)}%)</span>
-                <span>= <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b></span>`;
+            minimo = `<div class="mp-conta">
+                ${fmt(p.consumo_mensal)} ${un}/mês × ${fmt(ltMeses)} mês de lead time<br>
+                + segurança <b>${fmt(p.estoque_seguranca)} ${un}</b> (curva ${esc(p.classe_abc)}, ${fmt(p.nivel_servico_pct, 1)}%)<br>
+                = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>`;
         } else {
-            minimo = `<span>1 retirada típica: <b>${fmt(p.estoque_minimo_sugerido, 2)} ${un}</b></span>
-                <span>80% das ${p.retiradas_24m} retiradas de 24 meses foram até esse tamanho. Média diária não serve pra demanda esporádica.</span>`;
+            minimo = `<div class="mp-conta">1 retirada típica = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>
+                <p class="mp-nota">80% das ${p.retiradas_24m} retiradas de 24 meses foram até esse tamanho. Média diária não serve para demanda esporádica.</p>`;
         }
         const pr = parametros || {};
         const lote = p.lote_economico_sugerido == null
-            ? `<span>${p.custo_unitario == null ? 'Sem custo no GRV: não dá pra calcular.' : '—'}</span>`
-            : `<span>√(2 × ${fmt(p.consumo_mensal * 12, 2)} ${un}/ano × R$ ${fmt(pr.custo_pedido, 2)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))</span>
-               <span>= <b>${fmt(p.lote_economico_sugerido, 2)} ${un}</b>${p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico' ? ' (nunca menor que 1 retirada comum)' : ''}</span>`;
-        const os = `<div class="mp-calc__box"><span>Compra para OS (12 meses)</span>
-            <span><b>${fmt(p.consumo_os_pct_12m, 1)}%</b> do consumo foi material comprado para a própria OS</span>
-            <span>${p.oc_para_os_12m} OC(s) para OS · ${p.oc_estoque_12m} para estoque</span>
-            ${p.candidato_estoque ? '<span><b>Candidato a item de estoque:</b> comprado para OS com frequência.</span>' : ''}</div>`;
-        const conf = `<div class="mp-calc__box"><span>${CONFIANCA[p.confianca] || 'Confiança'}</span>${(p.confianca_motivos || []).map((m) => `<span>${esc(m)}</span>`).join('')}</div>`;
-        return `${chipsPlanejamento(p)}<div class="mp-calc">${demanda}${lead}<div class="mp-calc__box"><span>Estoque mínimo sugerido</span>${minimo}</div><div class="mp-calc__box"><span>Lote econômico sugerido</span>${lote}</div>${os}${conf}</div>`;
+            ? `<p class="mp-nota">${p.custo_unitario == null ? 'Sem custo no GRV: não dá para calcular.' : '—'}</p>`
+            : `<div class="mp-conta">√(2 × ${fmt(p.consumo_mensal * 12)} ${un}/ano × R$ ${fmt(pr.custo_pedido)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))<br>
+                = <b>${fmt(p.lote_economico_sugerido)} ${un}</b>${p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico' ? ' (nunca menor que 1 retirada comum)' : ''}</div>`;
+        const os = kv([
+            ['Consumo comprado para a própria OS', `${fmt(p.consumo_os_pct_12m, 1)}%`],
+            ['OCs em 12 meses', `${p.oc_para_os_12m} para OS · ${p.oc_estoque_12m} para estoque`],
+        ]);
+        return `<div class="mp-secao"><p class="mp-secao__titulo">Demanda</p>${demanda}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Reposição</p>${lead}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Estoque mínimo sugerido</p>${minimo}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Lote econômico sugerido</p>${lote}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Compra para OS</p>${os}${p.candidato_estoque ? '<p class="mp-nota" style="margin-top:8px"><b>Candidato a item de estoque:</b> comprado para OS com frequência.</p>' : ''}</div>`;
     }
 
-    function reservasHtml(item) {
+    function abaReservas(item) {
         const reservas = item.reservas || [];
-        if (!reservas.length) return '<span class="mp-muted">Sem reserva detalhada</span>';
-        return `<div class="mp-reservas">${reservas.map((r) => {
+        const un = esc(item.unidade || '');
+        const cab = `<p class="mp-nota" style="margin-bottom:10px">Reservado: <b>${fmt(item.saldo_reservado)} ${un}</b></p>`;
+        if (!reservas.length) return cab + '<p class="mp-nota">Sem reserva detalhada.</p>';
+        return cab + reservas.map((r) => {
             const os = r.os ? `OS ${esc(r.os)}${r.cod_os ? ` (${esc(r.cod_os)})` : ''}` : 'OS não localizada';
             const orc = r.orcamento ? `Orç. ${esc(r.orcamento)}${r.versao ? '/' + esc(r.versao) : ''}` : esc(r.descricao || 'Reserva');
-            const cliente = r.cliente || 'Cliente não localizado';
-            const osCompleta = `${os}${r.titulo_os ? ' · ' + esc(r.titulo_os) : ''}`;
-            return `<div class="mp-reserva">
-                <span class="mp-reserva__quantidade">${fmt(r.quantidade)} ${esc(item.unidade || '')}</span>
-                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">Orçamento</span><span class="mp-reserva__valor">${orc}</span></span>
-                <span class="mp-reserva__campo"><span class="mp-reserva__rotulo">OS / Cliente</span><span class="mp-reserva__valor">${osCompleta}<br>${esc(cliente)}</span></span>
-            </div>`;
-        }).join('')}</div>`;
+            return `<div class="mp-reserva"><b>${fmt(r.quantidade)} ${un}</b><span>${os}${r.titulo_os ? ' · ' + esc(r.titulo_os) : ''}</span><span>${orc} · ${esc(r.cliente || 'Cliente não localizado')}</span></div>`;
+        }).join('');
     }
 
-    function expandCell(item) {
-        if (visaoAtual !== 'produto_acabado') return '';
-        const isOpen = expanded.has(item.codigo);
-        const totalReservas = (item.reservas || []).length;
-        return `<td style="text-align:right;"><button class="mp-expand-btn" data-codigo="${esc(item.codigo || '')}" title="${isOpen ? 'Recolher reservas' : 'Ver reservas'}"><i class="fas fa-chevron-${isOpen ? 'up' : 'down'}"></i></button><div class="mp-muted">${totalReservas} reserva(s)</div></td>`;
-    }
-
-    function detalhesItem(item) {
-        const unidade = esc(item.unidade || '');
-        return `<div class="mp-item-details">
-            <span>Disponível: <strong>${fmt(item.saldo_disponivel)} ${unidade}</strong></span>
-            <span>Reservado: <strong>${fmt(item.saldo_reservado)} ${unidade}</strong></span>
-            <span>Total: <strong>${fmt(item.saldo_total)} ${unidade}</strong></span>
-            <span>Consumo médio/dia: <strong>${fmt(item.consumo_diario)} ${unidade}</strong></span>
-            <span>Saída em ${janelaDias} dias: <strong>${fmt(item.saida_total_periodo)} ${unidade}</strong></span>
-            <span>Maior saída em ${janelaDias} dias: <strong>${item.maior_saida ? `${fmt(item.maior_saida)} ${unidade}${item.maior_saida_data ? ' em ' + dataBr(item.maior_saida_data) : ''}` : '-'}</strong></span>
-            <span>Mínimo no GRV: <strong>${Number(item.estoque_minimo || 0) > 0 ? fmt(item.estoque_minimo) + ' ' + unidade : 'não cadastrado'}</strong></span>
-            <span>Lote no GRV: <strong>${Number(item.lote_economico || 0) > 0 ? fmt(item.lote_economico) + ' ' + unidade : 'não cadastrado'}</strong></span>
-        </div>`;
-    }
-
-    function ordensCompraHtml(item) {
-        if (!['materia_prima', 'revenda', 'insumos'].includes(visaoAtual)) return '';
-        const ordens = item.ordens_compra_abertas || [];
-        if (item.nivel !== 'critico' && !ordens.length) return '';
-        if (!ordens.length) {
-            return `<div class="mp-oc-status mp-oc-status--none"><strong><i class="fas fa-triangle-exclamation"></i> Sem OC em aberto</strong><br>Este material crítico ainda não possui reposição registrada.</div>`;
+    // Fornecimentos: histórico de OCs do item e fornecedores sugeridos (sob demanda).
+    const SITUACAO = { entregue: 'Entregue', parcial: 'Parcial', aberta: 'Em aberto' };
+    let fornVersao = 0;
+    async function abrirFornecimentos(item) {
+        const versao = ++fornVersao;
+        const codigo = item.codigo;
+        const corpo = $('mp-painel-corpo');
+        let data = fornCache[codigo];
+        if (!data) {
+            corpo.innerHTML = '<p class="mp-nota">Consultando o GRV...</p>';
+            try {
+                const resp = await fetch('/api/logistica/estoque/fornecimentos?' + new URLSearchParams({ codigo }));
+                data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Falha ao consultar.');
+                if (data.disponivel) fornCache[codigo] = data;
+            } catch (err) { data = { disponivel: false, fornecedores: [], fornecimentos: [] }; }
         }
-        const pendente = ordens.reduce((total, ordem) => total + Number(ordem.quantidade_pendente || 0), 0);
-        return `<div class="mp-oc-status mp-oc-status--open"><strong><i class="fas fa-cart-shopping"></i> Reposição em andamento</strong><br>${ordens.length} OC(s) aberta(s), total pendente de <strong>${fmt(pendente)} ${esc(item.unidade || '')}</strong><div class="mp-oc-list">${ordens.map((ordem) => `<span><strong>OC ${esc(ordem.ordem_compra || '-')}</strong> · ${fmt(ordem.quantidade_pendente)} ${esc(item.unidade || '')} · ${esc(ordem.fornecedor || 'Fornecedor não informado')}${ordem.prazo_entrega ? ' · Prev. ' + esc(ordem.prazo_entrega) : ''}</span>`).join('')}</div></div>`;
-    }
-
-    function fornecimentosBtn(item) {
-        if (!['materia_prima', 'revenda', 'insumos'].includes(visaoAtual)) return '';
-        return `<button type="button" class="mp-forn-btn" data-forn="${esc(item.codigo || '')}" title="Histórico de compras e fornecedores sugeridos"><i class="fas fa-truck"></i> Fornecimentos</button>`;
-    }
-
-    function detailRow(item) {
-        if (!expanded.has(item.codigo)) return '';
-        const reservas = `<div class="mp-reserva-resumo"><i class="fas fa-lock"></i> Quantidade reservada: <strong>${fmt(item.saldo_reservado)} ${esc(item.unidade || '')}</strong></div><strong>Reservas vinculadas</strong>${reservasHtml(item)}`;
-        const colspan = 5 + (visaoAtual === 'produto_acabado' ? 1 : 0) + (planejamentoAtivo ? 1 : 0);
-        return `<tr class="mp-detail-row"><td colspan="${colspan}"><strong>Detalhes do item</strong>${detalhesItem(item)}${calculoHtml(item)}${ordensCompraHtml(item)}${reservas}</td></tr>`;
-    }
-
-    function render(data) {
-        const resumo = data.resumo || {};
-        janelaDias = Number(data.janela_consumo_dias || 90);
-        diasAtencao = Number(data.dias_atencao || 15);
-        const diasCritico = Number(data.dias_critico || 7);
-        planejamentoAtivo = !!data.planejamento_ativo;
-        parametros = data.parametros_planejamento || parametros;
-        $('mp-param-open').style.display = data.pode_editar_parametros ? '' : 'none';
-        $('mp-plan-aviso').style.display = data.planejamento_indisponivel ? '' : 'none';
-        $('mp-th-sugestao').style.display = planejamentoAtivo ? '' : 'none';
-        $('mp-th-consumo').textContent = planejamentoAtivo ? 'Consumo' : 'Consumo/dia';
-        if (planejamentoAtivo) {
-            $('mp-metodo').textContent = 'Saldos do depósito 1 no GRV. Consumo, mínimo e lote sugeridos pelo histórico do kardex desde 2019 (últimos 12 meses fechados), com lead time medido de cada OC até a entrada.';
-            $('mp-legenda').textContent = `Crítico: acaba antes do lead time · Monitorar: abaixo do mínimo sugerido · ${resumo.esporadicos || 0} de demanda esporádica`;
-            $('mp-k-criticos-hint').textContent = 'Acabam antes da reposição chegar';
-            $('mp-k-atencao-hint').textContent = 'Abaixo do mínimo sugerido';
-        } else {
-            $('mp-metodo').innerHTML = `Saldos do depósito 1 no GRV. Cobertura = saldo disponível ÷ consumo médio diário dos últimos <span id="mp-janela">${janelaDias}</span> dias.`;
-            $('mp-legenda').textContent = `Crítico ≤ ${diasCritico} dias · Monitorar ≤ ${diasAtencao} dias`;
-            $('mp-k-criticos-hint').textContent = `Até ${diasCritico} dias de cobertura`;
-            $('mp-k-atencao-hint').textContent = `Até ${diasAtencao} dias de cobertura`;
-        }
-        $('mp-k-itens').textContent = resumo.itens || 0;
-        const total = Number(resumo.total_filtrado || 0);
-        $('mp-k-itens-hint').textContent = total > Number(resumo.itens || 0) ? `de ${total} encontrados` : '';
-        $('mp-k-criticos').textContent = resumo.criticos || 0;
-        $('mp-k-atencao').textContent = resumo.atencao || 0;
-        $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
-
-        const items = data.items || [];
-        $('mp-th-reservas').style.display = visaoAtual === 'produto_acabado' ? '' : 'none';
-        if (!items.length) {
-            $('mp-table').style.display = 'none';
-            $('mp-state').style.display = 'block';
-            $('mp-state').textContent = 'Nenhum item encontrado.';
+        if (versao !== fornVersao || selecionado !== codigo || abaAtual !== 'fornecimentos') return;
+        if (!data.disponivel) {
+            corpo.innerHTML = '<div class="mp-caixa">Não foi possível consultar o GRV agora. Tente de novo em instantes.</div>';
             return;
         }
-        $('mp-state').style.display = 'none';
-        $('mp-table').style.display = 'table';
-        $('mp-body').innerHTML = items.map((item) => `
-            <tr class="mp-item-row" data-codigo="${esc(item.codigo || '')}" data-unidade="${esc(item.unidade || '')}" title="Clique para ver detalhes do item">
-                <td>
-                    <div class="mp-item-main">
-                        <span class="mp-code">${esc(item.codigo || '-')}</span>
-                        <span class="mp-desc">${esc(item.descricao || '-')}</span>
-                        <span class="mp-locs">${esc((item.localizacoes || []).join(', ') || 'Sem localização')}</span>
-                    </div>
-                </td>
-                <td class="mp-right">${saldoCell(item)}</td>
-                <td class="mp-right">${consumoCell(item)}</td>
-                <td>${cobertura(item)}</td>
-                ${planejamentoAtivo ? `<td>${sugestaoCell(item)}</td>` : ''}
-                <td><div class="mp-nivel-cell">${badge(item)}${ocInline(item)}${fornecimentosBtn(item)}</div></td>
-                ${expandCell(item)}
-            </tr>
-            ${detailRow(item)}
-        `).join('');
-        document.querySelectorAll('.mp-expand-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const codigo = btn.dataset.codigo || '';
-                if (!codigo) return;
-                if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
-                render(data);
-            });
-        });
-        document.querySelectorAll('.mp-item-row').forEach((row) => {
-            row.addEventListener('click', (event) => {
-                if (event.target.closest('button')) return;
-                const codigo = row.dataset.codigo || '';
-                if (!codigo) return;
-                if (expanded.has(codigo)) expanded.delete(codigo); else expanded.add(codigo);
-                render(data);
-            });
-        });
+        if (!data.fornecimentos.length) {
+            corpo.innerHTML = '<p class="mp-nota">Nenhuma OC deste item desde 2019.</p>';
+            return;
+        }
+        const unidade = item.unidade || '';
+        const un = esc(unidade);
+        const outraUnidade = (u) => u && u.toUpperCase() !== unidade.toUpperCase();
+        const preco = (v) => v ? `R$ ${fmt(v, 4)}` : '—';
+        const selo = (f) => f.recomendado ? 'Mais rápido e menor preço' : (f.mais_rapido ? 'Mais rápido' : (f.menor_preco ? 'Menor preço' : ''));
+        const fornecedores = data.fornecedores.map((f) => `<tr class="${f.atual ? '' : 'inativo'}">
+            <td><b>${esc(f.fornecedor)}</b>${selo(f) ? `<span class="mp-selo"><i class="fas fa-check"></i> ${selo(f)}</span>` : ''}${f.atual ? '' : `<small>sem compra há ${data.meses_fornecedor_atual}+ meses</small>`}</td>
+            <td class="num">${f.fornecimentos}</td>
+            <td class="num">${f.lead_time_medio != null ? `${fmt(f.lead_time_medio, 1)} d<small>${f.entregas_com_prazo} entrega(s)</small>` : '—'}</td>
+            <td class="num">${preco(f.ultimo_preco)}<small>${f.ultimo_preco_data ? dataCompleta(f.ultimo_preco_data) : ''}</small></td>
+        </tr>`).join('');
+        const compras = data.fornecimentos.map((f) => `<tr>
+            <td>${dataCompleta(f.dt_oc)}<small>OC ${esc(f.ordem_compra)}${f.para_os ? ' · p/ OS' : ''}</small></td>
+            <td>${esc(f.fornecedor)}<small>${SITUACAO[f.situacao] || ''}${f.dt_entrada ? ' · entrada ' + dataCompleta(f.dt_entrada) : ''}</small></td>
+            <td class="num">${fmt(f.quantidade)}${outraUnidade(f.unidade_compra) && f.quantidade_compra ? `<small>${fmt(f.quantidade_compra)} ${esc(f.unidade_compra)}</small>` : ''}</td>
+            <td class="num">${preco(f.preco_unidade_estoque)}${outraUnidade(f.unidade_compra) && f.preco_compra ? `<small>R$ ${fmt(f.preco_compra)}/${esc(f.unidade_compra)}</small>` : ''}</td>
+            <td class="num">${f.lead_time_dias != null ? `${f.lead_time_dias} d` : '—'}</td>
+        </tr>`).join('');
+        corpo.innerHTML = `
+            <div class="mp-secao"><p class="mp-secao__titulo">Fornecedores</p>
+                <table class="mp-tab"><thead><tr><th>Fornecedor</th><th class="num">Compras</th><th class="num">Prazo médio</th><th class="num">Último preço/${un}</th></tr></thead><tbody>${fornecedores}</tbody></table>
+                <p class="mp-nota" style="margin-top:8px">Mais rápido: menor prazo médio (OC → entrada) entre quem entregou ao menos ${data.min_entregas_mais_rapido} vezes nos últimos ${data.meses_fornecedor_atual} meses. Menor preço: só compara compras dos últimos ${data.meses_preco_comparavel} meses. Preço na unidade de estoque; filiais do mesmo CNPJ contam como um fornecedor.</p>
+            </div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Todas as compras (${data.fornecimentos.length})</p>
+                <table class="mp-tab"><thead><tr><th>Data</th><th>Fornecedor</th><th class="num">Qtde (${un})</th><th class="num">Preço/${un}</th><th class="num">Prazo</th></tr></thead><tbody>${compras}</tbody></table>
+            </div>`;
     }
+
+    function abasDoItem(item) {
+        const abas = [['resumo', 'Resumo']];
+        if (item.planejamento && item.planejamento.tipo_demanda) abas.push(['calculo', 'Cálculo']);
+        if (VISOES_COMPRA.includes(visaoAtual)) abas.push(['fornecimentos', 'Fornecimentos']);
+        if (visaoAtual === 'produto_acabado' || Number(item.saldo_reservado || 0) > 0) abas.push(['reservas', 'Reservas']);
+        return abas;
+    }
+
+    function renderPainel(item, rolarTopo = true) {
+        const abas = abasDoItem(item);
+        if (!abas.some(([id]) => id === abaAtual)) abaAtual = 'resumo';
+        $('mp-painel-cod').textContent = item.codigo || '';
+        $('mp-painel-titulo').textContent = item.descricao || '';
+        $('mp-painel-sub').textContent = [item.unidade, (item.localizacoes || []).join(', ')].filter(Boolean).join(' · ');
+        $('mp-abas').innerHTML = abas.map(([id, rotulo]) => `<button type="button" class="mp-aba${id === abaAtual ? ' ativa' : ''}" role="tab" aria-selected="${id === abaAtual}" data-aba="${id}">${rotulo}</button>`).join('');
+        const corpo = $('mp-painel-corpo');
+        if (abaAtual === 'fornecimentos') abrirFornecimentos(item);
+        else if (abaAtual === 'calculo') corpo.innerHTML = abaCalculo(item);
+        else if (abaAtual === 'reservas') corpo.innerHTML = abaReservas(item);
+        else corpo.innerHTML = abaResumo(item);
+        if (rolarTopo) corpo.scrollTop = 0;
+    }
+
+    function abrirPainel(codigo) {
+        const item = itens.find((i) => i.codigo === codigo);
+        if (!item) return;
+        selecionado = codigo;
+        document.querySelectorAll('#mp-body tr').forEach((tr) => tr.classList.toggle('selecionado', tr.dataset.codigo === codigo));
+        renderPainel(item);
+        $('mp-painel').classList.add('aberto');
+        $('mp-painel').setAttribute('aria-hidden', 'false');
+    }
+
+    function fecharPainel() {
+        selecionado = null;
+        $('mp-painel').classList.remove('aberto');
+        $('mp-painel').setAttribute('aria-hidden', 'true');
+        document.querySelectorAll('#mp-body tr.selecionado').forEach((tr) => tr.classList.remove('selecionado'));
+    }
+
+    $('mp-body').addEventListener('click', (event) => {
+        const tr = event.target.closest('tr[data-codigo]');
+        if (!tr) return;
+        if (tr.dataset.codigo === selecionado) fecharPainel(); else abrirPainel(tr.dataset.codigo);
+    });
+    $('mp-abas').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-aba]');
+        if (!btn || !selecionado) return;
+        abaAtual = btn.dataset.aba;
+        const item = itens.find((i) => i.codigo === selecionado);
+        if (item) renderPainel(item);
+    });
+    $('mp-painel-fechar').addEventListener('click', fecharPainel);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && selecionado && !document.querySelector('dialog[open]')) fecharPainel();
+    });
+
+    // ------------------------------------------------------------ carga
 
     async function carregar(refresh = false, silencioso = false) {
         if (!silencioso) {
@@ -554,7 +660,7 @@
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(data.error || data.msg || 'Falha ao carregar estoque.');
             render(data);
-            $('mp-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+            $('mp-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         } catch (err) {
             // Falha em atualizacao silenciosa (em segundo plano) mantem os dados
             // ja exibidos, sem apagar a tabela com uma mensagem de erro.
@@ -573,79 +679,14 @@
     $('mp-estoque-minimo').addEventListener('change', () => carregar(false));
     $('mp-sem-saldo').addEventListener('change', () => carregar(false));
     $('mp-refresh').addEventListener('click', () => carregar(true));
-    document.querySelectorAll('.mp-view-btn').forEach((btn) => {
+    document.querySelectorAll('.mp-view-btn[data-visao]').forEach((btn) => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.mp-view-btn').forEach((item) => item.classList.remove('active'));
             btn.classList.add('active');
             visaoAtual = btn.dataset.visao || 'materia_prima';
-            expanded = new Set();
+            fecharPainel();
             carregar(false);
         });
-    });
-    // Fornecimentos: histórico de OCs do item e fornecedores sugeridos (sob demanda).
-    let fornVersao = 0;
-    const SITUACAO = { entregue: 'Entregue', parcial: 'Parcial', aberta: 'Em aberto' };
-    function dataCompleta(iso) {
-        const partes = String(iso || '').slice(0, 10).split('-');
-        return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : '—';
-    }
-    async function abrirFornecimentos(codigo, descricao, unidade) {
-        const versao = ++fornVersao;
-        const un = esc(unidade || '');
-        const outraUnidade = (u) => u && u.toUpperCase() !== String(unidade || '').toUpperCase();
-        $('mp-forn-title').innerHTML = `<i class="fas fa-truck"></i> Fornecimentos · ${esc(codigo)} <span class="mp-muted">${esc(descricao || '')}</span>`;
-        $('mp-forn-body').innerHTML = '<span class="mp-muted">Consultando o GRV...</span>';
-        $('mp-forn-dialog').showModal();
-        let data;
-        try {
-            const resp = await fetch('/api/logistica/estoque/fornecimentos?' + new URLSearchParams({ codigo }));
-            data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || 'Falha ao consultar.');
-        } catch (err) { data = { disponivel: false, fornecedores: [], fornecimentos: [] }; }
-        if (versao !== fornVersao) return;
-        if (!data.disponivel) {
-            $('mp-forn-body').innerHTML = '<div class="mp-aviso" style="margin:0"><i class="fas fa-triangle-exclamation"></i> Não foi possível consultar o GRV agora. Tente de novo em instantes.</div>';
-            return;
-        }
-        if (!data.fornecimentos.length) {
-            $('mp-forn-body').innerHTML = '<span class="mp-muted">Nenhuma OC deste item desde 2019.</span>';
-            return;
-        }
-        const preco = (v) => v ? `R$ ${fmt(v, 4)}/${un}` : '—';
-        const selos = (f) => [
-            f.recomendado ? '<span class="mp-chip conf-alta"><i class="fas fa-star"></i> Mais rápido e menor preço</span>' : '',
-            !f.recomendado && f.mais_rapido ? '<span class="mp-chip conf-alta"><i class="fas fa-bolt"></i> Mais rápido</span>' : '',
-            !f.recomendado && f.menor_preco ? '<span class="mp-chip conf-alta"><i class="fas fa-tag"></i> Menor preço</span>' : '',
-            !f.atual ? `<span class="mp-chip">sem compra há ${data.meses_fornecedor_atual}+ meses</span>` : '',
-        ].join(' ');
-        const fornecedores = data.fornecedores.map((f) => `<tr class="${f.atual ? '' : 'inativo'}">
-            <td><b>${esc(f.fornecedor)}</b><div class="mp-chips">${selos(f)}</div></td>
-            <td class="num"><b>${f.fornecimentos}</b></td>
-            <td class="num">${f.lead_time_medio != null ? `<b>${fmt(f.lead_time_medio, 1)} dia(s)</b><small>${f.entregas_com_prazo} entrega(s)</small>` : '—'}</td>
-            <td class="num"><b>${preco(f.ultimo_preco)}</b><small>${f.ultimo_preco_data ? dataCompleta(f.ultimo_preco_data) : ''}</small></td>
-            <td class="num">${dataCompleta(f.ultima_compra)}</td></tr>`).join('');
-        const linhas = data.fornecimentos.map((f) => `<tr>
-            <td>${dataCompleta(f.dt_oc)}</td>
-            <td><b>OC ${esc(f.ordem_compra)}</b>${f.para_os ? '<small>comprada p/ OS</small>' : ''}</td>
-            <td>${esc(f.fornecedor)}</td>
-            <td class="num"><b>${fmt(f.quantidade, 2)} ${un}</b>${outraUnidade(f.unidade_compra) && f.quantidade_compra ? `<small>${fmt(f.quantidade_compra, 2)} ${esc(f.unidade_compra)}</small>` : ''}</td>
-            <td class="num"><b>${preco(f.preco_unidade_estoque)}</b>${outraUnidade(f.unidade_compra) && f.preco_compra ? `<small>R$ ${fmt(f.preco_compra, 2)}/${esc(f.unidade_compra)}</small>` : ''}</td>
-            <td>${f.dt_entrada ? dataCompleta(f.dt_entrada) : '—'}</td>
-            <td class="num">${f.lead_time_dias != null ? `${f.lead_time_dias} dia(s)` : '—'}</td>
-            <td>${SITUACAO[f.situacao] || ''}</td></tr>`).join('');
-        $('mp-forn-body').innerHTML = `
-            <p class="mp-forn-sec">Fornecedores</p>
-            <div class="mp-forn-wrap"><table class="mp-forn-table"><thead><tr><th>Fornecedor</th><th class="num">Compras</th><th class="num">Prazo médio (OC → entrada)</th><th class="num">Último preço</th><th class="num">Última compra</th></tr></thead><tbody>${fornecedores}</tbody></table></div>
-            <p class="mp-muted" style="margin:0">"Mais rápido": menor prazo médio entre quem entregou ao menos ${data.min_entregas_mais_rapido} vezes nos últimos ${data.meses_fornecedor_atual} meses. "Menor preço": só compara compras dos últimos ${data.meses_preco_comparavel} meses, porque preço antigo não vale pra hoje. Preço convertido para a unidade de estoque (${un}). Filiais do mesmo CNPJ contam como um fornecedor.</p>
-            <p class="mp-forn-sec">Todas as compras (${data.fornecimentos.length})</p>
-            <div class="mp-forn-wrap"><table class="mp-forn-table"><thead><tr><th>Data OC</th><th>OC</th><th>Fornecedor</th><th class="num">Quantidade</th><th class="num">Preço</th><th>Entrada</th><th class="num">Prazo</th><th>Situação</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
-    }
-    $('mp-forn-close').addEventListener('click', () => $('mp-forn-dialog').close());
-    $('mp-body').addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-forn]');
-        if (!btn) return;
-        const row = btn.closest('tr');
-        abrirFornecimentos(btn.dataset.forn, row?.querySelector('.mp-desc')?.textContent || '', row?.dataset.unidade || '');
     });
 
     // Parâmetros do planejamento: o botão só aparece pra Admin e a rota confere de novo.

@@ -72,6 +72,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_FROTA": "Logística > Transporte > Gestão de Frota",
     "PAGE_LOGISTICA_VIAGEM": "Logística > Transporte > Gestão de Viagens",
     "PAGE_LOGISTICA_INVENTARIO": "Logística > Inventário > Inventariar (contagem)",
+    "PAGE_LOGISTICA_ESTOQUE": "Logística > Estoque (consulta: saldo, mínimo/lote sugeridos e fornecimentos)",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestão (Admin)",
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
     "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",
@@ -149,6 +150,9 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
+        # Só a consulta de estoque: PAGE_LOGISTICA_INVENTARIO abriria também a
+        # contagem de inventário e o Controle de Chapas (pedido de 28/09/2026).
+        "PAGE_LOGISTICA_ESTOQUE",
     },
     "Produção": {
         "PAGE_PRODUCAO",
