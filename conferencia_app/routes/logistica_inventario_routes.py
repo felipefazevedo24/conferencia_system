@@ -528,10 +528,20 @@ def estoque_fornecimentos():
         return jsonify({"error": "Informe o código do item."}), 400
     try:
         linhas = buscar_fornecimentos_grv(codigo)
-    except Exception:
-        # GRV fora do ar nao derruba a tela: a janela avisa e fica vazia.
+    except Exception as exc:
+        # GRV fora do ar nao derruba a tela: a aba avisa e fica vazia. O motivo
+        # separa "VM sem o endpoint novo" (404 do proprio bridge) de tunel ou
+        # bridge fora do ar - a mensagem generica escondia isso (29/09/2026).
         current_app.logger.warning("Nao foi possivel consultar fornecimentos de %s.", codigo, exc_info=True)
-        return jsonify({"disponivel": False, "fornecedores": [], "fornecimentos": []})
+        resp = getattr(exc, "response", None)
+        corpo = (resp.text or "")[:2000] if resp is not None else ""
+        if resp is not None and resp.status_code == 404 and "ERR_NGROK" not in corpo:
+            motivo = "bridge_desatualizado"
+        elif isinstance(exc, (requests.ConnectionError, requests.Timeout)) or "ERR_NGROK" in corpo:
+            motivo = "bridge_fora"
+        else:
+            motivo = "erro"
+        return jsonify({"disponivel": False, "motivo": motivo, "fornecedores": [], "fornecimentos": []})
     return jsonify({"disponivel": True, **planejamento_svc.resumir_fornecimentos(linhas)})
 
 

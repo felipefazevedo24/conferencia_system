@@ -547,7 +547,11 @@
         }
         if (versao !== fornVersao || selecionado !== codigo || abaAtual !== 'fornecimentos') return;
         if (!data.disponivel) {
-            corpo.innerHTML = '<div class="mp-caixa">Não foi possível consultar o GRV agora. Tente de novo em instantes.</div>';
+            const MOTIVO = {
+                bridge_desatualizado: 'A ponte com o GRV (bridge na VM) ainda não tem a consulta de fornecimentos. É preciso atualizar o bridge na VM (git pull + reiniciar).',
+                bridge_fora: 'A ponte com o GRV (bridge na VM) não respondeu. Verifique se o bridge e o túnel estão no ar.',
+            };
+            corpo.innerHTML = `<div class="mp-caixa">${MOTIVO[data.motivo] || 'Não foi possível consultar o GRV agora. Tente de novo em instantes.'}</div>`;
             return;
         }
         if (!data.fornecimentos.length) {

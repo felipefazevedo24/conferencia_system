@@ -428,3 +428,28 @@ def test_compras_ve_estoque_sem_abrir_contagem_nem_chapas(tmp_path):
     assert client.post("/api/logistica/inventario-inicial", json={}).status_code == 403
     assert client.get("/logistica/estoque/chapas").status_code == 403
     assert client.put("/api/logistica/estoque/planejamento/parametros", json={}).status_code == 403
+
+
+def test_fornecimentos_diz_quando_o_bridge_esta_desatualizado_ou_fora(tmp_path):
+    import requests
+
+    def http_erro(status, texto):
+        resposta = requests.Response()
+        resposta.status_code = status
+        resposta._content = texto.encode()
+        return requests.HTTPError(response=resposta)
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    casos = [
+        (http_erro(404, '{"erro": "not found"}'), "bridge_desatualizado"),       # VM sem o endpoint novo
+        (http_erro(404, "<html>ERR_NGROK_3200 offline</html>"), "bridge_fora"),  # túnel caído também dá 404
+        (requests.ConnectionError("recusada"), "bridge_fora"),
+        (RuntimeError("erro no SQL"), "erro"),
+    ]
+    for erro, motivo in casos:
+        with patch.object(routes, "buscar_fornecimentos_grv", side_effect=erro):
+            data = client.get("/api/logistica/estoque/fornecimentos?codigo=19-01-00563").get_json()
+        assert data["disponivel"] is False
+        assert data["motivo"] == motivo, erro

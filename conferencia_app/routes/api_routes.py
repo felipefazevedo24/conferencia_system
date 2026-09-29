@@ -80,6 +80,7 @@ from ..schemas.api_schemas import (
     ValidarSchema,
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
+from ..services import chapa_oxicorte_service as chapa_oxicorte_svc
 from ..services import teams_service
 from ..services import processo_recebimento_log_service as processo_log_svc
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
@@ -5538,6 +5539,16 @@ def buscar_itens(nota):
         _release_lock(nota)
         db.session.commit()
         return jsonify({"error": "NF sem itens elegíveis para conferência."}), 404
+    # Aços Radial: a chapa oxicorte é identificada pelo pedido; sem vínculo
+    # completo ou sem GRV, a conferência não abre (decisão de 29/09/2026).
+    oxicorte_ids = set()
+    if chapa_oxicorte_svc.eh_nf_acos_radial(itens):
+        try:
+            oxicorte_ids = chapa_oxicorte_svc.identificar_oxicorte(itens)
+        except ValueError as exc:
+            _release_lock(nota)
+            db.session.commit()
+            return jsonify({"error": str(exc), "bloqueio_oxicorte": True}), 409
     iniciou_conferencia = False
     for item in itens:
         if not item.inicio_conferencia:
@@ -5582,6 +5593,7 @@ def buscar_itens(nota):
                 "unidade": item.unidade_comercial or "UN",
                 "pedido_compra": item.pedido_compra or "",
                 "qtd_chapas_und": item.qtd_chapas_und,
+                "oxicorte": item.id in oxicorte_ids,
             }
             for item in itens
         ]
@@ -5757,6 +5769,14 @@ def validar():
     if not itens_db:
         return jsonify({"sucesso": False, "msg": "NF sem itens pendentes para conferência."}), 404
 
+    # Quem decide o que é chapa oxicorte é o servidor, não o que a tela mandou.
+    oxicorte_ids = set()
+    if chapa_oxicorte_svc.eh_nf_acos_radial(itens_db):
+        try:
+            oxicorte_ids = chapa_oxicorte_svc.identificar_oxicorte(itens_db)
+        except ValueError as exc:
+            return jsonify({"sucesso": False, "msg": str(exc)}), 409
+
     resultado_itens = []
     erros = []
     divergencias_ids = []
@@ -5790,17 +5810,28 @@ def validar():
         # material recebido em peso. Fica auditável e é enviada no aviso de
         # entrada de chapa. Só grava quando um valor é informado (nunca limpa),
         # para sobreviver às múltiplas chamadas de /validar do fluxo.
-        if _unidade_eh_chapa(item.unidade_comercial):
+        eh_oxicorte = item.id in oxicorte_ids
+        if _unidade_eh_chapa(item.unidade_comercial) or eh_oxicorte:
             chapa_dados = chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None
             chapa_und = _parse_chapas_und(chapa_dados)
+            if eh_oxicorte and chapa_und is None and not float(item.qtd_chapas_und or 0) > 0:
+                return jsonify({
+                    "sucesso": False,
+                    "msg": f"Chapa oxicorte ({item.codigo_grv or item.codigo}): informe a quantidade de peças (UND).",
+                    "item_id": item.id,
+                }), 400
             if chapa_und is not None:
                 from ..services.chapa_auditoria_service import alterar_unidades
                 alterar_unidades(item, chapa_und, user)
-                try:
-                    from ..services.chapa_calculo_service import salvar_calculo_item
-                    salvar_calculo_item(item, chapa_dados, user)
-                except ValueError as exc:
-                    return jsonify({"sucesso": False, "msg": str(exc), "item_id": item.id}), 400
+                if not eh_oxicorte:
+                    # Oxicorte não tem medida de chapa padrão: só a UND.
+                    try:
+                        from ..services.chapa_calculo_service import salvar_calculo_item
+                        salvar_calculo_item(item, chapa_dados, user)
+                    except ValueError as exc:
+                        return jsonify({"sucesso": False, "msg": str(exc), "item_id": item.id}), 400
+            if eh_oxicorte:
+                chapa_oxicorte_svc.excluir_do_controle_de_chapas(item)
 
             # Item marcado como chapa (agora ou numa chamada anterior de
             # /validar): o conferente conta as chapas em UND e informa as
