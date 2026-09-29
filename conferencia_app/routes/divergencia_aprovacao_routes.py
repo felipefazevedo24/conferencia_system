@@ -30,6 +30,13 @@ from ..models import DivergenciaPedidoAprovacao, ItemNota, Usuario
 from ..auth import has_permission, is_admin_role
 from ..services.pedidos_service import comparar_pedido_com_nf, PedidoERPIndisponivelError
 from ..services.consyste_service import download_documento_consyste
+from ..services.divergencia_vinculo_service import (
+    historico_ajustes,
+    itens_da_divergencia,
+    linhas_para_selecao,
+    pedidos_dos_itens,
+    salvar_vinculos,
+)
 from ..tempo import agora_br
 
 
@@ -139,11 +146,7 @@ def dados_aprovacao(token):
     if not _aprovador_logado(token):
         return jsonify({"sucesso": False, "erro": "login_necessario"}), 401
 
-    itens_db = (
-        ItemNota.query.filter_by(numero_nota=registro.numero_nota)
-        .order_by(ItemNota.id.asc())
-        .all()
-    )
+    itens_db = itens_da_divergencia(registro)
     chave_acesso = ""
     itens_xml = []
     for i in itens_db:
@@ -161,17 +164,28 @@ def dados_aprovacao(token):
             }
         )
 
+    # Compara com os pedidos ATUAIS dos itens (Compras pode ter ajustado aqui
+    # ou o Auditor la); o do registro e so o da epoca do aviso.
+    pedidos = pedidos_dos_itens(itens_db) or str(registro.pedido_compra or "").strip()
     comparacao = None
     erro_comparacao = None
-    if registro.pedido_compra:
+    linhas_po = []
+    if pedidos:
         try:
-            comparacao = comparar_pedido_com_nf(
-                registro.pedido_compra, _itens_nf_para_comparacao(itens_db)
-            )
+            comparacao = comparar_pedido_com_nf(pedidos, _itens_nf_para_comparacao(itens_db))
+            linhas_po = linhas_para_selecao(pedidos)
         except PedidoERPIndisponivelError as exc:
             erro_comparacao = f"ERP indisponível para comparar o pedido: {exc}"
+        except ValueError as exc:
+            erro_comparacao = str(exc)
         except Exception as exc:  # pragma: no cover - best effort
             erro_comparacao = f"Não foi possível comparar com o pedido: {exc}"
+
+    # Linha efetiva de cada item (manual ou a que o matching escolheu), pela
+    # chave estavel "OC#posicao" que a tela usa no seletor.
+    chave_por_indice = {l["indice"]: l["chave"] for l in linhas_po}
+    for par in (comparacao or {}).get("pares") or []:
+        par["po_chave"] = chave_por_indice.get(par.get("po_index"))
 
     nf_valor_total = 0.0
     fornecedor = registro.fornecedor or ""
@@ -205,6 +219,9 @@ def dados_aprovacao(token):
             "comparacao": comparacao,
             "erro_comparacao": erro_comparacao,
             "tem_pdf": bool(chave_acesso),
+            "pedidos": pedidos,
+            "linhas_po": linhas_po,
+            "historico": historico_ajustes(registro),
         }
     )
 
@@ -217,11 +234,7 @@ def danfe_aprovacao(token):
     if not _aprovador_logado(token):
         return jsonify({"error": "Login necessário."}), 401
 
-    item = (
-        ItemNota.query.filter_by(numero_nota=registro.numero_nota)
-        .filter(ItemNota.chave_acesso.isnot(None))
-        .first()
-    )
+    item = next((i for i in itens_da_divergencia(registro) if i.chave_acesso), None)
     chave = re.sub(r"\D", "", str(getattr(item, "chave_acesso", "") or ""))[:44]
     if len(chave) != 44:
         return jsonify({"error": "NF sem chave de acesso para baixar o PDF."}), 404
@@ -244,6 +257,70 @@ def danfe_aprovacao(token):
             "Content-Disposition": f'inline; filename="{filename}"',
             "Content-Length": str(len(pdf_bytes)),
         },
+    )
+
+
+@divergencia_aprovacao_bp.route("/aprovar-divergencia/<token>/linhas-pedido", methods=["GET"])
+def linhas_pedido_aprovacao(token):
+    """Linhas dos pedidos informados, pro seletor - usado quando Compras
+    acrescenta/troca um pedido antes de salvar."""
+    registro = _carregar_registro(token)
+    if not registro:
+        return jsonify({"sucesso": False, "msg": "Link inválido."}), 404
+    if not _aprovador_logado(token):
+        return jsonify({"sucesso": False, "erro": "login_necessario", "msg": "Faça login novamente."}), 401
+    try:
+        linhas = linhas_para_selecao(str(request.args.get("pedidos") or ""))
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True, "linhas": linhas})
+
+
+@divergencia_aprovacao_bp.route("/aprovar-divergencia/<token>/vinculos", methods=["POST"])
+def vinculos_aprovacao(token):
+    """Compras corrige o pedido/linha de OC de cada item antes de decidir."""
+    registro = _carregar_registro(token)
+    if not registro:
+        return jsonify({"sucesso": False, "msg": "Link inválido."}), 404
+    aprovador = _aprovador_logado(token)
+    if not aprovador:
+        return jsonify({"sucesso": False, "erro": "login_necessario", "msg": "Faça login novamente."}), 401
+
+    data = request.get_json() or {}
+    try:
+        resultado = salvar_vinculos(
+            registro,
+            str(data.get("pedidos") or ""),
+            data.get("vinculos") or {},
+            aprovador.get("nome") or aprovador.get("username"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+
+    # Mesmo pos-processamento do "Salvar Vinculo" do Auditor: grava as linhas
+    # que o matching escolheu sozinho e o codigo interno. Falha aqui nao
+    # desfaz o que Compras salvou.
+    try:
+        from .api_routes import _sincronizar_codigo_interno_por_pedido
+
+        _sincronizar_codigo_interno_por_pedido(
+            registro.numero_nota,
+            resultado["pedidos"],
+            cnpj_emitente=registro.cnpj_emitente,
+            fornecedor=None if registro.cnpj_emitente else registro.fornecedor,
+        )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Falha ao sincronizar código interno após ajuste de vínculo (NF %s)", registro.numero_nota)
+
+    n = resultado["alteracoes"]
+    return jsonify(
+        {
+            "sucesso": True,
+            "alteracoes": n,
+            "msg": "Nenhuma mudança no vínculo." if not n else f"Vínculo atualizado ({n} {'alteração' if n == 1 else 'alterações'}).",
+        }
     )
 
 

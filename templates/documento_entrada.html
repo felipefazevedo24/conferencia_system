@@ -406,6 +406,44 @@
         background: var(--rec-surface) !important;
         border-color: var(--rec-border) !important;
     }
+
+    /* Card da aprovação de divergência XML × pedido (Compras via Teams). */
+    .dvb { --dvb-c: #b45309; --dvb-bg: #fffbeb; --dvb-tile: #fef3c7; --dvb-bd: #fde68a;
+        margin-top: 12px; display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px;
+        border-radius: 12px; background: var(--dvb-bg); border: 1px solid var(--dvb-bd);
+        box-shadow: inset 4px 0 0 var(--dvb-c); }
+    .dvb.aprovado { --dvb-c: #15803d; --dvb-bg: #f0fdf4; --dvb-tile: #dcfce7; --dvb-bd: #bbf7d0; }
+    .dvb.rejeitado { --dvb-c: #b91c1c; --dvb-bg: #fef2f2; --dvb-tile: #fee2e2; --dvb-bd: #fecaca; }
+    .dvb__ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+        background: var(--dvb-tile); color: var(--dvb-c); font-size: 16px; }
+    .dvb__body { flex: 1; min-width: 0; }
+    .dvb__top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .dvb__title { font-size: 14px; font-weight: 700; color: #0f172a; }
+    .dvb__chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+        color: var(--dvb-c); background: var(--dvb-tile); }
+    .dvb__chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .dvb:not(.aprovado):not(.rejeitado) .dvb__chip .dot { animation: dvbPulse 1.6s ease-in-out infinite; }
+    @keyframes dvbPulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+    .dvb__meta { margin-top: 3px; font-size: 12.5px; color: #475569; }
+    .dvb__meta b { color: #0f172a; font-weight: 600; }
+    .dvb__lines { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .dvb__line { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px;
+        background: #fff; border: 1px solid var(--dvb-bd); font-size: 12px; color: #334155; }
+    .dvb__line code { font-size: 11.5px; font-weight: 700; color: #0f172a; background: none; padding: 0; }
+    .dvb__line em { font-style: normal; font-weight: 700; color: var(--dvb-c); }
+    .dvb__quote { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: #fff; border: 1px solid var(--dvb-bd);
+        font-size: 12.5px; color: #334155; }
+    .dvb__quote i { color: var(--dvb-c); margin-right: 6px; }
+    [data-theme="escuro"] .dvb { --dvb-bg: rgba(244,179,64,.08); --dvb-tile: rgba(244,179,64,.16); --dvb-bd: rgba(244,179,64,.30); --dvb-c: #fbbf24; }
+    [data-theme="escuro"] .dvb.aprovado { --dvb-bg: rgba(34,197,94,.08); --dvb-tile: rgba(34,197,94,.16); --dvb-bd: rgba(34,197,94,.30); --dvb-c: #4ade80; }
+    [data-theme="escuro"] .dvb.rejeitado { --dvb-bg: rgba(239,68,68,.08); --dvb-tile: rgba(239,68,68,.16); --dvb-bd: rgba(239,68,68,.30); --dvb-c: #f87171; }
+    [data-theme="escuro"] .dvb__title,
+    [data-theme="escuro"] .dvb__meta b,
+    [data-theme="escuro"] .dvb__line code { color: #e8eef6; }
+    [data-theme="escuro"] .dvb__meta { color: #9fb0c4; }
+    [data-theme="escuro"] .dvb__line,
+    [data-theme="escuro"] .dvb__quote { background: rgba(255,255,255,.03); color: #b8c6d6; }
 </style>
 {% endblock %}
 
@@ -652,7 +690,7 @@
                 </div>
             </div>
 
-            <div id="divergenciaDecisaoBanner" style="display:none; margin-top:12px; padding:12px 14px; border-radius:10px; font-size:13px; font-weight:600;"></div>
+            <div id="divergenciaDecisaoBanner" class="dvb" style="display:none;"></div>
 
             <div class="rec-stack-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px;">
                 <div class="box">
@@ -1736,27 +1774,61 @@
                 const dt = new Date(iso);
                 return isNaN(dt) ? String(iso) : dt.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
             };
-            const quem = r.respondido_por || '—';
-            const quando = fmtData(r.respondido_em);
-            const motivo = r.motivo_resposta ? ` — Motivo: ${r.motivo_resposta}` : '';
-            let cor = '#334155', fundo = '#f1f5f9', borda = '#cbd5e1', icone = 'fa-circle-info', texto = '';
+            const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const haQuanto = (iso) => {
+                const dt = iso ? new Date(iso) : null;
+                if (!dt || isNaN(dt)) return '';
+                const min = Math.max(0, Math.round((Date.now() - dt.getTime()) / 60000));
+                if (min < 1) return 'agora há pouco';
+                if (min < 60) return `há ${min} min`;
+                const h = Math.round(min / 60);
+                return h < 24 ? `há ${h} h` : `há ${Math.round(h / 24)} dia(s)`;
+            };
+            // "Linha 1 do XML (ITM04724) -> Linha 1 do pedido: valor diverge" (formato do api_routes).
+            const linhas = String(r.detalhe || '').split('\n').map(s => s.trim()).filter(Boolean).map(t => {
+                const m = /^Linha (\S+) do XML \(([^)]*)\) -> (.+?): (.+)$/.exec(t);
+                return m
+                    ? `<span class="dvb__line">Linha ${esc(m[1])} · <code>${esc(m[2])}</code> <em>${esc(m[4])}</em></span>`
+                    : `<span class="dvb__line">${esc(t)}</span>`;
+            }).join('');
+            const quem = esc(r.respondido_por || '—');
+            const quando = esc(fmtData(r.respondido_em));
+            const quote = r.motivo_resposta ? `<div class="dvb__quote"><i class="fas fa-quote-left"></i>${esc(r.motivo_resposta)}</div>` : '';
+            let cls = '', icone = '', titulo = '', chip = '', meta = '', extra = '';
             if (status === 'Pendente') {
-                cor = '#92400e'; fundo = '#fffbeb'; borda = '#fcd34d'; icone = 'fa-clock';
-                const enviado = r.solicitado_em ? ` (solicitado em ${fmtData(r.solicitado_em)})` : '';
-                texto = `Divergência XML × pedido <b>aguardando aprovação de Compras</b> via Teams${enviado}. A NF só pode ser liberada após a decisão.`;
+                icone = 'fa-hourglass-half'; chip = 'Aguardando Compras';
+                titulo = 'Divergência XML × pedido em aprovação';
+                const desde = r.solicitado_em ? ` · enviada ao Teams em <b>${esc(fmtData(r.solicitado_em))}</b> (${haQuanto(r.solicitado_em)})` : '';
+                meta = `A NF fica bloqueada até Compras decidir${desde}.`;
+                extra = linhas ? `<div class="dvb__lines">${linhas}</div>` : '';
             } else if (status === 'Aprovado') {
-                cor = '#166534'; fundo = '#f0fdf4'; borda = '#86efac'; icone = 'fa-circle-check';
-                texto = `Divergência <b>APROVADA por Compras</b> (${quem} em ${quando})${motivo}. A NF já pode ser liberada.`;
+                cls = 'aprovado'; icone = 'fa-circle-check'; chip = 'Aprovada';
+                titulo = 'Compras aprovou a divergência';
+                meta = `Por <b>${quem}</b> em ${quando} · a NF já pode ser liberada para conferência.`;
+                extra = quote;
             } else if (status === 'Rejeitado') {
-                cor = '#991b1b'; fundo = '#fff1f2'; borda = '#fca5a5'; icone = 'fa-circle-xmark';
-                texto = `Divergência <b>RECUSADA por Compras</b> (${quem} em ${quando})${motivo}. A NF <b>não pode ser liberada</b> por aqui — exclua do Auditor XML ou trate com Compras.`;
+                cls = 'rejeitado'; icone = 'fa-circle-xmark'; chip = 'Recusada';
+                titulo = 'Compras recusou a divergência';
+                meta = `Por <b>${quem}</b> em ${quando} · a NF <b>não pode ser liberada</b> por aqui — exclua do Auditor XML ou trate com Compras.`;
+                extra = quote + (linhas ? `<div class="dvb__lines">${linhas}</div>` : '');
             } else {
                 return;
             }
-            banner.style.color = cor;
-            banner.style.background = fundo;
-            banner.style.border = `1px solid ${borda}`;
-            banner.innerHTML = `<i class="fas ${icone}" style="margin-right:6px;"></i>${texto}`;
+            // Compras pode ter corrigido pedido/linha na tela de aprovação: o vínculo
+            // que o operador vê aqui pode não ser mais o que ele salvou.
+            const ajustes = Array.isArray(r.ajustes_vinculo) ? r.ajustes_vinculo : [];
+            const ajusteTxt = ajustes.length
+                ? `<div class="dvb__meta"><i class="fas fa-link"></i> Compras ajustou o vínculo com o pedido (${ajustes.length} ${ajustes.length === 1 ? 'alteração' : 'alterações'}; a última por <b>${esc(ajustes[0].usuario)}</b> em ${esc(ajustes[0].em)}).</div>`
+                : '';
+            banner.className = `dvb ${cls}`;
+            banner.innerHTML = `
+                <div class="dvb__ico"><i class="fas ${icone}"></i></div>
+                <div class="dvb__body">
+                    <div class="dvb__top"><span class="dvb__title">${titulo}</span><span class="dvb__chip"><span class="dot"></span>${chip}</span></div>
+                    <div class="dvb__meta">${meta}</div>
+                    ${ajusteTxt}
+                    ${extra}
+                </div>`;
             banner.style.display = '';
         } catch (e) {
             // Sem registro de divergência para esta NF -> banner permanece oculto.

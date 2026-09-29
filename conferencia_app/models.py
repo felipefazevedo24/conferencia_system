@@ -3922,6 +3922,29 @@ class DivergenciaPedidoAprovacao(db.Model):
     # Token da URL publica de aprovacao (o link enviado no Teams). Quem tem o
     # link ve a NF; alem disso a tela exige login+senha do Sync pra aprovar.
     token = db.Column(db.String(64), unique=True, index=True)
+    # Numero de NF nao e unico entre fornecedores: sem o CNPJ a tela de
+    # aprovacao misturava itens de NFs homonimas. Nulo em registros antigos.
+    cnpj_emitente = db.Column(db.String(14), index=True)
+
+
+class DivergenciaVinculoAjuste(db.Model):
+    """Historico dos ajustes de vinculo NF x pedido feitos por Compras na tela
+    de aprovacao da divergencia (/aprovar-divergencia/<token>). Uma linha por
+    mudanca: troca do conjunto de pedidos da NF ou da linha de OC de um item.
+    Textos de/para ja legiveis ("OC 12717 · linha 2 · COD") porque o indice
+    gravado no item so faz sentido junto com o conjunto de pedidos da epoca."""
+
+    __tablename__ = "divergencia_vinculo_ajuste"
+
+    id = db.Column(db.Integer, primary_key=True)
+    divergencia_id = db.Column(db.Integer, nullable=False, index=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    item_nota_id = db.Column(db.Integer, index=True)  # None = mudanca do conjunto de pedidos
+    item_codigo = db.Column(db.String(80))
+    de = db.Column(db.String(300))
+    para = db.Column(db.String(300))
+    usuario = db.Column(db.String(160), nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class ChapaAuditoria(db.Model):

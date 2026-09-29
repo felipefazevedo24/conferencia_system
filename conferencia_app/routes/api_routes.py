@@ -3490,7 +3490,7 @@ def _anexar_uso_historico_po(resultado: dict, numero_nota: str) -> None:
         current_app.logger.exception("Falha ao verificar uso historico de linha do pedido em outras NFs")
 
 
-def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido: str, fornecedor: str, resultado: dict) -> None:
+def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido: str, fornecedor: str, resultado: dict, cnpj_emitente: str = "") -> None:
     """
     Assim que uma divergência de quantidade/valor entre XML e pedido é
     detectada (não só quando alguém tenta avançar mesmo assim), abre um pedido
@@ -3544,6 +3544,7 @@ def _notificar_divergencia_pedido_se_necessario(numero_nota: str, numero_pedido:
                 pedido_compra=str(numero_pedido or "")[:200],
                 fornecedor=str(fornecedor or "")[:100],
                 status="Pendente",
+                cnpj_emitente=re.sub(r"\D", "", str(cnpj_emitente or ""))[:14] or None,
             )
             db.session.add(registro)
         registro.detalhe = "\n".join(linhas_divergentes)[:4000]
@@ -3643,7 +3644,7 @@ def _detectar_e_notificar_divergencia_confirmada(numero_nota: str, numero_pedido
     except Exception:
         current_app.logger.exception("Falha ao comparar pedido para notificar divergência confirmada (NF %s)", numero_nota)
         return
-    _notificar_divergencia_pedido_se_necessario(numero_nota, numero_pedido, fornecedor or "", resultado)
+    _notificar_divergencia_pedido_se_necessario(numero_nota, numero_pedido, fornecedor or "", resultado, cnpj_emitente=cnpj_emitente)
 
 
 def _divergencia_callback_token_valido() -> bool:
@@ -4325,6 +4326,8 @@ def divergencia_pedido_status():
     )
     if not registro:
         return jsonify({"sucesso": True, "existe": False})
+    from ..services.divergencia_vinculo_service import historico_ajustes
+
     return jsonify(
         {
             "sucesso": True,
@@ -4335,6 +4338,8 @@ def divergencia_pedido_status():
             "respondido_por": registro.respondido_por,
             "respondido_em": registro.respondido_em.isoformat() if registro.respondido_em else None,
             "motivo_resposta": registro.motivo_resposta,
+            # Compras pode ter corrigido pedido/linha na tela de aprovacao.
+            "ajustes_vinculo": historico_ajustes(registro),
         }
     )
 

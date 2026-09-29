@@ -1,30 +1,31 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="escuro">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" type="image/png" href="/static/favicon16x16.png">
   <title>{% if numero_nota %}NF {{ numero_nota }} · {% endif %}Aprovação de divergência</title>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     :root {
-      --bg: #0a0f16; --panel: #121a24; --panel-2: #16202c; --panel-3: #1b2735;
-      --border: #223043; --border-strong: #2e3f55;
-      --text: #e8eef6; --text-soft: #b8c6d6; --muted: #8397ae;
-      --primary: #1c86f2; --primary-hover: #1570d0; --primary-soft: #7dc4ff;
-      --green: #12a36d; --green-hover: #0e8a5c; --green-soft: #6fe0b1;
-      --red: #e05a54; --red-hover: #c9463f; --red-soft: #ffaaa5;
-      --amber: #f4b340; --amber-soft: #ffd88f;
+      --bg: #eef1f5; --panel: #ffffff; --panel-2: #f6f8fb; --panel-3: #eef2f7;
+      --border: #e3e8ef; --border-strong: #cfd7e2;
+      --text: #0f172a; --text-soft: #334155; --muted: #64748b;
+      --primary: #1c86f2; --primary-hover: #0f62c9; --primary-soft: #0f62c9;
+      --green: #12a36d; --green-hover: #0e8a5c; --green-soft: #0d7a4f;
+      --red: #e05a54; --red-hover: #c9463f; --red-soft: #b42318;
+      --amber: #d97706; --amber-soft: #92400e;
       --radius: 14px;
+      --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; }
     body {
       background:
-        radial-gradient(900px 500px at 100% -10%, rgba(28,134,242,.10), transparent 60%),
-        radial-gradient(700px 400px at -10% 110%, rgba(18,163,109,.06), transparent 60%),
+        radial-gradient(900px 500px at 100% -10%, rgba(28,134,242,.08), transparent 60%),
         var(--bg);
       background-attachment: fixed;
       color: var(--text); font-family: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
@@ -34,11 +35,8 @@
     .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 140px; }
 
     /* ===== Marca ===== */
-    .brand-badge {
-      width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex: none;
-      background: linear-gradient(135deg, #1c86f2, #7dc4ff); color: #04111f; font-size: 18px;
-      font-weight: 800; box-shadow: 0 6px 18px rgba(28,134,242,.30);
-    }
+    .logo { display: block; height: 44px; width: auto; }
+    .topbar-sep { width: 1px; height: 30px; background: var(--border-strong); }
     .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
     .topbar-title { flex: 1; min-width: 0; }
     .topbar-title strong { display: block; font-size: 15px; font-weight: 700; }
@@ -55,7 +53,7 @@
     /* ===== Blocos ===== */
     .card {
       background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      box-shadow: var(--shadow);
     }
     .section { margin-top: 26px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -176,8 +174,8 @@
     /* ===== Barra de decisão (fixa no rodapé) ===== */
     .decision-bar {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-      background: rgba(14,21,30,.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      border-top: 1px solid var(--border-strong); box-shadow: 0 -12px 30px rgba(0,0,0,.35);
+      background: rgba(255,255,255,.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border-strong); box-shadow: 0 -8px 24px rgba(15,23,42,.08);
     }
     .decision-inner { max-width: 1080px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 14px; align-items: center; }
     .decision-inner textarea {
@@ -190,16 +188,24 @@
 
     /* ===== Resultado da decisão ===== */
     .result {
-      display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: var(--radius); margin-bottom: 16px;
-      border: 1px solid;
+      display: flex; gap: 18px; align-items: flex-start; padding: 22px 24px; border-radius: var(--radius); margin-bottom: 18px;
+      border: 1px solid; box-shadow: var(--shadow);
     }
-    .result .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; flex: none; }
-    .result strong { display: block; font-size: 15px; }
-    .result span { font-size: 13px; color: var(--text-soft); }
-    .result.aprovado { background: rgba(18,163,109,.08); border-color: rgba(18,163,109,.35); }
-    .result.aprovado .ico { background: rgba(18,163,109,.18); color: var(--green-soft); }
-    .result.rejeitado { background: rgba(224,90,84,.08); border-color: rgba(224,90,84,.35); }
-    .result.rejeitado .ico { background: rgba(224,90,84,.18); color: var(--red-soft); }
+    .result .ico { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; flex: none; color: #fff; }
+    .result .txt { flex: 1; min-width: 0; }
+    .result strong { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+    .result .quem { display: block; margin-top: 2px; font-size: 13.5px; color: var(--text-soft); }
+    .result .quote { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: rgba(255,255,255,.75);
+      font-size: 13.5px; color: var(--text-soft); border: 1px solid; }
+    .result .quote i { margin-right: 8px; opacity: .7; }
+    .result.aprovado { background: #ecfdf3; border-color: #abefc6; }
+    .result.aprovado strong { color: #05603a; }
+    .result.aprovado .ico { background: var(--green); box-shadow: 0 0 0 6px rgba(18,163,109,.15); }
+    .result.aprovado .quote { border-color: #abefc6; }
+    .result.rejeitado { background: #fef3f2; border-color: #fecdca; }
+    .result.rejeitado strong { color: #912018; }
+    .result.rejeitado .ico { background: var(--red); box-shadow: 0 0 0 6px rgba(224,90,84,.15); }
+    .result.rejeitado .quote { border-color: #fecdca; }
 
     /* ===== Carregando / erro ===== */
     .sk { background: linear-gradient(90deg, var(--panel-2) 0%, var(--panel-3) 50%, var(--panel-2) 100%);
@@ -213,7 +219,7 @@
     .state p { margin: 0 auto 18px; color: var(--muted); max-width: 420px; }
 
     /* ===== Modal de confirmação ===== */
-    .modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(3,6,10,.7); display: grid; place-items: center; padding: 16px;
+    .modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: grid; place-items: center; padding: 16px;
       backdrop-filter: blur(3px); }
     .modal { width: 100%; max-width: 420px; padding: 24px; }
     .modal h3 { margin: 0 0 6px; font-size: 17px; }
@@ -222,17 +228,11 @@
 
     /* ===== Login ===== */
     .login-screen { min-height: calc(100dvh - 40px); display: flex; align-items: center; justify-content: center; }
-    .login-card { width: 100%; max-width: 400px; padding: 30px 28px 24px; position: relative; overflow: hidden; }
-    .login-top { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-    .login-top strong { display: block; font-size: 15px; }
-    .login-top span { font-size: 12px; color: var(--muted); }
-    .login-ctx {
-      background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 22px;
-    }
-    .login-ctx .eyebrow { font-size: 10.5px; }
-    .login-ctx .nf { font-size: 20px; font-weight: 800; margin-top: 2px; }
-    .login-ctx .forn { color: var(--text-soft); font-size: 13px; }
-    .login-ctx .status-chip { margin-top: 10px; }
+    .login-card { width: 100%; max-width: 400px; padding: 34px 30px 26px; }
+    .login-top { text-align: center; margin-bottom: 26px; }
+    .login-top .logo { height: auto; width: 190px; margin: 0 auto 22px; }
+    .login-top h1 { margin: 0 0 6px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+    .login-top p { margin: 0; font-size: 13.5px; color: var(--muted); }
     .field { margin-bottom: 14px; }
     .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
     .input-wrap { position: relative; }
@@ -254,6 +254,38 @@
 
     .foot { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 28px; }
 
+    /* ===== Ajuste de vínculo (Compras) ===== */
+    .vinc-bar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; padding: 12px 16px;
+      background: var(--panel-2); border-bottom: 1px solid var(--border); }
+    .vinc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--border-strong); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .chip.novo { border-color: var(--primary); color: var(--primary-hover); }
+    .chip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 20px; height: 20px;
+      border-radius: 50%; display: grid; place-items: center; font-size: 11px; }
+    .chip button:hover { background: rgba(224,90,84,.12); color: var(--red); }
+    .add-ped { display: inline-flex; gap: 6px; margin-left: auto; }
+    .add-ped input { width: 130px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border-strong);
+      background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+    .add-ped input:focus, .po-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(28,134,242,.18); }
+    .btn.sm { padding: 0 12px; height: 34px; font-size: 12.5px; }
+    .po-select { width: 100%; min-width: 220px; max-width: 320px; height: 34px; padding: 0 8px; border-radius: 8px;
+      border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; }
+    .po-select.changed { border-color: var(--primary); background: rgba(28,134,242,.06); }
+    .po-auto { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+    .vinc-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px;
+      background: rgba(28,134,242,.07); border-top: 1px solid rgba(28,134,242,.25); }
+    .vinc-save span { flex: 1; font-size: 13px; color: var(--text-soft); }
+    .vinc-save span i { color: var(--primary); margin-right: 6px; }
+    #vinc-msg { margin: 12px 16px; }
+    .hist-item { display: flex; gap: 12px; padding: 12px 18px; font-size: 13px; }
+    .hist-item + .hist-item { border-top: 1px solid var(--border); }
+    .hist-item .when { flex: none; width: 150px; color: var(--muted); font-size: 12px; }
+    .hist-item .what { flex: 1; min-width: 0; }
+    .hist-item .de { color: var(--muted); text-decoration: line-through; }
+    .hist-item .para { font-weight: 600; }
+
     @media (max-width: 760px) {
       .stats { grid-template-columns: repeat(2, 1fr); }
       .stat:nth-child(2) { border-right: 0; }
@@ -272,8 +304,9 @@
   <div class="wrap">
     {% if invalido %}
       <div class="topbar">
-        <div class="brand-badge">S</div>
-        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
+        <img class="logo" src="/static/columbia_sync_logo_v2.png?v=20260626-1" alt="Columbia Sync">
+        <span class="topbar-sep"></span>
+        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Compras · NF × pedido de compra</span></div>
       </div>
       <div class="card state warn">
         <div class="ico"><i class="fas fa-link-slash"></i></div>
@@ -286,18 +319,10 @@
     <div class="login-screen" id="login-screen">
       <div class="card login-card">
         <div class="login-top">
-          <div class="brand-badge">S</div>
-          <div><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
+          <img class="logo" src="/static/columbia_sync_logo_v2.png?v=20260626-1" alt="Columbia Sync">
+          <h1>Aprovação de divergência</h1>
+          <p>Entre com seu usuário do Sync para revisar{% if numero_nota %} a NF {{ numero_nota }}{% endif %}.</p>
         </div>
-        {% if numero_nota %}
-        <div class="login-ctx">
-          <div class="eyebrow">Divergência NF × Pedido</div>
-          <div class="nf">NF {{ numero_nota }}</div>
-          {% if fornecedor %}<div class="forn">{{ fornecedor }}</div>{% endif %}
-          {% set st = (status or 'Pendente') %}
-          <span class="status-chip {{ st|lower }}"><span class="dot"></span>{% if st == 'Pendente' %}Aguardando decisão{% else %}{{ st }}{% endif %}</span>
-        </div>
-        {% endif %}
         <div class="field">
           <label for="username">Usuário do Sync</label>
           <div class="input-wrap">
@@ -321,8 +346,9 @@
     <!-- CONTEÚDO (após login) -->
     <div id="conteudo" class="hidden">
       <div class="topbar">
-        <div class="brand-badge">S</div>
-        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
+        <img class="logo" src="/static/columbia_sync_logo_v2.png?v=20260626-1" alt="Columbia Sync">
+        <span class="topbar-sep"></span>
+        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Compras · NF × pedido de compra</span></div>
         <div class="user-chip" id="user-chip"><span class="av" id="user-av">?</span><span class="nm" id="user-nome"></span></div>
       </div>
 
@@ -386,11 +412,19 @@
             <span class="hint">Valores em vermelho são os que não batem</span>
           </div>
           <div class="card" style="overflow:hidden">
+            <div class="vinc-bar hidden" id="vinc-bar">
+              <span class="vinc-label">Pedidos da NF</span>
+              <div class="chips" id="ped-chips"></div>
+              <div class="add-ped">
+                <input id="ped-novo" inputmode="numeric" placeholder="Nº do pedido" aria-label="Adicionar pedido">
+                <button class="btn btn-ghost sm" id="btn-add-ped" onclick="adicionarPedido()"><i class="fas fa-plus"></i> Adicionar</button>
+              </div>
+            </div>
             <div class="table-scroll" id="cmp-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>#</th><th>Item da NF</th>
+                    <th>#</th><th>Item da NF</th><th>Linha do pedido</th>
                     <th class="num">Quantidade</th><th class="num">Valor unitário</th>
                     <th>Situação</th>
                   </tr>
@@ -399,7 +433,21 @@
               </table>
             </div>
             <div class="inline-note hidden" id="cmp-erro"><i class="fas fa-circle-info"></i><span id="cmp-erro-txt"></span></div>
+            <div class="vinc-save hidden" id="vinc-save">
+              <span id="vinc-save-txt"></span>
+              <button class="btn btn-ghost sm" onclick="descartarVinculo()">Descartar</button>
+              <button class="btn btn-primary sm" id="btn-salvar-vinc" onclick="salvarVinculo()"><i class="fas fa-rotate"></i> Salvar e recalcular</button>
+            </div>
+            <div class="msg" id="vinc-msg"></div>
           </div>
+        </div>
+
+        <div class="section hidden" id="hist-sec">
+          <div class="section-head">
+            <h2><i class="fas fa-clock-rotate-left"></i>Ajustes de vínculo</h2>
+            <span class="hint">Feitos por Compras nesta tela</span>
+          </div>
+          <div class="card" id="hist-list"></div>
         </div>
 
         <details class="card xml" id="xml-details">
@@ -562,7 +610,7 @@
       document.getElementById('h-solicitado').textContent = reg.solicitado_em ? ('Aberta em ' + reg.solicitado_em) : '';
       document.getElementById('v-fornecedor').textContent = reg.fornecedor || 'Fornecedor não identificado';
       document.getElementById('v-cnpj').textContent = reg.cnpj_emitente ? ('CNPJ ' + reg.cnpj_emitente) : '';
-      document.getElementById('v-pedido').textContent = reg.pedido_compra || '—';
+      document.getElementById('v-pedido').textContent = String(data.pedidos || reg.pedido_compra || '').split(',').filter(Boolean).join(', ') || '—';
       document.getElementById('v-emissao').textContent = reg.data_emissao || '—';
       document.getElementById('v-valor').textContent = reg.nf_valor_total ? money(reg.nf_valor_total) : '—';
       document.getElementById('btn-pdf').classList.toggle('hidden', !data.tem_pdf);
@@ -598,6 +646,7 @@
         document.getElementById('cmp-wrap').classList.remove('hidden');
         document.getElementById('cmp-erro').classList.add('hidden');
         cmpBody.innerHTML = pares.map(p => {
+          const vincCell = `<td class="vinc-cell" data-item="${esc(p.item_id)}"></td>`;
           const ok = !!p.ok;
           const un = p.nf_unidade ? ' ' + esc(p.nf_unidade) : '';
           const qtdNf = p.nf_qtd_original ?? p.nf_qtd;
@@ -614,8 +663,8 @@
             <td>
               <div class="item-cod">${esc(p.nf_codigo ?? '—')}</div>
               <div class="item-desc">${esc(p.nf_descricao ?? '—')}</div>
-              <div class="item-po">${p.po_linha ? 'Linha ' + esc(p.po_linha) + ' do pedido' : 'Sem linha do pedido vinculada'}</div>
             </td>
+            ${vincCell}
             <td class="num">
               <div class="cmp ${p.qtd_ok ? '' : 'bad'}">
                 <span class="k">NF</span><span class="v nf">${num(qtdNf, 4)}${un}</span>
@@ -638,6 +687,9 @@
         document.getElementById('cmp-erro').classList.remove('hidden');
       }
 
+      iniciarVinculo(data, pares, reg.status === 'Pendente' && !data.erro_comparacao);
+      renderHistorico(data.historico || []);
+
       // Itens XML
       const itens = data.itens_xml || [];
       document.getElementById('xml-count').textContent = itens.length;
@@ -658,10 +710,11 @@
       if (reg.status && reg.status !== 'Pendente') {
         const aprovado = reg.status === 'Aprovado';
         resultado.innerHTML = `<div class="result ${aprovado ? 'aprovado' : 'rejeitado'}">
-          <div class="ico"><i class="fas ${aprovado ? 'fa-circle-check' : 'fa-circle-xmark'}"></i></div>
-          <div>
-            <strong>${aprovado ? 'Divergência aprovada — NF liberada para conferência' : 'Divergência recusada — NF continua bloqueada'}</strong>
-            <span>Por ${esc(reg.respondido_por || '—')} em ${esc(reg.respondido_em || '—')}${reg.motivo_resposta ? ' · “' + esc(reg.motivo_resposta) + '”' : ''}</span>
+          <div class="ico"><i class="fas ${aprovado ? 'fa-check' : 'fa-xmark'}"></i></div>
+          <div class="txt">
+            <strong>${aprovado ? 'Divergência aprovada — a NF foi liberada para conferência' : 'Divergência recusada — a NF continua bloqueada'}</strong>
+            <span class="quem">Decidido por <b>${esc(reg.respondido_por || '—')}</b> em ${esc(reg.respondido_em || '—')}</span>
+            ${reg.motivo_resposta ? `<div class="quote"><i class="fas fa-quote-left"></i>${esc(reg.motivo_resposta)}</div>` : ''}
           </div>
         </div>`;
         bar.classList.add('hidden');
@@ -671,12 +724,181 @@
       }
     }
 
+    // ===== Ajuste de vínculo NF × pedido =====
+    // O servidor fala em chave estável "OC#posição" (nunca no índice da lista
+    // combinada, que muda quando o conjunto de pedidos muda).
+    const vinc = { editavel: false, pedidosOrig: [], pedidos: [], linhas: [], pares: [], orig: {}, sel: {} };
+
+    function rotuloLinha(l) {
+      if (!l) return '';
+      return `OC ${l.pedido} · linha ${l.posicao}${l.codigo ? ' · ' + l.codigo : ''}`;
+    }
+    function opcaoLinha(l) {
+      const qtd = l.qtd == null ? '' : ` · ${num(l.qtd, 4)}`;
+      const vu = l.valor_unit == null ? '' : ` · ${moneyUnit(l.valor_unit)}`;
+      const desc = l.descricao ? ` · ${l.descricao.slice(0, 40)}` : '';
+      return `OC ${l.pedido} · L${l.posicao}${l.codigo ? ' · ' + l.codigo : ''}${desc}${qtd}${vu}`;
+    }
+    function linhaPorChave(chave) { return vinc.linhas.find(l => l.chave === chave) || null; }
+
+    function celulaVinculo(p) {
+      const efetiva = linhaPorChave(p.po_chave);
+      if (!vinc.editavel) {
+        return efetiva ? `<span class="item-cod">${esc(rotuloLinha(efetiva))}</span>` : '<span class="po-auto">Sem linha vinculada</span>';
+      }
+      const id = String(p.item_id);
+      const atual = vinc.sel[id] ?? '';
+      const grupos = {};
+      vinc.linhas.forEach(l => { (grupos[l.pedido] = grupos[l.pedido] || []).push(l); });
+      const opts = ['<option value="">Automático (Sync escolhe)</option>'].concat(
+        Object.keys(grupos).map(oc => `<optgroup label="OC ${esc(oc)}">${grupos[oc].map(l =>
+          `<option value="${esc(l.chave)}" ${l.chave === atual ? 'selected' : ''}>${esc(opcaoLinha(l))}</option>`).join('')}</optgroup>`)
+      ).join('');
+      const mudou = (vinc.orig[id] ?? '') !== atual;
+      const auto = !atual && efetiva && !mudou ? `<span class="po-auto">Hoje: ${esc(rotuloLinha(efetiva))}</span>` : '';
+      return `<select class="po-select ${mudou ? 'changed' : ''}" data-item="${esc(id)}" onchange="mudarLinha(this.dataset.item, this.value)">${opts}</select>${auto}`;
+    }
+
+    function iniciarVinculo(data, pares, editavel) {
+      vinc.editavel = !!editavel && Array.isArray(data.linhas_po) && data.linhas_po.length > 0;
+      vinc.linhas = data.linhas_po || [];
+      vinc.pares = pares;
+      vinc.pedidosOrig = String(data.pedidos || '').split(',').map(x => x.trim()).filter(Boolean);
+      vinc.pedidos = vinc.pedidosOrig.slice();
+      vinc.orig = {}; vinc.sel = {};
+      // O que está gravado no item vira a seleção inicial (o Auditor grava até
+      // a escolha automática, então quase sempre já há uma linha).
+      pares.forEach(p => {
+        const v = p.linha_po_vinculada != null && p.po_chave ? p.po_chave : '';
+        vinc.orig[String(p.item_id)] = v; vinc.sel[String(p.item_id)] = v;
+      });
+      document.getElementById('vinc-bar').classList.toggle('hidden', !vinc.editavel);
+      renderChips(); renderCelulas(); atualizarBarraVinculo();
+    }
+
+    function renderChips() {
+      document.getElementById('ped-chips').innerHTML = vinc.pedidos.map(pd => `
+        <span class="chip ${vinc.pedidosOrig.includes(pd) ? '' : 'novo'}">${esc(pd)}
+          <button type="button" title="Remover pedido" data-ped="${esc(pd)}" onclick="removerPedido(this.dataset.ped)"><i class="fas fa-xmark"></i></button></span>`).join('')
+        || '<span class="po-auto">Nenhum pedido</span>';
+    }
+    function renderCelulas() {
+      document.querySelectorAll('#cmp-body td.vinc-cell').forEach(td => {
+        const p = vinc.pares.find(x => String(x.item_id) === td.dataset.item);
+        if (p) td.innerHTML = celulaVinculo(p);
+      });
+    }
+
+    function vinculoAlterado() {
+      if (!vinc.editavel) return false;
+      if (vinc.pedidos.join(',') !== vinc.pedidosOrig.join(',')) return true;
+      return Object.keys(vinc.sel).some(id => (vinc.sel[id] ?? '') !== (vinc.orig[id] ?? ''));
+    }
+    function atualizarBarraVinculo() {
+      const alterado = vinculoAlterado();
+      document.getElementById('vinc-save').classList.toggle('hidden', !alterado);
+      if (!alterado) return;
+      const itens = Object.keys(vinc.sel).filter(id => (vinc.sel[id] ?? '') !== (vinc.orig[id] ?? '')).length;
+      const partes = [];
+      if (vinc.pedidos.join(',') !== vinc.pedidosOrig.join(',')) partes.push('pedidos da NF');
+      if (itens) partes.push(`${itens} ${itens === 1 ? 'item' : 'itens'}`);
+      document.getElementById('vinc-save-txt').innerHTML = `<i class="fas fa-pen"></i>Ajuste não salvo: ${esc(partes.join(' e '))}. A comparação é recalculada ao salvar.`;
+    }
+
+    function mudarLinha(itemId, chave) {
+      vinc.sel[itemId] = chave || '';
+      renderCelulas();
+      atualizarBarraVinculo();
+    }
+
+    async function trocarPedidos(novos) {
+      const ordenados = Array.from(new Set(novos)).sort();
+      const btn = document.getElementById('btn-add-ped');
+      btn.disabled = true;
+      hideMsg('vinc-msg');
+      try {
+        const r = await fetch(`${BASE}/linhas-pedido?pedidos=${encodeURIComponent(ordenados.join(','))}`);
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 401) { mostrarLogin('Sua sessão expirou. Entre de novo.'); return false; }
+        if (!r.ok || !d.sucesso) { showMsg('vinc-msg', d.msg || 'Não foi possível consultar o pedido.', 'err'); return false; }
+        const linhas = d.linhas || [];
+        const achados = new Set(linhas.map(l => l.pedido));
+        const faltam = ordenados.filter(pd => !achados.has(pd));
+        if (faltam.length) { showMsg('vinc-msg', `Pedido sem linhas no ERP: ${faltam.join(', ')}. Confira o número.`, 'err'); return false; }
+        vinc.pedidos = ordenados;
+        vinc.linhas = linhas;
+        // Linha escolhida que saiu junto com um pedido removido volta pro automático.
+        const chaves = new Set(linhas.map(l => l.chave));
+        Object.keys(vinc.sel).forEach(id => { if (vinc.sel[id] && !chaves.has(vinc.sel[id])) vinc.sel[id] = ''; });
+        renderChips(); renderCelulas(); atualizarBarraVinculo();
+        return true;
+      } catch (e) {
+        showMsg('vinc-msg', 'Erro de conexão ao consultar o pedido.', 'err');
+        return false;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function adicionarPedido() {
+      const inp = document.getElementById('ped-novo');
+      const novo = inp.value.replace(/\D/g, '');
+      if (!novo) { inp.focus(); return; }
+      if (vinc.pedidos.includes(novo)) { inp.value = ''; return; }
+      if (await trocarPedidos(vinc.pedidos.concat(novo))) inp.value = '';
+    }
+    function removerPedido(pd) {
+      if (vinc.pedidos.length <= 1) { showMsg('vinc-msg', 'A NF precisa de ao menos um pedido. Adicione o correto antes de remover este.', 'err'); return; }
+      trocarPedidos(vinc.pedidos.filter(x => x !== pd));
+    }
+    function descartarVinculo() {
+      hideMsg('vinc-msg');
+      hideMsg('decisao-msg');
+      carregarDados();  // volta ao que está gravado, com as linhas do conjunto original
+    }
+
+    async function salvarVinculo() {
+      const vinculos = {};
+      Object.keys(vinc.sel).forEach(id => { if ((vinc.sel[id] ?? '') !== (vinc.orig[id] ?? '')) vinculos[id] = vinc.sel[id] || null; });
+      const btn = document.getElementById('btn-salvar-vinc');
+      btn.disabled = true;
+      try {
+        const r = await fetch(`${BASE}/vinculos`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidos: vinc.pedidos.join(','), vinculos }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 401) { mostrarLogin('Sua sessão expirou. Entre de novo para salvar o ajuste.'); return; }
+        if (!r.ok || !d.sucesso) { showMsg('vinc-msg', d.msg || 'Não foi possível salvar o vínculo.', 'err'); return; }
+        hideMsg('decisao-msg');
+        await carregarDados();
+        showMsg('vinc-msg', d.msg + ' Confira a comparação antes de decidir.', 'ok');
+      } catch (e) {
+        showMsg('vinc-msg', 'Erro de conexão ao salvar o vínculo.', 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderHistorico(hist) {
+      document.getElementById('hist-sec').classList.toggle('hidden', !hist.length);
+      document.getElementById('hist-list').innerHTML = hist.map(h => `
+        <div class="hist-item">
+          <div class="when">${esc(h.em)}<br>${esc(h.usuario)}</div>
+          <div class="what">${h.pedidos ? '<b>Pedidos da NF</b>' : `<b>Item ${esc(h.item_codigo || '')}</b>`}:
+            <span class="de">${esc(h.de)}</span> → <span class="para">${esc(h.para)}</span></div>
+        </div>`).join('');
+    }
+
     function abrirPdf() {
       window.open(`${BASE}/danfe`, '_blank');
     }
 
     let decisaoPendente = null;
     function pedirConfirmacao(decisao) {
+      if (vinculoAlterado()) {
+        showMsg('decisao-msg', 'Você tem ajuste de vínculo não salvo. Salve (para recalcular a comparação) ou descarte antes de decidir.', 'err');
+        return;
+      }
       const motivo = document.getElementById('motivo').value.trim();
       if (decisao === 'rejeitado' && !motivo) {
         showMsg('decisao-msg', 'Escreva o motivo da recusa no campo de observação.', 'err');
@@ -739,6 +961,7 @@
     document.getElementById('btn-login')?.addEventListener('click', fazerLogin);
     document.getElementById('username')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
     document.getElementById('password')?.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+    document.getElementById('ped-novo')?.addEventListener('keydown', e => { if (e.key === 'Enter') adicionarPedido(); });
   </script>
 </body>
 </html>
