@@ -346,3 +346,96 @@ def reverter_expedicao_por_nf(numero_nf) -> int:
     if afetadas:
         db.session.commit()
     return afetadas
+
+
+# ── NF incluida manualmente (sem ordem de faturamento na API) ──────────────
+# NF emitida fora do fluxo das ordens de faturamento. Antes so' dava pra
+# joga-la direto no romaneio, e ela ficava sem registro na conferencia. Agora
+# vira uma ordem aqui, ja' em "Faturado sem conferência" - a mesma trava das
+# ordens que faturaram sem conferir: pra ir ao romaneio precisa conferir (com
+# foto) ou "Expedir sem conferência" com justificativa.
+#
+# Nao ha cod_ordem_fat real: usa uma faixa propria, positiva (as rotas usam
+# <int:>, que nao aceita negativo) e muito acima das OFs do ERP, que nunca
+# chegam nela. O sync da API so' cria/atualiza pelas OFs que vem da API, entao
+# nunca toca nessas ordens.
+ORIGEM_NF_MANUAL = "nf_manual"
+COD_ORDEM_NF_MANUAL_BASE = 900_000_000
+
+
+def eh_nf_manual(ordem: ExpedicaoOrdemFat) -> bool:
+    return (ordem.origem_status or "") == ORIGEM_NF_MANUAL
+
+
+def _qtde_item_nf(valor) -> int:
+    try:
+        return int(round(float(str(valor or "0").replace(",", "."))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def registrar_nf_manual(numero_nf, usuario: str) -> ExpedicaoOrdemFat:
+    """Busca a NF no ERP (bridge) e registra como ordem "Faturado sem
+    conferência", com os itens do XML pra conferencia. Levanta ValueError com
+    mensagem pro usuario."""
+    from ..models import ExpedicaoOrdemST
+    from . import danfe_service
+    from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+
+    numero_nf = _limpar_num_nf(numero_nf)
+    if not numero_nf:
+        raise ValueError("Digite o número da NF.")
+
+    existente = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf, excluido=False).first()
+    if existente:
+        ref = "incluída manualmente" if eh_nf_manual(existente) else f"OF #{existente.cod_ordem_fat}"
+        raise ValueError(f"A NF {numero_nf} já está na Conferência de Expedição ({ref}, {existente.status}).")
+    if ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first():
+        raise ValueError(f"A NF {numero_nf} já está na Conferência de Expedição (aba ST).")
+
+    try:
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+    except Exception:
+        current_app.logger.warning("NF manual: falha ao consultar a NF %s no ERP", numero_nf, exc_info=True)
+        raise ValueError("Não foi possível consultar o ERP agora. Tente novamente em instantes.")
+    xml_bytes = (nota or {}).get("xml_bytes")
+    if not xml_bytes:
+        raise ValueError(f"NF {numero_nf} não encontrada no ERP (ou ainda sem XML autorizado).")
+    try:
+        nfe = danfe_service.parse_nfe_xml(xml_bytes)
+    except Exception:
+        current_app.logger.warning("NF manual: XML da NF %s ilegivel", numero_nf, exc_info=True)
+        raise ValueError(f"Não foi possível ler o XML da NF {numero_nf}.")
+
+    ultimo = (
+        db.session.query(db.func.max(ExpedicaoOrdemFat.cod_ordem_fat))
+        .filter(ExpedicaoOrdemFat.cod_ordem_fat > COD_ORDEM_NF_MANUAL_BASE)
+        .scalar()
+    )
+    agora = agora_br()
+    ordem = ExpedicaoOrdemFat(
+        cod_ordem_fat=(ultimo or COD_ORDEM_NF_MANUAL_BASE) + 1,
+        origem_status=ORIGEM_NF_MANUAL,
+        cliente=(str(nfe.get("dest_nome") or "").strip() or None),
+        numero_nf=numero_nf,
+        status=STATUS_FATURADO_SEM_CONF,
+        faturado_at=agora,
+        peso_liquido=(str(nfe.get("vol_pesoL") or "").strip() or None),
+        peso_bruto=(str(nfe.get("vol_pesoB") or "").strip() or None),
+        qtde_volumes=(str(nfe.get("vol_qtd") or "").strip() or None),
+        especie_volumes=(str(nfe.get("vol_esp") or "").strip() or None),
+        updated_at=agora,
+    )
+    db.session.add(ordem)
+    db.session.flush()
+    ordem.codigo_interno = f"NFM-{ordem.id:06d}"
+    for idx, item in enumerate(nfe.get("itens") or []):
+        db.session.add(ExpedicaoOrdemFatItem(
+            ordem_id=ordem.id,
+            linha=idx,
+            cod_interno=str(item.get("cProd") or "").strip()[:80],
+            item=str(item.get("xProd") or "").strip()[:200],
+            n_os="",
+            qtde_a_faturar=_qtde_item_nf(item.get("qCom")),
+        ))
+    return ordem

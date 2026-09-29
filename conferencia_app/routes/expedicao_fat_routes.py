@@ -79,6 +79,7 @@ def _ordem_resumo(ordem: ExpedicaoOrdemFat, total_itens: int | None = None) -> d
         "id": ordem.id,
         "codigo_interno": ordem.codigo_interno,
         "cod_ordem_fat": ordem.cod_ordem_fat,
+        "nf_manual": svc.eh_nf_manual(ordem),
         "cliente": ordem.cliente,
         "orcamento": ordem.orcamento,
         "pedido": ordem.pedido,
@@ -130,6 +131,39 @@ def sincronizar_conf_cega():
     return jsonify({"sucesso": True, **resumo})
 
 
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/nf-manual", methods=["POST"])
+@roles_required(*ROLES)
+def adicionar_nf_manual_conf_cega():
+    """"Adicionar manualmente": NF sem ordem de faturamento na API (veio do
+    romaneio pra ca). Entra como "Faturado sem conferência" pra ter conferencia,
+    foto e acompanhamento, com a mesma trava pro romaneio."""
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username") or "desconhecido"
+    try:
+        ordem = svc.registrar_nf_manual(payload.get("numero_nf"), usuario)
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    log_svc.registrar_log(
+        origem="fat",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_fat,
+        acao="nf_manual",
+        usuario=usuario,
+        status_anterior="",
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=False,
+        diff_cabecalho=[{
+            "campo": "acao", "label": "Ação", "de": "",
+            "para": f"NF {ordem.numero_nf} incluída manualmente (dados do ERP)",
+        }],
+        diff_itens=[],
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "ordem": _ordem_resumo(ordem)}), 201
+
+
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens", methods=["GET"])
 @permission_required(PERMISSION)
 def listar_ordens_conf_cega():
@@ -163,6 +197,7 @@ def listar_ordens_conf_cega():
             str(ordem.orcamento or ""),
             str(ordem.pedido or ""),
             str(ordem.cliente or ""),
+            str(ordem.numero_nf or ""),
         ]).lower()
         if busca in campos:
             return True

@@ -252,6 +252,15 @@
                 </div>
                 <button class="eui-btn eui-btn--ghost hidden" id="{{ prefix }}-btn-limpar-busca" title="Limpar busca"><i class="fas fa-xmark"></i></button>
             </div>
+            {% if prefix == 'fat' %}
+            <!-- Veio do Romaneio: NF sem ordem de faturamento entra aqui como
+                 "Faturado sem conferência", pra ter registro, foto e acompanhamento. -->
+            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:260px; max-width:520px;">
+                <input type="text" id="fat-nf-manual" class="eui-input" autocomplete="off" style="flex:1;"
+                    placeholder="Ou digite o número de uma NF que não passou pela conferência…">
+                <button type="button" class="eui-btn eui-btn--ghost" id="fat-btn-add-nf-manual" style="white-space:nowrap;" title="Busca os dados da NF direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
+            </div>
+            {% endif %}
             <div style="position:relative;">
                 <button class="eui-btn eui-btn--ghost" type="button" id="{{ prefix }}-btn-toolbar-menu"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
                 <div class="ce-dropdown-menu" id="{{ prefix }}-toolbar-menu">
@@ -2072,7 +2081,7 @@
         podeCorrigirNf: true,
         podeInformarNf: true,
         podeExpedirSemConf: true,
-        colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
+        colunas: (o) => [o.nf_manual ? `NF ${o.numero_nf} (manual)` : "#" + o.cod_ordem_fat, o.cliente, o.orcamento],
         previsao: (o) => o.dt_previsao_entrega,
         onCount: (n) => { $("fat-tab-count").textContent = n; },
     });
@@ -2087,6 +2096,32 @@
         previsao: (o) => o.dt_prevista_entrega,
         onCount: (n) => { $("st-tab-count").textContent = n; },
     });
+
+    // "Adicionar manualmente" (veio do Romaneio): busca a NF no ERP e registra
+    // como "Faturado sem conferência"; depois mostra a ordem criada na lista.
+    async function adicionarNfManual() {
+        const input = $("fat-nf-manual");
+        const btn = $("fat-btn-add-nf-manual");
+        const nf = input.value.trim();
+        if (!nf) { toast("Digite o número da NF.", "error"); return; }
+        btn.disabled = true;
+        try {
+            const data = await api("/api/expedicao/conf-cega/nf-manual", {
+                method: "POST", body: JSON.stringify({ numero_nf: nf }),
+            });
+            input.value = "";
+            toast(`NF ${data.ordem.numero_nf} incluída como "Faturado sem conferência".`, "success");
+            const busca = $("fat-busca");
+            busca.value = data.ordem.numero_nf;
+            busca.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+        } catch (e) {
+            toast(e.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    }
+    $("fat-btn-add-nf-manual").addEventListener("click", adicionarNfManual);
+    $("fat-nf-manual").addEventListener("keydown", (e) => { if (e.key === "Enter") adicionarNfManual(); });
 
     // Abas
     let stCarregado = false;

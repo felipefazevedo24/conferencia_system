@@ -109,16 +109,14 @@ const window = {};
     script += helpers + eventos + r'''
 (async () => {
     await $('rom-btn-novo').handlers.click();
-    $('rom-nf-manual').value = '100';
-    await $('rom-btn-add-nf-manual').handlers.click();
+    adicionarNfLocal('100');  // "Adicionar manualmente" saiu do romaneio (foi pra Conferencia)
     assert.equal(nfsAtual.length, 1);
     assert.equal(chamadas.length, 0);
     $('rom-modal-cancel').handlers.click();
     await $('rom-btn-novo').handlers.click();
     assert.equal(nfsAtual.length, 0);
     assert.equal(chamadas.length, 0);
-    $('rom-nf-manual').value = '200';
-    await $('rom-btn-add-nf-manual').handlers.click();
+    adicionarNfLocal('200');  // "Adicionar manualmente" saiu do romaneio (foi pra Conferencia)
     const salvar = $('rom-modal-save').handlers.click;
     await Promise.all([salvar(), salvar()]);
     assert.equal(chamadas.length, 1);
