@@ -1496,7 +1496,7 @@
         const alerta = document.querySelector(`.item-alerta[data-id="${id}"]`);
         if (alerta) {
             alerta.className = 'item-alerta';
-            alerta.innerText = ativo ? 'Peso em KG vem da NF — conte só as chapas.' : '';
+            alerta.innerText = '';
         }
         const linha = qtd.closest('tr');
         if (linha) linha.classList.toggle('contado', ativo);
@@ -1556,6 +1556,27 @@
         const valorConvertido = valorInformado * fatorConversao;
         const diferenca = Math.abs(valorConvertido - valorEsperado);
         return diferenca <= 0.0001 ? { tipo: 'ok', mensagem: '' } : { tipo: 'erro', mensagem: '' };
+    }
+
+    // Bloqueio com motivo e lista de itens (o servidor manda: 1ª linha = o
+    // quê, 2ª = o que fazer, "• ..." = itens). Vira aviso com título e lista
+    // em vez de um bloco de texto corrido.
+    function mostrarBloqueioConferencia(msg) {
+        mostrarMensagemOperacional('', true);
+        const linhas = String(msg || '').split('\n').map((l) => l.trim()).filter(Boolean);
+        const itens = linhas.filter((l) => l.startsWith('•')).map((l) => l.replace(/^•\s*/, ''));
+        const texto = linhas.filter((l) => !l.startsWith('•'));
+        const box = document.getElementById('msg-lock');
+        box.style.padding = '14px 16px';
+        box.innerHTML = `
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <i class="fas fa-lock" style="margin-top:3px;"></i>
+                <div style="display:grid; gap:4px;">
+                    <strong style="font-size:14px;">${_rcEscape(texto[0] || 'Conferência bloqueada')}</strong>
+                    ${texto.slice(1).map((t) => `<span style="font-size:13px; font-weight:500;">${_rcEscape(t)}</span>`).join('')}
+                    ${itens.length ? `<ul style="margin:6px 0 0; padding-left:18px; font-size:12.5px; font-weight:500; display:grid; gap:2px;">${itens.map((i) => `<li>${_rcEscape(i)}</li>`).join('')}</ul>` : ''}
+                </div>
+            </div>`;
     }
 
     function mostrarMensagemOperacional(msg, isErro = false) {
@@ -1994,7 +2015,8 @@
         }
         if (!res.ok) {
             const d = await res.json().catch(() => ({}));
-            mostrarMensagemOperacional(d.error || `Não foi possível abrir a NF ${n}.`, true);
+            if (d.bloqueio_oxicorte) mostrarBloqueioConferencia(d.error);
+            else mostrarMensagemOperacional(d.error || `Não foi possível abrir a NF ${n}.`, true);
             return;
         }
         document.getElementById('msg-lock').style.display = 'none';

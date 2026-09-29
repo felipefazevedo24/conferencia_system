@@ -14,8 +14,8 @@ vendida em KG. Regras combinadas com a logística em 29/09/2026:
   alguma linha da NF não estiver vinculada ao pedido, ou se o GRV não
   responder, a conferência não segue - melhor parar do que marcar errado.
 
-A família sai da consulta de estoque que a bridge já tem (todos os produtos
-ativos com a família, com ou sem saldo): não precisa de endpoint novo na VM.
+A família vem da bridge só para os códigos da NF (buscar_familias_grv), com
+cache de 12 h; bridge antiga cai na consulta de estoque completa.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from typing import Iterable
 
 from ..extensions import db
 from ..models import ChapaControleExclusao, ItemNota
-from .erp_estoque_service import buscar_estoque_grv
+from .erp_estoque_service import buscar_familias_grv
 
 
 CNPJ_RAIZ_ACOS_RADIAL = "00446473"
@@ -56,41 +56,44 @@ def eh_nf_acos_radial(itens: Iterable[ItemNota]) -> bool:
     return True
 
 
-def _rotulo(item: ItemNota) -> str:
-    return f"{item.codigo or '-'} {str(item.descricao or '')[:40]}".strip()
+def _lista(itens: list[ItemNota], com_codigo: bool = False) -> str:
+    linhas = [
+        "• " + (f"{i.codigo_grv} — " if com_codigo else "") + (str(i.descricao or i.codigo or "-").strip())
+        for i in itens[:8]
+    ]
+    if len(itens) > 8:
+        linhas.append(f"• e mais {len(itens) - 8}")
+    return "\n".join(linhas)
 
 
 def identificar_oxicorte(itens: list[ItemNota]) -> set[int]:
     """IDs dos itens da NF da Aços Radial que são chapa oxicorte.
 
-    Levanta ValueError (mensagem para o conferente) quando não dá pra
-    garantir: linha sem vínculo com o pedido, GRV fora do ar ou código do
-    pedido que não existe no GRV."""
+    Levanta ValueError (mensagem para o conferente, uma linha por item) quando
+    não dá pra garantir: linha sem vínculo com o pedido, GRV fora do ar ou
+    código do pedido que não existe no GRV."""
     sem_vinculo = [i for i in itens if i.linha_po_vinculada is None or not _codigo(i.codigo_grv)]
     if sem_vinculo:
         raise ValueError(
-            "NF da Aços Radial: todas as linhas precisam estar vinculadas ao pedido de compra "
-            "no Documento de Entrada para o Sync identificar as chapas oxicorte. Sem vínculo: "
-            + "; ".join(_rotulo(i) for i in sem_vinculo[:5])
-            + (f" e mais {len(sem_vinculo) - 5}" if len(sem_vinculo) > 5 else "")
-            + "."
+            f"Conferência bloqueada: {len(sem_vinculo)} linha(s) desta NF da Aços Radial sem vínculo com o pedido de compra.\n"
+            "Faça o vínculo no Documento de Entrada e abra a conferência de novo.\n"
+            + _lista(sem_vinculo)
         )
 
     try:
-        estoque = buscar_estoque_grv()
+        familias = {c: _normalizar(f) for c, f in buscar_familias_grv([i.codigo_grv for i in itens]).items()}
     except Exception:
         raise ValueError(
-            "NF da Aços Radial: não foi possível consultar o GRV para identificar as chapas oxicorte. "
-            "Tente novamente em instantes; a conferência fica bloqueada até o GRV responder."
+            "Conferência bloqueada: não consegui consultar o GRV para identificar as chapas oxicorte da Aços Radial.\n"
+            "Tente de novo em alguns instantes."
         )
-    familias = {_codigo(codigo): _normalizar(dados.get("familia")) for codigo, dados in (estoque.get("por_codigo") or {}).items()}
 
     nao_encontrados = [i for i in itens if _codigo(i.codigo_grv) not in familias]
     if nao_encontrados:
         raise ValueError(
-            "NF da Aços Radial: código do pedido não encontrado no GRV (ou inativo): "
-            + "; ".join(f"{i.codigo_grv} ({_rotulo(i)})" for i in nao_encontrados[:5])
-            + ". Corrija o vínculo no Documento de Entrada."
+            f"Conferência bloqueada: {len(nao_encontrados)} código(s) do pedido não existem (ou estão inativos) no GRV.\n"
+            "Corrija o vínculo no Documento de Entrada.\n"
+            + _lista(nao_encontrados, com_codigo=True)
         )
     return {i.id for i in itens if familias[_codigo(i.codigo_grv)] == FAMILIA_OXICORTE}
 

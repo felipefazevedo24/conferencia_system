@@ -308,6 +308,56 @@ def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, d
     return dados
 
 
+# Família de produto quase nunca muda: guarda por 12 h por código.
+_FAMILIA_CACHE: dict[str, tuple[float, str]] = {}
+_FAMILIA_CACHE_TTL_SEGUNDOS = 12 * 3600
+
+
+def buscar_familias_grv(codigos: list[str], empresa: int = 1) -> dict[str, str]:
+    """codigo (sem pontuação) -> nome da família no GRV, só dos códigos pedidos.
+
+    Ordem: cache por código -> estoque completo se já estiver em cache (sem
+    rede) -> endpoint enxuto da bridge. Bridge antiga (404 do próprio Flask,
+    não do túnel) cai na consulta de estoque completa, mais lenta mas que já
+    existe na VM. Código inexistente/inativo fica fora do resultado."""
+    chaves = sorted({re.sub(r"[^A-Z0-9]", "", str(c or "").upper()) for c in codigos or []} - {""})
+    agora = time.monotonic()
+    resultado = {c: _FAMILIA_CACHE[c][1] for c in chaves if c in _FAMILIA_CACHE and _FAMILIA_CACHE[c][0] > agora}
+    faltando = [c for c in chaves if c not in resultado]
+    if not faltando:
+        return resultado
+
+    def _do_estoque(estoque: dict[str, Any]) -> dict[str, str]:
+        por_codigo = {re.sub(r"[^A-Z0-9]", "", k.upper()): str(v.get("familia") or "") for k, v in (estoque.get("por_codigo") or {}).items()}
+        return {c: por_codigo[c] for c in faltando if c in por_codigo}
+
+    em_cache = estoque_grv_em_cache()
+    if em_cache is not None:
+        novos = _do_estoque(em_cache)
+    else:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar familia no GRV.")
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/produtos-familia",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "codigos": faltando},
+            timeout=cfg["timeout"],
+        )
+        if resp.status_code == 404 and "ERR_NGROK" not in (resp.text or "")[:2000]:
+            novos = _do_estoque(buscar_estoque_grv())
+        else:
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict) or not data.get("sucesso"):
+                raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de familias."))
+            novos = {str(k): str(v or "") for k, v in (data.get("familias") or {}).items()}
+    for codigo, familia in novos.items():
+        _FAMILIA_CACHE[codigo] = (agora + _FAMILIA_CACHE_TTL_SEGUNDOS, familia)
+    resultado.update(novos)
+    return resultado
+
+
 def buscar_fornecimentos_grv(codigo: str, empresa: int = 1) -> list[dict[str, Any]]:
     """Todos os itens de OC do produto desde 2019, com a data da 1a entrada
     de cada OC. Consulta de 1 item, sob demanda (botao na tela): sem cache."""

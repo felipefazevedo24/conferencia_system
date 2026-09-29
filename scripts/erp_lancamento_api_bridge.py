@@ -2779,6 +2779,47 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar planejamento de estoque no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/produtos-familia")
+    def consultar_produtos_familia():
+        """Família de cada código (a conferência da Aços Radial precisa só disso).
+        A consulta de estoque completa trazia ~3,4 MB pra PythonAnywhere a cada
+        abertura de conferência; esta devolve só os códigos pedidos."""
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigos = sorted({
+                re.sub(r"[^A-Z0-9]", "", str(c or "").strip().upper()) for c in (payload.get("codigos") or [])
+            } - {""})[:500]
+            if not codigos:
+                return jsonify({"sucesso": True, "familias": {}})
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        select regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo,
+                               coalesce(f.nome, '') as familia
+                        from public.tproduto p
+                        left join public.tfamilia f on f.cod_empresa = p.cod_empresa and f.codigo = p.cod_familia
+                        where p.cod_empresa = %s
+                          and coalesce(p.inativo, 0) = 0
+                          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
+                        """,
+                        (empresa, codigos),
+                    )
+                    familias = {codigo: familia for codigo, familia in cur.fetchall()}
+            return jsonify({"sucesso": True, "familias": familias})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar família dos produtos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/estoque/fornecimentos")
     def consultar_estoque_fornecimentos():
         cfg = _config()
