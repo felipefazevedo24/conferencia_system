@@ -62,6 +62,9 @@ PERMISSION_VALIDACAO = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
 PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
 PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
 PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
+# Consulta da tela de Estoque sem a contagem de inventario nem o Controle de
+# Chapas (que a PERMISSION base tambem abre). Quem tem a base continua vendo.
+PERMISSION_ESTOQUE = "PAGE_LOGISTICA_ESTOQUE"
 # Analisar (realizados/ajustes/analise de causa) exige permissao propria;
 # a permissao base (PERMISSION) da acesso so a aba de contagem.
 PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
@@ -307,7 +310,7 @@ def inventario_consulta_page():
 
 @logistica_inventario_bp.route("/logistica/estoque")
 @logistica_inventario_bp.route("/logistica/estoque-materia-prima")
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_page():
     return render_template(
         "logistica_estoque_materia_prima.html",
@@ -318,7 +321,7 @@ def estoque_page():
 
 @logistica_inventario_bp.route("/api/logistica/estoque-materia-prima", methods=["GET"])
 @logistica_inventario_bp.route("/api/logistica/estoque", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_materia_prima_api():
     visao = str(request.args.get("visao") or "materia_prima").strip()
     if visao not in ESTOQUE_VISOES:
@@ -518,7 +521,7 @@ def estoque_materia_prima_api():
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/fornecimentos", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_fornecimentos():
     codigo = str(request.args.get("codigo") or "").strip()
     if not codigo:
@@ -533,13 +536,13 @@ def estoque_fornecimentos():
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_planejamento_parametros():
     return jsonify({"parametros": planejamento_svc.obter_parametros(), "pode_editar": is_admin_session()})
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["PUT"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_planejamento_parametros_salvar():
     # Custo do pedido e niveis de servico mudam a sugestao de compra de todo
     # mundo: so' Admin mexe (pedido da logistica em 28/09/2026).
