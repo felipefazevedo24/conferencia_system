@@ -252,20 +252,16 @@
                 </div>
                 <button class="eui-btn eui-btn--ghost hidden" id="{{ prefix }}-btn-limpar-busca" title="Limpar busca"><i class="fas fa-xmark"></i></button>
             </div>
-            {% if prefix == 'fat' %}
-            <!-- Veio do Romaneio: NF sem ordem de faturamento entra aqui como
-                 "Faturado sem conferência", pra ter registro, foto e acompanhamento. -->
-            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:260px; max-width:520px;">
-                <input type="text" id="fat-nf-manual" class="eui-input" autocomplete="off" style="flex:1;"
-                    placeholder="Ou digite o número de uma NF que não passou pela conferência…">
-                <button type="button" class="eui-btn eui-btn--ghost" id="fat-btn-add-nf-manual" style="white-space:nowrap;" title="Busca os dados da NF direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
-            </div>
-            {% endif %}
             <div style="position:relative;">
                 <button class="eui-btn eui-btn--ghost" type="button" id="{{ prefix }}-btn-toolbar-menu"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
                 <div class="ce-dropdown-menu" id="{{ prefix }}-toolbar-menu">
                     <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
                     <button class="eui-btn eui-btn--primary" id="{{ prefix }}-btn-sync"><i class="fas fa-cloud-arrow-down"></i> Buscar da API</button>
+                    {% if prefix == 'fat' %}
+                    <!-- Veio do Romaneio: NF sem ordem de faturamento entra aqui como
+                         "Faturado sem conferência", pra ter registro, foto e acompanhamento. -->
+                    <button class="eui-btn eui-btn--ghost" id="fat-btn-add-nf-manual" title="NF que não passou pela conferência - busca os dados direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
+                    {% endif %}
                     <button class="eui-btn eui-btn--warning" id="{{ prefix }}-btn-montar-romaneio" title="Reunir NFes faturadas (de uma ou mais ordens) em um novo romaneio"><i class="fas fa-receipt"></i> Montar Romaneio</button>
                 </div>
             </div>
@@ -2100,16 +2096,21 @@
     // "Adicionar manualmente" (veio do Romaneio): busca a NF no ERP e registra
     // como "Faturado sem conferência"; depois mostra a ordem criada na lista.
     async function adicionarNfManual() {
-        const input = $("fat-nf-manual");
         const btn = $("fat-btn-add-nf-manual");
-        const nf = input.value.trim();
-        if (!nf) { toast("Digite o número da NF.", "error"); return; }
+        const nf = await pedirMotivo({
+            title: "Adicionar NF manualmente",
+            sub: "NF que não passou pela conferência. Os dados vêm do ERP e ela entra como <b>Faturado sem conferência</b>.",
+            label: "Número da NF",
+            placeholder: "Ex.: 12345",
+            okLabel: "Adicionar",
+            errLabel: "Digite o número da NF.",
+        });
+        if (!nf) return;
         btn.disabled = true;
         try {
             const data = await api("/api/expedicao/conf-cega/nf-manual", {
                 method: "POST", body: JSON.stringify({ numero_nf: nf }),
             });
-            input.value = "";
             toast(`NF ${data.ordem.numero_nf} incluída como "Faturado sem conferência".`, "success");
             const busca = $("fat-busca");
             busca.value = data.ordem.numero_nf;
@@ -2121,7 +2122,6 @@
         }
     }
     $("fat-btn-add-nf-manual").addEventListener("click", adicionarNfManual);
-    $("fat-nf-manual").addEventListener("keydown", (e) => { if (e.key === "Enter") adicionarNfManual(); });
 
     // Abas
     let stCarregado = false;
