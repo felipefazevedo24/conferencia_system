@@ -294,3 +294,49 @@ def notificar_relatorio_ajuste_inventario(
             {"type": "Action.OpenUrl", "title": "Abrir ajustes de inventário", "url": link}
         ]
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+
+
+def notificar_divergencia_inventario_gestor(
+    codigo_produto: str,
+    local_codigo: str,
+    diferenca: float,
+    *,
+    descricao: str | None = None,
+    unidade: str | None = None,
+    qtde_contada: float | None = None,
+    qtde_sistema: float | None = None,
+    custo_medio: float | None = None,
+    contado_por: str | None = None,
+    link: str | None = None,
+    env_var: str = "TEAMS_WEBHOOK_INVENTARIO_GESTOR_URL",
+    config_key: str = "webhook_inventario_gestor",
+) -> None:
+    """Avisa o gestor que uma contagem de inventario divergiu do GRV e o
+    ajuste esta em "Aguardando gestor" pra ser validado."""
+    app = current_app._get_current_object()
+    url = _webhook_url(env_var, config_key)
+    if not url:
+        app.logger.info("TEAMS: webhook do inventario/gestor nao configurado; aviso ignorado (%s).", codigo_produto)
+        return
+
+    def _q(v):
+        return f"{v:g}" if isinstance(v, (int, float)) else "—"
+
+    un = f" {unidade}" if unidade else ""
+    linha = f"{codigo_produto} · {local_codigo} · diferença {diferenca:+g}{un}"
+    partes = []
+    if descricao:
+        partes.append(descricao)
+    partes.append(f"Contado: {_q(qtde_contada)}{un} · Sistema (GRV): {_q(qtde_sistema)}{un}")
+    if custo_medio is not None:
+        impacto = f"{diferenca * custo_medio:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        partes.append(f"Impacto estimado: R$ {impacto}")
+    if contado_por:
+        partes.append(f"Contado por: {contado_por}")
+    subinfo = "\n".join(partes) + "\n\nAguardando validação do gestor."
+    payload = _card_payload("⚠️ Divergência de inventário para validar", linha, subinfo, mencionar_canal=True)
+    if link:
+        payload["attachments"][0]["content"]["actions"] = [
+            {"type": "Action.OpenUrl", "title": "Abrir ajustes de inventário", "url": link}
+        ]
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()

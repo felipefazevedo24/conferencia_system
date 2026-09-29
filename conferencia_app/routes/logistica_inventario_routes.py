@@ -810,6 +810,20 @@ def criar_inventario_inicial():
         ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
+            # Aviso no Teams pro gestor validar - assincrono, nao afeta a contagem.
+            base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+            teams_service.notificar_divergencia_inventario_gestor(
+                ajuste.codigo_produto,
+                ajuste.local_codigo,
+                ajuste.diferenca,
+                descricao=ajuste.descricao_produto,
+                unidade=ajuste.unidade_medida,
+                qtde_contada=ajuste.qtde_contada,
+                qtde_sistema=ajuste.qtde_estoque_no_momento,
+                custo_medio=ajuste.custo_medio,
+                contado_por=row.criado_por,
+                link=f"{base}/logistica/inventario/ajustes",
+            )
     except Exception as exc:  # noqa: BLE001
         current_app.logger.warning(
             "Falha ao consultar o GRV pra gravar snapshot/detectar divergencia (código=%s, local=%s): %s",
