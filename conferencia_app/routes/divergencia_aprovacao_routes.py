@@ -90,7 +90,16 @@ def pagina_aprovacao(token):
     registro = _carregar_registro(token)
     if not registro:
         return render_template("divergencia_aprovacao.html", token=token, invalido=True), 404
-    return render_template("divergencia_aprovacao.html", token=token, invalido=False)
+    # Contexto minimo no login (quem tem o token ja pode ver a NF - ver docstring
+    # do modulo); o detalhe de itens/valores continua so apos o login.
+    return render_template(
+        "divergencia_aprovacao.html",
+        token=token,
+        invalido=False,
+        numero_nota=registro.numero_nota or "",
+        fornecedor=registro.fornecedor or "",
+        status=registro.status or "Pendente",
+    )
 
 
 @divergencia_aprovacao_bp.route("/aprovar-divergencia/<token>/login", methods=["POST"])

@@ -4,244 +4,459 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Aprovação de divergência · Compras</title>
+  <meta name="color-scheme" content="dark">
+  <title>{% if numero_nota %}NF {{ numero_nota }} · {% endif %}Aprovação de divergência</title>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     :root {
-      --bg: #0b1119; --panel: #141d28; --panel-2: #172230; --border: #263447;
-      --border-strong: #33475f; --text: #e8eef6; --text-soft: #b8c6d6; --muted: #9fb0c4;
-      --primary: #1c86f2; --primary-hover: #0f62c9; --primary-soft: #7dc4ff;
-      --green: #11a36c; --green-hover: #0d8a5b; --red: #e05a54; --red-hover: #c9463f;
-      --amber: #f4b340;
+      --bg: #0a0f16; --panel: #121a24; --panel-2: #16202c; --panel-3: #1b2735;
+      --border: #223043; --border-strong: #2e3f55;
+      --text: #e8eef6; --text-soft: #b8c6d6; --muted: #8397ae;
+      --primary: #1c86f2; --primary-hover: #1570d0; --primary-soft: #7dc4ff;
+      --green: #12a36d; --green-hover: #0e8a5c; --green-soft: #6fe0b1;
+      --red: #e05a54; --red-hover: #c9463f; --red-soft: #ffaaa5;
+      --amber: #f4b340; --amber-soft: #ffd88f;
+      --radius: 14px;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; }
     body {
-      background: radial-gradient(circle at top right, rgba(28,134,242,.10), transparent 30%),
-                  linear-gradient(180deg, #0b1119 0%, #0d141d 100%);
-      color: var(--text); font-family: "IBM Plex Sans", "Segoe UI", Tahoma, sans-serif;
+      background:
+        radial-gradient(900px 500px at 100% -10%, rgba(28,134,242,.10), transparent 60%),
+        radial-gradient(700px 400px at -10% 110%, rgba(18,163,109,.06), transparent 60%),
+        var(--bg);
+      background-attachment: fixed;
+      color: var(--text); font-family: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
       font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 60px; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .hidden { display: none !important; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 140px; }
+
+    /* ===== Marca ===== */
     .brand-badge {
-      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
-      background: linear-gradient(135deg, #1c86f2, #7dc4ff); color: #05070b; font-size: 20px;
-      font-weight: 800; box-shadow: 0 8px 20px rgba(28,134,242,.28);
+      width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex: none;
+      background: linear-gradient(135deg, #1c86f2, #7dc4ff); color: #04111f; font-size: 18px;
+      font-weight: 800; box-shadow: 0 6px 18px rgba(28,134,242,.30);
     }
-    .brand h1 { font-size: 18px; margin: 0; font-weight: 800; letter-spacing: .01em; }
-    .brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+    .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .topbar-title { flex: 1; min-width: 0; }
+    .topbar-title strong { display: block; font-size: 15px; font-weight: 700; }
+    .topbar-title span { font-size: 12px; color: var(--muted); }
+    .user-chip {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-soft);
+    }
+    .user-chip .av {
+      width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--panel-3); color: var(--primary-soft); font-weight: 800; font-size: 11px;
+    }
+
+    /* ===== Blocos ===== */
     .card {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-      padding: 22px; box-shadow: 0 16px 32px rgba(0,0,0,.32); margin-bottom: 18px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
     }
-    .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
-    .card .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
-    label { display: block; font-size: 12px; font-weight: 700; color: var(--text-soft);
-      margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
-    input, textarea {
-      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border-strong);
-      background: var(--panel-2); color: var(--text); font-size: 14px; font-family: inherit;
+    .section { margin-top: 26px; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .section-head h2 { margin: 0; font-size: 13px; font-weight: 700; color: var(--text-soft); letter-spacing: .02em; }
+    .section-head h2 i { color: var(--muted); margin-right: 6px; }
+    .section-head .hint { font-size: 12px; color: var(--muted); }
+
+    /* ===== Status ===== */
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; white-space: nowrap; border: 1px solid transparent;
     }
-    input:focus, textarea:focus { outline: none; border-color: var(--primary);
-      box-shadow: 0 0 0 4px rgba(28,134,242,.18); }
-    .field { margin-bottom: 14px; }
+    .status-chip.pendente { background: rgba(244,179,64,.12); color: var(--amber-soft); border-color: rgba(244,179,64,.35); }
+    .status-chip.aprovado { background: rgba(18,163,109,.14); color: var(--green-soft); border-color: rgba(18,163,109,.4); }
+    .status-chip.rejeitado { background: rgba(224,90,84,.14); color: var(--red-soft); border-color: rgba(224,90,84,.4); }
+    .status-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .status-chip.pendente .dot { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+    /* ===== Cabeçalho da NF ===== */
+    .hero { padding: 22px 22px 0; overflow: hidden; }
+    .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
+    .hero h1 { margin: 4px 0 2px; font-size: 28px; font-weight: 800; letter-spacing: -.01em; line-height: 1.15; }
+    .hero .forn { font-size: 15px; color: var(--text-soft); font-weight: 600; }
+    .hero .cnpj { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); margin: 20px -22px 0;
+      border-top: 1px solid var(--border); background: var(--panel-2);
+    }
+    .stat { padding: 14px 22px; border-right: 1px solid var(--border); min-width: 0; }
+    .stat:last-child { border-right: 0; }
+    .stat span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+    .stat strong { display: block; font-size: 17px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat strong.warn { color: var(--amber-soft); }
+    .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    /* ===== Resumo da divergência ===== */
+    .diverg-list { padding: 6px 0; }
+    .diverg-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 18px; }
+    .diverg-item + .diverg-item { border-top: 1px solid var(--border); }
+    .diverg-ico {
+      width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center;
+      background: rgba(244,179,64,.12); color: var(--amber);
+    }
+    .diverg-txt { flex: 1; min-width: 0; }
+    .diverg-txt strong { font-weight: 700; }
+    .diverg-txt small { display: block; color: var(--muted); font-size: 12.5px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 6px;
+      font-size: 11.5px; font-weight: 700; white-space: nowrap;
+    }
+    .tag.no { background: rgba(224,90,84,.14); color: var(--red-soft); }
+    .tag.ok { background: rgba(18,163,109,.14); color: var(--green-soft); }
+    .tag.neutral { background: var(--panel-3); color: var(--text-soft); }
+
+    /* ===== Tabela comparativa ===== */
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 14px; text-align: left; vertical-align: top; }
+    thead th {
+      color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+      background: var(--panel-2); border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    tbody tr + tr td { border-top: 1px solid var(--border); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    tr.row-diverg td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+    tr.row-ok td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+    .ln { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .item-cod { font-weight: 700; font-size: 13px; }
+    .item-desc { color: var(--text-soft); font-size: 12.5px; max-width: 360px; }
+    .item-po { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+    .cmp { display: grid; grid-template-columns: auto auto; gap: 1px 10px; justify-content: end; }
+    .cmp .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; align-self: center; }
+    .cmp .v { text-align: right; }
+    .cmp.bad .v.nf { color: var(--red-soft); font-weight: 700; }
+    .delta { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 5px;
+      background: rgba(224,90,84,.14); color: var(--red-soft); }
+
+    details.xml { margin-top: 26px; }
+    details.xml summary {
+      cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 14px 18px;
+      font-size: 13px; font-weight: 700; color: var(--text-soft);
+    }
+    details.xml summary::-webkit-details-marker { display: none; }
+    details.xml summary .chev { margin-left: auto; transition: transform .2s ease; color: var(--muted); }
+    details.xml[open] summary .chev { transform: rotate(180deg); }
+    details.xml[open] summary { border-bottom: 1px solid var(--border); }
+
+    /* ===== Botões ===== */
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 12px 18px; border-radius: 10px; border: 0; font-size: 14px; font-weight: 700;
-      cursor: pointer; transition: filter .15s ease, transform .05s ease;
+      padding: 11px 18px; border-radius: 10px; border: 1px solid transparent; font-size: 14px; font-weight: 700;
+      cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease, transform .05s ease;
+      font-family: inherit; text-decoration: none;
     }
     .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
     .btn-green { background: var(--green); color: #fff; }
-    .btn-green:hover { background: var(--green-hover); }
-    .btn-red { background: var(--red); color: #fff; }
-    .btn-red:hover { background: var(--red-hover); }
-    .btn-ghost { background: transparent; border: 1px solid var(--border-strong); color: var(--text-soft); }
-    .btn-ghost:hover { border-color: var(--primary); color: var(--primary-soft); }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
-    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; display: none; }
-    .msg.err { display: block; background: rgba(224,90,84,.14); color: #ffb4af; border: 1px solid rgba(224,90,84,.4); }
-    .msg.ok { display: block; background: rgba(17,163,108,.14); color: #7ee6b8; border: 1px solid rgba(17,163,108,.4); }
-    .hidden { display: none !important; }
-    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 20px; }
-    .kv { display: flex; flex-direction: column; gap: 2px; }
-    .kv span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-    .kv strong { font-size: 15px; color: var(--text); font-weight: 700; }
-    .diverg-box {
-      background: rgba(244,179,64,.10); border: 1px solid rgba(244,179,64,.4); border-radius: 12px;
-      padding: 14px 16px; margin-top: 14px; white-space: pre-line; font-size: 13px; color: #ffe0a3;
-    }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    tr.ok td { background: rgba(17,163,108,.06); }
-    tr.diverg td { background: rgba(224,90,84,.07); }
-    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
-      font-size: 11px; font-weight: 800; }
-    .pill.ok { background: rgba(17,163,108,.18); color: #7ee6b8; }
-    .pill.no { background: rgba(224,90,84,.18); color: #ffb4af; }
-    .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
-    .sec-title { font-size: 12px; font-weight: 800; color: var(--primary-soft); text-transform: uppercase;
-      letter-spacing: .04em; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
-    .actions-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
-    .status-banner { padding: 14px 16px; border-radius: 12px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
-    .status-banner.aprovado { background: rgba(17,163,108,.14); color: #7ee6b8; border: 1px solid rgba(17,163,108,.4); }
-    .status-banner.rejeitado { background: rgba(224,90,84,.14); color: #ffb4af; border: 1px solid rgba(224,90,84,.4); }
-    .loading { text-align: center; color: var(--muted); padding: 30px; }
-    .foot { text-align: center; color: var(--muted); font-size: 11px; margin-top: 24px; }
+    .btn-green:hover:not(:disabled) { background: var(--green-hover); }
+    .btn-red { background: transparent; color: var(--red-soft); border-color: rgba(224,90,84,.5); }
+    .btn-red:hover:not(:disabled) { background: rgba(224,90,84,.12); border-color: var(--red); }
+    .btn-red.solid { background: var(--red); color: #fff; border-color: var(--red); }
+    .btn-red.solid:hover:not(:disabled) { background: var(--red-hover); }
+    .btn-ghost { background: var(--panel-2); border-color: var(--border-strong); color: var(--text-soft); font-size: 13px; padding: 9px 14px; }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--primary); color: var(--primary-soft); }
 
-    /* ===== Tela de login (centralizada) ===== */
-    .login-screen { min-height: calc(100dvh - 48px); display: flex; align-items: center; justify-content: center; padding: 16px; }
-    .login-card {
-      width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--border);
-      border-radius: 20px; padding: 34px 30px; box-shadow: 0 24px 60px rgba(0,0,0,.45);
-      position: relative; overflow: hidden;
+    /* ===== Mensagens ===== */
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; display: none; }
+    .msg.err { display: flex; gap: 8px; align-items: flex-start; background: rgba(224,90,84,.12); color: var(--red-soft); border: 1px solid rgba(224,90,84,.35); }
+    .msg.ok { display: flex; gap: 8px; align-items: flex-start; background: rgba(18,163,109,.12); color: var(--green-soft); border: 1px solid rgba(18,163,109,.35); }
+    .inline-note { padding: 14px 18px; color: var(--muted); font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+    .inline-note i { color: var(--amber); margin-top: 3px; }
+
+    /* ===== Barra de decisão (fixa no rodapé) ===== */
+    .decision-bar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+      background: rgba(14,21,30,.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border-strong); box-shadow: 0 -12px 30px rgba(0,0,0,.35);
     }
-    .login-card::before {
-      content: ""; position: absolute; inset: 0 0 auto 0; height: 5px;
-      background: linear-gradient(90deg, #1c86f2, #7dc4ff, #11a36c);
+    .decision-inner { max-width: 1080px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 14px; align-items: center; }
+    .decision-inner textarea {
+      flex: 1; min-width: 0; resize: none; height: 46px; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid var(--border-strong); background: var(--panel-2); color: var(--text); font: inherit; font-size: 13.5px;
     }
-    .login-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; margin-bottom: 24px; }
-    .login-top .brand-badge { width: 60px; height: 60px; border-radius: 18px; font-size: 28px; }
-    .login-top h1 { font-size: 19px; margin: 6px 0 0; font-weight: 800; }
-    .login-top p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); max-width: 300px; }
-    .login-field { margin-bottom: 16px; position: relative; }
-    .login-field label { margin-bottom: 8px; }
-    .login-field .ico { position: absolute; left: 14px; top: 38px; color: var(--muted); font-size: 14px; pointer-events: none; }
-    .login-field input { padding-left: 40px; height: 48px; }
-    .login-card .btn-primary { width: 100%; height: 48px; font-size: 15px; margin-top: 4px; }
-    .login-foot { text-align: center; margin-top: 18px; font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .decision-inner textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(28,134,242,.2); height: 84px; }
+    .decision-inner .btn { height: 46px; }
+    .decision-bar .msg { max-width: 1080px; margin: 0 auto 12px; width: calc(100% - 32px); }
+
+    /* ===== Resultado da decisão ===== */
+    .result {
+      display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: var(--radius); margin-bottom: 16px;
+      border: 1px solid;
+    }
+    .result .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; flex: none; }
+    .result strong { display: block; font-size: 15px; }
+    .result span { font-size: 13px; color: var(--text-soft); }
+    .result.aprovado { background: rgba(18,163,109,.08); border-color: rgba(18,163,109,.35); }
+    .result.aprovado .ico { background: rgba(18,163,109,.18); color: var(--green-soft); }
+    .result.rejeitado { background: rgba(224,90,84,.08); border-color: rgba(224,90,84,.35); }
+    .result.rejeitado .ico { background: rgba(224,90,84,.18); color: var(--red-soft); }
+
+    /* ===== Carregando / erro ===== */
+    .sk { background: linear-gradient(90deg, var(--panel-2) 0%, var(--panel-3) 50%, var(--panel-2) 100%);
+      background-size: 200% 100%; animation: sk 1.2s linear infinite; border-radius: 8px; }
+    @keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .state { text-align: center; padding: 48px 24px; }
+    .state .ico { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; display: grid; place-items: center;
+      font-size: 22px; background: rgba(224,90,84,.12); color: var(--red-soft); }
+    .state.warn .ico { background: rgba(244,179,64,.12); color: var(--amber); }
+    .state h2 { margin: 0 0 6px; font-size: 17px; }
+    .state p { margin: 0 auto 18px; color: var(--muted); max-width: 420px; }
+
+    /* ===== Modal de confirmação ===== */
+    .modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(3,6,10,.7); display: grid; place-items: center; padding: 16px;
+      backdrop-filter: blur(3px); }
+    .modal { width: 100%; max-width: 420px; padding: 24px; }
+    .modal h3 { margin: 0 0 6px; font-size: 17px; }
+    .modal p { margin: 0 0 20px; color: var(--text-soft); font-size: 13.5px; }
+    .modal .row { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* ===== Login ===== */
+    .login-screen { min-height: calc(100dvh - 40px); display: flex; align-items: center; justify-content: center; }
+    .login-card { width: 100%; max-width: 400px; padding: 30px 28px 24px; position: relative; overflow: hidden; }
+    .login-top { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .login-top strong { display: block; font-size: 15px; }
+    .login-top span { font-size: 12px; color: var(--muted); }
+    .login-ctx {
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 22px;
+    }
+    .login-ctx .eyebrow { font-size: 10.5px; }
+    .login-ctx .nf { font-size: 20px; font-weight: 800; margin-top: 2px; }
+    .login-ctx .forn { color: var(--text-soft); font-size: 13px; }
+    .login-ctx .status-chip { margin-top: 10px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
+    .input-wrap { position: relative; }
+    .input-wrap i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; pointer-events: none; }
+    .input-wrap input {
+      width: 100%; height: 46px; padding: 0 14px 0 40px; border-radius: 10px; border: 1px solid var(--border-strong);
+      background: var(--panel-2); color: var(--text); font: inherit; font-size: 14px;
+    }
+    .input-wrap input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(28,134,242,.2); }
+    /* Autopreenchimento do navegador pintava os campos de azul-claro sobre o tema escuro. */
+    .input-wrap input:-webkit-autofill,
+    .input-wrap input:-webkit-autofill:hover,
+    .input-wrap input:-webkit-autofill:focus {
+      -webkit-text-fill-color: var(--text); caret-color: var(--text);
+      -webkit-box-shadow: 0 0 0 1000px var(--panel-2) inset; transition: background-color 9999s ease-out 0s;
+    }
+    .login-card .btn-primary { width: 100%; height: 46px; margin-top: 6px; }
+    .login-foot { text-align: center; margin-top: 18px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    .foot { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 28px; }
+
+    @media (max-width: 760px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+      .hero h1 { font-size: 24px; }
+      .decision-inner { flex-wrap: wrap; }
+      .decision-inner textarea { flex-basis: 100%; }
+      .decision-inner .btn { flex: 1; }
+      .wrap { padding-bottom: 190px; }
+      .user-chip .nm { display: none; }
+      .user-chip { padding: 6px; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     {% if invalido %}
-      <div class="brand">
+      <div class="topbar">
         <div class="brand-badge">S</div>
-        <div>
-          <h1>Aprovação de divergência de recebimento</h1>
-          <p>Columbia Machine Brasil · Compras</p>
-        </div>
+        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
       </div>
-      <div class="card">
-        <h2><i class="fas fa-triangle-exclamation" style="color:var(--amber)"></i> Link inválido ou expirado</h2>
-        <p class="sub">Este link de aprovação não existe mais. Peça um novo pelo Auditor XML.</p>
+      <div class="card state warn">
+        <div class="ico"><i class="fas fa-link-slash"></i></div>
+        <h2>Link inválido ou expirado</h2>
+        <p>Este link de aprovação não existe mais. Peça um novo pelo Auditor XML.</p>
       </div>
     {% else %}
 
-    <!-- LOGIN (tela centralizada) -->
+    <!-- LOGIN -->
     <div class="login-screen" id="login-screen">
-      <div class="login-card">
+      <div class="card login-card">
         <div class="login-top">
           <div class="brand-badge">S</div>
-          <h1>Aprovação de recebimento</h1>
-          <p>Entre com seu usuário do Sync. Somente Compras ou administradores podem aprovar divergências.</p>
+          <div><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
         </div>
-        <div class="login-field">
-          <label for="username">Usuário</label>
-          <i class="fas fa-user ico"></i>
-          <input id="username" autocomplete="username" placeholder="Seu usuário" autofocus>
+        {% if numero_nota %}
+        <div class="login-ctx">
+          <div class="eyebrow">Divergência NF × Pedido</div>
+          <div class="nf">NF {{ numero_nota }}</div>
+          {% if fornecedor %}<div class="forn">{{ fornecedor }}</div>{% endif %}
+          {% set st = (status or 'Pendente') %}
+          <span class="status-chip {{ st|lower }}"><span class="dot"></span>{% if st == 'Pendente' %}Aguardando decisão{% else %}{{ st }}{% endif %}</span>
         </div>
-        <div class="login-field">
+        {% endif %}
+        <div class="field">
+          <label for="username">Usuário do Sync</label>
+          <div class="input-wrap">
+            <i class="fas fa-user"></i>
+            <input id="username" autocomplete="username" placeholder="Seu usuário" autofocus autocapitalize="characters">
+          </div>
+        </div>
+        <div class="field">
           <label for="password">Senha</label>
-          <i class="fas fa-lock ico"></i>
-          <input id="password" type="password" autocomplete="current-password" placeholder="Sua senha">
+          <div class="input-wrap">
+            <i class="fas fa-lock"></i>
+            <input id="password" type="password" autocomplete="current-password" placeholder="Sua senha">
+          </div>
         </div>
-        <button class="btn btn-primary" id="btn-login"><i class="fas fa-right-to-bracket"></i> Entrar</button>
+        <button class="btn btn-primary" id="btn-login"><i class="fas fa-right-to-bracket"></i> Entrar e revisar</button>
         <div class="msg" id="login-msg"></div>
-        <div class="login-foot"><i class="fas fa-shield-halved"></i> Acesso protegido por link exclusivo + login</div>
+        <div class="login-foot"><i class="fas fa-shield-halved"></i> Somente Compras ou administradores podem decidir.</div>
       </div>
     </div>
 
-    <!-- CONTEUDO (apos login) -->
+    <!-- CONTEÚDO (após login) -->
     <div id="conteudo" class="hidden">
-      <div class="brand">
+      <div class="topbar">
         <div class="brand-badge">S</div>
-        <div>
-          <h1>Aprovação de divergência de recebimento</h1>
-          <p>Columbia Machine Brasil · Compras</p>
+        <div class="topbar-title"><strong>Aprovação de divergência</strong><span>Columbia Machine Brasil · Compras</span></div>
+        <div class="user-chip" id="user-chip"><span class="av" id="user-av">?</span><span class="nm" id="user-nome"></span></div>
+      </div>
+
+      <!-- Carregando -->
+      <div id="loading">
+        <div class="card" style="padding:22px">
+          <div class="sk" style="width:120px;height:12px"></div>
+          <div class="sk" style="width:220px;height:28px;margin-top:10px"></div>
+          <div class="sk" style="width:320px;max-width:100%;height:14px;margin-top:10px"></div>
+          <div class="sk" style="width:100%;height:58px;margin-top:22px"></div>
+        </div>
+        <div class="card" style="padding:18px;margin-top:26px">
+          <div class="sk" style="width:100%;height:16px"></div>
+          <div class="sk" style="width:80%;height:16px;margin-top:12px"></div>
         </div>
       </div>
-      <div class="loading" id="loading"><i class="fas fa-spinner fa-spin"></i> Carregando dados da nota...</div>
+
+      <!-- Erro -->
+      <div id="erro-carga" class="card state hidden">
+        <div class="ico"><i class="fas fa-triangle-exclamation"></i></div>
+        <h2>Não foi possível carregar a nota</h2>
+        <p id="erro-carga-txt"></p>
+        <button class="btn btn-ghost" onclick="carregarDados()"><i class="fas fa-rotate-right"></i> Tentar de novo</button>
+      </div>
 
       <div id="detalhe" class="hidden">
-        <div id="status-banner"></div>
+        <div id="resultado"></div>
 
-        <div class="card">
-          <h2><i class="fas fa-file-invoice"></i> Nota fiscal <span id="h-nf"></span></h2>
-          <p class="sub" id="h-solicitado"></p>
-          <div class="grid2">
-            <div class="kv"><span>Fornecedor</span><strong id="v-fornecedor">—</strong></div>
-            <div class="kv"><span>CNPJ emitente</span><strong id="v-cnpj">—</strong></div>
-            <div class="kv"><span>Pedido de compra</span><strong id="v-pedido">—</strong></div>
-            <div class="kv"><span>Emissão</span><strong id="v-emissao">—</strong></div>
-            <div class="kv"><span>Valor da NF</span><strong id="v-valor">—</strong></div>
+        <div class="card hero">
+          <div class="hero-top">
+            <div style="min-width:0">
+              <div class="eyebrow">Divergência NF × Pedido de compra</div>
+              <h1>NF <span id="h-nf"></span></h1>
+              <div class="forn" id="v-fornecedor">—</div>
+              <div class="cnpj" id="v-cnpj"></div>
+            </div>
+            <div class="hero-actions">
+              <span class="status-chip pendente" id="status-chip"><span class="dot"></span><span id="status-txt">Aguardando decisão</span></span>
+              <button class="btn btn-ghost" id="btn-pdf" onclick="abrirPdf()"><i class="fas fa-file-pdf"></i> DANFE (PDF)</button>
+            </div>
           </div>
-          <div class="diverg-box" id="v-detalhe"></div>
-          <div style="margin-top:14px">
-            <button class="btn btn-ghost" id="btn-pdf" onclick="abrirPdf()"><i class="fas fa-file-pdf"></i> Baixar PDF da NF-e (Consyste)</button>
+          <div class="stats">
+            <div class="stat"><span>Pedido de compra</span><strong id="v-pedido">—</strong></div>
+            <div class="stat"><span>Emissão</span><strong id="v-emissao">—</strong></div>
+            <div class="stat"><span>Valor da NF</span><strong id="v-valor">—</strong></div>
+            <div class="stat"><span>Itens divergentes</span><strong id="v-qtd-diverg" class="warn">—</strong></div>
           </div>
         </div>
 
-        <div class="sec-title"><i class="fas fa-scale-balanced"></i> Pedido de compra x Nota fiscal (linha a linha)</div>
-        <div class="table-scroll" id="cmp-wrap">
-          <table id="cmp-table">
-            <thead>
-              <tr>
-                <th>#</th><th>Código (XML)</th><th>Descrição (XML)</th>
-                <th class="num">Qtd XML</th><th class="num">Qtd pedido</th>
-                <th class="num">R$ un. XML</th><th class="num">R$ un. pedido</th>
-                <th>Situação</th>
-              </tr>
-            </thead>
-            <tbody id="cmp-body"></tbody>
-          </table>
-        </div>
-        <div class="msg" id="cmp-erro"></div>
-
-        <div class="sec-title"><i class="fas fa-list"></i> Itens da nota (XML)</div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Código</th><th>Descrição</th><th class="num">Qtd</th><th>Un.</th><th class="num">Valor total</th><th>CFOP</th><th>NCM</th></tr>
-            </thead>
-            <tbody id="xml-body"></tbody>
-          </table>
+        <div class="section">
+          <div class="section-head">
+            <h2><i class="fas fa-circle-exclamation"></i>O que divergiu</h2>
+            <span class="hint" id="h-solicitado"></span>
+          </div>
+          <div class="card diverg-list" id="diverg-list"></div>
         </div>
 
-        <!-- DECISAO -->
-        <div class="card" id="decisao-card" style="margin-top:20px">
-          <h2><i class="fas fa-gavel"></i> Sua decisão</h2>
-          <p class="sub">Aprovar libera a NF para seguir a conferência. Recusar mantém a NF bloqueada.</p>
-          <div class="field">
-            <label for="motivo">Observação / motivo <span style="text-transform:none;color:var(--muted)">(obrigatório para recusar)</span></label>
-            <textarea id="motivo" rows="3" placeholder="Ex.: divergência autorizada pelo comprador fulano / preço renegociado..."></textarea>
+        <div class="section">
+          <div class="section-head">
+            <h2><i class="fas fa-scale-balanced"></i>Nota fiscal × Pedido, linha a linha</h2>
+            <span class="hint">Valores em vermelho são os que não batem</span>
           </div>
-          <div class="actions-row">
-            <button class="btn btn-green" id="btn-aprovar" onclick="decidir('aprovado')"><i class="fas fa-check"></i> Aprovar divergência</button>
-            <button class="btn btn-red" id="btn-recusar" onclick="decidir('rejeitado')"><i class="fas fa-xmark"></i> Recusar</button>
+          <div class="card" style="overflow:hidden">
+            <div class="table-scroll" id="cmp-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th><th>Item da NF</th>
+                    <th class="num">Quantidade</th><th class="num">Valor unitário</th>
+                    <th>Situação</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-body"></tbody>
+              </table>
+            </div>
+            <div class="inline-note hidden" id="cmp-erro"><i class="fas fa-circle-info"></i><span id="cmp-erro-txt"></span></div>
           </div>
-          <div class="msg" id="decisao-msg"></div>
+        </div>
+
+        <details class="card xml" id="xml-details">
+          <summary><i class="fas fa-file-code" style="color:var(--muted)"></i> Todos os itens da nota (XML) <span class="tag neutral" id="xml-count">0</span><i class="fas fa-chevron-down chev"></i></summary>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Código</th><th>Descrição</th><th class="num">Qtd</th><th>Un.</th><th class="num">Valor total</th><th>CFOP</th><th>NCM</th></tr>
+              </thead>
+              <tbody id="xml-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="foot">Link exclusivo — não compartilhe este endereço.</div>
+    </div>
+
+    <!-- Barra de decisão -->
+    <div class="decision-bar hidden" id="decisao-bar">
+      <div class="msg" id="decisao-msg"></div>
+      <div class="decision-inner">
+        <textarea id="motivo" rows="1" maxlength="500" placeholder="Observação (obrigatória para recusar) — ex.: preço renegociado com o fornecedor"></textarea>
+        <button class="btn btn-red" id="btn-recusar" onclick="pedirConfirmacao('rejeitado')"><i class="fas fa-xmark"></i> Recusar</button>
+        <button class="btn btn-green" id="btn-aprovar" onclick="pedirConfirmacao('aprovado')"><i class="fas fa-check"></i> Aprovar</button>
+      </div>
+    </div>
+
+    <!-- Confirmação -->
+    <div class="modal-bg hidden" id="modal" onclick="if (event.target === this) fecharModal()">
+      <div class="card modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+        <h3 id="modal-titulo"></h3>
+        <p id="modal-texto"></p>
+        <div class="row">
+          <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+          <button class="btn" id="modal-ok"></button>
         </div>
       </div>
     </div>
 
     {% endif %}
-
-    <div class="foot" id="page-foot" {% if not invalido %}style="display:none"{% endif %}>Acesso protegido por link exclusivo + login. Não compartilhe este endereço.</div>
   </div>
 
   <script>
     const TOKEN = {{ token|tojson }};
     const BASE = `/aprovar-divergencia/${TOKEN}`;
-    let jaLogado = false;
 
+    // Descrição/código vêm do XML do fornecedor: escapa antes de ir pro innerHTML.
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
     function money(v) {
       return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function moneyUnit(v) {
+      // Unitário pode ter mais de 2 casas (chapa por kg etc.); não arredonda a diferença pra fora da tela.
+      return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
     }
     function num(v, d = 2) {
       return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: d });
@@ -249,8 +464,26 @@
     function showMsg(id, texto, tipo) {
       const el = document.getElementById(id);
       if (!el) return;
-      el.textContent = texto;
+      const ico = tipo === 'ok' ? 'fa-circle-check' : 'fa-circle-exclamation';
+      el.innerHTML = `<i class="fas ${ico}" style="margin-top:3px"></i><span>${esc(texto)}</span>`;
       el.className = 'msg ' + (tipo === 'ok' ? 'ok' : 'err');
+    }
+    function hideMsg(id) {
+      const el = document.getElementById(id);
+      if (el) el.className = 'msg';
+    }
+    function setStatusChip(status) {
+      const chip = document.getElementById('status-chip');
+      const st = (status || 'Pendente');
+      chip.className = 'status-chip ' + st.toLowerCase();
+      document.getElementById('status-txt').textContent = st === 'Pendente' ? 'Aguardando decisão' : st;
+    }
+    function mostrarLogin(msg) {
+      document.getElementById('conteudo').classList.add('hidden');
+      document.getElementById('decisao-bar').classList.add('hidden');
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('btn-login').disabled = false;
+      if (msg) showMsg('login-msg', msg, 'err');
     }
 
     async function fazerLogin() {
@@ -259,6 +492,7 @@
       if (!username || !password) { showMsg('login-msg', 'Informe usuário e senha.', 'err'); return; }
       const btn = document.getElementById('btn-login');
       btn.disabled = true;
+      hideMsg('login-msg');
       try {
         const r = await fetch(`${BASE}/login`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -266,10 +500,11 @@
         });
         const data = await r.json();
         if (!r.ok || !data.sucesso) { showMsg('login-msg', data.msg || 'Falha no login.', 'err'); btn.disabled = false; return; }
-        jaLogado = true;
+        const nome = data.nome || data.username || '';
+        document.getElementById('user-nome').textContent = nome;
+        document.getElementById('user-av').textContent = (nome || '?').trim().charAt(0).toUpperCase();
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('conteudo').classList.remove('hidden');
-        const pf = document.getElementById('page-foot'); if (pf) pf.style.display = '';
         carregarDados();
       } catch (e) {
         showMsg('login-msg', 'Erro de conexão. Tente de novo.', 'err');
@@ -278,17 +513,44 @@
     }
 
     async function carregarDados() {
-      try {
-        const r = await fetch(`${BASE}/dados`);
-        const data = await r.json();
-        if (!r.ok || !data.sucesso) {
-          document.getElementById('loading').textContent = data.msg || 'Não foi possível carregar.';
-          return;
-        }
-        renderizar(data);
-      } catch (e) {
-        document.getElementById('loading').textContent = 'Erro de conexão ao carregar os dados.';
+      document.getElementById('erro-carga').classList.add('hidden');
+      if (document.getElementById('detalhe').classList.contains('hidden')) {
+        document.getElementById('loading').classList.remove('hidden');
       }
+      let r, data;
+      try {
+        r = await fetch(`${BASE}/dados`, { credentials: 'same-origin' });
+        data = await r.json().catch(() => ({}));
+      } catch (e) {
+        return erroCarga('Sem conexão com o servidor. Verifique a rede e tente de novo.');
+      }
+      if (r.status === 401) {
+        // A sessão do login não chegou nesta requisição (cookie bloqueado/expirado).
+        return mostrarLogin('Sua sessão não foi mantida. Entre de novo — se persistir, abra o link direto no navegador (fora do Teams).');
+      }
+      if (!r.ok || !data.sucesso) {
+        return erroCarga(data.msg || `O servidor respondeu com erro (HTTP ${r.status}).`);
+      }
+      renderizar(data);
+    }
+
+    function erroCarga(texto) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('erro-carga-txt').textContent = texto;
+      document.getElementById('erro-carga').classList.remove('hidden');
+    }
+
+    function motivoDivergencia(p) {
+      if (p.po_qtd == null && p.po_valor_unit == null) return 'Sem linha no pedido';
+      if (!p.qtd_ok && !p.valor_ok) return 'Qtd e valor';
+      return !p.qtd_ok ? 'Quantidade' : 'Valor';
+    }
+
+    // "Linha 1 do XML (ITM04724) -> Linha 1 do pedido: valor diverge" -> partes legíveis.
+    function parseLinhaDetalhe(txt) {
+      const m = /^Linha (\S+) do XML \(([^)]*)\) -> (.+?): (.+)$/.exec(txt.trim());
+      if (!m) return null;
+      return { nf: m[1], cod: m[2], destino: m[3], motivo: m[4] };
     }
 
     function renderizar(data) {
@@ -297,99 +559,185 @@
       document.getElementById('detalhe').classList.remove('hidden');
 
       document.getElementById('h-nf').textContent = reg.numero_nota || '';
-      document.getElementById('h-solicitado').textContent = reg.solicitado_em ? ('Solicitado em ' + reg.solicitado_em) : '';
-      document.getElementById('v-fornecedor').textContent = reg.fornecedor || '—';
-      document.getElementById('v-cnpj').textContent = reg.cnpj_emitente || '—';
+      document.getElementById('h-solicitado').textContent = reg.solicitado_em ? ('Aberta em ' + reg.solicitado_em) : '';
+      document.getElementById('v-fornecedor').textContent = reg.fornecedor || 'Fornecedor não identificado';
+      document.getElementById('v-cnpj').textContent = reg.cnpj_emitente ? ('CNPJ ' + reg.cnpj_emitente) : '';
       document.getElementById('v-pedido').textContent = reg.pedido_compra || '—';
       document.getElementById('v-emissao').textContent = reg.data_emissao || '—';
       document.getElementById('v-valor').textContent = reg.nf_valor_total ? money(reg.nf_valor_total) : '—';
-      document.getElementById('v-detalhe').textContent = reg.detalhe || 'Divergência entre a nota e o pedido de compra.';
+      document.getElementById('btn-pdf').classList.toggle('hidden', !data.tem_pdf);
+      setStatusChip(reg.status);
 
-      if (!data.tem_pdf) document.getElementById('btn-pdf').classList.add('hidden');
-
-      // Banner de status + trava se ja decidido
-      const banner = document.getElementById('status-banner');
-      if (reg.status && reg.status !== 'Pendente') {
-        const cls = reg.status === 'Aprovado' ? 'aprovado' : 'rejeitado';
-        const ico = reg.status === 'Aprovado' ? 'fa-circle-check' : 'fa-circle-xmark';
-        banner.className = 'status-banner ' + cls;
-        banner.innerHTML = `<i class="fas ${ico}"></i> Já ${reg.status.toLowerCase()} por ${reg.respondido_por || '—'} em ${reg.respondido_em || '—'}${reg.motivo_resposta ? ' · ' + reg.motivo_resposta : ''}`;
-        const dcard = document.getElementById('decisao-card');
-        if (dcard) dcard.classList.add('hidden');
+      // Resumo textual (é o mesmo texto que foi pro Teams).
+      const linhasDet = String(reg.detalhe || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const lista = document.getElementById('diverg-list');
+      if (linhasDet.length) {
+        lista.innerHTML = linhasDet.map(t => {
+          const p = parseLinhaDetalhe(t);
+          if (!p) return `<div class="diverg-item"><div class="diverg-ico"><i class="fas fa-triangle-exclamation"></i></div><div class="diverg-txt">${esc(t)}</div></div>`;
+          const motivo = p.motivo.charAt(0).toUpperCase() + p.motivo.slice(1);
+          const destino = p.destino.charAt(0).toLowerCase() + p.destino.slice(1);
+          return `<div class="diverg-item">
+            <div class="diverg-ico"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="diverg-txt"><strong>Linha ${esc(p.nf)} da NF</strong> · ${esc(p.cod)}<small>comparada com ${esc(destino)}</small></div>
+            <span class="tag no">${esc(motivo)}</span>
+          </div>`;
+        }).join('');
+      } else {
+        lista.innerHTML = '<div class="inline-note"><i class="fas fa-circle-info"></i><span>Divergência entre a nota e o pedido de compra.</span></div>';
       }
 
-      // Comparacao OC x XML
+      // Comparação linha a linha
       const cmpBody = document.getElementById('cmp-body');
       const cmp = data.comparacao;
-      if (cmp && Array.isArray(cmp.pares) && cmp.pares.length) {
-        cmpBody.innerHTML = cmp.pares.map(p => {
+      const pares = (cmp && Array.isArray(cmp.pares)) ? cmp.pares : [];
+      const qtdDiverg = pares.length ? pares.filter(p => !p.ok).length : linhasDet.length;
+      document.getElementById('v-qtd-diverg').textContent = pares.length ? `${qtdDiverg} de ${pares.length}` : (qtdDiverg || '—');
+
+      if (pares.length) {
+        document.getElementById('cmp-wrap').classList.remove('hidden');
+        document.getElementById('cmp-erro').classList.add('hidden');
+        cmpBody.innerHTML = pares.map(p => {
           const ok = !!p.ok;
+          const un = p.nf_unidade ? ' ' + esc(p.nf_unidade) : '';
+          const qtdNf = p.nf_qtd_original ?? p.nf_qtd;
+          let delta = '';
+          if (!p.valor_ok && p.po_valor_unit) {
+            const pct = ((Number(p.nf_valor_unit || 0) - p.po_valor_unit) / p.po_valor_unit) * 100;
+            if (isFinite(pct)) delta = `<span class="delta">${pct > 0 ? '+' : ''}${pct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</span>`;
+          }
           const situ = ok
-            ? '<span class="pill ok"><i class="fas fa-check"></i> Bate</span>'
-            : `<span class="pill no"><i class="fas fa-xmark"></i> ${!p.qtd_ok && !p.valor_ok ? 'Qtd e valor' : (!p.qtd_ok ? 'Quantidade' : 'Valor')}</span>`;
-          return `<tr class="${ok ? 'ok' : 'diverg'}">
-            <td>${p.linha ?? ''}</td>
-            <td>${p.nf_codigo ?? '—'}</td>
-            <td>${p.nf_descricao ?? '—'}</td>
-            <td class="num">${num(p.nf_qtd_original ?? p.nf_qtd)}</td>
-            <td class="num">${p.po_qtd == null ? '—' : num(p.po_qtd)}</td>
-            <td class="num">${money(p.nf_valor_unit)}</td>
-            <td class="num">${p.po_valor_unit == null ? '—' : money(p.po_valor_unit)}</td>
+            ? '<span class="tag ok"><i class="fas fa-check"></i> Bate</span>'
+            : `<span class="tag no"><i class="fas fa-xmark"></i> ${esc(motivoDivergencia(p))}</span>`;
+          return `<tr class="${ok ? 'row-ok' : 'row-diverg'}">
+            <td class="ln">${esc(p.linha ?? '')}</td>
+            <td>
+              <div class="item-cod">${esc(p.nf_codigo ?? '—')}</div>
+              <div class="item-desc">${esc(p.nf_descricao ?? '—')}</div>
+              <div class="item-po">${p.po_linha ? 'Linha ' + esc(p.po_linha) + ' do pedido' : 'Sem linha do pedido vinculada'}</div>
+            </td>
+            <td class="num">
+              <div class="cmp ${p.qtd_ok ? '' : 'bad'}">
+                <span class="k">NF</span><span class="v nf">${num(qtdNf, 4)}${un}</span>
+                <span class="k">Pedido</span><span class="v">${p.po_qtd == null ? '—' : num(p.po_qtd, 4)}</span>
+              </div>
+            </td>
+            <td class="num">
+              <div class="cmp ${p.valor_ok ? '' : 'bad'}">
+                <span class="k">NF</span><span class="v nf">${moneyUnit(p.nf_valor_unit)}</span>
+                <span class="k">Pedido</span><span class="v">${p.po_valor_unit == null ? '—' : moneyUnit(p.po_valor_unit)}</span>
+              </div>
+              ${delta}
+            </td>
             <td>${situ}</td>
           </tr>`;
         }).join('');
       } else {
         document.getElementById('cmp-wrap').classList.add('hidden');
-        if (data.erro_comparacao) showMsg('cmp-erro', data.erro_comparacao, 'err');
-        else showMsg('cmp-erro', 'Sem comparação disponível para este pedido.', 'err');
+        document.getElementById('cmp-erro-txt').textContent = data.erro_comparacao || 'Sem comparação disponível para este pedido.';
+        document.getElementById('cmp-erro').classList.remove('hidden');
       }
 
       // Itens XML
-      document.getElementById('xml-body').innerHTML = (data.itens_xml || []).map(i => `
+      const itens = data.itens_xml || [];
+      document.getElementById('xml-count').textContent = itens.length;
+      document.getElementById('xml-body').innerHTML = itens.map(i => `
         <tr>
-          <td>${i.codigo ?? '—'}</td>
-          <td>${i.descricao ?? '—'}</td>
-          <td class="num">${num(i.qtd)}</td>
-          <td>${i.unidade ?? ''}</td>
+          <td class="item-cod">${esc(i.codigo ?? '—')}</td>
+          <td class="item-desc">${esc(i.descricao ?? '—')}</td>
+          <td class="num">${num(i.qtd, 4)}</td>
+          <td>${esc(i.unidade ?? '')}</td>
           <td class="num">${money(i.valor_total)}</td>
-          <td>${i.cfop ?? ''}</td>
-          <td>${i.ncm ?? ''}</td>
+          <td>${esc(i.cfop ?? '')}</td>
+          <td>${esc(i.ncm ?? '')}</td>
         </tr>`).join('');
+
+      // Já decidida: mostra o resultado e esconde a barra de decisão.
+      const resultado = document.getElementById('resultado');
+      const bar = document.getElementById('decisao-bar');
+      if (reg.status && reg.status !== 'Pendente') {
+        const aprovado = reg.status === 'Aprovado';
+        resultado.innerHTML = `<div class="result ${aprovado ? 'aprovado' : 'rejeitado'}">
+          <div class="ico"><i class="fas ${aprovado ? 'fa-circle-check' : 'fa-circle-xmark'}"></i></div>
+          <div>
+            <strong>${aprovado ? 'Divergência aprovada — NF liberada para conferência' : 'Divergência recusada — NF continua bloqueada'}</strong>
+            <span>Por ${esc(reg.respondido_por || '—')} em ${esc(reg.respondido_em || '—')}${reg.motivo_resposta ? ' · “' + esc(reg.motivo_resposta) + '”' : ''}</span>
+          </div>
+        </div>`;
+        bar.classList.add('hidden');
+      } else {
+        resultado.innerHTML = '';
+        bar.classList.remove('hidden');
+      }
     }
 
     function abrirPdf() {
       window.open(`${BASE}/danfe`, '_blank');
     }
 
+    let decisaoPendente = null;
+    function pedirConfirmacao(decisao) {
+      const motivo = document.getElementById('motivo').value.trim();
+      if (decisao === 'rejeitado' && !motivo) {
+        showMsg('decisao-msg', 'Escreva o motivo da recusa no campo de observação.', 'err');
+        document.getElementById('motivo').focus();
+        return;
+      }
+      hideMsg('decisao-msg');
+      decisaoPendente = decisao;
+      const nf = document.getElementById('h-nf').textContent;
+      const ok = document.getElementById('modal-ok');
+      if (decisao === 'aprovado') {
+        document.getElementById('modal-titulo').textContent = `Aprovar a divergência da NF ${nf}?`;
+        document.getElementById('modal-texto').textContent = 'A nota será liberada para seguir a conferência de recebimento.';
+        ok.className = 'btn btn-green';
+        ok.innerHTML = '<i class="fas fa-check"></i> Aprovar';
+      } else {
+        document.getElementById('modal-titulo').textContent = `Recusar a divergência da NF ${nf}?`;
+        document.getElementById('modal-texto').textContent = 'A nota continuará bloqueada. Essa decisão é definitiva.';
+        ok.className = 'btn btn-red solid';
+        ok.innerHTML = '<i class="fas fa-xmark"></i> Recusar';
+      }
+      document.getElementById('modal').classList.remove('hidden');
+      ok.focus();
+    }
+    function fecharModal() {
+      document.getElementById('modal').classList.add('hidden');
+      decisaoPendente = null;
+    }
+
     async function decidir(decisao) {
       const motivo = document.getElementById('motivo').value.trim();
-      if (decisao === 'rejeitado' && !motivo) { showMsg('decisao-msg', 'Informe o motivo da recusa.', 'err'); return; }
-      const texto = decisao === 'aprovado' ? 'APROVAR esta divergência e liberar a NF?' : 'RECUSAR esta divergência? A NF continuará bloqueada.';
-      if (!confirm(texto)) return;
-      document.getElementById('btn-aprovar').disabled = true;
-      document.getElementById('btn-recusar').disabled = true;
+      const botoes = [document.getElementById('btn-aprovar'), document.getElementById('btn-recusar')];
+      botoes.forEach(b => b.disabled = true);
       try {
         const r = await fetch(`${BASE}/decidir`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ decisao, motivo }),
         });
-        const data = await r.json();
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 401) { botoes.forEach(b => b.disabled = false); return mostrarLogin('Sua sessão expirou. Entre de novo para registrar a decisão.'); }
         if (!r.ok || !data.sucesso) {
           showMsg('decisao-msg', data.msg || 'Não foi possível registrar a decisão.', 'err');
-          document.getElementById('btn-aprovar').disabled = false;
-          document.getElementById('btn-recusar').disabled = false;
+          botoes.forEach(b => b.disabled = false);
           return;
         }
         showMsg('decisao-msg', data.msg, 'ok');
-        setTimeout(() => carregarDados(), 800);
+        setTimeout(() => { hideMsg('decisao-msg'); carregarDados(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, 900);
       } catch (e) {
         showMsg('decisao-msg', 'Erro de conexão ao registrar.', 'err');
-        document.getElementById('btn-aprovar').disabled = false;
-        document.getElementById('btn-recusar').disabled = false;
+        botoes.forEach(b => b.disabled = false);
       }
     }
 
+    document.getElementById('modal-ok')?.addEventListener('click', () => {
+      const d = decisaoPendente;
+      fecharModal();
+      if (d) decidir(d);
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
     document.getElementById('btn-login')?.addEventListener('click', fazerLogin);
+    document.getElementById('username')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
     document.getElementById('password')?.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
   </script>
 </body>

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 
 import requests
@@ -172,6 +173,45 @@ def notificar_solicitacao_nf(
     )
 
 
+# Formato gerado em api_routes._notificar_divergencia_pedido_se_necessario:
+# "Linha 1 do XML (ITM04724) -> Linha 1 do pedido: valor diverge"
+_RE_LINHA_DIVERGENCIA = re.compile(r"^Linha (?P<nf>\S+) do XML \((?P<cod>[^)]*)\) -> (?P<destino>.+?): (?P<motivo>.+)$")
+
+
+def _linha_divergencia_card(linha: str) -> dict:
+    """Uma divergencia em 2 colunas (item | motivo). Se o texto nao seguir o
+    formato esperado, mostra cru - melhor feio do que sumir do card."""
+    m = _RE_LINHA_DIVERGENCIA.match(linha.strip())
+    if not m:
+        return {"type": "TextBlock", "text": f"• {linha}", "wrap": True, "spacing": "Small"}
+    destino = m["destino"]
+    destino = destino[0].lower() + destino[1:] if destino else destino
+    return {
+        "type": "ColumnSet",
+        "spacing": "Small",
+        "columns": [
+            {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                    {"type": "TextBlock", "text": f"**Linha {m['nf']}** · {m['cod']}", "wrap": True},
+                    {"type": "TextBlock", "text": f"→ {destino}", "isSubtle": True, "size": "Small",
+                     "spacing": "None", "wrap": True},
+                ],
+            },
+            {
+                "type": "Column",
+                "width": "auto",
+                "verticalContentAlignment": "Center",
+                "items": [
+                    {"type": "TextBlock", "text": m["motivo"].capitalize(), "color": "Attention",
+                     "weight": "Bolder", "size": "Small", "wrap": True},
+                ],
+            },
+        ],
+    }
+
+
 def notificar_divergencia_pedido(
     numero_nota: str,
     fornecedor: str,
@@ -208,35 +248,47 @@ def notificar_divergencia_pedido(
         app.logger.info("TEAMS: webhook de divergencia nao configurado; aviso ignorado (NF %s).", numero_nota)
         return False if sync else None
 
-    # === Texto do cartao do Teams (edite aqui para mudar a mensagem) ==========
-    titulo_card = "🚨 Divergência identificada"
-    linha_principal = f"NF {numero_nota} · {fornecedor or 'Fornecedor não identificado'}"
-    partes_subinfo = []
-    if pedido_compra:
-        partes_subinfo.append(f"📄 Pedido de compra: {pedido_compra}")
-    if linhas_divergentes:
-        partes_subinfo.append("O que divergiu entre a nota e o pedido:")
-        partes_subinfo.extend(f"• {linha}" for linha in linhas_divergentes)
-    partes_subinfo.append("")
-    partes_subinfo.append("👉 Clique no botão abaixo para abrir a tela de aprovação.")
-    subinfo = "\n".join(partes_subinfo) or None
-    # =========================================================================
+    # Card proprio (nao usa _card_payload): faixa de alerta, fatos em FactSet e
+    # uma linha por divergencia - o texto corrido antigo era dificil de ler.
+    payload = _card_payload("", "", None, mencionar_canal=True)
+    card_content = payload["attachments"][0]["content"]
+    corpo = [card_content["body"][0]]  # so a mencao do canal
 
-    payload = _card_payload(
-        titulo_card,
-        linha_principal,
-        subinfo,
-        mencionar_canal=True,
+    corpo.append(
+        {
+            "type": "Container",
+            "style": "attention",
+            "bleed": True,
+            "items": [
+                {"type": "TextBlock", "text": "⚠️ DIVERGÊNCIA NF × PEDIDO", "weight": "Bolder",
+                 "size": "Small", "color": "Attention", "spacing": "None"},
+                {"type": "TextBlock", "text": f"NF {numero_nota}", "weight": "Bolder",
+                 "size": "ExtraLarge", "spacing": "Small", "wrap": True},
+                {"type": "TextBlock", "text": fornecedor or "Fornecedor não identificado",
+                 "isSubtle": True, "spacing": "None", "wrap": True},
+            ],
+        }
     )
-    # Botao clicavel no proprio card (abre a tela de aprovacao no navegador).
+    fatos = []
+    if pedido_compra:
+        fatos.append({"title": "Pedido de compra", "value": str(pedido_compra)})
+    if linhas_divergentes:
+        qtd = len(linhas_divergentes)
+        fatos.append({"title": "Itens divergentes", "value": f"{qtd} {'linha' if qtd == 1 else 'linhas'}"})
+    fatos.append({"title": "Situação", "value": "⏳ Aguardando decisão de Compras"})
+    corpo.append({"type": "FactSet", "facts": fatos, "spacing": "Medium"})
+
+    if linhas_divergentes:
+        corpo.append({"type": "TextBlock", "text": "O QUE DIVERGIU", "weight": "Bolder", "size": "Small",
+                      "isSubtle": True, "spacing": "Medium", "separator": True})
+        for linha in linhas_divergentes:
+            corpo.append(_linha_divergencia_card(str(linha)))
+
+    card_content["body"] = corpo
     if link_conferencia:
-        try:
-            card_content = payload["attachments"][0]["content"]
-            card_content["actions"] = [
-                {"type": "Action.OpenUrl", "title": "Abrir e decidir (Aprovar / Recusar)", "url": link_conferencia}
-            ]
-        except (KeyError, IndexError, TypeError):
-            pass
+        card_content["actions"] = [
+            {"type": "Action.OpenUrl", "title": "Revisar e decidir", "url": link_conferencia, "style": "positive"}
+        ]
     # Campos extras (fora do envelope do card), para automações adicionais no flow.
     payload["numero_nota"] = str(numero_nota or "")
     payload["fornecedor"] = str(fornecedor or "")
