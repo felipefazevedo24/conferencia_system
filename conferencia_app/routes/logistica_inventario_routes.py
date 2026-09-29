@@ -1471,6 +1471,9 @@ CHAPA_DENSIDADES = {
 
 # Diferença aceitável entre peso calculado (peso/peça × UND) e o peso recebido.
 CHAPA_TOLERANCIA_PCT = 5.0
+# Lote vai pro histórico (zerados) quando o que sobra pelas baixas é menor que
+# este % do peso da NF - diferença entre peso da NF e peso real baixado.
+CHAPA_LOTE_ZERADO_PCT = 1.0
 
 
 def _chapa_kg_do_item(item) -> float:
@@ -1762,9 +1765,14 @@ def api_chapas_listar():
         chapas_estoque = max(und - chapas_baixadas, 0.0) if chapas_baixadas is not None else None
         chapas_reservadas = (kg_res / peso) if peso else None
         chapas_disp = max(chapas_estoque - chapas_reservadas, 0.0) if (chapas_estoque is not None and chapas_reservadas is not None) else None
-        # Histórico = o código não tem mais saldo real no GRV (tudo consumido).
-        # Sem dado do GRV (bridge fora), mantém em estoque (nunca falso-histórico).
-        historico = bool(real_cod is not None and float(real_cod.get("qtde_total") or 0) <= 0.0001)
+        # Histórico = o código não tem mais saldo real no GRV (tudo consumido)
+        # OU este lote foi consumido: um lote antigo zerado não pode ficar na
+        # lista só porque outro lote do mesmo código ainda tem saldo. As baixas
+        # nunca somam o peso exato da NF, daí a sobra tolerada. Sem dado do GRV
+        # (bridge fora) kg_saida é 0 e mantém em estoque (nunca falso-histórico).
+        codigo_zerado = real_cod is not None and float(real_cod.get("qtde_total") or 0) <= 0.0001
+        lote_zerado = kg_nf > 0 and kg_saida > 0 and kg_saldo <= kg_nf * CHAPA_LOTE_ZERADO_PCT / 100.0
+        historico = bool(codigo_zerado or lote_zerado)
         out = {
             "item_id": l["item_id"], "itens_ids": l["itens_ids"], "und_outros": l["und_outros"],
             "fonte": l["fonte"], "numero_nota": l["numero_nota"], "codigo": l["codigo"],

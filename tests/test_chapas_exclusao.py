@@ -540,3 +540,31 @@ def test_rota_de_movimentos_nao_derruba_a_tela(app, monkeypatch):
     assert r.status_code == 200 and r.get_json()['movimentos'] == [{'saida': 1}]
     assert chamadas == [('19-01-00558', '70387-10/07/2026-2')]
     assert app.test_client().get('/api/logistica/chapas/movimentos?codigo=X&lote=L').status_code in (302, 401)
+
+
+def _saldo_grv(monkeypatch, kg_saida_ar2, qtde_codigo=100):
+    monkeypatch.setattr(erp_estoque_service, 'buscar_saldo_chapa_por_lote', lambda codigos: {
+        'por_lote': [{'codigo': 'CH-1', 'lote': 'AR-2', 'kg_saida': kg_saida_ar2, 'kg_reservado': 0}],
+        'saldo_codigo': {'CH-1': {'qtde_total': qtde_codigo, 'qtde_reservada': 0, 'qtde_disponivel': qtde_codigo}}})
+
+
+def test_lote_consumido_vai_pro_historico_mesmo_com_codigo_com_saldo(app, monkeypatch):
+    # Lote AR-2 tem 75 kg na NF. Sobra 0,5 kg (< 1%) -> zerado, mesmo o código
+    # CH-1 ainda tendo saldo no GRV pelo outro lote.
+    _saldo_grv(monkeypatch, 74.5)
+    data = client_for(app).get('/api/logistica/chapas').get_json()
+    por_id = {l['item_id']: l['historico'] for l in data['itens']}
+    assert por_id == {1: False, 2: True}
+    assert data['resumo']['chapas'] == 1
+
+
+def test_lote_com_sobra_acima_da_tolerancia_continua_em_estoque(app, monkeypatch):
+    _saldo_grv(monkeypatch, 74.0)  # sobra 1 kg > 0,75 kg (1% de 75)
+    data = client_for(app).get('/api/logistica/chapas').get_json()
+    assert not any(l['historico'] for l in data['itens'])
+
+
+def test_codigo_zerado_no_grv_manda_todos_os_lotes_pro_historico(app, monkeypatch):
+    _saldo_grv(monkeypatch, 0, qtde_codigo=0)
+    data = client_for(app).get('/api/logistica/chapas').get_json()
+    assert all(l['historico'] for l in data['itens'])
