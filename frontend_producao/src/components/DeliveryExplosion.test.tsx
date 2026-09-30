@@ -70,4 +70,22 @@ describe("DeliveryExplosion", () => {
     expect(budget).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: /OS 9644/ })).not.toBeInTheDocument();
   });
+
+  it("shows the effective delivery date returned for the service order", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <DeliveryExplosion
+        month={9}
+        year={2026}
+        classification="MOLDE"
+        search=""
+        onClose={vi.fn()}
+        onSelectOrder={vi.fn()}
+      />,
+      { wrapper: wrapper(queryClient) }
+    );
+
+    expect(await screen.findByText("02/09/2026")).toBeVisible();
+    expect(screen.queryByText("Sem data")).not.toBeInTheDocument();
+  });
 });
