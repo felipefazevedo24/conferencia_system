@@ -53,6 +53,14 @@ def test_mes_e_data_usam_renegociacao_com_fallback_para_entrega_da_os():
     ]
 
 
+def test_orcamento_usa_somente_o_vinculo_mais_proximo_de_cada_os():
+    sql = queries.SQL_PRODUCAO_CRONOGRAMA_ENTREGAS
+    assert "PARTITION BY candidate.due_cod_os" in sql
+    assert "ORDER BY candidate.depth, candidate.source_priority" in sql
+    assert "WHERE link_rank = 1" in sql
+    assert "FROM resolved_budget_orders resolved" in sql
+
+
 def test_filtros_usam_intervalo_semiaberto_e_pesquisa_combinada():
     with patch.object(service, "_metadata_read", return_value=[]) as fetch:
         assert service.listar_entregas_cronograma(12, 2026, "CMS", "7807/002") == []

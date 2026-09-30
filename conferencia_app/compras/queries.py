@@ -310,10 +310,12 @@ WITH RECURSIVE due_orders AS (
       AND COALESCE(u_data_renegociacao, dt_prevista) < %(fim)s::date
 ),
 ancestor_orders AS (
-    SELECT cod_os, cod_os AS due_cod_os
+    SELECT cod_os, cod_os AS due_cod_os, 0 AS depth,
+           ARRAY[cod_os]::integer[] AS path
     FROM due_orders
-    UNION
-    SELECT request.cod_os, ancestor.due_cod_os
+    UNION ALL
+    SELECT request.cod_os, ancestor.due_cod_os, ancestor.depth + 1,
+           ancestor.path || request.cod_os
     FROM ancestor_orders ancestor
     JOIN public.tos_solicitacao_necessidade necessity
       ON necessity.cod_empresa = %(cod_empresa)s
@@ -322,22 +324,31 @@ ancestor_orders AS (
       ON request.cod_empresa = necessity.cod_empresa
      AND request.guid_pai = necessity.guid_solicitacao
     WHERE request.cod_os IS NOT NULL
+      AND NOT request.cod_os = ANY(ancestor.path)
 ),
-budget_ids AS (
-    SELECT os.cod_orcamento AS cod_orcamento
-    FROM ancestor_orders ancestor
-    JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
-                      AND os.codigo = ancestor.cod_os
-    WHERE os.cod_orcamento IS NOT NULL
-    UNION
-    SELECT generated.cod_orcamento
+budget_candidates AS (
+    -- Vinculo exato registrado quando o orcamento gerou a OS.
+    SELECT ancestor.due_cod_os, generated.cod_orcamento,
+           ancestor.depth, 1 AS source_priority
     FROM ancestor_orders ancestor
     JOIN public.torcamento_servico_gerados generated
       ON generated.cod_empresa = %(cod_empresa)s
      AND generated.cod_os = ancestor.cod_os
      AND COALESCE(generated.cancelado, 0) = 0
-    UNION
-    SELECT budget.codigo
+    WHERE generated.cod_orcamento IS NOT NULL
+    UNION ALL
+    -- Vinculo direto gravado na propria OS (quando existente).
+    SELECT ancestor.due_cod_os, service.cod_orcamento,
+           ancestor.depth, 2 AS source_priority
+    FROM ancestor_orders ancestor
+    JOIN public.tos service
+      ON service.cod_empresa = %(cod_empresa)s
+     AND service.codigo = ancestor.cod_os
+    WHERE service.cod_orcamento IS NOT NULL
+    UNION ALL
+    -- Fallback para OS gerada por solicitacao; escolhe a revisao mais recente.
+    SELECT ancestor.due_cod_os, budget.codigo,
+           ancestor.depth, 3 AS source_priority
     FROM ancestor_orders ancestor
     JOIN public.tos_solicitacao_necessidade necessity
       ON necessity.cod_empresa = %(cod_empresa)s
@@ -345,9 +356,33 @@ budget_ids AS (
     JOIN public.tsol_max_os request
       ON request.cod_empresa = necessity.cod_empresa
      AND request.guid_pai = necessity.guid_solicitacao
-    JOIN public.torcamento budget
-      ON budget.cod_empresa = %(cod_empresa)s
-     AND budget.n_orcamento = request.numero_orcamento
+    JOIN LATERAL (
+        SELECT candidate.codigo
+        FROM public.torcamento candidate
+        WHERE candidate.cod_empresa = %(cod_empresa)s
+          AND candidate.n_orcamento = request.numero_orcamento
+        ORDER BY candidate.codigo DESC
+        LIMIT 1
+    ) budget ON TRUE
+    WHERE request.numero_orcamento > 0
+),
+ranked_budget_ids AS (
+    SELECT candidate.*,
+           ROW_NUMBER() OVER (
+               PARTITION BY candidate.due_cod_os
+               ORDER BY candidate.depth, candidate.source_priority,
+                        candidate.cod_orcamento DESC
+           ) AS link_rank
+    FROM budget_candidates candidate
+),
+resolved_budget_orders AS (
+    SELECT due_cod_os AS cod_os, cod_orcamento
+    FROM ranked_budget_ids
+    WHERE link_rank = 1
+),
+budget_ids AS (
+    SELECT DISTINCT cod_orcamento
+    FROM resolved_budget_orders
 ),
 budgets AS (
     SELECT budget.codigo, budget.n_orcamento, budget.versao
@@ -394,10 +429,13 @@ orders AS (
     FROM linked GROUP BY cod_orcamento, cod_os
 ),
 scheduled_orders AS (
-    SELECT orders.cod_orcamento, orders.cod_os, orders.principal,
+    SELECT resolved.cod_orcamento, resolved.cod_os,
+           COALESCE(orders.principal, FALSE) AS principal,
            due.dt_entrega_cronograma
-    FROM orders
-    JOIN due_orders due ON due.cod_os = orders.cod_os
+    FROM resolved_budget_orders resolved
+    JOIN due_orders due ON due.cod_os = resolved.cod_os
+    LEFT JOIN orders ON orders.cod_orcamento = resolved.cod_orcamento
+                    AND orders.cod_os = resolved.cod_os
 ),
 operation_counts AS (
     SELECT process.cod_os,
