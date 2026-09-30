@@ -25,6 +25,7 @@ def test_orcamento_agrupa_os_e_calcula_progresso_sem_consulta_por_os():
     with patch.object(service, "_metadata_read", return_value=rows) as fetch:
         delivery = service.listar_entregas_cronograma(9, 2026)[0]
     assert fetch.call_count == 1
+    assert delivery["orcamento_id"] == "72"
     assert delivery["data_entrega"] == "2026-09-25T00:00:00"
     assert [item["numero"] for item in delivery["os"]] == ["7807/001", "7807/002"]
     assert [item["principal"] for item in delivery["os"]] == [True, False]
@@ -51,6 +52,14 @@ def test_mes_e_data_usam_renegociacao_com_fallback_para_entrega_da_os():
         ["7807/001"],
         ["7807/002"],
     ]
+
+
+def test_orcamento_usa_somente_o_vinculo_mais_proximo_de_cada_os():
+    sql = queries.SQL_PRODUCAO_CRONOGRAMA_ENTREGAS
+    assert "PARTITION BY candidate.due_cod_os" in sql
+    assert "ORDER BY candidate.depth, candidate.source_priority" in sql
+    assert "WHERE link_rank = 1" in sql
+    assert "FROM resolved_budget_orders resolved" in sql
 
 
 def test_filtros_usam_intervalo_semiaberto_e_pesquisa_combinada():

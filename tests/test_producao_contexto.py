@@ -25,7 +25,14 @@ def api(monkeypatch):
     for name, attrs in {
         "auth": {"permission_required": lambda _: lambda fn: fn},
         "extensions": {"db": None},
-        "models": {"ProducaoObservacao": None, "ProducaoSequencia": None},
+        "models": {
+            "ProducaoObservacao": None,
+            "ProducaoOrcamentoArquivo": None,
+            "ProducaoOrcamentoArquivoBloco": None,
+            "ProducaoSequencia": None,
+            "RpaExecucao": None,
+            "RpaExecutor": None,
+        },
     }.items():
         module = ModuleType(f"{namespace}.{name}")
         vars(module).update(attrs)

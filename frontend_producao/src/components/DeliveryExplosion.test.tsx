@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,9 @@ import { DeliveryExplosion } from "./DeliveryExplosion";
 vi.mock("../lib/api", () => ({
   api: {
     getScheduledDeliveries: vi.fn(),
-    getDeliveryStructure: vi.fn()
+    getDeliveryStructure: vi.fn(),
+    archiveScheduledBudget: vi.fn(),
+    restoreScheduledBudget: vi.fn()
   }
 }));
 
@@ -25,6 +27,7 @@ describe("DeliveryExplosion", () => {
   beforeEach(() => {
     mockedApi.getScheduledDeliveries.mockResolvedValue([
       {
+        orcamento_id: "6907-id",
         orcamento: "6907",
         versao: "",
         cliente: "Columbia Machine",
@@ -37,6 +40,8 @@ describe("DeliveryExplosion", () => {
       }
     ]);
     mockedApi.getDeliveryStructure.mockResolvedValue({ nos: [] });
+    mockedApi.archiveScheduledBudget.mockResolvedValue({ arquivado: true });
+    mockedApi.restoreScheduledBudget.mockResolvedValue({ arquivado: false });
   });
 
   afterEach(() => {
@@ -87,5 +92,54 @@ describe("DeliveryExplosion", () => {
 
     expect(await screen.findByText("02/09/2026")).toBeVisible();
     expect(screen.queryByText("Sem data")).not.toBeInTheDocument();
+  });
+
+  it("counts a budget only once when it has deliveries on different dates", async () => {
+    mockedApi.getScheduledDeliveries.mockResolvedValueOnce([
+      {
+        orcamento_id: "7375-id", orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
+        classificacoes: ["MOLDE"], data_entrega: "2026-10-15", status: "",
+        percentual: null,
+        os: [{ numero: "10507", descricao: "OS 1", principal: true, status: "" }]
+      },
+      {
+        orcamento_id: "7375-id", orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
+        classificacoes: ["MOLDE"], data_entrega: "2026-10-22", status: "",
+        percentual: null,
+        os: [{ numero: "10509", descricao: "OS 2", principal: true, status: "" }]
+      }
+    ]);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <DeliveryExplosion month={10} year={2026} classification="MOLDE" search=""
+        onClose={vi.fn()} onSelectOrder={vi.fn()} />,
+      { wrapper: wrapper(queryClient) }
+    );
+
+    await screen.findAllByRole("button", { name: /7375/ });
+    const summary = screen.getByLabelText("Resumo do período");
+    expect(summary).toHaveTextContent(/1\s*orçamentos/);
+    expect(summary).toHaveTextContent(/2\s*ordens de serviço/);
+  });
+
+  it("archives a budget and restores it from the archived view", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <DeliveryExplosion month={9} year={2026} classification="MOLDE" search=""
+        onClose={vi.fn()} onSelectOrder={vi.fn()} />,
+      { wrapper: wrapper(queryClient) }
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
+    await waitFor(() => expect(mockedApi.archiveScheduledBudget).toHaveBeenCalledWith(
+      "6907-id", "6907", "", "2026-09-02"
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: /Arquivados/ }));
+    await waitFor(() => expect(mockedApi.getScheduledDeliveries).toHaveBeenCalledWith(9, 2026, "MOLDE", "", expect.any(AbortSignal), true));
+    fireEvent.click(await screen.findByRole("button", { name: "Restaurar" }));
+    await waitFor(() => expect(mockedApi.restoreScheduledBudget).toHaveBeenCalledWith(
+      "6907-id", "6907", "", "2026-09-02"
+    ));
   });
 });
