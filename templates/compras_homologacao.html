@@ -84,6 +84,15 @@
     .hf-foto small { display: block; font-size: 10.5px; color: var(--eui-muted); margin-top: 4px; word-break: break-word; }
     .hf-foto button { margin-top: 4px; width: 100%; border: 1px solid var(--eui-danger, #dc2626); background: #fff; color: var(--eui-danger, #dc2626); border-radius: 5px; font-size: 11px; font-weight: 700; cursor: pointer; padding: 3px; }
 
+    .hf-evid a + button, .hf-evid-del { border: 0; background: transparent; color: var(--eui-danger, #dc2626); cursor: pointer; font-size: 11px; padding: 0 4px; }
+    .hf-evid-add { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--eui-primary, #2563eb); cursor: pointer; margin-top: 5px; }
+    .hf-evid-add input { display: none; }
+    .hf-evid-info { font-size: 11px; font-weight: 700; color: #92400e; margin-top: 5px; }
+    .hf-resp-tab { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .hf-resp-tab th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--eui-muted); padding: 6px 8px; }
+    .hf-resp-tab td { padding: 4px 6px; }
+    .hf-resp-tab input { width: 100%; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; }
+    .hf-dispensado { padding: 12px 14px; font-size: 12.5px; color: #065f46; background: #ecfdf5; }
     .hf-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; margin-bottom: 12px; }
 </style>
 {% endblock %}
@@ -94,7 +103,7 @@
         <div>
             <div class="eui-page-header__eyebrow">Compras</div>
             <h1 class="eui-page-header__title"><i class="fas fa-clipboard-check"></i> Homologação de Fornecedores</h1>
-            <p class="eui-page-header__sub">Formulário <b id="hf-codigo">F-COM-001-01</b> — a nota é calculada automaticamente pelos pesos de cada seção. Rascunho → Em aprovação → Homologado.</p>
+            <p class="eui-page-header__sub">Formulário <b id="hf-codigo">F 066</b> — a nota é calculada automaticamente pelas respostas. Rascunho → Em aprovação → Homologado.</p>
         </div>
         <div class="eui-page-header__actions">
             <button class="eui-btn eui-btn--primary" id="hf-btn-novo"><i class="fas fa-plus"></i> Nova homologação</button>
@@ -182,8 +191,10 @@
     const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
 
     const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado", "Com fornecedor": "fornecedor" };
-    const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado", "Em análise": "analise" };
-    const SLUG_OPT = { "Sim": "", "Conforme": "", "Parcial": "meio", "Não": "neg", "Nao": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
+    const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado", "Em análise": "analise",
+        "Eficiente / Qualificado": "aprovado", "Qualificado c/ plano de ação": "ressalvas", "Desqualificado": "reprovado" };
+    const SLUG_OPT = { "Sim": "", "Conforme": "", "Atende": "", "Parcial": "meio", "Atende Parcial": "meio", "Não": "neg", "Nao": "neg",
+        "Não Atende": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
 
     let filtroStatus = "", filtroValidade = "", modelo = null, atual = null;
 
@@ -239,8 +250,11 @@
         if (!modelo) modelo = await api("/api/compras/homologacao/modelo");
         atual = {
             id: null, status: "Rascunho", validade_meses: 12,
+            formulario: modelo.formulario,
             secoes: JSON.parse(JSON.stringify(modelo.secoes)),
             fotos: [],
+            responsaveis: (modelo.formulario.setores_responsaveis || []).map((setor) => ({ setor })),
+            iso9001_certificado: null, iso9001_evidencias: [],
         };
         desenhar("Nova homologação");
     }
@@ -258,6 +272,68 @@
         ["categoria_compra", "Categoria de Compra"],
     ];
 
+    // Rev. 04: ISO 9001 declarado E certificado anexado dispensa o questionario.
+    const rev04 = () => (atual.formulario || {}).regra === "pontos";
+    const isoValido = () => rev04() && atual.iso9001_certificado === true && (atual.iso9001_evidencias || []).length > 0;
+    const secaoDispensada = (s) => s.pula_com_iso && isoValido();
+    const temEvid = (it) => (it.evidencias || []).length > 0;
+
+    function evidHtml(chave, item, evids, ed) {
+        const lista = (evids || []).map((ev) => `<a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}${ev.enviado_por ? " · " + esc(ev.enviado_por) : ""}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>${ed ? `<button type="button" class="hf-evid-del" data-del-evid="${ev.id}" title="Remover evidência"><i class="fas fa-xmark"></i></button>` : ""}`).join("");
+        // Sem id ainda nao ha' onde gravar o anexo - o aviso sai uma vez so', no topo.
+        const add = (ed && atual.id)
+            ? `<label class="hf-evid-add"><i class="fas fa-upload"></i> Anexar<input type="file" accept=".pdf,.jpg,.jpeg,.png" data-up-evid="${esc(chave)}|${item}"></label>` : "";
+        return `<div class="hf-evid">${lista}${add}</div>`;
+    }
+
+    function avisoItem(s, it, cv) {
+        if (!rev04()) {
+            return (!temEvid(it) && cv && ["Sim", "Parcial", "Conforme"].includes(it.resposta))
+                ? '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Sem evidência</div>' : "";
+        }
+        if ((s.evidencia_exigida || []).includes(it.resposta) && !temEvid(it))
+            return '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Cópia obrigatória</div>';
+        if ((s.evidencia_limita || []).includes(it.resposta) && !temEvid(it))
+            return '<div class="hf-evid-info"><i class="fas fa-circle-info"></i> Sem evidência: vale Atende Parcial</div>';
+        if (s.justificar_na && it.resposta === "Não Aplicável" && !(it.comentario || "").trim())
+            return '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Justifique no comentário</div>';
+        return "";
+    }
+
+    function blocoRev04(ed) {
+        const dis = ed ? "" : "disabled";
+        const resp = (atual.responsaveis || []).map((r) => `<tr><td style="font-weight:700; white-space:nowrap;">${esc(r.setor)}</td>` +
+            ["nome", "cargo", "telefone", "email"].map((c) => `<td><input data-resp-setor="${esc(r.setor)}" data-resp-campo="${c}" value="${esc(r[c] || "")}" ${dis}></td>`).join("") + `</tr>`).join("");
+        const iso = atual.iso9001_certificado;
+        return `<div class="hf-secao"><div class="hf-secao-head"><span class="hf-secao-titulo">Responsáveis do Fornecedor</span></div>
+                <div class="hf-secao-body" style="padding:6px 8px; overflow-x:auto;"><table class="hf-resp-tab">
+                <thead><tr><th>Setor/Processo</th><th>Nome</th><th>Cargo</th><th>Telefone</th><th>E-mail</th></tr></thead><tbody>${resp}</tbody></table></div></div>
+            <div class="hf-secao"><div class="hf-secao-head"><span class="hf-secao-titulo">Sistema de Gestão da Qualidade Certificado ISO 9001</span></div>
+                <div class="hf-secao-body" style="padding:10px 14px;"><div class="hf-form-grid" style="margin-bottom:6px;">
+                    <div class="hf-field"><label>Possui ISO 9001 vigente?</label>
+                        <select data-iso="certificado" ${dis}><option value="">Selecione…</option>
+                        <option value="sim" ${iso === true ? "selected" : ""}>Sim — anexar o certificado e não responder o questionário</option>
+                        <option value="nao" ${iso === false ? "selected" : ""}>Não — responder o questionário</option></select></div>
+                    ${iso ? `<div class="hf-field"><label>Validade do certificado</label><input type="date" data-iso="validade" value="${esc(atual.iso9001_validade || "")}" ${dis}></div>` : ""}
+                </div>
+                ${iso ? `<div class="hf-item-texto"><b>Certificado ISO 9001</b>${evidHtml(atual.formulario.secao_iso, 1, atual.iso9001_evidencias, ed)}
+                    ${!(atual.iso9001_evidencias || []).length ? '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Sem o certificado anexado o questionário precisa ser respondido</div>' : ""}</div>` : ""}
+                </div></div>`;
+    }
+
+    function blocoUsoColumbia(ed) {
+        const dis = ed ? "" : "disabled";
+        const sn = (campo) => `<select data-campo="${campo}" ${dis}><option value="">—</option>${["Sim", "Não"].map((v) => `<option ${atual[campo] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+        return `<div class="hf-secao"><div class="hf-secao-head"><span class="hf-secao-titulo">Para uso exclusivo da Columbia</span></div>
+            <div class="hf-secao-body" style="padding:10px 14px;"><div class="hf-form-grid" style="margin-bottom:0;">
+                <div class="hf-field"><label>É necessária aprovação por amostra?</label>${sn("amostra_necessaria")}</div>
+                <div class="hf-field"><label>Observação</label><input data-campo="amostra_obs" value="${esc(atual.amostra_obs || "")}" ${dis}></div>
+                <div class="hf-field"><label>É necessária visita técnica?</label>${sn("visita_necessaria")}</div>
+                <div class="hf-field"><label>Observação</label><input data-campo="visita_obs" value="${esc(atual.visita_obs || "")}" ${dis}></div>
+                <div class="hf-field wide"><label>Resultado da visita técnica</label><textarea data-campo="resultado_auditoria" rows="2" ${dis}>${esc(atual.resultado_auditoria || "")}</textarea></div>
+            </div></div></div>`;
+    }
+
     function desenhar(titulo) {
         const ed = atual.status === "Rascunho";
         $("hf-modal-titulo").textContent = titulo;
@@ -265,9 +341,12 @@
             ? `#${atual.id} · ${atual.status} · criado por ${atual.criado_por || "—"} em ${atual.criado_em || "—"}`
             : "Preencha os dados e responda todos os itens para enviar à aprovação.";
 
-        const faltando = (atual.secoes || []).reduce((n, s) => n + s.itens.filter((i) => !i.resposta).length, 0);
+        const faltando = (atual.secoes || []).filter((s) => !secaoDispensada(s)).reduce((n, s) => n + s.itens.filter((i) => !i.resposta).length, 0);
         $("hf-avisos").innerHTML = (ed && faltando)
             ? `<div class="hf-aviso"><i class="fas fa-circle-info"></i> Faltam <b>${faltando}</b> item(ns) sem resposta — o envio para aprovação só é liberado com o formulário completo.</div>` : "";
+        if (ed && !atual.id && rev04()) {
+            $("hf-avisos").innerHTML += '<div class="hf-aviso"><i class="fas fa-paperclip"></i> Salve o rascunho para poder anexar as evidências (cópias dos documentos, certificado ISO 9001).</div>';
+        }
         const cv = atual.convite;
         if (atual.status === "Com fornecedor" && cv) {
             $("hf-avisos").innerHTML += cv.situacao === "expirado"
@@ -291,24 +370,31 @@
             <div class="hf-field ${cls || ""}"><label>${rot}</label>
                 <input data-campo="${k}" value="${esc(atual[k] || "")}" ${ed ? "" : "disabled"}></div>`).join("") + `
             <div class="hf-field"><label>Validade (meses)</label><input type="number" min="1" max="120" data-campo="validade_meses" value="${atual.validade_meses || 12}" ${ed ? "" : "disabled"}></div>
-            <div class="hf-field wide"><label>Descrição do Produto/Serviço</label><textarea data-campo="descricao_produto_servico" rows="2" ${ed ? "" : "disabled"}>${esc(atual.descricao_produto_servico || "")}</textarea></div>
-            <div class="hf-field wide"><label>Resultado da Auditoria</label><textarea data-campo="resultado_auditoria" rows="2" ${ed ? "" : "disabled"}>${esc(atual.resultado_auditoria || "")}</textarea></div>
+            <div class="hf-field wide"><label>${rev04() ? "Seguimento / Descrição do Produto/Serviço" : "Descrição do Produto/Serviço"}</label><textarea data-campo="descricao_produto_servico" rows="2" ${ed ? "" : "disabled"}>${esc(atual.descricao_produto_servico || "")}</textarea></div>
+            ${rev04() ? "" : `<div class="hf-field wide"><label>Resultado da Auditoria</label><textarea data-campo="resultado_auditoria" rows="2" ${ed ? "" : "disabled"}>${esc(atual.resultado_auditoria || "")}</textarea></div>`}
         </div>`;
+
+        if (rev04()) html += blocoRev04(ed);
 
         (atual.secoes || []).forEach((s) => {
             const resp = s.itens.filter((i) => i.resposta).length;
-            html += `<div class="hf-secao">
-                <div class="hf-secao-head">
+            const cab = `<div class="hf-secao-head">
                     <span class="hf-secao-titulo">${esc(s.titulo)}</span>
-                    <span class="hf-secao-peso">peso ${(s.peso * 100).toFixed(0)}%</span>
+                    ${s.peso != null ? `<span class="hf-secao-peso">peso ${(s.peso * 100).toFixed(0)}%</span>` : ""}
                     <span class="hf-secao-prog">${resp}/${s.itens.length} respondidos</span>
-                </div>
+                </div>`;
+            if (secaoDispensada(s)) {
+                html += `<div class="hf-secao">${cab}<div class="hf-dispensado"><i class="fas fa-certificate"></i> Dispensado: ISO 9001 vigente com certificado anexado — a nota sai só dos documentos.</div></div>`;
+                return;
+            }
+            html += `<div class="hf-secao">${cab}
                 <div class="hf-secao-body">` + s.itens.map((it) => `
                     <div class="hf-item ${it.resposta ? "" : "sem-resposta"}">
                         <div class="hf-item-num">${it.item}</div>
-                        <div class="hf-item-texto">${esc(it.texto)}${(it.evidencias || []).length ? `
-                            <div class="hf-evid">${it.evidencias.map((ev) => `<a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>`).join("")}</div>`
-                            : (cv && ["Sim", "Parcial", "Conforme"].includes(it.resposta) ? '<div class="hf-evid-falta"><i class="fas fa-triangle-exclamation"></i> Sem evidência</div>' : "")}</div>
+                        <div class="hf-item-texto">${esc(it.texto)}${rev04()
+                            ? evidHtml(s.chave, it.item, it.evidencias, ed)
+                            : ((it.evidencias || []).length ? `
+                            <div class="hf-evid">${it.evidencias.map((ev) => `<a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>`).join("")}</div>` : "")}${avisoItem(s, it, cv)}</div>
                         <select class="hf-resp ${it.resposta ? "sel " + (SLUG_OPT[it.resposta] || "") : ""}"
                             data-resp="${esc(s.chave)}|${it.item}" ${ed ? "" : "disabled"}>
                             <option value="">Selecione…</option>${s.escala.map((op) => `
@@ -318,8 +404,9 @@
                     </div>`).join("") + `</div></div>`;
         });
 
+        if (rev04()) html += blocoUsoColumbia(ed);
         html += `<div class="hf-form-grid">
-            <div class="hf-field wide"><label>Obs. Conformidade Legal</label><textarea data-campo="obs_conformidade_legal" rows="2" ${ed ? "" : "disabled"}>${esc(atual.obs_conformidade_legal || "")}</textarea></div>
+            ${rev04() ? "" : `<div class="hf-field wide"><label>Obs. Conformidade Legal</label><textarea data-campo="obs_conformidade_legal" rows="2" ${ed ? "" : "disabled"}>${esc(atual.obs_conformidade_legal || "")}</textarea></div>`}
             <div class="hf-field wide"><label>Comentário final</label><textarea data-campo="comentario" rows="2" ${ed ? "" : "disabled"}>${esc(atual.comentario || "")}</textarea></div>
         </div>`;
 
@@ -344,6 +431,22 @@
     }
 
     function notaLocal() {
+        if (rev04()) {
+            // Pontos obtidos / possiveis; N/A fora da conta; no questionario
+            // "Atende" sem anexo vale Parcial (mesma regra do servidor).
+            let obtido = 0, possivel = 0;
+            (atual.secoes || []).forEach((s) => {
+                if (secaoDispensada(s)) return;
+                s.itens.forEach((i) => {
+                    let r = i.resposta;
+                    if ((s.evidencia_limita || []).includes(r) && !temEvid(i)) r = "Atende Parcial";
+                    if (r === "Atende") { obtido += 1; possivel += 1; }
+                    else if (r === "Atende Parcial") { obtido += 0.5; possivel += 1; }
+                    else if (r === "Não Atende") { possivel += 1; }
+                });
+            });
+            return possivel ? obtido / possivel : 0;
+        }
         let nota = 0;
         (atual.secoes || []).forEach((s) => {
             const fator = { "Sim": 1, "Conforme": 1, "Não Aplicável": 1, "Nao Aplicavel": 1, "Parcial": .5 };
@@ -355,13 +458,14 @@
 
     function desenharNota() {
         const n = notaLocal();
-        const classe = atual.status === "Com fornecedor" ? "Em análise"
-            : n >= 0.75001 ? "Aprovado" : n >= 0.55001 ? "Aprovado com ressalvas" : "Reprovado";
+        const f = atual.formulario || {};
+        const faixa = (f.faixas || []).find((x) => x.minimo == null || (x.estrito ? n > x.minimo : n >= x.minimo)) || {};
+        const classe = atual.status === "Com fornecedor" ? "Em análise" : (faixa.classificacao || "—");
         $("hf-nota-box").innerHTML = `
             <div><div class="hf-nota-label">Nota</div><div class="hf-nota-valor">${pct(n)}</div></div>
-            <span class="hf-classe ${SLUG_CLASSE[classe]}">${classe}</span>
+            <span class="hf-classe ${SLUG_CLASSE[classe] || ""}">${esc(classe)}</span>
             <div style="font-size:11.5px; color:var(--eui-muted); margin-left:auto;">
-                ≥ 75% Aprovado · ≥ 55% Com ressalvas · abaixo disso Reprovado
+                ${esc(f.texto_faixas || "")}${f.codigo ? ` · ${esc(f.codigo)}${f.revisao ? " rev. " + esc(f.revisao) : ""}` : ""}
             </div>`;
     }
 
@@ -399,7 +503,32 @@
             respostas.push({ secao: s.chave, item: i.item, resposta: i.resposta || "", comentario: ta ? ta.value : "" });
         }));
         dados.respostas = respostas;
+        if (rev04()) {
+            dados.responsaveis = (atual.responsaveis || []).map((r) => {
+                const out = { setor: r.setor };
+                ["nome", "cargo", "telefone", "email"].forEach((c) => {
+                    const el = corpo.querySelector(`[data-resp-setor="${CSS.escape(r.setor)}"][data-resp-campo="${c}"]`);
+                    out[c] = el ? el.value : (r[c] || "");
+                });
+                return out;
+            });
+            const iso = corpo.querySelector('[data-iso="certificado"]');
+            if (iso) dados.iso9001_certificado = iso.value === "sim" ? true : iso.value === "nao" ? false : null;
+            const val = corpo.querySelector('[data-iso="validade"]');
+            if (val) dados.iso9001_validade = val.value;
+        }
         return dados;
+    }
+
+    // Guarda na memoria o que foi digitado antes de redesenhar a janela.
+    function guardarDigitado() {
+        const d = coletar();
+        Object.keys(d).forEach((k) => { if (k !== "respostas") atual[k] = d[k]; });
+        (d.respostas || []).forEach((r) => {
+            const s = atual.secoes.find((x) => x.chave === r.secao);
+            const it = s && s.itens.find((x) => x.item === r.item);
+            if (it) it.comentario = r.comentario;
+        });
     }
 
     // CNPJ -> dados cadastrais (mesma consulta da Atualizacao Cadastral).
@@ -449,25 +578,56 @@
             const s = atual.secoes.find((x) => x.chave === chave);
             const it = s && s.itens.find((x) => String(x.item) === item);
             if (!it) return;
-            // Guarda comentarios digitados antes de redesenhar.
-            $("hf-corpo").querySelectorAll("[data-coment]").forEach((ta) => {
-                const [ck, ci] = ta.dataset.coment.split("|");
-                const cs = atual.secoes.find((x) => x.chave === ck);
-                const cit = cs && cs.itens.find((x) => String(x.item) === ci);
-                if (cit) cit.comentario = ta.value;
-            });
-            $("hf-corpo").querySelectorAll("[data-campo]").forEach((el) => { atual[el.dataset.campo] = el.value; });
+            // Guarda o que foi digitado antes de redesenhar.
+            guardarDigitado();
             it.resposta = sel.value || null;
             desenhar($("hf-modal-titulo").textContent);
             return;
         }
+        if (e.target.matches('[data-iso="certificado"]')) { guardarDigitado(); desenhar($("hf-modal-titulo").textContent); return; }
+        const up = e.target.closest("[data-up-evid]");
+        if (up) { anexarEvidencia(up); return; }
         if (e.target.matches('[data-campo="cnpj"]')) buscarCnpj(false);
     });
+
+    // Evidencia anexada pelo comprador: salva o que foi digitado antes, porque
+    // a janela e' redesenhada com o que o servidor devolve.
+    async function anexarEvidencia(input) {
+        const arquivo = input.files && input.files[0];
+        if (!arquivo || !atual.id) return;
+        const [secao, item] = input.dataset.upEvid.split("|");
+        try {
+            await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(coletar()) });
+            const fd = new FormData();
+            fd.append("secao", secao); fd.append("item", item); fd.append("arquivo", arquivo);
+            const resp = await fetch(`/api/compras/homologacao/${atual.id}/evidencias`, { method: "POST", body: fd });
+            const d = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(d.error || ("Erro " + resp.status));
+            atual = d.homologacao;
+            toast(d.message, "success");
+            desenhar(atual.razao_social || "Homologação");
+            carregar();
+        } catch (err) { toast(err.message, "error"); input.value = ""; }
+    }
+
+    async function removerEvidencia(id) {
+        if (!confirm("Remover esta evidência?")) return;
+        try {
+            await api(`/api/compras/homologacao/${atual.id}`, { method: "PUT", body: JSON.stringify(coletar()) });
+            const d = await api(`/api/compras/homologacao/evidencias/${id}`, { method: "DELETE" });
+            atual = d.homologacao;
+            toast(d.message, "success");
+            desenhar(atual.razao_social || "Homologação");
+            carregar();
+        } catch (err) { toast(err.message, "error"); }
+    }
 
     $("hf-corpo").addEventListener("click", (e) => {
         if (e.target.closest("#hf-btn-cnpj")) { buscarCnpj(true); return; }
         const del = e.target.closest("[data-del-foto]");
         if (del) removerFoto(del.dataset.delFoto);
+        const delEv = e.target.closest("[data-del-evid]");
+        if (delEv) removerEvidencia(delEv.dataset.delEvid);
     });
 
     $("hf-acoes").addEventListener("click", async (e) => {

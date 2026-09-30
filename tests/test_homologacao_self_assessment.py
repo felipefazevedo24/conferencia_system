@@ -5,9 +5,18 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from unittest.mock import patch
 
+import pytest
+
 from tests.test_app import build_test_app, login_admin
 
 SMTP = "conferencia_app.routes.compras_homologacao_routes.enviar_mensagem_smtp"
+
+
+@pytest.fixture(autouse=True)
+def _formulario_antigo(monkeypatch):
+    """Estes testes cobrem o F-COM-001-01, que segue valendo pras homologacoes
+    criadas antes da rev. 04 (a rev. 04 tem testes proprios)."""
+    monkeypatch.setattr("conferencia_app.services.compras_homologacao_service.FORMULARIO_VIGENTE", "F-COM-001-01")
 
 
 def _criar_homologacao(client, **extra):

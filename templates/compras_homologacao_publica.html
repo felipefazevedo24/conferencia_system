@@ -69,6 +69,12 @@
     .evid-add { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #d9e9ff; border: 1px dashed rgba(154,187,224,.55); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
     .evid-add input { display: none; }
     .evid-falta { font-size: 12px; font-weight: 800; color: #fbbf24; }
+    .evid-info { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .resp-tab { width: 100%; border-collapse: collapse; }
+    .resp-tab th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 4px 6px; }
+    .resp-tab td { padding: 4px 4px; }
+    .resp-tab td:first-child { font-weight: 700; white-space: nowrap; font-size: 13px; }
+    .dispensado { font-size: 14px; color: #6ee7b7; }
     .item.pendente .item-num { color: #fbbf24; }
 
     .barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(10,12,17,.96); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
@@ -128,7 +134,8 @@
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     // Valores gravados sao sem acento (ver compras_homologacao_form); aqui so' o rotulo.
     const ROTULO = { 'Nao': 'Não', 'Nao Aplicavel': 'Não Aplicável', 'Nao Conforme': 'Não Conforme' };
-    const CLASSE = { 'Sim': 'ok', 'Conforme': 'ok', 'Parcial': 'meio', 'Nao': 'neg', 'Nao Conforme': 'neg', 'Nao Aplicavel': 'na' };
+    const CLASSE = { 'Sim': 'ok', 'Conforme': 'ok', 'Parcial': 'meio', 'Nao': 'neg', 'Nao Conforme': 'neg', 'Nao Aplicavel': 'na',
+      'Atende': 'ok', 'Atende Parcial': 'meio', 'Não Atende': 'neg', 'Não Aplicável': 'na' };
     const CAMPOS_CONTATO = [
       ['contato_principal', 'Contato principal'], ['telefone', 'Telefone'],
       ['email', 'E-mail'], ['website', 'Website'],
@@ -158,8 +165,53 @@
       return `<div class="empty-state${classe ? ' ' + classe : ''}"><i class="fas ${icone}"></i><h3>${esc(titulo)}</h3><p>${esc(texto)}</p></div>`;
     }
 
+    const rev04 = () => (dados.formulario || {}).regra === 'pontos';
+    const secaoDe = (it) => dados.secoes.find((s) => s.itens.includes(it));
     function precisaEvidencia(it) {
-      return dados.exigem_evidencia.includes(it.resposta) && !(it.evidencias || []).length;
+      const s = secaoDe(it);
+      const exigidas = s && s.evidencia_exigida ? s.evidencia_exigida : dados.exigem_evidencia;
+      return exigidas.includes(it.resposta) && !(it.evidencias || []).length;
+    }
+    function limitaSemEvidencia(it) {
+      const s = secaoDe(it);
+      return !!(s && (s.evidencia_limita || []).includes(it.resposta) && !(it.evidencias || []).length);
+    }
+    // ISO 9001 declarado + certificado anexado dispensa o questionario.
+    const isoValido = () => rev04() && dados.iso9001_certificado === true && (dados.iso9001_evidencias || []).length > 0;
+    const dispensada = (s) => s.pula_com_iso && isoValido();
+    const secoesAtivas = () => dados.secoes.filter((s) => !dispensada(s));
+
+    function evidHtml(chave, evids, falta, info) {
+      return `<div class="evid">
+        ${(evids || []).map((ev) => `<span class="evid-chip"><a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a><button type="button" data-del-evid="${ev.id}" title="Remover" aria-label="Remover evidência"><i class="fas fa-xmark"></i></button></span>`).join('')}
+        <label class="evid-add"><i class="fas fa-upload"></i> Anexar evidência<input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" data-upload="${esc(chave)}"></label>
+        ${falta ? '<span class="evid-falta"><i class="fas fa-triangle-exclamation"></i> Evidência obrigatória</span>' : ''}
+        ${info ? '<span class="evid-info"><i class="fas fa-circle-info"></i> Sem evidência, vale no máximo Atende Parcial</span>' : ''}
+      </div>`;
+    }
+
+    function blocosRev04() {
+      const resp = (dados.responsaveis || []).map((r) => `<tr><td>${esc(r.setor)}</td>` +
+        ['nome', 'cargo', 'telefone', 'email'].map((c) => `<td><input data-resp-setor="${esc(r.setor)}" data-resp-campo="${c}" value="${esc(r[c] || '')}" aria-label="${c} - ${esc(r.setor)}"></td>`).join('') + '</tr>').join('');
+      const iso = dados.iso9001_certificado;
+      return `
+        <div class="section">
+          <h2><i class="fas fa-users"></i> Responsáveis do fornecedor</h2>
+          <div style="overflow-x:auto;"><table class="resp-tab"><thead><tr><th>Setor/Processo</th><th>Nome</th><th>Cargo</th><th>Telefone</th><th>E-mail</th></tr></thead><tbody>${resp}</tbody></table></div>
+        </div>
+        <div class="section">
+          <h2><i class="fas fa-certificate"></i> Sistema de Gestão da Qualidade Certificado ISO 9001</h2>
+          <div class="grid2">
+            <div class="field"><label>Sua empresa possui ISO 9001 vigente?</label>
+              <select class="resp" data-iso="certificado">
+                <option value="">Selecione…</option>
+                <option value="sim" ${iso === true ? 'selected' : ''}>Sim — anexar o certificado (não precisa responder o questionário)</option>
+                <option value="nao" ${iso === false ? 'selected' : ''}>Não — responder o questionário</option>
+              </select></div>
+            ${iso ? `<div class="field"><label>Validade do certificado</label><input type="date" data-iso="validade" value="${esc(dados.iso9001_validade || '')}"></div>` : ''}
+          </div>
+          ${iso ? `<div class="item-texto"><b>Certificado ISO 9001</b></div>${evidHtml(`${dados.formulario.secao_iso}|1`, dados.iso9001_evidencias, !(dados.iso9001_evidencias || []).length, false)}` : ''}
+        </div>`;
     }
 
     function desenhar() {
@@ -180,10 +232,13 @@
 
       const ro = (k, rot) => `<div class="field"><label>${rot}</label><input readonly value="${esc(c[k] || '')}"></div>`;
       const ct = dados.contato || {};
+      const comoPreencher = rev04()
+        ? `<p>Nos <b>documentos</b> marcados como <b>Atende</b> é <b>obrigatório anexar a cópia</b>; os marcados como <b>Não Aplicável</b> precisam de justificativa no comentário. Nas <b>questões do sistema de qualidade</b>, anexe as evidências: sem elas a resposta vale no máximo <b>Atende Parcial</b>. Se a empresa tem <b>ISO 9001</b> vigente, anexe o certificado e não precisa responder o questionário. Arquivos PDF, JPG ou PNG, até ${dados.max_evidencia_mb} MB cada.</p>`
+        : `<p>Responda cada item do questionário. Nos itens respondidos como <b>Sim</b>, <b>Parcial</b> ou <b>Conforme</b> é <b>obrigatório anexar a evidência</b> (PDF, JPG ou PNG, até ${dados.max_evidencia_mb} MB por arquivo).</p>`;
       let html = `
         <div class="section intro">
           <h2><i class="fas fa-circle-info"></i> Como preencher</h2>
-          <p>Responda cada item do questionário. Nos itens respondidos como <b>Sim</b>, <b>Parcial</b> ou <b>Conforme</b> é <b>obrigatório anexar a evidência</b> (PDF, JPG ou PNG, até ${dados.max_evidencia_mb} MB por arquivo).</p>
+          ${comoPreencher}
           <p>As respostas são salvas automaticamente. Você pode sair e voltar pelo mesmo link até ${esc(dados.expira_em)}. Ao terminar, clique em <b>Enviar respostas</b>.</p>
         </div>
         <div class="section">
@@ -199,8 +254,14 @@
           <div class="field"><label>Descrição do produto/serviço fornecido</label><textarea data-campo="descricao_produto_servico" rows="3">${esc(ct.descricao_produto_servico || '')}</textarea></div>
         </div>`;
 
+      if (rev04()) html += blocosRev04();
+
       dados.secoes.forEach((s) => {
         const resp = s.itens.filter((i) => i.resposta).length;
+        if (dispensada(s)) {
+          html += `<div class="section"><h2><i class="fas fa-list-check"></i> ${esc(s.titulo)}</h2><p class="dispensado"><i class="fas fa-circle-check"></i> Dispensado: ISO 9001 vigente com certificado anexado.</p></div>`;
+          return;
+        }
         html += `<div class="section"><h2><i class="fas fa-list-check"></i> ${esc(s.titulo)}<span class="prog">${resp}/${s.itens.length} respondidos</span></h2>` +
           s.itens.map((it) => {
             const chave = `${s.chave}|${it.item}`;
@@ -214,11 +275,7 @@
               </select>
               <div class="item-extra">
                 <textarea data-coment="${esc(chave)}" rows="1" placeholder="Comentário (opcional)">${esc(it.comentario || '')}</textarea>
-                <div class="evid">
-                  ${(it.evidencias || []).map((ev) => `<span class="evid-chip"><a href="${esc(ev.url)}" target="_blank" rel="noopener" title="${esc(ev.nome_arquivo)}"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a><button type="button" data-del-evid="${ev.id}" title="Remover" aria-label="Remover evidência"><i class="fas fa-xmark"></i></button></span>`).join('')}
-                  <label class="evid-add"><i class="fas fa-upload"></i> Anexar evidência<input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" data-upload="${esc(chave)}"></label>
-                  ${falta ? '<span class="evid-falta"><i class="fas fa-triangle-exclamation"></i> Evidência obrigatória</span>' : ''}
-                </div>
+                ${evidHtml(chave, it.evidencias, falta, limitaSemEvidencia(it))}
               </div>
             </div>`;
           }).join('') + `</div>`;
@@ -230,7 +287,7 @@
     }
 
     function atualizarBarra() {
-      const itens = dados.secoes.flatMap((s) => s.itens);
+      const itens = secoesAtivas().flatMap((s) => s.itens);
       const respondidos = itens.filter((i) => i.resposta).length;
       const semEvid = itens.filter(precisaEvidencia).length;
       $('barra-info').innerHTML = `${respondidos}/${itens.length} itens respondidos` +
@@ -242,6 +299,20 @@
       const corpo = $('conteudo');
       const payload = {};
       corpo.querySelectorAll('[data-campo]').forEach((el) => { payload[el.dataset.campo] = el.value; });
+      if (rev04()) {
+        payload.responsaveis = (dados.responsaveis || []).map((r) => {
+          const out = { setor: r.setor };
+          ['nome', 'cargo', 'telefone', 'email'].forEach((c) => {
+            const el = corpo.querySelector(`[data-resp-setor="${CSS.escape(r.setor)}"][data-resp-campo="${c}"]`);
+            out[c] = el ? el.value : (r[c] || '');
+          });
+          return out;
+        });
+        const iso = corpo.querySelector('[data-iso="certificado"]');
+        if (iso) payload.iso9001_certificado = iso.value === 'sim' ? true : iso.value === 'nao' ? false : null;
+        const val = corpo.querySelector('[data-iso="validade"]');
+        if (val) payload.iso9001_validade = val.value;
+      }
       payload.respostas = [];
       dados.secoes.forEach((s) => s.itens.forEach((it) => {
         const chave = `${s.chave}|${it.item}`;
@@ -285,6 +356,10 @@
         const aviso = item.querySelector('.evid-falta');
         if (falta && !aviso) item.querySelector('.evid').insertAdjacentHTML('beforeend', '<span class="evid-falta"><i class="fas fa-triangle-exclamation"></i> Evidência obrigatória</span>');
         if (!falta && aviso) aviso.remove();
+        const info = item.querySelector('.evid-info');
+        const limita = it && limitaSemEvidencia(it);
+        if (limita && !info) item.querySelector('.evid').insertAdjacentHTML('beforeend', '<span class="evid-info"><i class="fas fa-circle-info"></i> Sem evidência, vale no máximo Atende Parcial</span>');
+        if (!limita && info) info.remove();
         const secao = item.closest('.section');
         const s = dados.secoes.find((x) => x.chave === sel.dataset.resp.split('|')[0]);
         secao.querySelector('.prog').textContent = `${s.itens.filter((i) => i.resposta).length}/${s.itens.length} respondidos`;
@@ -294,7 +369,11 @@
       }
       const up = e.target.closest('[data-upload]');
       if (up) { await enviarArquivos(up); return; }
-      if (e.target.matches('[data-campo], [data-coment]')) agendarAutosave();
+      if (e.target.matches('[data-iso="certificado"]')) {
+        try { dados = await salvar(true); desenhar(); } catch (err) { toast(err.message, 'error'); }
+        return;
+      }
+      if (e.target.matches('[data-campo], [data-coment], [data-resp-setor], [data-iso]')) agendarAutosave();
     });
 
     async function enviarArquivos(input) {

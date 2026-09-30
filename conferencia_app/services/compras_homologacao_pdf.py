@@ -1,4 +1,5 @@
-"""Gera o F-COM-001-01 preenchido em PDF (para arquivo e auditoria).
+"""Gera a homologacao preenchida em PDF (para arquivo e auditoria), no
+formulario em que ela foi feita: F-COM-001-01 (antigas) ou F 066 rev. 04.
 
 Reproduz o formulario que Compras usava no Excel: cabecalho com codigo/
 revisao, dados do fornecedor, escopo, as quatro secoes pontuadas com as
@@ -18,6 +19,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from . import compras_homologacao_form as form
+from . import compras_homologacao_form_rev04 as form_r04
 from . import compras_homologacao_service as svc
 
 _CINZA = colors.HexColor("#f1f5f9")
@@ -31,6 +33,9 @@ _COR_CLASSIFICACAO = {
     form.CLASSIFICACAO_APROVADO: _VERDE,
     form.CLASSIFICACAO_RESSALVAS: _AMBAR,
     form.CLASSIFICACAO_REPROVADO: _VERMELHO,
+    form_r04.CLASSIFICACAO_QUALIFICADO: _VERDE,
+    form_r04.CLASSIFICACAO_PLANO_ACAO: _AMBAR,
+    form_r04.CLASSIFICACAO_DESQUALIFICADO: _VERMELHO,
 }
 
 
@@ -74,7 +79,18 @@ def _tabela_campos(pares, estilos, larguras=(35 * mm, 60 * mm, 35 * mm, 55 * mm)
     return tabela
 
 
-def _tabela_secao(secao, respostas, detalhe, estilos):
+def _resposta_pdf(secao, registro, com_evidencia) -> str:
+    """Resposta como gravada; no rev. 04 avisa quando o "Atende" sem anexo
+    valeu como Parcial na nota."""
+    resposta = (registro.resposta if registro else None) or "—"
+    if registro and secao.get("evidencia") and registro.resposta:
+        efetiva = form_r04.resposta_efetiva(secao, registro.resposta, (secao["chave"], registro.item) in com_evidencia)
+        if efetiva != registro.resposta:
+            resposta += f" <font size=6.5 color='#b45309'>(vale {efetiva}: sem evidência)</font>"
+    return resposta
+
+
+def _tabela_secao(secao, respostas, detalhe, estilos, com_evidencia=frozenset()):
     cabecalho = [
         _p("<b>#</b>", estilos["celula"]),
         _p("<b>Item</b>", estilos["celula"]),
@@ -87,7 +103,7 @@ def _tabela_secao(secao, respostas, detalhe, estilos):
         linhas.append([
             _p(i, estilos["celula"]),
             _p(texto, estilos["celula"]),
-            _p((registro.resposta if registro else None) or "—", estilos["celula"]),
+            _p(_resposta_pdf(secao, registro, com_evidencia), estilos["celula"]),
             _p((registro.comentario if registro else None) or "", estilos["celula"]),
         ])
 
@@ -107,11 +123,62 @@ def _tabela_secao(secao, respostas, detalhe, estilos):
 def _cabecalho_secao(secao, detalhe, estilos):
     info = detalhe.get(secao["chave"], {})
     aproveitamento = info.get("aproveitamento", 0.0)
+    peso = f"peso {secao['peso']:.0%} · " if secao.get("peso") is not None else ""
     return _p(
         f"{secao['titulo']} "
-        f"<font size=8 color='#64748b'>(peso {secao['peso']:.0%} · aproveitamento {aproveitamento:.0%})</font>",
+        f"<font size=8 color='#64748b'>({peso}aproveitamento {aproveitamento:.0%})</font>",
         estilos["secao"],
     )
+
+
+def _blocos_rev04(homologacao, estilos) -> list:
+    """Quadros do F 066 rev. 04 que o formulario antigo nao tinha."""
+    por_setor = {r.setor: r for r in homologacao.responsaveis}
+    linhas = [[_p(f"<b>{t}</b>", estilos["celula"]) for t in ("Setor/Processo", "Nome", "Cargo", "Telefone", "E-mail")]]
+    for setor in form_r04.SETORES_RESPONSAVEIS:
+        r = por_setor.get(setor)
+        linhas.append([_p(setor, estilos["celula"])] + [
+            _p(getattr(r, campo, None) or "", estilos["celula"]) for campo in ("nome", "cargo", "telefone", "email")
+        ])
+    responsaveis = Table(linhas, colWidths=[35 * mm, 45 * mm, 30 * mm, 30 * mm, 45 * mm])
+    responsaveis.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.4, _BORDA),
+        ("BACKGROUND", (0, 0), (-1, 0), _CINZA),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    iso = homologacao.iso9001_certificado
+    validade = homologacao.iso9001_validade.strftime("%d/%m/%Y") if homologacao.iso9001_validade else "—"
+    return [
+        _p("Responsáveis do Fornecedor", estilos["secao"]),
+        responsaveis,
+        _p("Sistema de Gestão da Qualidade Certificado ISO 9001", estilos["secao"]),
+        _tabela_campos([
+            ("ISO 9001 vigente", "Sim" if iso else ("Não" if iso is False else "—")),
+            ("Validade do certificado", validade if iso else "—"),
+            ("Certificado anexado", "Sim" if svc.iso_valido(homologacao) else "Não"),
+            ("Questionário", "Dispensado (ISO 9001)" if svc.iso_valido(homologacao) else "Respondido"),
+        ], estilos),
+    ]
+
+
+def _blocos_uso_columbia(homologacao, estilos) -> list:
+    return [
+        _p("Para uso exclusivo da Columbia", estilos["secao"]),
+        _tabela_campos([
+            ("Aprovação por amostra?", homologacao.amostra_necessaria),
+            ("Obs.", homologacao.amostra_obs),
+            ("Visita técnica?", homologacao.visita_necessaria),
+            ("Obs.", homologacao.visita_obs),
+        ], estilos),
+        _p("<b>Resultado da visita técnica</b>", estilos["campo"]),
+        _p(homologacao.resultado_auditoria or "—", estilos["campo"]),
+        Spacer(1, 4),
+        _p(
+            "Metodologia: Pontos obtidos / Pontos possíveis × 100 (Atende = 1 · Atende Parcial = 0,5 · "
+            "Não Atende = 0; Não Aplicável fora da conta). " + form_r04.TEXTO_FAIXAS + ".",
+            estilos["rodape"],
+        ),
+    ]
 
 
 def _fotos(homologacao, estilos):
@@ -147,24 +214,26 @@ def _fotos(homologacao, estilos):
 def gerar_pdf_homologacao(homologacao) -> bytes:
     estilos = _estilos()
     respostas = {(r.secao, r.item): r for r in homologacao.respostas}
-    nota, classificacao, detalhe = svc.calcular_nota(
-        {chave: r.resposta for chave, r in respostas.items()}
-    )
+    nota, classificacao, detalhe = svc.calcular_nota_da(homologacao)
+    formulario = svc.formulario_da(homologacao)
+    rev04 = formulario is form_r04
+    com_evidencia = {(e.secao, e.item) for e in homologacao.evidencias}
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
         leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
-        title=f"{form.CODIGO_FORMULARIO} - {homologacao.razao_social or ''}",
+        title=f"{formulario.CODIGO_FORMULARIO} - {homologacao.razao_social or ''}",
         # sem compressao: mantem o texto legivel nos bytes crus (facilita teste)
         pageCompression=0,
     )
 
     fluxo = [
-        _p("Homologação de Fornecedores", estilos["titulo"]),
+        _p("Avaliação de Fornecedor" if rev04 else "Homologação de Fornecedores", estilos["titulo"]),
         _p(
-            f"{form.CODIGO_FORMULARIO} · Emissão 03/06/2024 · Revisão 01 · "
-            f"Registro #{homologacao.id}",
+            (f"{form_r04.CODIGO_FORMULARIO} · Revisão {form_r04.REVISAO} · " if rev04
+             else f"{form.CODIGO_FORMULARIO} · Emissão 03/06/2024 · Revisão 01 · ")
+            + f"Registro #{homologacao.id}",
             estilos["sub"],
         ),
         Spacer(1, 8),
@@ -188,15 +257,20 @@ def gerar_pdf_homologacao(homologacao) -> bytes:
         ], estilos),
     ]
 
-    if homologacao.resultado_auditoria:
+    if rev04:
+        fluxo += _blocos_rev04(homologacao, estilos)
+    elif homologacao.resultado_auditoria:
         fluxo += [
             _p("3. Resultado da Auditoria", estilos["secao"]),
             _p(homologacao.resultado_auditoria, estilos["campo"]),
         ]
 
-    for secao in form.SECOES:
+    for secao in formulario.SECOES:
         fluxo.append(_cabecalho_secao(secao, detalhe, estilos))
-        fluxo.append(_tabela_secao(secao, respostas, detalhe, estilos))
+        if rev04 and secao["pula_com_iso"] and svc.iso_valido(homologacao):
+            fluxo.append(_p("Dispensado: fornecedor com ISO 9001 vigente (certificado anexado).", estilos["campo"]))
+            continue
+        fluxo.append(_tabela_secao(secao, respostas, detalhe, estilos, com_evidencia))
         if secao["chave"] == form.SECAO_LEGAL and homologacao.obs_conformidade_legal:
             fluxo.append(Spacer(1, 3))
             fluxo.append(_p(f"<i>Obs.: {homologacao.obs_conformidade_legal}</i>", estilos["rodape"]))
@@ -218,6 +292,8 @@ def gerar_pdf_homologacao(homologacao) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     fluxo += [Spacer(1, 10), resultado]
+    if rev04:
+        fluxo += _blocos_uso_columbia(homologacao, estilos)
 
     if homologacao.comentario:
         fluxo += [_p("9. Comentário", estilos["secao"]), _p(homologacao.comentario, estilos["campo"])]

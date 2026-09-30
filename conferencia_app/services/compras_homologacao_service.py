@@ -10,6 +10,11 @@ Workflow:
                                \\--devolver--> Rascunho
     (Homologado/Reprovado podem ser reabertos, voltando pra Rascunho.)
 
+Formularios: as homologacoes novas nascem no F 066 rev. 04
+(compras_homologacao_form_rev04.py); as anteriores continuam no
+F-COM-001-01 (compras_homologacao_form.py), com a nota do jeito que foram
+avaliadas. Ver formulario_da.
+
 Self assessment (opcional, a partir do Rascunho):
     Rascunho ---enviar_para_fornecedor--> Com fornecedor
     Com fornecedor ---fornecedor envia pelo link--> Rascunho (comprador revisa)
@@ -28,9 +33,11 @@ from ..models import (
     ComprasHomologacaoEvidencia,
     ComprasHomologacaoFornecedor as Homologacao,
     ComprasHomologacaoFoto,
+    ComprasHomologacaoResponsavel,
     ComprasHomologacaoResposta,
 )
 from . import compras_homologacao_form as form
+from . import compras_homologacao_form_rev04 as form_r04
 from ..tempo import agora_br
 
 # Quantos dias antes do vencimento a homologacao ja entra no alerta.
@@ -49,6 +56,9 @@ TIPOS_EVIDENCIA = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "imag
 # endereco vem do cartao CNPJ (so' leitura pra ele); auditoria, fotos e
 # comentario final sao internos.
 CAMPOS_FORNECEDOR = ("contato_principal", "telefone", "email", "website", "descricao_produto_servico")
+
+# Formulario das homologacoes criadas daqui pra frente.
+FORMULARIO_VIGENTE = form_r04.VERSAO
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -106,8 +116,52 @@ def _respostas_por_chave(homologacao: Homologacao) -> dict[tuple[str, int], str]
     return {(r.secao, r.item): r.resposta for r in homologacao.respostas}
 
 
+# ── Versao do formulario ───────────────────────────────────────────────
+def eh_rev04(homologacao: Homologacao) -> bool:
+    return (homologacao.formulario_versao or "") == form_r04.VERSAO
+
+
+def formulario_da(homologacao: Homologacao):
+    """Modulo do formulario em que a homologacao foi preenchida (NULL = o
+    antigo F-COM-001-01)."""
+    return form_r04 if eh_rev04(homologacao) else form
+
+
+def formulario_vigente():
+    return form_r04 if FORMULARIO_VIGENTE == form_r04.VERSAO else form
+
+
+def _com_evidencia(homologacao: Homologacao) -> set:
+    return {(e.secao, e.item) for e in homologacao.evidencias}
+
+
+def iso_valido(homologacao: Homologacao) -> bool:
+    """Rev. 04: ISO 9001 declarado E certificado anexado - so' assim o
+    questionario deixa de ser exigido."""
+    return (
+        eh_rev04(homologacao)
+        and bool(homologacao.iso9001_certificado)
+        and (form_r04.SECAO_ISO, 1) in _com_evidencia(homologacao)
+    )
+
+
+def itens_da(homologacao: Homologacao):
+    """(secao, item, texto) que precisam de resposta nesta homologacao."""
+    if eh_rev04(homologacao):
+        return form_r04.itens_do_formulario(iso_valido(homologacao))
+    return form.itens_do_formulario()
+
+
+def calcular_nota_da(homologacao: Homologacao) -> tuple[float, str, dict]:
+    if eh_rev04(homologacao):
+        return form_r04.calcular_nota(
+            _respostas_por_chave(homologacao), _com_evidencia(homologacao), iso_valido(homologacao),
+        )
+    return calcular_nota(_respostas_por_chave(homologacao))
+
+
 def recalcular(homologacao: Homologacao) -> Homologacao:
-    nota, classificacao, _ = calcular_nota(_respostas_por_chave(homologacao))
+    nota, classificacao, _ = calcular_nota_da(homologacao)
     homologacao.nota = nota
     homologacao.classificacao = classificacao
     return homologacao
@@ -119,18 +173,24 @@ _CAMPOS_CABECALHO = (
     "cidade_estado", "contato_principal", "telefone", "email", "website",
     "categoria_compra", "descricao_produto_servico", "resultado_auditoria",
     "obs_conformidade_legal", "comentario",
+    "amostra_obs", "visita_obs",
 )
+_SIM_NAO = ("Sim", "Não")
 
 
 def criar(dados: dict, usuario: str) -> Homologacao:
     razao = _txt(dados.get("razao_social"))
     if not razao:
         raise ValueError("Informe a razão social do fornecedor.")
-    homologacao = Homologacao(status=Homologacao.STATUS_RASCUNHO, criado_por=usuario)
+    homologacao = Homologacao(
+        status=Homologacao.STATUS_RASCUNHO, criado_por=usuario, formulario_versao=FORMULARIO_VIGENTE,
+    )
     _aplicar_cabecalho(homologacao, dados)
     db.session.add(homologacao)
     db.session.flush()
     salvar_respostas(homologacao, dados.get("respostas") or [], commit=False)
+    if "responsaveis" in dados:
+        salvar_responsaveis(homologacao, dados.get("responsaveis"))
     recalcular(homologacao)
     db.session.commit()
     return homologacao
@@ -146,6 +206,54 @@ def _aplicar_cabecalho(homologacao: Homologacao, dados: dict) -> None:
         except (TypeError, ValueError):
             meses = 12
         homologacao.validade_meses = max(1, min(meses, 120))
+    for campo in ("amostra_necessaria", "visita_necessaria"):
+        if campo in dados:
+            valor = _txt(dados.get(campo))
+            if valor and valor not in _SIM_NAO:
+                raise ValueError("Responda Sim ou Não em amostra / visita técnica.")
+            setattr(homologacao, campo, valor or None)
+    _aplicar_iso(homologacao, dados)
+
+
+def _data_iso(valor) -> date | None:
+    texto = _txt(valor)[:10]
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(texto, formato).date()
+        except ValueError:
+            continue
+    if texto:
+        raise ValueError("Data de validade do certificado ISO 9001 inválida.")
+    return None
+
+
+def _aplicar_iso(homologacao: Homologacao, dados: dict) -> None:
+    if "iso9001_certificado" in dados:
+        valor = dados.get("iso9001_certificado")
+        if isinstance(valor, str):
+            valor = {"sim": True, "true": True, "nao": False, "não": False, "false": False}.get(valor.strip().lower())
+        homologacao.iso9001_certificado = None if valor is None else bool(valor)
+    if "iso9001_validade" in dados:
+        homologacao.iso9001_validade = _data_iso(dados.get("iso9001_validade"))
+
+
+def salvar_responsaveis(homologacao: Homologacao, lista) -> None:
+    """Upsert por setor (Diretoria, Vendas, Financeiro, Qualidade)."""
+    existentes = {r.setor: r for r in homologacao.responsaveis}
+    for entrada in lista or []:
+        if not isinstance(entrada, dict):
+            continue
+        setor = _txt(entrada.get("setor"))
+        if setor not in form_r04.SETORES_RESPONSAVEIS:
+            continue
+        registro = existentes.get(setor)
+        if registro is None:
+            registro = ComprasHomologacaoResponsavel(setor=setor)
+            homologacao.responsaveis.append(registro)
+            existentes[setor] = registro
+        for campo, limite in (("nome", 120), ("cargo", 80), ("telefone", 40), ("email", 120)):
+            if campo in entrada:
+                setattr(registro, campo, _txt(entrada.get(campo))[:limite] or None)
 
 
 def atualizar(homologacao: Homologacao, dados: dict) -> Homologacao:
@@ -158,6 +266,8 @@ def atualizar(homologacao: Homologacao, dados: dict) -> Homologacao:
     _aplicar_cabecalho(homologacao, dados)
     if "respostas" in dados:
         salvar_respostas(homologacao, dados.get("respostas") or [], commit=False)
+    if "responsaveis" in dados:
+        salvar_responsaveis(homologacao, dados.get("responsaveis"))
     recalcular(homologacao)
     db.session.commit()
     return homologacao
@@ -165,13 +275,14 @@ def atualizar(homologacao: Homologacao, dados: dict) -> Homologacao:
 
 def salvar_respostas(homologacao: Homologacao, respostas: list, commit: bool = True) -> Homologacao:
     """Upsert das respostas por (secao, item). Só aceita secao/item que
-    existam no formulario vigente e resposta dentro da escala da secao."""
+    existam no formulario da homologacao e resposta dentro da escala da secao."""
+    formulario = formulario_da(homologacao)
     existentes = {(r.secao, r.item): r for r in homologacao.respostas}
     for entrada in respostas or []:
         if not isinstance(entrada, dict):
             continue
         secao_chave = _txt(entrada.get("secao"))
-        secao = form.secao_por_chave(secao_chave)
+        secao = formulario.secao_por_chave(secao_chave)
         if not secao:
             continue
         try:
@@ -215,10 +326,11 @@ def itens_faltando(homologacao: Homologacao) -> list[dict]:
     respondidas = {
         (r.secao, r.item) for r in homologacao.respostas if _txt(r.resposta)
     }
+    formulario = formulario_da(homologacao)
     faltando = []
-    for secao_chave, item, texto in form.itens_do_formulario():
+    for secao_chave, item, texto in itens_da(homologacao):
         if (secao_chave, item) not in respondidas:
-            secao = form.secao_por_chave(secao_chave)
+            secao = formulario.secao_por_chave(secao_chave)
             faltando.append({
                 "secao": secao_chave,
                 "secao_titulo": secao["titulo"] if secao else secao_chave,
@@ -231,12 +343,56 @@ def itens_faltando(homologacao: Homologacao) -> list[dict]:
 def validar_para_envio(homologacao: Homologacao) -> None:
     if not _txt(homologacao.razao_social):
         raise ValueError("Informe a razão social do fornecedor.")
+    _validar_iso_rev04(homologacao)
     faltando = itens_faltando(homologacao)
     if faltando:
         primeira = faltando[0]
         raise ValueError(
-            f"Responda todos os {form.total_itens()} itens antes de enviar para aprovação - "
+            f"Responda todos os {sum(1 for _ in itens_da(homologacao))} itens antes de enviar para aprovação - "
             f"faltam {len(faltando)} (ex.: {primeira['secao_titulo']}, item {primeira['item']})."
+        )
+    if eh_rev04(homologacao):
+        _validar_rev04(homologacao)
+
+
+def pendencias_justificativa(homologacao: Homologacao) -> list[dict]:
+    """Rev. 04: documento marcado Nao Aplicavel precisa de justificativa."""
+    if not eh_rev04(homologacao):
+        return []
+    pendentes = []
+    for r in homologacao.respostas:
+        secao = form_r04.secao_por_chave(r.secao)
+        if secao and secao["justificar_na"] and r.resposta == form_r04.RESPOSTA_NA and not _txt(r.comentario):
+            pendentes.append({"secao": r.secao, "secao_titulo": secao["titulo"], "item": r.item})
+    return sorted(pendentes, key=lambda p: p["item"])
+
+
+def _validar_iso_rev04(homologacao: Homologacao) -> None:
+    """Vem antes da checagem de itens em branco: quem declarou ISO precisa
+    saber que falta o certificado, nao que faltam as 15 questoes."""
+    if not eh_rev04(homologacao) or not homologacao.iso9001_certificado:
+        return
+    if (form_r04.SECAO_ISO, 1) not in _com_evidencia(homologacao):
+        raise ValueError("Anexe o certificado ISO 9001 - sem ele o questionário precisa ser respondido.")
+    if not homologacao.iso9001_validade:
+        raise ValueError("Informe a validade do certificado ISO 9001.")
+
+
+def _validar_rev04(homologacao: Homologacao) -> None:
+    """Regras do F 066 rev. 04 que valem pro comprador e pro fornecedor."""
+    _validar_iso_rev04(homologacao)
+    sem_evidencia = pendencias_evidencia(homologacao)
+    if sem_evidencia:
+        primeira = sem_evidencia[0]
+        raise ValueError(
+            f"Documento marcado como Atende precisa da cópia anexada - faltam {len(sem_evidencia)} "
+            f"(ex.: item {primeira['item']}: {primeira['texto']})."
+        )
+    sem_justificativa = pendencias_justificativa(homologacao)
+    if sem_justificativa:
+        raise ValueError(
+            f"Justifique os documentos marcados como Não Aplicável - faltam {len(sem_justificativa)} "
+            f"(ex.: item {sem_justificativa[0]['item']})."
         )
 
 
@@ -518,23 +674,37 @@ def salvar_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) -> H
             setattr(homologacao, campo, _txt(dados.get(campo)) or None)
     if "respostas" in dados:
         salvar_respostas(homologacao, dados.get("respostas") or [], commit=False)
+    if "responsaveis" in dados:
+        salvar_responsaveis(homologacao, dados.get("responsaveis"))
+    if eh_rev04(homologacao):
+        _aplicar_iso(homologacao, dados)
     recalcular(homologacao)
     db.session.commit()
     return homologacao
 
 
+def respostas_exigem_evidencia(homologacao: Homologacao, secao_chave: str) -> tuple:
+    """Respostas que so' valem com anexo naquela secao. Rev. 04: so' o
+    "Atende" dos documentos - no questionario o anexo so' limita a nota."""
+    if eh_rev04(homologacao):
+        secao = form_r04.secao_por_chave(secao_chave)
+        return (form_r04.RESPOSTA_ATENDE,) if secao and secao["evidencia"] == "obrigatoria" else ()
+    return form.RESPOSTAS_EXIGEM_EVIDENCIA
+
+
 def pendencias_evidencia(homologacao: Homologacao) -> list[dict]:
-    """Itens respondidos Sim/Parcial/Conforme sem nenhuma evidencia, na
-    ordem do formulario."""
+    """Itens cuja resposta exige evidencia e estao sem nenhuma, na ordem do
+    formulario."""
+    formulario = formulario_da(homologacao)
     respostas = {(r.secao, r.item): r.resposta for r in homologacao.respostas}
-    com_evidencia = {(e.secao, e.item) for e in homologacao.evidencias}
+    com_evidencia = _com_evidencia(homologacao)
     pendentes = []
-    for secao_chave, item, texto in form.itens_do_formulario():
-        if respostas.get((secao_chave, item)) in form.RESPOSTAS_EXIGEM_EVIDENCIA \
+    for secao_chave, item, texto in itens_da(homologacao):
+        if respostas.get((secao_chave, item)) in respostas_exigem_evidencia(homologacao, secao_chave) \
                 and (secao_chave, item) not in com_evidencia:
             pendentes.append({
                 "secao": secao_chave,
-                "secao_titulo": form.secao_por_chave(secao_chave)["titulo"],
+                "secao_titulo": formulario.secao_por_chave(secao_chave)["titulo"],
                 "item": item,
                 "texto": texto,
             })
@@ -545,6 +715,7 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
     """Envio final do fornecedor: tudo respondido + evidencia onde exigida.
     Volta pra Rascunho pro comprador revisar e mandar pra aprovacao."""
     homologacao = salvar_self_assessment(convite, dados)
+    _validar_iso_rev04(homologacao)
     faltando = itens_faltando(homologacao)
     if faltando:
         primeira = faltando[0]
@@ -552,6 +723,8 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
             f"Responda todos os itens antes de enviar - faltam {len(faltando)} "
             f"(ex.: {primeira['secao_titulo']}, item {primeira['item']})."
         )
+    if eh_rev04(homologacao):
+        _validar_rev04(homologacao)
     sem_evidencia = pendencias_evidencia(homologacao)
     if sem_evidencia:
         primeira = sem_evidencia[0]
@@ -567,12 +740,41 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
 
 def anexar_evidencia(convite: ComprasHomologacaoConvite, secao_chave: str, item, arquivo) -> ComprasHomologacaoEvidencia:
     homologacao = _exigir_convite_aberto(convite)
-    secao = form.secao_por_chave(_txt(secao_chave))
+    return _anexar_evidencia(homologacao, secao_chave, item, arquivo, f"Fornecedor ({convite.email})")
+
+
+def anexar_evidencia_interna(homologacao: Homologacao, secao_chave: str, item, arquivo, usuario: str) -> ComprasHomologacaoEvidencia:
+    """Comprador anexa a evidencia (ex.: documento recebido por e-mail) -
+    no rev. 04 os documentos so' valem como Atende com a copia anexada."""
+    if homologacao.status != Homologacao.STATUS_RASCUNHO:
+        raise ValueError("Só é possível anexar evidências enquanto a homologação está em rascunho.")
+    return _anexar_evidencia(homologacao, secao_chave, item, arquivo, usuario)
+
+
+def remover_evidencia_interna(evidencia: ComprasHomologacaoEvidencia) -> None:
+    homologacao = evidencia.homologacao
+    if homologacao.status != Homologacao.STATUS_RASCUNHO:
+        raise ValueError("Só é possível remover evidências enquanto a homologação está em rascunho.")
+    homologacao.evidencias.remove(evidencia)
+    recalcular(homologacao)
+    db.session.commit()
+
+
+def _item_valido(homologacao: Homologacao, secao_chave: str, item: int) -> str | None:
+    """Chave da secao se (secao, item) existe no formulario da homologacao."""
+    if eh_rev04(homologacao) and secao_chave == form_r04.SECAO_ISO:
+        return form_r04.SECAO_ISO if item == 1 else None
+    secao = formulario_da(homologacao).secao_por_chave(secao_chave)
+    return secao["chave"] if secao and 1 <= item <= len(secao["itens"]) else None
+
+
+def _anexar_evidencia(homologacao: Homologacao, secao_chave: str, item, arquivo, enviado_por: str) -> ComprasHomologacaoEvidencia:
     try:
         item = int(item)
     except (TypeError, ValueError):
         item = 0
-    if not secao or not (1 <= item <= len(secao["itens"])):
+    chave = _item_valido(homologacao, _txt(secao_chave), item)
+    if not chave:
         raise ValueError("Item do formulário inválido.")
     if not arquivo or not getattr(arquivo, "filename", ""):
         raise ValueError("Nenhum arquivo recebido.")
@@ -588,15 +790,17 @@ def anexar_evidencia(convite: ComprasHomologacaoConvite, secao_chave: str, item,
         raise ValueError("Arquivo muito grande (máximo 10 MB).")
 
     evidencia = ComprasHomologacaoEvidencia(
-        secao=secao["chave"],
+        secao=chave,
         item=item,
         nome_arquivo=nome[:260],
         content_type=content_type,
         tamanho_bytes=len(conteudo),
         dados=conteudo,
-        enviado_por=f"Fornecedor ({convite.email})"[:100],
+        enviado_por=_txt(enviado_por)[:100],
     )
     homologacao.evidencias.append(evidencia)
+    # No rev. 04 a evidencia mexe na nota (questionario / ISO).
+    recalcular(homologacao)
     db.session.commit()
     return evidencia
 
@@ -609,4 +813,5 @@ def evidencia_do_convite(convite: ComprasHomologacaoConvite, evidencia_id) -> Co
 def remover_evidencia(convite: ComprasHomologacaoConvite, evidencia: ComprasHomologacaoEvidencia) -> None:
     homologacao = _exigir_convite_aberto(convite)
     homologacao.evidencias.remove(evidencia)
+    recalcular(homologacao)
     db.session.commit()

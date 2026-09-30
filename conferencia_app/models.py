@@ -2313,6 +2313,21 @@ class ComprasHomologacaoFornecedor(db.Model):
     # 9. Comentario final
     comentario = db.Column(db.Text)
 
+    # Versao do formulario (ver compras_homologacao_service.formulario_da).
+    # NULL = F-COM-001-01, o modelo das homologacoes anteriores a rev. 04.
+    formulario_versao = db.Column(db.String(20))
+
+    # F 066 rev. 04: ISO 9001 vigente dispensa o questionario (com o
+    # certificado anexado como evidencia da secao "ISO 9001").
+    iso9001_certificado = db.Column(db.Boolean)
+    iso9001_validade = db.Column(db.Date)
+    # F 066 rev. 04 - "Para uso exclusivo da Columbia" (Sim/Nao + obs.).
+    # O resultado da visita tecnica usa resultado_auditoria.
+    amostra_necessaria = db.Column(db.String(3))
+    amostra_obs = db.Column(db.String(500))
+    visita_necessaria = db.Column(db.String(3))
+    visita_obs = db.Column(db.String(500))
+
     # Nota calculada (0 a 1) + classificacao pelas faixas do formulario.
     nota = db.Column(db.Float)
     classificacao = db.Column(db.String(40), index=True)
@@ -2351,6 +2366,12 @@ class ComprasHomologacaoFornecedor(db.Model):
         backref="homologacao",
         cascade="all, delete-orphan",
         order_by="ComprasHomologacaoEvidencia.id",
+    )
+    responsaveis = db.relationship(
+        "ComprasHomologacaoResponsavel",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoResponsavel.id",
     )
     convites = db.relationship(
         "ComprasHomologacaoConvite",
@@ -2419,6 +2440,24 @@ class ComprasHomologacaoConvite(db.Model):
     enviado_por = db.Column(db.String(100))
     respondido_em = db.Column(db.DateTime)
     cancelado_em = db.Column(db.DateTime)
+
+
+class ComprasHomologacaoResponsavel(db.Model):
+    """Responsaveis do fornecedor por setor (F 066 rev. 04: Diretoria,
+    Vendas, Financeiro, Qualidade) - preenchidos pelo comprador ou pelo
+    proprio fornecedor no link de autoavaliacao."""
+
+    __tablename__ = "compras_homologacao_responsavel"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    setor = db.Column(db.String(40), nullable=False)
+    nome = db.Column(db.String(120))
+    cargo = db.Column(db.String(80))
+    telefone = db.Column(db.String(40))
+    email = db.Column(db.String(120))
 
 
 class ComprasHomologacaoEvidencia(db.Model):

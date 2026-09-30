@@ -6330,10 +6330,13 @@ def test_homologacao_pontuacao_segue_os_pesos_do_formulario(tmp_path):
             assert classe == esperado, (nota_alvo, classe)
 
 
-def test_homologacao_workflow_rascunho_aprovacao_homologado(tmp_path):
+def test_homologacao_workflow_rascunho_aprovacao_homologado(tmp_path, monkeypatch):
     """Workflow completo: rascunho -> em aprovacao -> homologado, com a
     validade contada a partir da decisao. So' o rascunho e' editavel e o
     envio exige o formulario inteiro respondido."""
+    # Cobre o formulario antigo (F-COM-001-01), que segue valendo pras
+    # homologacoes criadas antes da rev. 04.
+    monkeypatch.setattr("conferencia_app.services.compras_homologacao_service.FORMULARIO_VIGENTE", "F-COM-001-01")
     import pytest
 
     from conferencia_app.models import ComprasHomologacaoFornecedor as Homologacao
@@ -6403,9 +6406,12 @@ def test_homologacao_workflow_rascunho_aprovacao_homologado(tmp_path):
         assert svc.situacao_validade(h)["situacao"] is None
 
 
-def test_homologacao_reprovacao_exige_motivo_e_validade_alerta_vencimento(tmp_path):
+def test_homologacao_reprovacao_exige_motivo_e_validade_alerta_vencimento(tmp_path, monkeypatch):
     """Reprovar exige motivo e nao gera validade. Homologacao perto do fim
     entra no alerta 'a vencer' e depois em 'vencido'."""
+    # Cobre o formulario antigo (F-COM-001-01), que segue valendo pras
+    # homologacoes criadas antes da rev. 04.
+    monkeypatch.setattr("conferencia_app.services.compras_homologacao_service.FORMULARIO_VIGENTE", "F-COM-001-01")
     import pytest
     from datetime import date, timedelta
 
@@ -6451,8 +6457,11 @@ def test_homologacao_reprovacao_exige_motivo_e_validade_alerta_vencimento(tmp_pa
         assert svc.listar(busca="VIGENTE") == [outro]
 
 
-def test_homologacao_api_http_e_pdf_do_formulario(tmp_path):
+def test_homologacao_api_http_e_pdf_do_formulario(tmp_path, monkeypatch):
     """Rotas HTTP do modulo + geracao do F-COM-001-01 preenchido em PDF."""
+    # Cobre o formulario antigo (F-COM-001-01), que segue valendo pras
+    # homologacoes criadas antes da rev. 04.
+    monkeypatch.setattr("conferencia_app.services.compras_homologacao_service.FORMULARIO_VIGENTE", "F-COM-001-01")
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)

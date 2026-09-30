@@ -16,6 +16,7 @@ from ..models import (
     ComprasHomologacaoFoto,
 )
 from ..services import compras_homologacao_form as form
+from ..services import compras_homologacao_form_rev04 as form_r04
 from ..services import compras_homologacao_pdf as pdf_svc
 from ..services import compras_homologacao_service as svc
 from ..services.smtp_service import enviar_mensagem_smtp
@@ -60,6 +61,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "decidido_por": homologacao.decidido_por,
         "justificativa_decisao": homologacao.justificativa_decisao,
         "qtd_fotos": len(homologacao.fotos),
+        "formulario_versao": homologacao.formulario_versao or "F-COM-001-01",
     }
     if not completo:
         return dados
@@ -76,11 +78,16 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "resultado_auditoria": homologacao.resultado_auditoria,
         "obs_conformidade_legal": homologacao.obs_conformidade_legal,
         "comentario": homologacao.comentario,
+        "amostra_necessaria": homologacao.amostra_necessaria,
+        "amostra_obs": homologacao.amostra_obs,
+        "visita_necessaria": homologacao.visita_necessaria,
+        "visita_obs": homologacao.visita_obs,
     })
 
-    respostas = {(r.secao, r.item): r for r in homologacao.respostas}
-    _, _, detalhe = svc.calcular_nota({c: r.resposta for c, r in respostas.items()})
+    _, _, detalhe = svc.calcular_nota_da(homologacao)
     dados["detalhe_secoes"] = detalhe
+    dados["formulario"] = _formulario_payload(svc.formulario_da(homologacao))
+    dados.update(_dados_rev04(homologacao, "/api/compras/homologacao/evidencias/{id}"))
     dados["secoes"] = _secoes_payload(homologacao, "/api/compras/homologacao/evidencias/{id}")
     dados["fotos"] = [
         {
@@ -96,6 +103,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     ]
     dados["itens_faltando"] = len(svc.itens_faltando(homologacao))
     dados["itens_sem_evidencia"] = len(svc.pendencias_evidencia(homologacao))
+    dados["itens_sem_justificativa"] = len(svc.pendencias_justificativa(homologacao))
     convite = svc.ultimo_convite(homologacao)
     dados["convite"] = {
         "email": convite.email,
@@ -108,25 +116,116 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     return dados
 
 
-def _secoes_payload(homologacao: Homologacao, url_evidencia: str) -> list[dict]:
-    """Secoes do formulario com resposta, comentario e evidencias de cada
-    item. `url_evidencia` muda entre a tela interna e o link do fornecedor."""
-    respostas = {(r.secao, r.item): r for r in homologacao.respostas}
+def _formulario_payload(formulario) -> dict:
+    """Regras do formulario que as telas precisam pra pre-visualizar a nota
+    e os avisos - a nota que vale e' a calculada no servidor."""
+    if formulario is form_r04:
+        return {
+            "versao": form_r04.VERSAO,
+            "codigo": form_r04.CODIGO_FORMULARIO,
+            "revisao": form_r04.REVISAO,
+            "titulo": form_r04.TITULO_FORMULARIO,
+            "regra": "pontos",
+            "faixas": [
+                {"minimo": form_r04.NOTA_MINIMA_QUALIFICADO, "estrito": True,
+                 "classificacao": form_r04.CLASSIFICACAO_QUALIFICADO, "slug": "aprovado"},
+                {"minimo": form_r04.NOTA_MINIMA_PLANO_ACAO, "estrito": True,
+                 "classificacao": form_r04.CLASSIFICACAO_PLANO_ACAO, "slug": "ressalvas"},
+                {"minimo": None, "estrito": False,
+                 "classificacao": form_r04.CLASSIFICACAO_DESQUALIFICADO, "slug": "reprovado"},
+            ],
+            "texto_faixas": form_r04.TEXTO_FAIXAS,
+            "setores_responsaveis": list(form_r04.SETORES_RESPONSAVEIS),
+            "secao_iso": form_r04.SECAO_ISO,
+        }
+    return {
+        "versao": "F-COM-001-01",
+        "codigo": form.CODIGO_FORMULARIO,
+        "revisao": "01",
+        "titulo": form.TITULO_FORMULARIO,
+        "regra": "pesos",
+        "faixas": [
+            {"minimo": form.NOTA_MINIMA_APROVADO, "estrito": False,
+             "classificacao": form.CLASSIFICACAO_APROVADO, "slug": "aprovado"},
+            {"minimo": form.NOTA_MINIMA_RESSALVAS, "estrito": False,
+             "classificacao": form.CLASSIFICACAO_RESSALVAS, "slug": "ressalvas"},
+            {"minimo": None, "estrito": False,
+             "classificacao": form.CLASSIFICACAO_REPROVADO, "slug": "reprovado"},
+        ],
+        "texto_faixas": "≥ 75% Aprovado · ≥ 55% Com ressalvas · abaixo disso Reprovado",
+        "setores_responsaveis": [],
+        "secao_iso": None,
+        "obs_conformidade_legal": form.OBS_CONFORMIDADE_LEGAL,
+    }
+
+
+def _evidencias_por_item(homologacao: Homologacao | None, url_evidencia: str) -> dict:
     evidencias: dict[tuple[str, int], list] = {}
-    for e in homologacao.evidencias:
+    for e in (homologacao.evidencias if homologacao else []):
         evidencias.setdefault((e.secao, e.item), []).append({
             "id": e.id,
             "nome_arquivo": e.nome_arquivo,
             "tamanho_bytes": e.tamanho_bytes,
             "enviado_em": _dt(e.enviado_em),
+            "enviado_por": e.enviado_por,
             "url": url_evidencia.format(id=e.id),
         })
+    return evidencias
+
+
+def _dados_rev04(homologacao: Homologacao, url_evidencia: str) -> dict:
+    """ISO 9001 e responsaveis (so' existem no F 066 rev. 04)."""
+    if not svc.eh_rev04(homologacao):
+        return {}
+    por_setor = {r.setor: r for r in homologacao.responsaveis}
+    return {
+        "iso9001_certificado": homologacao.iso9001_certificado,
+        "iso9001_validade": homologacao.iso9001_validade.isoformat() if homologacao.iso9001_validade else None,
+        "iso9001_evidencias": _evidencias_por_item(homologacao, url_evidencia).get((form_r04.SECAO_ISO, 1), []),
+        "iso9001_valido": svc.iso_valido(homologacao),
+        "responsaveis": [
+            {
+                "setor": setor,
+                "nome": getattr(por_setor.get(setor), "nome", None),
+                "cargo": getattr(por_setor.get(setor), "cargo", None),
+                "telefone": getattr(por_setor.get(setor), "telefone", None),
+                "email": getattr(por_setor.get(setor), "email", None),
+            }
+            for setor in form_r04.SETORES_RESPONSAVEIS
+        ],
+    }
+
+
+def _regras_secao(formulario, secao: dict) -> dict:
+    if formulario is form_r04:
+        return {
+            "evidencia_exigida": [form_r04.RESPOSTA_ATENDE] if secao["evidencia"] == "obrigatoria" else [],
+            "evidencia_limita": [form_r04.RESPOSTA_ATENDE] if secao["evidencia"] == "limita_parcial" else [],
+            "justificar_na": secao["justificar_na"],
+            "pula_com_iso": secao["pula_com_iso"],
+        }
+    return {
+        "evidencia_exigida": [r for r in form.RESPOSTAS_EXIGEM_EVIDENCIA if r in secao["escala"]],
+        "evidencia_limita": [],
+        "justificar_na": False,
+        "pula_com_iso": False,
+    }
+
+
+def _secoes_payload(homologacao: Homologacao | None, url_evidencia: str, formulario=None) -> list[dict]:
+    """Secoes do formulario com resposta, comentario e evidencias de cada
+    item. `url_evidencia` muda entre a tela interna e o link do fornecedor.
+    Sem homologacao (formulario em branco), usa `formulario`."""
+    formulario = formulario or svc.formulario_da(homologacao)
+    respostas = {(r.secao, r.item): r for r in (homologacao.respostas if homologacao else [])}
+    evidencias = _evidencias_por_item(homologacao, url_evidencia)
     return [
         {
             "chave": secao["chave"],
             "titulo": secao["titulo"],
             "peso": secao["peso"],
             "escala": list(secao["escala"]),
+            **_regras_secao(formulario, secao),
             "itens": [
                 {
                     "item": i,
@@ -140,7 +239,7 @@ def _secoes_payload(homologacao: Homologacao, url_evidencia: str) -> list[dict]:
                 for i, texto in enumerate(secao["itens"], start=1)
             ],
         }
-        for secao in form.SECOES
+        for secao in formulario.SECOES
     ]
 
 
@@ -173,33 +272,20 @@ def api_listar():
     return jsonify({
         "homologacoes": [_fmt(r) for r in registros],
         "metricas": svc.metricas(svc.listar()),
-        "formulario": {
-            "codigo": form.CODIGO_FORMULARIO,
-            "total_itens": form.total_itens(),
-            "nota_minima_aprovado": form.NOTA_MINIMA_APROVADO,
-            "nota_minima_ressalvas": form.NOTA_MINIMA_RESSALVAS,
-        },
+        "formulario": _formulario_payload(svc.formulario_vigente()),
     })
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/modelo", methods=["GET"])
 @permission_required(PERMISSION)
 def api_modelo():
-    """Formulario em branco - usado pra montar a tela de cadastro."""
+    """Formulario em branco (versao vigente) - usado pra montar a tela de cadastro."""
+    formulario = svc.formulario_vigente()
+    payload = _formulario_payload(formulario)
     return jsonify({
-        "codigo": form.CODIGO_FORMULARIO,
-        "obs_conformidade_legal": form.OBS_CONFORMIDADE_LEGAL,
-        "secoes": [
-            {
-                "chave": s["chave"],
-                "titulo": s["titulo"],
-                "peso": s["peso"],
-                "escala": list(s["escala"]),
-                "itens": [{"item": i, "texto": t, "resposta": None, "comentario": None}
-                          for i, t in enumerate(s["itens"], start=1)],
-            }
-            for s in form.SECOES
-        ],
+        **payload,
+        "formulario": payload,
+        "secoes": _secoes_payload(None, "", formulario=formulario),
     })
 
 
@@ -342,7 +428,7 @@ def api_pdf(homologacao_id):
     if not homologacao:
         return jsonify({"error": "Homologação não encontrada."}), 404
     conteudo = pdf_svc.gerar_pdf_homologacao(homologacao)
-    nome = f"{form.CODIGO_FORMULARIO}_{(homologacao.razao_social or 'fornecedor')[:40]}.pdf"
+    nome = f"{svc.formulario_da(homologacao).CODIGO_FORMULARIO}_{(homologacao.razao_social or 'fornecedor')[:40]}.pdf"
     return send_file(
         BytesIO(conteudo), mimetype="application/pdf",
         as_attachment=False, download_name=nome.replace("/", "-"),
@@ -392,6 +478,20 @@ def api_remover_foto(foto_id):
 
 
 # ── Self assessment: lado do comprador ──────────────────────────────────
+def _texto_evidencia_email(homologacao: Homologacao) -> str:
+    if svc.eh_rev04(homologacao):
+        return (
+            "Os documentos marcados como <strong>Atende</strong> precisam da cópia anexada (PDF, JPG ou PNG). "
+            "Nas questões do sistema de qualidade, anexe as evidências: sem elas a resposta vale no máximo "
+            "<strong>Atende Parcial</strong>. Empresas com <strong>ISO 9001</strong> vigente anexam o "
+            "certificado e ficam dispensadas do questionário."
+        )
+    return (
+        "Para os itens respondidos como <strong>Sim</strong>, <strong>Parcial</strong> ou "
+        "<strong>Conforme</strong> é obrigatório anexar a evidência (PDF, JPG ou PNG)."
+    )
+
+
 def _enviar_email_self_assessment(homologacao: Homologacao, link: str, destinatario: str, validade: str) -> None:
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"Homologação de Fornecedor – Autoavaliação – {homologacao.razao_social} – Columbia Machine Brasil"
@@ -402,9 +502,7 @@ def _enviar_email_self_assessment(homologacao: Homologacao, link: str, destinata
         f"<p>A Columbia Machine Brasil está conduzindo a homologação da empresa "
         f"<strong>{html.escape(homologacao.razao_social or '')}</strong> como fornecedora.</p>"
         f"<p>Solicitamos, por gentileza, o preenchimento do questionário de autoavaliação "
-        f"({form.CODIGO_FORMULARIO}) pelo link abaixo. Para os itens respondidos como "
-        f"<strong>Sim</strong>, <strong>Parcial</strong> ou <strong>Conforme</strong> é obrigatório "
-        f"anexar a evidência (PDF, JPG ou PNG).</p>"
+        f"({svc.formulario_da(homologacao).CODIGO_FORMULARIO}) pelo link abaixo. {_texto_evidencia_email(homologacao)}</p>"
         f"<p><a href=\"{link}\">{link}</a></p>"
         f"<p>É possível salvar e continuar depois pelo mesmo link, válido até {validade}.</p>"
         f"<p>Atenciosamente,</p>"
@@ -463,6 +561,37 @@ def api_baixar_evidencia(evidencia_id):
     return _enviar_evidencia(evidencia)
 
 
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/evidencias", methods=["POST"])
+@permission_required(PERMISSION)
+def api_anexar_evidencia_interna(homologacao_id):
+    """Comprador anexa a evidencia de um item (documento recebido por fora do link)."""
+    homologacao = _obter(homologacao_id)
+    if not homologacao:
+        return jsonify({"error": "Homologação não encontrada."}), 404
+    try:
+        svc.anexar_evidencia_interna(
+            homologacao, request.form.get("secao"), request.form.get("item"),
+            request.files.get("arquivo"), _usuario(),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência anexada.", "homologacao": _fmt(homologacao, completo=True)})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/evidencias/<int:evidencia_id>", methods=["DELETE"])
+@permission_required(PERMISSION)
+def api_remover_evidencia_interna(evidencia_id):
+    evidencia = db.session.get(ComprasHomologacaoEvidencia, evidencia_id)
+    if not evidencia:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    homologacao = evidencia.homologacao
+    try:
+        svc.remover_evidencia_interna(evidencia)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência removida.", "homologacao": _fmt(homologacao, completo=True)})
+
+
 def _enviar_evidencia(evidencia: ComprasHomologacaoEvidencia):
     return send_file(
         BytesIO(evidencia.dados), mimetype=evidencia.content_type or "application/octet-stream",
@@ -485,7 +614,8 @@ def _payload_publico(convite, token: str) -> dict:
         "situacao": svc.situacao_convite(convite),
         "expira_em": _dt(convite.expira_em),
         "respondido_em": _dt(convite.respondido_em),
-        "codigo": form.CODIGO_FORMULARIO,
+        "codigo": svc.formulario_da(homologacao).CODIGO_FORMULARIO,
+        "formulario": _formulario_payload(svc.formulario_da(homologacao)),
         "exigem_evidencia": list(form.RESPOSTAS_EXIGEM_EVIDENCIA),
         "max_evidencia_mb": svc.MAX_EVIDENCIA_BYTES // (1024 * 1024),
         "cadastro": {
@@ -499,6 +629,7 @@ def _payload_publico(convite, token: str) -> dict:
         "contato": {campo: getattr(homologacao, campo) for campo in svc.CAMPOS_FORNECEDOR},
         # O banco so' tem o hash: a URL de download usa o token da propria requisicao.
         "secoes": _secoes_payload(homologacao, f"/api/homologacao-fornecedor/{token}/evidencias/{{id}}"),
+        **_dados_rev04(homologacao, f"/api/homologacao-fornecedor/{token}/evidencias/{{id}}"),
     }
 
 
@@ -575,7 +706,7 @@ def _avisar_comprador_resposta(homologacao: Homologacao, convite) -> None:
         f"<p>Olá,</p>"
         f"<p>O fornecedor <strong>{html.escape(homologacao.razao_social or '')}</strong> "
         f"({html.escape(homologacao.cnpj or '')}) respondeu a autoavaliação de homologação "
-        f"({form.CODIGO_FORMULARIO}) em {_dt(convite.respondido_em)}.</p>"
+        f"({svc.formulario_da(homologacao).CODIGO_FORMULARIO}) em {_dt(convite.respondido_em)}.</p>"
         f"<p>Nota calculada pelas respostas do fornecedor: <strong>{nota}%</strong> "
         f"({html.escape(homologacao.classificacao or '')}).</p>"
         f"<p>A homologação voltou para <strong>Rascunho</strong>: revise as respostas e as evidências "
