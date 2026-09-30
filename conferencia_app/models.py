@@ -205,6 +205,9 @@ class ItemNota(db.Model):
     material_cliente = db.Column(db.Boolean, nullable=False, default=False, index=True)
     remessa = db.Column(db.Boolean, nullable=False, default=False, index=True)
     sem_conferencia_logistica = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    # Compra via Mercado Livre: o pedido continua obrigatório, mas qtd/valor do
+    # XML não batem com o pedido por natureza, então a divergência não bloqueia.
+    mercado_livre = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     auditor_status = db.Column(db.String(30), default="NaoAuditado", index=True)
     auditor_decisao = db.Column(db.String(20), default="PendenteDecisao", index=True)
     auditor_diagnostico = db.Column(db.String(4000))

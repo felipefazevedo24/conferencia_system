@@ -4744,6 +4744,99 @@ def test_liberar_nfse_envia_direto_entrada_concluido(tmp_path):
         assert item.status == "Concluído"
 
 
+def _resultado_pedido_divergente(item_id):
+    return {
+        "encontrado": True,
+        "total_ok": False,
+        "pares": [
+            {
+                "linha": 1, "item_id": item_id, "po_index": 0, "po_linha": 1,
+                "nf_codigo": "ML-1", "ok": False, "qtd_ok": False, "valor_ok": False,
+            }
+        ],
+        "linhas_po": [],
+    }
+
+
+def _liberar_com_divergencia(tmp_path, mercado_livre):
+    from conferencia_app.models import DivergenciaPedidoAprovacao
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="7035",
+            fornecedor="Loja ML",
+            codigo="ML-1",
+            descricao="Item comprado no Mercado Livre",
+            qtd_real=3.0,
+            valor_produto=99.0,
+            status="AguardandoLiberacao",
+            auditor_status="SemInconsistencia",
+        )
+        db.session.add(item)
+        db.session.commit()
+        item_id = item.id
+
+    with patch("conferencia_app.routes.api_routes.comparar_pedido_com_nf", return_value=_resultado_pedido_divergente(item_id)), \
+            patch("conferencia_app.routes.api_routes.teams_service.notificar_divergencia_pedido", return_value=True):
+        response = client.post(
+            "/api/xml_auditor/liberar",
+            json={"nota": "7035", "pedido_compra": "12751", "mercado_livre": mercado_livre},
+        )
+
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="7035").first()
+        pendencias = DivergenciaPedidoAprovacao.query.filter_by(numero_nota="7035").count()
+        assert item.mercado_livre is mercado_livre
+        if mercado_livre:
+            assert response.status_code == 200, response.get_json()
+            assert item.status == "Pendente"  # segue pra conferência física normal
+            assert pendencias == 0
+        else:
+            assert response.status_code == 409
+            assert response.get_json()["erro"] == "divergencia_pendente_aprovacao"
+            assert item.status == "AguardandoLiberacao"
+            assert pendencias == 1
+
+
+def test_liberar_mercado_livre_ignora_divergencia_qtd_valor(tmp_path):
+    _liberar_com_divergencia(tmp_path, mercado_livre=True)
+
+
+def test_liberar_sem_mercado_livre_bloqueia_divergencia_qtd_valor(tmp_path):
+    _liberar_com_divergencia(tmp_path, mercado_livre=False)
+
+
+def test_liberar_mercado_livre_continua_exigindo_pedido(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="7036",
+                fornecedor="Loja ML",
+                codigo="ML-1",
+                descricao="Item comprado no Mercado Livre",
+                qtd_real=1.0,
+                status="AguardandoLiberacao",
+                auditor_status="SemInconsistencia",
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/xml_auditor/liberar",
+        json={"nota": "7036", "pedido_compra": "", "mercado_livre": True},
+    )
+    assert response.status_code == 409
+    assert "pedido de compras" in response.get_json()["msg"]
+
+
 def test_auditor_preserva_codigo_material_do_erp_sem_formatar(tmp_path):
     app = build_test_app(tmp_path)
 
