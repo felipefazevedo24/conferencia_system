@@ -1,5 +1,5 @@
-"""Tela do Cardex no navegador de verdade: resumo agrupado por família,
-clique no item abrindo o Modelo 7 e aba de fechamentos. A lógica de
+"""Tela do Cardex no navegador de verdade: resumo, "Ver cardex" abrindo o
+Modelo 7 do item em modal e aba de fechamentos. A lógica de
 montagem é toda JS; a fixture é a mesma do test_logistica_cardex."""
 from pathlib import Path
 from threading import Thread
@@ -35,35 +35,27 @@ def test_cardex_resumo_item_e_fechamentos_no_navegador(tmp_path):
             page.goto(f"{base}/logistica/cardex?inicio=2026-09-01")
             page.fill("#cx-inicio", "2026-09-01")
             page.fill("#cx-fim", "2026-09-30")
-            page.click("#cx-btn-consultar")
+            page.click("#cx-btn-atualizar")
 
-            # Uma família só: já abre com o item e o total geral.
-            expect(page.locator("#cx-resumo-body tr.cx-item")).to_have_count(1)
-            expect(page.locator("#cx-resumo-foot tr.cx-total")).to_contain_text("TOTAL GERAL")
-            expect(page.locator("#cx-s-saidas")).to_have_text("R$ 85,47")
-            expect(page.locator("#cx-deps")).to_contain_text("1 · PRINCIPAL")
+            expect(page.locator("#cx-resumo-body tr")).to_have_count(1)
+            expect(page.locator("#cx-resumo-foot")).to_contain_text("Total geral")
+            expect(page.locator("#cx-s-saidas")).to_have_text("R$ -85,47")
+            expect(page.locator("#cx-deposito")).to_contain_text("1 · PRINCIPAL")
 
-            # Grade de ERP: clique seleciona, teclado navega, Enter abre.
-            page.locator("#cx-resumo-body tr.cx-item").click()
-            expect(page.locator("#cx-resumo-body tr.cx-item.is-sel")).to_have_count(1)
-            expect(page.locator("[data-pane=resumo]")).to_be_visible()
-
-            page.locator("#cx-resumo-grid").focus()
-            page.keyboard.press("Enter")
-            expect(page.locator("[data-pane=item]")).to_be_visible()
+            # "Ver cardex" abre o Modelo 7 do item em modal, como o Picking.
+            page.locator("#cx-resumo-body button[data-ver]").click()
+            expect(page.locator("#cx-item-modal")).to_be_visible()
             linhas = page.locator("#cx-item-body tr")
             expect(linhas).to_have_count(5)  # saldo inicial + 3 movimentos + saldo final
             expect(linhas.nth(0)).to_contain_text("4.518,620")
+            expect(linhas.nth(1)).to_contain_text("0,6100")  # ICMS por unidade da NF
             expect(linhas.nth(2)).to_contain_text("Saída 53918")
             expect(linhas.nth(2).locator("td.cx-medio")).to_have_text("4,1168")
             expect(linhas.nth(2)).to_contain_text("28.315,03")
-            # Entradas e saídas em colunas separadas; imposto da NF por unidade.
-            expect(linhas.nth(1)).to_contain_text("0,6100")
             expect(linhas.nth(3)).to_contain_text("sem imposto na NF")
-            linhas.nth(1).click()
-            expect(page.locator("#cx-item-body tr.cx-det")).to_contain_text("NF 78851")
+            page.click("#cx-item-fechar")
 
-            page.click("[data-tab=fechamentos]")
+            page.click("[data-aba=fechamentos]")
             expect(page.locator("#cx-fech-body")).to_contain_text("Nenhum mês fechado ainda.")
             assert erros_js == []
             browser.close()

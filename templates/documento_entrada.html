@@ -705,8 +705,10 @@
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
                         <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
+                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="mercadoLivre"> Mercado Livre</label>
                     </div>
-                    <p class="rec-muted" style="margin:8px 0 0; font-size:11px;">Quando marcado, após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
+                    <p class="rec-muted" style="margin:8px 0 0; font-size:11px;"><b>Sem conferência logística:</b> após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
+                    <p class="rec-muted" style="margin:4px 0 0; font-size:11px;"><b>Mercado Livre:</b> o pedido continua obrigatório, mas quantidade e valor não são validados contra ele.</p>
                 </div>
                 <div class="box">
                     <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
@@ -1515,6 +1517,7 @@
             material_cliente: !!document.getElementById('materialCliente')?.checked,
             remessa: !!document.getElementById('remessa')?.checked,
             sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
+            mercado_livre: !!document.getElementById('mercadoLivre')?.checked,
         };
     }
     let confirmResolver = null;
@@ -1721,6 +1724,7 @@
             document.getElementById('materialCliente').checked = !!d.material_cliente;
             document.getElementById('remessa').checked = !!d.remessa;
             document.getElementById('semConferenciaLogistica').checked = !!d.sem_conferencia_logistica;
+            document.getElementById('mercadoLivre').checked = !!d.mercado_livre;
             alternarMaterialCliente();
             document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
             document.getElementById('obsFiscal').value = d.auditor_observacao || '';
@@ -1879,6 +1883,7 @@
                         nota: auditorNotaSelecionada.numero, pedido_compra: pedido,
                         material_cliente: false, remessa: false,
                         sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
+                        mercado_livre: !!document.getElementById('mercadoLivre')?.checked,
                         observacao,
                         cnpj_emitente: auditorNotaSelecionada?.cnpj_emitente || '',
                         fornecedor: auditorNotaSelecionada?.fornecedor || '',
@@ -1896,6 +1901,10 @@
             } else if (r.total_ok) {
                 res.className = 'pedido-result ok';
                 res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem perfeitamente. Nenhuma vinculação manual necessária!`;
+                wrap.style.display = 'none';
+            } else if (document.getElementById('mercadoLivre')?.checked) {
+                res.className = 'pedido-result ok';
+                res.textContent = `✔ Pedido "${pedido}" vinculado. Mercado Livre: quantidade e valor não são validados.`;
                 wrap.style.display = 'none';
             } else if (possuiMarcadorConfirmacaoDivergencia()) {
                 const ndivQtd = r.pares.filter((p) => !p.qtd_ok).length;
