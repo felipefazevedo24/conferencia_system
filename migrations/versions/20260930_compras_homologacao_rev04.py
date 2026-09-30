@@ -8,7 +8,7 @@ Registros antigos ficam com NULL - continuam no formulario antigo.
 A tabela compras_homologacao_responsavel e nova e sai no db.create_all().
 
 Revision ID: 20260930_homolog_rev04
-Revises: 20260930_prod_orc_data
+Revises: 20260930_item_nota_ml
 Create Date: 2026-09-30
 """
 
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 
 revision = "20260930_homolog_rev04"
-down_revision = "20260930_prod_orc_data"
+down_revision = "20260930_item_nota_ml"
 branch_labels = None
 depends_on = None
 
