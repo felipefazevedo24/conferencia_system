@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 
 from ..auth import permission_required
 from ..extensions import db
-from ..models import ProducaoObservacao, ProducaoOrcamentoArquivo, ProducaoSequencia
+from ..models import ProducaoObservacao, ProducaoOrcamentoArquivoBloco, ProducaoSequencia
 from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
 from ..tempo import agora_br
 
@@ -45,7 +45,7 @@ def _cronograma_chave(
 def _cronograma_arquivados(usuario: str) -> set[tuple[str, str]]:
     if not usuario:
         return set()
-    rows = ProducaoOrcamentoArquivo.query.filter_by(usuario=usuario, ativo=True).all()
+    rows = ProducaoOrcamentoArquivoBloco.query.filter_by(usuario=usuario, ativo=True).all()
     return {
         _cronograma_chave(row.orcamento_id, row.data_entrega)
         for row in rows
@@ -353,12 +353,12 @@ def cronograma_arquivar_orcamento():
     if len(orcamento_id) > 80 or len(numero) > 80 or len(versao) > 30:
         return jsonify({"error": "Identificação do orçamento inválida."}), 400
 
-    row = ProducaoOrcamentoArquivo.query.filter_by(
+    row = ProducaoOrcamentoArquivoBloco.query.filter_by(
         usuario=usuario, orcamento_id=orcamento_id, data_entrega=data_entrega,
     ).first()
     now = agora_br()
     if row is None:
-        row = ProducaoOrcamentoArquivo(
+        row = ProducaoOrcamentoArquivoBloco(
             usuario=usuario, orcamento_id=orcamento_id, numero_orcamento=numero,
             versao=versao, data_entrega=data_entrega,
             ativo=True, arquivado_em=now, atualizado_em=now,
@@ -392,7 +392,7 @@ def cronograma_restaurar_orcamento(numero: str):
         return jsonify({"error": "Usuário não identificado."}), 401
     if not orcamento_id:
         return jsonify({"error": "Informe o registro do orçamento."}), 400
-    row = ProducaoOrcamentoArquivo.query.filter_by(
+    row = ProducaoOrcamentoArquivoBloco.query.filter_by(
         usuario=usuario, orcamento_id=orcamento_id, data_entrega=data_entrega,
     ).first()
     if row is not None:

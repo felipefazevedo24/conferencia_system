@@ -28,6 +28,7 @@ def api(monkeypatch):
         "models": {
             "ProducaoObservacao": None,
             "ProducaoOrcamentoArquivo": None,
+            "ProducaoOrcamentoArquivoBloco": None,
             "ProducaoSequencia": None,
             "RpaExecucao": None,
             "RpaExecutor": None,

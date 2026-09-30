@@ -4163,7 +4163,29 @@ class ProducaoOrcamentoArquivo(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     usuario = db.Column(db.String(100), nullable=False, index=True)
-    orcamento_id = db.Column(db.String(80), nullable=False, default="")
+    numero_orcamento = db.Column(db.String(80), nullable=False, index=True)
+    versao = db.Column(db.String(30), nullable=False, default="")
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    arquivado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    restaurado_em = db.Column(db.DateTime, nullable=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "usuario", "numero_orcamento", "versao",
+            name="uq_producao_orcamento_arquivo_usuario_orcamento",
+        ),
+    )
+
+
+class ProducaoOrcamentoArquivoBloco(db.Model):
+    """Arquivamento reversivel de um bloco exato do cronograma."""
+
+    __tablename__ = "producao_orcamento_arquivo_bloco"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario = db.Column(db.String(100), nullable=False, index=True)
+    orcamento_id = db.Column(db.String(80), nullable=False, index=True)
     numero_orcamento = db.Column(db.String(80), nullable=False, index=True)
     versao = db.Column(db.String(30), nullable=False, default="")
     data_entrega = db.Column(db.String(10), nullable=False, default="")
@@ -4175,7 +4197,7 @@ class ProducaoOrcamentoArquivo(db.Model):
     __table_args__ = (
         db.UniqueConstraint(
             "usuario", "orcamento_id", "data_entrega",
-            name="uq_producao_orcamento_arquivo_usuario_registro_data",
+            name="uq_producao_orcamento_arquivo_bloco_registro_data",
         ),
     )
 

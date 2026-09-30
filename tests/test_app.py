@@ -163,7 +163,7 @@ def test_producao_estaticos_exigem_pasta_configurada():
 
 
 def test_cronograma_arquiva_e_restaura_orcamento_por_usuario(tmp_path):
-    from conferencia_app.models import ProducaoOrcamentoArquivo
+    from conferencia_app.models import ProducaoOrcamentoArquivoBloco
 
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -202,7 +202,7 @@ def test_cronograma_arquiva_e_restaura_orcamento_por_usuario(tmp_path):
         ]
 
     with app.app_context():
-        row = ProducaoOrcamentoArquivo.query.filter_by(
+        row = ProducaoOrcamentoArquivoBloco.query.filter_by(
             usuario="ADMIN", orcamento_id="101", data_entrega="2026-10-18",
         ).one()
         assert row.ativo is False
