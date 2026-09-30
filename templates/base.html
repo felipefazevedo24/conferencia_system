@@ -271,7 +271,7 @@
                     or can_access('PAGE_LOGISTICA_VIAGEM')
                     or can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_INVENTARIO_VALIDACAO')
                     or can_access('PAGE_LOGISTICA_INVENTARIO_FINANCE') or can_access('PAGE_LOGISTICA_INVENTARIO_FISCAL')
-                    or can_access('PAGE_LOGISTICA_ESTOQUE') %}
+                    or can_access('PAGE_LOGISTICA_ESTOQUE') or can_access('PAGE_LOGISTICA_CARDEX') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
@@ -319,7 +319,7 @@
 
                         {% if can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_INVENTARIO_VALIDACAO')
                             or can_access('PAGE_LOGISTICA_INVENTARIO_FINANCE') or can_access('PAGE_LOGISTICA_INVENTARIO_FISCAL')
-                            or can_access('PAGE_LOGISTICA_ESTOQUE') %}
+                            or can_access('PAGE_LOGISTICA_ESTOQUE') or can_access('PAGE_LOGISTICA_CARDEX') %}
                         <div class="submenu-subgroup" data-subgroup="inventario">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-clipboard-list submenu-icon"></i> Inventário <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
@@ -329,6 +329,9 @@
                                 {% endif %}
                                 {% if can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_ESTOQUE') %}
                                 <a href="/logistica/estoque" class="list-group-item list-group-item-action"><i class="fas fa-boxes-stacked"></i> Estoque</a>
+                                {% endif %}
+                                {% if can_access('PAGE_LOGISTICA_CARDEX') %}
+                                <a href="/logistica/cardex" class="list-group-item list-group-item-action"><i class="fas fa-book"></i> Cardex</a>
                                 {% endif %}
                             </div>
                         </div>

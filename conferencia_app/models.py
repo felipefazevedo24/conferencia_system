@@ -2085,6 +2085,74 @@ class LogisticaInventarioAnaliseCausa(db.Model):
     )
 
 
+class LogisticaCardexFechamento(db.Model):
+    """Fechamento (congelamento) mensal do Cardex para a Contabilidade.
+
+    O Cardex é calculado ao vivo a partir do kardex do GRV, mas o GRV aceita
+    lançamento retroativo (tipo 8): o mês de agosto visto hoje pode não ser o
+    mesmo visto em 01/09. Fechar grava a foto do mês (uma linha por item em
+    LogisticaCardexFechamentoItem) e essa foto passa a ser (1) o que a tela e
+    as exportações mostram para aquele mês e (2) a abertura do mês seguinte.
+    "Conferir com o GRV" recalcula e mostra o que mudou desde o fechamento.
+
+    Reabrir não apaga o cabeçalho (fica o histórico de quem fechou/reabriu e
+    por quê), só as linhas; e só é permitido no último mês fechado, senão a
+    abertura dos meses seguintes perderia a base."""
+
+    __tablename__ = "logistica_cardex_fechamento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ano = db.Column(db.Integer, nullable=False, index=True)
+    mes = db.Column(db.Integer, nullable=False, index=True)
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default="fechado", index=True)  # fechado|reaberto
+    # "ancora" = abriu pelo fechamento do mês anterior; "grv" = saldo inicial
+    # recalculado de trás pra frente a partir do saldo atual do GRV.
+    origem_abertura = db.Column(db.String(20), nullable=False, default="grv")
+    total_itens = db.Column(db.Integer, nullable=False, default=0)
+    valor_inicial = db.Column(db.Float, nullable=False, default=0)
+    valor_entradas = db.Column(db.Float, nullable=False, default=0)
+    valor_saidas = db.Column(db.Float, nullable=False, default=0)
+    valor_ajustes = db.Column(db.Float, nullable=False, default=0)
+    valor_final = db.Column(db.Float, nullable=False, default=0)
+    meta_json = db.Column(db.Text)  # depositos (codigo -> nome) e avisos do calculo
+
+    fechado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    fechado_por = db.Column(db.String(100), nullable=False)
+    reaberto_em = db.Column(db.DateTime)
+    reaberto_por = db.Column(db.String(100))
+    motivo_reabertura = db.Column(db.String(500))
+
+    itens = db.relationship(
+        "LogisticaCardexFechamentoItem",
+        backref="fechamento",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
+
+
+class LogisticaCardexFechamentoItem(db.Model):
+    """Foto de um item no fechamento do Cardex. `dados` é o JSON (zlib) com a
+    abertura por depósito, as linhas do mês já valorizadas e o fechamento -
+    o suficiente para remontar o Modelo 7 de qualquer combinação de
+    depósitos sem voltar ao GRV. As colunas soltas são o total de todos os
+    depósitos, para somar o mês sem descompactar item por item."""
+
+    __tablename__ = "logistica_cardex_fechamento_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    fechamento_id = db.Column(db.Integer, db.ForeignKey("logistica_cardex_fechamento.id"), nullable=False, index=True)
+    codigo = db.Column(db.String(60), nullable=False, index=True)  # codigo_interno normalizado (so' A-Z0-9)
+    codigo_interno = db.Column(db.String(60))
+    descricao = db.Column(db.String(300))
+    familia = db.Column(db.String(120), index=True)
+    qtde_final = db.Column(db.Float, nullable=False, default=0)
+    valor_final = db.Column(db.Float, nullable=False, default=0)
+    custo_medio_final = db.Column(db.Float)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"), nullable=False)
+
+
 class LogisticaConsumoChapaNesting(db.Model):
     """Um "Nesting" (Programa de corte) importado do relatorio HTML gerado
     pela maquina de corte a laser/plasma (FastReport 5.0 - ver

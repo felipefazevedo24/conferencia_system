@@ -516,6 +516,49 @@ def buscar_movimentos_chapa_lote(codigo: str, lote: str, empresa: int = 1) -> di
         return {"disponivel": False, "movimentos": []}
 
 
+def buscar_cardex_grv(
+    desde,
+    ate=None,
+    codigo: str | None = None,
+    conciliar: bool = False,
+    empresa: int = 1,
+    apenas_historico: bool = False,
+) -> dict[str, Any]:
+    """Movimento cru do kardex (ver /api/erp/estoque/cardex na bridge). Nunca
+    lança: devolve {"disponivel": False, "erro": ...} e a tela avisa."""
+    try:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            return {"disponivel": False, "erro": "Consulta ao GRV não configurada (ERP_LANCAMENTO_API_URL ausente)."}
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/estoque/cardex",
+            headers=_headers(cfg),
+            json={
+                "empresa": empresa,
+                "desde": desde.isoformat(),
+                "ate": ate.isoformat() if ate else None,
+                "codigo": codigo or None,
+                "conciliar": bool(conciliar),
+                "apenas_historico": bool(apenas_historico),
+            },
+            # O mes inteiro de todos os itens e' uma consulta pesada.
+            timeout=max(cfg["timeout"], 180),
+        )
+        if resp.status_code == 404:
+            return {"disponivel": False, "erro": "Bridge do ERP desatualizada: falta o endpoint do Cardex. Atualize (git pull) e reinicie a bridge na VM."}
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            return {"disponivel": False, "erro": str((data or {}).get("erro") or "Resposta inválida da bridge.")}
+        return {"disponivel": True, **data}
+    except requests.Timeout:
+        current_app.logger.warning("Timeout ao consultar o cardex no GRV.", exc_info=True)
+        return {"disponivel": False, "erro": "O GRV demorou demais para responder. Tente um período menor ou um item só."}
+    except Exception as exc:
+        current_app.logger.warning("Nao foi possivel consultar o cardex no GRV.", exc_info=True)
+        return {"disponivel": False, "erro": f"Não foi possível consultar o GRV: {exc}"}
+
+
 def diagnosticar_chapa_lote(saida_numero: str, codigo: str, empresa: int = 1) -> dict[str, Any]:
     """Chama o diagnostico da bridge pra descobrir, no GRV real, a tabela que
     amarra a SAIDA ao LOTE e as reservas por OS. So leitura de metadados."""

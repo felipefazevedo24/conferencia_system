@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+
+{% block title %}Inventário | Cardex{% endblock %}
+{% block shell_title %}Inventário — Cardex{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cx-wrap { display: grid; gap: 18px; }
+    .cx-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px 16px; }
+    .cx-filtros .eui-field { margin: 0; }
+    .cx-deps { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 14px; }
+    .cx-dep { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 3px 11px; font-size: 11.5px; font-weight: 600; cursor: pointer; color: var(--eui-text-soft); }
+    .cx-dep.is-on { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
+    .cx-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--eui-border); padding: 0 16px; }
+    .cx-tab { border: 0; background: none; padding: 11px 14px; font-size: 13px; font-weight: 600; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .cx-tab.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .cx-pane { display: none; }
+    .cx-pane.is-active { display: block; }
+    .cx-table-wrap { overflow-x: auto; max-height: 68vh; overflow-y: auto; }
+    .cx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .cx-table th { position: sticky; top: 0; z-index: 1; background: var(--eui-surface-2, #f1f5f9); font-size: 11px; text-transform: none; font-weight: 700; color: var(--eui-text-soft); padding: 8px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; text-align: left; }
+    .cx-table td { padding: 6px 8px; border-bottom: 1px solid var(--eui-border); vertical-align: top; }
+    .cx-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cx-table tr.cx-fam td { background: var(--eui-surface-3, #eef2f7); font-weight: 700; cursor: pointer; }
+    .cx-table tr.cx-total td { background: var(--eui-primary-soft); font-weight: 800; }
+    .cx-table tr.cx-saldo td { background: var(--eui-surface-2, #f8fafc); font-weight: 700; }
+    .cx-table tr.cx-item { cursor: pointer; }
+    .cx-table tr.cx-item:hover td { background: var(--eui-surface-2, #f8fafc); }
+    .cx-table tr.cx-info td { color: var(--eui-muted); font-style: italic; }
+    .cx-medio { color: var(--eui-danger); font-weight: 700; }
+    .cx-neg { color: var(--eui-danger); }
+    .cx-obs { max-width: 380px; font-size: 11px; color: var(--eui-muted); }
+    .cx-doc { font-weight: 600; }
+    .cx-alerta { color: #b45309; margin-left: 4px; }
+    .cx-empty { padding: 36px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .cx-banner { margin: 0 16px 14px; }
+    .cx-sec { padding: 14px 16px; border-top: 1px solid var(--eui-border); }
+    .cx-sec h4 { font-size: 13.5px; margin: 0 0 8px; }
+    .cx-sec p { font-size: 12px; color: var(--eui-muted); margin: 0 0 8px; }
+    .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 420px; display: none; }
+    .cx-toast.error { border-left-color: var(--eui-danger); }
+    .cx-toast.success { border-left-color: var(--eui-success); }
+    .cx-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .cx-modal-backdrop.open { display: flex; }
+    .cx-modal { background: var(--eui-surface, #fff); border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 1100px; max-height: 88vh; overflow-y: auto; padding: 22px; }
+    .cx-modal h3 { margin: 0 0 6px; font-size: 17px; }
+    .cx-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .cx-loading { opacity: .55; pointer-events: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cx-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-book"></i> Cardex</h1>
+            <p class="eui-page-header__sub">Movimento do estoque valorizado, no formato do Registro de Inventário Modelo 7. Quantidade do kardex do GRV; custo de entrada pela NF (sem ICMS, PIS e COFINS); saídas, transferências e ajustes pelo custo médio. Abre no mês vigente.</p>
+        </div>
+    </header>
+
+    <div class="eui-stats" id="cx-stats">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-door-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo inicial</span><span class="eui-stat__value" id="cx-s-inicial">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-arrow-down"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entradas</span><span class="eui-stat__value" id="cx-s-entradas">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-arrow-up"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saídas</span><span class="eui-stat__value" id="cx-s-saidas">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scale-balanced"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Ajustes de inventário</span><span class="eui-stat__value" id="cx-s-ajustes">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-flag-checkered"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo final</span><span class="eui-stat__value" id="cx-s-final">—</span><span class="eui-stat__hint" id="cx-s-variacao"></span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--neutral"><i class="fas fa-cubes"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens</span><span class="eui-stat__value" id="cx-s-itens">—</span><span class="eui-stat__hint" id="cx-s-itens-hint"></span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="cx-filtros">
+            <div class="eui-field"><label class="eui-field__label" for="cx-inicio">Início</label><input type="date" id="cx-inicio" class="eui-input" value="{{ periodo_inicio }}"></div>
+            <div class="eui-field"><label class="eui-field__label" for="cx-fim">Fim</label><input type="date" id="cx-fim" class="eui-input" value="{{ periodo_fim }}"></div>
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="atual">Mês vigente</button>
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="anterior">Mês anterior</button>
+            <div class="eui-field"><label class="eui-field__label" for="cx-familia">Família</label><select id="cx-familia" class="eui-input" style="min-width:200px;"><option value="">Todas</option></select></div>
+            <div class="eui-field" style="flex:1; min-width:220px;"><label class="eui-field__label" for="cx-busca">Buscar</label><input type="search" id="cx-busca" class="eui-input" placeholder="Código ou descrição" autocomplete="off"></div>
+            <label style="font-size:12px; display:flex; gap:6px; align-items:center; padding-bottom:8px;"><input type="checkbox" id="cx-somente-mov"> Só com movimento</label>
+            <button class="eui-btn eui-btn--primary" id="cx-btn-consultar"><i class="fas fa-magnifying-glass"></i> Consultar</button>
+            <button class="eui-btn eui-btn--ghost" id="cx-btn-atualizar" title="Busca de novo no GRV, sem usar o que já foi calculado"><i class="fas fa-rotate"></i> Atualizar do GRV</button>
+        </div>
+        <div class="cx-deps" id="cx-deps"></div>
+        <div id="cx-banner"></div>
+
+        <div class="cx-tabs">
+            <button class="cx-tab is-active" data-tab="resumo"><i class="fas fa-table-list"></i> Resumo do período</button>
+            <button class="cx-tab" data-tab="item"><i class="fas fa-file-lines"></i> Cardex do item (Modelo 7)</button>
+            <button class="cx-tab" data-tab="conciliacao"><i class="fas fa-list-check"></i> Conciliação</button>
+            <button class="cx-tab" data-tab="fechamentos"><i class="fas fa-lock"></i> Fechamentos</button>
+        </div>
+
+        <div class="cx-pane is-active" data-pane="resumo">
+            <div class="eui-toolbar" style="padding:10px 16px; justify-content:flex-end; gap:8px; display:flex;">
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-export="xlsx:resumo"><i class="fas fa-file-excel"></i> Resumo (Excel)</button>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-export="xlsx:completo" title="Resumo + o Modelo 7 de cada item"><i class="fas fa-file-excel"></i> Completo com Modelo 7 (Excel)</button>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-export="pdf:resumo"><i class="fas fa-file-pdf"></i> Resumo (PDF)</button>
+            </div>
+            <div class="cx-table-wrap">
+                <table class="cx-table">
+                    <thead><tr>
+                        <th>Código</th><th>Descrição</th><th>Un.</th>
+                        <th class="num">Saldo inicial</th><th class="num">R$ inicial</th>
+                        <th class="num">Entradas</th><th class="num">R$ entradas</th>
+                        <th class="num">Saídas</th><th class="num">R$ saídas</th>
+                        <th class="num">Transf.</th><th class="num">Ajustes</th><th class="num">R$ ajustes</th>
+                        <th class="num">Reavaliação</th>
+                        <th class="num">Saldo final</th><th class="num">R$ final</th><th class="num">Custo médio</th>
+                    </tr></thead>
+                    <tbody id="cx-resumo-body"><tr><td colspan="16" class="cx-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="cx-pane" data-pane="item">
+            <div class="cx-filtros">
+                <div class="eui-field"><label class="eui-field__label" for="cx-item-codigo">Código do item</label><input id="cx-item-codigo" class="eui-input" placeholder="19-01-00564" autocomplete="off"></div>
+                <button class="eui-btn eui-btn--primary" id="cx-btn-item"><i class="fas fa-file-lines"></i> Abrir cardex</button>
+                <div style="flex:1;"></div>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-export="xlsx:item"><i class="fas fa-file-excel"></i> Excel</button>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-export="pdf:item"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+            <div id="cx-item-cab" style="padding:0 16px 10px; font-size:13px;"></div>
+            <div class="cx-table-wrap">
+                <table class="cx-table">
+                    <thead><tr>
+                        <th>Data</th><th>Tipo</th><th>Documento / Obs.</th><th>Dep.</th>
+                        <th class="num">Quantidade</th><th class="num">Custo unit.</th><th class="num">Total</th>
+                        <th class="num">ICMS</th><th class="num">PIS</th><th class="num">COFINS</th><th class="num">IBS</th><th class="num">CBS</th>
+                        <th class="num">Saldo qtde</th><th class="num">Saldo total</th><th class="num">Custo médio</th>
+                    </tr></thead>
+                    <tbody id="cx-item-body"><tr><td colspan="15" class="cx-empty">Clique num item do resumo ou digite o código.</td></tr></tbody>
+                </table>
+            </div>
+            <p style="font-size:11px; color:var(--eui-muted); padding:8px 16px;"><span class="cx-medio">Custo em vermelho</span> = valorizado pelo custo médio (saídas, transferências, ajustes e entradas sem NF). Impostos por unidade, da NF de entrada.</p>
+        </div>
+
+        <div class="cx-pane" data-pane="conciliacao">
+            <div class="cx-sec" style="border-top:0;">
+                <p>Confere o período contra o GRV: saldo do kardex × saldo do depósito, ajustes de inventário do Sync × lançados no GRV, e as entradas sem custo da NF. É uma consulta pesada (percorre o histórico inteiro do kardex).</p>
+                <button class="eui-btn eui-btn--primary" id="cx-btn-conciliar"><i class="fas fa-list-check"></i> Rodar conciliação</button>
+            </div>
+            <div id="cx-conciliacao"></div>
+        </div>
+
+        <div class="cx-pane" data-pane="fechamentos">
+            <div class="cx-sec" style="border-top:0;">
+                <p>Fechar um mês congela o Cardex daquele mês: a tela e as exportações passam a mostrar a foto gravada, e ela vira o saldo inicial do mês seguinte. Lançamento retroativo no GRV depois disso não muda o mês fechado — use "Conferir com o GRV" para ver o que mudou.</p>
+                {% if pode_fechar %}
+                <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="eui-field" style="margin:0;"><label class="eui-field__label" for="cx-fechar-mes">Mês a fechar</label><input type="month" id="cx-fechar-mes" class="eui-input"></div>
+                    <button class="eui-btn eui-btn--primary" id="cx-btn-fechar"><i class="fas fa-lock"></i> Fechar mês</button>
+                </div>
+                {% endif %}
+            </div>
+            <div class="cx-table-wrap">
+                <table class="cx-table">
+                    <thead><tr>
+                        <th>Mês</th><th>Situação</th><th>Abertura</th><th class="num">Itens</th>
+                        <th class="num">R$ inicial</th><th class="num">R$ entradas</th><th class="num">R$ saídas</th><th class="num">R$ ajustes</th><th class="num">R$ final</th>
+                        <th>Fechado</th><th>Reaberto</th><th style="text-align:right;">Ações</th>
+                    </tr></thead>
+                    <tbody id="cx-fech-body"><tr><td colspan="12" class="cx-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="cx-toast" id="cx-toast"></div>
+
+<div class="cx-modal-backdrop" id="cx-modal">
+    <div class="cx-modal">
+        <h3 id="cx-modal-titulo"></h3>
+        <div id="cx-modal-corpo"></div>
+        <div class="cx-modal-foot"><button class="eui-btn eui-btn--ghost" id="cx-modal-fechar">Fechar</button></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PODE_FECHAR = {{ 'true' if pode_fechar else 'false' }};
+    const $ = (id) => document.getElementById(id);
+    const estado = { depositos: new Set(), resumo: null, itemCodigo: "", familiasAbertas: new Set() };
+
+    const fmtBR = (casas) => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    const F2 = fmtBR(2), F3 = fmtBR(3), F4 = fmtBR(4);
+    const n = (v, f) => (v === null || v === undefined || v === "") ? "" : f.format(v);
+    const q = (v) => n(v, F3), r = (v) => n(v, F2), c = (v) => n(v, F4);
+    const brl = (v) => "R$ " + F2.format(v || 0);
+    const cls = (v) => (v < -0.0000005 ? " cx-neg" : "");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    const dataBR = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "";
+    const ALERTAS = {
+        nf_sem_custo: "Entrada sem valor encontrado na NF (valorizada pelo médio)",
+        custo_estimado: "Custo médio de abertura estimado (saldo passou por zero)",
+        custo_divergente: "Custo do GRV não fecha com o histórico de entradas",
+        saldo_negativo: "Saldo negativo no período",
+        sem_custo_grv: "Sem custo médio no GRV",
+        divergente_grv: "Saldo final calculado ≠ saldo atual do GRV",
+    };
+    const alertaIcone = (lista) => (lista && lista.length)
+        ? `<i class="fas fa-triangle-exclamation cx-alerta" title="${esc(lista.map((a) => ALERTAS[a] || a).join(" · "))}"></i>` : "";
+
+    function toast(msg, tipo) {
+        const el = $("cx-toast");
+        el.textContent = msg;
+        el.className = "cx-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
+    }
+
+    function modal(titulo, html) {
+        $("cx-modal-titulo").innerHTML = titulo;
+        $("cx-modal-corpo").innerHTML = html;
+        $("cx-modal").classList.add("open");
+    }
+    $("cx-modal-fechar").addEventListener("click", () => $("cx-modal").classList.remove("open"));
+
+    function params(extra) {
+        const p = new URLSearchParams();
+        p.set("inicio", $("cx-inicio").value);
+        p.set("fim", $("cx-fim").value);
+        if (estado.depositos.size) p.set("depositos", Array.from(estado.depositos).join(","));
+        if ($("cx-familia").value) p.set("familia", $("cx-familia").value);
+        if ($("cx-busca").value.trim()) p.set("busca", $("cx-busca").value.trim());
+        if ($("cx-somente-mov").checked) p.set("somente_movimento", "1");
+        Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
+        return p.toString();
+    }
+
+    async function getJSON(url) {
+        const resp = await fetch(url, { credentials: "same-origin" });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || `Erro ${resp.status}`);
+        return data;
+    }
+
+    // ---------------- Banner de origem ----------------
+    function renderBanner(dados) {
+        let html = "";
+        if (!dados.disponivel) {
+            html = `<div class="eui-callout eui-callout--danger cx-banner"><i class="fas fa-plug-circle-xmark"></i><span><strong>GRV indisponível.</strong> ${esc(dados.erro || "")}</span></div>`;
+        } else if (dados.fonte === "congelado") {
+            const f = dados.fechamento;
+            html = `<div class="eui-callout eui-callout--success cx-banner"><i class="fas fa-lock"></i><span><strong>Mês fechado ${esc(f.rotulo)}.</strong> Foto congelada em ${esc(dataBR((f.fechado_em || "").slice(0, 10)))} por ${esc(f.fechado_por)} — não muda com lançamento retroativo no GRV.</span></div>`;
+        } else {
+            const origem = dados.fonte === "ancora"
+                ? `Saldo inicial pelo fechamento de <strong>${esc(dados.ancora.rotulo)}</strong>.`
+                : "Saldo inicial recalculado a partir do saldo atual do GRV.";
+            html = `<div class="eui-callout eui-callout--info cx-banner"><i class="fas fa-circle-info"></i><span><strong>Prévia calculada do GRV</strong> (${esc((dados.gerado_em || "").replace("T", " "))}). ${origem}</span></div>`;
+        }
+        (dados.avisos || []).forEach((a) => {
+            html += `<div class="eui-callout eui-callout--warning cx-banner"><i class="fas fa-triangle-exclamation"></i><span>${esc(a)}</span></div>`;
+        });
+        $("cx-banner").innerHTML = html;
+    }
+
+    function renderDepositos(dados) {
+        const sel = new Set((dados.depositos_selecionados || []).map(Number));
+        const lista = dados.depositos || [];
+        let html = `<span style="font-size:11.5px; font-weight:700; color:var(--eui-muted); padding:4px 4px 0 0;">Depósitos:</span>`;
+        html += `<button class="cx-dep ${sel.size ? "" : "is-on"}" data-dep="">Todos</button>`;
+        lista.forEach((d) => {
+            html += `<button class="cx-dep ${sel.has(d.codigo) ? "is-on" : ""}" data-dep="${d.codigo}" title="${esc(d.nome)}">${d.codigo} · ${esc(d.nome)}</button>`;
+        });
+        $("cx-deps").innerHTML = html;
+    }
+    $("cx-deps").addEventListener("click", (ev) => {
+        const b = ev.target.closest("[data-dep]");
+        if (!b) return;
+        const dep = b.dataset.dep;
+        if (!dep) estado.depositos.clear();
+        else if (estado.depositos.has(dep)) estado.depositos.delete(dep);
+        else estado.depositos.add(dep);
+        carregarResumo(false);
+        if (estado.itemCodigo) carregarItem(estado.itemCodigo, false);
+    });
+
+    function renderStats(dados) {
+        const i = dados.indicadores || {};
+        $("cx-s-inicial").textContent = brl(i.valor_inicial);
+        $("cx-s-entradas").textContent = brl(i.valor_entradas);
+        $("cx-s-saidas").textContent = brl(i.valor_saidas);
+        $("cx-s-ajustes").textContent = brl(i.valor_ajustes);
+        $("cx-s-final").textContent = brl(i.valor_final);
+        $("cx-s-variacao").textContent = "Variação " + brl(i.variacao);
+        $("cx-s-itens").textContent = (i.itens || 0).toLocaleString("pt-BR");
+        $("cx-s-itens-hint").textContent = `${i.itens_com_movimento || 0} com movimento · ${i.itens_sem_movimento || 0} parados · ${i.itens_com_alerta || 0} com alerta`;
+    }
+
+    // ---------------- Resumo ----------------
+    function linhaValores(v) {
+        return `<td class="num${cls(v.qtde_inicial)}">${q(v.qtde_inicial)}</td><td class="num${cls(v.valor_inicial)}">${r(v.valor_inicial)}</td>`
+            + `<td class="num">${q(v.qtde_entrada)}</td><td class="num">${r(v.valor_entrada)}</td>`
+            + `<td class="num">${q(v.qtde_saida)}</td><td class="num">${r(v.valor_saida)}</td>`
+            + `<td class="num">${q(v.qtde_transferencia)}</td><td class="num">${q(v.qtde_ajuste)}</td><td class="num">${r(v.valor_ajuste)}</td>`
+            + `<td class="num">${v.valor_reavaliacao ? r(v.valor_reavaliacao) : ""}</td>`
+            + `<td class="num${cls(v.qtde_final)}">${q(v.qtde_final)}</td><td class="num${cls(v.valor_final)}">${r(v.valor_final)}</td>`;
+    }
+
+    function renderResumo(dados) {
+        const body = $("cx-resumo-body");
+        if (!dados.disponivel) { body.innerHTML = `<tr><td colspan="16" class="cx-empty">Sem dados: ${esc(dados.erro || "GRV indisponível")}</td></tr>`; return; }
+        const linhas = dados.linhas || [];
+        if (!linhas.length) { body.innerHTML = `<tr><td colspan="16" class="cx-empty">Nenhum item com saldo ou movimento no período e filtros escolhidos.</td></tr>`; return; }
+        const grupos = new Map();
+        linhas.forEach((l) => { if (!grupos.has(l.familia)) grupos.set(l.familia, []); grupos.get(l.familia).push(l); });
+        const abrirTudo = grupos.size === 1 || $("cx-busca").value.trim() || $("cx-familia").value;
+        let html = "";
+        grupos.forEach((itens, fam) => {
+            const sub = dados.subtotais_familia[fam] || {};
+            const aberta = abrirTudo || estado.familiasAbertas.has(fam);
+            html += `<tr class="cx-fam" data-fam="${esc(fam)}"><td colspan="3"><i class="fas fa-chevron-${aberta ? "down" : "right"}"></i> ${esc(fam || "(sem família)")} <span style="font-weight:500; color:var(--eui-muted);">· ${itens.length} itens</span></td>${linhaValores(sub)}<td></td></tr>`;
+            if (!aberta) return;
+            itens.forEach((l) => {
+                html += `<tr class="cx-item" data-codigo="${esc(l.codigo_interno || l.codigo)}"><td style="white-space:nowrap;">${esc(l.codigo_interno)}${alertaIcone(l.alertas)}</td><td>${esc(l.descricao)}</td><td>${esc(l.unidade)}</td>${linhaValores(l)}<td class="num">${c(l.custo_medio_final)}</td></tr>`;
+            });
+        });
+        html += `<tr class="cx-total"><td colspan="3">TOTAL GERAL</td>${linhaValores(dados.totais)}<td></td></tr>`;
+        body.innerHTML = html;
+    }
+    $("cx-resumo-body").addEventListener("click", (ev) => {
+        const fam = ev.target.closest("tr.cx-fam");
+        if (fam) {
+            const nome = fam.dataset.fam;
+            if (estado.familiasAbertas.has(nome)) estado.familiasAbertas.delete(nome); else estado.familiasAbertas.add(nome);
+            renderResumo(estado.resumo);
+            return;
+        }
+        const item = ev.target.closest("tr.cx-item");
+        if (item) { $("cx-item-codigo").value = item.dataset.codigo; abrirAba("item"); carregarItem(item.dataset.codigo, false); }
+    });
+
+    function atualizarFamilias(dados) {
+        const sel = $("cx-familia");
+        const atual = sel.value;
+        sel.innerHTML = `<option value="">Todas</option>` + (dados.familias || []).map((f) => `<option value="${esc(f)}"${f === atual ? " selected" : ""}>${esc(f || "(sem família)")}</option>`).join("");
+    }
+
+    async function carregarResumo(forcar) {
+        const card = $("cx-resumo-body");
+        card.classList.add("cx-loading");
+        if (forcar) card.innerHTML = `<tr><td colspan="16" class="cx-empty">Buscando no GRV… o mês inteiro pode levar até um minuto.</td></tr>`;
+        try {
+            const dados = await getJSON("/api/logistica/cardex/resumo?" + params(forcar ? { atualizar: "1" } : {}));
+            estado.resumo = dados;
+            renderBanner(dados); renderDepositos(dados); atualizarFamilias(dados); renderStats(dados); renderResumo(dados);
+        } catch (e) {
+            card.innerHTML = `<tr><td colspan="16" class="cx-empty">${esc(e.message)}</td></tr>`;
+            toast(e.message, "error");
+        } finally { card.classList.remove("cx-loading"); }
+    }
+
+    // ---------------- Item (Modelo 7) ----------------
+    async function carregarItem(codigo, forcar) {
+        codigo = (codigo || "").trim();
+        if (!codigo) { toast("Informe o código do item.", "error"); return; }
+        estado.itemCodigo = codigo;
+        const body = $("cx-item-body");
+        body.innerHTML = `<tr><td colspan="15" class="cx-empty">Carregando…</td></tr>`;
+        try {
+            const dados = await getJSON("/api/logistica/cardex/item?" + params({ codigo, ...(forcar ? { atualizar: "1" } : {}) }));
+            if (!dados.disponivel || !dados.item) { body.innerHTML = `<tr><td colspan="15" class="cx-empty">${esc(dados.erro || "GRV indisponível")}</td></tr>`; return; }
+            const it = dados.item;
+            $("cx-item-cab").innerHTML = `<strong>${esc(it.codigo_interno)}</strong> — ${esc(it.descricao)} · ${esc(it.unidade)} · Classif. fiscal ${esc(it.ncm || "-")} · ${esc(it.familia)} · Grupo ${esc(it.grupo || "-")}`
+                + (it.alertas.length ? `<div class="eui-callout eui-callout--warning" style="margin-top:8px;"><i class="fas fa-triangle-exclamation"></i><span>${it.alertas.map((a) => esc(ALERTAS[a] || a)).join(" · ")}</span></div>` : "");
+            let html = `<tr class="cx-saldo"><td></td><td colspan="11">Saldo inicial</td><td class="num${cls(it.inicial.qtde)}">${q(it.inicial.qtde)}</td><td class="num">${r(it.inicial.valor)}</td><td class="num">${c(it.inicial.custo_medio)}</td></tr>`;
+            it.linhas.forEach((l) => {
+                const imp = l.impostos_unit || {};
+                const info = l.classe === "informativo";
+                const medio = !info && l.origem_custo !== "nf";
+                const nf = l.nf ? `<div class="cx-obs">NF ${esc(l.nf.numero)} de ${esc(dataBR(l.nf.data))} · CFOP ${esc(l.nf.cfop)}${l.nf.chave ? " · " + esc(l.nf.chave) : ""}</div>` : "";
+                const ajuste = l.ajuste_sync ? ` <a class="eui-badge eui-badge--info" href="/logistica/inventario/ajustes" title="Ajuste do módulo de Inventário">Ajuste Sync #${l.ajuste_sync.id}</a>` : "";
+                const semNf = l.origem_custo === "nf_nao_encontrada" ? ` <span class="eui-badge eui-badge--warning" title="Entrada de NF sem valor encontrado na tcom_aux">sem valor da NF</span>` : "";
+                html += `<tr class="${info ? "cx-info" : ""}"><td style="white-space:nowrap;">${esc(dataBR(l.data.slice(0, 10)))}</td>`
+                    + `<td style="white-space:nowrap;">${esc(l.tipo)}-${esc(info ? l.tipo_rotulo : ({ entrada: "Entrada", saida: "Saída", transferencia: "Transferência", ajuste: "Ajuste inv." }[l.classe]))}</td>`
+                    + `<td><div class="cx-doc">${esc(l.documento)}${ajuste}${semNf}</div><div class="cx-obs">${esc(l.obs)}</div>${nf}</td><td>${esc(l.deposito)}</td>`
+                    + `<td class="num${cls(l.qtde)}">${q(l.qtde)}</td><td class="num${medio ? " cx-medio" : ""}" title="${medio ? "Custo médio" : "Custo da NF: " + esc((l.custo_fonte || []).join(", "))}">${c(l.custo_unit)}</td><td class="num${cls(l.valor)}">${r(l.valor)}</td>`
+                    + `<td class="num">${c(imp.icms || null)}</td><td class="num">${c(imp.pis || null)}</td><td class="num">${c(imp.cofins || null)}</td><td class="num">${c(imp.ibs || null)}</td><td class="num">${c(imp.cbs || null)}</td>`
+                    + `<td class="num${cls(l.saldo_qtde)}">${info ? "" : q(l.saldo_qtde)}</td><td class="num">${info ? "" : r(l.saldo_valor)}</td><td class="num">${c(l.custo_medio)}</td></tr>`;
+            });
+            if (!it.linhas.length) html += `<tr><td colspan="15" class="cx-empty">Sem movimento no período para os depósitos escolhidos.</td></tr>`;
+            html += `<tr class="cx-saldo"><td></td><td colspan="11">Saldo final</td><td class="num${cls(it.final.qtde)}">${q(it.final.qtde)}</td><td class="num">${r(it.final.valor)}</td><td class="num">${c(it.final.custo_medio)}</td></tr>`;
+            body.innerHTML = html;
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="15" class="cx-empty">${esc(e.message)}</td></tr>`;
+        }
+    }
+    $("cx-btn-item").addEventListener("click", () => carregarItem($("cx-item-codigo").value, false));
+    $("cx-item-codigo").addEventListener("keydown", (ev) => { if (ev.key === "Enter") carregarItem($("cx-item-codigo").value, false); });
+
+    // ---------------- Conciliação ----------------
+    function tabela(cabecalho, linhas) {
+        if (!linhas.length) return `<p style="color:var(--eui-success); font-weight:600;"><i class="fas fa-circle-check"></i> Nada a apontar.</p>`;
+        return `<div class="cx-table-wrap" style="max-height:340px;"><table class="cx-table"><thead><tr>${cabecalho.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${linhas.join("")}</tbody></table></div>`;
+    }
+
+    async function conciliar() {
+        const alvo = $("cx-conciliacao");
+        alvo.innerHTML = `<div class="cx-empty">Conferindo com o GRV… pode levar até um minuto.</div>`;
+        try {
+            const d = await getJSON("/api/logistica/cardex/conciliacao?" + params());
+            if (!d.disponivel) { alvo.innerHTML = `<div class="cx-empty">${esc(d.erro || "GRV indisponível")}</div>`; return; }
+            let html = "";
+            const s = d.saldo || {};
+            html += `<div class="cx-sec"><h4><i class="fas fa-scale-balanced"></i> Kardex × saldo do depósito no GRV</h4>`;
+            if (!s.disponivel) html += `<p>${esc(s.erro || "Indisponível")}</p>`;
+            else {
+                html += `<p>${s.fecham} de ${s.conferidos} saldos (item × depósito) fecham com a soma do kardex (tipos 0, 1 e 2). ${s.total_divergentes} divergentes${s.fecham_so_com_tipos_8_9 ? `, dos quais <strong>${s.fecham_so_com_tipos_8_9} só fecham somando os tipos 8/9</strong> (sinal de que o GRV os considera no saldo)` : ""}.</p>`;
+                html += tabela(["Código", "Descrição", "Dep.", "Saldo GRV", "Soma kardex", "Tipos 8/9", "Diferença"],
+                    (s.divergentes || []).map((x) => `<tr><td>${esc(x.codigo_interno)}</td><td>${esc(x.descricao)}</td><td>${esc(x.deposito)}</td><td class="num">${q(x.saldo_grv)}</td><td class="num">${q(x.soma_kardex)}</td><td class="num">${q(x.soma_tipos_8_9)}</td><td class="num cx-neg">${q(x.diferenca)}</td></tr>`));
+            }
+            html += `</div>`;
+
+            const aj = d.ajustes || { no_grv: [], sem_movimento_no_grv: [] };
+            html += `<div class="cx-sec"><h4><i class="fas fa-clipboard-check"></i> Ajustes de inventário</h4><p>Ajustes lançados no GRV no período e o ajuste correspondente no módulo de Inventário do Sync (pelo documento informado no Finance).</p>`;
+            html += tabela(["Código", "Descrição", "Documento GRV", "Qtde líquida", "Ajuste no Sync"],
+                aj.no_grv.map((x) => `<tr><td>${esc(x.codigo_interno)}</td><td>${esc(x.descricao)}</td><td>${esc(x.documento)}</td><td class="num${cls(x.qtde_liquida)}">${q(x.qtde_liquida)}</td><td>${x.ajuste_sync_id ? `#${x.ajuste_sync_id} (dif. ${q(x.diferenca_sync)})` : `<span class="eui-badge eui-badge--neutral">sem registro no Sync</span>`}</td></tr>`));
+            if (aj.sem_movimento_no_grv.length) {
+                html += `<p style="margin-top:10px;"><strong class="cx-neg">Concluídos no Finance do Sync sem movimento no kardex:</strong></p>`;
+                html += tabela(["Ajuste", "Código", "Descrição", "Documento", "Diferença"],
+                    aj.sem_movimento_no_grv.map((x) => `<tr><td>#${x.ajuste_id}</td><td>${esc(x.codigo)}</td><td>${esc(x.descricao)}</td><td>${esc(x.documento)}</td><td class="num">${q(x.diferenca)}</td></tr>`));
+            }
+            html += `</div>`;
+
+            const ce = d.custo_entradas || { origens: {}, colunas: {} };
+            const o = ce.origens || {};
+            html += `<div class="cx-sec"><h4><i class="fas fa-file-invoice-dollar"></i> Custo das entradas</h4><p>${o.nf || 0} entradas pelo custo da NF · ${o.nf_nao_encontrada || 0} de NF sem valor encontrado · ${o.medio || 0} sem NF (produção, devolução), pelo médio. Colunas da NF usadas: ${Object.entries(ce.colunas || {}).map(([k, v]) => `${esc(k)} (${v})`).join(", ") || "nenhuma"}.</p></div>`;
+
+            html += `<div class="cx-sec"><h4><i class="fas fa-triangle-exclamation"></i> Alertas por item</h4>`;
+            html += (d.alertas || []).length ? d.alertas.map((a) => `<p><strong>${esc(a.rotulo)}</strong> — ${a.itens.length} itens: ${a.itens.slice(0, 40).map((i) => esc(i.codigo_interno)).join(", ")}${a.itens.length > 40 ? "…" : ""}</p>`).join("") : tabela([], []);
+            html += `</div>`;
+            alvo.innerHTML = html;
+        } catch (e) {
+            alvo.innerHTML = `<div class="cx-empty">${esc(e.message)}</div>`;
+        }
+    }
+    $("cx-btn-conciliar").addEventListener("click", conciliar);
+
+    // ---------------- Fechamentos ----------------
+    async function carregarFechamentos() {
+        const body = $("cx-fech-body");
+        try {
+            const d = await getJSON("/api/logistica/cardex/fechamentos");
+            if (!d.fechamentos.length) { body.innerHTML = `<tr><td colspan="12" class="cx-empty">Nenhum mês fechado ainda.</td></tr>`; return; }
+            body.innerHTML = d.fechamentos.map((f) => {
+                const fechado = f.status === "fechado";
+                const acoes = [];
+                if (fechado) {
+                    acoes.push(`<button class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${f.data_inicio}|${f.data_fim}">Ver</button>`);
+                    acoes.push(`<button class="eui-btn eui-btn--ghost eui-btn--sm" data-conferir="${f.id}">Conferir com o GRV</button>`);
+                    if (PODE_FECHAR) acoes.push(`<button class="eui-btn eui-btn--danger eui-btn--sm" data-reabrir="${f.id}" data-rotulo="${f.rotulo}">Reabrir</button>`);
+                }
+                return `<tr><td><strong>${esc(f.rotulo)}</strong></td>`
+                    + `<td>${fechado ? `<span class="eui-badge eui-badge--success">Fechado</span>` : `<span class="eui-badge eui-badge--neutral">Reaberto</span>`}</td>`
+                    + `<td>${f.origem_abertura === "ancora" ? "Mês anterior fechado" : "Recalculada do GRV"}</td><td class="num">${f.total_itens}</td>`
+                    + `<td class="num">${r(f.valor_inicial)}</td><td class="num">${r(f.valor_entradas)}</td><td class="num">${r(f.valor_saidas)}</td><td class="num">${r(f.valor_ajustes)}</td><td class="num">${r(f.valor_final)}</td>`
+                    + `<td>${esc(dataBR((f.fechado_em || "").slice(0, 10)))} · ${esc(f.fechado_por)}</td>`
+                    + `<td>${f.reaberto_em ? `${esc(dataBR(f.reaberto_em.slice(0, 10)))} · ${esc(f.reaberto_por)}<div class="cx-obs">${esc(f.motivo_reabertura)}</div>` : ""}</td>`
+                    + `<td style="text-align:right; white-space:nowrap;">${acoes.join(" ")}</td></tr>`;
+            }).join("");
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="12" class="cx-empty">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    $("cx-fech-body").addEventListener("click", async (ev) => {
+        const ver = ev.target.closest("[data-ver]");
+        if (ver) {
+            const [ini, fim] = ver.dataset.ver.split("|");
+            $("cx-inicio").value = ini; $("cx-fim").value = fim;
+            abrirAba("resumo"); carregarResumo(false);
+            return;
+        }
+        const conf = ev.target.closest("[data-conferir]");
+        if (conf) {
+            modal("Conferindo com o GRV…", `<div class="cx-empty">Recalculando o mês no GRV de hoje…</div>`);
+            try {
+                const d = await getJSON(`/api/logistica/cardex/fechamentos/${conf.dataset.conferir}/conferir`);
+                if (!d.disponivel) { modal("Conferência", `<p>${esc(d.erro || "GRV indisponível")}</p>`); return; }
+                const linhas = d.diferencas.map((x) => `<tr><td>${esc(x.codigo_interno)}</td><td>${esc(x.descricao)}</td><td class="num">${q(x.qtde_congelada)}</td><td class="num">${q(x.qtde_grv_hoje)}</td><td class="num">${r(x.valor_congelado)}</td><td class="num">${r(x.valor_grv_hoje)}</td><td class="num">${x.movimentos_congelados} → ${x.movimentos_grv_hoje}</td></tr>`);
+                modal(`Conferência de ${esc(d.fechamento.rotulo)}`,
+                    `<p style="font-size:12.5px;">${d.itens_conferidos} itens conferidos · <strong>${d.diferencas.length}</strong> mudaram no GRV depois do fechamento.</p>`
+                    + tabela(["Código", "Descrição", "Qtde fechada", "Qtde GRV hoje", "R$ fechado", "R$ GRV hoje", "Movimentos"], linhas));
+            } catch (e) { modal("Conferência", `<p>${esc(e.message)}</p>`); }
+            return;
+        }
+        const reabrir = ev.target.closest("[data-reabrir]");
+        if (reabrir) {
+            const motivo = prompt(`Motivo para reabrir ${reabrir.dataset.rotulo}? A foto congelada do mês será descartada.`);
+            if (motivo === null) return;
+            try {
+                const resp = await fetch(`/api/logistica/cardex/fechamentos/${reabrir.dataset.reabrir}/reabrir`, {
+                    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motivo }),
+                });
+                const d = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(d.error || `Erro ${resp.status}`);
+                toast(`${reabrir.dataset.rotulo} reaberto.`, "success");
+                carregarFechamentos(); carregarResumo(false);
+            } catch (e) { toast(e.message, "error"); }
+        }
+    });
+
+    if (PODE_FECHAR) {
+        const hoje = new Date();
+        const anterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        $("cx-fechar-mes").value = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, "0")}`;
+        $("cx-btn-fechar").addEventListener("click", async () => {
+            const [ano, mes] = ($("cx-fechar-mes").value || "").split("-").map(Number);
+            if (!ano || !mes) { toast("Escolha o mês.", "error"); return; }
+            if (!confirm(`Fechar ${String(mes).padStart(2, "0")}/${ano}? O Cardex do mês fica congelado e vira a abertura do mês seguinte.`)) return;
+            const btn = $("cx-btn-fechar");
+            btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Fechando…`;
+            try {
+                const resp = await fetch("/api/logistica/cardex/fechamentos", {
+                    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ano, mes }),
+                });
+                const d = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(d.error || `Erro ${resp.status}`);
+                toast(`${d.fechamento.rotulo} fechado: ${d.fechamento.total_itens} itens, saldo final ${brl(d.fechamento.valor_final)}.`, "success");
+                carregarFechamentos();
+            } catch (e) { toast(e.message, "error"); }
+            finally { btn.disabled = false; btn.innerHTML = `<i class="fas fa-lock"></i> Fechar mês`; }
+        });
+    }
+
+    // ---------------- Exportação, abas, período ----------------
+    document.querySelectorAll("[data-export]").forEach((b) => b.addEventListener("click", () => {
+        const [formato, tipo] = b.dataset.export.split(":");
+        const extra = { tipo };
+        if (tipo === "item") {
+            if (!estado.itemCodigo) { toast("Abra o cardex de um item primeiro.", "error"); return; }
+            extra.codigo = estado.itemCodigo;
+        }
+        window.location.href = `/api/logistica/cardex/exportar.${formato}?` + params(extra);
+    }));
+
+    function abrirAba(nome) {
+        document.querySelectorAll(".cx-tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === nome));
+        document.querySelectorAll(".cx-pane").forEach((p) => p.classList.toggle("is-active", p.dataset.pane === nome));
+        if (nome === "fechamentos") carregarFechamentos();
+    }
+    document.querySelectorAll(".cx-tab").forEach((t) => t.addEventListener("click", () => abrirAba(t.dataset.tab)));
+
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    document.querySelectorAll("[data-periodo]").forEach((b) => b.addEventListener("click", () => {
+        const hoje = new Date();
+        const base = b.dataset.periodo === "anterior" ? new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1) : new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        $("cx-inicio").value = iso(base);
+        $("cx-fim").value = iso(new Date(base.getFullYear(), base.getMonth() + 1, 0));
+        carregarResumo(false);
+    }));
+
+    $("cx-btn-consultar").addEventListener("click", () => { carregarResumo(false); if (estado.itemCodigo) carregarItem(estado.itemCodigo, false); });
+    $("cx-btn-atualizar").addEventListener("click", () => { carregarResumo(true); if (estado.itemCodigo) carregarItem(estado.itemCodigo, true); });
+    $("cx-busca").addEventListener("keydown", (ev) => { if (ev.key === "Enter") carregarResumo(false); });
+    $("cx-familia").addEventListener("change", () => carregarResumo(false));
+    $("cx-somente-mov").addEventListener("change", () => carregarResumo(false));
+
+    carregarResumo(false);
+})();
+</script>
+{% endblock %}

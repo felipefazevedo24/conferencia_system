@@ -1547,6 +1547,188 @@ SQL_FORNECIMENTOS_PRODUTO = """
 """
 
 
+# Cardex (Logistica > Inventario > Cardex). A bridge so' devolve o movimento
+# cru; saldo, custo medio e valorizacao sao calculados no Sync, que pode
+# mudar a regra sem redeploy da VM. Tipos 3-6 (reserva/solicitacao) nao
+# movem estoque e ficam de fora; 8 e 9 vem para o Sync decidir.
+# O custo NAO esta no kardex: vem da NF de entrada (tcompras + tcom_aux). As
+# colunas de valor/imposto da tcom_aux ainda nao foram confirmadas no GRV
+# real, entao vao como jsonb filtrado por nome (mesmo recurso do Comex) e o
+# Sync escolhe - ver /api/erp/estoque/cardex-diag para calibrar.
+_CARDEX_TIPOS = "(0, 1, 2, 8, 9)"
+_CARDEX_CHAVES_NF = (
+    r"^(cod_produto|cod_interno|qtde|qtde_compra|quantidade|unidade|unidade_est|numero_item|cfop|produto)$"
+    r"|valor|vl_|vlr|preco|custo|total|icms|pis|cofins|ipi|ibs|cbs|frete|seguro|desconto|despesa|outras"
+)
+
+SQL_CARDEX_PRODUTOS = """
+    with saldo as (
+        select d.cod_produto, d.cod_deposito, sum(coalesce(d.qtde_total, 0))::double precision as qtde
+        from public.tproduto_deposito d
+        where d.cod_empresa = %(empresa)s
+        group by d.cod_produto, d.cod_deposito
+    ),
+    com_mov as (
+        select distinct c.cod_produto
+        from public.tproduto_cardex c
+        where c.cod_empresa = %(empresa)s
+          and c.tipo_movimento in """ + _CARDEX_TIPOS + """
+          and c.dt_hora_movimentacao >= %(desde)s::date
+    )
+    select p.codigo as cod_produto,
+           trim(p.codigo_interno::text) as codigo_interno,
+           regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo,
+           coalesce(p.nome, '') as descricao,
+           coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
+           coalesce(f.nome, '') as familia,
+           coalesce(p.cod_grupo::text, '') as grupo,
+           p.preco_custo::double precision as preco_custo,
+           (select jsonb_object_agg(e.k, e.v) from jsonb_each(to_jsonb(p)) as e(k, v) where e.k ~* '(ncm|fiscal)') as fiscal,
+           coalesce(
+               (select jsonb_object_agg(s.cod_deposito::text, s.qtde) from saldo s where s.cod_produto = p.codigo),
+               '{}'::jsonb
+           ) as saldos
+    from public.tproduto p
+    left join public.tfamilia f on f.cod_empresa = p.cod_empresa and f.codigo = p.cod_familia
+    where p.cod_empresa = %(empresa)s
+      and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
+      {filtro}
+"""
+_CARDEX_FILTRO_TODOS = """
+      and (
+          exists (select 1 from saldo s where s.cod_produto = p.codigo and abs(s.qtde) > 0.000001)
+          or p.codigo in (select cod_produto from com_mov)
+      )
+"""
+_CARDEX_FILTRO_CODIGO = """
+      and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %(codigo)s
+"""
+
+SQL_CARDEX_MOVIMENTOS = """
+    select c.id::text as id,
+           c.cod_produto,
+           c.cod_deposito,
+           c.dt_hora_movimentacao as data,
+           c.tipo_movimento as tipo,
+           coalesce(c.qtde_movimentada, 0)::double precision as qtde,
+           upper(coalesce(c.tabela_link, '')) as tabela,
+           coalesce(c.chave_primaria_link::text, '') as chave,
+           coalesce(c.obs, '') as obs
+    from public.tproduto_cardex c
+    where c.cod_empresa = %(empresa)s
+      and c.tipo_movimento in """ + _CARDEX_TIPOS + """
+      and c.dt_hora_movimentacao >= %(desde)s::date
+      {filtro_ate}
+      {filtro_produto}
+    order by c.dt_hora_movimentacao, c.id
+"""
+
+# Soma de tudo o que o kardex ja' moveu (desde 18/06/2019), por deposito e
+# tipo: comparada com o saldo do tproduto_deposito diz se o kardex fecha.
+SQL_CARDEX_HISTORICO = """
+    select c.cod_produto, c.cod_deposito, c.tipo_movimento,
+           sum(coalesce(c.qtde_movimentada, 0))::double precision as qtde
+    from public.tproduto_cardex c
+    where c.cod_empresa = %(empresa)s
+      and c.tipo_movimento in """ + _CARDEX_TIPOS + """
+      {filtro_produto}
+    group by c.cod_produto, c.cod_deposito, c.tipo_movimento
+"""
+
+SQL_CARDEX_NF_CABECALHO = """
+    select tc.codigo as cod_compra, tc.n_nf, tc.dt_nf,
+           coalesce(nullif(trim(tc.fornecedor), ''), '') as fornecedor,
+           coalesce(tc.chv_nfe, '') as chave_nfe,
+           coalesce(tc.cfop::text, '') as cfop
+    from public.tcompras tc
+    where tc.cod_empresa = %(empresa)s and tc.codigo = any(%(compras)s)
+"""
+
+SQL_CARDEX_NF_ITENS = """
+    select a.realciona_auto as cod_compra,
+           (select jsonb_object_agg(e.k, e.v) from jsonb_each(to_jsonb(a)) as e(k, v) where e.k ~* %(chaves)s) as campos
+    from public.tcom_aux a
+    where a.cod_empresa = %(empresa)s and a.realciona_auto = any(%(compras)s)
+"""
+
+
+def _cardex_grv(
+    cur,
+    *,
+    empresa: int,
+    desde: date,
+    ate: date | None,
+    codigo: str | None,
+    conciliar: bool,
+    apenas_historico: bool = False,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"empresa": empresa, "desde": desde, "ate": ate, "codigo": codigo}
+    cur.execute(
+        SQL_CARDEX_PRODUTOS.replace("{filtro}", _CARDEX_FILTRO_CODIGO if codigo else _CARDEX_FILTRO_TODOS),
+        params,
+    )
+    cols = [desc[0] for desc in cur.description]
+    produtos = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    filtro_produto = ""
+    if codigo:
+        if not produtos:
+            return {"produtos": [], "movimentos": [], "notas": {}, "historico": [], "depositos": []}
+        params["produtos"] = [p["cod_produto"] for p in produtos]
+        filtro_produto = "and c.cod_produto = any(%(produtos)s)"
+    movimentos: list[dict[str, Any]] = []
+    if not apenas_historico:
+        cur.execute(
+            SQL_CARDEX_MOVIMENTOS
+            .replace("{filtro_ate}", "and c.dt_hora_movimentacao < (%(ate)s::date + 1)" if ate else "")
+            .replace("{filtro_produto}", filtro_produto),
+            params,
+        )
+        cols = [desc[0] for desc in cur.description]
+        movimentos = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    # Entrada de compra: chave_primaria_link = "empresa;cod_compra".
+    compras = sorted({
+        int(m["chave"].split(";")[1])
+        for m in movimentos
+        if m["tabela"] == "TCOMPRAS" and re.match(r"^\d+;\d+$", m["chave"] or "")
+    })
+    notas: dict[str, dict[str, Any]] = {}
+    if compras:
+        cur.execute(SQL_CARDEX_NF_CABECALHO, {"empresa": empresa, "compras": compras})
+        cols = [desc[0] for desc in cur.description]
+        for row in cur.fetchall():
+            nf = dict(zip(cols, row))
+            notas[str(nf["cod_compra"])] = {**nf, "itens": []}
+        cur.execute(SQL_CARDEX_NF_ITENS, {"empresa": empresa, "compras": compras, "chaves": _CARDEX_CHAVES_NF})
+        for cod_compra, campos in cur.fetchall():
+            notas.setdefault(str(cod_compra), {"cod_compra": cod_compra, "itens": []})["itens"].append(campos or {})
+
+    historico = []
+    if conciliar or apenas_historico:
+        cur.execute(SQL_CARDEX_HISTORICO.replace("{filtro_produto}", filtro_produto), params)
+        historico = [
+            {"cod_produto": cod, "deposito": dep, "tipo": tipo, "qtde": float(qt or 0)}
+            for cod, dep, tipo, qt in cur.fetchall()
+        ]
+
+    cur.execute("select to_jsonb(d) from public.tdeposito d")
+    depositos = []
+    for (linha,) in cur.fetchall():
+        linha = linha or {}
+        if linha.get("cod_empresa") not in (None, empresa):
+            continue
+        depositos.append({
+            "codigo": linha.get("codigo"),
+            "nome": next(
+                (str(linha[k]).strip() for k in ("descricao", "nome", "deposito", "nome_deposito") if str(linha.get(k) or "").strip()),
+                "",
+            ),
+        })
+
+    return {"produtos": produtos, "movimentos": movimentos, "notas": notas, "historico": historico, "depositos": depositos}
+
+
 def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date) -> dict[str, dict[str, Any]]:
     """Historico cru por codigo; as contas (classificacao, minimo, lote) ficam
     no Sync, que tem os parametros e pode mudar sem redeploy da VM."""
@@ -2845,6 +3027,117 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "codigo": codigo, "fornecimentos": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/cardex")
+    def consultar_estoque_cardex():
+        """Movimento cru do kardex a partir de `desde` (ate' hoje, ou ate' `ate`).
+        Entrada: {"desde": "2026-09-01", "ate": null, "codigo": null, "conciliar": false}.
+        Sem `codigo` traz todo produto com saldo ou com movimento no periodo."""
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        payload = request.get_json(silent=True) or {}
+        try:
+            desde = _parse_data(payload.get("desde"))
+            ate = _parse_data(payload.get("ate"))
+        except ValueError:
+            return jsonify({"sucesso": False, "erro": "data_invalida"}), 400
+        if not desde:
+            return jsonify({"sucesso": False, "erro": "desde_obrigatorio"}), 400
+        codigo = re.sub(r"[^A-Z0-9]", "", str(payload.get("codigo") or "").strip().upper()) or None
+        try:
+            empresa = int(payload.get("empresa") or 1)
+        except (TypeError, ValueError):
+            empresa = 1
+        try:
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    # O resumo do mes inteiro passa dos 15 s do readonly padrao.
+                    cur.execute("set local statement_timeout = 170000")
+                    dados = _cardex_grv(
+                        cur, empresa=empresa, desde=desde, ate=ate, codigo=codigo,
+                        conciliar=bool(payload.get("conciliar")),
+                        apenas_historico=bool(payload.get("apenas_historico")),
+                    )
+            return jsonify({"sucesso": True, "empresa": empresa, "desde": desde.isoformat(), **_json_safe(dados)})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar o cardex no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/cardex-diag")
+    def diagnostico_estoque_cardex():
+        """Diagnostico SO-LEITURA para calibrar o custo do Cardex: colunas reais
+        das tabelas envolvidas e, para um produto, os movimentos do periodo com
+        a NF de entrada crua (tcompras + tcom_aux inteiros). Nao altera nada.
+
+        Entrada: {"codigo": "19-01-00564", "desde": "2026-09-01", "ate": "2026-09-30"}
+        """
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        payload = request.get_json(silent=True) or {}
+        codigo = re.sub(r"[^A-Z0-9]", "", str(payload.get("codigo") or "").strip().upper())
+        desde = _parse_data(payload.get("desde")) or (date.today() - timedelta(days=30))
+        ate = _parse_data(payload.get("ate")) or date.today()
+        try:
+            empresa = int(payload.get("empresa") or 1)
+        except (TypeError, ValueError):
+            empresa = 1
+        out: dict[str, Any] = {"sucesso": True, "codigo": codigo, "colunas": {}, "produto": None, "movimentos": [], "notas": []}
+        try:
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    for tabela in ("tproduto_cardex", "tcompras", "tcom_aux", "tdeposito", "tproduto_deposito"):
+                        cur.execute(
+                            "select column_name from information_schema.columns "
+                            "where table_schema='public' and table_name=%s order by ordinal_position",
+                            (tabela,),
+                        )
+                        out["colunas"][tabela] = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+                    if codigo:
+                        cur.execute(
+                            "select to_jsonb(p) from public.tproduto p where p.cod_empresa = %s "
+                            "and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %s",
+                            (empresa, codigo),
+                        )
+                        linha = cur.fetchone()
+                        out["produto"] = linha[0] if linha else None
+                        cur.execute(
+                            """
+                            select to_jsonb(c) from public.tproduto_cardex c
+                            join public.tproduto p on p.cod_empresa = c.cod_empresa and p.codigo = c.cod_produto
+                            where c.cod_empresa = %s
+                              and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %s
+                              and c.dt_hora_movimentacao >= %s::date and c.dt_hora_movimentacao < (%s::date + 1)
+                            order by c.dt_hora_movimentacao, c.id
+                            limit 60
+                            """,
+                            (empresa, codigo, desde, ate),
+                        )
+                        out["movimentos"] = [r[0] for r in cur.fetchall()]
+                        compras = sorted({
+                            int(str(m.get("chave_primaria_link") or "").split(";")[1])
+                            for m in out["movimentos"]
+                            if str(m.get("tabela_link") or "").upper() == "TCOMPRAS"
+                            and re.match(r"^\d+;\d+$", str(m.get("chave_primaria_link") or ""))
+                        })[:5]
+                        for cod_compra in compras:
+                            cur.execute("select to_jsonb(tc) from public.tcompras tc where tc.cod_empresa = %s and tc.codigo = %s", (empresa, cod_compra))
+                            cab = cur.fetchone()
+                            cur.execute("select to_jsonb(a) from public.tcom_aux a where a.cod_empresa = %s and a.realciona_auto = %s", (empresa, cod_compra))
+                            out["notas"].append({
+                                "cod_compra": cod_compra,
+                                "tcompras": (cab[0] if cab else None),
+                                "tcom_aux": [r[0] for r in cur.fetchall()],
+                            })
+            return jsonify(_json_safe(out))
+        except Exception as exc:
+            app.logger.exception("Falha no diagnostico do cardex")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/conserto")
