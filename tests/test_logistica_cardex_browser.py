@@ -39,11 +39,17 @@ def test_cardex_resumo_item_e_fechamentos_no_navegador(tmp_path):
 
             # Uma família só: já abre com o item e o total geral.
             expect(page.locator("#cx-resumo-body tr.cx-item")).to_have_count(1)
-            expect(page.locator("#cx-resumo-body tr.cx-total")).to_contain_text("TOTAL GERAL")
-            expect(page.locator("#cx-s-saidas")).to_have_text("R$ -85,47")
+            expect(page.locator("#cx-resumo-foot tr.cx-total")).to_contain_text("TOTAL GERAL")
+            expect(page.locator("#cx-s-saidas")).to_have_text("R$ 85,47")
             expect(page.locator("#cx-deps")).to_contain_text("1 · PRINCIPAL")
 
+            # Grade de ERP: clique seleciona, teclado navega, Enter abre.
             page.locator("#cx-resumo-body tr.cx-item").click()
+            expect(page.locator("#cx-resumo-body tr.cx-item.is-sel")).to_have_count(1)
+            expect(page.locator("[data-pane=resumo]")).to_be_visible()
+
+            page.locator("#cx-resumo-grid").focus()
+            page.keyboard.press("Enter")
             expect(page.locator("[data-pane=item]")).to_be_visible()
             linhas = page.locator("#cx-item-body tr")
             expect(linhas).to_have_count(5)  # saldo inicial + 3 movimentos + saldo final
@@ -51,6 +57,11 @@ def test_cardex_resumo_item_e_fechamentos_no_navegador(tmp_path):
             expect(linhas.nth(2)).to_contain_text("Saída 53918")
             expect(linhas.nth(2).locator("td.cx-medio")).to_have_text("4,1168")
             expect(linhas.nth(2)).to_contain_text("28.315,03")
+            # Entradas e saídas em colunas separadas; imposto da NF por unidade.
+            expect(linhas.nth(1)).to_contain_text("0,6100")
+            expect(linhas.nth(3)).to_contain_text("sem imposto na NF")
+            linhas.nth(1).click()
+            expect(page.locator("#cx-item-body tr.cx-det")).to_contain_text("NF 78851")
 
             page.click("[data-tab=fechamentos]")
             expect(page.locator("#cx-fech-body")).to_contain_text("Nenhum mês fechado ainda.")

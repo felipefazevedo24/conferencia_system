@@ -92,6 +92,24 @@ def test_custo_da_nf_sai_liquido_de_icms_pis_cofins():
     assert svc.custo_da_nf([{"cod_produto": 1}]) is None
 
 
+@pytest.mark.parametrize("campos", [
+    {"icms_vl": ICMS, "pis_vl": PIS, "cofins_vl": COFINS},
+    {"vicms": ICMS, "vpis": PIS, "vcofins": COFINS},
+    {"total_icms": ICMS, "vlr_pis_item": PIS, "valor_cofins_item": COFINS},
+    # Só base e alíquota: calcula.
+    {"base_icms": 23800.0, "aliq_icms": ICMS / 238, "bc_pis": 23800.0, "perc_pis": PIS / 238, "bc_cofins": 23800.0, "aliq_cofins": COFINS / 238},
+])
+def test_custo_da_nf_reconhece_imposto_por_outros_nomes_de_coluna(campos):
+    linha = {"cod_produto": COD, "qtde": 2380.0, "valor_total": LIQUIDO_NF_78851 + ICMS + PIS + COFINS,
+             # ST e base não podem ser confundidos com o imposto próprio.
+             "vl_icms_st": 999.0, **campos}
+    custo = svc.custo_da_nf([linha])
+    assert custo["impostos"]["icms"] == pytest.approx(ICMS)
+    assert custo["impostos"]["pis"] == pytest.approx(PIS)
+    assert custo["impostos"]["cofins"] == pytest.approx(COFINS)
+    assert custo["valor_liquido"] == pytest.approx(LIQUIDO_NF_78851)
+
+
 def test_cardex_reproduz_a_planilha_da_contabilidade():
     item = _item()
     det = svc.detalhe(item)
@@ -121,7 +139,9 @@ def test_cardex_reproduz_a_planilha_da_contabilidade():
     assert entrada2["custo_unit"] == pytest.approx(92126.12 / 17205)
     assert det["final"]["qtde"] == pytest.approx(QTDE_HOJE)
     assert det["final"]["valor"] == pytest.approx(VALOR_HOJE, abs=0.01)
-    assert item["alertas"] == []
+    # A NF 173975 da fixture vem sem imposto: o custo fica bruto e a tela avisa.
+    assert entrada2["sem_imposto"] is True
+    assert item["alertas"] == ["nf_sem_imposto"]
 
 
 def test_resumo_do_item_soma_por_classe():

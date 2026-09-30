@@ -173,6 +173,42 @@ def _primeiro(campos: dict, chaves: tuple[str, ...]) -> tuple[float | None, str 
     return None, None
 
 
+# Os nomes exatos acima são chute; o GRV real pode chamar de icms_vl,
+# vicms, total_icms... Reconhece pelo padrão: token do imposto + marcador de
+# valor, descartando base, alíquota e ST (que não são o imposto próprio).
+_MARCADORES_VALOR = {"v", "vl", "vlr", "vr", "valor", "total", "vtotal"}
+
+
+def _tokens(chave: str) -> set[str]:
+    return {t for t in re.split(r"[^a-z0-9]+", chave) if t}
+
+
+def _imposto(campos: dict, nome: str) -> tuple[float | None, str | None]:
+    valor, chave = _primeiro(campos, CHAVES_IMPOSTO[nome])
+    if valor is not None:
+        return valor, chave
+    base = aliq = None
+    for chave, bruto in sorted(campos.items()):
+        tokens = _tokens(chave)
+        colado = re.fullmatch(rf"(v|vl|vlr|vr|valor){nome}|{nome}(v|vl|vlr|vr|valor)", chave)
+        if nome not in tokens and not colado:
+            continue
+        numero = _float(bruto)
+        if numero is None:
+            continue
+        if tokens & {"st", "ret", "retido", "fcp", "difal", "desonerado"}:
+            continue
+        if tokens & {"base", "bc"}:
+            base = base or (numero, chave)
+        elif tokens & {"aliq", "aliquota", "perc", "p"}:
+            aliq = aliq or (numero, chave)
+        elif colado or tokens & _MARCADORES_VALOR:
+            return numero, chave
+    if base and aliq:
+        return base[0] * aliq[0] / 100, f"{base[1]}*{aliq[1]}/100"
+    return None, None
+
+
 def custo_da_nf(linhas_nf: list[dict]) -> dict | None:
     """Soma as linhas da NF que são do produto (pode vir em mais de uma
     linha) e devolve o valor líquido dos impostos recuperáveis. None se
@@ -195,8 +231,8 @@ def custo_da_nf(linhas_nf: list[dict]) -> dict | None:
         bruto += valor
         fontes.add(chave)
         qtde_nf += qtde or 0.0
-        for nome, chaves in CHAVES_IMPOSTO.items():
-            imposto, chave_imp = _primeiro(campos, chaves)
+        for nome in CHAVES_IMPOSTO:
+            imposto, chave_imp = _imposto(campos, nome)
             if imposto is not None:
                 impostos[nome] += imposto
                 fontes.add(chave_imp)
@@ -393,6 +429,7 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
         impostos_unit = None
         custo_fonte: list[str] = []
         origem_custo = "medio"
+        sem_imposto = False
         if cod_compra and classe == "entrada":
             if cod_compra not in custos_nf:
                 custos_nf[cod_compra] = custo_da_nf(_linhas_nf_do_produto(nota or {}, prod.get("cod_produto"), codigo))
@@ -403,6 +440,9 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
                 impostos_unit = {nome: valor / base_qtde for nome, valor in custo["impostos"].items()}
                 custo_fonte = custo["fontes"]
                 origem_custo = "nf"
+                # Sem imposto recuperável achado, o custo fica bruto: avisa em
+                # vez de deixar a coluna em branco em silêncio.
+                sem_imposto = not any(custo["impostos"][n] for n in IMPOSTOS_RECUPERAVEIS)
             else:
                 origem_custo = "nf_nao_encontrada"
         nf = None
@@ -433,6 +473,7 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
             "impostos_unit": impostos_unit,
             "custo_fonte": custo_fonte,
             "origem_custo": origem_custo,
+            "sem_imposto": sem_imposto,
         })
     return preparados
 
@@ -490,6 +531,8 @@ def calcular_item(
             alertas.add("saldo_negativo")
         if mov["origem_custo"] == "nf_nao_encontrada":
             alertas.add("nf_sem_custo")
+        if mov.get("sem_imposto"):
+            alertas.add("nf_sem_imposto")
         linha = {k: v for k, v in mov.items() if k not in ("custo_nf", "dia")}
         linha.update(resultado)
         linhas.append(linha)
@@ -917,6 +960,7 @@ def consultar_item(codigo: str, inicio: date, fim: date, depositos: set[int] | N
 
 ALERTA_ROTULO = {
     "nf_sem_custo": "Entrada de NF sem valor encontrado na NF (valorizada pelo custo médio)",
+    "nf_sem_imposto": "Entrada de NF sem ICMS/PIS/COFINS encontrado (custo pelo valor bruto da NF)",
     "custo_estimado": "Saldo passou por zero: custo médio de abertura estimado pela NF anterior",
     "custo_divergente": "Custo do GRV não fecha com o histórico de entradas (resíduo ao zerar o saldo)",
     "saldo_negativo": "Saldo ficou negativo no período",
