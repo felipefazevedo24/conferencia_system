@@ -85,6 +85,8 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
     "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
+    "PAGE_LOGISTICA_CARDEX": "Logística > Inventário > Cardex (movimento valorizado, Modelo 7)",
+    "PAGE_LOGISTICA_CARDEX_FECHAR": "Logística > Inventário > Cardex > Fechar e reabrir mês",
     "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Intralog > Consumo de Chapa (Nesting)",
     "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
@@ -113,6 +115,9 @@ BASE_ROLE_PERMISSIONS = {
     "Controladoria": {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
+        # A Contabilidade é quem pediu o Cardex e quem fecha o mês.
+        "PAGE_LOGISTICA_CARDEX",
+        "PAGE_LOGISTICA_CARDEX_FECHAR",
     },
     "Logística": {
         "PAGE_RECEBIMENTO_ENDERECAMENTO",
