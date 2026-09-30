@@ -19,7 +19,7 @@ function criticalReason(node: DeliveryStructureNode, dueDate: string | null) {
   if (days !== null && days <= 3) return "Prazo crítico";
   return null;
 }
-const budgetKey = (delivery: ScheduledDelivery) => `${delivery.orcamento}/${delivery.versao}/${delivery.data_entrega ?? ""}`;
+const budgetKey = (delivery: ScheduledDelivery) => `${delivery.orcamento_id}/${delivery.data_entrega ?? ""}`;
 
 export function DeliveryExplosion({ month, year, classification, search, onClose, onSelectOrder }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -28,8 +28,12 @@ export function DeliveryExplosion({ month, year, classification, search, onClose
   const deliveries = useQuery({ queryKey: ["delivery-explosion", month, year, classification, search, view], queryFn: ({ signal }) => api.getScheduledDeliveries(month, year, classification, search, signal, view === "archived"), staleTime: 20_000 });
   const archiveMutation = useMutation({
     mutationFn: (delivery: ScheduledDelivery) => view === "archived"
-      ? api.restoreScheduledBudget(delivery.orcamento, delivery.versao)
-      : api.archiveScheduledBudget(delivery.orcamento, delivery.versao),
+      ? api.restoreScheduledBudget(
+          delivery.orcamento_id, delivery.orcamento, delivery.versao, delivery.data_entrega
+        )
+      : api.archiveScheduledBudget(
+          delivery.orcamento_id, delivery.orcamento, delivery.versao, delivery.data_entrega
+        ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delivery-explosion", month, year, classification, search] })
   });
   const budgetCount = useMemo(() => new Set((deliveries.data ?? []).map((delivery) => `${delivery.orcamento}/${delivery.versao}`)).size, [deliveries.data]);

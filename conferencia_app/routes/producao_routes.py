@@ -29,15 +29,27 @@ def _cronograma_usuario() -> str:
     return str(session.get("username") or "").strip()
 
 
-def _cronograma_chave(orcamento: object, versao: object = "") -> tuple[str, str]:
-    return str(orcamento or "").strip(), str(versao or "").strip()
+def _cronograma_data(data_entrega: object = "") -> str:
+    return str(data_entrega or "").strip()[:10]
+
+
+def _cronograma_chave(
+    orcamento_id: object, data_entrega: object = "",
+) -> tuple[str, str]:
+    return (
+        str(orcamento_id or "").strip(),
+        _cronograma_data(data_entrega),
+    )
 
 
 def _cronograma_arquivados(usuario: str) -> set[tuple[str, str]]:
     if not usuario:
         return set()
     rows = ProducaoOrcamentoArquivo.query.filter_by(usuario=usuario, ativo=True).all()
-    return {_cronograma_chave(row.numero_orcamento, row.versao) for row in rows}
+    return {
+        _cronograma_chave(row.orcamento_id, row.data_entrega)
+        for row in rows
+    }
 
 
 @producao_bp.get("/producao")
@@ -313,7 +325,9 @@ def cronograma_entregas():
         archived_view = str(request.args.get("arquivados") or "").strip().lower() in {"1", "true", "sim"}
         entregas = [
             entrega for entrega in entregas
-            if (_cronograma_chave(entrega.get("orcamento"), entrega.get("versao")) in archived_keys)
+            if (_cronograma_chave(
+                entrega.get("orcamento_id"), entrega.get("data_entrega"),
+            ) in archived_keys)
             == archived_view
         ]
         return jsonify({"periodo": {"mes": mes, "ano": ano}, "entregas": entregas})
@@ -326,43 +340,60 @@ def cronograma_entregas():
 @permission_required("PAGE_PRODUCAO")
 def cronograma_arquivar_orcamento():
     payload = request.get_json(silent=True) or {}
-    numero, versao = _cronograma_chave(payload.get("orcamento"), payload.get("versao"))
+    orcamento_id, data_entrega = _cronograma_chave(
+        payload.get("orcamento_id"), payload.get("data_entrega"),
+    )
+    numero = str(payload.get("orcamento") or "").strip()
+    versao = str(payload.get("versao") or "").strip()
     usuario = _cronograma_usuario()
     if not usuario:
         return jsonify({"error": "Usuário não identificado."}), 401
-    if not numero:
-        return jsonify({"error": "Informe o número do orçamento."}), 400
-    if len(numero) > 80 or len(versao) > 30:
+    if not orcamento_id or not numero:
+        return jsonify({"error": "Informe o registro e o número do orçamento."}), 400
+    if len(orcamento_id) > 80 or len(numero) > 80 or len(versao) > 30:
         return jsonify({"error": "Identificação do orçamento inválida."}), 400
 
     row = ProducaoOrcamentoArquivo.query.filter_by(
-        usuario=usuario, numero_orcamento=numero, versao=versao,
+        usuario=usuario, orcamento_id=orcamento_id, data_entrega=data_entrega,
     ).first()
     now = agora_br()
     if row is None:
         row = ProducaoOrcamentoArquivo(
-            usuario=usuario, numero_orcamento=numero, versao=versao,
+            usuario=usuario, orcamento_id=orcamento_id, numero_orcamento=numero,
+            versao=versao, data_entrega=data_entrega,
             ativo=True, arquivado_em=now, atualizado_em=now,
         )
         db.session.add(row)
     else:
         row.ativo = True
+        row.numero_orcamento = numero
+        row.versao = versao
         row.arquivado_em = now
         row.restaurado_em = None
         row.atualizado_em = now
     db.session.commit()
-    return jsonify({"arquivado": True, "orcamento": numero, "versao": versao}), 201
+    return jsonify({
+        "arquivado": True, "orcamento_id": orcamento_id,
+        "orcamento": numero, "versao": versao,
+        "data_entrega": data_entrega,
+    }), 201
 
 
 @producao_bp.delete("/api/producao/cronograma-entregas/arquivados/<path:numero>")
 @permission_required("PAGE_PRODUCAO")
 def cronograma_restaurar_orcamento(numero: str):
-    numero, versao = _cronograma_chave(numero, request.args.get("versao", ""))
+    orcamento_id, data_entrega = _cronograma_chave(
+        request.args.get("orcamento_id", ""), request.args.get("data_entrega", ""),
+    )
+    numero = str(numero or "").strip()
+    versao = str(request.args.get("versao", "") or "").strip()
     usuario = _cronograma_usuario()
     if not usuario:
         return jsonify({"error": "Usuário não identificado."}), 401
+    if not orcamento_id:
+        return jsonify({"error": "Informe o registro do orçamento."}), 400
     row = ProducaoOrcamentoArquivo.query.filter_by(
-        usuario=usuario, numero_orcamento=numero, versao=versao,
+        usuario=usuario, orcamento_id=orcamento_id, data_entrega=data_entrega,
     ).first()
     if row is not None:
         now = agora_br()
@@ -370,7 +401,11 @@ def cronograma_restaurar_orcamento(numero: str):
         row.restaurado_em = now
         row.atualizado_em = now
         db.session.commit()
-    return jsonify({"arquivado": False, "orcamento": numero, "versao": versao})
+    return jsonify({
+        "arquivado": False, "orcamento_id": orcamento_id,
+        "orcamento": numero, "versao": versao,
+        "data_entrega": data_entrega,
+    })
 
 
 @producao_bp.get("/api/producao/cronograma-entregas/classificacoes")

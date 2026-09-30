@@ -16,6 +16,7 @@ export interface DeliveryOrder {
 }
 
 export interface ScheduledDelivery {
+  orcamento_id: string;
   orcamento: string;
   versao: string;
   cliente: string;
@@ -90,11 +91,13 @@ export const api = {
     });
   },
 
-  archiveScheduledBudget(budgetNumber: string, version = "") {
+  archiveScheduledBudget(budgetId: string, budgetNumber: string, version = "", deliveryDate: string | null = null) {
     return fetch("/api/producao/cronograma-entregas/arquivados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orcamento: budgetNumber, versao: version })
+      body: JSON.stringify({
+        orcamento_id: budgetId, orcamento: budgetNumber, versao: version, data_entrega: deliveryDate
+      })
     }).then(async (response) => {
       const payload = await response.json() as { arquivado?: boolean; error?: string };
       if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao arquivar o orçamento.");
@@ -102,9 +105,10 @@ export const api = {
     });
   },
 
-  restoreScheduledBudget(budgetNumber: string, version = "") {
-    const params = new URLSearchParams();
+  restoreScheduledBudget(budgetId: string, budgetNumber: string, version = "", deliveryDate: string | null = null) {
+    const params = new URLSearchParams({ orcamento_id: budgetId });
     if (version) params.set("versao", version);
+    if (deliveryDate) params.set("data_entrega", deliveryDate);
     const suffix = params.size ? `?${params}` : "";
     return fetch(`/api/producao/cronograma-entregas/arquivados/${encodeURIComponent(budgetNumber)}${suffix}`, {
       method: "DELETE"

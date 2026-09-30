@@ -27,6 +27,7 @@ describe("DeliveryExplosion", () => {
   beforeEach(() => {
     mockedApi.getScheduledDeliveries.mockResolvedValue([
       {
+        orcamento_id: "6907-id",
         orcamento: "6907",
         versao: "",
         cliente: "Columbia Machine",
@@ -96,13 +97,13 @@ describe("DeliveryExplosion", () => {
   it("counts a budget only once when it has deliveries on different dates", async () => {
     mockedApi.getScheduledDeliveries.mockResolvedValueOnce([
       {
-        orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
+        orcamento_id: "7375-id", orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
         classificacoes: ["MOLDE"], data_entrega: "2026-10-15", status: "",
         percentual: null,
         os: [{ numero: "10507", descricao: "OS 1", principal: true, status: "" }]
       },
       {
-        orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
+        orcamento_id: "7375-id", orcamento: "7375", versao: "", cliente: "Cliente", descricao: "",
         classificacoes: ["MOLDE"], data_entrega: "2026-10-22", status: "",
         percentual: null,
         os: [{ numero: "10509", descricao: "OS 2", principal: true, status: "" }]
@@ -130,11 +131,15 @@ describe("DeliveryExplosion", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
-    await waitFor(() => expect(mockedApi.archiveScheduledBudget).toHaveBeenCalledWith("6907", ""));
+    await waitFor(() => expect(mockedApi.archiveScheduledBudget).toHaveBeenCalledWith(
+      "6907-id", "6907", "", "2026-09-02"
+    ));
 
     fireEvent.click(screen.getByRole("button", { name: /Arquivados/ }));
     await waitFor(() => expect(mockedApi.getScheduledDeliveries).toHaveBeenCalledWith(9, 2026, "MOLDE", "", expect.any(AbortSignal), true));
     fireEvent.click(await screen.findByRole("button", { name: "Restaurar" }));
-    await waitFor(() => expect(mockedApi.restoreScheduledBudget).toHaveBeenCalledWith("6907", ""));
+    await waitFor(() => expect(mockedApi.restoreScheduledBudget).toHaveBeenCalledWith(
+      "6907-id", "6907", "", "2026-09-02"
+    ));
   });
 });

@@ -23,15 +23,17 @@ def upgrade():
         "producao_orcamento_arquivo",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("usuario", sa.String(100), nullable=False),
+        sa.Column("orcamento_id", sa.String(80), nullable=False, server_default=""),
         sa.Column("numero_orcamento", sa.String(80), nullable=False),
         sa.Column("versao", sa.String(30), nullable=False, server_default=""),
+        sa.Column("data_entrega", sa.String(10), nullable=False, server_default=""),
         sa.Column("ativo", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("arquivado_em", sa.DateTime(), nullable=False),
         sa.Column("restaurado_em", sa.DateTime()),
         sa.Column("atualizado_em", sa.DateTime(), nullable=False),
         sa.UniqueConstraint(
-            "usuario", "numero_orcamento", "versao",
-            name="uq_producao_orcamento_arquivo_usuario_orcamento",
+            "usuario", "orcamento_id", "data_entrega",
+            name="uq_producao_orcamento_arquivo_usuario_registro_data",
         ),
     )
     op.create_index("ix_producao_orcamento_arquivo_usuario", "producao_orcamento_arquivo", ["usuario"])

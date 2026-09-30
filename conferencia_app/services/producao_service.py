@@ -188,6 +188,7 @@ def listar_entregas_cronograma(mes: int, ano: int, classificacao: str = "", pesq
         budget_id = int(row["cod_orcamento"])
         delivery_date = _iso(row.get("dt_entrega_cronograma"))
         delivery = deliveries.setdefault((budget_id, delivery_date), {
+            "orcamento_id": str(budget_id),
             "orcamento": _texto(row.get("n_orcamento")),
             "versao": _texto(row.get("versao")),
             "data_entrega": delivery_date,
