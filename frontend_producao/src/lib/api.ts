@@ -78,14 +78,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getScheduledDeliveries(month: number, year: number, classification = "", search = "", signal?: AbortSignal) {
+  getScheduledDeliveries(month: number, year: number, classification = "", search = "", signal?: AbortSignal, archived = false) {
     const params = new URLSearchParams({ mes: String(month), ano: String(year) });
     if (classification) params.set("classificacao", classification);
     if (search) params.set("pesquisa", search);
+    if (archived) params.set("arquivados", "1");
     return fetch(`/api/producao/cronograma-entregas?${params}`, { signal }).then(async (response) => {
       const payload = await response.json() as { entregas?: ScheduledDelivery[]; error?: string };
       if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao consultar o cronograma.");
       return payload.entregas ?? [];
+    });
+  },
+
+  archiveScheduledBudget(budgetNumber: string, version = "") {
+    return fetch("/api/producao/cronograma-entregas/arquivados", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orcamento: budgetNumber, versao: version })
+    }).then(async (response) => {
+      const payload = await response.json() as { arquivado?: boolean; error?: string };
+      if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao arquivar o orçamento.");
+      return payload;
+    });
+  },
+
+  restoreScheduledBudget(budgetNumber: string, version = "") {
+    const params = new URLSearchParams();
+    if (version) params.set("versao", version);
+    const suffix = params.size ? `?${params}` : "";
+    return fetch(`/api/producao/cronograma-entregas/arquivados/${encodeURIComponent(budgetNumber)}${suffix}`, {
+      method: "DELETE"
+    }).then(async (response) => {
+      const payload = await response.json() as { arquivado?: boolean; error?: string };
+      if (!response.ok) throw new ApiError(response.status, payload.error ?? "Falha ao restaurar o orçamento.");
+      return payload;
     });
   },
 

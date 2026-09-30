@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 
 from ..auth import permission_required
 from ..extensions import db
-from ..models import ProducaoObservacao, ProducaoSequencia
+from ..models import ProducaoObservacao, ProducaoOrcamentoArquivo, ProducaoSequencia
 from ..services import producao_service, rpa_agrupamento_service, rpa_grv_service, rpa_queue_service
 from ..tempo import agora_br
 
@@ -23,6 +23,21 @@ def _original_static_directory() -> str:
     if static_folder is None:
         raise RuntimeError("Pasta de arquivos estaticos nao configurada.")
     return static_folder + "/producao_original"
+
+
+def _cronograma_usuario() -> str:
+    return str(session.get("username") or "").strip()
+
+
+def _cronograma_chave(orcamento: object, versao: object = "") -> tuple[str, str]:
+    return str(orcamento or "").strip(), str(versao or "").strip()
+
+
+def _cronograma_arquivados(usuario: str) -> set[tuple[str, str]]:
+    if not usuario:
+        return set()
+    rows = ProducaoOrcamentoArquivo.query.filter_by(usuario=usuario, ativo=True).all()
+    return {_cronograma_chave(row.numero_orcamento, row.versao) for row in rows}
 
 
 @producao_bp.get("/producao")
@@ -294,10 +309,68 @@ def cronograma_entregas():
         entregas = producao_service.listar_entregas_cronograma(
             mes, ano, request.args.get("classificacao", ""), request.args.get("pesquisa", "")
         )
+        archived_keys = _cronograma_arquivados(_cronograma_usuario())
+        archived_view = str(request.args.get("arquivados") or "").strip().lower() in {"1", "true", "sim"}
+        entregas = [
+            entrega for entrega in entregas
+            if (_cronograma_chave(entrega.get("orcamento"), entrega.get("versao")) in archived_keys)
+            == archived_view
+        ]
         return jsonify({"periodo": {"mes": mes, "ano": ano}, "entregas": entregas})
     except Exception:
         current_app.logger.exception("Falha ao consultar cronograma de entregas")
         return jsonify({"error": "Não foi possível consultar o cronograma no GRV."}), 503
+
+
+@producao_bp.post("/api/producao/cronograma-entregas/arquivados")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_arquivar_orcamento():
+    payload = request.get_json(silent=True) or {}
+    numero, versao = _cronograma_chave(payload.get("orcamento"), payload.get("versao"))
+    usuario = _cronograma_usuario()
+    if not usuario:
+        return jsonify({"error": "Usuário não identificado."}), 401
+    if not numero:
+        return jsonify({"error": "Informe o número do orçamento."}), 400
+    if len(numero) > 80 or len(versao) > 30:
+        return jsonify({"error": "Identificação do orçamento inválida."}), 400
+
+    row = ProducaoOrcamentoArquivo.query.filter_by(
+        usuario=usuario, numero_orcamento=numero, versao=versao,
+    ).first()
+    now = agora_br()
+    if row is None:
+        row = ProducaoOrcamentoArquivo(
+            usuario=usuario, numero_orcamento=numero, versao=versao,
+            ativo=True, arquivado_em=now, atualizado_em=now,
+        )
+        db.session.add(row)
+    else:
+        row.ativo = True
+        row.arquivado_em = now
+        row.restaurado_em = None
+        row.atualizado_em = now
+    db.session.commit()
+    return jsonify({"arquivado": True, "orcamento": numero, "versao": versao}), 201
+
+
+@producao_bp.delete("/api/producao/cronograma-entregas/arquivados/<path:numero>")
+@permission_required("PAGE_PRODUCAO")
+def cronograma_restaurar_orcamento(numero: str):
+    numero, versao = _cronograma_chave(numero, request.args.get("versao", ""))
+    usuario = _cronograma_usuario()
+    if not usuario:
+        return jsonify({"error": "Usuário não identificado."}), 401
+    row = ProducaoOrcamentoArquivo.query.filter_by(
+        usuario=usuario, numero_orcamento=numero, versao=versao,
+    ).first()
+    if row is not None:
+        now = agora_br()
+        row.ativo = False
+        row.restaurado_em = now
+        row.atualizado_em = now
+        db.session.commit()
+    return jsonify({"arquivado": False, "orcamento": numero, "versao": versao})
 
 
 @producao_bp.get("/api/producao/cronograma-entregas/classificacoes")

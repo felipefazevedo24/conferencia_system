@@ -162,6 +162,44 @@ def test_producao_estaticos_exigem_pasta_configurada():
             _original_static_directory()
 
 
+def test_cronograma_arquiva_e_restaura_orcamento_por_usuario(tmp_path):
+    from conferencia_app.models import ProducaoOrcamentoArquivo
+
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    deliveries = [
+        {"orcamento": "7185", "versao": "A", "data_entrega": "2026-10-18", "os": [{"numero": "9965"}]},
+        {"orcamento": "7403", "versao": "", "data_entrega": "2026-10-21", "os": [{"numero": "10721"}]},
+    ]
+    endpoint = "/api/producao/cronograma-entregas?mes=10&ano=2026"
+
+    with patch("conferencia_app.routes.producao_routes.producao_service.listar_entregas_cronograma", return_value=deliveries):
+        assert [item["orcamento"] for item in client.get(endpoint).get_json()["entregas"]] == ["7185", "7403"]
+        archived = client.post(
+            "/api/producao/cronograma-entregas/arquivados",
+            json={"orcamento": "7185", "versao": "A"},
+        )
+        assert archived.status_code == 201
+        assert [item["orcamento"] for item in client.get(endpoint).get_json()["entregas"]] == ["7403"]
+        archived_view = client.get(endpoint + "&arquivados=1").get_json()["entregas"]
+        assert [(item["orcamento"], item["versao"]) for item in archived_view] == [("7185", "A")]
+
+        restored = client.delete(
+            "/api/producao/cronograma-entregas/arquivados/7185?versao=A"
+        )
+        assert restored.status_code == 200
+        assert [item["orcamento"] for item in client.get(endpoint).get_json()["entregas"]] == ["7185", "7403"]
+
+    with app.app_context():
+        row = ProducaoOrcamentoArquivo.query.filter_by(
+            usuario="ADMIN", numero_orcamento="7185", versao="A",
+        ).one()
+        assert row.ativo is False
+        assert row.arquivado_em is not None
+        assert row.restaurado_em is not None
+
+
 def test_producao_observacoes_preservam_campos_e_validacao(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

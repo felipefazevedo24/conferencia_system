@@ -4156,6 +4156,28 @@ class ProducaoSequencia(db.Model):
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
+class ProducaoOrcamentoArquivo(db.Model):
+    """Preferencia reversivel do usuario para o cronograma de entregas."""
+
+    __tablename__ = "producao_orcamento_arquivo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario = db.Column(db.String(100), nullable=False, index=True)
+    numero_orcamento = db.Column(db.String(80), nullable=False, index=True)
+    versao = db.Column(db.String(30), nullable=False, default="")
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    arquivado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    restaurado_em = db.Column(db.DateTime, nullable=True)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "usuario", "numero_orcamento", "versao",
+            name="uq_producao_orcamento_arquivo_usuario_orcamento",
+        ),
+    )
+
+
 class RpaExecutor(db.Model):
     __tablename__ = "rpa_executor"
 
