@@ -296,15 +296,64 @@ WHERE UPPER(BTRIM(service.n_os)) NOT LIKE 'E%%'
 ORDER BY service.n_os, dependency_walk.dependent_cod_os NULLS FIRST
 """
 
-# Cronograma do painel visual: a data pertence ao orçamento. O vínculo usa
-# as chaves oficiais do GRV e percorre as mesmas solicitações das dependências.
+# Cronograma do painel visual: cada OS usa a data renegociada quando informada
+# e, na ausencia dela, a data de entrega original. O vinculo com o orcamento
+# usa as chaves oficiais do GRV e percorre as solicitacoes das dependencias.
 SQL_PRODUCAO_CRONOGRAMA_ENTREGAS = """
-WITH RECURSIVE budgets AS (
-    SELECT codigo, n_orcamento, versao, dt_previsao_entrega
-    FROM public.torcamento
+WITH RECURSIVE due_orders AS (
+    SELECT codigo AS cod_os,
+           COALESCE(u_data_renegociacao, dt_prevista) AS dt_entrega_cronograma
+    FROM public.tos
     WHERE cod_empresa = %(cod_empresa)s
-      AND dt_previsao_entrega >= %(inicio)s::date
-      AND dt_previsao_entrega < %(fim)s::date
+      AND UPPER(BTRIM(n_os)) NOT LIKE 'E%%'
+      AND COALESCE(u_data_renegociacao, dt_prevista) >= %(inicio)s::date
+      AND COALESCE(u_data_renegociacao, dt_prevista) < %(fim)s::date
+),
+ancestor_orders AS (
+    SELECT cod_os, cod_os AS due_cod_os
+    FROM due_orders
+    UNION
+    SELECT request.cod_os, ancestor.due_cod_os
+    FROM ancestor_orders ancestor
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = %(cod_empresa)s
+     AND necessity.cod_os = ancestor.cod_os
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = necessity.cod_empresa
+     AND request.guid_pai = necessity.guid_solicitacao
+    WHERE request.cod_os IS NOT NULL
+),
+budget_ids AS (
+    SELECT os.cod_orcamento AS cod_orcamento
+    FROM ancestor_orders ancestor
+    JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
+                      AND os.codigo = ancestor.cod_os
+    WHERE os.cod_orcamento IS NOT NULL
+    UNION
+    SELECT generated.cod_orcamento
+    FROM ancestor_orders ancestor
+    JOIN public.torcamento_servico_gerados generated
+      ON generated.cod_empresa = %(cod_empresa)s
+     AND generated.cod_os = ancestor.cod_os
+     AND COALESCE(generated.cancelado, 0) = 0
+    UNION
+    SELECT budget.codigo
+    FROM ancestor_orders ancestor
+    JOIN public.tos_solicitacao_necessidade necessity
+      ON necessity.cod_empresa = %(cod_empresa)s
+     AND necessity.cod_os = ancestor.cod_os
+    JOIN public.tsol_max_os request
+      ON request.cod_empresa = necessity.cod_empresa
+     AND request.guid_pai = necessity.guid_solicitacao
+    JOIN public.torcamento budget
+      ON budget.cod_empresa = %(cod_empresa)s
+     AND budget.n_orcamento = request.numero_orcamento
+),
+budgets AS (
+    SELECT budget.codigo, budget.n_orcamento, budget.versao
+    FROM public.torcamento budget
+    JOIN budget_ids selected ON selected.cod_orcamento = budget.codigo
+    WHERE budget.cod_empresa = %(cod_empresa)s
 ),
 seed AS (
     SELECT b.codigo AS cod_orcamento, os.codigo AS cod_os, FALSE AS principal
@@ -344,6 +393,12 @@ orders AS (
     SELECT cod_orcamento, cod_os, BOOL_OR(principal) AS principal
     FROM linked GROUP BY cod_orcamento, cod_os
 ),
+scheduled_orders AS (
+    SELECT orders.cod_orcamento, orders.cod_os, orders.principal,
+           due.dt_entrega_cronograma
+    FROM orders
+    JOIN due_orders due ON due.cod_os = orders.cod_os
+),
 operation_counts AS (
     SELECT process.cod_os,
            COUNT(*)::integer AS total,
@@ -352,34 +407,35 @@ operation_counts AS (
                             OR process.dt_finalizacao IS NOT NULL)::integer AS concluidas
     FROM public.tpro_pro process
     WHERE process.cod_empresa = %(cod_empresa)s
-      AND process.cod_os IN (SELECT cod_os FROM orders)
+      AND process.cod_os IN (SELECT cod_os FROM scheduled_orders)
     GROUP BY process.cod_os
 )
 SELECT b.codigo AS cod_orcamento, b.n_orcamento, b.versao,
-       b.dt_previsao_entrega, os.codigo AS cod_os, os.n_os,
+       scheduled.dt_entrega_cronograma, os.codigo AS cod_os, os.n_os,
        os.cliente, os.titulo, os.u_classificacao,
-       os.status_servico, COALESCE(o.principal, FALSE) AS principal,
+       os.status_servico, COALESCE(scheduled.principal, FALSE) AS principal,
        COALESCE(op.total, 0) AS operacoes_total,
        COALESCE(op.concluidas, 0) AS operacoes_concluidas
 FROM budgets b
-LEFT JOIN orders o ON o.cod_orcamento = b.codigo
-LEFT JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
-                       AND os.codigo = o.cod_os
-                       AND UPPER(BTRIM(os.n_os)) NOT LIKE 'E%%'
+JOIN scheduled_orders scheduled ON scheduled.cod_orcamento = b.codigo
+JOIN public.tos os ON os.cod_empresa = %(cod_empresa)s
+                  AND os.codigo = scheduled.cod_os
 LEFT JOIN operation_counts op ON op.cod_os = os.codigo
 WHERE (%(classificacao)s::text IS NULL OR EXISTS (
-    SELECT 1 FROM orders class_orders
+    SELECT 1 FROM scheduled_orders class_orders
     JOIN public.tos class_os ON class_os.cod_empresa = %(cod_empresa)s
                             AND class_os.codigo = class_orders.cod_os
     WHERE class_orders.cod_orcamento = b.codigo
+      AND class_orders.dt_entrega_cronograma = scheduled.dt_entrega_cronograma
       AND UPPER(BTRIM(class_os.u_classificacao)) = UPPER(BTRIM(%(classificacao)s::text))
 ))
 AND (%(pesquisa)s::text IS NULL OR b.n_orcamento::text ILIKE %(pesquisa)s
      OR EXISTS (
-       SELECT 1 FROM orders search_orders
+       SELECT 1 FROM scheduled_orders search_orders
        JOIN public.tos search_os ON search_os.cod_empresa = %(cod_empresa)s
                                 AND search_os.codigo = search_orders.cod_os
        WHERE search_orders.cod_orcamento = b.codigo
+         AND search_orders.dt_entrega_cronograma = scheduled.dt_entrega_cronograma
          AND (search_os.n_os ILIKE %(pesquisa)s
               OR search_os.cliente ILIKE %(pesquisa)s
               OR search_os.titulo ILIKE %(pesquisa)s
@@ -388,7 +444,7 @@ AND (%(pesquisa)s::text IS NULL OR b.n_orcamento::text ILIKE %(pesquisa)s
                            AND item.cod_os = search_os.codigo
                            AND item.subtitulo ILIKE %(pesquisa)s))
      ))
-ORDER BY b.dt_previsao_entrega, b.n_orcamento, principal DESC, os.codigo
+ORDER BY scheduled.dt_entrega_cronograma, b.n_orcamento, principal DESC, os.codigo
 """
 
 SQL_PRODUCAO_OS_ABERTAS = """

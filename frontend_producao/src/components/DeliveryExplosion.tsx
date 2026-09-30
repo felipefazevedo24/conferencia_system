@@ -19,7 +19,7 @@ function criticalReason(node: DeliveryStructureNode, dueDate: string | null) {
   if (days !== null && days <= 3) return "Prazo crítico";
   return null;
 }
-const budgetKey = (delivery: ScheduledDelivery) => `${delivery.orcamento}/${delivery.versao}`;
+const budgetKey = (delivery: ScheduledDelivery) => `${delivery.orcamento}/${delivery.versao}/${delivery.data_entrega ?? ""}`;
 
 export function DeliveryExplosion({ month, year, classification, search, onClose, onSelectOrder }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

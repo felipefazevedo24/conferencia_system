@@ -3,12 +3,13 @@ from datetime import datetime
 from unittest.mock import patch
 
 from test_producao_contexto import api, service  # noqa: F401 - fixture compartilhada
+from conferencia_app.compras import queries
 
 
 def budget_row(**changes):
     row = {
         "cod_orcamento": 72, "n_orcamento": 7222, "versao": "A",
-        "dt_previsao_entrega": datetime(2026, 9, 25),
+        "dt_entrega_cronograma": datetime(2026, 9, 25),
         "cod_os": 801, "n_os": "7807/001", "cliente": "Cliente real",
         "titulo": "Transportador", "u_classificacao": "CMS",
         "status_servico": "EM PRODUÇÃO", "principal": True,
@@ -28,6 +29,28 @@ def test_orcamento_agrupa_os_e_calcula_progresso_sem_consulta_por_os():
     assert [item["numero"] for item in delivery["os"]] == ["7807/001", "7807/002"]
     assert [item["principal"] for item in delivery["os"]] == [True, False]
     assert (delivery["operacoes_concluidas"], delivery["operacoes_total"], delivery["percentual"]) == (30, 35, 86)
+
+
+def test_mes_e_data_usam_renegociacao_com_fallback_para_entrega_da_os():
+    sql = queries.SQL_PRODUCAO_CRONOGRAMA_ENTREGAS
+    assert "COALESCE(u_data_renegociacao, dt_prevista)" in sql
+    assert "dt_previsao_entrega >=" not in sql
+
+    rows = [
+        budget_row(cod_os=801, n_os="7807/001", dt_entrega_cronograma=datetime(2026, 10, 15)),
+        budget_row(cod_os=802, n_os="7807/002", dt_entrega_cronograma=datetime(2026, 10, 30)),
+    ]
+    with patch.object(service, "_metadata_read", return_value=rows):
+        deliveries = service.listar_entregas_cronograma(10, 2026)
+
+    assert [item["data_entrega"] for item in deliveries] == [
+        "2026-10-15T00:00:00",
+        "2026-10-30T00:00:00",
+    ]
+    assert [[order["numero"] for order in item["os"]] for item in deliveries] == [
+        ["7807/001"],
+        ["7807/002"],
+    ]
 
 
 def test_filtros_usam_intervalo_semiaberto_e_pesquisa_combinada():

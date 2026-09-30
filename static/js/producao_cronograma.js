@@ -188,7 +188,7 @@
 
     function makeCard(delivery) {
         const card = element('article', 'delivery-card');
-        const key = `${delivery.orcamento}/${delivery.versao}`;
+        const key = `${delivery.orcamento}/${delivery.versao}/${delivery.data_entrega || ''}`;
         const open = state.openBudget === key;
         const toggle = element('button', 'delivery-card-toggle');
         toggle.type = 'button';

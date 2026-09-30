@@ -183,13 +183,14 @@ def listar_entregas_cronograma(mes: int, ano: int, classificacao: str = "", pesq
         "classificacao": _texto(classificacao) or None,
         "pesquisa": f"%{_texto(pesquisa)}%" if _texto(pesquisa) else None,
     })
-    deliveries: dict[int, dict[str, Any]] = {}
+    deliveries: dict[tuple[int, str | None], dict[str, Any]] = {}
     for row in rows:
         budget_id = int(row["cod_orcamento"])
-        delivery = deliveries.setdefault(budget_id, {
+        delivery_date = _iso(row.get("dt_entrega_cronograma"))
+        delivery = deliveries.setdefault((budget_id, delivery_date), {
             "orcamento": _texto(row.get("n_orcamento")),
             "versao": _texto(row.get("versao")),
-            "data_entrega": _iso(row.get("dt_previsao_entrega")),
+            "data_entrega": delivery_date,
             "cliente": "", "descricao": "", "classificacoes": [],
             "status": "", "percentual": None,
             "operacoes_total": 0, "operacoes_concluidas": 0,
