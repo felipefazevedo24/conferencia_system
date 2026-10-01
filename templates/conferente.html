@@ -788,6 +788,29 @@
             color: var(--eui-text);
             border-color: var(--eui-border);
         }
+
+        /* ===== Refino visual da fila e da tela de contagem ===== */
+        /* minmax(0, 1fr): sem isso a coluna unica cresce ate a largura minima da
+           tabela e a pagina inteira estoura em tela estreita. */
+        .ce-wrap { grid-template-columns: minmax(0, 1fr); }
+        #receb-notas-painel > .eui-toolbar { margin-bottom: 14px; }
+        .rc-table .eui-badge { white-space: nowrap; }
+        .rc-table th.rc-col-fit, .rc-table td.rc-col-fit { width: 1%; white-space: nowrap; }
+        .rc-table th.rc-col-forn { min-width: 240px; }
+        .rc-table tbody td:nth-child(5) { white-space: nowrap; }
+        .rc-table tbody td:last-child { text-align: right; }
+        .rc-table tbody tr:has(.eui-empty):hover { background: transparent; }
+        .rc-table .rc-nf { font-variant-numeric: tabular-nums; }
+
+        [data-theme="escuro"] .fator-input,
+        [data-theme="escuro"] .unidade-input { background: var(--eui-surface) !important; color: var(--eui-text) !important; border-color: var(--eui-border-strong) !important; }
+        [data-theme="escuro"] .chapa-btn { background: var(--eui-surface-2); color: var(--eui-text-soft); border-color: var(--eui-border-strong); }
+        [data-theme="escuro"] .chapa-btn.preenchido { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border-color: transparent; }
+        [data-theme="escuro"] .chapa-btn.faltando { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); border-color: transparent; }
+        [data-theme="escuro"] .rc-hist-tipo { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+        [data-theme="escuro"] .rc-hist-tipo--danger { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+        [data-theme="escuro"] .rc-hist-tipo--success { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+        [data-theme="escuro"] .ce-dropdown-menu { background: var(--eui-surface); border-color: var(--eui-border); }
     </style>
 {% endblock %}
 
@@ -900,11 +923,11 @@
                             <tr>
                                 <th width="120">ID Conferência</th>
                                 <th width="120">NF-e</th>
-                                <th>Fornecedor</th>
-                                <th width="200">Referência</th>
+                                <th class="rc-col-forn">Fornecedor</th>
+                                <th width="160">Referência</th>
                                 <th width="150">Recebida em</th>
-                                <th width="180">Status</th>
-                                <th width="130" style="text-align:right;">Ação</th>
+                                <th class="rc-col-fit">Status</th>
+                                <th class="rc-col-fit" style="text-align:right;">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="notas-tbody">
@@ -1582,10 +1605,12 @@
     function mostrarMensagemOperacional(msg, isErro = false) {
         const box = document.getElementById('msg-lock');
         box.style.display = 'block';
-        box.style.background = isErro ? '#fef2f2' : '#fffbeb';
-        box.style.color = isErro ? '#991b1b' : '#92400e';
-        box.style.border = isErro ? '1px solid #fecaca' : '1px solid #fef3c7';
+        box.style.background = isErro ? 'var(--eui-danger-soft)' : 'var(--eui-warning-soft)';
+        box.style.color = isErro ? 'var(--eui-danger-soft-text)' : 'var(--eui-warning-soft-text)';
+        box.style.border = '1px solid transparent';
         box.innerText = msg;
+        // O aviso fica acima da tabela: quem clicou numa linha la embaixo nao o via.
+        box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
     // --- NOVA LOGICA DE HISTORICO COM FILTRO REAL-TIME ---
@@ -1777,6 +1802,14 @@
         return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     }
 
+    // Argumento de funcao dentro de onclick="...". Nao da pra usar '${_rcEsc(x)}':
+    // um apostrofo no valor (ex.: fornecedor "EPI'S LTDA") fecha a string do JS e
+    // o clique morre com erro de sintaxe, sem aviso na tela. JSON.stringify gera o
+    // literal JS correto e o _rcEsc protege as aspas duplas no atributo HTML.
+    function _rcArg(s) {
+        return _rcEsc(JSON.stringify(String(s == null ? '' : s)));
+    }
+
     function _rcIdentityQuery(cnpjEmitente, fornecedor, chaveAcesso = '', documentoRef = '') {
         const params = new URLSearchParams();
         if (String(documentoRef || '').trim()) params.set('documento_ref', String(documentoRef).trim());
@@ -1805,7 +1838,7 @@
             const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
             const msg = termo ? 'Nenhuma NF encontrada para esta busca.'
                 : (filtroReceb ? 'Nenhuma NF neste fluxo.' : 'Não há conferências na fila.');
-            tbody.innerHTML = `<tr><td colspan="7" class="ce-empty">${msg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7"><div class="eui-empty"><i class="fas fa-inbox"></i><strong>${msg}</strong></div></td></tr>`;
             return;
         }
 
@@ -1819,8 +1852,8 @@
             const lanc = n.status_slug === 'lancado' && n.numero_lancamento
                 ? `<div style="font-size:11px; color:#64748b; margin-top:2px;">Lanç.: ${_rcEsc(n.numero_lancamento)}</div>` : '';
             const acao = n.status_slug === 'pendente'
-                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}','${_rcEsc(n.chave_acesso || '')}','${_rcEsc(n.documento_ref || '')}')"><i class="fas fa-barcode"></i> Conferir</button>`
-                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="abrirVisualizacao('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}','${_rcEsc(n.chave_acesso || '')}','${_rcEsc(n.documento_ref || '')}')"><i class="fas fa-eye"></i> Visualizar</button>`;
+                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir(${_rcArg(n.numero)},${_rcArg(n.cnpj_emitente)},${_rcArg(n.fornecedor)},${_rcArg(n.chave_acesso)},${_rcArg(n.documento_ref)})"><i class="fas fa-barcode"></i> Conferir</button>`
+                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="abrirVisualizacao(${_rcArg(n.numero)},${_rcArg(n.cnpj_emitente)},${_rcArg(n.fornecedor)},${_rcArg(n.chave_acesso)},${_rcArg(n.documento_ref)})"><i class="fas fa-eye"></i> Visualizar</button>`;
             return `<tr>
                 <td class="rc-cod">${_rcEsc(n.codigo_conferencia)}</td>
                 <td class="rc-nf">${_rcEsc(n.numero)}</td>
