@@ -973,7 +973,9 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             nf_valor_unit = (nf_valor_total / nf_qtd) if nf_qtd > 0 else 0.0
 
             qtd_diff = abs((po_qtd or 0) - nf_qtd) if po_qtd is not None else float("inf")
-            qtd_ok = po_qtd is not None and qtd_diff < 0.0001
+            # po_qtd é o saldo PENDENTE no ERP: entrega parcial (NF abaixo do saldo)
+            # é normal e o resto fica pra próxima NF. Só acima do saldo diverge.
+            qtd_ok = po_qtd is not None and nf_qtd <= po_qtd + 0.0001
             unit_diff = abs((po_valor_unit or 0) - nf_valor_unit) if po_valor_unit is not None else float("inf")
             unit_ok = po_valor_unit is not None and unit_diff <= 0.01
 
@@ -1028,8 +1030,10 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 melhor = candidato
                 continue
 
-            atual_rank = (candidato["score"], candidato["ok"], candidato["qtd_ok"], candidato["valor_ok"], -candidato["qtd_diff"], -candidato["unit_diff"], -candidato["total_diff"])
-            melhor_rank = (melhor["score"], melhor["ok"], melhor["qtd_ok"], melhor["valor_ok"], -melhor["qtd_diff"], -melhor["unit_diff"], -melhor["total_diff"])
+            # Com entrega parcial aceita, vários fatores passam a "caber" no saldo;
+            # no empate, fica sem conversão em vez de inventar um fator que encoste no saldo.
+            atual_rank = (candidato["score"], candidato["ok"], candidato["qtd_ok"], candidato["valor_ok"], candidato["fator_aplicado"] == 1.0, -candidato["qtd_diff"], -candidato["unit_diff"], -candidato["total_diff"])
+            melhor_rank = (melhor["score"], melhor["ok"], melhor["qtd_ok"], melhor["valor_ok"], melhor["fator_aplicado"] == 1.0, -melhor["qtd_diff"], -melhor["unit_diff"], -melhor["total_diff"])
             if atual_rank > melhor_rank:
                 melhor = candidato
 
@@ -1176,7 +1180,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         po_qtd = mets[indices[0]]["po_qtd"]
         soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
         qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
-        qtd_ok_grupo = po_qtd is not None and qtd_diff < 0.0001
+        qtd_ok_grupo = po_qtd is not None and soma_nf_qtd <= po_qtd + 0.0001
         # Guarda quais linhas do XML (numero + quantidade) compoem a soma desta
         # linha do pedido, pra dar pra conferir de onde vem o total (diagnostico).
         linhas_grupo = [{"linha": i + 1, "nf_qtd": round(mets[i]["nf_qtd"], 6)} for i in indices]
