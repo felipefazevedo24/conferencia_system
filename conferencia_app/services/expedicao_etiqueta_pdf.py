@@ -152,6 +152,10 @@ def gerar_etiqueta_red_molds_pdf(
     # de leitura de PDF (pypdf/pymupdf) so pra isso.
     c = canvas.Canvas(buf, pagesize=portrait((LARGURA, ALTURA)), pageCompression=0)
     c.setTitle("Etiqueta de Expedição")
+    # Pede ao visualizador (Chrome, Edge, Acrobat) pra imprimir em tamanho
+    # real: sem isso o dialogo "ajusta a pagina" ao papel padrao do driver da
+    # Zebra e a etiqueta sai reduzida.
+    c.setViewerPreference("PrintScaling", "None")
 
     for volume_atual in range(1, qtde_volumes + 1):
         # Faixa do logo em branco: o logo vem pre-impresso no rolo.
