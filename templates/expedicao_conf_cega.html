@@ -947,6 +947,7 @@
                     else if (act === "fotos") abrirModalFotosPreexpedicao(cfg.apiBase, cod, ordemPorCod(cod));
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
                     else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
+                    else if (act === "imprimir-etiqueta-columbia") imprimirEtiquetaColumbia(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
                     else if (act === "expedir-sem-conf") expedirSemConferencia(cod);
                     else if (act === "excluir") excluirOrdem(cod);
@@ -964,7 +965,10 @@
             // pra ordens de faturamento (tem NF/cliente/orcamento) a partir do
             // faturamento em diante (precisa de NF pra imprimir).
             const btnEtiqueta = () =>
-                (cfg.codKey === "cod_ordem_fat") ? it("imprimir-etiqueta-red-molds", "fa-tag", "Imprimir Etiqueta - Red Molds") : "";
+                (cfg.codKey === "cod_ordem_fat")
+                    ? it("imprimir-etiqueta-red-molds", "fa-tag", "Imprimir Etiqueta - Red Molds")
+                      + it("imprimir-etiqueta-columbia", "fa-tag", "Imprimir Etiqueta - Columbia")
+                    : "";
             let itens = "";
             if (s === "pendente" || s === "faturado_sem_conf") {
                 const lbl = s === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
@@ -1040,6 +1044,9 @@
         // ── Etiqueta de expedição (Identificação de Volume) ─────────────────
         function imprimirEtiquetaRedMolds(cod) {
             window.open(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-red-molds.pdf`, "_blank");
+        }
+        function imprimirEtiquetaColumbia(cod) {
+            window.open(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-columbia.pdf`, "_blank");
         }
 
         // ── Anexar comprovante de entrega direto da fila de Expedição ────────

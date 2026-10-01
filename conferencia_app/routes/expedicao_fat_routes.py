@@ -321,9 +321,20 @@ def obter_ordem_conf_cega(cod_ordem_fat):
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-red-molds.pdf")
 @permission_required(PERMISSION)
 def etiqueta_red_molds_pdf(cod_ordem_fat):
-    """Etiqueta de expedicao (Identificacao de Volume), modelo Red Molds,
-    pra impressao termica Zebra - uma pagina por volume. So disponivel a
-    partir do faturamento (a ordem precisa ter NF)."""
+    """Etiqueta de expedicao (Identificacao de Volume), modelo Red Molds
+    (105 x 200 mm), pra impressao termica Zebra - uma pagina por volume. So
+    disponivel a partir do faturamento (a ordem precisa ter NF)."""
+    return _etiqueta_pdf(cod_ordem_fat, etiqueta_pdf.RED_MOLDS, "etiqueta_red_molds")
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-columbia.pdf")
+@permission_required(PERMISSION)
+def etiqueta_columbia_pdf(cod_ordem_fat):
+    """Mesma etiqueta no modelo Columbia (80 x 120 mm, sem OS)."""
+    return _etiqueta_pdf(cod_ordem_fat, etiqueta_pdf.COLUMBIA, "etiqueta_columbia")
+
+
+def _etiqueta_pdf(cod_ordem_fat, modelo, prefixo_arquivo: str):
     ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
     if not ordem:
         return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
@@ -346,7 +357,8 @@ def etiqueta_red_molds_pdf(cod_ordem_fat):
         etiqueta_svc.buscar_endereco_cliente(ordem.cliente)
     )
 
-    pdf_bytes = etiqueta_pdf.gerar_etiqueta_red_molds_pdf(
+    pdf_bytes = etiqueta_pdf.gerar_etiqueta_pdf(
+        modelo,
         numero_nf=ordem.numero_nf,
         orcamento=ordem.orcamento or dados_nf.get("orcamento") or "",
         os_texto=os_texto or dados_nf.get("os") or "",
@@ -359,7 +371,7 @@ def etiqueta_red_molds_pdf(cod_ordem_fat):
         BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=False,
-        download_name=f"etiqueta_red_molds_{cod_ordem_fat}.pdf",
+        download_name=f"{prefixo_arquivo}_{cod_ordem_fat}.pdf",
     )
 
 
