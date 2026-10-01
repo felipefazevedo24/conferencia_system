@@ -43,27 +43,29 @@
 
     /* Badges (fila de auditoria / linha da lista unificada) */
     .badge { display: inline-flex; padding: 5px 12px; border-radius: 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
-    .b-pendente { background: rgba(245, 158, 11, 0.1); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .b-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .b-inc { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .b-dec-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .b-dec-no { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .b-pendente { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); border: 1px solid transparent; }
+    .b-ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border: 1px solid transparent; }
+    .b-inc { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border: 1px solid transparent; }
+    .b-dec-ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border: 1px solid transparent; }
+    .b-dec-no { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border: 1px solid transparent; }
 
     /* Detalhe do Auditor XML */
     .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
-    .box { border: 1px solid var(--border-color); border-radius: 14px; padding: 14px 16px; background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); transition: all 0.2s; }
-    .box:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .box { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); padding: 14px 16px; background: var(--eui-surface-2); }
     .box label { display: block; font-size: 10px; color: var(--text-muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
     .box span { font-size: 14px; font-weight: 700; color: var(--text-main); }
 
-    .inconsistencias { border-left: 4px solid var(--danger-erp); background: rgba(239, 68, 68, 0.05); border-radius: 12px; padding: 18px; margin: 18px 0; }
-    .inconsistencias b { color: #991b1b; font-size: 14px; }
-    .inconsistencias ul { margin: 10px 0 0 20px; color: #b91c1c; }
+    .inconsistencias { border-left: 4px solid var(--eui-danger); background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding: 14px 16px; margin: 0; }
+    .inconsistencias b { color: var(--eui-text); font-size: 14px; }
+    .inconsistencias ul { margin: 10px 0 0 20px; color: var(--eui-danger-soft-text); }
+    .inconsistencias.is-ok { border-left-color: var(--eui-success); background: var(--eui-success-soft); }
+    .de-inc-msg { margin-top: 6px; font-weight: 700; color: var(--eui-danger-soft-text); }
+    .inconsistencias.is-ok .de-inc-msg { color: var(--eui-success-soft-text); }
 
     .pedido-result { display: none; border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 13px; font-weight: 600; border-left: 4px solid; }
-    .pedido-result.ok  { background: #f0fdf4; color: #166534; border-left-color: var(--success-erp); }
-    .pedido-result.err { background: #fef2f2; color: #991b1b; border-left-color: var(--danger-erp); }
-    .pedido-result.warn{ background: #fffbeb; color: #92400e; border-left-color: var(--warning-erp); }
+    .pedido-result.ok  { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border-left-color: var(--eui-success); }
+    .pedido-result.err { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border-left-color: var(--eui-danger); }
+    .pedido-result.warn{ background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); border-left-color: var(--eui-warning); }
 
     .po-compare-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
     .po-compare-table th { background: #f1f5f9; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; }
@@ -102,8 +104,6 @@
     .vinc-edit-btn { margin-top: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .vinc-edit-btn:hover { border-color: #2563eb; color: #1d4ed8; }
 
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-    .actions .btn:last-child { grid-column: span 2; }
     .btn { border: 1px solid var(--border-color); background: #fff; color: #475569; border-radius: 12px; padding: 11px 18px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-decoration: none; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: inline-flex; align-items: center; gap: 8px; }
     .btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
 
@@ -142,16 +142,17 @@
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
-    .modal-card { background: #fff; border-radius: 16px; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18); padding: 32px 36px; max-width: 420px; width: 90%; text-align: center; animation: modalIn 0.18s ease-out; }
+    .modal-card { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); box-shadow: var(--eui-shadow-lg); padding: 28px 32px; max-width: 420px; width: 90%; text-align: center; animation: modalIn 0.18s ease-out; }
     @keyframes modalIn { from { transform: scale(0.93); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     .modal-card .modal-icon { font-size: 36px; color: var(--warning-erp); margin-bottom: 16px; }
     .modal-card h4 { margin: 0 0 8px; font-size: 17px; font-weight: 800; color: var(--text-main); }
     .modal-card p  { margin: 0 0 24px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
-    .modal-actions { display: flex; gap: 10px; justify-content: center; }
-    .vinculacao-overlay-card { background: #fff; border-radius: 14px; box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2); width: min(980px, 95vw); max-height: 86vh; overflow: hidden; animation: modalIn 0.2s ease-out; border: 2px solid #2563eb; }
-    .pendencia-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2); width: min(560px, 94vw); padding: 24px; border: 2px solid #f59e0b; animation: modalIn 0.2s ease-out; }
-    .pendencia-card h4 { margin: 0; font-size: 18px; color: #7c2d12; font-weight: 900; display: flex; align-items: center; gap: 10px; }
-    .pendencia-card p { margin: 10px 0 16px; color: #475569; font-size: 14px; line-height: 1.45; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .vinculacao-overlay-card { background: var(--eui-surface); border-radius: var(--eui-radius-lg); box-shadow: var(--eui-shadow-lg); width: min(980px, 95vw); max-height: 86vh; overflow: hidden; animation: modalIn 0.2s ease-out; border: 1px solid var(--eui-border); }
+    .pendencia-card { background: var(--eui-surface); border-radius: var(--eui-radius-lg); box-shadow: inset 0 3px 0 var(--eui-warning), var(--eui-shadow-lg); width: min(560px, 94vw); padding: 24px; border: 1px solid var(--eui-border); animation: modalIn 0.2s ease-out; }
+    .pendencia-card h4 { margin: 0; font-size: 16px; color: var(--eui-text); font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .pendencia-card h4 i { color: var(--eui-warning); }
+    .pendencia-card p { margin: 10px 0 16px; color: var(--eui-text-soft); font-size: 14px; line-height: 1.45; }
     .pendencia-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
     .rec-card { background: #fff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important; padding: 0 !important; }
@@ -159,7 +160,7 @@
     .rec-card__title { font-size: 14px !important; font-weight: 700 !important; color: #0f172a !important; text-transform: none !important; letter-spacing: 0 !important; }
     .rec-card__sub { font-size: 12px !important; color: #64748b !important; margin-top: 2px !important; }
     .rec-card__body { padding: 16px 20px !important; }
-    .rec-btn { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; padding: 8px 14px !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #0f172a !important; transition: background 0.15s, border-color 0.15s !important; }
+    .rec-btn { border-radius: var(--eui-radius-sm) !important; min-height: 36px; box-shadow: none !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; padding: 8px 14px !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #0f172a !important; transition: background 0.15s, border-color 0.15s !important; }
     .rec-btn:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; }
     .rec-btn--primary { background: #0f62c9 !important; border-color: #0f62c9 !important; color: #fff !important; }
     .rec-btn--primary:hover { background: #0b4fa4 !important; border-color: #0b4fa4 !important; }
@@ -175,14 +176,23 @@
        Estilos herdados do Documento de Entrada (lancamento.html) — cards de
        detalhe, maquina de estados, pendencias, modais de lancamento/estorno.
        ========================================================================== */
-    .doc-btn { border: 1px solid transparent; border-radius: 14px; padding: 11px 16px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-    .doc-btn:hover:not(:disabled) { transform: translateY(-1px); }
-    .doc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .doc-btn-primary { background: linear-gradient(135deg, #1671d8, #0f62c9); color: #ffffff; border-color: #0f62c9; }
-    .doc-btn-secondary { background: #ffffff; color: var(--doc-ink); border-color: var(--doc-border); }
-    .doc-btn-success { background: var(--doc-success-soft); color: var(--doc-success); border-color: #bde5cc; }
-    .doc-btn-warning { background: var(--doc-warning-soft); color: var(--doc-warning); border-color: #f4d5a0; }
-    .doc-btn-danger { background: var(--doc-danger-soft); color: var(--doc-danger); border-color: #f0c2c8; }
+    /* Mesma geometria e variantes do .eui-btn (erp-ui.css), para a tela ter um
+       botao so. O #de-root + !important e' necessario: o recebimento_sap.css
+       (compartilhado com outras telas) fixa .doc-btn com !important. */
+    #de-root .doc-btn { border: 1px solid transparent !important; border-radius: var(--eui-radius-sm) !important; min-height: 36px; padding: 0 14px !important; font-size: 13px !important; font-weight: 600 !important; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; transition: all var(--eui-trans); }
+    #de-root .doc-btn i { font-size: 12px; }
+    #de-root .doc-btn:focus-visible { outline: none; box-shadow: var(--eui-focus-ring) !important; }
+    #de-root .doc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    #de-root .doc-btn-primary { background: var(--eui-primary) !important; color: var(--eui-primary-contrast) !important; border-color: var(--eui-primary) !important; }
+    #de-root .doc-btn-primary:hover:not(:disabled) { background: var(--eui-primary-hover) !important; border-color: var(--eui-primary-hover) !important; }
+    #de-root .doc-btn-secondary { background: var(--eui-surface) !important; color: var(--eui-text) !important; border-color: var(--eui-border-strong) !important; }
+    #de-root .doc-btn-secondary:hover:not(:disabled) { background: var(--eui-surface-3) !important; border-color: var(--eui-primary) !important; color: var(--eui-primary) !important; }
+    #de-root .doc-btn-success { background: var(--eui-surface) !important; color: var(--eui-success) !important; border-color: var(--eui-success) !important; }
+    #de-root .doc-btn-success:hover:not(:disabled) { background: var(--eui-success-soft) !important; }
+    #de-root .doc-btn-warning { background: var(--eui-surface) !important; color: var(--eui-warning) !important; border-color: var(--eui-warning) !important; }
+    #de-root .doc-btn-warning:hover:not(:disabled) { background: var(--eui-warning-soft) !important; }
+    #de-root .doc-btn-danger { background: var(--eui-surface) !important; color: var(--eui-danger) !important; border-color: var(--eui-danger) !important; }
+    #de-root .doc-btn-danger:hover:not(:disabled) { background: var(--eui-danger-soft) !important; color: var(--eui-danger) !important; }
 
     .doc-feedback { display: none; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 16px 18px; border-radius: 18px; border: 1px solid transparent; box-shadow: var(--doc-shadow); background: #ffffff; }
     .doc-feedback.show { display: flex; }
@@ -194,21 +204,21 @@
     .doc-feedback-close { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 20px; line-height: 1; padding: 0; }
 
     .doc-detail-empty { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--doc-muted); padding: 44px 24px; font-size: 13px; font-weight: 700; }
-    .doc-card { border: 1px solid var(--doc-border); border-radius: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); padding: 18px; }
+    .doc-card { border: 1px solid var(--doc-border); border-radius: var(--eui-radius); background: var(--eui-surface); padding: 16px; min-width: 0; }
     .doc-card h3 { margin: 0 0 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; color: var(--doc-muted); }
     .doc-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .doc-summary-item { padding: 14px; border-radius: 16px; background: #f6f9fc; border: 1px solid #e4ebf2; }
+    .doc-summary-item { padding: 12px; border-radius: var(--eui-radius); background: #f6f9fc; border: 1px solid #e4ebf2; }
     .doc-summary-item label { display: block; margin-bottom: 6px; font-size: 10px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: 0.08em; }
     .doc-summary-item strong { display: block; font-size: 14px; line-height: 1.4; font-weight: 800; color: var(--doc-ink); word-break: break-word; }
     .doc-workflow { display: flex; gap: 12px; flex-wrap: wrap; }
-    .doc-step { flex: 1 1 130px; min-width: 120px; padding: 12px 14px; border-radius: 16px; border: 1px solid #dde7f0; background: #f8fbfe; }
+    .doc-step { flex: 1 1 130px; min-width: 120px; padding: 12px 14px; border-radius: var(--eui-radius); border: 1px solid #dde7f0; background: #f8fbfe; }
     .doc-step.done { background: var(--doc-success-soft); border-color: #bde5cc; }
     .doc-step.pending { background: #f7f9fc; border-color: #e2eaf2; }
     .doc-step-label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 800; color: var(--doc-muted); }
     .doc-step-status { display: block; margin-top: 6px; font-size: 14px; font-weight: 800; color: var(--doc-ink); }
     .doc-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .doc-pendency-list, .doc-timeline-list { display: grid; gap: 10px; }
-    .doc-pendency-item, .doc-timeline-item { padding: 12px 14px; border-radius: 16px; border: 1px solid #e2eaf2; background: #f9fbfd; }
+    .doc-pendency-item, .doc-timeline-item { padding: 12px 14px; border-radius: var(--eui-radius); border: 1px solid #e2eaf2; background: #f9fbfd; }
     .doc-pendency-item.severidade-alta { background: var(--doc-danger-soft); border-color: #f0c2c8; }
     .doc-pendency-item.severidade-media { background: var(--doc-warning-soft); border-color: #f4d5a0; }
     .doc-pendency-item.severidade-warning { background: var(--doc-warning-soft); border-color: #f4d5a0; }
@@ -222,32 +232,39 @@
     .rc-hist-item.is-danger { border-left-color: #dc2626; }
     .rc-hist-item.is-success { border-left-color: #16a34a; }
     .rc-hist-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .rc-hist-tipo { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: #e0ecff; color: #0f62c9; }
-    .rc-hist-tipo--danger { background: #fee2e2; color: #b91c1c; }
-    .rc-hist-tipo--success { background: #dcfce7; color: #15803d; }
+    .rc-hist-tipo { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+    .rc-hist-tipo--danger { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .rc-hist-tipo--success { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
     .rc-hist-data { color: #64748b; font-size: 11px; font-weight: 700; margin-left: auto; font-family: monospace; }
     .rc-hist-desc { font-size: 13px; color: #334155; margin-top: 6px; font-weight: 600; }
     .rc-hist-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 22px; }
-    .doc-modal-overlay { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 24px; }
+    .doc-modal-overlay { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 24px; }
     .doc-modal-overlay.active { display: flex; }
-    .doc-modal { width: min(720px, 100%); border-radius: 20px; background: #ffffff; border: 1px solid var(--doc-border); box-shadow: 0 30px 70px rgba(15, 23, 42, 0.2); overflow: hidden; }
+    .doc-modal { width: min(720px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; border-radius: var(--eui-radius-lg); background: var(--eui-surface); border: 1px solid var(--eui-border); box-shadow: var(--eui-shadow-lg); overflow: hidden; animation: modalIn 0.18s ease-out; }
     .doc-modal.small { width: min(580px, 100%); }
-    .doc-modal-head, .doc-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 22px; }
-    .doc-modal-head { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; }
-    .doc-modal-head h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; }
-    .doc-modal-close { border: none; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; padding: 0; }
-    .doc-modal-body { padding: 22px; display: grid; gap: 16px; }
-    .doc-modal-foot { background: #f8fafc; border-top: 1px solid var(--doc-border); justify-content: flex-end; }
+    .doc-modal-head, .doc-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 22px; }
+    /* Cabecalho neutro com um filete de cor: a cor indica o tipo de acao sem
+       competir com o conteudo (antes era um gradiente cheio por modal). */
+    .doc-modal-head { --dmh: var(--eui-primary); background: var(--eui-surface); color: var(--eui-text); border-bottom: 1px solid var(--eui-border); box-shadow: inset 0 3px 0 var(--dmh); }
+    .doc-modal-head--warning { --dmh: var(--eui-warning); }
+    .doc-modal-head--danger { --dmh: var(--eui-danger); }
+    .doc-modal-head h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .doc-modal-head h3 i { color: var(--dmh); font-size: 14px; }
+    .doc-modal-sub { margin: 4px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .doc-modal-close { border: none; background: transparent; color: var(--eui-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0; }
+    .doc-modal-close:hover { color: var(--eui-text); }
+    .doc-modal-body { padding: 20px 22px; display: grid; gap: 16px; overflow-y: auto; }
+    .doc-modal-foot { background: var(--eui-surface-2); border-top: 1px solid var(--eui-border); justify-content: flex-end; }
     .doc-form-block { display: grid; gap: 8px; }
     .doc-form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; color: var(--doc-muted); }
-    .doc-inline-check { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 16px; background: var(--doc-primary-soft); border: 1px solid #cfe0fb; color: var(--doc-primary); font-size: 12px; font-weight: 700; }
+    .doc-inline-check { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: var(--eui-radius); background: var(--doc-primary-soft); border: 1px solid #cfe0fb; color: var(--doc-primary); font-size: 12px; font-weight: 700; }
     .doc-item-code-list { display: grid; gap: 10px; max-height: 260px; overflow-y: auto; }
-    .doc-item-code-card { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; border: 1px solid #f0d4a2; background: #fff8eb; }
+    .doc-item-code-card { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: center; padding: 12px; border-radius: var(--eui-radius); border: 1px solid #f0d4a2; background: #fff8eb; }
     .doc-item-code-title { font-size: 12px; font-weight: 800; color: #7e5711; }
     .doc-item-code-sub { margin-top: 4px; font-size: 11px; font-weight: 700; color: #9a6c12; }
-    .doc-form-help { padding: 12px; border-radius: 16px; background: #f7fafc; border: 1px solid #e4ebf2; color: var(--doc-muted); font-size: 12px; font-weight: 700; line-height: 1.5; }
+    .doc-form-help { padding: 12px; border-radius: var(--eui-radius); background: #f7fafc; border: 1px solid #e4ebf2; color: var(--doc-muted); font-size: 12px; font-weight: 700; line-height: 1.5; }
     .doc-estorno-feedback { font-size: 11px; font-weight: 800; color: var(--doc-danger); }
-    .doc-input, .doc-select, .doc-textarea { width: 100%; border: 1px solid var(--doc-border); border-radius: 12px; background: #fff; padding: 11px 14px; font-size: 13px; font-weight: 600; color: var(--doc-ink); }
+    .doc-input, .doc-select, .doc-textarea { width: 100%; border: 1px solid var(--doc-border); border-radius: 8px; background: #fff; padding: 9px 12px; font-size: 13px; font-weight: 500; color: var(--doc-ink); }
     .doc-input:focus, .doc-select:focus, .doc-textarea:focus { outline: none; border-color: var(--doc-primary); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
     .doc-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .hidden { display: none !important; }
@@ -262,9 +279,8 @@
     .de-list-row.is-active td { background: var(--eui-primary-soft, #e7f0ff); }
     .de-panel { display: none; }
     .de-panel.is-visible { display: block; }
-    .de-header-strip { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 14px; background: #fff; border: 1px solid #e2e8f0; margin-bottom: 16px; }
-    .de-header-strip__id { font-size: 18px; font-weight: 800; color: #0f172a; }
-    .de-header-strip__sub { font-size: 12px; color: #64748b; font-weight: 600; }
+    .de-header-strip__id { font-size: 18px; font-weight: 800; color: var(--eui-text); }
+    .de-header-strip__sub { font-size: 12px; color: var(--eui-muted); font-weight: 600; }
 
     /* Hub + telas focadas por estagio */
     .de-view[hidden] { display: none !important; }
@@ -356,7 +372,6 @@
     [data-theme="escuro"] .rec-textarea,
     [data-theme="escuro"] .rec-select { background: var(--rec-surface) !important; border-color: var(--rec-border) !important; color: var(--rec-ink-900) !important; }
 
-    [data-theme="escuro"] .doc-btn-secondary { background: var(--rec-surface-alt); color: var(--rec-ink-900); border-color: var(--rec-border); }
     [data-theme="escuro"] .doc-feedback { background: var(--rec-surface); }
     [data-theme="escuro"] .doc-card { background: var(--rec-surface); border-color: var(--rec-border); }
     [data-theme="escuro"] .doc-summary-item { background: var(--rec-surface-alt); border-color: var(--rec-border); }
@@ -377,9 +392,6 @@
     [data-theme="escuro"] .doc-select,
     [data-theme="escuro"] .doc-textarea { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
 
-    [data-theme="escuro"] .de-header-strip { background: var(--rec-surface); border-color: var(--rec-border); }
-    [data-theme="escuro"] .de-header-strip__id { color: var(--rec-ink-900); }
-    [data-theme="escuro"] .de-header-strip__sub { color: var(--rec-ink-500); }
     [data-theme="escuro"] .de-import-col__title { color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
     [data-theme="escuro"] .file-msg { color: var(--rec-ink-500); }
     [data-theme="escuro"] .ce-vol-table thead th { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
@@ -400,11 +412,6 @@
     [data-theme="escuro"] #diagList {
         border-color: rgba(239, 68, 68, .30) !important;
         background: rgba(239, 68, 68, .12) !important;
-    }
-    [data-theme="escuro"] .doc-detail-bar,
-    [data-theme="escuro"] #detail-body {
-        background: var(--rec-surface) !important;
-        border-color: var(--rec-border) !important;
     }
 
     /* Card da aprovação de divergência XML × pedido (Compras via Teams). */
@@ -444,13 +451,129 @@
     [data-theme="escuro"] .dvb__meta { color: #9fb0c4; }
     [data-theme="escuro"] .dvb__line,
     [data-theme="escuro"] .dvb__quote { background: rgba(255,255,255,.03); color: #b8c6d6; }
+
+    /* ==========================================================================
+       Refino visual — tudo aqui usa os tokens --eui-*, que ja trocam sozinhos
+       no tema escuro (por isso este bloco nao tem regras [data-theme]).
+       ========================================================================== */
+    #de-toast { position: sticky; top: 8px; z-index: 50; box-shadow: var(--eui-shadow-md); }
+    .de-inline { display: flex; gap: 8px; align-items: center; }
+    .de-inline > .eui-input, .de-inline > .rec-input { flex: 1; min-width: 0; }
+    .de-help { font-size: 12px; color: var(--eui-muted); margin: 0 0 14px; }
+    .de-k { color: var(--eui-muted); }
+    .de-code { background: var(--eui-surface-3); color: var(--eui-text); padding: 2px 4px; border-radius: 4px; }
+    .de-import-toggle .eui-card__head { cursor: pointer; }
+    /* Excecoes do bloco. O ui_erp.css fixa fundo claro em todo <input> e
+       vence o .eui-input na especificidade, deixando os campos brancos no escuro. */
+    [data-theme="escuro"] #de-root .eui-input { background: var(--eui-surface); color: var(--eui-text); border-color: var(--eui-border-strong); }
+    /* As regras de tema escuro la' de cima pintam .doc-step e .doc-pendency-item
+       de uma cor so', apagando o estado (concluida / severidade). Devolve aqui. */
+    [data-theme="escuro"] .doc-step.done { background: var(--eui-success-soft); border-color: transparent; }
+    [data-theme="escuro"] .doc-pendency-item.severidade-alta { background: var(--eui-danger-soft); border-color: transparent; }
+    [data-theme="escuro"] .doc-pendency-item.severidade-media,
+    [data-theme="escuro"] .doc-pendency-item.severidade-warning { background: var(--eui-warning-soft); border-color: transparent; }
+    [data-theme="escuro"] .doc-pendency-item.severidade-info { background: var(--eui-primary-soft); border-color: transparent; }
+
+    /* Aviso inline (resultado de busca de OC, registro de doc. nao fiscal etc.) */
+    .de-note { margin-top: 10px; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-weight: 600; line-height: 1.45; border: 1px solid var(--eui-border); background: var(--eui-surface-2); color: var(--eui-text-soft); }
+    .de-note--ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); border-color: transparent; }
+    .de-note--err { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); border-color: transparent; }
+
+    /* Badges de auditoria: mesmo formato do .eui-badge usado na coluna Situacao */
+    #de-root .badge { align-items: center; min-height: 22px; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0.02em; }
+
+    /* Area de upload */
+    .file-drop-area > i { font-size: 22px; color: var(--eui-primary); opacity: 0.6; }
+    .file-drop-area.is-dragover { border-color: var(--eui-primary) !important; border-style: solid !important; background: var(--eui-primary-soft) !important; }
+    .file-drop-area.has-files { border-style: solid !important; border-color: var(--eui-success) !important; }
+    .de-file-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .de-file-list:empty { display: none; }
+    .de-file-chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--eui-surface); border: 1px solid var(--eui-border); color: var(--eui-text-soft); }
+
+    /* Fila: rola dentro do card, com o cabecalho preso, para o painel de
+       detalhe nao ficar uma pagina inteira abaixo da linha clicada. */
+    .ce-table-wrap { max-height: min(62vh, 620px); overflow: auto; }
+    .ce-vol-table thead th { position: sticky; top: 0; z-index: 1; }
+    .ce-vol-table tbody td.de-empty-cell { width: auto; text-align: center; white-space: normal; font-weight: 400; }
+    .de-fila-title { font-size: 13px; color: var(--eui-muted); }
+    .de-fila-title i { color: var(--eui-muted-2); }
+    .eui-input.de-busca { width: 260px; max-width: 100%; }
+    .de-paginacao { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px 0; }
+    .de-paginacao__info { font-size: 12px; color: var(--eui-muted); }
+    .de-skel { display: block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--eui-surface-3) 0%, var(--eui-border) 50%, var(--eui-surface-3) 100%); background-size: 200% 100%; animation: deSkel 1.25s linear infinite; }
+    @keyframes deSkel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Painel de auditoria (card unico) */
+    .de-audit-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .de-audit-body > .dvb { margin-top: 0; }
+    .de-chips { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+    .de-chip { display: inline-flex; align-items: center; gap: 8px; }
+    .de-chip__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--eui-muted); }
+    .de-chip__value { font-size: 12.5px; font-weight: 600; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .de-audit-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+    .de-audit-grid textarea { width: 100%; margin-top: 6px; }
+    .de-checks { margin-top: 12px; display: grid; gap: 8px; }
+    .box .de-check { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--eui-text); }
+    .de-hint { margin: 8px 0 0; font-size: 11px; color: var(--eui-muted); }
+    .de-hint + .de-hint { margin-top: 4px; }
+    .de-decisao { border-color: var(--eui-danger); background: var(--eui-danger-soft); }
+    .de-decisao p { margin: 6px 0 12px; font-size: 12.5px; color: var(--eui-danger-soft-text); }
+    .de-decisao__btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* Acao destrutiva isolada a esquerda; o fluxo normal termina a direita. */
+    .de-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding-top: 16px; border-top: 1px solid var(--eui-border); }
+    .de-actions__main { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+    .de-section-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--eui-text); display: flex; align-items: center; gap: 8px; }
+    .de-section-title i { color: var(--eui-primary); font-size: 13px; }
+    .de-itens-wrap { max-height: 300px; }
+
+    /* Painel de lancamento */
+    .doc-detail-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 16px; align-items: center; padding: 16px 20px; border-radius: var(--eui-radius-lg) var(--eui-radius-lg) 0 0; background: var(--eui-surface); border: 1px solid var(--eui-border); }
+    .doc-detail-head { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .doc-detail-number { font-size: 18px; font-weight: 800; color: var(--eui-text); }
+    .doc-detail-sub { font-size: 12px; font-weight: 600; color: var(--eui-muted); }
+    .doc-detail-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-top: none; border-radius: 0 0 var(--eui-radius-lg) var(--eui-radius-lg); }
+    .doc-detail-body:empty { display: none; }
+    .doc-table-wrap { overflow-x: auto; }
+    .doc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .doc-table th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--eui-muted); padding: 9px 12px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .doc-table td { padding: 9px 12px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); }
+    .doc-table tbody tr:last-child td { border-bottom: none; }
+
+    /* Modal de estorno — cartoes de tipo */
+    .de-tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .de-tipo-card { --tc: var(--eui-primary); --tc-soft: var(--eui-primary-soft); padding: 14px; border-radius: var(--eui-radius); border: 2px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text); cursor: pointer; text-align: left; transition: border-color var(--eui-trans), background var(--eui-trans); }
+    .de-tipo-card--conferencia { --tc: var(--eui-success); --tc-soft: var(--eui-success-soft); }
+    .de-tipo-card--auditor { --tc: var(--eui-warning); --tc-soft: var(--eui-warning-soft); }
+    .de-tipo-card.is-selected { border-color: var(--tc); background: var(--tc-soft); }
+    .de-tipo-card__top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .de-tipo-card__ico { flex: none; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--tc-soft); color: var(--tc); }
+    .de-tipo-card.is-selected .de-tipo-card__ico { background: var(--eui-surface); }
+    .de-tipo-card strong { font-size: 13px; font-weight: 700; }
+    .de-tipo-card p { margin: 0; font-size: 11px; color: var(--eui-muted); }
+
+    @media (max-width: 1100px) {
+        .de-audit-grid, .doc-two-col { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 900px) {
+        .doc-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+        .doc-summary-grid, .vinculacao-linha-xml-dados, .vinc-po-resumo-grid, .doc-item-code-card, .de-decisao__btns { grid-template-columns: 1fr; }
+        /* !important: o JS grava grid-template-columns inline ao abrir o modal */
+        .de-tipo-grid { grid-template-columns: 1fr !important; }
+        .de-actions, .de-actions__main { flex-direction: column; align-items: stretch; margin-left: 0; }
+        .doc-detail-actions .doc-btn { flex: 1 1 auto; }
+        .eui-input.de-busca { width: 100%; }
+        .doc-modal-overlay { padding: 12px; }
+        .modal-card { padding: 22px 18px; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-erp eui-scope" id="de-root" data-is-admin="{{ 'true' if is_admin else 'false' }}" data-can-auditor="{{ 'true' if can_access('PAGE_XML_AUDITOR') else 'false' }}" data-can-lancamento="{{ 'true' if can_access('PAGE_LANCAMENTO') else 'false' }}">
     <div class="module-shell">
-        <div id="de-toast" class="msg" style="position: sticky; top: 8px; z-index: 50;"></div>
+        <div id="de-toast" class="msg"></div>
 
         <header class="eui-page-header">
             <div>
@@ -458,7 +581,7 @@
                 <h1 class="eui-page-header__title"><i class="fas fa-file-invoice"></i> Documento de Entrada</h1>
                 <p class="eui-page-header__sub">Importação, auditoria fiscal e lançamento ERP num único fluxo.</p>
             </div>
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div class="de-inline">
                 <button class="eui-btn eui-btn--ghost" type="button" id="de-btn-sync-erp"><i class="fas fa-cloud-arrow-down"></i> Sincronizar ERP</button>
                 <button class="eui-btn eui-btn--primary" type="button" id="de-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
             </div>
@@ -506,7 +629,7 @@
 
         <!-- Importar XML -->
         <div class="eui-card de-import-toggle">
-            <div class="eui-card__head" style="cursor:pointer;" id="de-import-toggle-head">
+            <div class="eui-card__head" id="de-import-toggle-head">
                 <h2 class="eui-card__title"><i class="fas fa-cloud-upload-alt"></i> Importar XML</h2>
                 <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-import-toggle-btn"><i class="fas fa-chevron-up"></i></button>
             </div>
@@ -524,14 +647,14 @@
                         </div>
                         <div class="eui-field">
                             <label class="eui-field__label">Entrada por chave (44 dígitos)</label>
-                            <div style="display:flex; gap:8px;">
+                            <div class="de-inline">
                                 <input type="text" id="consyste-chave" class="eui-input" maxlength="44" placeholder="0000 0000 0000...">
                                 <button id="btn-consyste-chave" class="eui-btn eui-btn--primary" type="button" onclick="buscarPorChave()"><i class="fas fa-bolt"></i> Puxar</button>
                             </div>
                         </div>
                         <div class="eui-field">
                             <label class="eui-field__label">Consulta por número</label>
-                            <div style="display:flex; gap:8px;">
+                            <div class="de-inline">
                                 <input type="text" id="consyste-numero" class="eui-input" placeholder="Ex: 351">
                                 <button id="btn-consyste-numero" class="eui-btn eui-btn--primary" type="button" onclick="buscarPorNumero()"><i class="fas fa-search"></i> Buscar</button>
                             </div>
@@ -542,8 +665,9 @@
                         <div class="eui-field" style="flex:1;">
                             <label class="eui-field__label">Repositório local de XML</label>
                             <div class="file-drop-area" id="drop-area" style="flex:1;">
-                                <i class="fas fa-file-code" style="font-size: 24px; color: var(--sap-blue); opacity: 0.6;"></i>
-                                <span class="file-msg" id="file-name">Selecione arquivos XML</span>
+                                <i class="fas fa-file-code"></i>
+                                <span class="file-msg" id="file-name">Arraste os XML aqui ou clique para selecionar</span>
+                                <div class="de-file-list" id="file-list"></div>
                                 <input type="file" id="xmls" accept=".xml" multiple onchange="updateFileName()">
                             </div>
                         </div>
@@ -551,18 +675,18 @@
                     </div>
                 </div>
                 <div id="consyste-status"></div>
-                <div id="status" style="margin-top:10px;"></div>
+                <div id="status" class="de-note" style="display:none;"></div>
             </div>
         </div>
 
         <!-- Documento não fiscal (fatura, conta, débito etc.) -->
         <div class="eui-card de-import-toggle" style="margin-top:0;">
-            <div class="eui-card__head" style="cursor:pointer;" id="de-nf-toggle-head">
+            <div class="eui-card__head" id="de-nf-toggle-head">
                 <h2 class="eui-card__title"><i class="fas fa-file-invoice-dollar"></i> Documento Não Fiscal</h2>
                 <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-nf-toggle-btn"><i class="fas fa-chevron-down"></i></button>
             </div>
             <div class="eui-card__body de-import-body hidden" id="de-nf-body">
-                <p style="font-size:12px; color:#64748b; margin-bottom:14px;">Registre faturas, notas de débito, contas e outros documentos não eletrônicos, vinculando-os a uma ordem de compra.</p>
+                <p class="de-help">Registre faturas, notas de débito, contas e outros documentos não eletrônicos, vinculando-os a uma ordem de compra.</p>
                 <div class="de-import-grid">
                     <div class="de-import-col">
                         <span class="de-import-col__title"><i class="fas fa-file-alt"></i> Dados do documento</span>
@@ -588,11 +712,11 @@
                         <span class="de-import-col__title"><i class="fas fa-link"></i> Vínculo com Ordem de Compra</span>
                         <div class="eui-field">
                             <label class="eui-field__label">Número da OC</label>
-                            <div style="display:flex; gap:8px;">
+                            <div class="de-inline">
                                 <input type="text" id="nf-oc" class="eui-input" placeholder="Ex: OC-2026-0001">
                                 <button id="btn-nf-oc-buscar" class="eui-btn eui-btn--primary" type="button" onclick="buscarOcParaDocNF()"><i class="fas fa-search"></i> Buscar</button>
                             </div>
-                            <div id="nf-oc-status" style="display:none; margin-top:8px; border-radius:8px; padding:10px 12px; font-size:12px; font-weight:700;"></div>
+                            <div id="nf-oc-status" class="de-note" style="display:none;"></div>
                         </div>
                         <div class="eui-field">
                             <label class="eui-field__label">Fornecedor</label>
@@ -605,8 +729,8 @@
                         <div id="nf-anexo-wrap" style="margin-top:14px;">
                             <label class="eui-field__label">Anexo (PDF/imagem) <span style="color:#dc2626; font-weight:800;">*</span> <span id="nf-anexo-badge" style="color:#64748b; font-weight:600; text-transform:none;">— obrigatório</span></label>
                             <div class="file-drop-area" id="nf-drop-area" style="min-height:60px;">
-                                <i class="fas fa-paperclip" style="font-size:20px; color:var(--sap-blue); opacity:.6;"></i>
-                                <span class="file-msg" id="nf-file-msg">Selecione PDF, PNG ou JPG</span>
+                                <i class="fas fa-paperclip"></i>
+                                <span class="file-msg" id="nf-file-msg">Arraste ou selecione PDF, PNG ou JPG</span>
                                 <input type="file" id="nf-arquivo" accept=".pdf,.png,.jpg,.jpeg" onchange="nfArquivoSelecionado()">
                             </div>
                         </div>
@@ -616,7 +740,7 @@
                     <button type="button" class="eui-btn eui-btn--ghost" onclick="limparFormDocNF()"><i class="fas fa-eraser"></i> Limpar</button>
                     <button id="btn-nf-adicionar" type="button" class="eui-btn eui-btn--success" onclick="adicionarDocNF()"><i class="fas fa-plus"></i> Registrar documento</button>
                 </div>
-                <div id="nf-feedback" style="display:none; margin-top:10px; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:700;"></div>
+                <div id="nf-feedback" class="de-note" style="display:none;"></div>
             </div>
         </div>
         </div><!-- /de-hub-view -->
@@ -635,10 +759,8 @@
         <!-- Lista unificada -->
         <div class="eui-card">
             <div class="eui-card__head">
-                <h2 class="eui-card__title" style="font-size:13px; color:#64748b;"><i class="fas fa-filter"></i> Fila</h2>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <input type="text" id="de-busca" class="eui-input" placeholder="Buscar por NF ou fornecedor..." style="width:260px;">
-                </div>
+                <h2 class="eui-card__title de-fila-title"><i class="fas fa-filter"></i> Fila</h2>
+                <input type="text" id="de-busca" class="eui-input de-busca" placeholder="Buscar por NF ou fornecedor...">
             </div>
             <div class="eui-card__body eui-card__body--tight">
                 <div class="ce-table-wrap">
@@ -654,13 +776,12 @@
                             </tr>
                         </thead>
                         <tbody id="de-tbody">
-                            <tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Carregando…</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 4px;">
-                    <span id="de-paginacao-info" style="font-size:12px; color:#64748b;"></span>
-                    <div style="display:flex; gap:6px;">
+                <div class="de-paginacao">
+                    <span id="de-paginacao-info" class="de-paginacao__info"></span>
+                    <div class="de-inline">
                         <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-btn-pag-anterior"><i class="fas fa-chevron-left"></i></button>
                         <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-btn-pag-proxima"><i class="fas fa-chevron-right"></i></button>
                     </div>
@@ -670,91 +791,97 @@
 
         <!-- Painel de detalhe: vazio -->
         <div class="eui-card de-panel is-visible" id="de-panel-vazio">
-            <div class="eui-card__body" style="text-align:center; padding:40px 20px; color:#64748b;">
-                <i class="fas fa-hand-pointer" style="font-size:28px; opacity:.5;"></i>
-                <p style="margin-top:10px; font-weight:700;">Selecione uma nota na lista para abrir o painel.</p>
+            <div class="eui-empty">
+                <i class="fas fa-hand-pointer"></i>
+                <strong>Selecione uma nota na lista</strong>
+                <span>O painel de auditoria ou de lançamento abre aqui.</span>
             </div>
         </div>
 
         <!-- Painel de detalhe: Auditoria (portado de auditor_xml.html) -->
         <div class="de-panel" id="de-panel-auditoria">
-            <div class="de-header-strip">
-                <div>
-                    <div class="de-header-strip__id">NF <span id="dNota">---</span></div>
-                    <div class="de-header-strip__sub"><span id="dFornecedor">---</span> · Status fluxo: <span id="dStatusFluxo">---</span></div>
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <span class="box" style="padding:8px 12px;"><label>Status auditoria</label><span id="dStatusAuditoria">---</span></span>
-                    <span class="box" style="padding:8px 12px;"><label>Decisão fiscal</label><span id="dDecisaoFiscal">---</span></span>
-                    <span class="box" style="padding:8px 12px;"><label>CNPJ destinatário</label><span id="dCnpjDestinatario">---</span></span>
-                </div>
-            </div>
-
-            <div id="divergenciaDecisaoBanner" class="dvb" style="display:none;"></div>
-
-            <div class="rec-stack-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px;">
-                <div class="box">
-                    <label>Pedido(s) de Compra (Vínculo ERP)</label>
-                    <div style="display:flex; gap:8px; margin-top:6px;">
-                        <input id="pedidoCompra" class="rec-input" style="flex:1;" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
-                        <button type="button" class="rec-btn" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
+            <div class="eui-card">
+                <div class="eui-card__head">
+                    <div>
+                        <div class="de-header-strip__id">NF <span id="dNota">---</span></div>
+                        <div class="de-header-strip__sub"><span id="dFornecedor">---</span> · Status fluxo: <span id="dStatusFluxo">---</span></div>
                     </div>
-                    <div id="pedidoResult" class="pedido-result"></div>
-                    <div id="pedidoCompareWrap" style="display:none;"></div>
-                    <div style="margin-top:12px; display:grid; gap:8px;">
-                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
-                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
-                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
-                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="mercadoLivre"> Mercado Livre</label>
+                    <div class="de-chips">
+                        <span class="de-chip"><span class="de-chip__label">Auditoria</span><span class="badge b-pendente" id="dStatusAuditoria">---</span></span>
+                        <span class="de-chip"><span class="de-chip__label">Decisão fiscal</span><span class="badge b-pendente" id="dDecisaoFiscal">---</span></span>
+                        <span class="de-chip"><span class="de-chip__label">CNPJ destinatário</span><span class="de-chip__value" id="dCnpjDestinatario">---</span></span>
                     </div>
-                    <p class="rec-muted" style="margin:8px 0 0; font-size:11px;"><b>Sem conferência logística:</b> após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
-                    <p class="rec-muted" style="margin:4px 0 0; font-size:11px;"><b>Mercado Livre:</b> o pedido continua obrigatório, mas quantidade e valor não são validados contra ele.</p>
                 </div>
-                <div class="box">
-                    <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
-                    <textarea id="justificativaFiscal" class="rec-textarea" rows="4" style="width:100%; margin-top:6px;" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+                <div class="eui-card__body de-audit-body">
+                    <div id="divergenciaDecisaoBanner" class="dvb" style="display:none;"></div>
+
+                    <div class="de-audit-grid">
+                        <div class="box">
+                            <label>Pedido(s) de Compra (Vínculo ERP)</label>
+                            <div class="de-inline">
+                                <input id="pedidoCompra" class="rec-input" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
+                                <button type="button" class="eui-btn eui-btn--ghost" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
+                            </div>
+                            <div id="pedidoResult" class="pedido-result"></div>
+                            <div id="pedidoCompareWrap" style="display:none;"></div>
+                            <div class="de-checks">
+                                <label class="de-check"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
+                                <label class="de-check"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
+                                <label class="de-check"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
+                                <label class="de-check"><input type="checkbox" id="mercadoLivre"> Mercado Livre</label>
+                            </div>
+                            <p class="de-hint"><b>Sem conferência logística:</b> após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
+                            <p class="de-hint"><b>Mercado Livre:</b> o pedido continua obrigatório, mas quantidade e valor não são validados contra ele.</p>
+                        </div>
+                        <div class="box">
+                            <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
+                            <textarea id="justificativaFiscal" class="rec-textarea" rows="4" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+                        </div>
+                        <div class="box">
+                            <label>Observações do Auditor Fiscal</label>
+                            <textarea id="obsFiscal" class="rec-textarea" rows="4" placeholder="Descreva observações relevantes..."></textarea>
+                        </div>
+                    </div>
+
+                    <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
+
+                    <div id="decisaoInconsistenciaBox" class="box de-decisao" style="display:none;">
+                        <label>Decisão da Inconsistência Fiscal</label>
+                        <p>Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.</p>
+                        <div class="de-decisao__btns">
+                            <button type="button" class="eui-btn eui-btn--success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                            <button type="button" class="eui-btn eui-btn--danger" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                        </div>
+                    </div>
+
+                    <div class="de-actions">
+                        <button type="button" class="eui-btn eui-btn--danger" onclick="retirarNotaDoAuditor()"><i class="fas fa-trash"></i> Excluir do Auditor (definitivo)</button>
+                        <div class="de-actions__main">
+                            <button type="button" class="eui-btn eui-btn--ghost" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                            <button type="button" class="eui-btn eui-btn--ghost" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
+                            <button type="button" class="eui-btn eui-btn--success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
+                        </div>
+                    </div>
+
+                    <h3 class="de-section-title"><i class="fas fa-th-list"></i> Itens do Documento</h3>
+                    <div class="rec-table-wrap rec-table-wrap--bordered de-itens-wrap">
+                        <table class="rec-table rec-table--compact">
+                            <thead>
+                                <tr><th>Código</th><th>Descrição</th><th>CFOP</th><th>NCM</th><th>CST ICMS</th><th>CST PIS</th><th>CST COFINS</th><th class="num">Qtd</th></tr>
+                            </thead>
+                            <tbody id="tbodyItens"></tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="box">
-                    <label>Observações do Auditor Fiscal</label>
-                    <textarea id="obsFiscal" class="rec-textarea" rows="4" style="width:100%; margin-top:6px;" placeholder="Descreva observações relevantes..."></textarea>
-                </div>
-            </div>
-
-            <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
-
-            <div id="decisaoInconsistenciaBox" class="box" style="display:none; border:1px solid var(--rec-red-100); background:#fff7f7;">
-                <label>Decisão da Inconsistência Fiscal</label>
-                <p class="rec-muted" style="margin:6px 0 12px; color:var(--rec-red-700);">Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.</p>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                    <button class="rec-btn rec-btn--success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
-                    <button class="rec-btn rec-btn--danger" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
-                </div>
-            </div>
-
-            <div class="actions">
-                <button class="rec-btn rec-btn--warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
-                <button class="rec-btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
-                <button class="rec-btn" style="background:var(--rec-amber-100); color:var(--rec-amber-700); border-color:#f3cfa0;" onclick="retirarNotaDoAuditor()"><i class="fas fa-trash"></i> Excluir do Auditor (definitivo)</button>
-                <button class="rec-btn rec-btn--success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
-            </div>
-
-            <h3 class="rec-card__title" style="margin:22px 0 10px;"><i class="fas fa-th-list"></i> Itens do Documento</h3>
-            <div class="rec-table-wrap rec-table-wrap--bordered" style="max-height:300px;">
-                <table class="rec-table rec-table--compact">
-                    <thead>
-                        <tr><th>Código</th><th>Descrição</th><th>CFOP</th><th>NCM</th><th>CST ICMS</th><th>CST PIS</th><th>CST COFINS</th><th class="num">Qtd</th></tr>
-                    </thead>
-                    <tbody id="tbodyItens"></tbody>
-                </table>
             </div>
         </div>
 
         <!-- Painel de detalhe: Lançamento / Finalizado (portado de lancamento.html) -->
         <div class="de-panel" id="de-panel-lancamento">
-            <div class="doc-detail-bar" style="display:flex; justify-content:space-between; gap:16px; align-items:center; padding:16px 18px; border-radius:14px 14px 0 0; background:#fff; border:1px solid #e2e8f0; border-bottom:none;">
-                <div style="display:flex; flex-direction:column; gap:4px;">
-                    <span class="doc-detail-number" id="detail-number" style="font-size:20px; font-weight:800; color:#1e293b;">---</span>
-                    <span class="doc-detail-sub" id="detail-sub" style="font-size:12px; font-weight:700; color:#64748b;">---</span>
+            <div class="doc-detail-bar">
+                <div class="doc-detail-head">
+                    <span class="doc-detail-number" id="detail-number">---</span>
+                    <span class="doc-detail-sub" id="detail-sub">---</span>
                 </div>
                 <div class="doc-detail-actions">
                     <button id="btn-action-lancar" class="doc-btn doc-btn-primary" type="button" onclick="abrirModalLancamento()" disabled><i class="fas fa-book"></i> Lançar</button>
@@ -764,7 +891,7 @@
                     <button id="btn-action-pdf" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('pdf')" disabled><i class="fas fa-file-pdf"></i> PDF</button>
                 </div>
             </div>
-            <div id="detail-body" class="doc-detail-body" style="padding:16px; background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 14px 14px; display:grid; gap:16px;"></div>
+            <div id="detail-body" class="doc-detail-body"></div>
         </div>
         </div><!-- /de-stage-view -->
     </div>
@@ -789,12 +916,12 @@
         <i class="fas fa-triangle-exclamation modal-icon" style="color:var(--rec-red-600);"></i>
         <h4 style="text-align:center;">Inconsistências no XML detectadas</h4>
         <p style="text-align:center;">Revise os pontos abaixo e registre a decisão fiscal.</p>
-        <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid var(--rec-red-100); border-radius:var(--rec-radius); background:#fff7f7; padding:12px;"></div>
+        <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid var(--eui-danger); border-radius:var(--rec-radius); background:var(--eui-danger-soft); padding:12px;"></div>
         <div style="margin-top:12px;">
             <label for="diagJustificativa" class="rec-label">Justificativa para recusa (mín. 5 caracteres)</label>
             <textarea id="diagJustificativa" class="rec-textarea" rows="3" style="width:100%;" placeholder="Descreva o motivo da recusa..."></textarea>
         </div>
-        <div id="diagMsg" style="display:none; margin-top:10px; padding:10px 12px; border-radius:var(--rec-radius); font-size:12px; font-weight:600;"></div>
+        <div id="diagMsg" class="de-note de-note--err" style="display:none;"></div>
         <div class="modal-actions" style="margin-top:16px;">
             <button class="rec-btn rec-btn--success" type="button" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
             <button class="rec-btn rec-btn--danger" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
@@ -805,14 +932,17 @@
 
 <div id="vinculacaoOverlay" class="modal-overlay" onclick="if(event.target===this)fecharModalVinculacao()">
     <div class="vinculacao-overlay-card">
-        <div style="padding:18px 22px; background:var(--rec-blue-700); color:#fff;">
-            <h3 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;"><i class="fas fa-link"></i> Vincular Linhas do Pedido</h3>
-            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Pra cada linha da NOTA FISCAL (XML), escolha a linha correspondente do PEDIDO DE COMPRA (OC).</p>
+        <div class="doc-modal-head">
+            <div>
+                <h3><i class="fas fa-link"></i> Vincular Linhas do Pedido</h3>
+                <p class="doc-modal-sub">Pra cada linha da NOTA FISCAL (XML), escolha a linha correspondente do PEDIDO DE COMPRA (OC).</p>
+            </div>
+            <button class="doc-modal-close" type="button" onclick="fecharModalVinculacao()">&times;</button>
         </div>
         <div style="padding:20px; max-height:62vh; overflow-y:auto;">
             <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
         </div>
-        <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
+        <div class="doc-modal-foot">
             <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
             <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
         </div>
@@ -842,7 +972,7 @@
 <div id="modal-lancamento" class="doc-modal-overlay">
     <div class="doc-modal">
         <div class="doc-modal-head">
-            <h3>Efetivar lançamento fiscal</h3>
+            <h3><i class="fas fa-book"></i> Efetivar lançamento fiscal</h3>
             <button class="doc-modal-close" type="button" onclick="fecharModalLancamento()">&times;</button>
         </div>
         <div class="doc-modal-body">
@@ -875,35 +1005,35 @@
 
 <div id="modal-estorno" class="doc-modal-overlay">
     <div class="doc-modal small">
-        <div class="doc-modal-head" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);">
-            <h3>Estorno de documento de entrada</h3>
+        <div class="doc-modal-head doc-modal-head--warning">
+            <h3><i class="fas fa-rotate-left"></i> Estorno de documento de entrada</h3>
             <button class="doc-modal-close" type="button" onclick="fecharModalEstorno()">&times;</button>
         </div>
         <div class="doc-modal-body">
             <div class="doc-form-help" id="estorno-resumo">Nenhuma NF selecionada.</div>
             <div class="doc-form-block">
                 <label class="doc-form-label">Tipo de estorno</label>
-                <div id="estorno-tipos-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <button id="btn-tipo-estorno-lancamento" type="button" onclick="selecionarTipoEstorno('lancamento')" style="padding:16px 14px; border-radius:14px; border:2px solid #3b82f6; background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%); cursor:pointer; text-align:left;">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-book"></i></span>
-                            <strong style="font-size:13px; color:#1e40af;">Estornar Lançamento</strong>
+                <div id="estorno-tipos-grid" class="de-tipo-grid">
+                    <button id="btn-tipo-estorno-lancamento" type="button" class="de-tipo-card is-selected" onclick="selecionarTipoEstorno('lancamento')">
+                        <div class="de-tipo-card__top">
+                            <span class="de-tipo-card__ico"><i class="fas fa-book"></i></span>
+                            <strong>Estornar Lançamento</strong>
                         </div>
-                        <p style="margin:0; font-size:11px; color:#64748b;">Reverte o lançamento fiscal no ERP.</p>
+                        <p>Reverte o lançamento fiscal no ERP.</p>
                     </button>
-                    <button id="btn-tipo-estorno-conferencia" type="button" onclick="selecionarTipoEstorno('conferencia')" style="padding:16px 14px; border-radius:14px; border:2px solid #e2e8f0; background:#fff; cursor:pointer; text-align:left;">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-clipboard-check"></i></span>
-                            <strong style="font-size:13px; color:#065f46;">Estornar Conferência</strong>
+                    <button id="btn-tipo-estorno-conferencia" type="button" class="de-tipo-card de-tipo-card--conferencia" onclick="selecionarTipoEstorno('conferencia')">
+                        <div class="de-tipo-card__top">
+                            <span class="de-tipo-card__ico"><i class="fas fa-clipboard-check"></i></span>
+                            <strong>Estornar Conferência</strong>
                         </div>
-                        <p style="margin:0; font-size:11px; color:#64748b;">Reverte a conferência do recebimento.</p>
+                        <p>Reverte a conferência do recebimento.</p>
                     </button>
-                    <button id="btn-tipo-estorno-auditor" type="button" onclick="selecionarTipoEstorno('auditor')" style="display:none; padding:16px 14px; border-radius:14px; border:2px solid #e2e8f0; background:#fff; cursor:pointer; text-align:left;">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-rotate-left"></i></span>
-                            <strong style="font-size:13px; color:#92400e;">Retornar ao Auditor</strong>
+                    <button id="btn-tipo-estorno-auditor" type="button" class="de-tipo-card de-tipo-card--auditor" onclick="selecionarTipoEstorno('auditor')" style="display:none;">
+                        <div class="de-tipo-card__top">
+                            <span class="de-tipo-card__ico"><i class="fas fa-rotate-left"></i></span>
+                            <strong>Retornar ao Auditor</strong>
                         </div>
-                        <p style="margin:0; font-size:11px; color:#64748b;">Volta para auditoria para editar OC ou dados.</p>
+                        <p>Volta para auditoria para editar OC ou dados.</p>
                     </button>
                 </div>
             </div>
@@ -918,7 +1048,7 @@
                 </div>
             </div>
             <div id="estorno-conferencia-fields" style="display:none;">
-                <div class="doc-form-help" style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%); border:1px solid #34d399; color:#065f46; margin-bottom:12px;">
+                <div class="de-note de-note--ok" style="margin:0 0 12px;">
                     <i class="fas fa-info-circle"></i> A conferência será removida e o conferente precisará refazer o checklist de recebimento.
                 </div>
             </div>
@@ -937,8 +1067,8 @@
 
 <div id="modal-excluir-pendencia" class="doc-modal-overlay" onclick="if(event.target===this)fecharModalExclusaoPendencia()">
     <div class="doc-modal small">
-        <div class="doc-modal-head" style="background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);">
-            <h3>Excluir NF da fila de pendências</h3>
+        <div class="doc-modal-head doc-modal-head--danger">
+            <h3><i class="fas fa-trash"></i> Excluir NF da fila de pendências</h3>
             <button class="doc-modal-close" type="button" onclick="fecharModalExclusaoPendencia()">&times;</button>
         </div>
         <div class="doc-modal-body">
@@ -1060,7 +1190,7 @@
         document.getElementById('de-lista-titulo').innerHTML = `<i class="fas fa-list"></i> ${escapeHtml(DE_TITULOS_ETAPA[deEtapaAtual] || 'Notas')}`;
 
         if (!notas.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Nenhuma nota encontrada.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="6" class="de-empty-cell"><div class="eui-empty"><i class="fas fa-inbox"></i><strong>Nenhuma nota encontrada</strong><span>${deBuscaAtual ? 'Nada nesta fila para a busca informada.' : 'Esta fila está vazia no momento.'}</span></div></td></tr>`;
         } else {
             tbody.innerHTML = notas.map((n) => {
                 const alerta = n.tem_divergencia_ativa ? ' <i class="fas fa-triangle-exclamation" style="color:#dc2626;" title="Divergência ativa"></i>' : '';
@@ -1085,6 +1215,14 @@
         document.getElementById('de-paginacao-info').textContent = `${inicio}-${fim} de ${deTotalRegistros}`;
         document.getElementById('de-btn-pag-anterior').disabled = dePaginaAtual <= 1;
         document.getElementById('de-btn-pag-proxima').disabled = fim >= deTotalRegistros;
+    }
+
+    // So entra na troca de fila: nas recargas apos cada acao a lista antiga
+    // continua na tela ate a nova chegar, para a linha aberta nao piscar.
+    function mostrarListaCarregando() {
+        const linha = '<tr>' + [70, 180, 90, 110, 120, 12].map((w) => `<td><span class="de-skel" style="width:${w}px;"></span></td>`).join('') + '</tr>';
+        document.getElementById('de-tbody').innerHTML = linha.repeat(6);
+        document.getElementById('de-paginacao-info').textContent = '';
     }
 
     async function carregarLista() {
@@ -1137,6 +1275,7 @@
         document.getElementById('de-lista-titulo').innerHTML = `<i class="fas fa-list"></i> ${escapeHtml(DE_TITULOS_ETAPA[etapa] || 'Notas')}`;
         document.getElementById('de-stage-sub').textContent = DE_SUBTITULOS_ETAPA[etapa] || '';
         mostrarPainel('de-panel-vazio');
+        mostrarListaCarregando();
         carregarLista();
     }
 
@@ -1210,15 +1349,14 @@
     function nfArquivoSelecionado() {
         const input = document.getElementById('nf-arquivo');
         const msg = document.getElementById('nf-file-msg');
-        msg.textContent = input.files.length ? input.files[0].name : 'Selecione PDF, PNG ou JPG';
+        msg.textContent = input.files.length ? input.files[0].name : 'Arraste ou selecione PDF, PNG ou JPG';
+        document.getElementById('nf-drop-area').classList.toggle('has-files', input.files.length > 0);
     }
 
     function nfStatusOC(msg, tipo) {
         const box = document.getElementById('nf-oc-status');
         box.style.display = 'block';
-        const cores = { ok: { bg: '#f0fdf4', color: '#166534', border: '#a7f3d0' }, err: { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' }, info: { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' } };
-        const c = cores[tipo] || cores.info;
-        box.style.background = c.bg; box.style.color = c.color; box.style.border = `1px solid ${c.border}`;
+        box.className = 'de-note' + (tipo === 'ok' || tipo === 'err' ? ` de-note--${tipo}` : '');
         box.textContent = msg;
     }
 
@@ -1258,7 +1396,7 @@
         const arquivoInput = document.getElementById('nf-arquivo');
         if (!arquivoInput.files.length) {
             const feedEl = document.getElementById('nf-feedback');
-            feedEl.style.display = 'block'; feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+            feedEl.style.display = 'block'; feedEl.className = 'de-note de-note--err';
             feedEl.textContent = 'O anexo é obrigatório. Selecione o arquivo PDF ou imagem do documento.';
             return;
         }
@@ -1277,17 +1415,17 @@
             const feedEl = document.getElementById('nf-feedback');
             feedEl.style.display = 'block';
             if (r.ok && d.sucesso) {
-                feedEl.style.background = '#f0fdf4'; feedEl.style.color = '#166534'; feedEl.style.border = '1px solid #a7f3d0';
+                feedEl.className = 'de-note de-note--ok';
                 feedEl.textContent = `✔ ${d.msg || 'Documento registrado'} (nº ${d.numero})`;
                 limparFormDocNF(false);
                 await recarregarTudo();
             } else {
-                feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+                feedEl.className = 'de-note de-note--err';
                 feedEl.textContent = d.msg || 'Falha ao registrar documento';
             }
         } catch (e) {
             const feedEl = document.getElementById('nf-feedback');
-            feedEl.style.display = 'block'; feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+            feedEl.style.display = 'block'; feedEl.className = 'de-note de-note--err';
             feedEl.textContent = 'Erro de conexão: ' + (e.message || e);
         } finally {
             btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> Registrar documento';
@@ -1298,7 +1436,8 @@
         ['nf-numero', 'nf-oc', 'nf-fornecedor', 'nf-obs'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
         document.getElementById('nf-tipo').value = 'FATURA';
         document.getElementById('nf-arquivo').value = '';
-        document.getElementById('nf-file-msg').textContent = 'Selecione PDF, PNG ou JPG';
+        document.getElementById('nf-file-msg').textContent = 'Arraste ou selecione PDF, PNG ou JPG';
+        document.getElementById('nf-drop-area').classList.remove('has-files');
         document.getElementById('nf-oc-status').style.display = 'none';
         document.getElementById('nf-oc-linhas-wrap').style.display = 'none';
         if (limparFeedback) document.getElementById('nf-feedback').style.display = 'none';
@@ -1480,8 +1619,21 @@
 
     function updateFileName() {
         const input = document.getElementById('xmls');
-        document.getElementById('file-name').innerText = input.files.length + ' arquivo(s) selecionado(s)';
+        const nomes = Array.from(input.files).map((f) => f.name);
+        document.getElementById('file-name').innerText = nomes.length ? nomes.length + ' arquivo(s) selecionado(s)' : 'Arraste os XML aqui ou clique para selecionar';
+        const visiveis = nomes.slice(0, 6);
+        const resto = nomes.length - visiveis.length;
+        document.getElementById('file-list').innerHTML = visiveis.map((n) => `<span class="de-file-chip">${escapeHtml(n)}</span>`).join('') + (resto > 0 ? `<span class="de-file-chip">+${resto}</span>` : '');
+        document.getElementById('drop-area').classList.toggle('has-files', nomes.length > 0);
     }
+
+    // Realce ao arrastar: o <input type="file"> cobre a area inteira, entao o
+    // drop em si ja e nativo — aqui entra so o feedback visual.
+    ['drop-area', 'nf-drop-area'].forEach((id) => {
+        const area = document.getElementById(id);
+        ['dragenter', 'dragover'].forEach((ev) => area.addEventListener(ev, () => area.classList.add('is-dragover')));
+        ['dragleave', 'drop'].forEach((ev) => area.addEventListener(ev, () => area.classList.remove('is-dragover')));
+    });
 
     async function fazerUpload() {
         const input = document.getElementById('xmls');
@@ -1609,15 +1761,15 @@
         if (tipo === 'auditoria') {
             texto.textContent = 'Você ainda não executou a auditoria XML desta NF. Execute a auditoria agora para liberar a conferência.';
             actions.innerHTML = `
-                <button class="btn warning" type="button" onclick="fecharPendenciaObrigatoria(); auditarSelecionada();"><i class="fas fa-robot"></i> Executar Auditoria</button>
-                <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
+                <button class="eui-btn eui-btn--primary" type="button" onclick="fecharPendenciaObrigatoria(); auditarSelecionada();"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
         } else {
             texto.textContent = 'Informe o pedido de compra ou escolha o tipo do documento para liberar sem OC.';
             actions.innerHTML = `
-                <button class="btn" type="button" onclick="irParaCampoPedido();"><i class="fas fa-keyboard"></i> Informar Pedido</button>
-                <button class="btn" type="button" onclick="marcarTipoDocumento('material');"><i class="fas fa-user-tag"></i> Material de Cliente</button>
-                <button class="btn" type="button" onclick="marcarTipoDocumento('remessa');"><i class="fas fa-truck"></i> Remessa</button>
-                <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
+                <button class="eui-btn eui-btn--primary" type="button" onclick="irParaCampoPedido();"><i class="fas fa-keyboard"></i> Informar Pedido</button>
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="marcarTipoDocumento('material');"><i class="fas fa-user-tag"></i> Material de Cliente</button>
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="marcarTipoDocumento('remessa');"><i class="fas fa-truck"></i> Remessa</button>
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
         }
         document.getElementById('pendenciaOverlay').classList.add('active');
     }
@@ -1656,9 +1808,9 @@
         const msg = document.getElementById('diagMsg');
         const just = document.getElementById('diagJustificativa');
         if (!inconsistencias || !inconsistencias.length) {
-            list.innerHTML = '<div style="color:#64748b;">Sem inconsistências.</div>';
+            list.innerHTML = '<div class="de-k">Sem inconsistências.</div>';
         } else {
-            list.innerHTML = `<ul style="margin:0; padding-left:18px; color:#991b1b;">${inconsistencias.map((i) => `<li style="margin:6px 0;">${i}</li>`).join('')}</ul>`;
+            list.innerHTML = `<ul style="margin:0; padding-left:18px; color:var(--eui-danger-soft-text);">${inconsistencias.map((i) => `<li style="margin:6px 0;">${i}</li>`).join('')}</ul>`;
         }
         just.value = '';
         msg.style.display = 'none';
@@ -1718,8 +1870,10 @@
             document.getElementById('dStatusFluxo').textContent = d.status_fluxo || '---';
             document.getElementById('dFornecedor').textContent = d.fornecedor || '---';
             document.getElementById('dStatusAuditoria').textContent = d.auditor_status || 'NaoAuditado';
+            document.getElementById('dStatusAuditoria').className = `badge ${badgeClass(d.auditor_status)}`;
             document.getElementById('dCnpjDestinatario').textContent = d.cnpj_destinatario || '---';
             document.getElementById('dDecisaoFiscal').textContent = d.auditor_decisao || 'PendenteDecisao';
+            document.getElementById('dDecisaoFiscal').className = `badge ${badgeDecisaoClass(d.auditor_decisao)}`;
             document.getElementById('pedidoCompra').value = d.pedido_compra || '';
             document.getElementById('materialCliente').checked = !!d.material_cliente;
             document.getElementById('remessa').checked = !!d.remessa;
@@ -1734,21 +1888,19 @@
             const inconsistencias = d.inconsistencias || [];
             if (!inconsistencias.length) {
                 incBox.style.display = '';
-                incBox.style.borderLeftColor = 'var(--success-erp)';
-                incBox.style.background = '#f0fdf4';
-                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#166534; font-weight:700;"><i class="fas fa-check-circle"></i> Nenhuma inconsistência detectada.</div>';
+                incBox.className = 'inconsistencias is-ok';
+                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div class="de-inc-msg"><i class="fas fa-check-circle"></i> Nenhuma inconsistência detectada.</div>';
                 decisaoBox.style.display = 'none';
             } else {
                 incBox.style.display = '';
-                incBox.style.borderLeftColor = 'var(--danger-erp)';
-                incBox.style.background = '#fff1f2';
-                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#991b1b; font-weight:700;"><i class="fas fa-triangle-exclamation"></i> Inconsistências detectadas. O card de diagnóstico aparece ao executar a auditoria.</div>';
+                incBox.className = 'inconsistencias';
+                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div class="de-inc-msg"><i class="fas fa-triangle-exclamation"></i> Inconsistências detectadas. O card de diagnóstico aparece ao executar a auditoria.</div>';
                 decisaoBox.style.display = 'none';
             }
 
             document.getElementById('tbodyItens').innerHTML = (d.itens || []).map((i) => `
                 <tr>
-                    <td><code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${i.codigo || '---'}</code></td>
+                    <td><code class="de-code">${i.codigo || '---'}</code></td>
                     <td>${i.descricao || '---'}</td>
                     <td>${i.cfop || '---'}</td>
                     <td>${i.ncm || '---'}</td>
@@ -1847,7 +1999,6 @@
         const justificativa = justificativaModal || justificativaPagina;
         if (!autorizado && justificativa.length < 5) {
             msg.style.display = 'block';
-            msg.style.background = '#fef2f2'; msg.style.color = '#991b1b'; msg.style.border = '1px solid #fecaca';
             msg.textContent = 'Para recusar, informe uma justificativa com no mínimo 5 caracteres.';
             return;
         }
@@ -2023,11 +2174,11 @@
             : '';
         return `<div class="vinc-po-resumo-titulo"><i class="fas fa-file-contract"></i> Dados desta linha do pedido</div>
             <div class="vinc-po-resumo-grid">
-                <div><span style="color:#64748b;">Código:</span> <strong>${po.codigo_material || '-'}</strong></div>
-                <div><span style="color:#64748b;">Descrição:</span> <strong>${po.descricao_material || '-'}</strong></div>
-                <div><span style="color:#64748b;">Quantidade do pedido:</span> <strong>${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
-                <div><span style="color:#64748b;">Saldo disponível:</span> <strong>${Number(saldo || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
-                <div><span style="color:#64748b;">Valor unit.:</span> <strong>R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                <div><span class="de-k">Código:</span> <strong>${po.codigo_material || '-'}</strong></div>
+                <div><span class="de-k">Descrição:</span> <strong>${po.descricao_material || '-'}</strong></div>
+                <div><span class="de-k">Quantidade do pedido:</span> <strong>${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span class="de-k">Saldo disponível:</span> <strong>${Number(saldo || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                <div><span class="de-k">Valor unit.:</span> <strong>R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
             </div>${notaSaldo}`;
     }
 
@@ -2149,11 +2300,11 @@
                     <div class="vinculacao-linha-xml">
                         <div class="vinculacao-linha-xml-titulo">Dados desta linha do XML ${badgeVinculo}${badgeRateio}</div>
                         <div class="vinculacao-linha-xml-dados">
-                            <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
-                            <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
-                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd_original ?? p.nf_qtd ?? 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
-                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit_original ?? p.nf_valor_unit ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
-                            ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span style="color:#64748b;">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
+                            <div><span class="de-k">Código:</span> <strong>${p.nf_codigo}</strong></div>
+                            <div><span class="de-k">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
+                            <div><span class="de-k">Quantidade:</span> <strong>${Number(p.nf_qtd_original ?? p.nf_qtd ?? 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} ${p.nf_unidade || ''}</strong></div>
+                            <div><span class="de-k">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit_original ?? p.nf_valor_unit ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                            ${p.nf_qtd_kg !== null && p.nf_qtd_kg !== undefined ? `<div><span class="de-k">Quantidade em KG:</span> <strong>${Number(p.nf_qtd_kg).toLocaleString('pt-BR', {maximumFractionDigits:2})} KG</strong></div>` : ''}
                         </div>
                         <div class="vinc-conversao-wrap">
                             <label class="vinc-conversao-label">Conversão da quantidade:</label>
@@ -2788,17 +2939,17 @@
         const btnAuditor = document.getElementById('btn-tipo-estorno-auditor');
         const fieldsLancamento = document.getElementById('estorno-lancamento-fields');
         const fieldsConferencia = document.getElementById('estorno-conferencia-fields');
-        const resetBtn = (btn) => { btn.style.border = '2px solid #e2e8f0'; btn.style.background = '#fff'; };
+        const resetBtn = (btn) => btn.classList.remove('is-selected');
         resetBtn(btnLancamento); resetBtn(btnConferencia); if (btnAuditor) resetBtn(btnAuditor);
         fieldsLancamento.style.display = 'none'; fieldsConferencia.style.display = 'none';
         if (tipo === 'lancamento' && !btnLancamento.disabled) {
-            btnLancamento.style.border = '2px solid #3b82f6'; btnLancamento.style.background = 'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)';
+            btnLancamento.classList.add('is-selected');
             fieldsLancamento.style.display = 'block';
         } else if (tipo === 'conferencia' && !btnConferencia.disabled) {
-            btnConferencia.style.border = '2px solid #10b981'; btnConferencia.style.background = 'linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)';
+            btnConferencia.classList.add('is-selected');
             fieldsConferencia.style.display = 'block';
         } else if (tipo === 'auditor' && btnAuditor) {
-            btnAuditor.style.border = '2px solid #f59e0b'; btnAuditor.style.background = 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)';
+            btnAuditor.classList.add('is-selected');
         }
     }
 
