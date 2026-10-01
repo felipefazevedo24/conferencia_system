@@ -1045,10 +1045,11 @@
         // ── Etiqueta de expedição (Identificação de Volume) ─────────────────
         // Direto na Zebra (ZPL com o tamanho embutido); sem o Zebra Browser
         // Print no computador, abre o PDF - ver static/js/zebra_print.js.
+        const PAPEL_ETIQUETA = { "red-molds": "105 x 200 mm", "columbia": "80 x 120 mm" };
         async function imprimirEtiqueta(cod, modelo) {
             const base = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-${modelo}`;
             try {
-                const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl`, pdfUrl: `${base}.pdf` });
+                const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl`, pdfUrl: `${base}.pdf`, papel: PAPEL_ETIQUETA[modelo] });
                 if (r.via === "zebra") toast(`Etiqueta enviada para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
                 else toast(`${r.motivo} Abrindo o PDF.`, "info");
             } catch (e) {

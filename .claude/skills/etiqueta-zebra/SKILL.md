@@ -47,7 +47,8 @@ Zebra nao imprimia dois tamanhos sem trocar configuracao. O ERP faz igual.
    `setViewerPreference("PrintScaling", "None")`). Os dois usam a MESMA
    funcao de coleta de dados. Rota com `@permission_required` do modulo.
 5. **Tela**: carregue `static/js/zebra_print.js` e chame
-   `ZebraPrint.imprimir({ zplUrl, pdfUrl })`; mostre o resultado
+   `ZebraPrint.imprimir({ zplUrl, pdfUrl, papel: "80 x 120 mm" })` (`papel`
+   vai no aviso de antes do PDF, pra pessoa escolher o papel certo); mostre o resultado
    (`r.via === "zebra"` imprimiu; `"pdf"` abriu o PDF com `r.motivo`).
 6. **Dados de integracao** (NF, ERP, bridge) nunca derrubam a etiqueta: se a
    consulta falhar, sai com o campo vazio/"—" (ver `dados_da_nf`).
@@ -73,6 +74,11 @@ Zebra nao imprimia dois tamanhos sem trocar configuracao. O ERP faz igual.
    `https://localhost:9101/ssl_support` no navegador e aceitar o certificado.
 5. Trocou o rolo de tamanho? Calibrar a Zebra (segurar **Feed** ate piscar 2
    vezes) - o ZPL manda o tamanho, mas a impressora precisa medir o gap.
+
+Diagnostico rapido no computador: abrir `https://localhost:9101/default?type=printer`.
+"Recusou a conexao" = Browser Print nao instalado/aberto (o driver da Zebra
+sozinho NAO basta); aviso de seguranca = aceitar o certificado; vazio/`{}` =
+sem impressora padrao no Browser Print; nome da Zebra = ok.
 
 Sem o Browser Print a tela abre o PDF (mesma etiqueta) - funciona, mas volta
 a depender do papel do driver. O objetivo e' todo computador de impressao ter

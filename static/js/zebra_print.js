@@ -11,7 +11,8 @@
  * mesma etiqueta - a impressao nunca fica travada.
  *
  * Uso:
- *   ZebraPrint.imprimir({ zplUrl: "/api/.../etiqueta-x.zpl", pdfUrl: "/api/.../etiqueta-x.pdf" })
+ *   ZebraPrint.imprimir({ zplUrl: "/api/.../etiqueta-x.zpl", pdfUrl: "/api/.../etiqueta-x.pdf",
+ *                         papel: "80 x 120 mm" })
  *     .then((r) => r.via === "zebra" ? "impresso" : "abriu o PDF");
  */
 (function (global) {
@@ -69,8 +70,19 @@
 
     // Abrir o PDF depois de esperar a deteccao pode cair no bloqueio de
     // pop-up (ja' nao e' mais "o clique"); bloqueado, abre na mesma aba.
-    function _abrirPdf(url) {
+    // O aviso vem ANTES do PDF: a aba nova toma o foco e um aviso na tela do
+    // Sync passaria despercebido (aconteceu na primeira impressao real).
+    function _abrirPdf(url, motivo, papel) {
         if (!url) return;
+        global.alert(
+            `${motivo}
+
+A etiqueta vai abrir em PDF. Na impressão, escolha o papel ` +
+            `${papel || "do tamanho da etiqueta"} e escala 100%.
+
+` +
+            "Para imprimir direto na Zebra, sem escolher papel, deixe o Zebra Browser Print aberto neste computador."
+        );
         const janela = global.open(url, "_blank");
         if (!janela) global.location.assign(url);
     }
@@ -78,8 +90,9 @@
     async function imprimir(opcoes) {
         const bp = await impressoraPadrao();
         if (!bp) {
-            _abrirPdf(opcoes.pdfUrl);
-            return { via: "pdf", motivo: "Zebra Browser Print não encontrado neste computador." };
+            const motivo = "O Zebra Browser Print não respondeu neste computador (não está instalado ou não está aberto).";
+            _abrirPdf(opcoes.pdfUrl, motivo, opcoes.papel);
+            return { via: "pdf", motivo };
         }
         const dpi = await resolucao(bp);
         const sep = opcoes.zplUrl.includes("?") ? "&" : "?";
@@ -94,8 +107,9 @@
             await _enviar(bp, zpl);
         } catch (e) {
             cache = null;
-            _abrirPdf(opcoes.pdfUrl);
-            return { via: "pdf", motivo: "A Zebra não respondeu - abrindo o PDF." };
+            const motivo = "A Zebra não respondeu ao Browser Print (desligada, sem papel ou desconectada).";
+            _abrirPdf(opcoes.pdfUrl, motivo, opcoes.papel);
+            return { via: "pdf", motivo };
         }
         return { via: "zebra", impressora: bp.device && bp.device.name, dpi };
     }
