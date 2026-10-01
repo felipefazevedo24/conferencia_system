@@ -339,13 +339,17 @@ def etiqueta_red_molds_pdf(cod_ordem_fat):
     except (TypeError, ValueError):
         qtde_volumes = 1
 
-    cliente_erp = etiqueta_svc.buscar_endereco_cliente(ordem.cliente)
-    endereco_linhas = etiqueta_svc.montar_endereco_formatado(cliente_erp)
+    # Endereco do destinatario da propria NF; sem ela (bridge fora, NF sem
+    # XML), cai na busca do cliente pelo nome no ERP, como antes.
+    dados_nf = etiqueta_svc.dados_da_nf(ordem.numero_nf)
+    endereco_linhas = dados_nf.get("endereco_linhas") or etiqueta_svc.montar_endereco_formatado(
+        etiqueta_svc.buscar_endereco_cliente(ordem.cliente)
+    )
 
     pdf_bytes = etiqueta_pdf.gerar_etiqueta_red_molds_pdf(
         numero_nf=ordem.numero_nf,
-        orcamento=ordem.orcamento or "",
-        os_texto=os_texto,
+        orcamento=ordem.orcamento or dados_nf.get("orcamento") or "",
+        os_texto=os_texto or dados_nf.get("os") or "",
         cliente=ordem.cliente or "",
         endereco_linhas=endereco_linhas,
         qtde_volumes=qtde_volumes,

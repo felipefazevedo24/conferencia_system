@@ -7,6 +7,7 @@ gerada normalmente - so sai sem endereco preenchido (nao trava a impressao)."""
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import requests
@@ -119,3 +120,49 @@ def buscar_endereco_cliente(nome_cliente: str) -> dict[str, Any] | None:
         return None
     cliente = data.get("cliente")
     return cliente if isinstance(cliente, dict) else None
+
+
+# ── Dados tirados da propria NF (XML emitido, via bridge) ───────────────
+# O endereco do destinatario na NF e' o que vale pra entrega - mais
+# confiavel que procurar o cliente pelo nome. Orcamento/OS: so' se o texto
+# das informacoes complementares trouxer "Orcamento: X" / "OS: Y".
+_RE_ORCAMENTO = re.compile(r"Or[çc]amento\s*(?:n[º°o.]*)?\s*[:\-]?\s*([0-9][0-9A-Za-z./-]*)", re.IGNORECASE)
+_RE_OS = re.compile(r"\bO\.?S\.?\s*(?:n[º°o.]*)?\s*[:\-]\s*([0-9][0-9A-Za-z./-]*)", re.IGNORECASE)
+
+
+def dados_da_nf(numero_nf: str) -> dict[str, Any]:
+    """{"endereco_linhas", "orcamento", "os"} da NF emitida - vazio se o
+    bridge nao responder ou a NF nao tiver XML (nao trava a etiqueta)."""
+    numero_nf = str(numero_nf or "").strip()
+    if not numero_nf:
+        return {}
+    try:
+        from . import danfe_service
+        from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+        xml_bytes = (nota or {}).get("xml_bytes")
+        if not xml_bytes:
+            return {}
+        nfe = danfe_service.parse_nfe_xml(xml_bytes)
+    except Exception:
+        current_app.logger.warning("Etiqueta: falha ao ler a NF %s no bridge", numero_nf, exc_info=True)
+        return {}
+
+    endereco = montar_endereco_formatado({
+        "endereco": nfe.get("dest_logr"),
+        "numero": nfe.get("dest_nro"),
+        "complemento": nfe.get("dest_cpl"),
+        "bairro": nfe.get("dest_bairro"),
+        "cidade": nfe.get("dest_mun"),
+        "uf": nfe.get("dest_uf"),
+        "cep": nfe.get("dest_cep"),
+    })
+    obs = str(nfe.get("infCpl") or "")
+    orcamento = _RE_ORCAMENTO.search(obs)
+    os_nf = _RE_OS.findall(obs)
+    return {
+        "endereco_linhas": endereco,
+        "orcamento": orcamento.group(1) if orcamento else "",
+        "os": "/".join(dict.fromkeys(os_nf)),
+    }
