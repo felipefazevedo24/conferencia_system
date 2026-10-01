@@ -624,6 +624,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/zebra_print.js') }}?v={{ asset_version }}"></script>
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
@@ -1042,12 +1043,20 @@
         }
 
         // ── Etiqueta de expedição (Identificação de Volume) ─────────────────
-        function imprimirEtiquetaRedMolds(cod) {
-            window.open(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-red-molds.pdf`, "_blank");
+        // Direto na Zebra (ZPL com o tamanho embutido); sem o Zebra Browser
+        // Print no computador, abre o PDF - ver static/js/zebra_print.js.
+        async function imprimirEtiqueta(cod, modelo) {
+            const base = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-${modelo}`;
+            try {
+                const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl`, pdfUrl: `${base}.pdf` });
+                if (r.via === "zebra") toast(`Etiqueta enviada para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
+                else toast(`${r.motivo} Abrindo o PDF.`, "info");
+            } catch (e) {
+                toast(e.message, "error");
+            }
         }
-        function imprimirEtiquetaColumbia(cod) {
-            window.open(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-columbia.pdf`, "_blank");
-        }
+        function imprimirEtiquetaRedMolds(cod) { imprimirEtiqueta(cod, "red-molds"); }
+        function imprimirEtiquetaColumbia(cod) { imprimirEtiqueta(cod, "columbia"); }
 
         // ── Anexar comprovante de entrega direto da fila de Expedição ────────
         // FOB: uma unica foto finaliza todas as NFs do romaneio (mesmo endpoint
