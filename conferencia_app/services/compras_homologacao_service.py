@@ -436,6 +436,9 @@ def homologar(homologacao: Homologacao, usuario: str, justificativa: str = "") -
     homologacao.decidido_por = usuario
     homologacao.justificativa_decisao = _txt(justificativa)[:2000] or None
     _aplicar_validade(homologacao, agora)
+    # Rev. 04: itens que nao pontuaram cheio viram plano de acao (paralelo).
+    from . import compras_homologacao_plano_service as plano_svc
+    plano_svc.criar_se_pendente(homologacao, usuario)
     db.session.commit()
     return homologacao
 
@@ -465,6 +468,8 @@ def reabrir(homologacao: Homologacao, usuario: str) -> Homologacao:
     homologacao.enviado_em = None
     homologacao.enviado_por = None
     homologacao.valido_ate = None
+    from . import compras_homologacao_plano_service as plano_svc
+    plano_svc.cancelar_aberto(homologacao)
     db.session.commit()
     return homologacao
 

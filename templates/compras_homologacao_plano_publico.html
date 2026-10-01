@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plano de Ação | Columbia Sync</title>
+  <meta name="theme-color" content="#06070a">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* Mesmo visual do link publico de cotacao do Comex. */
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg: #06070a; --panel: rgba(16, 18, 24, .9); --panel-2: rgba(20, 24, 32, .78);
+      --line: rgba(160, 184, 215, .24); --line-strong: rgba(160, 184, 215, .42);
+      --text: #eef5ff; --muted: #92a3bd;
+      --green-bg: rgba(52, 211, 153, .16); --red-bg: rgba(251, 113, 133, .16);
+      --radius: 12px; --shadow: 0 14px 40px rgba(0, 0, 0, .5);
+    }
+    body {
+      margin: 0; min-height: 100vh; font-family: "Manrope", "Trebuchet MS", sans-serif; color: var(--text);
+      background: radial-gradient(1200px 460px at 12% -5%, rgba(47, 137, 255, .24), transparent 58%),
+        radial-gradient(900px 420px at 90% 3%, rgba(18, 197, 153, .14), transparent 56%),
+        linear-gradient(180deg, #090b10 0%, #05060a 100%);
+    }
+    .hero { position: relative; overflow: hidden; color: #fff; background: linear-gradient(160deg, rgba(15,18,25,.95), rgba(8,9,13,.98)); border-bottom: 1px solid rgba(255,255,255,.08); padding: 26px 24px 34px; }
+    .wrap { max-width: 980px; margin: 0 auto; position: relative; z-index: 2; }
+    .brand { display: inline-flex; align-items: center; gap: 14px; text-decoration: none; }
+    .brand img { width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 12px 22px rgba(0,0,0,.45)); }
+    .brand span { color: #a9cdff; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .22em; }
+    h1 { font-size: clamp(24px, 4vw, 34px); line-height: 1.1; margin: 16px 0 4px; font-weight: 800; letter-spacing: -.02em; color: #fff; }
+    .subtitle { margin: 0; color: #c4d3ea; font-size: 14px; }
+    .main { max-width: 980px; margin: -14px auto 0; padding: 0 16px 120px; position: relative; z-index: 3; }
+    .section { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(6px); padding: 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; color: #f4f8ff; font-weight: 800; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    h2 i { color: #7fb2ff; }
+    h2 .prog { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 700; }
+    label { display: block; font-size: 11px; font-weight: 800; color: #9bb0cd; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #4b9bff; }
+    input[readonly] { color: #c4d3ea; background: rgba(255,255,255,.02); border-style: dashed; }
+    select option { background: #141821; color: var(--text); }
+    textarea { resize: vertical; min-height: 40px; line-height: 1.45; }
+    .field { margin-bottom: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .muted { color: var(--muted); }
+    .intro p { font-size: 13.5px; color: #c4d3ea; line-height: 1.6; margin: 0 0 8px; }
+    .intro b { color: #ffd9a0; }
+
+    .item { display: grid; grid-template-columns: 28px 1fr 200px; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255,255,255,.06); }
+    .item:first-of-type { border-top: 0; }
+    .item-num { font-weight: 800; color: var(--muted); padding-top: 9px; }
+    .item-texto { font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+    .item-extra { grid-column: 2 / -1; display: grid; gap: 8px; }
+    .resp.sel { font-weight: 700; }
+    .resp.ok { border-color: #34d399; background: rgba(52,211,153,.12); }
+    .resp.neg { border-color: #fb7185; background: rgba(251,113,133,.12); }
+    .resp.meio { border-color: #fbbf24; background: rgba(251,191,36,.12); }
+    .resp.na { border-color: #94a3b8; background: rgba(148,163,184,.12); }
+    .evid { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .evid-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; background: rgba(75,155,255,.14); border: 1px solid rgba(75,155,255,.4); border-radius: 999px; padding: 4px 6px 4px 10px; max-width: 100%; }
+    .evid-chip a { color: #cfe4ff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+    .evid-chip button { border: 0; background: rgba(251,113,133,.2); color: #ffc5ce; border-radius: 999px; width: 20px; height: 20px; cursor: pointer; font-size: 11px; }
+    .evid-add { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #d9e9ff; border: 1px dashed rgba(154,187,224,.55); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+    .evid-add input { display: none; }
+    .evid-falta { font-size: 12px; font-weight: 800; color: #fbbf24; }
+    .evid-info { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .resp-tab { width: 100%; border-collapse: collapse; }
+    .resp-tab th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 4px 6px; }
+    .resp-tab td { padding: 4px 4px; }
+    .resp-tab td:first-child { font-weight: 700; white-space: nowrap; font-size: 13px; }
+    .dispensado { font-size: 14px; color: #6ee7b7; }
+    .item.pendente .item-num { color: #fbbf24; }
+
+    .barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(10,12,17,.96); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+    .barra .wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .barra .info { flex: 1; min-width: 200px; font-size: 13px; color: #c4d3ea; font-weight: 700; }
+    .barra .info small { display: block; color: var(--muted); font-weight: 600; font-size: 11.5px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: var(--radius); padding: 12px 18px; font-size: 14px; font-weight: 900; text-decoration: none; cursor: pointer; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary { border: 1px solid #4b9bff; background: linear-gradient(135deg, #2a7cf0, #1e62be); color: #fff; }
+    .btn-ghost { border: 1px solid rgba(154, 187, 224, .45); background: rgba(255,255,255,.04); color: #d9e9ff; }
+
+    .empty-state { text-align: center; padding: 40px 22px; background: rgba(255,255,255,.03); border: 1px dashed rgba(161, 188, 219, .34); border-radius: var(--radius); color: var(--muted); }
+    .empty-state i { width: 58px; height: 58px; display: inline-grid; place-items: center; border-radius: var(--radius); background: rgba(47, 137, 255, .2); color: #cfe5ff; font-size: 24px; margin-bottom: 13px; }
+    .empty-state.is-success i { background: var(--green-bg); color: #9af0d0; }
+    .empty-state.is-error i { background: var(--red-bg); color: #ffc5ce; }
+    .empty-state h3 { margin: 0 0 6px; color: #f2f8ff; }
+    .toast { position: fixed; top: 16px; right: 16px; z-index: 999; background: #1a1d26; border: 1px solid var(--line); border-left: 4px solid #4b9bff; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 700; color: var(--text); max-width: 380px; display: none; box-shadow: var(--shadow); }
+    .toast.error { border-left-color: #fb7185; }
+    .toast.success { border-left-color: #34d399; }
+    .hidden { display: none !important; }
+    @media (max-width: 680px) {
+      .grid2 { grid-template-columns: 1fr; }
+      .item { grid-template-columns: 24px 1fr; }
+      .item select { grid-column: 2; }
+    }
+    .status { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+    .status.pendente { background: rgba(251,191,36,.16); color: #fcd34d; }
+    .status.analise { background: rgba(75,155,255,.18); color: #bcd8ff; }
+    .status.aceito { background: rgba(52,211,153,.16); color: #9af0d0; }
+    .plano-item { padding: 16px 0; border-top: 1px solid rgba(255,255,255,.06); display: grid; gap: 8px; }
+    .plano-item:first-of-type { border-top: 0; }
+    .plano-topo { display: flex; gap: 10px; align-items: flex-start; }
+    .plano-topo .item-texto { flex: 1; margin: 0; }
+    .acao { font-size: 13.5px; color: #e6eefc; background: rgba(255,255,255,.03); border-left: 3px solid #4b9bff; border-radius: 0 8px 8px 0; padding: 8px 12px; }
+    .acao small { display: block; color: var(--muted); font-weight: 700; margin-top: 4px; }
+    .recusa { font-size: 13px; color: #ffc5ce; background: rgba(251,113,133,.1); border-radius: 8px; padding: 8px 12px; }
+    .relatorio p { font-size: 14px; color: #dbe6f7; line-height: 1.6; margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <a class="brand" href="#">
+        <img src="/static/columbia_sync_logo_v2.png" alt="Columbia Machine Brasil">
+        <span>Columbia&nbsp;Sync</span>
+      </a>
+      <h1>Plano de Ação — Avaliação de Fornecedor</h1>
+      <p class="subtitle" id="subtitulo">Carregando…</p>
+    </div>
+  </header>
+  <main class="main">
+    <div id="carregando" class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Carregando…</h3></div>
+    <div id="conteudo" class="hidden"></div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+  (function () {
+    const token = {{ token|tojson }};
+    const API = `/api/plano-acao-fornecedor/${encodeURIComponent(token)}`;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const dataBR = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
+    const SLUG = { 'Pendente': 'pendente', 'Em análise': 'analise', 'Aceito': 'aceito' };
+    let dados = null, ocupado = false;
+
+    function toast(msg, tipo) {
+      const el = $('toast');
+      el.textContent = msg;
+      el.className = 'toast' + (tipo ? ' ' + tipo : '');
+      el.style.display = 'block';
+      clearTimeout(el._t);
+      el._t = setTimeout(() => { el.style.display = 'none'; }, 5500);
+    }
+    async function api(url, options) {
+      const resp = await fetch(url, options || {});
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || ('Erro ' + resp.status));
+      return data;
+    }
+    function estado(icone, titulo, texto, classe) {
+      return `<div class="empty-state ${classe || ''}"><i class="fas ${icone}"></i><h3>${esc(titulo)}</h3><p>${esc(texto)}</p></div>`;
+    }
+
+    function desenhar() {
+      const p = dados.plano;
+      $('subtitulo').textContent = [dados.razao_social, dados.cnpj].filter(Boolean).join(' · ');
+      $('carregando').classList.add('hidden');
+      $('conteudo').classList.remove('hidden');
+      if (p.status === 'Concluído') {
+        $('conteudo').innerHTML = estado('fa-circle-check', 'Plano de ação concluído', 'Todas as evidências foram aceitas pela Columbia. Obrigado!', 'is-success');
+        return;
+      }
+      if (!dados.editavel) {
+        $('conteudo').innerHTML = estado('fa-link-slash', 'Link desativado', 'Este plano de ação não está mais ativo. Fale com o comprador da Columbia Machine Brasil.', 'is-error');
+        return;
+      }
+      const relatorio = (p.relatorio || '').split('\n').filter((l) => l.trim()).map((l) => `<p>${esc(l)}</p>`).join('');
+      let html = `<div class="section relatorio"><h2><i class="fas fa-file-lines"></i> Relatório da avaliação</h2>${relatorio}</div>
+        <div class="section intro"><h2><i class="fas fa-circle-info"></i> Como enviar</h2>
+          <p>Para cada item abaixo, anexe a evidência da ação realizada (PDF, JPG ou PNG, até ${dados.max_evidencia_mb} MB). Ao anexar, o item vai para <b>análise da Columbia</b>. Se a evidência for recusada, o item volta com o motivo para você reenviar.</p></div>
+        <div class="section"><h2><i class="fas fa-list-check"></i> Itens do plano<span class="prog">${p.aceitos}/${p.total} aceitos</span></h2>`;
+      html += p.itens.map((it) => {
+        const aceito = it.status === 'Aceito';
+        return `<div class="plano-item" data-item="${it.id}">
+          <div class="plano-topo"><div class="item-texto">${esc(it.texto)}</div><span class="status ${SLUG[it.status] || ''}">${esc(it.status)}</span></div>
+          <div class="acao">${esc(it.acao || '')}<small>Situação na avaliação: ${esc(it.motivo)} · Prazo: ${dataBR(it.prazo)}</small></div>
+          ${it.motivo_recusa && it.status === 'Pendente' ? `<div class="recusa"><i class="fas fa-rotate-left"></i> Evidência recusada: ${esc(it.motivo_recusa)}</div>` : ''}
+          ${aceito ? '' : `<textarea data-coment="${it.id}" rows="2" placeholder="Comentário sobre a ação realizada (opcional)">${esc(it.comentario_fornecedor || '')}</textarea>`}
+          <div class="evid">
+            ${(it.evidencias || []).map((ev) => `<span class="evid-chip"><a href="${esc(ev.url)}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>${aceito ? '' : `<button type="button" data-del-evid="${ev.id}" title="Remover" aria-label="Remover evidência"><i class="fas fa-xmark"></i></button>`}</span>`).join('')}
+            ${aceito ? '' : `<label class="evid-add"><i class="fas fa-upload"></i> Anexar evidência<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" data-upload="${it.id}"></label>`}
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+      $('conteudo').innerHTML = html;
+    }
+
+    $('conteudo').addEventListener('change', async (e) => {
+      const up = e.target.closest('[data-upload]');
+      if (up) {
+        const arquivo = up.files && up.files[0];
+        if (!arquivo || ocupado) return;
+        if (arquivo.size > dados.max_evidencia_mb * 1024 * 1024) { toast(`"${arquivo.name}" passa de ${dados.max_evidencia_mb} MB.`, 'error'); up.value = ''; return; }
+        ocupado = true;
+        try {
+          const fd = new FormData();
+          fd.append('arquivo', arquivo);
+          const ta = $('conteudo').querySelector(`[data-coment="${up.dataset.upload}"]`);
+          if (ta) fd.append('comentario', ta.value);
+          dados = await api(`${API}/itens/${up.dataset.upload}/evidencias`, { method: 'POST', body: fd });
+          toast('Evidência enviada para análise da Columbia.', 'success');
+          desenhar();
+        } catch (err) { toast(err.message, 'error'); up.value = ''; } finally { ocupado = false; }
+        return;
+      }
+      const ta = e.target.closest('[data-coment]');
+      if (ta) {
+        try {
+          await api(`${API}/itens/${ta.dataset.coment}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comentario: ta.value }) });
+          toast('Comentário salvo.', 'success');
+        } catch (err) { toast(err.message, 'error'); }
+      }
+    });
+
+    $('conteudo').addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-del-evid]');
+      if (!del || ocupado || !confirm('Remover esta evidência?')) return;
+      ocupado = true;
+      try {
+        dados = await api(`${API}/evidencias/${del.dataset.delEvid}`, { method: 'DELETE' });
+        toast('Evidência removida.', 'success');
+        desenhar();
+      } catch (err) { toast(err.message, 'error'); } finally { ocupado = false; }
+    });
+
+    api(API).then((d) => { dados = d; desenhar(); }).catch((err) => {
+      $('carregando').outerHTML = estado('fa-link-slash', 'Link inválido', err.message, 'is-error');
+      $('subtitulo').textContent = '';
+    });
+  })();
+  </script>
+</body>
+</html>

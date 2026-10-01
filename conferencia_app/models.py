@@ -2382,6 +2382,12 @@ class ComprasHomologacaoFornecedor(db.Model):
         cascade="all, delete-orphan",
         order_by="ComprasHomologacaoConvite.id",
     )
+    planos_acao = db.relationship(
+        "ComprasHomologacaoPlanoAcao",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoPlanoAcao.id",
+    )
 
 
 class ComprasHomologacaoResposta(db.Model):
@@ -2443,6 +2449,105 @@ class ComprasHomologacaoConvite(db.Model):
     enviado_por = db.Column(db.String(100))
     respondido_em = db.Column(db.DateTime)
     cancelado_em = db.Column(db.DateTime)
+
+
+class ComprasHomologacaoPlanoAcao(db.Model):
+    """Plano de acao de um fornecedor homologado (F 066 rev. 04) - corre em
+    paralelo, depois da homologacao, pros itens que nao pontuaram cheio
+    (Atende Parcial, Nao Atende, Atende sem evidencia).
+
+    Rascunho (comprador revisa o relatorio gerado pela IA ou pelo modelo
+    padrao) -> Com fornecedor (link enviado; o fornecedor anexa as
+    evidencias) -> Concluido (Columbia aceitou todos os itens). Reabrir a
+    homologacao cancela o plano em aberto. A nota da homologacao nao muda:
+    a avaliacao e' o retrato de quando foi feita."""
+
+    __tablename__ = "compras_homologacao_plano_acao"
+
+    STATUS_RASCUNHO = "Rascunho"
+    STATUS_COM_FORNECEDOR = "Com fornecedor"
+    STATUS_CONCLUIDO = "Concluído"
+    STATUS_CANCELADO = "Cancelado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    status = db.Column(db.String(20), nullable=False, default=STATUS_RASCUNHO, index=True)
+    relatorio = db.Column(db.Text)
+    relatorio_origem = db.Column(db.String(10))  # ia | modelo
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    criado_por = db.Column(db.String(100))
+    # Link do fornecedor: so' o hash do token (mesmo padrao do convite).
+    token_hash = db.Column(db.String(64), unique=True, index=True)
+    email = db.Column(db.String(120))
+    enviado_em = db.Column(db.DateTime)
+    enviado_por = db.Column(db.String(100))
+    concluido_em = db.Column(db.DateTime)
+
+    itens = db.relationship(
+        "ComprasHomologacaoPlanoItem",
+        backref="plano",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoPlanoItem.id",
+    )
+
+
+class ComprasHomologacaoPlanoItem(db.Model):
+    """Item do plano de acao: retrato da pendencia (texto e resposta da
+    avaliacao) + acao/prazo combinados + evidencia do fornecedor.
+
+    Pendente -> Em análise (fornecedor anexou) -> Aceito, ou volta pra
+    Pendente com o motivo da recusa."""
+
+    __tablename__ = "compras_homologacao_plano_item"
+
+    STATUS_PENDENTE = "Pendente"
+    STATUS_EM_ANALISE = "Em análise"
+    STATUS_ACEITO = "Aceito"
+
+    id = db.Column(db.Integer, primary_key=True)
+    plano_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_plano_acao.id"), nullable=False, index=True
+    )
+    secao = db.Column(db.String(60), nullable=False)
+    item = db.Column(db.Integer, nullable=False)
+    texto = db.Column(db.Text, nullable=False)
+    resposta = db.Column(db.String(20))
+    motivo = db.Column(db.String(30), nullable=False)  # Atende Parcial | Não Atende | Sem evidência
+    acao = db.Column(db.Text)
+    prazo = db.Column(db.Date)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDENTE, index=True)
+    comentario_fornecedor = db.Column(db.Text)
+    enviado_em = db.Column(db.DateTime)
+    motivo_recusa = db.Column(db.String(500))
+    decidido_em = db.Column(db.DateTime)
+    decidido_por = db.Column(db.String(100))
+
+    evidencias = db.relationship(
+        "ComprasHomologacaoPlanoEvidencia",
+        backref="plano_item",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoPlanoEvidencia.id",
+    )
+
+
+class ComprasHomologacaoPlanoEvidencia(db.Model):
+    """Evidencia do plano de acao anexada pelo fornecedor (no banco, mesmo
+    padrao das evidencias da autoavaliacao)."""
+
+    __tablename__ = "compras_homologacao_plano_evidencia"
+
+    id = db.Column(db.Integer, primary_key=True)
+    plano_item_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_plano_item.id"), nullable=False, index=True
+    )
+    nome_arquivo = db.Column(db.String(260))
+    content_type = db.Column(db.String(80))
+    tamanho_bytes = db.Column(db.Integer)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    enviado_por = db.Column(db.String(100))
 
 
 class ComprasHomologacaoResponsavel(db.Model):

@@ -93,6 +93,16 @@
     .hf-resp-tab td { padding: 4px 6px; }
     .hf-resp-tab input { width: 100%; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; }
     .hf-dispensado { padding: 12px 14px; font-size: 12.5px; color: #065f46; background: #ecfdf5; }
+    .hf-plano-item { display: grid; grid-template-columns: 1fr 260px 140px; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; align-items: start; }
+    .hf-plano-item:last-child { border-bottom: none; }
+    .hf-plano-item textarea, .hf-plano-item input { width: 100%; font-size: 12px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 5px 7px; }
+    .hf-plano-motivo { font-size: 11px; font-weight: 700; color: #92400e; }
+    .hf-plano-st { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 9px; white-space: nowrap; display: inline-block; }
+    .hf-plano-st.pendente { background: #fef3c7; color: #92400e; }
+    .hf-plano-st.analise { background: #e0e7ff; color: #3730a3; }
+    .hf-plano-st.aceito { background: #dcfce7; color: #166534; }
+    .hf-plano-acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    @media (max-width: 900px) { .hf-plano-item { grid-template-columns: 1fr; } }
     .hf-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; margin-bottom: 12px; }
 </style>
 {% endblock %}
@@ -235,7 +245,7 @@
                 <td>${esc(h.categoria_compra || "—")}</td>
                 <td><b>${pct(h.nota)}</b></td>
                 <td>${h.classificacao ? `<span class="hf-classe ${SLUG_CLASSE[h.classificacao] || ""}">${esc(h.classificacao)}</span>` : "—"}</td>
-                <td><span class="hf-badge ${SLUG_STATUS[h.status] || ""}">${esc(h.status)}</span></td>
+                <td><span class="hf-badge ${SLUG_STATUS[h.status] || ""}">${esc(h.status)}</span>${h.plano_acao ? `<div style="font-size:11px;color:var(--eui-muted);margin-top:3px;"><i class="fas fa-list-check"></i> Plano: ${h.plano_acao.status === "Concluído" ? "concluído" : h.plano_acao.status === "Rascunho" ? "em rascunho" : `${h.plano_acao.aceitos}/${h.plano_acao.total} aceitos${h.plano_acao.em_analise ? ` · ${h.plano_acao.em_analise} p/ analisar` : ""}`}</div>` : ""}</td>
                 <td>${val}</td>
                 <td style="text-align:right; white-space:nowrap;">
                     <button class="eui-btn eui-btn--subtle eui-btn--sm" data-abrir="${h.id}"><i class="fas fa-eye"></i> Abrir</button>
@@ -334,6 +344,112 @@
             </div></div></div>`;
     }
 
+    // ── Plano de acao (fase 2): corre em paralelo depois de homologar ─────
+    const SLUG_PLANO = { "Pendente": "pendente", "Em análise": "analise", "Aceito": "aceito" };
+    function blocoPlano(p) {
+        const rasc = p.status === "Rascunho";
+        const resumo = rasc ? "em rascunho" : `${p.aceitos}/${p.total} aceitos`;
+        let h = `<div class="hf-secao" id="hf-plano"><div class="hf-secao-head">
+            <span class="hf-secao-titulo"><i class="fas fa-list-check"></i> Plano de ação</span>
+            <span class="hf-secao-peso">${esc(p.status)}</span>
+            <span class="hf-secao-prog">${esc(resumo)}</span></div>
+            <div class="hf-secao-body" style="padding:10px 14px;">`;
+        if (rasc) {
+            h += `<div class="hf-aviso" style="margin-bottom:10px;"><i class="fas fa-wand-magic-sparkles"></i> ${p.total} item(ns) não pontuaram cheio. Gere o relatório (IA ou modelo padrão), revise o texto, as ações e os prazos e envie ao fornecedor.</div>
+                <div class="hf-plano-acoes" style="margin:0 0 10px;">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-plano-act="gerar"><i class="fas fa-wand-magic-sparkles"></i> Gerar relatório com IA</button>
+                </div>
+                <div class="hf-field wide"><label>Relatório ao fornecedor${p.relatorio_origem === "ia" ? " (gerado pela IA — revise)" : p.relatorio_origem === "modelo" ? " (modelo padrão)" : ""}</label>
+                    <textarea data-plano-relatorio rows="7">${esc(p.relatorio || "")}</textarea></div>`;
+        } else {
+            h += `<div style="font-size:12px;color:var(--eui-muted);margin-bottom:8px;">Enviado para <b>${esc(p.email || "—")}</b> em ${esc(p.enviado_em || "—")} por ${esc(p.enviado_por || "—")}${p.concluido_em ? ` · concluído em ${esc(p.concluido_em)}` : ""}</div>
+                <details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:12px;font-weight:700;">Relatório enviado</summary>
+                <div style="white-space:pre-line;font-size:12.5px;padding:8px 0;">${esc(p.relatorio || "")}</div></details>`;
+        }
+        h += `</div><div class="hf-secao-body">` + p.itens.map((it) => {
+            const evids = (it.evidencias || []).map((ev) => `<a href="${esc(ev.url)}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> ${esc(ev.nome_arquivo)}</a>`).join("");
+            const direita = rasc
+                ? `<textarea data-plano-acao="${it.id}" rows="3" placeholder="Ação esperada…">${esc(it.acao || "")}</textarea>
+                   <input type="date" data-plano-prazo="${it.id}" value="${esc(it.prazo || "")}">`
+                : `<div style="font-size:12px;">${esc(it.acao || "")}</div>
+                   <div style="font-size:11px;color:var(--eui-muted);margin-top:3px;">Prazo: ${dataBR(it.prazo)}</div>`;
+            const status = rasc ? "" : `<span class="hf-plano-st ${SLUG_PLANO[it.status] || ""}">${esc(it.status)}</span>
+                ${it.status === "Em análise" ? `<div class="hf-plano-acoes">
+                    <button type="button" class="eui-btn eui-btn--success eui-btn--sm" data-plano-act="aceitar" data-item="${it.id}">Aceitar</button>
+                    <button type="button" class="eui-btn eui-btn--danger eui-btn--sm" data-plano-act="recusar" data-item="${it.id}">Recusar</button></div>` : ""}`;
+            return `<div class="hf-plano-item">
+                <div><div class="hf-item-texto">${esc(it.texto)}</div>
+                    <div class="hf-plano-motivo">${esc(it.motivo)}${it.resposta && it.resposta !== it.motivo ? ` (respondido: ${esc(it.resposta)})` : ""}</div>
+                    ${it.comentario_fornecedor ? `<div style="font-size:12px;margin-top:4px;"><b>Fornecedor:</b> ${esc(it.comentario_fornecedor)}</div>` : ""}
+                    ${evids ? `<div class="hf-evid">${evids}</div>` : ""}
+                    ${it.motivo_recusa && it.status === "Pendente" ? `<div class="hf-evid-falta">Recusado: ${esc(it.motivo_recusa)}</div>` : ""}</div>
+                <div>${direita}</div>
+                <div>${status}</div>
+            </div>`;
+        }).join("") + `</div>`;
+        if (p.status === "Rascunho" || p.status === "Com fornecedor") {
+            h += `<div class="hf-secao-body" style="padding:10px 14px;border-top:1px solid var(--eui-border,#e5e7eb);"><div class="hf-plano-acoes">
+                ${rasc ? '<button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-plano-act="salvar"><i class="fas fa-floppy-disk"></i> Salvar plano</button>' : ""}
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-plano-act="enviar"><i class="fas fa-envelope"></i> ${rasc ? "Enviar ao fornecedor" : "Reenviar link"}</button>
+            </div></div>`;
+        }
+        return h + `</div>`;
+    }
+
+    function coletarPlano() {
+        const corpo = $("hf-corpo");
+        const rel = corpo.querySelector("[data-plano-relatorio]");
+        return {
+            relatorio: rel ? rel.value : undefined,
+            itens: atual.plano_acao.itens.map((it) => {
+                const acao = corpo.querySelector(`[data-plano-acao="${it.id}"]`);
+                const prazo = corpo.querySelector(`[data-plano-prazo="${it.id}"]`);
+                return { id: it.id, acao: acao ? acao.value : it.acao, prazo: prazo ? prazo.value : it.prazo };
+            }),
+        };
+    }
+
+    async function acaoPlano(btn) {
+        const p = atual.plano_acao;
+        const act = btn.dataset.planoAct;
+        const base = `/api/compras/homologacao/planos/${p.id}`;
+        btn.disabled = true;
+        try {
+            let r;
+            if (act === "gerar") {
+                if ((p.relatorio || "").trim() && !confirm("Gerar de novo substitui o relatório, as ações e os prazos já preenchidos. Continuar?")) return;
+                toast("Gerando o relatório…", "");
+                r = await api(`${base}/gerar`, { method: "POST" });
+            } else if (act === "salvar") {
+                r = await api(base, { method: "PUT", body: JSON.stringify(coletarPlano()) });
+            } else if (act === "enviar") {
+                if (p.status === "Rascunho") await api(base, { method: "PUT", body: JSON.stringify(coletarPlano()) });
+                const email = prompt("E-mail do fornecedor que vai receber o plano de ação:", p.email || atual.email || "");
+                if (email === null) return;
+                r = await api(`${base}/enviar`, { method: "POST", body: JSON.stringify({ email }) });
+                if (!r.email_enviado) prompt("Copie o link e envie ao fornecedor:", r.link);
+            } else if (act === "aceitar") {
+                r = await api(`${base}/itens/${btn.dataset.item}/aceitar`, { method: "POST" });
+            } else if (act === "recusar") {
+                const motivo = prompt("Motivo da recusa (o fornecedor vai ver):");
+                if (motivo === null) return;
+                r = await api(`${base}/itens/${btn.dataset.item}/recusar`, { method: "POST", body: JSON.stringify({ motivo }) });
+            }
+            if (r) {
+                atual = r.homologacao;
+                toast(r.message, r.email_enviado === false ? "error" : "success");
+                desenhar(atual.razao_social || "Homologação");
+                const plano = $("hf-plano");
+                if (plano) plano.scrollIntoView({ block: "nearest" });
+                carregar();
+            }
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     function desenhar(titulo) {
         const ed = atual.status === "Rascunho";
         $("hf-modal-titulo").textContent = titulo;
@@ -421,6 +537,8 @@
                 </div>`).join("") || '<div style="font-size:12.5px;color:var(--eui-muted);">Nenhuma foto anexada.</div>') +
                 `</div></div></div>`;
         }
+
+        if (atual.plano_acao) html += blocoPlano(atual.plano_acao);
 
         $("hf-corpo").innerHTML = html;
         desenharAcoes();
@@ -628,6 +746,8 @@
         if (del) removerFoto(del.dataset.delFoto);
         const delEv = e.target.closest("[data-del-evid]");
         if (delEv) removerEvidencia(delEv.dataset.delEvid);
+        const btnPlano = e.target.closest("[data-plano-act]");
+        if (btnPlano) acaoPlano(btnPlano);
     });
 
     $("hf-acoes").addEventListener("click", async (e) => {

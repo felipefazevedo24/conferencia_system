@@ -18,6 +18,7 @@ from ..models import (
 from ..services import compras_homologacao_form as form
 from ..services import compras_homologacao_form_rev04 as form_r04
 from ..services import compras_homologacao_pdf as pdf_svc
+from ..services import compras_homologacao_plano_service as plano_svc
 from ..services import compras_homologacao_service as svc
 from ..services.smtp_service import enviar_mensagem_smtp
 
@@ -62,6 +63,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "justificativa_decisao": homologacao.justificativa_decisao,
         "qtd_fotos": len(homologacao.fotos),
         "formulario_versao": homologacao.formulario_versao or "F-COM-001-01",
+        "plano_acao": plano_svc.resumo(plano_svc.plano_ativo(homologacao)),
     }
     if not completo:
         return dados
@@ -104,6 +106,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     dados["itens_faltando"] = len(svc.itens_faltando(homologacao))
     dados["itens_sem_evidencia"] = len(svc.pendencias_evidencia(homologacao))
     dados["itens_sem_justificativa"] = len(svc.pendencias_justificativa(homologacao))
+    dados["plano_acao"] = _fmt_plano(plano_svc.plano_ativo(homologacao), "/api/compras/homologacao/planos/evidencias/{id}")
     convite = svc.ultimo_convite(homologacao)
     dados["convite"] = {
         "email": convite.email,
@@ -114,6 +117,47 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "respondido_em": _dt(convite.respondido_em),
     } if convite else None
     return dados
+
+
+def _fmt_plano(plano, url_evidencia: str) -> dict | None:
+    """Plano de acao com os itens e evidencias. `url_evidencia` muda entre a
+    tela interna e o link do fornecedor."""
+    if not plano:
+        return None
+    return {
+        **plano_svc.resumo(plano),
+        "relatorio": plano.relatorio,
+        "relatorio_origem": plano.relatorio_origem,
+        "criado_em": _dt(plano.criado_em),
+        "email": plano.email,
+        "enviado_em": _dt(plano.enviado_em),
+        "enviado_por": plano.enviado_por,
+        "concluido_em": _dt(plano.concluido_em),
+        "itens": [
+            {
+                "id": it.id,
+                "secao": it.secao,
+                "item": it.item,
+                "texto": it.texto,
+                "resposta": it.resposta,
+                "motivo": it.motivo,
+                "acao": it.acao,
+                "prazo": it.prazo.isoformat() if it.prazo else None,
+                "status": it.status,
+                "comentario_fornecedor": it.comentario_fornecedor,
+                "enviado_em": _dt(it.enviado_em),
+                "motivo_recusa": it.motivo_recusa,
+                "decidido_em": _dt(it.decidido_em),
+                "decidido_por": it.decidido_por,
+                "evidencias": [
+                    {"id": ev.id, "nome_arquivo": ev.nome_arquivo, "enviado_em": _dt(ev.enviado_em),
+                     "url": url_evidencia.format(id=ev.id)}
+                    for ev in it.evidencias
+                ],
+            }
+            for it in plano.itens
+        ],
+    }
 
 
 def _formulario_payload(formulario) -> dict:
@@ -758,3 +802,202 @@ def api_self_assessment_remover(token, evidencia_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Evidência removida.", **_payload_publico(convite, token)})
+
+
+# ── Plano de acao (fase 2): lado do comprador ───────────────────────────
+def _acao_plano(plano_id, funcao, mensagem, **kwargs):
+    plano = plano_svc.obter(plano_id)
+    if not plano:
+        return jsonify({"error": "Plano de ação não encontrado."}), 404
+    try:
+        funcao(plano, **kwargs)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": mensagem, "homologacao": _fmt(plano.homologacao, completo=True)})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>/gerar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_plano_gerar(plano_id):
+    plano = plano_svc.obter(plano_id)
+    if not plano:
+        return jsonify({"error": "Plano de ação não encontrado."}), 404
+    try:
+        plano_svc.gerar_relatorio(plano)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    mensagem = ("Relatório gerado pela IA - revise antes de enviar." if plano.relatorio_origem == "ia"
+                else "IA indisponível: relatório gerado pelo modelo padrão - revise antes de enviar.")
+    return jsonify({"message": mensagem, "homologacao": _fmt(plano.homologacao, completo=True)})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>", methods=["PUT"])
+@permission_required(PERMISSION)
+def api_plano_salvar(plano_id):
+    return _acao_plano(plano_id, plano_svc.salvar, "Plano de ação salvo.", dados=request.get_json(silent=True) or {})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>/itens/<int:item_id>/aceitar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_plano_aceitar(plano_id, item_id):
+    return _acao_plano(plano_id, plano_svc.aceitar_item, "Evidência aceita.", item_id=item_id, usuario=_usuario())
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>/itens/<int:item_id>/recusar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_plano_recusar(plano_id, item_id):
+    payload = request.get_json(silent=True) or {}
+    return _acao_plano(plano_id, plano_svc.recusar_item, "Evidência recusada - o item voltou para o fornecedor.",
+                       item_id=item_id, usuario=_usuario(), motivo=payload.get("motivo") or "")
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/evidencias/<int:evidencia_id>", methods=["GET"])
+@permission_required(PERMISSION)
+def api_plano_baixar_evidencia(evidencia_id):
+    from ..models import ComprasHomologacaoPlanoEvidencia
+
+    ev = db.session.get(ComprasHomologacaoPlanoEvidencia, evidencia_id)
+    if not ev or not ev.dados:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    return _enviar_evidencia(ev)
+
+
+def _enviar_email_plano(plano, link: str) -> None:
+    homologacao = plano.homologacao
+    paragrafos = "".join(f"<p>{html.escape(p)}</p>" for p in (plano.relatorio or "").split("\n") if p.strip())
+    linhas = "".join(
+        f"<tr><td style='padding:6px;border:1px solid #ddd;'>{html.escape(it.texto)}</td>"
+        f"<td style='padding:6px;border:1px solid #ddd;'>{html.escape(it.motivo)}</td>"
+        f"<td style='padding:6px;border:1px solid #ddd;'>{html.escape(it.acao or '')}</td>"
+        f"<td style='padding:6px;border:1px solid #ddd;white-space:nowrap;'>{it.prazo.strftime('%d/%m/%Y') if it.prazo else ''}</td></tr>"
+        for it in plano.itens
+    )
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = f"Plano de Ação – Avaliação de Fornecedor – {homologacao.razao_social} – Columbia Machine Brasil"
+    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    msg["To"] = plano.email
+    corpo = (
+        f"{paragrafos}"
+        f"<table style='border-collapse:collapse;font-size:13px;'>"
+        f"<tr><th style='padding:6px;border:1px solid #ddd;'>Requisito</th><th style='padding:6px;border:1px solid #ddd;'>Situação</th>"
+        f"<th style='padding:6px;border:1px solid #ddd;'>Ação esperada</th><th style='padding:6px;border:1px solid #ddd;'>Prazo</th></tr>"
+        f"{linhas}</table>"
+        f"<p>Envie as evidências de cada item pelo link de acompanhamento:</p>"
+        f"<p><a href=\"{link}\">{link}</a></p>"
+        f"<p>Atenciosamente,</p><p>Compras – Columbia Machine Brasil</p>"
+    )
+    msg.attach(MIMEText(corpo, "html", "utf-8"))
+    enviar_mensagem_smtp(current_app, msg)
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>/enviar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_plano_enviar(plano_id):
+    """Envia (ou reenvia, com link novo) o plano ao fornecedor. Se o e-mail
+    falhar, o link volta na resposta pro comprador repassar."""
+    plano = plano_svc.obter(plano_id)
+    if not plano:
+        return jsonify({"error": "Plano de ação não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        token = plano_svc.enviar(plano, payload.get("email") or "", _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    link = url_for("compras_homologacao.plano_fornecedor_page", token=token, _external=True)
+    try:
+        _enviar_email_plano(plano, link)
+        email_erro = None
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.exception("Falha ao enviar e-mail do plano de acao %s", plano.id)
+        email_erro = str(exc)
+    mensagem = (f"Plano de ação enviado para {plano.email}." if not email_erro
+                else f"Link gerado, mas o e-mail NÃO foi enviado: {email_erro}. Copie o link e envie ao fornecedor.")
+    return jsonify({
+        "message": mensagem, "email_enviado": not email_erro, "link": link,
+        "homologacao": _fmt(plano.homologacao, completo=True),
+    })
+
+
+# ── Plano de acao: link publico do fornecedor (sem login) ───────────────
+def _plano_ou_404(token):
+    plano = plano_svc.obter_por_token(token)
+    if not plano:
+        return None, (jsonify({"error": "Link inválido."}), 404)
+    return plano, None
+
+
+def _payload_plano_publico(plano, token: str) -> dict:
+    homologacao = plano.homologacao
+    return {
+        "editavel": plano_svc.aceita_fornecedor(plano),
+        "razao_social": homologacao.razao_social,
+        "cnpj": homologacao.cnpj,
+        "max_evidencia_mb": svc.MAX_EVIDENCIA_BYTES // (1024 * 1024),
+        "plano": _fmt_plano(plano, f"/api/plano-acao-fornecedor/{token}/evidencias/{{id}}"),
+    }
+
+
+@compras_homologacao_bp.route("/plano-acao-fornecedor/<token>")
+def plano_fornecedor_page(token):
+    if not plano_svc.obter_por_token(token):
+        return render_template("acesso_negado.html"), 404
+    return render_template("compras_homologacao_plano_publico.html", token=token)
+
+
+@compras_homologacao_bp.route("/api/plano-acao-fornecedor/<token>", methods=["GET"])
+def api_plano_fornecedor_dados(token):
+    plano, erro = _plano_ou_404(token)
+    if erro:
+        return erro
+    return jsonify(_payload_plano_publico(plano, token))
+
+
+@compras_homologacao_bp.route("/api/plano-acao-fornecedor/<token>/itens/<int:item_id>", methods=["PUT"])
+def api_plano_fornecedor_comentar(token, item_id):
+    plano, erro = _plano_ou_404(token)
+    if erro:
+        return erro
+    try:
+        plano_svc.comentar(plano, item_id, (request.get_json(silent=True) or {}).get("comentario") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Comentário salvo.", **_payload_plano_publico(plano, token)})
+
+
+@compras_homologacao_bp.route("/api/plano-acao-fornecedor/<token>/itens/<int:item_id>/evidencias", methods=["POST"])
+def api_plano_fornecedor_anexar(token, item_id):
+    plano, erro = _plano_ou_404(token)
+    if erro:
+        return erro
+    # Rota publica e o app nao tem MAX_CONTENT_LENGTH: recusa upload gigante
+    # antes de o Werkzeug ler o corpo inteiro.
+    if (request.content_length or 0) > svc.MAX_EVIDENCIA_BYTES + 64 * 1024:
+        return jsonify({"error": "Arquivo muito grande (máximo 10 MB)."}), 400
+    try:
+        plano_svc.anexar_evidencia(plano, item_id, request.files.get("arquivo"), request.form.get("comentario") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência enviada para análise da Columbia.", **_payload_plano_publico(plano, token)})
+
+
+@compras_homologacao_bp.route("/api/plano-acao-fornecedor/<token>/evidencias/<int:evidencia_id>", methods=["GET"])
+def api_plano_fornecedor_baixar(token, evidencia_id):
+    plano, erro = _plano_ou_404(token)
+    if erro:
+        return erro
+    ev = plano_svc.evidencia(plano, evidencia_id)
+    if not ev or not ev.dados:
+        return jsonify({"error": "Evidência não encontrada."}), 404
+    return _enviar_evidencia(ev)
+
+
+@compras_homologacao_bp.route("/api/plano-acao-fornecedor/<token>/evidencias/<int:evidencia_id>", methods=["DELETE"])
+def api_plano_fornecedor_remover(token, evidencia_id):
+    plano, erro = _plano_ou_404(token)
+    if erro:
+        return erro
+    try:
+        plano_svc.remover_evidencia(plano, evidencia_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Evidência removida.", **_payload_plano_publico(plano, token)})
