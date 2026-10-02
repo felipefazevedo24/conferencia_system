@@ -107,6 +107,11 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     dados["itens_sem_evidencia"] = len(svc.pendencias_evidencia(homologacao))
     dados["itens_sem_justificativa"] = len(svc.pendencias_justificativa(homologacao))
     dados["plano_acao"] = _fmt_plano(plano_svc.plano_ativo(homologacao), "/api/compras/homologacao/planos/evidencias/{id}")
+    dados["plano_pode_criar"] = (
+        not dados["plano_acao"]
+        and homologacao.status in (Homologacao.STATUS_HOMOLOGADO, Homologacao.STATUS_REPROVADO)
+        and bool(plano_svc.pendencias(homologacao))
+    )
     convite = svc.ultimo_convite(homologacao)
     dados["convite"] = {
         "email": convite.email,
@@ -814,6 +819,17 @@ def _acao_plano(plano_id, funcao, mensagem, **kwargs):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": mensagem, "homologacao": _fmt(plano.homologacao, completo=True)})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/plano-acao", methods=["POST"])
+@permission_required(PERMISSION)
+def api_plano_criar(homologacao_id):
+    def criar(homologacao, usuario):
+        plano_svc.criar_manual(homologacao, usuario)
+        return homologacao
+
+    return _acao(homologacao_id, criar, "Plano de ação criado - gere o relatório e envie ao fornecedor.",
+                 usuario=_usuario())
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/planos/<int:plano_id>/gerar", methods=["POST"])
