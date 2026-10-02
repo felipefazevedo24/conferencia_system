@@ -304,7 +304,7 @@
                         <th rowspan="2" class="num">Quantidade</th>
                         <th rowspan="2" class="num">Custo unit.</th>
                         <th rowspan="2" class="num">Valor</th>
-                        <th colspan="3" class="cx-grupo" title="Por unidade, da NF de entrada; já descontados do custo">Impostos por unidade (NF)</th>
+                        <th colspan="3" class="cx-grupo" title="Total da entrada em R$, da NF; já descontados do custo">Impostos da entrada (R$)</th>
                         <th colspan="3" class="cx-grupo">Saldo após o lançamento</th>
                     </tr>
                     <tr>
@@ -319,7 +319,7 @@
                 <tbody id="cx-item-body"></tbody>
             </table>
         </div>
-        <p class="cx-legenda"><span class="cx-medio">Custo em vermelho</span> = custo médio do momento. ICMS, PIS e COFINS por unidade, já descontados do custo da entrada. Cada lançamento é valorizado em centavos: saldo inicial + lançamentos = saldo final.</p>
+        <p class="cx-legenda"><span class="cx-medio">Custo em vermelho</span> = custo médio do momento. ICMS, PIS e COFINS: total da entrada em R$, já descontados do custo — exceto o ICMS marcado "ICMS no custo" (uso e consumo ou CST 90, sem crédito). Cada lançamento é valorizado em centavos: saldo inicial + lançamentos = saldo final.</p>
         <div class="cx-modal-foot"><button class="eui-btn eui-btn--ghost" id="cx-item-fechar">Fechar</button></div>
     </div>
 </div>
@@ -683,16 +683,19 @@
             const medio = !info && l.origem_custo !== "nf";
             const u = l.impostos_unit;
             const semImposto = u && !(u.icms || u.pis || u.cofins);
+            // Total da entrada em R$ (por unidade x quantidade); o estorno sai negativo.
+            const imp = (v) => (u && v) ? `<td class="num${cls(v * l.qtde)}">${r(v * l.qtde)}</td>` : `<td class="num"></td>`;
             const nf = l.nf ? `<span class="cx-sub">NF ${esc(l.nf.numero)} de ${esc(dataBR(l.nf.data))} · CFOP ${esc(l.nf.cfop)}</span>` : "";
+            const seloIcms = l.icms_no_custo ? ` <span class="eui-badge eui-badge--info" title="ICMS sem crédito: ${esc(l.icms_no_custo)}. O valor do ICMS ficou no custo da entrada.">ICMS no custo</span>` : "";
             const selo = l.origem_custo === "nf_nao_encontrada" ? ` <span class="eui-badge eui-badge--warning" title="Entrada de NF sem valor encontrado">sem valor da NF</span>`
                 : l.ajuste_sync ? ` <span class="eui-badge eui-badge--info" title="Ajuste do módulo de Inventário">Sync #${l.ajuste_sync.id}</span>` : "";
             const impostos = semImposto
                 ? `<td colspan="3" style="text-align:center;"><span class="eui-badge eui-badge--warning" title="Nenhum ICMS/PIS/COFINS encontrado na NF: custo pelo valor bruto">sem imposto na NF</span></td>`
-                : `<td class="num">${c(u && u.icms || null)}</td><td class="num">${c(u && u.pis || null)}</td><td class="num">${c(u && u.cofins || null)}</td>`;
+                : imp(u && u.icms) + imp(u && u.pis) + imp(u && u.cofins);
             html += `<tr class="${info ? "cx-info" : ""}">
                 <td style="white-space:nowrap;">${esc(dataBR(l.data.slice(0, 10)))}</td>
                 <td style="white-space:nowrap;">${esc(info ? l.tipo_rotulo : TIPO[l.classe])}${!info && l.tipo === 2 ? `<span class="cx-sub">transferência de depósito</span>` : ""}${!info && l.tipo === 9 ? `<span class="cx-sub">troca de material</span>` : ""}</td>
-                <td title="${esc(l.obs)}"><b>${esc(l.documento)}</b>${selo}${nf}</td>
+                <td title="${esc(l.obs)}"><b>${esc(l.documento)}</b>${selo}${seloIcms}${nf}</td>
                 <td>${esc(l.deposito)}</td>
                 <td class="num${cls(l.qtde)}">${q(l.qtde)}${l.qtde_lancada != null ? `<span class="cx-sub" title="O GRV lançou ${q(l.qtde_lancada)}; o saldo do depósito variou ${q(l.qtde)}">lançado ${q(l.qtde_lancada)}</span>` : ""}</td>
                 <td class="num${medio ? " cx-medio" : ""}" title="${medio ? "Custo médio" : "Custo da NF"}">${c(l.custo_unit)}</td>

@@ -261,6 +261,63 @@ def test_anotacao_de_reserva_gravada_como_entrada_nao_mexe_no_saldo(com_saldo):
     assert item["fechamento"]["q"] == {"1": pytest.approx(6898.62)}
 
 
+def test_nf_lancada_estornada_e_lancada_de_novo_nao_divide_o_custo():
+    """Caso real (19-01-00633, 01/10/2026): NF 2857 lançada, estornada e
+    lançada de novo. O custo unitário é o da nota (27,7668), não a metade."""
+    nota = {"17203": {"cod_compra": 17203, "n_nf": "2857", "dt_nf": "2026-09-29", "fornecedor": "METALSTEEL", "chave_nfe": "", "cfop": "1101",
+                      "itens": [{"cod_produto": COD, "qtde": 95.0, "total": 3125.5, "vl_icms": 218.785, "vpis_q09": 47.9608, "vcofins_s11": 220.9103}]}}
+    obs = "ENTRADA DE MATERIAL. ENTRADA: 17203. NF: 2857."
+    movs = [_mov(60, "2026-10-01", 0, 95.0, "TCOMPRAS", "1;17203", obs),
+            _mov(61, "2026-10-01", 0, -95.0, "TCOMPRAS", "1;17203", "ENTRADA DE MATERIAL - ESTORNO. ENTRADA: 17203."),
+            _mov(62, "2026-10-01", 0, 95.0, "TCOMPRAS", "1;17203", obs)]
+    produto = {**_produto(saldos={"1": 104.93}, preco=27.44), "abertura": {"qtde": 9.93, "custo": 24.27, "data": "2026-09-30T10:00:00"}}
+    item = _item(_grv(produtos=[produto], movimentos=movs, notas=nota), inicio=date(2026, 10, 1), fim=date(2026, 10, 31))
+    det = svc.detalhe(item)
+    assert [round(l["custo_unit"], 4) for l in det["linhas"]] == [27.7668, 27.7668, 27.7668]
+    assert [l["valor"] for l in det["linhas"]] == [2637.84, -2637.84, 2637.84]
+    assert det["linhas"][0]["impostos_unit"]["icms"] * 95 == pytest.approx(218.785)
+    assert det["final"]["qtde"] == pytest.approx(104.93)
+    assert det["final"]["valor"] == pytest.approx(240.99 + 2637.84, abs=0.02)
+    # NF estornada por inteiro: usa a quantidade da própria nota.
+    so_estorno = _item(_grv(produtos=[{**produto, "saldos": {"1": 9.93}}], movimentos=movs[:2], notas=nota),
+                       inicio=date(2026, 10, 1), fim=date(2026, 10, 31))
+    assert round(svc.detalhe(so_estorno)["linhas"][0]["custo_unit"], 4) == 27.7668
+    assert svc.detalhe(so_estorno)["final"]["valor"] == pytest.approx(240.99, abs=0.02)
+
+
+@pytest.mark.parametrize("campos, motivo", [
+    ({"cfop": "1556", "cst_n12": "000"}, "uso e consumo (CFOP 1556)"),
+    ({"cfop": "2.556"}, "uso e consumo (CFOP 2556)"),
+    ({"cfop": "1407", "cst_n12": "260"}, "uso e consumo (CFOP 1407)"),
+    ({"cfop": "1101", "cst_n12": "090"}, "CST 090"),
+    ({"cfop": "1101", "cst_n12": "000"}, None),
+    ({"cfop": "1102"}, None),
+])
+def test_uso_e_consumo_nao_toma_credito_de_icms(campos, motivo):
+    """Uso e consumo (CFOP x556/x407) e CST 90: o ICMS fica no custo. PIS e
+    COFINS continuam saindo. O ICMS destacado continua aparecendo."""
+    linha = {"cod_produto": COD, "qtde": 10.0, "total": 1000.0, "vl_icms": 180.0, "vpis_q09": 16.5, "vcofins_s11": 76.0, **campos}
+    custo = svc.custo_da_nf([linha])
+    assert custo["impostos"]["icms"] == 180.0
+    if motivo:
+        assert custo["valor_liquido"] == pytest.approx(1000.0 - 16.5 - 76.0)
+        assert custo["icms_sem_credito"] == 180.0 and custo["motivo_sem_credito"] == motivo
+    else:
+        assert custo["valor_liquido"] == pytest.approx(1000.0 - 180.0 - 16.5 - 76.0)
+        assert custo["icms_sem_credito"] == 0
+
+
+def test_cfop_de_uso_e_consumo_so_no_cabecalho_da_nota_tambem_vale():
+    nota = {"17300": {"cod_compra": 17300, "n_nf": "900", "dt_nf": "2026-09-01", "fornecedor": "FORNECEDOR", "chave_nfe": "", "cfop": "1556",
+                      "itens": [{"cod_produto": COD, "qtde": 10.0, "total": 1000.0, "vl_icms": 180.0, "vpis_q09": 16.5, "vcofins_s11": 76.0}]}}
+    movs = [_mov(70, "2026-09-05", 0, 10.0, "TCOMPRAS", "1;17300", "ENTRADA DE MATERIAL. ENTRADA: 17300. NF: 900.")]
+    produto = {**_produto(saldos={"1": 10.0}, preco=90.75), "abertura": {"qtde": 0.0, "custo": 0.0, "data": None}}
+    linha = _item(_grv(produtos=[produto], movimentos=movs, notas=nota))["linhas"][0]
+    assert linha["custo_unit"] == pytest.approx(90.75)  # (1000 - 16,50 - 76,00) / 10: o ICMS ficou no custo
+    assert linha["icms_no_custo"] == "uso e consumo (CFOP 1556)"
+    assert linha["impostos_unit"]["icms"] == pytest.approx(18.0)
+
+
 def test_troca_de_material_tipo_9_mexe_no_saldo():
     movs = [_mov(50, "2026-09-08", 9, 5.98, "TPRODUTO", "", obs="MATERIAL DE ORIGEM:19-01-00999"),
             _mov(51, "2026-09-09", 9, -2.0, "TPRODUTO", "", obs="MATERIAL DE DESTINO:19-01-00998")]

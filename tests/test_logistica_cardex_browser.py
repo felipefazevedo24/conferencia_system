@@ -48,7 +48,7 @@ def test_cardex_resumo_item_e_fechamentos_no_navegador(tmp_path):
             linhas = page.locator("#cx-item-body tr")
             expect(linhas).to_have_count(5)  # saldo inicial + 3 movimentos + saldo final
             expect(linhas.nth(0)).to_contain_text("4.518,620")
-            expect(linhas.nth(1)).to_contain_text("0,6100")  # ICMS por unidade da NF
+            expect(linhas.nth(1)).to_contain_text("1.451,80")  # ICMS total da entrada (R$)
             expect(linhas.nth(2)).to_contain_text("Saída 53918")
             expect(linhas.nth(2).locator("td.cx-medio")).to_have_text("4,1168")
             expect(linhas.nth(2)).to_contain_text("28.315,03")

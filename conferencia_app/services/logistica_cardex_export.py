@@ -158,11 +158,17 @@ def _aba_resumo(ws, resumo: dict) -> None:
 CARDEX_COLUNAS = [
     ("Data movimentação", 12), ("Tipo movimento", 14), ("Obs.", 48), ("Documento", 26), ("Cod interno", 13),
     ("Item", 34), ("Un.", 5), ("Classificação fiscal", 12), ("Família", 22), ("Grupo", 7), ("Cod dep.", 7),
-    ("Quantidade", 13), ("Custo unitário", 12), ("Total", 13), ("ICMS", 8), ("PIS", 8), ("COFINS", 8),
-    ("IBS", 8), ("CBS", 8), ("Saldo quantidade", 14), ("Saldo total", 14), ("Custo médio", 11),
+    ("Quantidade", 13), ("Custo unitário", 12), ("Total", 13), ("ICMS R$", 11), ("PIS R$", 11), ("COFINS R$", 11),
+    ("IBS R$", 10), ("CBS R$", 10), ("Saldo quantidade", 14), ("Saldo total", 14), ("Custo médio", 11),
 ]
-_FMT_CARDEX = {11: FMT_QTDE, 12: FMT_CUSTO, 13: FMT_VALOR, 14: FMT_CUSTO, 15: FMT_CUSTO, 16: FMT_CUSTO,
-               17: FMT_CUSTO, 18: FMT_CUSTO, 19: FMT_QTDE, 20: FMT_VALOR, 21: FMT_CUSTO}
+_FMT_CARDEX = {11: FMT_QTDE, 12: FMT_CUSTO, 13: FMT_VALOR, 14: FMT_VALOR, 15: FMT_VALOR, 16: FMT_VALOR,
+               17: FMT_VALOR, 18: FMT_VALOR, 19: FMT_QTDE, 20: FMT_VALOR, 21: FMT_CUSTO}
+
+
+def _impostos_da_linha(linha: dict) -> dict:
+    """Impostos da entrada em R$ (total da linha), não por unidade: é como a
+    Contabilidade confere contra a NF. O estorno sai negativo."""
+    return {k: round(v * linha["qtde"], 2) for k, v in (linha.get("impostos_unit") or {}).items() if v}
 
 
 def _aba_cardex(ws, cab: dict, detalhes: list[dict]) -> None:
@@ -194,7 +200,7 @@ def _aba_cardex(ws, cab: dict, detalhes: list[dict]) -> None:
             True, CINZA,
         )
         for l in det["linhas"]:
-            imp = {k: v for k, v in (l.get("impostos_unit") or {}).items() if v}
+            imp = _impostos_da_linha(l)
             informativo = l["classe"] == "informativo"
             escrever(
                 [_data_br(l["data"][:10]), f"{l['tipo']}-{CLASSE_ROTULO.get(l['classe'], l['tipo_rotulo'])}", l["obs"], l["documento"]]
@@ -324,18 +330,18 @@ def gerar_pdf_resumo(resumo: dict) -> bytes:
 
 def gerar_pdf_item(cab: dict, det: dict) -> bytes:
     cabecalho = ["Data", "Tipo", "Documento / Obs.", "Dep.", "Quantidade", "Custo unit.", "Total",
-                 "ICMS", "PIS", "COFINS", "Saldo qtde", "Saldo total", "Custo médio"]
+                 "ICMS R$", "PIS R$", "COFINS R$", "Saldo qtde", "Saldo total", "Custo médio"]
     dados = [cabecalho]
     ini, fim = det["inicial"], det["final"]
     dados.append(["", "Saldo inicial", "", "", "", "", "", "", "", "", _br(ini["qtde"], 3), _br(ini["valor"]), _br(ini["custo_medio"], 4)])
     for l in det["linhas"]:
-        imp = {k: v for k, v in (l.get("impostos_unit") or {}).items() if v}
+        imp = _impostos_da_linha(l)
         informativo = l["classe"] == "informativo"
         dados.append([
             _data_br(l["data"][:10]), CLASSE_ROTULO.get(l["classe"], l["tipo_rotulo"]),
             Paragraph(f"<b>{l['documento']}</b><br/>{l['obs']}", _P), l["deposito"],
             _br(l["qtde"], 3), _br(l["custo_unit"], 4), _br(l["valor"]),
-            _br(imp.get("icms"), 4), _br(imp.get("pis"), 4), _br(imp.get("cofins"), 4),
+            _br(imp.get("icms")), _br(imp.get("pis")), _br(imp.get("cofins")),
             "" if informativo else _br(l["saldo_qtde"], 3), "" if informativo else _br(l["saldo_valor"]), _br(l["custo_medio"], 4),
         ])
     dados.append(["", "Saldo final", "", "", "", "", "", "", "", "", _br(fim["qtde"], 3), _br(fim["valor"]), _br(fim["custo_medio"], 4)])

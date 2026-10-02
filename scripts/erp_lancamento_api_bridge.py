@@ -1560,7 +1560,7 @@ _CARDEX_TIPOS = "(0, 1, 2, 8, 9)"
 # vcofins_s11, vfrete_i15, vseg_i16 (seguro) e vdesc_i17 (desconto) - os dois
 # ultimos nao casavam com "seguro"/"desconto" e ficavam de fora.
 _CARDEX_CHAVES_NF = (
-    r"^(cod_produto|cod_interno|qtde|qtde_compra|qtde_estoque|qcom|quantidade|unidade|unidade_est|numero_item|cfop|produto)$"
+    r"^(cod_produto|cod_interno|qtde|qtde_compra|qtde_estoque|qcom|quantidade|unidade|unidade_est|numero_item|cfop|produto|cst_n12)$"
     r"|valor|vl_|vlr|preco|custo|total|icms|pis|cofins|ipi|ibs|cbs|frete|seguro|vseg|desconto|vdesc|despesa|outras"
 )
 

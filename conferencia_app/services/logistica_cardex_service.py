@@ -124,6 +124,31 @@ CHAVES_DESCONTO = ("vdesc_i17", "valor_desconto", "vl_desconto", "desconto")
 # teste da reforma, compensados no PIS/COFINS) - aparecem, mas não abatem.
 IMPOSTOS_RECUPERAVEIS = ("icms", "pis", "cofins")
 
+# ICMS SEM crédito: fica no custo. Uso e consumo não dá crédito de ICMS, e o
+# GRV NÃO faz essa distinção (em 2026 abateu R$ 39 mil de ICMS do custo de 548
+# itens de CFOP 1556) - aqui o Cardex diverge do GRV de propósito, a pedido
+# da Contabilidade. PIS/COFINS continuam saindo do custo nesses casos.
+#   - CFOP de uso e consumo: x556 (compra) e x407 (compra com ST).
+#   - CST de ICMS terminado em 90 ("outras"), em qualquer CFOP.
+CFOPS_SEM_CREDITO_ICMS = ("1556", "2556", "3556", "1407", "2407")
+CST_ICMS_SEM_CREDITO = ("90",)
+CHAVES_CFOP = ("cfop",)
+CHAVES_CST_ICMS = ("cst_n12", "cst_icms", "cst")
+
+
+def icms_sem_credito(campos: dict, cfop_nota: str = "") -> str | None:
+    """Motivo pelo qual o ICMS da linha não dá crédito (e fica no custo), ou
+    None se dá. `campos` com as chaves já em minúsculas."""
+    cfop = next((str(campos.get(c) or "") for c in CHAVES_CFOP if str(campos.get(c) or "").strip()), "") or cfop_nota
+    cfop = re.sub(r"[^0-9]", "", str(cfop or ""))
+    if cfop in CFOPS_SEM_CREDITO_ICMS:
+        return f"uso e consumo (CFOP {cfop})"
+    cst = next((str(campos.get(c) or "") for c in CHAVES_CST_ICMS if str(campos.get(c) or "").strip()), "")
+    cst = re.sub(r"[^0-9]", "", cst)
+    if cst and cst[-2:] in CST_ICMS_SEM_CREDITO:
+        return f"CST {cst}"
+    return None
+
 _CACHE: dict[tuple, tuple[float, dict]] = {}
 _CACHE_TTL_SEGUNDOS = 600
 
@@ -258,12 +283,15 @@ def _imposto(campos: dict, nome: str) -> tuple[float | None, str | None]:
     return None, None
 
 
-def custo_da_nf(linhas_nf: list[dict]) -> dict | None:
+def custo_da_nf(linhas_nf: list[dict], cfop_nota: str = "") -> dict | None:
     """Soma as linhas da NF que são do produto (pode vir em mais de uma
     linha) e devolve o valor líquido dos impostos recuperáveis. None se
-    nenhuma linha tiver valor."""
+    nenhuma linha tiver valor. `impostos` é o destacado na nota;
+    `icms_sem_credito` é a parte do ICMS que NÃO saiu do custo."""
     bruto = acrescimo = desconto = qtde_nf = 0.0
     impostos = {nome: 0.0 for nome in CHAVES_IMPOSTO}
+    icms_fora = 0.0
+    motivos_sem_credito: set[str] = set()
     fontes: set[str] = set()
     achou = False
     for campos in linhas_nf:
@@ -285,6 +313,11 @@ def custo_da_nf(linhas_nf: list[dict]) -> dict | None:
             if imposto is not None:
                 impostos[nome] += imposto
                 fontes.add(chave_imp)
+                if nome == "icms" and imposto:
+                    motivo = icms_sem_credito(campos, cfop_nota)
+                    if motivo:
+                        icms_fora += imposto
+                        motivos_sem_credito.add(motivo)
         for chave_extra in CHAVES_ACRESCIMO:
             extra = _float(campos.get(chave_extra))
             if extra:
@@ -296,12 +329,14 @@ def custo_da_nf(linhas_nf: list[dict]) -> dict | None:
             fontes.add(chave_desc)
     if not achou:
         return None
-    liquido = bruto + acrescimo - desconto - sum(impostos[n] for n in IMPOSTOS_RECUPERAVEIS)
+    liquido = bruto + acrescimo - desconto - sum(impostos[n] for n in IMPOSTOS_RECUPERAVEIS) + icms_fora
     return {
         "valor_bruto": bruto,
         "acrescimo": acrescimo,
         "desconto": desconto,
         "impostos": impostos,
+        "icms_sem_credito": icms_fora,
+        "motivo_sem_credito": ", ".join(sorted(motivos_sem_credito)),
         "valor_liquido": liquido,
         "qtde_nf": qtde_nf,
         "fontes": sorted(fontes),
@@ -490,14 +525,19 @@ def _abertura_retroativa(saldo_atual: dict[str, float], custo_atual: float, movs
 def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict]:
     """Classifica, liga na NF e calcula o custo unitário de entrada."""
     codigo = prod.get("codigo") or normalizar_codigo(prod.get("codigo_interno"))
-    # Quantidade que entrou por NF (a mesma NF pode lançar em mais de uma
-    # linha, e o estorno vem negativo no mesmo documento).
-    qtde_entrada_nf: dict[str, float] = defaultdict(float)
+    # Quantidade que a NF deixou no estoque: entradas MENOS estornos. A mesma
+    # NF pode lançar em mais de uma linha, e quem lança, estorna e lança de
+    # novo gera +95, -95, +95 no mesmo documento: somar só os positivos daria
+    # 190 e o custo unitário cairia pela metade (caso real: NF 2857, 10/2026).
+    qtde_liquida_nf: dict[str, float] = defaultdict(float)
+    qtde_bruta_nf: dict[str, float] = defaultdict(float)
     efetivas = [_qtde_efetiva(mov) for mov in movs]
     for mov, efetiva in zip(movs, efetivas):
         cod_compra = _cod_compra(mov)
-        if cod_compra and efetiva > 0:
-            qtde_entrada_nf[cod_compra] += efetiva
+        if cod_compra:
+            qtde_liquida_nf[cod_compra] += efetiva
+            if efetiva > 0:
+                qtde_bruta_nf[cod_compra] += efetiva
 
     custos_nf: dict[str, dict | None] = {}
     preparados = []
@@ -511,11 +551,19 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
         custo_fonte: list[str] = []
         origem_custo = "medio"
         sem_imposto = False
+        icms_no_custo = None
         if cod_compra and classe == "entrada":
             if cod_compra not in custos_nf:
-                custos_nf[cod_compra] = custo_da_nf(_linhas_nf_do_produto(nota or {}, prod.get("cod_produto"), codigo))
+                custos_nf[cod_compra] = custo_da_nf(
+                    _linhas_nf_do_produto(nota or {}, prod.get("cod_produto"), codigo),
+                    cfop_nota=str((nota or {}).get("cfop") or ""),
+                )
             custo = custos_nf[cod_compra]
-            base_qtde = qtde_entrada_nf.get(cod_compra) or (custo or {}).get("qtde_nf") or 0
+            # NF estornada por inteiro (líquido zero): cai na quantidade da
+            # própria nota e, por último, no que foi lançado.
+            base_qtde = qtde_liquida_nf.get(cod_compra) or 0
+            if base_qtde <= EPS:
+                base_qtde = (custo or {}).get("qtde_nf") or qtde_bruta_nf.get(cod_compra) or 0
             if custo and base_qtde > EPS:
                 custo_nf = custo["valor_liquido"] / base_qtde
                 impostos_unit = {nome: valor / base_qtde for nome, valor in custo["impostos"].items()}
@@ -524,6 +572,8 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
                 # Sem imposto recuperável achado, o custo fica bruto: avisa em
                 # vez de deixar a coluna em branco em silêncio.
                 sem_imposto = not any(custo["impostos"][n] for n in IMPOSTOS_RECUPERAVEIS)
+                if custo.get("icms_sem_credito"):
+                    icms_no_custo = custo.get("motivo_sem_credito") or "sem crédito"
             else:
                 origem_custo = "nf_nao_encontrada"
         nf = None
@@ -558,6 +608,8 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
             "custo_fonte": custo_fonte,
             "origem_custo": origem_custo,
             "sem_imposto": sem_imposto,
+            # Texto do motivo quando o ICMS da entrada não deu crédito (ficou no custo).
+            "icms_no_custo": icms_no_custo,
         })
     return preparados
 
