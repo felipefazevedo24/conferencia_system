@@ -24,10 +24,13 @@ def _pode_fechar() -> bool:
 
 def _filtros():
     inicio, fim = svc.parse_periodo(request.args.get("inicio"), request.args.get("fim"))
+    svc.parse_depositos(request.args.get("depositos"))  # só valida: 400 se vier lixo
     return {
         "inicio": inicio,
         "fim": fim,
-        "depositos": svc.parse_depositos(request.args.get("depositos")),
+        # O Cardex é sempre o depósito 1 - inclusive ao abrir um mês fechado
+        # antes dessa regra, cuja foto ainda guarda os outros depósitos.
+        "depositos": {int(svc.DEPOSITO_CARDEX)},
         "forcar": request.args.get("atualizar") == "1",
     }
 

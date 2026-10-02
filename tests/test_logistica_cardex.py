@@ -173,19 +173,31 @@ def test_abertura_pela_ancora_aplica_o_que_veio_antes_do_inicio():
     assert [l["documento"] for l in det["linhas"]] == ["NF 173975 · GERDAU"]
 
 
-def test_transferencia_entre_depositos_nao_muda_o_medio():
+def test_cardex_considera_so_o_deposito_1():
+    """O Cardex é o livro do depósito 1: o saldo e o movimento do depósito 2
+    não entram, e a transferência 1 -> 2 sai do Cardex pelo médio."""
     movs = [_mov(10, "2026-09-10", 2, -100.0, "TSAIDA_E", "1;60000", dep=1),
-            _mov(11, "2026-09-10", 2, 100.0, "TSAIDA_E", "1;60000", dep=2)]
-    grv = _grv(produtos=[_produto(saldos={"1": 900.0, "2": 100.0}, preco=5.0)], movimentos=movs, notas={})
+            _mov(11, "2026-09-10", 2, 100.0, "TSAIDA_E", "1;60000", dep=2),
+            _mov(12, "2026-09-12", 1, -30.0, "TSAIDA_E", "1;60001", dep=2)]
+    grv = _grv(produtos=[_produto(saldos={"1": 900.0, "2": 70.0}, preco=5.0)], movimentos=movs, notas={})
     item = _item(grv)
-    todos = svc.resumo(item)
-    assert todos["qtde_transferencia"] == pytest.approx(0)
-    assert todos["valor_final"] == pytest.approx(5000.0)
-    so_principal = svc.resumo(item, {1})
-    assert so_principal["qtde_inicial"] == pytest.approx(1000.0)
-    assert so_principal["qtde_transferencia"] == pytest.approx(-100.0)
-    assert so_principal["valor_transferencia"] == pytest.approx(-500.0)
-    assert so_principal["valor_final"] == pytest.approx(4500.0)
+    assert set(item["abertura"]["q"]) == {"1"} and set(item["fechamento"]["q"]) == {"1"}
+    assert [l["deposito"] for l in item["linhas"]] == ["1"]
+    linha = svc.resumo(item)
+    assert linha["qtde_inicial"] == pytest.approx(1000.0)
+    assert linha["qtde_transferencia"] == pytest.approx(-100.0)
+    assert linha["valor_transferencia"] == pytest.approx(-500.0)
+    assert linha["qtde_final"] == pytest.approx(900.0)
+    assert linha["valor_final"] == pytest.approx(4500.0)
+    assert linha["valor_reavaliacao"] == 0
+    assert "divergente_grv" not in item["alertas"]
+
+
+def test_ancora_antiga_com_outros_depositos_abre_so_pelo_deposito_1():
+    ancora = {"q": {"1": 4518.62, "2": 300.0}, "m": 18707.09 / 4518.62}
+    det = svc.detalhe(_item(ancora=ancora))
+    assert det["inicial"]["qtde"] == pytest.approx(4518.62)
+    assert det["inicial"]["valor"] == pytest.approx(18707.09, abs=0.01)
 
 
 def test_inventario_vira_ajuste_e_tipo_8_nao_mexe_no_saldo():

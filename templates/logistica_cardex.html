@@ -110,7 +110,7 @@
         <div>
             <div class="eui-page-header__eyebrow">Logística · Inventário</div>
             <h1 class="eui-page-header__title"><i class="fas fa-book"></i> Cardex</h1>
-            <p class="eui-page-header__sub">Estoque valorizado no formato do Registro de Inventário Modelo 7: entrada pelo custo da NF sem ICMS, PIS e COFINS; saídas, transferências e ajustes pelo custo médio.</p>
+            <p class="eui-page-header__sub">Estoque do depósito 1 valorizado no formato do Registro de Inventário Modelo 7: entrada pelo custo da NF sem ICMS, PIS e COFINS; saídas, transferências e ajustes pelo custo médio.</p>
         </div>
         <span class="cx-status" id="cx-status"></span>
     </header>
@@ -135,7 +135,8 @@
         <span class="cx-filtros__sep"></span>
         <div class="cx-filtros__grupo">
             <select id="cx-familia" class="eui-input" style="min-width:190px;"><option value="">Todas as famílias</option></select>
-            <select id="cx-deposito" class="eui-input" style="min-width:170px;"><option value="">Todos os depósitos</option></select>
+            <span class="eui-badge eui-badge--neutral" title="O Cardex considera sempre o depósito 1, pela quantidade total (não o disponível)."><i class="fas fa-warehouse"></i> Depósito 1 · quantidade total</span>
+            <select id="cx-deposito" class="eui-input" hidden><option value="">Todos os depósitos</option></select>
             <button class="eui-btn eui-btn--primary" id="cx-btn-atualizar" title="Busca de novo no GRV"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </div>

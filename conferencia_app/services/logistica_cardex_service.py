@@ -11,9 +11,11 @@ De onde vem cada coisa:
 - Saída, transferência, ajuste e entrada sem NF (produção, devolução): pelo
   custo médio do momento ("operações de saída utilizam o médio").
 
-O custo médio é do PRODUTO (todos os depósitos juntos), igual ao
-tproduto.preco_custo do GRV. Filtrar um depósito mostra a quantidade daquele
-depósito valorizada por esse médio.
+O Cardex é o livro do DEPÓSITO 1 (DEPOSITO_CARDEX), pela quantidade total
+do depósito (tproduto_deposito.qtde_total, não o disponível): saldo e
+movimento dos outros depósitos ficam de fora. Transferência do 1 para outro
+depósito aparece como saída de transferência, pelo médio. O custo médio é o
+do saldo do depósito 1.
 
 Saldo inicial do período, em ordem de preferência:
 1. Fechamento congelado do mês anterior (LogisticaCardexFechamento) - a
@@ -56,6 +58,10 @@ from ..tempo import agora_br
 from .erp_estoque_service import buscar_cardex_grv
 
 EPS = 1e-6
+# Decisão da Contabilidade: o Cardex considera sempre e só o depósito 1
+# (principal). Somar os outros (em produção, terceiros...) inflava o saldo e
+# não batia com o que o GRV mostra no depósito principal.
+DEPOSITO_CARDEX = "1"
 # Tipos do tproduto_cardex que mexem no saldo (mesma regra do consumo e do
 # planejamento). 8 (inventário retroativo) e 9 (troca de material) aparecem
 # no Cardex como informativos até a conciliação mostrar que o saldo do GRV
@@ -527,12 +533,18 @@ def calcular_item(
     `inicio` até hoje (para desfazer a partir do saldo atual). None se o item
     não tem saldo nem movimento no período."""
     alertas: set[str] = set()
-    preparados = _preparar_movimentos(movs, prod, notas)
+    # Só o depósito do Cardex. O filtro vem DEPOIS de preparar: o custo
+    # unitário da NF divide pelo que a nota lançou em todos os depósitos.
+    preparados = [m for m in _preparar_movimentos(movs, prod, notas) if m["deposito"] == DEPOSITO_CARDEX]
     inicio_iso, fim_iso = inicio.isoformat(), fim.isoformat()
-    saldos_grv = {str(k): float(v or 0) for k, v in (prod.get("saldos") or {}).items()}
+    saldos_grv = {
+        str(k): float(v or 0) for k, v in (prod.get("saldos") or {}).items() if str(k) == DEPOSITO_CARDEX
+    }
 
     if abertura_ancora is not None:
-        estado = _Estado(abertura_ancora.get("q") or {}, abertura_ancora.get("m") or 0)
+        # Fechamento gravado antes desta regra pode ter outros depósitos na foto.
+        q_ancora = {k: v for k, v in (abertura_ancora.get("q") or {}).items() if str(k) == DEPOSITO_CARDEX}
+        estado = _Estado(q_ancora, abertura_ancora.get("m") or 0)
         for mov in preparados:
             if mov["dia"] < inicio_iso:
                 estado.aplicar(mov)
@@ -1193,6 +1205,8 @@ def conciliar(inicio: date, fim: date, forcar: bool = False) -> dict:
             saldos = {str(k): float(v or 0) for k, v in (prod.get("saldos") or {}).items()}
             deps = set(saldos) | {d for (c, d) in soma if c == cod}
             for dep in deps:
+                if dep != DEPOSITO_CARDEX:
+                    continue
                 tipos = soma.get((cod, dep), {})
                 movem = sum(v for t, v in tipos.items() if t in TIPOS_QUE_MOVEM)
                 extras = sum(v for t, v in tipos.items() if t not in TIPOS_QUE_MOVEM)
