@@ -1556,9 +1556,12 @@ SQL_FORNECIMENTOS_PRODUTO = """
 # real, entao vao como jsonb filtrado por nome (mesmo recurso do Comex) e o
 # Sync escolhe - ver /api/erp/estoque/cardex-diag para calibrar.
 _CARDEX_TIPOS = "(0, 1, 2, 8, 9)"
+# Nomes reais conferidos em 02/10/2026: total, qtde_estoque, vl_icms, vpis_q09,
+# vcofins_s11, vfrete_i15, vseg_i16 (seguro) e vdesc_i17 (desconto) - os dois
+# ultimos nao casavam com "seguro"/"desconto" e ficavam de fora.
 _CARDEX_CHAVES_NF = (
-    r"^(cod_produto|cod_interno|qtde|qtde_compra|quantidade|unidade|unidade_est|numero_item|cfop|produto)$"
-    r"|valor|vl_|vlr|preco|custo|total|icms|pis|cofins|ipi|ibs|cbs|frete|seguro|desconto|despesa|outras"
+    r"^(cod_produto|cod_interno|qtde|qtde_compra|qtde_estoque|qcom|quantidade|unidade|unidade_est|numero_item|cfop|produto)$"
+    r"|valor|vl_|vlr|preco|custo|total|icms|pis|cofins|ipi|ibs|cbs|frete|seguro|vseg|desconto|vdesc|despesa|outras"
 )
 
 SQL_CARDEX_PRODUTOS = """
@@ -1604,23 +1607,56 @@ _CARDEX_FILTRO_CODIGO = """
       and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %(codigo)s
 """
 
+# saldo / saldo_ant: o GRV grava em cada linha o qtde_total do deposito DEPOIS
+# dela. A variacao entre a linha e a anterior (qualquer tipo, mesmo produto e
+# deposito) e' o que realmente mexeu no estoque - o Sync usa isso em vez da
+# quantidade lancada (ver _qtde_efetiva no logistica_cardex_service). O lag
+# olha 400 dias para tras: produto parado ha mais que isso vem com saldo_ant
+# nulo e o Sync cai na quantidade lancada.
 SQL_CARDEX_MOVIMENTOS = """
-    select c.id::text as id,
-           c.cod_produto,
-           c.cod_deposito,
-           c.dt_hora_movimentacao as data,
-           c.tipo_movimento as tipo,
-           coalesce(c.qtde_movimentada, 0)::double precision as qtde,
-           upper(coalesce(c.tabela_link, '')) as tabela,
-           coalesce(c.chave_primaria_link::text, '') as chave,
-           coalesce(c.obs, '') as obs
-    from public.tproduto_cardex c
-    where c.cod_empresa = %(empresa)s
-      and c.tipo_movimento in """ + _CARDEX_TIPOS + """
-      and c.dt_hora_movimentacao >= %(desde)s::date
-      {filtro_ate}
+    select c.id, c.cod_produto, c.cod_deposito, c.data, c.tipo, c.qtde, c.tabela, c.chave, c.obs, c.saldo, c.saldo_ant
+    from (
+        select k.id::text as id,
+               k.cod_produto,
+               k.cod_deposito,
+               k.dt_hora_movimentacao as data,
+               k.tipo_movimento as tipo,
+               coalesce(k.qtde_movimentada, 0)::double precision as qtde,
+               upper(coalesce(k.tabela_link, '')) as tabela,
+               coalesce(k.chave_primaria_link::text, '') as chave,
+               coalesce(k.obs, '') as obs,
+               k.qtde_total::double precision as saldo,
+               lag(k.qtde_total) over (
+                   partition by k.cod_produto, k.cod_deposito order by k.dt_hora_movimentacao, k.id
+               )::double precision as saldo_ant
+        from public.tproduto_cardex k
+        where k.cod_empresa = %(empresa)s
+          and k.dt_hora_movimentacao >= (%(desde)s::date - 400)
+          {filtro_ate}
+          {filtro_produto}
+    ) c
+    where c.tipo in """ + _CARDEX_TIPOS + """
+      and c.data >= %(desde)s::date
+    order by c.data, c.id
+"""
+
+# Abertura do Cardex quando nao ha mes fechado: a ultima linha do kardex do
+# deposito 1 ANTES do periodo traz o saldo (qtde_total) e o custo do GRV
+# naquele momento. E' como a Contabilidade abre a ficha (19-01-00564 em
+# 09/2026: 4.518,62 kg a 4,14 = saldo e vl_custo da ultima linha de 31/08).
+# Deposito 1 fixo: e' o deposito do Cardex (DEPOSITO_CARDEX no Sync).
+SQL_CARDEX_ABERTURA = """
+    select distinct on (k.cod_produto)
+           k.cod_produto,
+           k.qtde_total::double precision as qtde,
+           coalesce(nullif(k.vl_custo, 0), k.vl_custo_fiscal)::double precision as custo,
+           k.dt_hora_movimentacao as data
+    from public.tproduto_cardex k
+    where k.cod_empresa = %(empresa)s
+      and k.cod_deposito = 1
+      and k.dt_hora_movimentacao < %(desde)s::date
       {filtro_produto}
-    order by c.dt_hora_movimentacao, c.id
+    order by k.cod_produto, k.dt_hora_movimentacao desc, k.id desc
 """
 
 # Soma de tudo o que o kardex ja' moveu (desde 18/06/2019), por deposito e
@@ -1678,10 +1714,17 @@ def _cardex_grv(
         filtro_produto = "and c.cod_produto = any(%(produtos)s)"
     movimentos: list[dict[str, Any]] = []
     if not apenas_historico:
+        cur.execute(SQL_CARDEX_ABERTURA.replace("{filtro_produto}", filtro_produto.replace("c.cod_produto", "k.cod_produto")), params)
+        aberturas = {
+            cod: {"qtde": qtde, "custo": custo, "data": data.isoformat() if data else None}
+            for cod, qtde, custo, data in cur.fetchall()
+        }
+        for produto in produtos:
+            produto["abertura"] = aberturas.get(produto["cod_produto"])
         cur.execute(
             SQL_CARDEX_MOVIMENTOS
-            .replace("{filtro_ate}", "and c.dt_hora_movimentacao < (%(ate)s::date + 1)" if ate else "")
-            .replace("{filtro_produto}", filtro_produto),
+            .replace("{filtro_ate}", "and k.dt_hora_movimentacao < (%(ate)s::date + 1)" if ate else "")
+            .replace("{filtro_produto}", filtro_produto.replace("c.cod_produto", "k.cod_produto")),
             params,
         )
         cols = [desc[0] for desc in cur.description]

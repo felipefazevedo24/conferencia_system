@@ -145,11 +145,11 @@
     <!-- ================= RESUMO ================= -->
     <section class="cx-panel active" data-panel="resumo">
         <div class="eui-stats">
-            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-door-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo inicial</span><span class="eui-stat__value" id="cx-s-inicial">—</span></div></div>
-            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-arrow-down"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entradas</span><span class="eui-stat__value" id="cx-s-entradas">—</span></div></div>
-            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-arrow-up"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saídas</span><span class="eui-stat__value" id="cx-s-saidas">—</span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-door-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo inicial</span><span class="eui-stat__value" id="cx-s-inicial">—</span><span class="eui-stat__hint" id="cx-q-inicial"></span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-arrow-down"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entradas</span><span class="eui-stat__value" id="cx-s-entradas">—</span><span class="eui-stat__hint" id="cx-q-entradas"></span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-arrow-up"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saídas</span><span class="eui-stat__value" id="cx-s-saidas">—</span><span class="eui-stat__hint" id="cx-q-saidas"></span></div></div>
             <div class="eui-stat" title="Ajustes de inventário, transferências e reavaliação"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scale-balanced"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Ajustes</span><span class="eui-stat__value" id="cx-s-ajustes">—</span></div></div>
-            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-flag-checkered"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo final</span><span class="eui-stat__value" id="cx-s-final">—</span><span class="eui-stat__hint" id="cx-s-itens"></span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-flag-checkered"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Valor do estoque (saldo final)</span><span class="eui-stat__value" id="cx-s-final">—</span><span class="eui-stat__hint" id="cx-q-final"></span><span class="eui-stat__hint" id="cx-s-itens"></span></div></div>
         </div>
         <div class="cx-conta-saldo" id="cx-conta-saldo"></div>
 
@@ -177,7 +177,7 @@
                                 <th class="num">Entradas</th>
                                 <th class="num">Saídas</th>
                                 <th class="num" title="Ajustes de inventário, transferências e reavaliação">Ajustes</th>
-                                <th class="num">Saldo final</th>
+                                <th class="num" title="Valor do estoque em R$ e, embaixo, a quantidade total no depósito 1">Estoque final</th>
                                 <th class="num">Custo médio</th>
                                 <th style="text-align:right;">Ação</th>
                             </tr>
@@ -369,7 +369,7 @@
     const ALERTAS = {
         nf_sem_custo: "Entrada sem valor encontrado na NF (valorizada pelo médio)",
         nf_sem_imposto: "Entrada de NF sem ICMS/PIS/COFINS encontrado (custo pelo valor bruto)",
-        custo_estimado: "Custo médio de abertura estimado (saldo passou por zero)",
+        custo_estimado: "Custo médio de abertura estimado (GRV sem custo na data ou saldo passou por zero)",
         custo_divergente: "Custo do GRV não fecha com o histórico de entradas",
         saldo_negativo: "Saldo negativo no período",
         sem_custo_grv: "Sem custo médio no GRV",
@@ -451,7 +451,7 @@
         } else {
             st.className = "cx-status cx-status--vivo";
             st.innerHTML = `<i class="fas fa-satellite-dish"></i> Prévia · sem mês fechado anterior`;
-            st.title = "Sem mês fechado antes deste período: o saldo inicial foi recalculado de trás para frente a partir do saldo e do custo médio atuais do GRV.";
+            st.title = "Sem mês fechado antes deste período: o saldo inicial é o saldo do depósito 1 no GRV na véspera, pelo custo que o GRV tinha na data.";
         }
         (dados.avisos || []).forEach((a) => {
             // Este aviso é exatamente o que a etiqueta "sem mês fechado anterior" já diz.
@@ -474,6 +474,14 @@
         $("cx-s-entradas").textContent = brl(i.valor_entradas);
         $("cx-s-saidas").textContent = brl(i.valor_saidas);
         $("cx-s-ajustes").textContent = brl(i.valor_outros);
+        // Quantidade total embaixo do R$. Soma unidades diferentes (KG, PC...):
+        // serve de ordem de grandeza; filtrando uma família ela fica homogênea.
+        const t = dados.totais || {};
+        const qt = (v) => dados.disponivel === false ? "" : `${q(v || 0)} em quantidade`;
+        $("cx-q-inicial").textContent = qt(t.qtde_inicial);
+        $("cx-q-entradas").textContent = qt(t.qtde_entrada);
+        $("cx-q-saidas").textContent = qt(t.qtde_saida);
+        $("cx-q-final").textContent = qt(t.qtde_final);
         $("cx-s-final").textContent = brl(i.valor_final);
         $("cx-s-itens").textContent = `${(i.itens || 0).toLocaleString("pt-BR")} itens · ${i.itens_com_alerta || 0} com alerta`;
         const fora = i.itens_desconsiderados || 0;
@@ -488,10 +496,12 @@
 
     // R$ em cima e a quantidade embaixo, menor: o contador lê o valor e
     // confere a quantidade sem precisar do dobro de colunas.
-    const celula = (valor, qtde) => `<td class="num${cls(valor)}" data-sort="${valor || 0}">${r(valor)}${qtde === undefined ? "" : `<span class="cx-sub">${q(qtde)}</span>`}</td>`;
-    const valores = (v) => celula(v.valor_inicial, v.qtde_inicial) + celula(v.valor_entrada, v.qtde_entrada)
-        + celula(v.valor_saida, v.qtde_saida) + celula(ajustes(v), (v.qtde_ajuste || 0) + (v.qtde_transferencia || 0))
-        + celula(v.valor_final, v.qtde_final);
+    // `un` só vem nas linhas de item: total e subtotal somam unidades
+    // diferentes (KG, PC...), então lá a quantidade vai sem unidade.
+    const celula = (valor, qtde, un) => `<td class="num${cls(valor)}" data-sort="${valor || 0}">R$ ${r(valor)}${qtde === undefined ? "" : `<span class="cx-sub">${q(qtde)}${un ? " " + esc(un) : ""}</span>`}</td>`;
+    const valores = (v, un) => celula(v.valor_inicial, v.qtde_inicial, un) + celula(v.valor_entrada, v.qtde_entrada, un)
+        + celula(v.valor_saida, v.qtde_saida, un) + celula(ajustes(v), (v.qtde_ajuste || 0) + (v.qtde_transferencia || 0), un)
+        + celula(v.valor_final, v.qtde_final, un);
 
     function renderResumo(dados) {
         const body = $("cx-resumo-body"), foot = $("cx-resumo-foot");
@@ -515,8 +525,8 @@
                 <td class="cx-cod"><a href="#" data-ver="${esc(cod)}"><b>${esc(l.codigo_interno)}</b></a></td>
                 <td>${esc(l.descricao)}<span class="cx-sub">${esc(l.familia)}</span>${selos ? `<span class="cx-selos">${selos}</span>` : ""}</td>
                 <td>${esc(l.unidade)}</td>
-                ${valores(l)}
-                <td class="num">${c(l.custo_medio_final)}</td>
+                ${valores(l, l.unidade)}
+                <td class="num">R$ ${c(l.custo_medio_final)}</td>
                 <td style="text-align:right;"><span class="cx-acoes"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver="${esc(cod)}"><i class="fas fa-book"></i> Ver cardex</button>${acaoFora}</span></td>
             </tr>`;
         }).join("");
@@ -681,10 +691,10 @@
                 : `<td class="num">${c(u && u.icms || null)}</td><td class="num">${c(u && u.pis || null)}</td><td class="num">${c(u && u.cofins || null)}</td>`;
             html += `<tr class="${info ? "cx-info" : ""}">
                 <td style="white-space:nowrap;">${esc(dataBR(l.data.slice(0, 10)))}</td>
-                <td style="white-space:nowrap;">${esc(info ? l.tipo_rotulo : TIPO[l.classe])}</td>
+                <td style="white-space:nowrap;">${esc(info ? l.tipo_rotulo : TIPO[l.classe])}${!info && l.tipo === 2 ? `<span class="cx-sub">transferência de depósito</span>` : ""}${!info && l.tipo === 9 ? `<span class="cx-sub">troca de material</span>` : ""}</td>
                 <td title="${esc(l.obs)}"><b>${esc(l.documento)}</b>${selo}${nf}</td>
                 <td>${esc(l.deposito)}</td>
-                <td class="num${cls(l.qtde)}">${q(l.qtde)}</td>
+                <td class="num${cls(l.qtde)}">${q(l.qtde)}${l.qtde_lancada != null ? `<span class="cx-sub" title="O GRV lançou ${q(l.qtde_lancada)}; o saldo do depósito variou ${q(l.qtde)}">lançado ${q(l.qtde_lancada)}</span>` : ""}</td>
                 <td class="num${medio ? " cx-medio" : ""}" title="${medio ? "Custo médio" : "Custo da NF"}">${c(l.custo_unit)}</td>
                 <td class="num${cls(l.valor)}">${r(l.valor)}</td>
                 ${impostos}

@@ -4,24 +4,36 @@ Contabilidade usa.
 
 De onde vem cada coisa:
 - Quantidade: kardex do GRV (public.tproduto_cardex), via bridge. A bridge
-  devolve o movimento cru; toda conta é feita aqui.
+  devolve o movimento cru; toda conta é feita aqui. O que mexeu no estoque
+  é a VARIAÇÃO DO SALDO que o GRV grava na própria linha (qtde_total), não a
+  quantidade lançada - ver _qtde_efetiva().
 - Custo da entrada: a NF de entrada (tcompras/tcom_aux), líquido dos impostos
   recuperáveis (ICMS, PIS, COFINS) - é o que dá os 4,07 da planilha da
   Contabilidade, com ICMS 0,61 / PIS 0,07 / COFINS 0,34 por unidade.
+
+Calibrado contra o GRV real em 02/10/2026 (5.599 itens de entrada de 2026 no
+depósito 1): total + frete + seguro - desconto - ICMS - PIS - COFINS bate
+com o custo que o GRV grava na NF em 95% dos itens (0,25% no valor total).
+O IPI não entra (o campo `total` já vem sem ele). O que não bate é
+importação (CFOP 3xxx: o GRV soma despesas aduaneiras) e Simples Nacional.
 - Saída, transferência, ajuste e entrada sem NF (produção, devolução): pelo
   custo médio do momento ("operações de saída utilizam o médio").
 
 O Cardex é o livro do DEPÓSITO 1 (DEPOSITO_CARDEX), pela quantidade total
 do depósito (tproduto_deposito.qtde_total, não o disponível): saldo e
 movimento dos outros depósitos ficam de fora. Transferência do 1 para outro
-depósito aparece como saída de transferência, pelo médio. O custo médio é o
-do saldo do depósito 1.
+depósito é saída (e a volta é entrada), pelo médio. O custo médio é o do
+saldo do depósito 1.
 
 Saldo inicial do período, em ordem de preferência:
 1. Fechamento congelado do mês anterior (LogisticaCardexFechamento) - a
    abertura de um mês é o fechamento do outro, como na contabilidade.
-2. Sem fechamento anterior: parte do saldo e do custo médio ATUAIS do GRV e
-   desfaz, de trás pra frente, todo movimento desde o início do período.
+2. Sem fechamento anterior: o saldo do depósito 1 e o custo que o GRV
+   gravou na última linha do kardex ANTES do período (prod["abertura"]). É
+   como a Contabilidade abre a ficha na planilha dela.
+3. Bridge antiga (sem "abertura") ou item sem kardex antes do período:
+   parte do saldo e do custo médio ATUAIS do GRV e desfaz, de trás pra
+   frente, todo movimento desde o início do período.
 
 Um mês fechado é servido da foto gravada, não do GRV (o GRV aceita
 lançamento retroativo; ver o model).
@@ -62,11 +74,18 @@ EPS = 1e-6
 # (principal). Somar os outros (em produção, terceiros...) inflava o saldo e
 # não batia com o que o GRV mostra no depósito principal.
 DEPOSITO_CARDEX = "1"
-# Tipos do tproduto_cardex que mexem no saldo (mesma regra do consumo e do
-# planejamento). 8 (inventário retroativo) e 9 (troca de material) aparecem
-# no Cardex como informativos até a conciliação mostrar que o saldo do GRV
-# os considera - ver conciliar().
-TIPOS_QUE_MOVEM = (0, 1, 2)
+# Tipos do tproduto_cardex que mexem no saldo. Conferido linha a linha no GRV
+# real (depósito 1, 2026): 0, 1, 2 e 9 (troca de material) alteram o
+# qtde_total; 3 a 6 são reserva/solicitação e 8 (inventário retroativo) vem
+# com quantidade zero.
+TIPOS_QUE_MOVEM = (0, 1, 2, 9)
+# Linhas gravadas com tipo 0/1/2 que NÃO mexem no saldo: são anotação de
+# reserva/solicitação (ex.: tipo 0 TCOMPRAS "INSERINDO ESTOQUE SOLICITADO
+# RESERVADO"). Só é usado quando a bridge não manda o saldo da linha.
+OBS_SO_RESERVA = (
+    "DISPONIVEL PARA RESERVA", "RESERVA PARA DISPONIVEL",
+    "INSERINDO ESTOQUE SOLICITADO", "BAIXANDO ESTOQUE SOLICITADO",
+)
 TIPO_ROTULO = {0: "Entrada", 1: "Saída", 2: "Transferência", 8: "Inventário retroativo", 9: "Troca de material"}
 CLASSES = ("entrada", "saida", "transferencia", "ajuste")
 CLASSE_ROTULO = {
@@ -77,25 +96,30 @@ CLASSE_ROTULO = {
     "informativo": "Informativo",
 }
 
-# Colunas candidatas da tcom_aux (item da NF de entrada). Ainda não
-# confirmadas no GRV real: a primeira que existir com valor ganha, e a
-# coluna usada vai junto na linha (custo_fonte) para a conciliação mostrar.
-# Calibrar com /api/erp/estoque/cardex-diag e ajustar SÓ aqui.
+# Colunas da tcom_aux (item da NF de entrada). O PRIMEIRO nome de cada lista
+# é o real do GRV, conferido em 02/10/2026: total, qtde_estoque, vl_icms,
+# vpis_q09, vcofins_s11, vlr_ibs, vlr_cbs, vfrete_i15, vseg_i16, vdesc_i17.
+# Os demais são os candidatos de antes, mantidos por segurança. A coluna
+# usada vai junto na linha (custo_fonte) para a conciliação mostrar.
 CHAVES_VALOR_ITEM = (
+    "total",
     "valor_total", "vl_total", "vlr_total", "valor_total_item", "vl_total_item", "total_item",
-    "valor_produto", "vl_produto", "vlr_produto", "valor_mercadoria", "total",
+    "valor_produto", "vl_produto", "vlr_produto", "valor_mercadoria",
 )
-CHAVES_PRECO_UNIT = ("preco_unitario", "valor_unitario", "vl_unitario", "vlr_unitario", "preco")
-CHAVES_QTDE = ("qtde", "quantidade", "qtd")
+CHAVES_PRECO_UNIT = ("vl_unitario", "preco_unitario", "valor_unitario", "vlr_unitario", "preco")
+# `qtde` da tcom_aux é a quantidade COMERCIAL da nota (ex.: 2,38 t); a de
+# estoque (2.380 kg) é qtde_estoque. Só serve de reserva: a base do custo
+# unitário é o que o kardex lançou.
+CHAVES_QTDE = ("qtde_estoque", "qtde", "quantidade", "qtd")
 CHAVES_IMPOSTO = {
-    "icms": ("valor_icms", "vl_icms", "vlr_icms", "icms_valor"),
-    "pis": ("valor_pis", "vl_pis", "vlr_pis", "pis_valor"),
-    "cofins": ("valor_cofins", "vl_cofins", "vlr_cofins", "cofins_valor"),
-    "ibs": ("valor_ibs", "vl_ibs", "vlr_ibs", "ibs_valor"),
-    "cbs": ("valor_cbs", "vl_cbs", "vlr_cbs", "cbs_valor"),
+    "icms": ("vl_icms", "valor_icms", "vlr_icms", "icms_valor"),
+    "pis": ("vpis_q09", "valor_pis", "vl_pis", "vlr_pis", "pis_valor"),
+    "cofins": ("vcofins_s11", "valor_cofins", "vl_cofins", "vlr_cofins", "cofins_valor"),
+    "ibs": ("vlr_ibs", "valor_ibs", "vl_ibs", "ibs_valor"),
+    "cbs": ("vlr_cbs", "valor_cbs", "vl_cbs", "cbs_valor"),
 }
-CHAVES_ACRESCIMO = ("valor_frete", "vl_frete", "valor_seguro", "vl_seguro", "valor_outras", "vl_outras", "vl_despesas")
-CHAVES_DESCONTO = ("valor_desconto", "vl_desconto", "desconto")
+CHAVES_ACRESCIMO = ("vfrete_i15", "vseg_i16", "valor_frete", "vl_frete", "valor_seguro", "vl_seguro", "valor_outras", "vl_outras", "vl_despesas")
+CHAVES_DESCONTO = ("vdesc_i17", "valor_desconto", "vl_desconto", "desconto")
 # Recuperáveis: saem do custo. IBS/CBS em 2026 são só informativos (ano de
 # teste da reforma, compensados no PIS/COFINS) - aparecem, mas não abatem.
 IMPOSTOS_RECUPERAVEIS = ("icms", "pis", "cofins")
@@ -308,13 +332,39 @@ def _cod_compra(mov: dict) -> str | None:
 # Classificação e documento de origem
 # --------------------------------------------------------------------------
 
-def _classe(mov: dict) -> str:
+def _qtde_efetiva(mov: dict) -> float:
+    """Quanto o lançamento mexeu no saldo do depósito.
+
+    O GRV grava em cada linha do kardex o saldo depois dela (qtde_total).
+    Quando a bridge manda esse saldo e o da linha anterior, a variação entre
+    os dois é a verdade - e resolve dois casos em que a quantidade lançada
+    engana: (1) linha tipo 0/1/2 que é só anotação de reserva (variação
+    zero); (2) "ajuste conforme inventário", que lança o saldo NOVO inteiro e
+    não a diferença, contando em dobro o que estava reservado.
+    Sem o saldo (bridge antiga), cai na quantidade lançada, descartando as
+    anotações de reserva pelo texto da observação."""
+    qtde = float(mov.get("qtde") or 0)
+    saldo, anterior = _float(mov.get("saldo")), _float(mov.get("saldo_ant"))
+    if saldo is not None and anterior is not None:
+        return round(saldo - anterior, 6) + 0.0
+    if str(mov.get("obs") or "").strip().upper().startswith(OBS_SO_RESERVA):
+        return 0.0
+    return qtde
+
+
+def _classe(mov: dict, qtde: float) -> str:
     tipo = mov.get("tipo")
-    if tipo not in TIPOS_QUE_MOVEM:
+    if tipo not in TIPOS_QUE_MOVEM or abs(qtde) <= EPS:
         return "informativo"
     if mov.get("tabela") == "TINVENT_DEP" and tipo in (0, 1):
         return "ajuste"
-    return {0: "entrada", 1: "saida", 2: "transferencia"}[tipo]
+    if tipo in (2, 9):
+        # 2: o Cardex é só do depósito 1 - o que vai para outro depósito saiu
+        # do livro, e o que volta entrou. 9: troca de material (sai de um
+        # código, entra em outro). Os dois pelo médio, não têm NF. A classe
+        # "transferencia" só existe ainda em mês fechado antes desta regra.
+        return "saida" if qtde < 0 else "entrada"
+    return {0: "entrada", 1: "saida"}[tipo]
 
 
 def _ultima_parte(chave: str) -> str:
@@ -443,15 +493,17 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
     # Quantidade que entrou por NF (a mesma NF pode lançar em mais de uma
     # linha, e o estorno vem negativo no mesmo documento).
     qtde_entrada_nf: dict[str, float] = defaultdict(float)
-    for mov in movs:
+    efetivas = [_qtde_efetiva(mov) for mov in movs]
+    for mov, efetiva in zip(movs, efetivas):
         cod_compra = _cod_compra(mov)
-        if cod_compra and float(mov.get("qtde") or 0) > 0:
-            qtde_entrada_nf[cod_compra] += float(mov["qtde"])
+        if cod_compra and efetiva > 0:
+            qtde_entrada_nf[cod_compra] += efetiva
 
     custos_nf: dict[str, dict | None] = {}
     preparados = []
-    for mov in movs:
-        classe = _classe(mov)
+    for mov, efetiva in zip(movs, efetivas):
+        classe = _classe(mov, efetiva)
+        lancada = float(mov.get("qtde") or 0)
         cod_compra = _cod_compra(mov)
         nota = notas.get(cod_compra) if cod_compra else None
         custo_nf = None
@@ -491,7 +543,10 @@ def _preparar_movimentos(movs: list[dict], prod: dict, notas: dict) -> list[dict
             "tipo_rotulo": TIPO_ROTULO.get(mov.get("tipo"), str(mov.get("tipo"))),
             "classe": classe,
             "deposito": str(mov.get("cod_deposito") if mov.get("cod_deposito") is not None else mov.get("deposito")),
-            "qtde": float(mov.get("qtde") or 0),
+            # Informativo mostra o que foi lançado; o resto, o que mexeu no saldo.
+            "qtde": lancada if classe == "informativo" else efetiva,
+            # Só vem quando difere (inventário com reserva): a tela mostra os dois.
+            "qtde_lancada": lancada if classe != "informativo" and abs(lancada - efetiva) > EPS else None,
             "tabela": mov.get("tabela") or "",
             "chave": mov.get("chave") or "",
             "obs": mov.get("obs") or "",
@@ -554,7 +609,18 @@ def calcular_item(
         if custo_atual is None:
             alertas.add("sem_custo_grv")
             custo_atual = 0.0
-        abertura = _abertura_retroativa(saldos_grv, custo_atual, [m for m in preparados if m["dia"] >= inicio_iso], alertas)
+        abertura_grv = prod.get("abertura") or {}
+        qtde_grv = _float(abertura_grv.get("qtde"))
+        if qtde_grv is not None:
+            # Saldo e custo que o GRV gravou na véspera do período.
+            custo_grv = _float(abertura_grv.get("custo"))
+            if not custo_grv:
+                custo_grv = custo_atual
+                if abs(qtde_grv) > EPS:
+                    alertas.add("custo_estimado")
+            abertura = {"q": {DEPOSITO_CARDEX: qtde_grv} if abs(qtde_grv) > EPS else {}, "m": custo_grv}
+        else:
+            abertura = _abertura_retroativa(saldos_grv, custo_atual, [m for m in preparados if m["dia"] >= inicio_iso], alertas)
 
     estado = _Estado(abertura["q"], abertura["m"])
     linhas = []
@@ -925,8 +991,8 @@ def calcular_ao_vivo(inicio: date, fim: date, codigo: str | None = None, forcar:
         )
     if not ancora:
         resultado["avisos"].append(
-            "Sem mês fechado antes deste período: o saldo inicial foi recalculado de trás pra frente a partir "
-            "do saldo e do custo médio atuais do GRV."
+            "Sem mês fechado antes deste período: o saldo inicial é o saldo do depósito 1 no GRV na véspera, "
+            "pelo custo que o GRV tinha na data."
         )
     _CACHE[chave] = (agora + _CACHE_TTL_SEGUNDOS, resultado)
     return resultado
@@ -1117,7 +1183,7 @@ def consultar_item(codigo: str, inicio: date, fim: date, depositos: set[int] | N
 ALERTA_ROTULO = {
     "nf_sem_custo": "Entrada de NF sem valor encontrado na NF (valorizada pelo custo médio)",
     "nf_sem_imposto": "Entrada de NF sem ICMS/PIS/COFINS encontrado (custo pelo valor bruto da NF)",
-    "custo_estimado": "Saldo passou por zero: custo médio de abertura estimado pela NF anterior",
+    "custo_estimado": "Custo médio de abertura estimado (o GRV não tinha custo na data ou o saldo passou por zero)",
     "custo_divergente": "Custo do GRV não fecha com o histórico de entradas (resíduo ao zerar o saldo)",
     "saldo_negativo": "Saldo ficou negativo no período",
     "sem_custo_grv": "Produto sem custo médio no GRV",

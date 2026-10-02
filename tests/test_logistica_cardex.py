@@ -175,7 +175,7 @@ def test_abertura_pela_ancora_aplica_o_que_veio_antes_do_inicio():
 
 def test_cardex_considera_so_o_deposito_1():
     """O Cardex é o livro do depósito 1: o saldo e o movimento do depósito 2
-    não entram, e a transferência 1 -> 2 sai do Cardex pelo médio."""
+    não entram, e a transferência 1 -> 2 é saída do Cardex, pelo médio."""
     movs = [_mov(10, "2026-09-10", 2, -100.0, "TSAIDA_E", "1;60000", dep=1),
             _mov(11, "2026-09-10", 2, 100.0, "TSAIDA_E", "1;60000", dep=2),
             _mov(12, "2026-09-12", 1, -30.0, "TSAIDA_E", "1;60001", dep=2)]
@@ -185,12 +185,106 @@ def test_cardex_considera_so_o_deposito_1():
     assert [l["deposito"] for l in item["linhas"]] == ["1"]
     linha = svc.resumo(item)
     assert linha["qtde_inicial"] == pytest.approx(1000.0)
-    assert linha["qtde_transferencia"] == pytest.approx(-100.0)
-    assert linha["valor_transferencia"] == pytest.approx(-500.0)
+    assert linha["qtde_saida"] == pytest.approx(-100.0)
+    assert linha["valor_saida"] == pytest.approx(-500.0)
+    assert linha["qtde_transferencia"] == 0 and linha["valor_transferencia"] == 0
+    assert item["linhas"][0]["classe"] == "saida" and item["linhas"][0]["tipo_rotulo"] == "Transferência"
     assert linha["qtde_final"] == pytest.approx(900.0)
     assert linha["valor_final"] == pytest.approx(4500.0)
     assert linha["valor_reavaliacao"] == 0
     assert "divergente_grv" not in item["alertas"]
+
+
+def test_transferencia_de_volta_para_o_deposito_1_e_entrada_pelo_medio():
+    movs = [_mov(10, "2026-09-10", 2, 40.0, "TSAIDA_E", "1;60002", dep=1),
+            _mov(11, "2026-09-10", 2, -40.0, "TSAIDA_E", "1;60002", dep=2)]
+    grv = _grv(produtos=[_produto(saldos={"1": 1040.0}, preco=5.0)], movimentos=movs, notas={})
+    item = _item(grv)
+    linha = svc.resumo(item)
+    assert linha["qtde_entrada"] == pytest.approx(40.0) and linha["valor_entrada"] == pytest.approx(200.0)
+    assert item["linhas"][0]["origem_custo"] == "medio" and item["alertas"] == []
+
+
+# --------------------------------------------------------------------------
+# Regras calibradas contra o GRV real em 02/10/2026
+# --------------------------------------------------------------------------
+
+def test_custo_da_nf_com_os_nomes_reais_das_colunas_do_grv():
+    """NF 405199 (SETEFER), item 19-01-00563, como está na tcom_aux: o PIS e o
+    COFINS vêm em vpis_q09 / vcofins_s11 e o `total` já vem sem o IPI. O GRV
+    grava custo de 4,6509 para essa linha (vl_custo_uni_sem_captacao)."""
+    linha = {"cod_produto": 27400, "qtde": 1860, "total": 11625, "vl_unitario": 6.25, "vl_icms": 2092.5,
+             "vpis_q09": 157.2862, "vcofins_s11": 724.47, "vl_ipi": 377.8125, "vlr_ibs": 8.6507, "vlr_cbs": 77.8567,
+             "valor_total_oc": 14130, "vl_base_calc_icms": 11625, "vl_custo_uni_sem_captacao": 4.65093752688172}
+    custo = svc.custo_da_nf([linha])
+    assert custo["valor_bruto"] == 11625
+    assert custo["impostos"]["pis"] == pytest.approx(157.2862) and custo["impostos"]["cofins"] == pytest.approx(724.47)
+    assert custo["valor_liquido"] / 1860 == pytest.approx(4.65093752688172)
+    # Frete, seguro e desconto do item também têm nome próprio no GRV.
+    com_extras = svc.custo_da_nf([{**linha, "vfrete_i15": 100.0, "vseg_i16": 10.0, "vdesc_i17": 25.0}])
+    assert com_extras["valor_liquido"] == pytest.approx(custo["valor_liquido"] + 100 + 10 - 25)
+
+
+def test_quantidade_que_vale_e_a_variacao_do_saldo_gravado_na_linha():
+    """Inventário: o GRV tira o disponível (fica o reservado) e depois lança o
+    saldo NOVO inteiro. Somar o lançado contaria o reservado em dobro."""
+    movs = [
+        {**_mov(30, "2026-09-10", 1, -1130.88, "TINVENT_DEP", "1;2947"), "saldo": 25.76, "saldo_ant": 1156.64},
+        {**_mov(31, "2026-09-10", 0, 706.64, "TINVENT_DEP", "1;2947"), "saldo": 706.64, "saldo_ant": 25.76},
+    ]
+    grv = _grv(produtos=[_produto(saldos={"1": 706.64}, preco=2.0)], movimentos=movs, notas={})
+    item = _item(grv)
+    remocao, ajuste = item["linhas"]
+    assert remocao["qtde"] == pytest.approx(-1130.88) and remocao["qtde_lancada"] is None
+    assert ajuste["qtde"] == pytest.approx(680.88) and ajuste["qtde_lancada"] == pytest.approx(706.64)
+    assert item["abertura"]["q"] == {"1": pytest.approx(1156.64)}
+    assert item["fechamento"]["q"] == {"1": pytest.approx(706.64)}
+    assert "divergente_grv" not in item["alertas"]
+
+
+@pytest.mark.parametrize("com_saldo", [True, False])
+def test_anotacao_de_reserva_gravada_como_entrada_nao_mexe_no_saldo(com_saldo):
+    """Tipo 0 TCOMPRAS "INSERINDO ESTOQUE SOLICITADO RESERVADO" não altera o
+    qtde_total no GRV. Com o saldo da linha, vale a variação (zero); sem ele
+    (bridge antiga), o texto da observação."""
+    nota = _mov(40, "2026-09-05", 0, 1152.0, "TCOMPRAS", "1;16814", obs="INSERINDO ESTOQUE SOLICITADO RESERVADO. ENTRADA: 16814")
+    entrada = dict(MOV_ENTRADA_78851)
+    if com_saldo:
+        nota = {**nota, "saldo": 6898.62, "saldo_ant": 6898.62}
+        entrada = {**entrada, "saldo": 6898.62, "saldo_ant": 4518.62}
+    grv = _grv(produtos=[_produto(saldos={"1": 6898.62})], movimentos=[entrada, nota])
+    item = _item(grv)
+    assert [l["classe"] for l in item["linhas"]] == ["entrada", "informativo"]
+    # Não entra na base do custo unitário da NF (2.380 kg, não 3.532).
+    assert item["linhas"][0]["custo_unit"] == pytest.approx(LIQUIDO_NF_78851 / 2380)
+    assert svc.resumo(item)["qtde_entrada"] == pytest.approx(2380.0)
+    assert item["fechamento"]["q"] == {"1": pytest.approx(6898.62)}
+
+
+def test_troca_de_material_tipo_9_mexe_no_saldo():
+    movs = [_mov(50, "2026-09-08", 9, 5.98, "TPRODUTO", "", obs="MATERIAL DE ORIGEM:19-01-00999"),
+            _mov(51, "2026-09-09", 9, -2.0, "TPRODUTO", "", obs="MATERIAL DE DESTINO:19-01-00998")]
+    grv = _grv(produtos=[_produto(saldos={"1": 103.98}, preco=5.0)], movimentos=movs, notas={})
+    item = _item(grv)
+    assert [(l["classe"], l["tipo_rotulo"]) for l in item["linhas"]] == [("entrada", "Troca de material"), ("saida", "Troca de material")]
+    linha = svc.resumo(item)
+    assert linha["qtde_inicial"] == pytest.approx(100.0) and linha["qtde_final"] == pytest.approx(103.98)
+    assert linha["valor_entrada"] == pytest.approx(29.9) and linha["valor_saida"] == pytest.approx(-10.0)
+
+
+def test_sem_mes_fechado_abre_pelo_saldo_e_custo_do_grv_na_vespera():
+    """Como a Contabilidade abre a ficha: saldo do depósito 1 em 31/08 pelo
+    custo que o GRV tinha gravado na data (4.518,62 kg x 4,14 = 18.707,09)."""
+    produto = {**_produto(preco=9.99), "abertura": {"qtde": 4518.62, "custo": 4.14, "data": "2026-08-31T15:54:08"}}
+    det = svc.detalhe(_item(_grv(produtos=[produto])))
+    assert det["inicial"] == {"qtde": 4518.62, "valor": 18707.09, "custo_medio": 4.14}
+    assert det["linhas"][0]["saldo_valor"] == pytest.approx(28400.50, abs=0.01)
+    assert det["linhas"][1]["valor"] == pytest.approx(-85.47, abs=0.01)
+    assert det["linhas"][1]["saldo_valor"] == pytest.approx(28315.03, abs=0.01)
+    # GRV sem custo na data: usa o custo atual do produto e avisa.
+    sem_custo = {**produto, "abertura": {"qtde": 4518.62, "custo": None, "data": None}}
+    item = _item(_grv(produtos=[sem_custo]))
+    assert item["abertura"]["m"] == 9.99 and "custo_estimado" in item["alertas"]
 
 
 def test_ancora_antiga_com_outros_depositos_abre_so_pelo_deposito_1():
@@ -456,8 +550,9 @@ def test_bridge_cardex(monkeypatch):
     cursor = _CursorFalso([
         (["cod_produto", "codigo_interno", "codigo", "descricao", "unidade", "familia", "grupo", "preco_custo", "fiscal", "saldos"],
          [(COD, "19-01-00564", CODIGO, "CHAPA", "KG", "MP", "1", 5.03, {"classificacao_fiscal": "72085200"}, {"1": 23946.48})]),
-        (["id", "cod_produto", "cod_deposito", "data", "tipo", "qtde", "tabela", "chave", "obs"],
-         [("1", COD, 1, datetime(2026, 9, 1, 8), 0, 2380.0, "TCOMPRAS", "1;16814", "ENTRADA")]),
+        (["cod_produto", "qtde", "custo", "data"], [(COD, 4518.62, 4.14, datetime(2026, 8, 31, 15, 54))]),
+        (["id", "cod_produto", "cod_deposito", "data", "tipo", "qtde", "tabela", "chave", "obs", "saldo", "saldo_ant"],
+         [("1", COD, 1, datetime(2026, 9, 1, 8), 0, 2380.0, "TCOMPRAS", "1;16814", "ENTRADA", 6898.62, 4518.62)]),
         (["cod_compra", "n_nf", "dt_nf", "fornecedor", "chave_nfe", "cfop"], [(16814, "78851", date(2026, 8, 28), "USIMINAS", "", "1101")]),
         (["cod_compra", "campos"], [(16814, {"cod_produto": COD, "valor_total": 12121.01})]),
         (["to_jsonb"], [({"cod_empresa": 1, "codigo": 1, "descricao": "PRINCIPAL"},), ({"cod_empresa": 2, "codigo": 9, "nome": "OUTRA"},)]),
@@ -471,11 +566,17 @@ def test_bridge_cardex(monkeypatch):
     data = client.post("/api/erp/estoque/cardex", json={"desde": "2026-09-01", "codigo": "19-01-00564"}).get_json()
     assert data["sucesso"] is True
     assert data["movimentos"][0]["data"] == "2026-09-01T08:00:00"
+    # Saldo da linha e da anterior (o Sync usa a variação) e abertura na véspera.
+    assert data["movimentos"][0]["saldo"] == 6898.62 and data["movimentos"][0]["saldo_ant"] == 4518.62
+    assert data["produtos"][0]["abertura"] == {"qtde": 4518.62, "custo": 4.14, "data": "2026-08-31T15:54:00"}
     assert data["notas"]["16814"]["n_nf"] == "78851"
     assert data["notas"]["16814"]["itens"] == [{"cod_produto": COD, "valor_total": 12121.01}]
     assert data["depositos"] == [{"codigo": 1, "nome": "PRINCIPAL"}]
     sqls = [s for s, _ in cursor.executados]
-    assert "= %(codigo)s" in sqls[1] and "c.cod_produto = any(%(produtos)s)" in sqls[2]
-    assert cursor.executados[2][1]["produtos"] == [COD]
+    assert "= %(codigo)s" in sqls[1]
+    # Abertura (véspera, depósito 1) e movimentos, os dois filtrados pelo produto.
+    assert "k.cod_deposito = 1" in sqls[2] and "k.cod_produto = any(%(produtos)s)" in sqls[2]
+    assert "lag(k.qtde_total)" in sqls[3] and "k.cod_produto = any(%(produtos)s)" in sqls[3]
+    assert cursor.executados[3][1]["produtos"] == [COD]
     assert client.post("/api/erp/estoque/cardex", json={}).status_code == 400
     assert client.post("/api/erp/estoque/cardex", json={"desde": "xx"}).status_code == 400
