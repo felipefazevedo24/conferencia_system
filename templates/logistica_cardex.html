@@ -5,40 +5,102 @@
 
 {% block extra_head %}
 <style>
-    .cx-wrap { display: grid; gap: 18px; }
+    /* minmax(0, 1fr): sem isso a coluna unica cresce ate a largura minima da
+       tabela e a pagina estoura para o lado em tela estreita. */
+    .cx-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
     .cx-tabs { display: flex; gap: 3px; padding: 4px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface-2); overflow-x: auto; }
     .cx-tabs button { flex: 1; min-width: max-content; padding: 9px 14px; border: 0; border-radius: var(--eui-radius-sm); background: transparent; color: var(--eui-muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
     .cx-tabs button i { font-size: 12px; }
     .cx-tabs button.active { background: var(--eui-surface); box-shadow: var(--eui-shadow-xs); color: var(--eui-primary); }
+    .cx-tabs .cx-conta { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--eui-surface-3); color: var(--eui-text-soft); font-size: 11px; font-weight: 700; }
+    .cx-tabs .cx-conta:empty { display: none; }
     .cx-panel { display: none; }
-    .cx-panel.active { display: grid; gap: 18px; }
+    .cx-panel.active { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+
+    /* Situacao do periodo, ao lado do titulo */
+    .cx-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+    .cx-status:empty { display: none; }
+    .cx-status--vivo { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .cx-status--ancora { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .cx-status--fechado { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .cx-status--erro { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+
+    /* Barra de filtros: periodo a esquerda, recorte a direita */
+    .cx-filtros { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 12px 16px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); background: var(--eui-surface); }
+    .cx-filtros .eui-input { width: auto; min-height: 36px; padding: 6px 10px; }
+    .cx-filtros__grupo { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .cx-filtros__rotulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); }
+    .cx-filtros__sep { flex: 1; }
+
+    /* Composicao do saldo: a conta que a Contabilidade faz de cabeca */
+    .cx-conta-saldo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 16px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface-2); font-size: 12.5px; color: var(--eui-text-soft); font-variant-numeric: tabular-nums; }
+    .cx-conta-saldo b { color: var(--eui-text); font-weight: 700; }
+    .cx-conta-saldo .cx-op { color: var(--eui-muted-2); font-weight: 700; }
+    .cx-conta-saldo .cx-fora-nota { margin-left: auto; color: var(--eui-muted); }
+    .cx-conta-saldo .cx-fora-nota a { font-weight: 700; }
 
     .cx-table-wrap { overflow-x: auto; }
     .cx-table-wrap--alta { max-height: 62vh; overflow-y: auto; }
+    .cx-table-wrap--alta thead th { position: sticky; top: 0; z-index: 2; background: var(--eui-surface-2); }
+    .cx-table-wrap--alta tfoot td { position: sticky; bottom: 0; z-index: 1; }
     .cx-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
     .erp-table td.num, .erp-table th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .erp-table tfoot td { font-weight: 800; background: var(--eui-surface-2); border-top: 2px solid var(--eui-border); }
+    .erp-table tfoot tr.cx-fora-total td { font-weight: 600; color: var(--eui-muted); border-top: 1px dashed var(--eui-border); }
     .erp-table tr.cx-saldo td { font-weight: 700; background: var(--eui-surface-2); }
     .erp-table tr.cx-info td { color: var(--eui-muted); font-style: italic; }
+    .erp-table th.cx-grupo { text-align: center; border-bottom: 1px solid var(--eui-border); }
+    /* Desconsiderado: continua legivel, mas visivelmente fora da conta */
+    .erp-table tr.cx-fora td { color: var(--eui-muted); background: var(--eui-surface-2); }
+    .erp-table tr.cx-fora td.num { text-decoration: line-through; text-decoration-color: var(--eui-muted-2); }
+    .erp-table tr.cx-fora .cx-sub { text-decoration: none; }
     .cx-cod { font-family: monospace; white-space: nowrap; }
     .cx-sub { display: block; font-size: 11px; color: var(--eui-muted); font-weight: 500; }
+    .cx-selos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .cx-neg { color: var(--eui-danger); }
+    .cx-zero { color: var(--eui-muted-2); }
     .cx-medio { color: var(--eui-danger); font-weight: 700; }
-    .cx-alerta { color: var(--eui-warning); margin-left: 5px; }
-    .cx-filtros .eui-input { width: auto; }
-    .cx-wrap .eui-stat__value { white-space: nowrap; }
+    .cx-acoes { display: inline-flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+    /* 5 indicadores: o valor em R$ nao quebra, entao o cartao precisa de piso
+       maior que o padrao (180px) para nao vazar da grade. */
+    .cx-wrap .eui-stats { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
+    .cx-wrap .eui-stat { min-width: 0; }
+    .cx-wrap .eui-stat__value { white-space: nowrap; font-size: 20px; }
+    .cx-legenda { font-size: 11.5px; color: var(--eui-muted); margin: 10px 0 0; }
+    /* Sem base minima a busca encolhe ate sobrar so a lupa em tela estreita. */
+    .cx-wrap .eui-toolbar__search { flex: 1 1 260px; }
+
+    /* Semaforo da conciliacao */
+    .cx-semaforo { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .cx-farol { --cf: var(--eui-success); --cf-soft: var(--eui-success-soft); display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); box-shadow: inset 4px 0 0 var(--cf); }
+    .cx-farol--warn { --cf: var(--eui-warning); --cf-soft: var(--eui-warning-soft); }
+    .cx-farol--danger { --cf: var(--eui-danger); --cf-soft: var(--eui-danger-soft); }
+    .cx-farol__ico { flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: var(--cf-soft); color: var(--cf); }
+    .cx-farol__num { display: block; font-size: 18px; font-weight: 800; color: var(--eui-text); line-height: 1.1; }
+    .cx-farol__txt { display: block; font-size: 11.5px; color: var(--eui-muted); }
 
     .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
     .cx-toast.error { border-left-color: var(--eui-danger); }
     .cx-toast.success { border-left-color: var(--eui-success); }
 
-    .cx-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .cx-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
     .cx-modal-backdrop.open { display: flex; }
-    .cx-modal { background: var(--eui-surface); color: var(--eui-text); border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 1280px; max-height: 90vh; overflow-y: auto; padding: 22px; }
-    .cx-modal h3 { margin: 0 0 6px; font-size: 17px; }
+    .cx-modal { background: var(--eui-surface); color: var(--eui-text); border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); box-shadow: var(--eui-shadow-lg); width: 100%; max-width: 1280px; max-height: 90vh; overflow-y: auto; padding: 22px; }
+    .cx-modal--pequeno { max-width: 520px; }
+    .cx-modal h3 { margin: 0 0 6px; font-size: 17px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .cx-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
     .cx-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
     .cx-modal .eui-stats { margin-bottom: 14px; }
+    .cx-modal textarea { width: 100%; min-height: 90px; resize: vertical; }
+    [data-theme="escuro"] .cx-modal textarea,
+    [data-theme="escuro"] .cx-wrap .eui-input { background: var(--eui-surface); color: var(--eui-text); border-color: var(--eui-border-strong); }
+
+    @media (max-width: 720px) {
+        .cx-filtros__sep { display: none; }
+        .cx-filtros .eui-input, .cx-filtros select { flex: 1 1 140px; }
+        .cx-conta-saldo .cx-fora-nota { margin-left: 0; flex-basis: 100%; }
+        .cx-modal { padding: 16px; }
+    }
 </style>
 {% endblock %}
 
@@ -50,13 +112,34 @@
             <h1 class="eui-page-header__title"><i class="fas fa-book"></i> Cardex</h1>
             <p class="eui-page-header__sub">Estoque valorizado no formato do Registro de Inventário Modelo 7: entrada pelo custo da NF sem ICMS, PIS e COFINS; saídas, transferências e ajustes pelo custo médio.</p>
         </div>
+        <span class="cx-status" id="cx-status"></span>
     </header>
 
     <nav class="cx-tabs" id="cx-tabs" aria-label="Seções do Cardex">
         <button type="button" data-aba="resumo" class="active"><i class="fas fa-table-list"></i> Resumo do período</button>
+        <button type="button" data-aba="familias"><i class="fas fa-layer-group"></i> Por família</button>
+        <button type="button" data-aba="desconsiderados"><i class="fas fa-ban"></i> Desconsiderados <span class="cx-conta" id="cx-conta-fora"></span></button>
         <button type="button" data-aba="conciliacao"><i class="fas fa-list-check"></i> Conciliação</button>
         <button type="button" data-aba="fechamentos"><i class="fas fa-lock"></i> Fechamentos</button>
     </nav>
+
+    <!-- Período e recorte: valem para Resumo, Por família e Conciliação -->
+    <div class="cx-filtros" id="cx-filtros">
+        <div class="cx-filtros__grupo">
+            <span class="cx-filtros__rotulo">Período</span>
+            <input type="date" id="cx-inicio" class="eui-input" value="{{ periodo_inicio }}" title="Início do período">
+            <input type="date" id="cx-fim" class="eui-input" value="{{ periodo_fim }}" title="Fim do período">
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="anterior">Mês anterior</button>
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="atual">Mês vigente</button>
+        </div>
+        <span class="cx-filtros__sep"></span>
+        <div class="cx-filtros__grupo">
+            <select id="cx-familia" class="eui-input" style="min-width:190px;"><option value="">Todas as famílias</option></select>
+            <select id="cx-deposito" class="eui-input" style="min-width:170px;"><option value="">Todos os depósitos</option></select>
+            <button class="eui-btn eui-btn--primary" id="cx-btn-atualizar" title="Busca de novo no GRV"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+    </div>
+    <div id="cx-banner"></div>
 
     <!-- ================= RESUMO ================= -->
     <section class="cx-panel active" data-panel="resumo">
@@ -64,34 +147,24 @@
             <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-door-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo inicial</span><span class="eui-stat__value" id="cx-s-inicial">—</span></div></div>
             <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-arrow-down"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entradas</span><span class="eui-stat__value" id="cx-s-entradas">—</span></div></div>
             <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-arrow-up"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saídas</span><span class="eui-stat__value" id="cx-s-saidas">—</span></div></div>
+            <div class="eui-stat" title="Ajustes de inventário, transferências e reavaliação"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-scale-balanced"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Ajustes</span><span class="eui-stat__value" id="cx-s-ajustes">—</span></div></div>
             <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-flag-checkered"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Saldo final</span><span class="eui-stat__value" id="cx-s-final">—</span><span class="eui-stat__hint" id="cx-s-itens"></span></div></div>
         </div>
+        <div class="cx-conta-saldo" id="cx-conta-saldo"></div>
 
         <div class="eui-card">
-            <div class="eui-card__head" style="justify-content:flex-end;">
-                <div class="cx-filtros" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                    <input type="date" id="cx-inicio" class="eui-input" value="{{ periodo_inicio }}" title="Início do período">
-                    <input type="date" id="cx-fim" class="eui-input" value="{{ periodo_fim }}" title="Fim do período">
-                    <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="anterior">Mês anterior</button>
-                    <button class="eui-btn eui-btn--subtle eui-btn--sm" data-periodo="atual">Mês vigente</button>
-                    <select id="cx-familia" class="eui-input" style="min-width:190px;"><option value="">Todas as famílias</option></select>
-                    <select id="cx-deposito" class="eui-input" style="min-width:170px;"><option value="">Todos os depósitos</option></select>
-                    <button class="eui-btn eui-btn--primary" id="cx-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
-                </div>
-            </div>
             <div class="eui-card__body eui-card__body--tight">
                 <div class="eui-toolbar" style="padding: 12px 16px;">
                     <div class="eui-toolbar__search" style="max-width:460px;">
                         <i class="fas fa-magnifying-glass"></i>
                         <input type="search" id="cx-busca" class="eui-input" autocomplete="off" placeholder="Buscar por código ou descrição do item…" style="width:100%;">
                     </div>
-                    <label style="font-size:12.5px; display:flex; gap:6px; align-items:center;"><input type="checkbox" id="cx-somente-mov"> Só itens com movimento</label>
+                    <label style="font-size:12.5px; display:flex; gap:6px; align-items:center; margin:0;"><input type="checkbox" id="cx-somente-mov"> Só itens com movimento</label>
                     <div style="flex:1;"></div>
                     <button class="eui-btn eui-btn--subtle eui-btn--sm" data-export="xlsx:resumo"><i class="fas fa-file-excel"></i> Excel</button>
                     <button class="eui-btn eui-btn--subtle eui-btn--sm" data-export="xlsx:completo" title="Resumo + o cardex de cada item"><i class="fas fa-file-excel"></i> Excel completo</button>
                     <button class="eui-btn eui-btn--subtle eui-btn--sm" data-export="pdf:resumo"><i class="fas fa-file-pdf"></i> PDF</button>
                 </div>
-                <div id="cx-banner" style="padding:0 16px;"></div>
                 <div class="cx-table-wrap cx-table-wrap--alta">
                     <table class="erp-table" id="cx-resumo-tabela">
                         <thead>
@@ -110,6 +183,52 @@
                         </thead>
                         <tbody id="cx-resumo-body"><tr><td colspan="10" class="cx-empty">Carregando…</td></tr></tbody>
                         <tfoot id="cx-resumo-foot"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= POR FAMÍLIA ================= -->
+    <section class="cx-panel" data-panel="familias">
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <div class="eui-card__title">Saldo por família</div>
+                    <div class="eui-card__sub">Soma dos itens considerados de cada família no período. Desconsiderar uma família tira todos os itens dela dos totais.</div>
+                </div>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="cx-table-wrap cx-table-wrap--alta">
+                    <table class="erp-table" id="cx-fam-tabela">
+                        <thead><tr>
+                            <th>Família</th><th class="num">Itens</th>
+                            <th class="num">Saldo inicial</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Ajustes</th><th class="num">Saldo final</th>
+                            <th class="num" title="Saldo final dos itens desconsiderados desta família (fora do total)">Fora do total</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr></thead>
+                        <tbody id="cx-fam-body"><tr><td colspan="9" class="cx-empty">Carregando…</td></tr></tbody>
+                        <tfoot id="cx-fam-foot"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= DESCONSIDERADOS ================= -->
+    <section class="cx-panel" data-panel="desconsiderados">
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <div class="eui-card__title">Itens e famílias desconsiderados</div>
+                    <div class="eui-card__sub">Continuam aparecendo no Cardex e nas exportações, mas não entram nos indicadores, subtotais e total geral. Vale a partir da marcação até alguém desfazer; mês já fechado não muda.</div>
+                </div>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="cx-table-wrap">
+                    <table class="erp-table">
+                        <thead><tr><th>Tipo</th><th>Código / família</th><th>Descrição</th><th>Motivo</th><th>Marcado por</th><th>Em</th><th style="text-align:right;">Ação</th></tr></thead>
+                        <tbody id="cx-fora-body"><tr><td colspan="7" class="cx-empty">Carregando…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -166,7 +285,7 @@
 <!-- Modal: cardex (Modelo 7) de um item -->
 <div class="cx-modal-backdrop" id="cx-item-modal">
     <div class="cx-modal">
-        <h3><i class="fas fa-book"></i> Cardex <span id="cx-item-titulo" class="cx-cod"></span></h3>
+        <h3><i class="fas fa-book"></i> Cardex <span id="cx-item-titulo" class="cx-cod"></span> <span id="cx-item-selo"></span></h3>
         <p class="cx-modal-sub" id="cx-item-sub"></p>
         <div id="cx-item-cab"></div>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px;">
@@ -177,26 +296,45 @@
             <table class="erp-table">
                 <thead>
                     <tr>
-                        <th>Data</th>
-                        <th>Tipo</th>
-                        <th>Documento</th>
-                        <th>Dep.</th>
-                        <th class="num">Quantidade</th>
-                        <th class="num">Custo unit.</th>
-                        <th class="num">Valor</th>
-                        <th class="num" title="Por unidade, da NF de entrada">ICMS</th>
-                        <th class="num" title="Por unidade, da NF de entrada">PIS</th>
-                        <th class="num" title="Por unidade, da NF de entrada">COFINS</th>
-                        <th class="num">Saldo qtde</th>
-                        <th class="num">Saldo R$</th>
+                        <th rowspan="2">Data</th>
+                        <th rowspan="2">Tipo</th>
+                        <th rowspan="2">Documento</th>
+                        <th rowspan="2">Dep.</th>
+                        <th rowspan="2" class="num">Quantidade</th>
+                        <th rowspan="2" class="num">Custo unit.</th>
+                        <th rowspan="2" class="num">Valor</th>
+                        <th colspan="3" class="cx-grupo" title="Por unidade, da NF de entrada; já descontados do custo">Impostos por unidade (NF)</th>
+                        <th colspan="3" class="cx-grupo">Saldo após o lançamento</th>
+                    </tr>
+                    <tr>
+                        <th class="num">ICMS</th>
+                        <th class="num">PIS</th>
+                        <th class="num">COFINS</th>
+                        <th class="num">Qtde</th>
+                        <th class="num">R$</th>
                         <th class="num">Custo médio</th>
                     </tr>
                 </thead>
                 <tbody id="cx-item-body"></tbody>
             </table>
         </div>
-        <p style="font-size:11.5px; color:var(--eui-muted); margin:10px 0 0;"><span class="cx-medio">Custo em vermelho</span> = custo médio do momento. ICMS, PIS e COFINS por unidade, já descontados do custo da entrada.</p>
+        <p class="cx-legenda"><span class="cx-medio">Custo em vermelho</span> = custo médio do momento. ICMS, PIS e COFINS por unidade, já descontados do custo da entrada. Cada lançamento é valorizado em centavos: saldo inicial + lançamentos = saldo final.</p>
         <div class="cx-modal-foot"><button class="eui-btn eui-btn--ghost" id="cx-item-fechar">Fechar</button></div>
+    </div>
+</div>
+
+<!-- Modal: desconsiderar item ou família -->
+<div class="cx-modal-backdrop" id="cx-fora-modal">
+    <div class="cx-modal cx-modal--pequeno">
+        <h3><i class="fas fa-ban"></i> <span id="cx-fora-titulo">Desconsiderar</span></h3>
+        <p class="cx-modal-sub" id="cx-fora-sub"></p>
+        <label class="eui-field__label" for="cx-fora-motivo">Motivo (obrigatório)</label>
+        <textarea id="cx-fora-motivo" class="eui-input" maxlength="500" placeholder="Ex.: material de consumo, não compõe o estoque contábil"></textarea>
+        <p class="cx-legenda">Continua aparecendo no Cardex, mas sai dos totais a partir de agora, até alguém desfazer. Fica registrado quem marcou.</p>
+        <div class="cx-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fora-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--danger" id="cx-fora-confirmar"><i class="fas fa-ban"></i> Desconsiderar</button>
+        </div>
     </div>
 </div>
 
@@ -216,14 +354,15 @@
 (function () {
     const PODE_FECHAR = {{ 'true' if pode_fechar else 'false' }};
     const $ = (id) => document.getElementById(id);
-    const estado = { deposito: "", resumo: null, itemCodigo: "" };
+    const estado = { deposito: "", resumo: null, itemCodigo: "", fora: null };
 
     const fmtBR = (casas) => new Intl.NumberFormat("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
     const F2 = fmtBR(2), F3 = fmtBR(3), F4 = fmtBR(4);
     const n = (v, f) => (v === null || v === undefined || v === "") ? "" : f.format(v);
     const q = (v) => n(v, F3), r = (v) => n(v, F2), c = (v) => n(v, F4);
     const brl = (v) => "R$ " + F2.format(Math.abs(v || 0) < 0.005 ? 0 : v);
-    const cls = (v) => (v < -0.0000005 ? " cx-neg" : "");
+    // Negativo em vermelho; zero esmaecido, para o olho ir direto no que tem valor.
+    const cls = (v) => (v < -0.0000005 ? " cx-neg" : (Math.abs(v || 0) < 0.005 ? " cx-zero" : ""));
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     const dataBR = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "";
     const ALERTAS = {
@@ -235,8 +374,10 @@
         sem_custo_grv: "Sem custo médio no GRV",
         divergente_grv: "Saldo final calculado ≠ saldo atual do GRV",
     };
-    const alertaIcone = (lista) => (lista && lista.length)
-        ? `<i class="fas fa-triangle-exclamation cx-alerta" title="${esc(lista.map((a) => ALERTAS[a] || a).join(" · "))}"></i>` : "";
+    const quando = (iso) => iso ? `${dataBR(iso.slice(0, 10))} ${iso.slice(11, 16)}` : "";
+    const seloFora = (d) => d ? `<span class="eui-badge eui-badge--neutral" title="${esc(`${d.tipo === "FAMILIA" ? "Família desconsiderada" : "Item desconsiderado"} por ${d.por || "-"}: ${d.motivo || ""}`)}"><i class="fas fa-ban"></i> Desconsiderado${d.tipo === "FAMILIA" ? " (família)" : ""}</span>` : "";
+    const seloAlertas = (lista) => (lista && lista.length)
+        ? `<span class="eui-badge eui-badge--warning" title="${esc(lista.map((a) => ALERTAS[a] || a).join(" · "))}"><i class="fas fa-triangle-exclamation"></i> ${lista.length === 1 ? "1 alerta" : lista.length + " alertas"}</span>` : "";
     // "Ajustes" = tudo que não é entrada nem saída (inventário, transferência,
     // reavaliação), calculado pela diferença para a linha sempre fechar.
     const ajustes = (v) => {
@@ -260,8 +401,10 @@
     }
     $("cx-modal-fechar").addEventListener("click", () => $("cx-modal").classList.remove("open"));
     $("cx-item-fechar").addEventListener("click", () => $("cx-item-modal").classList.remove("open"));
-    ["cx-modal", "cx-item-modal"].forEach((id) => $(id).addEventListener("click", (e) => { if (e.target.id === id) $(id).classList.remove("open"); }));
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") ["cx-modal", "cx-item-modal"].forEach((id) => $(id).classList.remove("open")); });
+    $("cx-fora-cancelar").addEventListener("click", () => $("cx-fora-modal").classList.remove("open"));
+    const MODAIS = ["cx-modal", "cx-item-modal", "cx-fora-modal"];
+    MODAIS.forEach((id) => $(id).addEventListener("click", (e) => { if (e.target.id === id) $(id).classList.remove("open"); }));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") MODAIS.forEach((id) => $(id).classList.remove("open")); });
 
     function params(extra) {
         const p = new URLSearchParams();
@@ -275,24 +418,44 @@
         return p.toString();
     }
 
-    async function getJSON(url) {
-        const resp = await fetch(url, { credentials: "same-origin" });
+    async function getJSON(url, opcoes) {
+        const resp = await fetch(url, { credentials: "same-origin", ...(opcoes || {}) });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data.error || `Erro ${resp.status}`);
         return data;
     }
+    const enviar = (url, metodo, corpo) => getJSON(url, {
+        method: metodo, headers: { "Content-Type": "application/json" }, body: corpo ? JSON.stringify(corpo) : undefined,
+    });
 
     // ---------------- Resumo ----------------
     function renderBanner(dados) {
+        // A situação do período vira uma etiqueta ao lado do título; a faixa
+        // fica só para os avisos que pedem leitura.
+        const st = $("cx-status");
         let html = "";
         if (!dados.disponivel) {
-            html = `<div class="eui-callout eui-callout--danger" style="margin-bottom:12px;"><i class="fas fa-plug-circle-xmark"></i><span><strong>GRV indisponível.</strong> ${esc(dados.erro || "")}</span></div>`;
+            st.className = "cx-status cx-status--erro";
+            st.innerHTML = `<i class="fas fa-plug-circle-xmark"></i> GRV indisponível`;
+            html = `<div class="eui-callout eui-callout--danger"><i class="fas fa-plug-circle-xmark"></i><span><strong>GRV indisponível.</strong> ${esc(dados.erro || "")}</span></div>`;
         } else if (dados.fonte === "congelado") {
             const f = dados.fechamento;
-            html = `<div class="eui-callout eui-callout--success" style="margin-bottom:12px;"><i class="fas fa-lock"></i><span><strong>Mês fechado ${esc(f.rotulo)}.</strong> Foto congelada em ${esc(dataBR((f.fechado_em || "").slice(0, 10)))} por ${esc(f.fechado_por)}.</span></div>`;
+            st.className = "cx-status cx-status--fechado";
+            st.innerHTML = `<i class="fas fa-lock"></i> Mês fechado ${esc(f.rotulo)}`;
+            st.title = `Foto congelada em ${dataBR((f.fechado_em || "").slice(0, 10))} por ${f.fechado_por}`;
+        } else if (dados.fonte === "ancora") {
+            st.className = "cx-status cx-status--ancora";
+            st.innerHTML = `<i class="fas fa-anchor"></i> Prévia · abertura pelo fechamento de ${esc((dados.ancora || {}).rotulo || "")}`;
+            st.title = "Calculado do GRV de hoje, partindo do último mês fechado";
+        } else {
+            st.className = "cx-status cx-status--vivo";
+            st.innerHTML = `<i class="fas fa-satellite-dish"></i> Prévia · sem mês fechado anterior`;
+            st.title = "Sem mês fechado antes deste período: o saldo inicial foi recalculado de trás para frente a partir do saldo e do custo médio atuais do GRV.";
         }
         (dados.avisos || []).forEach((a) => {
-            html += `<div class="eui-callout eui-callout--warning" style="margin-bottom:12px;"><i class="fas fa-triangle-exclamation"></i><span>${esc(a)}</span></div>`;
+            // Este aviso é exatamente o que a etiqueta "sem mês fechado anterior" já diz.
+            if (dados.fonte === "grv" && a.startsWith("Sem mês fechado antes deste período")) return;
+            html += `<div class="eui-callout eui-callout--warning" style="margin-top:8px;"><i class="fas fa-triangle-exclamation"></i><span>${esc(a)}</span></div>`;
         });
         $("cx-banner").innerHTML = html;
     }
@@ -309,8 +472,17 @@
         $("cx-s-inicial").textContent = brl(i.valor_inicial);
         $("cx-s-entradas").textContent = brl(i.valor_entradas);
         $("cx-s-saidas").textContent = brl(i.valor_saidas);
+        $("cx-s-ajustes").textContent = brl(i.valor_outros);
         $("cx-s-final").textContent = brl(i.valor_final);
         $("cx-s-itens").textContent = `${(i.itens || 0).toLocaleString("pt-BR")} itens · ${i.itens_com_alerta || 0} com alerta`;
+        const fora = i.itens_desconsiderados || 0;
+        $("cx-conta-saldo").innerHTML = dados.disponivel === false ? "" :
+            `<span>Saldo inicial <b>${r(i.valor_inicial || 0)}</b></span><span class="cx-op">+</span>`
+            + `<span>entradas <b>${r(i.valor_entradas || 0)}</b></span><span class="cx-op">+</span>`
+            + `<span>saídas <b class="${(i.valor_saidas || 0) < 0 ? "cx-neg" : ""}">${r(i.valor_saidas || 0)}</b></span><span class="cx-op">+</span>`
+            + `<span>ajustes <b class="${(i.valor_outros || 0) < 0 ? "cx-neg" : ""}">${r(i.valor_outros || 0)}</b></span><span class="cx-op">=</span>`
+            + `<span>saldo final <b>${r(i.valor_final || 0)}</b></span>`
+            + (fora ? `<span class="cx-fora-nota"><i class="fas fa-ban"></i> ${fora} ${fora === 1 ? "item desconsiderado" : "itens desconsiderados"} · R$ ${r(i.valor_desconsiderado || 0)} fora do total · <a href="#" data-ir-aba="desconsiderados">ver</a></span>` : "");
     }
 
     // R$ em cima e a quantidade embaixo, menor: o contador lê o valor e
@@ -326,18 +498,121 @@
         if (!dados.disponivel) { body.innerHTML = `<tr><td colspan="10" class="cx-empty">Sem dados: ${esc(dados.erro || "GRV indisponível")}</td></tr>`; return; }
         const linhas = dados.linhas || [];
         if (!linhas.length) { body.innerHTML = `<tr><td colspan="10" class="cx-empty">Nenhum item com saldo ou movimento no período e filtros escolhidos.</td></tr>`; return; }
+        // Mês fechado é foto: a marca de desconsiderado que vale é a gravada no
+        // fechamento, então ali não se marca nem desmarca.
+        const travado = dados.fonte === "congelado";
         body.innerHTML = linhas.map((l) => {
             const cod = l.codigo_interno || l.codigo;
-            return `<tr>
-                <td class="cx-cod"><a href="#" data-ver="${esc(cod)}"><b>${esc(l.codigo_interno)}</b></a>${alertaIcone(l.alertas)}</td>
-                <td>${esc(l.descricao)}<span class="cx-sub">${esc(l.familia)}</span></td>
+            const d = l.desconsiderado;
+            const selos = seloFora(d) + seloAlertas(l.alertas);
+            let acaoFora = "";
+            if (!travado) {
+                if (!d) acaoFora = `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-fora-item="${esc(l.codigo)}" data-rotulo="${esc(cod)}" data-descricao="${esc(l.descricao)}" title="Desconsiderar: continua na lista, sai do total"><i class="fas fa-ban"></i></button>`;
+                else if (d.tipo === "ITEM") acaoFora = `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-voltar="${d.id}" data-rotulo="${esc(cod)}" title="Voltar a considerar no total"><i class="fas fa-rotate-left"></i></button>`;
+            }
+            return `<tr class="${d ? "cx-fora" : ""}">
+                <td class="cx-cod"><a href="#" data-ver="${esc(cod)}"><b>${esc(l.codigo_interno)}</b></a></td>
+                <td>${esc(l.descricao)}<span class="cx-sub">${esc(l.familia)}</span>${selos ? `<span class="cx-selos">${selos}</span>` : ""}</td>
                 <td>${esc(l.unidade)}</td>
                 ${valores(l)}
                 <td class="num">${c(l.custo_medio_final)}</td>
-                <td style="text-align:right;"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver="${esc(cod)}"><i class="fas fa-book"></i> Ver cardex</button></td>
+                <td style="text-align:right;"><span class="cx-acoes"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver="${esc(cod)}"><i class="fas fa-book"></i> Ver cardex</button>${acaoFora}</span></td>
             </tr>`;
         }).join("");
-        foot.innerHTML = `<tr><td colspan="3">Total geral · ${linhas.length} itens</td>${valores(dados.totais)}<td></td><td></td></tr>`;
+        const fora = dados.desconsiderados || { itens: 0, totais: {} };
+        const considerados = linhas.length - fora.itens;
+        foot.innerHTML = `<tr><td colspan="3">Total geral · ${considerados} ${considerados === 1 ? "item" : "itens"}</td>${valores(dados.totais)}<td></td><td></td></tr>`
+            + (fora.itens ? `<tr class="cx-fora-total"><td colspan="3"><i class="fas fa-ban"></i> Desconsiderados (fora do total) · ${fora.itens}</td>${valores(fora.totais)}<td></td><td></td></tr>` : "");
+    }
+
+    // ---------------- Por família ----------------
+    function renderFamilias(dados) {
+        const body = $("cx-fam-body"), foot = $("cx-fam-foot");
+        foot.innerHTML = "";
+        const fams = (dados && dados.familias_resumo) || [];
+        if (!dados || !dados.disponivel || !fams.length) {
+            body.innerHTML = `<tr><td colspan="9" class="cx-empty">${dados && !dados.disponivel ? esc(dados.erro || "GRV indisponível") : "Nenhuma família com saldo ou movimento no período."}</td></tr>`;
+            return;
+        }
+        const travado = dados.fonte === "congelado";
+        body.innerHTML = fams.map((f) => {
+            const d = f.desconsiderada;
+            const acoes = [`<button class="eui-btn eui-btn--subtle eui-btn--sm" data-ver-familia="${esc(f.familia)}"><i class="fas fa-table-list"></i> Ver itens</button>`];
+            if (!travado && f.familia) {
+                acoes.push(d
+                    ? `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-voltar="${d.id}" data-rotulo="${esc(f.familia)}" title="Voltar a considerar a família"><i class="fas fa-rotate-left"></i></button>`
+                    : `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-fora-familia="${esc(f.familia)}" title="Desconsiderar a família inteira"><i class="fas fa-ban"></i></button>`);
+            }
+            return `<tr class="${d ? "cx-fora" : ""}">
+                <td><b>${esc(f.familia || "(sem família)")}</b>${d ? `<span class="cx-selos">${seloFora(d)}</span>` : ""}</td>
+                <td class="num" data-sort="${f.itens}">${f.itens}${f.itens_desconsiderados ? `<span class="cx-sub">${f.itens_desconsiderados} fora do total</span>` : ""}</td>
+                ${valores(f.totais)}
+                <td class="num${cls(f.valor_desconsiderado)}" data-sort="${f.valor_desconsiderado || 0}">${r(f.valor_desconsiderado)}</td>
+                <td style="text-align:right;"><span class="cx-acoes">${acoes.join("")}</span></td>
+            </tr>`;
+        }).join("");
+        const soma = (campo) => fams.reduce((t, f) => t + (f.totais[campo] || 0), 0);
+        const total = {};
+        ["valor_inicial", "qtde_inicial", "valor_entrada", "qtde_entrada", "valor_saida", "qtde_saida", "valor_final", "qtde_final", "qtde_ajuste", "qtde_transferencia"].forEach((k) => { total[k] = soma(k); });
+        foot.innerHTML = `<tr><td>Total · ${fams.length} ${fams.length === 1 ? "família" : "famílias"}</td><td class="num">${fams.reduce((t, f) => t + f.itens, 0)}</td>${valores(total)}`
+            + `<td class="num">${r(fams.reduce((t, f) => t + (f.valor_desconsiderado || 0), 0))}</td><td></td></tr>`;
+    }
+
+    // ---------------- Desconsiderados ----------------
+    async function carregarDesconsiderados() {
+        const body = $("cx-fora-body");
+        try {
+            const d = await getJSON("/api/logistica/cardex/desconsiderados");
+            const lista = d.desconsiderados || [];
+            $("cx-conta-fora").textContent = lista.length ? String(lista.length) : "";
+            if (!lista.length) { body.innerHTML = `<tr><td colspan="7" class="cx-empty">Nada desconsiderado: todos os itens entram nos totais.</td></tr>`; return; }
+            body.innerHTML = lista.map((x) => `<tr>
+                <td><span class="eui-badge eui-badge--${x.tipo === "FAMILIA" ? "violet" : "info"}">${x.tipo === "FAMILIA" ? "Família" : "Item"}</span></td>
+                <td class="${x.tipo === "ITEM" ? "cx-cod" : ""}"><b>${esc(x.chave)}</b></td>
+                <td>${esc(x.descricao)}</td>
+                <td>${esc(x.motivo)}</td>
+                <td>${esc(x.por)}</td>
+                <td style="white-space:nowrap;">${esc(quando(x.em))}</td>
+                <td style="text-align:right;"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-voltar="${x.id}" data-rotulo="${esc(x.chave)}"><i class="fas fa-rotate-left"></i> Voltar a considerar</button></td>
+            </tr>`).join("");
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="7" class="cx-empty" style="color:var(--eui-danger);">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    function abrirDesconsiderar(tipo, chave, rotulo, descricao) {
+        estado.fora = { tipo, chave, descricao: descricao || "" };
+        $("cx-fora-titulo").textContent = tipo === "FAMILIA" ? "Desconsiderar família" : "Desconsiderar item";
+        $("cx-fora-sub").textContent = tipo === "FAMILIA"
+            ? `Todos os itens da família "${rotulo}" saem dos totais.`
+            : `${rotulo}${descricao ? " · " + descricao : ""}`;
+        $("cx-fora-motivo").value = "";
+        $("cx-fora-modal").classList.add("open");
+        setTimeout(() => $("cx-fora-motivo").focus(), 50);
+    }
+
+    $("cx-fora-confirmar").addEventListener("click", async () => {
+        if (!estado.fora) return;
+        const motivo = $("cx-fora-motivo").value.trim();
+        if (motivo.length < 5) { toast("Informe o motivo (mínimo de 5 caracteres).", "error"); $("cx-fora-motivo").focus(); return; }
+        const btn = $("cx-fora-confirmar");
+        btn.disabled = true;
+        try {
+            await enviar("/api/logistica/cardex/desconsiderados", "POST", { ...estado.fora, motivo });
+            $("cx-fora-modal").classList.remove("open");
+            toast("Desconsiderado: continua na lista, fora dos totais.", "success");
+            carregarResumo(false); carregarDesconsiderados();
+        } catch (e) { toast(e.message, "error"); }
+        finally { btn.disabled = false; }
+    });
+
+    async function voltarAConsiderar(id, rotulo) {
+        if (!confirm(`Voltar a considerar ${rotulo} nos totais do Cardex?`)) return;
+        try {
+            await enviar(`/api/logistica/cardex/desconsiderados/${id}`, "DELETE");
+            toast(`${rotulo} voltou a entrar nos totais.`, "success");
+            carregarResumo(false); carregarDesconsiderados();
+        } catch (e) { toast(e.message, "error"); }
     }
 
     async function carregarResumo(forcar) {
@@ -345,7 +620,7 @@
         try {
             const dados = await getJSON("/api/logistica/cardex/resumo?" + params(forcar ? { atualizar: "1" } : {}));
             estado.resumo = dados;
-            renderBanner(dados); preencherFiltros(dados); renderStats(dados); renderResumo(dados);
+            renderBanner(dados); preencherFiltros(dados); renderStats(dados); renderResumo(dados); renderFamilias(dados);
         } catch (e) {
             $("cx-resumo-body").innerHTML = `<tr><td colspan="10" class="cx-empty" style="color:var(--eui-danger);">${esc(e.message)}</td></tr>`;
             toast(e.message, "error");
@@ -359,6 +634,7 @@
         estado.itemCodigo = codigo;
         $("cx-item-titulo").textContent = codigo;
         $("cx-item-sub").textContent = "Carregando…";
+        $("cx-item-selo").innerHTML = "";
         $("cx-item-cab").innerHTML = "";
         $("cx-item-body").innerHTML = `<tr><td colspan="13" class="cx-empty">Carregando…</td></tr>`;
         $("cx-item-modal").classList.add("open");
@@ -379,6 +655,7 @@
     function renderItem(dados) {
         const it = dados.item, res = dados.resumo || {};
         $("cx-item-titulo").textContent = it.codigo_interno;
+        $("cx-item-selo").innerHTML = seloFora(dados.desconsiderado);
         $("cx-item-sub").textContent = `${it.descricao} · ${it.unidade} · NCM ${it.ncm || "—"} · ${it.familia || "sem família"} · ${dataBR($("cx-inicio").value)} a ${dataBR($("cx-fim").value)}`;
         const stat = (icone, cor, rot, v, qt) => `<div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--${cor}"><i class="fas fa-${icone}"></i></div><div class="eui-stat__body"><span class="eui-stat__label">${rot}</span><span class="eui-stat__value">${brl(v)}</span><span class="eui-stat__hint">${q(qt)} ${esc(it.unidade)}</span></div></div>`;
         $("cx-item-cab").innerHTML = `<div class="eui-stats">`
@@ -422,7 +699,22 @@
 
     document.addEventListener("click", (e) => {
         const ver = e.target.closest("[data-ver]");
-        if (ver) { e.preventDefault(); abrirItem(ver.dataset.ver); }
+        if (ver) { e.preventDefault(); abrirItem(ver.dataset.ver); return; }
+        const foraItem = e.target.closest("[data-fora-item]");
+        if (foraItem) { abrirDesconsiderar("ITEM", foraItem.dataset.foraItem, foraItem.dataset.rotulo, foraItem.dataset.descricao); return; }
+        const foraFam = e.target.closest("[data-fora-familia]");
+        if (foraFam) { abrirDesconsiderar("FAMILIA", foraFam.dataset.foraFamilia, foraFam.dataset.foraFamilia, foraFam.dataset.foraFamilia); return; }
+        const voltar = e.target.closest("[data-voltar]");
+        if (voltar) { voltarAConsiderar(voltar.dataset.voltar, voltar.dataset.rotulo || "o registro"); return; }
+        const verFam = e.target.closest("[data-ver-familia]");
+        if (verFam) {
+            // O select só tem as famílias do último resumo; a escolhida está entre elas.
+            $("cx-familia").value = verFam.dataset.verFamilia;
+            mostrar("resumo"); carregarResumo(false);
+            return;
+        }
+        const irAba = e.target.closest("[data-ir-aba]");
+        if (irAba) { e.preventDefault(); mostrar(irAba.dataset.irAba); }
     });
 
     // ---------------- Conciliação ----------------
@@ -441,6 +733,19 @@
             if (!d.disponivel) { alvo.innerHTML = `<div class="cx-empty">${esc(d.erro || "GRV indisponível")}</div>`; return; }
             let html = "";
             const s = d.saldo || {};
+            const ajc = d.ajustes || { no_grv: [], sem_movimento_no_grv: [] };
+            const semSync = ajc.no_grv.filter((x) => !x.ajuste_sync_id).length + ajc.sem_movimento_no_grv.length;
+            const comAlerta = new Set((d.alertas || []).flatMap((a) => a.itens.map((i) => i.codigo))).size;
+            const semCusto = ((d.custo_entradas || {}).origens || {}).nf_nao_encontrada || 0;
+            const farol = (tom, icone, num, txt) => `<div class="cx-farol${tom ? " cx-farol--" + tom : ""}"><span class="cx-farol__ico"><i class="fas fa-${icone}"></i></span><span><span class="cx-farol__num">${num}</span><span class="cx-farol__txt">${txt}</span></span></div>`;
+            html += `<div class="cx-semaforo">`
+                + (s.disponivel
+                    ? farol(s.total_divergentes ? "danger" : "", "scale-balanced", `${s.fecham} de ${s.conferidos}`, s.total_divergentes ? `saldos fecham com o kardex · ${s.total_divergentes} divergentes` : "saldos fecham com o kardex")
+                    : farol("warn", "scale-balanced", "—", "kardex × saldo indisponível"))
+                + farol(semSync ? "warn" : "", "clipboard-check", semSync, "ajustes sem par entre GRV e Sync")
+                + farol(semCusto ? "danger" : "", "file-invoice-dollar", semCusto, "entradas de NF sem valor encontrado")
+                + farol(comAlerta ? "warn" : "", "triangle-exclamation", comAlerta, "itens com alerta de custo ou saldo")
+                + `</div>`;
             html += secao("scale-balanced", "Kardex × saldo do depósito no GRV", !s.disponivel ? texto(esc(s.erro || "Indisponível"))
                 : texto(`${s.fecham} de ${s.conferidos} saldos (item × depósito) fecham com a soma do kardex (tipos 0, 1 e 2). ${s.total_divergentes} divergentes${s.fecham_so_com_tipos_8_9 ? `, dos quais <strong>${s.fecham_so_com_tipos_8_9} só fecham somando os tipos 8/9</strong>` : ""}.`)
                 + tabela(["Código", "Descrição", "Dep.", "Saldo GRV", "Soma kardex", "Tipos 8/9", "Diferença"],
@@ -488,7 +793,7 @@
                 return `<tr><td><strong>${esc(f.rotulo)}</strong></td>`
                     + `<td>${fechado ? `<span class="eui-badge eui-badge--success">Fechado</span>` : `<span class="eui-badge eui-badge--neutral">Reaberto</span>`}</td>`
                     + `<td>${f.origem_abertura === "ancora" ? "Mês anterior fechado" : "Recalculada do GRV"}</td><td class="num">${f.total_itens}</td>`
-                    + `<td class="num">${r(f.valor_inicial)}</td><td class="num">${r(f.valor_entradas)}</td><td class="num">${r(f.valor_saidas)}</td><td class="num">${r(f.valor_ajustes)}</td><td class="num"><b>${r(f.valor_final)}</b></td>`
+                    + `<td class="num">${r(f.valor_inicial)}</td><td class="num">${r(f.valor_entradas)}</td><td class="num">${r(f.valor_saidas)}</td><td class="num">${r(f.valor_ajustes)}</td><td class="num"><b>${r(f.valor_final)}</b>${(f.desconsiderados || {}).itens ? `<span class="cx-sub" title="Itens desconsiderados na data do fechamento, fora deste total">${f.desconsiderados.itens} fora · ${r(f.desconsiderados.valor_final)}</span>` : ""}</td>`
                     + `<td>${esc(dataBR((f.fechado_em || "").slice(0, 10)))} · ${esc(f.fechado_por)}</td>`
                     + `<td>${f.reaberto_em ? `${esc(dataBR(f.reaberto_em.slice(0, 10)))} · ${esc(f.reaberto_por)}<span class="cx-sub">${esc(f.motivo_reabertura)}</span>` : ""}</td>`
                     + `<td style="text-align:right; white-space:nowrap;">${acoes.join(" ")}</td></tr>`;
@@ -575,6 +880,10 @@
         botoes.forEach((b) => b.classList.toggle("active", b.dataset.aba === aba));
         paineis.forEach((p) => p.classList.toggle("active", p.dataset.panel === aba));
         if (aba === "fechamentos") carregarFechamentos();
+        if (aba === "desconsiderados") carregarDesconsiderados();
+        // Período e recorte não se aplicam à lista de desconsiderados nem aos fechamentos.
+        $("cx-filtros").style.display = (aba === "desconsiderados" || aba === "fechamentos") ? "none" : "";
+        $("cx-banner").style.display = $("cx-filtros").style.display;
     }
     botoes.forEach((b) => b.addEventListener("click", () => mostrar(b.dataset.aba)));
 
@@ -594,7 +903,9 @@
     $("cx-busca").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => carregarResumo(false), 350); });
 
     TabelaOrdenavel.ativar($("cx-resumo-tabela"));
+    TabelaOrdenavel.ativar($("cx-fam-tabela"));
     carregarResumo(false);
+    carregarDesconsiderados();
 })();
 </script>
 {% endblock %}

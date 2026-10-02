@@ -158,6 +158,40 @@ def api_cardex_exportar_pdf():
     return send_file(BytesIO(conteudo), mimetype="application/pdf", as_attachment=True, download_name=nome)
 
 
+# Desconsiderar é de quem tem acesso à página (decisão do dono do módulo),
+# não só de quem fecha o mês. Fica registrado quem marcou e o motivo.
+@logistica_cardex_bp.route("/api/logistica/cardex/desconsiderados", methods=["GET"])
+@permission_required(PERMISSION)
+def api_cardex_desconsiderados():
+    return jsonify({"desconsiderados": svc.listar_desconsiderados()})
+
+
+@logistica_cardex_bp.route("/api/logistica/cardex/desconsiderados", methods=["POST"])
+@permission_required(PERMISSION)
+def api_cardex_desconsiderar():
+    payload = request.get_json(silent=True) or {}
+    try:
+        registro = svc.desconsiderar(
+            payload.get("tipo"), payload.get("chave"), payload.get("motivo"),
+            session["username"], descricao=payload.get("descricao") or "",
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"desconsiderado": registro}), 201
+
+
+@logistica_cardex_bp.route("/api/logistica/cardex/desconsiderados/<int:desconsiderado_id>", methods=["DELETE"])
+@permission_required(PERMISSION)
+def api_cardex_reconsiderar(desconsiderado_id: int):
+    try:
+        registro = svc.reconsiderar(desconsiderado_id, session["username"])
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if registro is None:
+        return jsonify({"error": "Registro não encontrado."}), 404
+    return jsonify({"desconsiderado": registro})
+
+
 @logistica_cardex_bp.route("/api/logistica/cardex/fechamentos", methods=["GET"])
 @permission_required(PERMISSION)
 def api_cardex_fechamentos():

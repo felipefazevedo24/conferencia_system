@@ -22,7 +22,16 @@ Saldo inicial do período, em ordem de preferência:
    desfaz, de trás pra frente, todo movimento desde o início do período.
 
 Um mês fechado é servido da foto gravada, não do GRV (o GRV aceita
-lançamento retroativo; ver o model)."""
+lançamento retroativo; ver o model).
+
+Arredondamento: cada lançamento é valorizado em centavos (2 casas) e o saldo
+em R$ é a soma desses centavos - assim saldo inicial + movimentos = saldo
+final fecha exato, e não "quase" como fecharia multiplicando quantidade por
+custo médio com todas as casas. O custo médio em si fica com todas as casas.
+
+Desconsiderados (LogisticaCardexDesconsiderado): item ou família que aparece
+no Cardex mas não entra nos totais. O cálculo do item é o mesmo; só a soma
+do resumo é que os deixa de fora."""
 from __future__ import annotations
 
 import calendar
@@ -37,7 +46,12 @@ from typing import Any
 from flask import current_app
 
 from ..extensions import db
-from ..models import LogisticaCardexFechamento, LogisticaCardexFechamentoItem, LogisticaInventarioAjuste
+from ..models import (
+    LogisticaCardexDesconsiderado,
+    LogisticaCardexFechamento,
+    LogisticaCardexFechamentoItem,
+    LogisticaInventarioAjuste,
+)
 from ..tempo import agora_br
 from .erp_estoque_service import buscar_cardex_grv
 
@@ -99,6 +113,11 @@ def _float(valor: Any) -> float | None:
         return float(valor)
     except (TypeError, ValueError):
         return None
+
+
+def _centavos(valor: Any) -> float:
+    """Valor em R$ com 2 casas. Soma 0.0 para nunca devolver -0.0."""
+    return round(float(valor or 0), 2) + 0.0
 
 
 def _data(valor: Any) -> date:
@@ -328,7 +347,7 @@ class _Estado:
     def __init__(self, q_por_deposito: dict[str, float], custo_medio: float):
         self.q: dict[str, float] = defaultdict(float, {str(k): float(v or 0) for k, v in q_por_deposito.items()})
         self.m = float(custo_medio or 0)
-        self.v = self.total_q * self.m
+        self.v = _centavos(self.total_q * self.m)
 
     @property
     def total_q(self) -> float:
@@ -340,18 +359,22 @@ class _Estado:
             return {"custo_unit": None, "valor": None, "custo_medio": self.m, "saldo_negativo": False}
         qtde = mov["qtde"]
         unit = mov["custo_nf"] if mov.get("custo_nf") is not None else self.m
-        valor = qtde * unit
+        valor = _centavos(qtde * unit)
         self.q[str(mov["deposito"])] += qtde
         total = self.total_q
-        self.v += valor
+        # Saída/ajuste pelo médio que zera o estoque leva o saldo em R$ inteiro
+        # (inclusive o centavo que sobrou dos arredondamentos anteriores): não
+        # pode ficar valor pendurado num saldo de quantidade zero.
+        if abs(total) <= EPS and mov.get("custo_nf") is None:
+            valor = -self.v
+        self.v = _centavos(self.v + valor)
         if total > EPS:
             self.m = self.v / total
         else:
             if mov.get("custo_nf") is not None:
                 self.m = unit
-            # Zerou (ou ficou negativo): o valor acompanha a quantidade, senão
-            # sobra resíduo de arredondamento pendurado num saldo zero.
-            self.v = total * self.m
+            # Zerou (ou ficou negativo): o valor acompanha a quantidade.
+            self.v = _centavos(total * self.m)
         return {"custo_unit": unit, "valor": valor, "custo_medio": self.m, "saldo_negativo": total < -EPS}
 
     def foto(self) -> dict:
@@ -636,21 +659,21 @@ def detalhe(item: dict, depositos: set[int] | None = None) -> dict:
     """Modelo 7: saldo inicial, cada movimento com saldo acumulado, saldo final."""
     m_ini = item["abertura"]["m"]
     q = _q_sel(item["abertura"]["q"], depositos)
-    inicial = {"qtde": q, "valor": q * m_ini, "custo_medio": m_ini}
+    inicial = {"qtde": q, "valor": _centavos(q * m_ini), "custo_medio": m_ini}
     linhas = []
     for linha in item["linhas"]:
         if not _no_filtro(linha["deposito"], depositos):
             continue
         if linha["classe"] != "informativo":
             q += linha["qtde"]
-        linhas.append({**linha, "saldo_qtde": q, "saldo_valor": q * linha["custo_medio"]})
+        linhas.append({**linha, "saldo_qtde": q, "saldo_valor": _centavos(q * linha["custo_medio"])})
     m_fim = item["fechamento"]["m"]
     q_fim = _q_sel(item["fechamento"]["q"], depositos)
     return {
         **{k: item[k] for k in ("codigo", "codigo_interno", "descricao", "unidade", "familia", "grupo", "ncm", "alertas")},
         "inicial": inicial,
         "linhas": linhas,
-        "final": {"qtde": q_fim, "valor": q_fim * m_fim, "custo_medio": m_fim},
+        "final": {"qtde": q_fim, "valor": _centavos(q_fim * m_fim), "custo_medio": m_fim},
     }
 
 
@@ -661,10 +684,10 @@ def resumo(item: dict, depositos: set[int] | None = None) -> dict:
     linha = {
         **{k: item[k] for k in ("codigo", "codigo_interno", "descricao", "unidade", "familia", "grupo", "ncm", "alertas")},
         "qtde_inicial": q_ini,
-        "valor_inicial": q_ini * m_ini,
+        "valor_inicial": _centavos(q_ini * m_ini),
         "custo_medio_inicial": m_ini,
         "qtde_final": q_fim,
-        "valor_final": q_fim * m_fim,
+        "valor_final": _centavos(q_fim * m_fim),
         "custo_medio_final": m_fim,
         "movimentos": 0,
     }
@@ -677,13 +700,13 @@ def resumo(item: dict, depositos: set[int] | None = None) -> dict:
         linha["movimentos"] += 1
         linha[f"qtde_{mov['classe']}"] += mov["qtde"]
         linha[f"valor_{mov['classe']}"] += mov["valor"] or 0
+    for classe in CLASSES:
+        linha[f"valor_{classe}"] = _centavos(linha[f"valor_{classe}"])
     # Com um depósito só, a entrada em outro depósito muda o médio e reavalia
     # este sem linha própria. Com todos os depósitos isso dá zero.
-    linha["valor_reavaliacao"] = linha["valor_final"] - linha["valor_inicial"] - sum(
+    linha["valor_reavaliacao"] = _centavos(linha["valor_final"] - linha["valor_inicial"] - sum(
         linha[f"valor_{c}"] for c in CLASSES
-    )
-    if abs(linha["valor_reavaliacao"]) < 0.005:
-        linha["valor_reavaliacao"] = 0.0
+    ))
     return linha
 
 
@@ -695,7 +718,92 @@ CAMPOS_TOTAIS = (
 
 
 def totalizar(linhas: list[dict]) -> dict:
-    return {campo: sum(l.get(campo) or 0 for l in linhas) for campo in CAMPOS_TOTAIS}
+    totais = {campo: sum(l.get(campo) or 0 for l in linhas) for campo in CAMPOS_TOTAIS}
+    for campo in CAMPOS_TOTAIS:
+        if campo.startswith("valor_"):
+            totais[campo] = _centavos(totais[campo])
+    return totais
+
+
+# --------------------------------------------------------------------------
+# Desconsiderados: aparecem, mas não entram nos totais
+# --------------------------------------------------------------------------
+
+TIPOS_DESCONSIDERADO = ("ITEM", "FAMILIA")
+
+
+def desconsiderado_para_dict(reg: LogisticaCardexDesconsiderado) -> dict:
+    return {
+        "id": reg.id,
+        "tipo": reg.tipo,
+        "chave": reg.chave,
+        "descricao": reg.descricao or "",
+        "motivo": reg.motivo,
+        "por": reg.criado_por,
+        "em": reg.criado_em.isoformat(timespec="seconds") if reg.criado_em else None,
+    }
+
+
+def listar_desconsiderados() -> list[dict]:
+    regs = (
+        LogisticaCardexDesconsiderado.query
+        .filter_by(ativo=True)
+        .order_by(LogisticaCardexDesconsiderado.tipo, LogisticaCardexDesconsiderado.chave)
+        .all()
+    )
+    return [desconsiderado_para_dict(r) for r in regs]
+
+
+def _mapa_desconsiderados() -> dict[str, dict[str, dict]]:
+    mapa: dict[str, dict[str, dict]] = {"ITEM": {}, "FAMILIA": {}}
+    for reg in listar_desconsiderados():
+        mapa[reg["tipo"]][reg["chave"]] = reg
+    return mapa
+
+
+def _marca_desconsiderado(item: dict, mapa: dict | None) -> dict | None:
+    """A marca que vale para o item. `mapa` None = mês congelado: vale a que
+    foi gravada na foto (mês fechado não muda quando alguém desconsidera
+    depois). Item marcado ganha da família."""
+    if mapa is None:
+        return item.get("desconsiderado") or None
+    return mapa["ITEM"].get(item["codigo"]) or mapa["FAMILIA"].get(item.get("familia") or "") or None
+
+
+def desconsiderar(tipo: str, chave: str, motivo: str, usuario: str, descricao: str = "") -> dict:
+    tipo = str(tipo or "").strip().upper()
+    if tipo not in TIPOS_DESCONSIDERADO:
+        raise ValueError("Informe se é para desconsiderar um item ou uma família.")
+    chave = normalizar_codigo(chave) if tipo == "ITEM" else str(chave or "").strip()
+    if not chave:
+        raise ValueError("Informe o código do item." if tipo == "ITEM" else "Informe a família.")
+    motivo = str(motivo or "").strip()
+    if len(motivo) < 5:
+        raise ValueError("Informe o motivo (mínimo de 5 caracteres).")
+    if LogisticaCardexDesconsiderado.query.filter_by(tipo=tipo, chave=chave, ativo=True).first():
+        raise ValueError("Este item já está desconsiderado." if tipo == "ITEM" else "Esta família já está desconsiderada.")
+    reg = LogisticaCardexDesconsiderado(
+        tipo=tipo, chave=chave[:120], descricao=str(descricao or "").strip()[:300],
+        motivo=motivo[:500], criado_por=usuario, criado_em=agora_br(), ativo=True,
+    )
+    db.session.add(reg)
+    db.session.commit()
+    current_app.logger.info("Cardex: %s %s desconsiderado por %s (%s)", tipo, chave, usuario, motivo)
+    return desconsiderado_para_dict(reg)
+
+
+def reconsiderar(desconsiderado_id: int, usuario: str) -> dict | None:
+    reg = db.session.get(LogisticaCardexDesconsiderado, desconsiderado_id)
+    if not reg:
+        return None
+    if not reg.ativo:
+        raise ValueError("Este registro já foi desfeito.")
+    reg.ativo = False
+    reg.removido_em = agora_br()
+    reg.removido_por = usuario
+    db.session.commit()
+    current_app.logger.info("Cardex: %s %s voltou a ser considerado por %s", reg.tipo, reg.chave, usuario)
+    return desconsiderado_para_dict(reg)
 
 
 # --------------------------------------------------------------------------
@@ -753,6 +861,7 @@ def fechamento_para_dict(f: LogisticaCardexFechamento | None) -> dict | None:
         "reaberto_por": f.reaberto_por,
         "motivo_reabertura": f.motivo_reabertura,
         "avisos": _meta(f).get("avisos") or [],
+        "desconsiderados": _meta(f).get("desconsiderados") or {"itens": 0, "valor_final": 0.0},
     }
 
 
@@ -867,7 +976,11 @@ def consultar_resumo(
 ) -> dict:
     base = obter_periodo(inicio, fim, forcar=forcar)
     saida = _cabecalho(inicio, fim, base, depositos)
-    linhas_todas = [resumo(item, depositos) for item in base["itens"]]
+    mapa = None if base["fonte"] == "congelado" else _mapa_desconsiderados()
+    linhas_todas = [
+        {**resumo(item, depositos), "desconsiderado": _marca_desconsiderado(item, mapa)}
+        for item in base["itens"]
+    ]
     # Item sem nada no(s) depósito(s) escolhido(s) some do resumo.
     linhas_todas = [
         l for l in linhas_todas
@@ -877,35 +990,63 @@ def consultar_resumo(
 
     termo = normalizar_codigo(busca)
     termo_texto = str(busca or "").strip().upper()
-    linhas = []
+    sem_familia = []  # passou em busca/movimento; ainda não filtrado por família
     for l in linhas_todas:
-        if familia and l["familia"] != familia:
-            continue
         if somente_movimento and not l["movimentos"]:
             continue
         if termo_texto and termo not in l["codigo"] and termo_texto not in l["descricao"].upper():
             continue
-        linhas.append(l)
+        sem_familia.append(l)
+    linhas = [l for l in sem_familia if not familia or l["familia"] == familia]
 
-    por_familia: dict[str, list[dict]] = defaultdict(list)
-    for l in linhas:
+    # Painel por família: sempre com todas as famílias (o filtro de família
+    # não o esconde), para dar para comparar e desconsiderar uma inteira.
+    por_familia_todas: dict[str, list[dict]] = defaultdict(list)
+    for l in sem_familia:
+        por_familia_todas[l["familia"]].append(l)
+    saida["familias_resumo"] = [
+        {
+            "familia": fam,
+            "itens": len(ls),
+            "itens_desconsiderados": sum(1 for l in ls if l["desconsiderado"]),
+            "desconsiderada": (mapa or {}).get("FAMILIA", {}).get(fam),
+            "totais": totalizar([l for l in ls if not l["desconsiderado"]]),
+            "valor_desconsiderado": _centavos(sum(l["valor_final"] for l in ls if l["desconsiderado"])),
+        }
+        for fam, ls in sorted(por_familia_todas.items())
+    ]
+
+    # Só os considerados entram em subtotal, total e indicador. A família
+    # inteira desconsiderada continua com subtotal (zerado) para a exportação.
+    considerados = [l for l in linhas if not l["desconsiderado"]]
+    desconsiderados = [l for l in linhas if l["desconsiderado"]]
+    por_familia: dict[str, list[dict]] = {l["familia"]: [] for l in linhas}
+    for l in considerados:
         por_familia[l["familia"]].append(l)
     saida["linhas"] = linhas
     saida["subtotais_familia"] = {fam: totalizar(ls) for fam, ls in por_familia.items()}
-    totais = totalizar(linhas)
+    totais = totalizar(considerados)
     saida["totais"] = totais
+    saida["desconsiderados"] = {"itens": len(desconsiderados), "totais": totalizar(desconsiderados)}
     saida["indicadores"] = {
-        "itens": len(linhas),
-        "itens_com_movimento": sum(1 for l in linhas if l["movimentos"]),
-        "itens_sem_movimento": sum(1 for l in linhas if not l["movimentos"] and abs(l["qtde_final"]) > EPS),
-        "itens_com_alerta": sum(1 for l in linhas if l["alertas"]),
+        "itens": len(considerados),
+        "itens_desconsiderados": len(desconsiderados),
+        "valor_desconsiderado": saida["desconsiderados"]["totais"]["valor_final"],
+        "itens_com_movimento": sum(1 for l in considerados if l["movimentos"]),
+        "itens_sem_movimento": sum(1 for l in considerados if not l["movimentos"] and abs(l["qtde_final"]) > EPS),
+        "itens_com_alerta": sum(1 for l in considerados if l["alertas"]),
         "valor_inicial": totais["valor_inicial"],
         "valor_entradas": totais["valor_entrada"],
         "valor_saidas": totais["valor_saida"],
         "valor_ajustes": totais["valor_ajuste"],
         "valor_transferencias": totais["valor_transferencia"],
         "valor_final": totais["valor_final"],
-        "variacao": totais["valor_final"] - totais["valor_inicial"],
+        "variacao": _centavos(totais["valor_final"] - totais["valor_inicial"]),
+        # Tudo o que não é entrada nem saída (inventário, transferência e
+        # reavaliação): é a parcela que faz inicial + entradas + saídas fechar no final.
+        "valor_outros": _centavos(
+            totais["valor_final"] - totais["valor_inicial"] - totais["valor_entrada"] - totais["valor_saida"]
+        ),
     }
     return saida
 
@@ -951,6 +1092,9 @@ def consultar_item(codigo: str, inicio: date, fim: date, depositos: set[int] | N
             )
     saida["item"] = visao
     saida["resumo"] = resumo(item, depositos)
+    saida["desconsiderado"] = _marca_desconsiderado(
+        item, None if base["fonte"] == "congelado" else _mapa_desconsiderados()
+    )
     return saida
 
 
@@ -1114,8 +1258,20 @@ def fechar_mes(ano: int, mes: int, usuario: str, hoje: date | None = None) -> di
         avisos.append(
             f"Fechado depois de {posterior.mes:02d}/{posterior.ano}, que já estava fechado com outra abertura."
         )
-    linhas = [resumo(item, None) for item in base["itens"]]
-    totais = totalizar(linhas)
+    # A marca de desconsiderado vai gravada na foto: o mês fechado continua
+    # igual mesmo que alguém desconsidere (ou volte a considerar) depois.
+    mapa = _mapa_desconsiderados()
+    itens = [{**item, "desconsiderado": _marca_desconsiderado(item, mapa)} for item in base["itens"]]
+    linhas = [resumo(item, None) for item in itens]
+    fora = [l for item, l in zip(itens, linhas) if item["desconsiderado"]]
+    totais = totalizar([l for item, l in zip(itens, linhas) if not item["desconsiderado"]])
+    resumo_fora = {"itens": len(fora), "valor_final": _centavos(sum(l["valor_final"] for l in fora))}
+    if fora:
+        valor_br = f"{resumo_fora['valor_final']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        avisos.append(
+            f"{len(fora)} item(ns) desconsiderado(s) ficaram fora dos totais deste fechamento "
+            f"(R$ {valor_br} de saldo final)."
+        )
     fechamento = LogisticaCardexFechamento(
         ano=ano,
         mes=mes,
@@ -1129,13 +1285,16 @@ def fechar_mes(ano: int, mes: int, usuario: str, hoje: date | None = None) -> di
         valor_saidas=totais["valor_saida"],
         valor_ajustes=totais["valor_ajuste"],
         valor_final=totais["valor_final"],
-        meta_json=json.dumps({"depositos": base["depositos_nomes"], "avisos": avisos}, ensure_ascii=False),
+        meta_json=json.dumps(
+            {"depositos": base["depositos_nomes"], "avisos": avisos, "desconsiderados": resumo_fora},
+            ensure_ascii=False,
+        ),
         fechado_em=agora_br(),
         fechado_por=usuario,
     )
     db.session.add(fechamento)
     db.session.flush()
-    for item, linha in zip(base["itens"], linhas):
+    for item, linha in zip(itens, linhas):
         db.session.add(LogisticaCardexFechamentoItem(
             fechamento_id=fechamento.id,
             codigo=item["codigo"],

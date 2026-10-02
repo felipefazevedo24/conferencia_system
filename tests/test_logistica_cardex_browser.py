@@ -55,6 +55,27 @@ def test_cardex_resumo_item_e_fechamentos_no_navegador(tmp_path):
             expect(linhas.nth(3)).to_contain_text("sem imposto na NF")
             page.click("#cx-item-fechar")
 
+            # Desconsiderar pela tela: o item continua na lista, sai do total
+            # e aparece na aba de desconsiderados; desfazer devolve ao total.
+            page.locator("#cx-resumo-body [data-fora-item]").click()
+            page.fill("#cx-fora-motivo", "Fora do estoque contábil")
+            page.click("#cx-fora-confirmar")
+            expect(page.locator("#cx-resumo-body tr.cx-fora")).to_have_count(1)
+            expect(page.locator("#cx-resumo-body")).to_contain_text("Desconsiderado")
+            expect(page.locator("#cx-s-final")).to_have_text("R$ 0,00")
+            expect(page.locator("#cx-resumo-foot")).to_contain_text("Desconsiderados (fora do total)")
+            page.click("[data-aba=familias]")
+            expect(page.locator("#cx-fam-body tr")).to_have_count(1)
+            expect(page.locator("#cx-fam-body")).to_contain_text("1 fora do total")
+            page.click("[data-aba=desconsiderados]")
+            expect(page.locator("#cx-fora-body")).to_contain_text("Fora do estoque contábil")
+            page.once("dialog", lambda dialogo: dialogo.accept())
+            page.locator("#cx-fora-body [data-voltar]").click()
+            expect(page.locator("#cx-fora-body")).to_contain_text("Nada desconsiderado")
+            page.click("[data-aba=resumo]")
+            expect(page.locator("#cx-resumo-body tr.cx-fora")).to_have_count(0)
+            expect(page.locator("#cx-s-final")).to_have_text("R$ 120.441,15")
+
             page.click("[data-aba=fechamentos]")
             expect(page.locator("#cx-fech-body")).to_contain_text("Nenhum mês fechado ainda.")
             assert erros_js == []

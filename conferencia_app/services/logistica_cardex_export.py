@@ -97,7 +97,20 @@ RESUMO_COLUNAS = [
     ("Saldo final qtde", "qtde_final", FMT_QTDE, 14),
     ("Saldo final R$", "valor_final", FMT_VALOR, 15),
     ("Custo médio final", "custo_medio_final", FMT_CUSTO, 13),
+    ("Observação", "observacao", None, 44),
 ]
+CINZA_TEXTO = "808080"
+
+
+def _separar(resumo: dict) -> tuple[list[dict], list[dict]]:
+    """(considerados, desconsiderados). Os desconsiderados saem numa seção à
+    parte, depois do total geral, para o total da planilha bater com a tela."""
+    considerados = [l for l in resumo["linhas"] if not l.get("desconsiderado")]
+    fora = [
+        {**l, "observacao": f"Desconsiderado por {l['desconsiderado'].get('por') or '-'}: {l['desconsiderado'].get('motivo') or ''}"}
+        for l in resumo["linhas"] if l.get("desconsiderado")
+    ]
+    return considerados, fora
 
 
 def _aba_resumo(ws, resumo: dict) -> None:
@@ -107,20 +120,21 @@ def _aba_resumo(ws, resumo: dict) -> None:
     ws.freeze_panes = ws.cell(row=linha + 1, column=4)
     linha += 1
 
-    def escrever(valores: dict, negrito=False, fundo=None):
+    def escrever(valores: dict, negrito=False, fundo=None, cor=None):
         nonlocal linha
         for col, (_, chave, fmt, _) in enumerate(RESUMO_COLUNAS, start=1):
             c = ws.cell(row=linha, column=col, value=valores.get(chave))
             c.border = BORDA
-            c.font = Font(size=9, bold=negrito)
+            c.font = Font(size=9, bold=negrito, color=cor)
             if fmt:
                 c.number_format = fmt
             if fundo:
                 c.fill = PatternFill("solid", fgColor=fundo)
         linha += 1
 
+    considerados, fora = _separar(resumo)
     familia_atual = None
-    for item in resumo["linhas"]:
+    for item in considerados:
         if familia_atual is not None and item["familia"] != familia_atual:
             escrever({**resumo["subtotais_familia"][familia_atual], "familia": f"Subtotal {familia_atual}", "custo_medio_final": None}, True, CINZA)
         familia_atual = item["familia"]
@@ -128,6 +142,17 @@ def _aba_resumo(ws, resumo: dict) -> None:
     if familia_atual is not None:
         escrever({**resumo["subtotais_familia"][familia_atual], "familia": f"Subtotal {familia_atual}", "custo_medio_final": None}, True, CINZA)
     escrever({**resumo["totais"], "familia": "TOTAL GERAL", "custo_medio_final": None}, True, AZUL_CLARO)
+
+    if fora:
+        linha += 1
+        ws.cell(row=linha, column=1, value="ITENS DESCONSIDERADOS — aparecem para conferência, mas NÃO entram no total geral acima").font = Font(bold=True, size=9, color="C00000")
+        linha += 1
+        for item in fora:
+            escrever(item, cor=CINZA_TEXTO)
+        escrever(
+            {**resumo["desconsiderados"]["totais"], "familia": "TOTAL DESCONSIDERADO (fora do total geral)", "custo_medio_final": None},
+            True, CINZA,
+        )
 
 
 CARDEX_COLUNAS = [
@@ -270,8 +295,9 @@ def gerar_pdf_resumo(resumo: dict) -> bytes:
             _br(v.get("custo_medio_final"), 4) if "custo_medio_final" in v else "",
         ]
 
+    considerados, fora = _separar(resumo)
     familia_atual = None
-    for item in resumo["linhas"]:
+    for item in considerados:
         if item["familia"] != familia_atual:
             if familia_atual is not None:
                 destaque.append(len(dados))
@@ -283,6 +309,11 @@ def gerar_pdf_resumo(resumo: dict) -> bytes:
         dados.append(linha({**resumo["subtotais_familia"][familia_atual], "unidade": ""}, "", f"Subtotal {familia_atual}"))
     destaque.append(len(dados))
     dados.append(linha({**resumo["totais"], "unidade": ""}, "", "TOTAL GERAL"))
+    if fora:
+        for item in fora:
+            dados.append(linha(item, item["codigo_interno"], f"[DESCONSIDERADO] {item['descricao']} — {item['desconsiderado'].get('motivo') or ''}"))
+        destaque.append(len(dados))
+        dados.append(linha({**resumo["desconsiderados"]["totais"], "unidade": ""}, "", "TOTAL DESCONSIDERADO (fora do total geral)"))
 
     tabela = Table(dados, colWidths=[22 * mm, 70 * mm, 10 * mm] + [19 * mm] * 8 + [16 * mm], repeatRows=1)
     tabela.setStyle(_estilo_tabela(destaque))

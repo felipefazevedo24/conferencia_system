@@ -2156,6 +2156,32 @@ class LogisticaCardexFechamentoItem(db.Model):
     dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"), nullable=False)
 
 
+class LogisticaCardexDesconsiderado(db.Model):
+    """Item ou família que a Contabilidade mandou desconsiderar no Cardex.
+
+    O item continua aparecendo na tela e nas exportações (quantidade e valor
+    visíveis), mas sai dos indicadores, dos subtotais e do total geral. Vale
+    "a partir de agora, até alguém desfazer": não tem período. Mês já fechado
+    não é afetado - a foto do fechamento guarda a marca que valia na hora.
+
+    Desfazer não apaga a linha (ativo=False + quem/quando), para ficar o
+    histórico de quem tirou o quê do total e por quê."""
+
+    __tablename__ = "logistica_cardex_desconsiderado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(10), nullable=False, index=True)  # ITEM | FAMILIA
+    # ITEM: codigo_interno normalizado (so' A-Z0-9); FAMILIA: o nome da familia como vem do GRV.
+    chave = db.Column(db.String(120), nullable=False, index=True)
+    descricao = db.Column(db.String(300))
+    motivo = db.Column(db.String(500), nullable=False)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    criado_por = db.Column(db.String(100), nullable=False)
+    removido_em = db.Column(db.DateTime)
+    removido_por = db.Column(db.String(100))
+
+
 class LogisticaConsumoChapaNesting(db.Model):
     """Um "Nesting" (Programa de corte) importado do relatorio HTML gerado
     pela maquina de corte a laser/plasma (FastReport 5.0 - ver
