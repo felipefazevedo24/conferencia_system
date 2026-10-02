@@ -13,7 +13,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from sqlalchemy import func, or_, true
 from werkzeug.utils import secure_filename
 
-from ..auth import permission_required, permission_required_any
+from ..auth import has_permission, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoMotorista,
@@ -1260,8 +1260,12 @@ def editar(vid: int):
 
 
 @viagem_bp.route("/<int:vid>", methods=["DELETE"])
-@permission_required(PERM, "Admin")
+@permission_required(PERM)
 def excluir(vid: int):
+    # Antes era travado no cargo Admin; agora e' uma permissao propria, que o
+    # Admin ja tem e pode ser concedida a um usuario sem torna-lo Admin.
+    if not has_permission("MANAGE_LOGISTICA_VIAGEM_EXCLUIR"):
+        return jsonify({"sucesso": False, "msg": "Você não tem permissão para apagar viagens."}), 403
     v = db.session.get(Viagem, vid)
     if not v:
         return jsonify({"sucesso": False, "msg": "Viagem não encontrada."}), 404

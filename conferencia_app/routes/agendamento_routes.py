@@ -13,7 +13,7 @@ from flask import Blueprint, current_app, jsonify, request, session, send_file
 from sqlalchemy import or_, true
 from werkzeug.utils import secure_filename
 
-from ..auth import is_admin_session, permission_required, permission_required_any
+from ..auth import has_permission, is_admin_session, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoCliente,
@@ -2141,6 +2141,49 @@ def central_viagens_alterar_prioridade(solicitacao_id: int):
     return jsonify({"sucesso": True})
 
 
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/data-liberacao", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_alterar_data_liberacao(solicitacao_id: int):
+    """Altera (ou remove, com valor vazio) a data "coleta liberada a partir de"."""
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row or str(row.tipo or "").strip() != "COLETA":
+        return jsonify({"error": "Coleta não encontrada."}), 404
+    if str(row.status or "").strip() in {"EmRota", "Concluida", "Cancelada"}:
+        return jsonify({"error": "Não é possível alterar a liberação de uma coleta em rota, concluída ou cancelada."}), 409
+    payload = request.get_json(silent=True) or {}
+    try:
+        nova = _parse_datetime(payload.get("data_liberacao"), "a data de liberação")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    usuario = session.get("username", "sistema")
+    detalhes = obter_detalhes_coleta(row.id) or {}
+    anterior = detalhes.get("data_liberacao")
+    # O serviço regrava a observação junto com a data: repassa a atual, senão
+    # alterar só a data apagaria a observação da coleta.
+    salvo = criar_ou_atualizar_detalhes_coleta(
+        solicitacao_id=row.id,
+        data_liberacao=nova,
+        observacao=detalhes.get("observacao"),
+        usuario=usuario,
+    )
+    if not salvo:
+        return jsonify({"error": "Não foi possível salvar a data de liberação."}), 500
+
+    def _fmt(valor):
+        return valor.strftime("%d/%m/%Y %H:%M") if isinstance(valor, datetime) else "sem data"
+
+    row.atualizado_em = agora_br()
+    _registrar_historico(
+        row.id,
+        evento="DATA_LIBERACAO_ALTERADA",
+        usuario=usuario,
+        detalhe=f"Data de liberação da coleta alterada de {_fmt(anterior)} para {_fmt(nova)}.",
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "data_liberacao_label": _fmt(nova) if nova else ""})
+
+
 @agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/reorganizar", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_reorganizar(solicitacao_id: int):
@@ -2198,8 +2241,8 @@ def central_viagens_cancelar(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/excluir", methods=["DELETE"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_excluir(solicitacao_id: int):
-    if not is_admin_session():
-        return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
+    if not has_permission("MANAGE_LOGISTICA_VIAGEM_EXCLUIR"):
+        return jsonify({"error": "Você não tem permissão para apagar solicitações na Central de Viagens."}), 403
     row = _get_solicitacao_visivel(solicitacao_id)
     if not row or not (_is_origem_automatica(row) or _is_origem_central_solicitante(row)):
         return jsonify({"error": "Viagem não encontrada."}), 404
@@ -2234,8 +2277,8 @@ def central_viagens_excluir(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/excluir-lote", methods=["POST", "DELETE"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_excluir_lote():
-    if not is_admin_session():
-        return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
+    if not has_permission("MANAGE_LOGISTICA_VIAGEM_EXCLUIR"):
+        return jsonify({"error": "Você não tem permissão para apagar solicitações na Central de Viagens."}), 403
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):

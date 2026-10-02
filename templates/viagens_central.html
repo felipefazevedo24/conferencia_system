@@ -33,6 +33,8 @@
     .vt-liberacao-pendente { color: #eab308; margin-left: 6px; }
     .vt-datas { display: grid; gap: 1px; margin-top: 3px; font-size: 11px; line-height: 1.35; color: var(--eui-muted); white-space: nowrap; }
     .vt-datas .is-pendente { color: var(--eui-warning); font-weight: 700; }
+    .vt-link-btn { border: none; background: transparent; padding: 0; margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--eui-primary); cursor: pointer; }
+    .vt-link-btn:hover { text-decoration: underline; }
     .vt-type.correios { background: #bae6fd; color: #075985; }
     .vt-header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .vt-header-actions .eui-btn { min-height: 40px; padding: 0 16px; text-decoration: none; }
@@ -92,7 +94,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="eui-scope vt-wrap" data-current-user-role="{{ user_role or '' }}">
+<div class="eui-scope vt-wrap" data-current-user-role="{{ user_role or '' }}" data-pode-excluir="{{ 'true' if can_access('MANAGE_LOGISTICA_VIAGEM_EXCLUIR') else 'false' }}">
     <header class="eui-page-header">
         <div>
             <div class="eui-page-header__eyebrow">LOGÍSTICA • TRANSPORTES</div>
@@ -159,6 +161,28 @@
         <div class="vt-modal__body" id="detalheBody"></div>
         <div class="vt-modal__foot"><button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDetalhe')">Fechar</button></div>
     </div>
+</div>
+
+<div id="modalLiberacao" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:480px;">
+    <div class="vt-modal__head">
+      <strong>Data de liberação da coleta</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalLiberacao')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <input type="hidden" id="liberacao-solicitacao-id">
+      <div class="vt-mini" id="liberacao-info"></div>
+      <div class="eui-field">
+        <label class="eui-field__label" for="liberacao-data">Coleta liberada a partir de</label>
+        <input type="datetime-local" id="liberacao-data" class="eui-input">
+      </div>
+      <div class="vt-mini">Deixe em branco para remover a data: a coleta passa a ficar liberada de imediato.</div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalLiberacao')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" id="liberacao-salvar" onclick="confirmarAlterarLiberacao()"><i class="fas fa-floppy-disk"></i> Salvar</button>
+    </div>
+  </div>
 </div>
 
 <div id="modalRealocarParada" class="vt-modal">
@@ -385,6 +409,9 @@
 <script>
 const CURRENT_USER_ROLE = String(document.querySelector('.vt-wrap')?.dataset.currentUserRole || '');
 const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin');
+// Apagar viagem/solicitação tem permissão própria (MANAGE_LOGISTICA_VIAGEM_EXCLUIR);
+// o servidor confere de novo, aqui é só para mostrar ou esconder os botões.
+const PODE_EXCLUIR = document.querySelector('.vt-wrap')?.dataset.podeExcluir === 'true';
 
 [
   'vt-actions-menu',
@@ -614,7 +641,7 @@ function renderSolicitacaoDetalhe(row) {
       <div class="vt-detail-item"><strong>${row.responsavel_origem_label || 'Responsável pela origem'}</strong>${row.responsavel_origem || '-'}</div>
       <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
       <div class="vt-detail-item"><strong>Solicitada em</strong>${row.criado_em || '-'}</div>
-      ${row.data_liberacao_label ? `<div class="vt-detail-item"><strong>Liberação da coleta</strong>${row.data_liberacao_label}</div>` : ''}
+      ${String(row.tipo || '').toUpperCase() === 'COLETA' ? `<div class="vt-detail-item"><strong>Liberação da coleta</strong>${row.data_liberacao_label || 'Sem data'} <button type="button" class="vt-link-btn" onclick="acaoAlterarLiberacao(${Number(row.id)})"><i class="fas fa-pen"></i> Alterar</button></div>` : ''}
       <div class="vt-detail-item"><strong>Observações</strong>${row.observacao_coleta || row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
     </div>
     ${row.tipo === 'COLETA' && oc ? estoqueDetalheHtml(oc) : ''}
@@ -1096,7 +1123,7 @@ function atualizarSelecionadasUI() {
   if (box) box.textContent = `Selecionadas: ${total}`;
   if (btnCriarViagem) btnCriarViagem.disabled = total === 0 || state.tab === 'VIAGENS';
   if (btnExcluir) {
-    btnExcluir.style.display = (state.tab !== 'VIAGENS' && IS_ADMIN) ? 'inline-flex' : 'none';
+    btnExcluir.style.display = (state.tab !== 'VIAGENS' && PODE_EXCLUIR) ? 'inline-flex' : 'none';
     btnExcluir.disabled = total === 0 || state.tab === 'VIAGENS';
   }
 }
@@ -1134,8 +1161,8 @@ async function acaoCriarViagemSelecionadas() {
 }
 
 async function acaoExcluirSelecionadasLote() {
-  if (!IS_ADMIN) {
-    showToast('Somente admin pode excluir solicitações.', 'error');
+  if (!PODE_EXCLUIR) {
+    showToast('Você não tem permissão para apagar solicitações.', 'error');
     return;
   }
 
@@ -1269,7 +1296,7 @@ function openActionsMenu(id, x, y) {
     ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-route'></i> Abrir viagem</button>` : ''}
     ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
-    ${IS_ADMIN ? `<button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Apagar solicitação</button>` : ''}
+    ${PODE_EXCLUIR ? `<button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Apagar solicitação</button>` : ''}
   `;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -1325,7 +1352,7 @@ function openViagemActionsMenu(viagemId, codigo, status, liberada, x, y) {
     <button onclick="acaoAbrirViagem(${vid})"><i class='fas fa-route'></i> Abrir viagem</button>
     ${podeLiberar ? `<button onclick="acaoLiberarMotorista(${vid})"><i class='fas fa-paper-plane'></i> Liberar motorista</button>` : ''}
     ${podeCancelar ? `<button onclick="acaoCancelarViagem(${vid}, '${codigoSafe}')"><i class='fas fa-ban'></i> Cancelar viagem</button>` : ''}
-    ${IS_ADMIN ? `<button class='danger' onclick="acaoExcluirViagem(${vid}, '${codigoSafe}')"><i class='fas fa-trash'></i> Apagar viagem</button>` : ''}
+    ${PODE_EXCLUIR ? `<button class='danger' onclick="acaoExcluirViagem(${vid}, '${codigoSafe}')"><i class='fas fa-trash'></i> Apagar viagem</button>` : ''}
   `;
 
   const vw = window.innerWidth;
@@ -1548,7 +1575,7 @@ async function acaoAbrirViagem(viagemId) {
   if (st !== 'Concluida' && st !== 'Cancelada') {
     acoesDetalhe.push(`<button class="eui-btn eui-btn--ghost" onclick="acaoAdicionarSolicitacaoNaViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-plus"></i> Adicionar solicitação</button>`);
   }
-  if (IS_ADMIN) {
+  if (PODE_EXCLUIR) {
     acoesDetalhe.push(`<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar viagem</button>`);
   }
   const acoesHtml = acoesDetalhe.length
@@ -1644,8 +1671,8 @@ async function confirmarRealocacaoParada() {
 async function acaoExcluirViagem(viagemId, codigoLabel) {
   const vid = Number(viagemId);
   if (!vid) return;
-  if (!IS_ADMIN) {
-    showToast('Somente admin pode apagar viagem.', 'error');
+  if (!PODE_EXCLUIR) {
+    showToast('Você não tem permissão para apagar viagens.', 'error');
     return;
   }
 
@@ -2068,6 +2095,40 @@ async function acaoPrioridade(id) {
   }
   showToast('Prioridade atualizada.', 'success');
   loadDashboard();
+}
+
+function acaoAlterarLiberacao(id) {
+  const row = rowById(id);
+  if (!row) return;
+  document.getElementById('liberacao-solicitacao-id').value = String(id);
+  document.getElementById('liberacao-data').value = String(row.data_liberacao || '').slice(0, 16);
+  document.getElementById('liberacao-info').textContent =
+    `OC ${row.numero_oc || row.documento_numero || '-'} · ${row.parceiro_nome || '-'} · atual: ${row.data_liberacao_label || 'sem data'}`;
+  openModal('modalLiberacao');
+}
+
+async function confirmarAlterarLiberacao() {
+  const id = Number(document.getElementById('liberacao-solicitacao-id').value || 0);
+  if (!id) return;
+  const btn = document.getElementById('liberacao-salvar');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/data-liberacao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_liberacao: document.getElementById('liberacao-data').value || '' })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(d.error || 'Falha ao alterar a data de liberação.', 'error');
+      return;
+    }
+    closeModal('modalLiberacao');
+    showToast(d.data_liberacao_label ? `Liberação alterada para ${d.data_liberacao_label}.` : 'Data de liberação removida.', 'success');
+    loadDashboard();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function acaoCancelar(id) {
