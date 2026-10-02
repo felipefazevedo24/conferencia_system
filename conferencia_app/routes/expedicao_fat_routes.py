@@ -334,12 +334,37 @@ def etiqueta_columbia_pdf(cod_ordem_fat):
     return _etiqueta_pdf(cod_ordem_fat, etiqueta_pdf.COLUMBIA, "etiqueta_columbia")
 
 
-def _etiqueta_pdf(cod_ordem_fat, modelo, prefixo_arquivo: str):
+# ZPL: impressao direta na Zebra (Zebra Browser Print) com o tamanho da
+# etiqueta embutido (^PW/^LL) - o PDF fica como alternativa.
+_MODELOS_ETIQUETA = {"red-molds": etiqueta_pdf.RED_MOLDS, "columbia": etiqueta_pdf.COLUMBIA}
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-<modelo>.zpl")
+@permission_required(PERMISSION)
+def etiqueta_zpl(cod_ordem_fat, modelo):
+    from ..services import expedicao_etiqueta_zpl as etiqueta_zpl_svc
+
+    modelo_etiqueta = _MODELOS_ETIQUETA.get(modelo)
+    if modelo_etiqueta is None:
+        return jsonify({"error": "Modelo de etiqueta desconhecido."}), 404
+    dados, erro = _dados_etiqueta(cod_ordem_fat)
+    if erro:
+        return erro
+    try:
+        dpi = int(request.args.get("dpi") or etiqueta_zpl_svc.DPI_PADRAO)
+    except (TypeError, ValueError):
+        dpi = etiqueta_zpl_svc.DPI_PADRAO
+    zpl = etiqueta_zpl_svc.gerar_etiqueta_zpl(modelo_etiqueta, dpi=dpi, **dados)
+    return current_app.response_class(zpl, mimetype="text/plain; charset=utf-8")
+
+
+def _dados_etiqueta(cod_ordem_fat):
+    """(dados da etiqueta, None) ou (None, resposta de erro)."""
     ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
     if not ordem:
-        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+        return None, (jsonify({"error": "Ordem de faturamento nao encontrada."}), 404)
     if not ordem.numero_nf:
-        return jsonify({"error": "Essa ordem ainda nao tem NF - etiqueta disponivel so apos o faturamento."}), 400
+        return None, (jsonify({"error": "Essa ordem ainda nao tem NF - etiqueta disponivel so apos o faturamento."}), 400)
 
     os_texto = "/".join(
         dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip())
@@ -357,15 +382,21 @@ def _etiqueta_pdf(cod_ordem_fat, modelo, prefixo_arquivo: str):
         etiqueta_svc.buscar_endereco_cliente(ordem.cliente)
     )
 
-    pdf_bytes = etiqueta_pdf.gerar_etiqueta_pdf(
-        modelo,
-        numero_nf=ordem.numero_nf,
-        orcamento=ordem.orcamento or dados_nf.get("orcamento") or "",
-        os_texto=os_texto or dados_nf.get("os") or "",
-        cliente=ordem.cliente or "",
-        endereco_linhas=endereco_linhas,
-        qtde_volumes=qtde_volumes,
-    )
+    return {
+        "numero_nf": ordem.numero_nf,
+        "orcamento": ordem.orcamento or dados_nf.get("orcamento") or "",
+        "os_texto": os_texto or dados_nf.get("os") or "",
+        "cliente": ordem.cliente or "",
+        "endereco_linhas": endereco_linhas,
+        "qtde_volumes": qtde_volumes,
+    }, None
+
+
+def _etiqueta_pdf(cod_ordem_fat, modelo, prefixo_arquivo: str):
+    dados, erro = _dados_etiqueta(cod_ordem_fat)
+    if erro:
+        return erro
+    pdf_bytes = etiqueta_pdf.gerar_etiqueta_pdf(modelo, **dados)
 
     return send_file(
         BytesIO(pdf_bytes),
