@@ -95,6 +95,23 @@ def criar_se_pendente(homologacao: Homologacao, usuario: str) -> Plano | None:
     return plano
 
 
+def criar_manual(homologacao: Homologacao, usuario: str) -> Plano:
+    """Botao "Criar plano de acao": pra homologacao ja' decidida que ficou sem
+    plano - reprovada (o automatico so' nasce ao homologar) ou homologada
+    antes da fase 2. Mesmo plano do automatico, mesmo acompanhamento."""
+    if not svc.eh_rev04(homologacao):
+        raise ValueError("O plano de ação só existe para avaliações no formulário F 066 rev. 04.")
+    if homologacao.status not in (Homologacao.STATUS_HOMOLOGADO, Homologacao.STATUS_REPROVADO):
+        raise ValueError("Crie o plano depois da decisão (homologado ou reprovado).")
+    if plano_ativo(homologacao):
+        raise ValueError("Este fornecedor já tem um plano de ação.")
+    if not pendencias(homologacao):
+        raise ValueError("Nenhum item ficou abaixo de Atende - não há o que colocar no plano.")
+    plano = criar_se_pendente(homologacao, usuario)
+    db.session.commit()
+    return plano
+
+
 def cancelar_aberto(homologacao: Homologacao) -> None:
     """Reabrir a homologacao invalida o plano em aberto (a avaliacao vai mudar)."""
     plano = plano_ativo(homologacao)

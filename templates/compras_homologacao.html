@@ -539,6 +539,14 @@
         }
 
         if (atual.plano_acao) html += blocoPlano(atual.plano_acao);
+        else if (atual.plano_pode_criar) {
+            html += `<div class="hf-secao" id="hf-plano"><div class="hf-secao-head">
+                <span class="hf-secao-titulo"><i class="fas fa-list-check"></i> Plano de ação</span></div>
+                <div class="hf-secao-body" style="padding:10px 14px;">
+                <div class="hf-aviso" style="margin-bottom:10px;"><i class="fas fa-circle-info"></i> Este fornecedor tem itens abaixo de Atende e ainda não tem plano de ação${atual.status === "Reprovado" ? " (homologação reprovada)" : ""}. Crie o plano para acompanhar as correções com o fornecedor.</div>
+                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="hf-plano-criar"><i class="fas fa-plus"></i> Criar plano de ação</button>
+                </div></div>`;
+        }
 
         $("hf-corpo").innerHTML = html;
         desenharAcoes();
@@ -748,6 +756,13 @@
         if (delEv) removerEvidencia(delEv.dataset.delEvid);
         const btnPlano = e.target.closest("[data-plano-act]");
         if (btnPlano) acaoPlano(btnPlano);
+        const criarPlano = e.target.closest("#hf-plano-criar");
+        if (criarPlano) {
+            criarPlano.disabled = true;
+            api(`/api/compras/homologacao/${atual.id}/plano-acao`, { method: "POST" })
+                .then((r) => { atual = r.homologacao; toast(r.message, "success"); desenhar(atual.razao_social || "Homologação"); carregar(); })
+                .catch((err) => { toast(err.message, "error"); criarPlano.disabled = false; });
+        }
     });
 
     $("hf-acoes").addEventListener("click", async (e) => {
