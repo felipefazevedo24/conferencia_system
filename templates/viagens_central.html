@@ -31,6 +31,8 @@
     .vt-row-correios td { background: #e0f2fe; }
     .vt-row-correios:hover td { background: #bae6fd; }
     .vt-liberacao-pendente { color: #eab308; margin-left: 6px; }
+    .vt-datas { display: grid; gap: 1px; margin-top: 3px; font-size: 11px; line-height: 1.35; color: var(--eui-muted); white-space: nowrap; }
+    .vt-datas .is-pendente { color: var(--eui-warning); font-weight: 700; }
     .vt-type.correios { background: #bae6fd; color: #075985; }
     .vt-header-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .vt-header-actions .eui-btn { min-height: 40px; padding: 0 16px; text-decoration: none; }
@@ -554,6 +556,18 @@ function marcadoresColeta(row) {
   return `<i class="fas fa-triangle-exclamation vt-liberacao-pendente" title="Coleta ainda não liberada. Liberada a partir de ${row.data_liberacao_label || '-'}."></i>`;
 }
 
+// Datas da coleta escritas na linha: antes a liberação só existia no title do
+// triângulo (some quando a hora passa e não aparece em tela de toque).
+function datasColeta(row) {
+  if (!row || String(row.tipo || '').toUpperCase() !== 'COLETA') return '';
+  const linhas = [];
+  if (row.criado_em) linhas.push(`<span>Solicitada em ${row.criado_em}</span>`);
+  if (row.data_liberacao_label) {
+    linhas.push(`<span class="${coletaAguardandoLiberacao(row) ? 'is-pendente' : ''}">Liberação: ${row.data_liberacao_label}</span>`);
+  }
+  return linhas.length ? `<div class="vt-datas">${linhas.join('')}</div>` : '';
+}
+
 // Tira o triângulo quando a hora chega, sem esperar o gestor recarregar a página.
 let assinaturaLiberacao = null;
 setInterval(() => {
@@ -577,7 +591,7 @@ function renderSolicitacaoRow(row) {
     <tr class="vt-solicitacao-row ${classeLinhaColeta(row)}" data-row-id="${row.id}">
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
       <td>${tipoBadge(row, typeClass, tipo)}</td>
-      <td>${doc}${marcadoresColeta(row)}</td>
+      <td>${doc}${marcadoresColeta(row)}${datasColeta(row)}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
       <td>${motorista}</td>
@@ -599,6 +613,8 @@ function renderSolicitacaoDetalhe(row) {
       <div class="vt-detail-item"><strong>Local</strong>${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}</div>
       <div class="vt-detail-item"><strong>${row.responsavel_origem_label || 'Responsável pela origem'}</strong>${row.responsavel_origem || '-'}</div>
       <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
+      <div class="vt-detail-item"><strong>Solicitada em</strong>${row.criado_em || '-'}</div>
+      ${row.data_liberacao_label ? `<div class="vt-detail-item"><strong>Liberação da coleta</strong>${row.data_liberacao_label}</div>` : ''}
       <div class="vt-detail-item"><strong>Observações</strong>${row.observacao_coleta || row.observacoes_logistica || row.observacoes_solicitante || '-'}</div>
     </div>
     ${row.tipo === 'COLETA' && oc ? estoqueDetalheHtml(oc) : ''}
@@ -890,7 +906,7 @@ function renderTable() {
         <tr class="${classeLinhaColeta(row)}">
           <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
           <td>${tipoBadge(row, typeClass, state.tab)}</td>
-          <td>${doc}${marcadoresColeta(row)}</td>
+          <td>${doc}${marcadoresColeta(row)}${datasColeta(row)}</td>
           <td>${row.parceiro_nome || '-'}</td>
           <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
           <td>${motorista}</td>
@@ -932,7 +948,7 @@ function renderTable() {
           <tr class="${classeLinhaColeta(row)}">
             <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
             <td>${tipoBadge(row, typeClass, state.tab)}</td>
-            <td>${doc}${marcadoresColeta(row)}</td>
+            <td>${doc}${marcadoresColeta(row)}${datasColeta(row)}</td>
             <td>${row.parceiro_nome || '-'}</td>
             <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
             <td>${motorista}</td>
