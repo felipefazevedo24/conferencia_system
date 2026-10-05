@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Logística | Saúde do estoque{% endblock %}
+
+{% block extra_head %}
+<style>
+    .se-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    #se-categorias { display: grid; gap: 22px; }
+    .se-tabela td.nowrap { white-space: nowrap; }
+    .se-nota { padding: 10px 14px; border-radius: var(--eui-radius); background: var(--eui-info-soft); color: var(--eui-info-soft-text); font-size: 12.5px; font-weight: 600; }
+    .se-cat h2 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--eui-muted); font-weight: 800; }
+    .se-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .se-card { text-align: left; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); background: var(--eui-surface); color: var(--eui-text);
+               padding: 14px 16px; cursor: pointer; display: grid; gap: 6px; box-shadow: var(--eui-shadow-xs); transition: var(--eui-trans); font: inherit; min-width: 0; }
+    .se-card:hover { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .se-card.is-active { border-color: var(--eui-primary); box-shadow: 0 0 0 3px var(--eui-focus-ring); }
+    .se-card__titulo { font-size: 13px; font-weight: 700; line-height: 1.3; }
+    .se-card__num { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .se-card__qtd { font-family: var(--eui-font-display); font-size: 26px; font-weight: 800; line-height: 1; }
+    .se-card__valor { font-size: 12.5px; color: var(--eui-text-soft); font-weight: 600; }
+    .se-card__rodape { font-size: 11px; color: var(--eui-muted); display: flex; justify-content: space-between; gap: 6px; }
+    .se-card.is-zero .se-card__qtd { color: var(--eui-success); }
+    .se-card.is-erro .se-card__qtd { color: var(--eui-muted); font-size: 14px; }
+    .se-trend-melhor { color: var(--eui-success); font-weight: 700; }
+    .se-trend-pior { color: var(--eui-danger); font-weight: 700; }
+    .se-detalhe { scroll-margin-top: 80px; }
+    .se-detalhe__head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .se-detalhe__head h3 { margin: 0; font-size: 17px; }
+    .se-acao { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); font-size: 12.5px; font-weight: 600; }
+    .se-ferramentas { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+    .se-ferramentas .eui-input { flex: 1 1 240px; max-width: 360px; min-height: 36px; }
+    .se-tabela-wrap { overflow: auto; max-height: 62vh; }
+    .se-tabela-wrap thead th { position: sticky; top: 0; z-index: 1; background: var(--eui-surface-2); }
+    .se-tabela td.num, .se-tabela th.num { text-align: right; white-space: nowrap; }
+    .se-sub { font-size: 11.5px; color: var(--eui-muted); }
+    .se-vazio { padding: 30px; text-align: center; color: var(--eui-muted); }
+    [data-theme="escuro"] .se-wrap .eui-input { background: var(--eui-surface); color: var(--eui-text); border-color: var(--eui-border-strong); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="se-wrap eui-scope">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-heart-pulse"></i> Saúde do estoque</h1>
+            <p class="eui-page-header__sub">O que está errado no cadastro e no processo de estoque do GRV, com o que fazer em cada caso.</p>
+        </div>
+        <button class="eui-btn eui-btn--ghost eui-btn--sm" id="se-atualizar"><i class="fas fa-rotate"></i> Atualizar tudo</button>
+    </header>
+
+    <div class="se-nota"><i class="fas fa-circle-info"></i> O Sync só lê o GRV: a correção é feita no próprio GRV. Cada consulta guarda uma foto do dia, e o cartão compara com a foto mais antiga dos últimos 30 dias.</div>
+
+    <div id="se-categorias"></div>
+
+    <section class="eui-card se-detalhe" id="se-detalhe" hidden>
+        <div class="eui-card__body">
+            <div class="se-detalhe__head">
+                <div>
+                    <h3 id="se-d-titulo"></h3>
+                    <div class="se-sub" id="se-d-desc"></div>
+                </div>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" id="se-fechar"><i class="fas fa-xmark"></i> Fechar</button>
+            </div>
+            <div class="se-acao" id="se-d-acao"></div>
+            <div class="se-ferramentas">
+                <input type="search" class="eui-input" id="se-filtro" placeholder="Filtrar nesta lista…" autocomplete="off">
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" id="se-csv"><i class="fas fa-file-csv"></i> Baixar CSV</button>
+                <span class="se-sub" id="se-d-info"></span>
+            </div>
+            <div class="se-tabela-wrap">
+                <table class="erp-table se-tabela"><thead id="se-d-thead"></thead><tbody id="se-d-tbody"></tbody></table>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CHECAGENS = {{ checagens | tojson }};
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const moeda = (v) => (v === null || v === undefined) ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+    const num = (v, casas = 2) => (v === null || v === undefined || v === "") ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: casas });
+    const dataBR = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—";
+    const resultados = {};
+    let aberta = null;
+
+    function formatar(valor, tipo) {
+        if (tipo === "moeda") return moeda(valor);
+        if (tipo === "qtd") return num(valor, 3);
+        if (tipo === "int") return num(valor, 0);
+        if (tipo === "pct") return valor === null || valor === undefined ? "—" : `${num(valor, 1)}%`;
+        if (tipo === "data") return dataBR(valor);
+        return esc(valor ?? "—");
+    }
+
+    // ---------------- Cartões ----------------
+    function montarCartoes() {
+        const porCategoria = {};
+        CHECAGENS.forEach((c) => { (porCategoria[c.categoria_label] = porCategoria[c.categoria_label] || []).push(c); });
+        $("se-categorias").innerHTML = Object.entries(porCategoria).map(([cat, lista]) => `
+            <section class="se-cat"><h2>${esc(cat)}</h2><div class="se-grid">
+                ${lista.map((c) => `<button type="button" class="se-card" id="se-card-${c.chave}" data-chave="${c.chave}" title="${esc(c.descricao)}">
+                    <span class="se-card__titulo">${esc(c.titulo)}</span>
+                    <span class="se-card__num"><span class="se-card__qtd">…</span><span class="se-card__valor"></span></span>
+                    <span class="se-card__rodape"><span class="se-card__trend"></span><span class="se-card__quando"></span></span>
+                </button>`).join("")}
+            </div></section>`).join("");
+        document.querySelectorAll(".se-card").forEach((el) => el.addEventListener("click", () => abrir(el.dataset.chave)));
+    }
+
+    function pintarCartao(chave) {
+        const el = $(`se-card-${chave}`), r = resultados[chave];
+        if (!el) return;
+        const qtdEl = el.querySelector(".se-card__qtd");
+        el.classList.remove("is-zero", "is-erro");
+        if (!r) { qtdEl.textContent = "…"; return; }
+        if (!r.disponivel) {
+            el.classList.add("is-erro");
+            qtdEl.textContent = "GRV indisponível";
+            el.querySelector(".se-card__valor").textContent = "";
+            el.querySelector(".se-card__trend").textContent = "";
+            return;
+        }
+        qtdEl.textContent = num(r.quantidade, 0);
+        el.classList.toggle("is-zero", !r.quantidade);
+        el.querySelector(".se-card__valor").textContent = r.valor !== null && r.valor !== undefined ? moeda(r.valor) : "";
+        const t = r.tendencia, trend = el.querySelector(".se-card__trend");
+        if (t) {
+            const dif = r.quantidade - t.quantidade;
+            trend.innerHTML = dif === 0 ? `igual a ${dataBR(t.dia)}`
+                : `<span class="${dif < 0 ? "se-trend-melhor" : "se-trend-pior"}">${dif < 0 ? "▼" : "▲"} ${num(Math.abs(dif), 0)}</span> desde ${dataBR(t.dia)}`;
+        } else {
+            trend.textContent = "primeira foto";
+        }
+        el.querySelector(".se-card__quando").textContent = r.desatualizado ? "cache (GRV fora)" : (r.consultado_em ? r.consultado_em.slice(11, 16) : "");
+    }
+
+    async function carregar(chave, forcar) {
+        try {
+            const resp = await fetch(`/api/logistica/saude-estoque/${encodeURIComponent(chave)}${forcar ? "?forcar=1" : ""}`, { credentials: "same-origin" });
+            resultados[chave] = resp.ok ? await resp.json() : { disponivel: false };
+        } catch (e) {
+            resultados[chave] = { disponivel: false };
+        }
+        pintarCartao(chave);
+        if (aberta === chave) renderDetalhe();
+    }
+
+    async function carregarTodas(forcar) {
+        const fila = CHECAGENS.map((c) => c.chave);
+        fila.forEach((ch) => { if (forcar) { delete resultados[ch]; pintarCartao(ch); } });
+        // Poucas por vez: cada uma é uma consulta no GRV.
+        const trabalhador = async () => { while (fila.length) await carregar(fila.shift(), forcar); };
+        await Promise.all([trabalhador(), trabalhador(), trabalhador()]);
+    }
+
+    // ---------------- Detalhe ----------------
+    function abrir(chave) {
+        aberta = chave;
+        document.querySelectorAll(".se-card").forEach((el) => el.classList.toggle("is-active", el.dataset.chave === chave));
+        $("se-filtro").value = "";
+        $("se-detalhe").hidden = false;
+        renderDetalhe();
+        $("se-detalhe").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function linhasFiltradas() {
+        const r = resultados[aberta];
+        const termo = $("se-filtro").value.trim().toLowerCase();
+        const linhas = (r && r.linhas) || [];
+        return termo ? linhas.filter((l) => Object.values(l).some((v) => String(v ?? "").toLowerCase().includes(termo))) : linhas;
+    }
+
+    function renderDetalhe() {
+        const c = CHECAGENS.find((x) => x.chave === aberta), r = resultados[aberta];
+        if (!c) return;
+        $("se-d-titulo").textContent = c.titulo;
+        $("se-d-desc").textContent = c.descricao;
+        $("se-d-acao").innerHTML = `<i class="fas fa-wrench"></i> O que fazer: ${esc(c.acao)}`;
+        const numericas = new Set(["moeda", "qtd", "int", "pct"]);
+        $("se-d-thead").innerHTML = `<tr>${c.colunas.map(([, rot, tipo]) => `<th class="${numericas.has(tipo) ? "num" : ""}">${esc(rot)}</th>`).join("")}</tr>`;
+        if (!r) { $("se-d-tbody").innerHTML = `<tr><td colspan="${c.colunas.length}" class="se-vazio">Carregando…</td></tr>`; $("se-d-info").textContent = ""; return; }
+        if (!r.disponivel) { $("se-d-tbody").innerHTML = `<tr><td colspan="${c.colunas.length}" class="se-vazio">${esc(r.erro || "GRV indisponível agora.")}</td></tr>`; $("se-d-info").textContent = ""; return; }
+        const linhas = linhasFiltradas();
+        $("se-d-tbody").innerHTML = linhas.length
+            ? linhas.map((l) => `<tr>${c.colunas.map(([campo, , tipo]) => `<td class="${numericas.has(tipo) ? "num" : (tipo === "data" || campo === "codigo_interno" ? "nowrap" : "")}">${formatar(l[campo], tipo)}</td>`).join("")}</tr>`).join("")
+            : `<tr><td colspan="${c.colunas.length}" class="se-vazio"><i class="fas fa-circle-check"></i> Nada aqui.</td></tr>`;
+        const corte = r.linhas_total > (r.linhas || []).length ? ` · mostrando as ${r.linhas.length} primeiras de ${num(r.linhas_total, 0)}` : "";
+        $("se-d-info").textContent = `${num(linhas.length, 0)} linha(s)${corte}${r.consultado_em ? ` · consultado às ${r.consultado_em.slice(11, 16)}` : ""}`;
+    }
+
+    function baixarCsv() {
+        const c = CHECAGENS.find((x) => x.chave === aberta);
+        if (!c) return;
+        const celula = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const corpo = linhasFiltradas().map((l) => c.colunas.map(([campo, , tipo]) => {
+            const v = l[campo];
+            return celula(typeof v === "number" && tipo !== "int" ? String(v).replace(".", ",") : v);
+        }).join(";"));
+        const csv = "﻿" + [c.colunas.map(([, rot]) => celula(rot)).join(";"), ...corpo].join("\r\n");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+        a.download = `saude-estoque-${c.chave}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    $("se-fechar").addEventListener("click", () => { $("se-detalhe").hidden = true; aberta = null; document.querySelectorAll(".se-card").forEach((el) => el.classList.remove("is-active")); });
+    $("se-filtro").addEventListener("input", renderDetalhe);
+    $("se-csv").addEventListener("click", baixarCsv);
+    $("se-atualizar").addEventListener("click", () => carregarTodas(true));
+
+    montarCartoes();
+    carregarTodas(false);
+})();
+</script>
+{% endblock %}

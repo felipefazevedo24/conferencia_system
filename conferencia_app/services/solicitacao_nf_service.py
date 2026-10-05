@@ -227,24 +227,30 @@ SQL_CLIENTE_BUSCAR = (
 
 SQL_CLIENTE_POR_CODIGO = _CLIENTE_SELECT + " where to_jsonb(c)->>'codigo' = %(codigo)s limit 1"
 
+# Disponível do depósito 1 (tproduto_deposito): tproduto.estoque_disponivel_uso
+# fica desatualizado. Mantém o nome da coluna que a tela já lê.
 SQL_MATERIAL_BUSCAR = """
-    select codigo_interno, nome, estoque_disponivel_uso,
-           coalesce(nullif(unidade, ''), nullif(unidade_compra, ''), '') as unidade,
-           coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
-    from public.tproduto
-    where cod_empresa = %(empresa)s
-      and (codigo_interno ilike %(termo)s or nome ilike %(termo)s)
-    order by nome
+    select p.codigo_interno, p.nome, coalesce(pd.qtde_disponivel, 0) as estoque_disponivel_uso,
+           coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), '') as unidade,
+           coalesce(nullif(p.localizacao_estoque, ''), '') as localizacao_estoque
+    from public.tproduto p
+    left join public.tproduto_deposito pd
+      on pd.cod_empresa = p.cod_empresa and pd.cod_produto = p.codigo and pd.cod_deposito = 1
+    where p.cod_empresa = %(empresa)s
+      and (p.codigo_interno ilike %(termo)s or p.nome ilike %(termo)s)
+    order by p.nome
     limit %(limit)s
 """
 
 SQL_MATERIAL_POR_CODIGO = """
-    select codigo_interno, nome, estoque_disponivel_uso,
-           coalesce(nullif(unidade, ''), nullif(unidade_compra, ''), '') as unidade,
-           coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
-    from public.tproduto
-    where cod_empresa = %(empresa)s
-      and lower(trim(codigo_interno)) = lower(trim(%(codigo)s))
+    select p.codigo_interno, p.nome, coalesce(pd.qtde_disponivel, 0) as estoque_disponivel_uso,
+           coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), '') as unidade,
+           coalesce(nullif(p.localizacao_estoque, ''), '') as localizacao_estoque
+    from public.tproduto p
+    left join public.tproduto_deposito pd
+      on pd.cod_empresa = p.cod_empresa and pd.cod_produto = p.codigo and pd.cod_deposito = 1
+    where p.cod_empresa = %(empresa)s
+      and lower(trim(p.codigo_interno)) = lower(trim(%(codigo)s))
     limit 1
 """
 

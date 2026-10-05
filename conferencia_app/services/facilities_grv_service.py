@@ -162,7 +162,7 @@ class FacilitiesGRVService:
         cfg = cfg or _config()
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             return []
-        filtro_saldo = "and coalesce(p.estoque, 0) > 0" if com_saldo else ""
+        filtro_saldo = "and coalesce(pd.qtde_total, 0) > 0" if com_saldo else ""
         sql = f"""
             select
                 p.cod_empresa,
@@ -173,14 +173,19 @@ class FacilitiesGRVService:
                 p.cod_familia,
                 coalesce(f.nome, '') as familia,
                 p.cod_grupo,
-                coalesce(p.estoque, 0) as saldo,
-                coalesce(p.estoque_reservado, 0) as reservado,
+                coalesce(pd.qtde_total, 0) as saldo,
+                coalesce(pd.qtde_reservada, 0) as reservado,
                 coalesce(p.localizacao_estoque, '') as localizacao_estoque,
                 coalesce(p.inativo, 0) as inativo
             from public.tproduto p
             left join public.tfamilia f
               on f.cod_empresa = p.cod_empresa
              and f.codigo = p.cod_familia
+            -- Saldo real do depósito 1: tproduto.estoque/estoque_reservado ficam desatualizados.
+            left join public.tproduto_deposito pd
+              on pd.cod_empresa = p.cod_empresa
+             and pd.cod_produto = p.codigo
+             and pd.cod_deposito = 1
             where p.cod_empresa = %s
               and p.cod_familia = %s
               and p.cod_grupo in (%s, %s)

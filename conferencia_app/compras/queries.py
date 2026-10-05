@@ -5,10 +5,56 @@ tnota_fiscal_item, tproduto, tstat_os).
 """
 
 # -------------------------------------------------------------------
+# Cobertura por estoque com alocação (CTE compartilhada; sem prefixo SQL_
+# para a bridge não expor como consulta avulsa).
+# O disponível do depósito 1 é consumido pelas linhas de OS abertas por
+# ordem de necessidade. Comparar cada linha sozinha contra o saldo dava
+# "coberto" para todas as OS que disputam o mesmo material (05/10/2026:
+# 317 linhas; Chapa A36 1/2" tinha 358 kg para 1.340 kg de demanda).
+# tproduto.estoque_disponivel_uso não serve: nulo em 8.095 produtos (todas
+# as chapas) e desatualizado em outros 2.602.
+# precisa = o que a linha ainda tira do estoque livre: pendente menos o que
+# já está reservado para ela; linha com OC/SC não tira nada.
+# -------------------------------------------------------------------
+_ALOCACAO_ESTOQUE_CTE = """
+estoque_alocado AS (
+    SELECT a.cod_empresa, a.cod_os, a.cod_os_aux, a.guid_linha, a.precisa, a.disponivel,
+           (a.precisa > 0 AND a.acumulado <= a.disponivel) AS coberto_estoque
+    FROM (
+        SELECT l.*,
+               SUM(l.precisa) OVER (
+                   PARTITION BY l.cod_empresa, l.cod_produto
+                   ORDER BY l.dt_necessidade NULLS LAST, l.dt_entrada, l.cod_os, l.cod_os_aux, l.guid_linha
+                   ROWS UNBOUNDED PRECEDING) AS acumulado
+        FROM (
+            SELECT lm.cod_empresa, lm.cod_os, lm.cod_os_aux, lm.guid_linha, lm.cod_produto,
+                   lm.dt_necessidade, os.dt_entrada,
+                   COALESCE(pd.qtde_disponivel, 0) AS disponivel,
+                   CASE WHEN EXISTS (
+                            SELECT 1 FROM public.tcom_aux_os x
+                            WHERE x.cod_empresa = lm.cod_empresa AND x.cod_os = lm.cod_os
+                              AND x.cod_os_aux = lm.cod_os_aux AND x.cod_produto = lm.cod_produto
+                              AND COALESCE(x.cancelado, 0) = 0)
+                        THEN 0
+                        ELSE GREATEST(COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0) - COALESCE(lm.qtde_reservada,0), 0)
+                   END AS precisa
+            FROM public.tlis_mat lm
+            JOIN public.tos os ON os.cod_empresa = lm.cod_empresa AND os.codigo = lm.cod_os
+            LEFT JOIN public.tproduto_deposito pd
+                   ON pd.cod_empresa = lm.cod_empresa AND pd.cod_produto = lm.cod_produto AND pd.cod_deposito = 1
+            WHERE lm.cod_empresa = %(cod_empresa)s
+              AND COALESCE(os.cancelado, 0) = 0
+              AND COALESCE(os.concluido, 0) = 0
+        ) l
+    ) a
+)"""
+
+# -------------------------------------------------------------------
 # Lista materiais de uma OS espec?fica (filtro pelo n_os vis?vel)
 # -------------------------------------------------------------------
 SQL_MATERIAIS_POR_OS = """
-WITH oc_sc AS (
+WITH """ + _ALOCACAO_ESTOQUE_CTE + """,
+oc_sc AS (
     SELECT cod_empresa,
            cod_os,
            cod_os_aux,
@@ -52,8 +98,9 @@ SELECT
         WHEN COALESCE(lm.qtde_entregue,0) >= COALESCE(lm.qtde,0) THEN 'ENTREGUE'
         WHEN oc.n_oc IS NOT NULL THEN 'OC EMITIDA'
         WHEN oc.n_sc IS NOT NULL THEN 'SOLICITACAO'
-        WHEN COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0) <= COALESCE(p.estoque_disponivel_uso,0) THEN 'COBERTO ESTOQUE'
+        -- Reserva antes da cobertura: linha já reservada não disputa o saldo livre.
         WHEN COALESCE(lm.qtde_reservada,0) >= COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0) THEN 'RESERVADO'
+        WHEN al.coberto_estoque THEN 'COBERTO ESTOQUE'
         ELSE 'A COMPRAR'
     END AS status_material,
     COALESCE(orc.dt_aprovacao, os.dt_aprovacao, os.dt_entrada)::timestamp AS engenharia_inicio,
@@ -65,6 +112,8 @@ SELECT
 FROM public.tos os
 INNER JOIN public.tlis_mat lm ON lm.cod_empresa = os.cod_empresa AND lm.cod_os = os.codigo
 LEFT JOIN public.tproduto p ON p.cod_empresa = lm.cod_empresa AND p.codigo = lm.cod_produto
+LEFT JOIN estoque_alocado al ON al.cod_empresa = lm.cod_empresa AND al.cod_os = lm.cod_os
+                            AND al.cod_os_aux = lm.cod_os_aux AND al.guid_linha = lm.guid_linha
 LEFT JOIN public.tstat_os st ON st.cod_empresa = os.cod_empresa AND st.codigo = os.cod_status
 LEFT JOIN oc_sc oc ON oc.cod_empresa = lm.cod_empresa AND oc.cod_os = lm.cod_os AND oc.cod_os_aux = lm.cod_os_aux AND oc.cod_produto = lm.cod_produto
 LEFT JOIN orc_link ol ON ol.cod_empresa = os.cod_empresa AND ol.cod_os = os.codigo
@@ -763,7 +812,8 @@ ORDER BY qtd DESC;
 # período entre dt_entrada e dt_prevista (25% / 50% / 100%).
 # -------------------------------------------------------------------
 SQL_OS_PAINEL = """
-WITH tp AS (
+WITH """ + _ALOCACAO_ESTOQUE_CTE + """,
+tp AS (
     -- tos_aux agregado: tipo de molde, contagens de lista_materiais_ok
     -- (usado para 'Com lista' / 'sem lista') e processo_produtivo_ok
     -- (usado para distinguir 'sem processos' / 'não' em producao).
@@ -798,18 +848,20 @@ disp AS (
     -- da lista de materiais cobre a necessidade liquida (qtde - entregue -
     -- compra ja contratada). Quando TODO item esta coberto, o ERP entende
     -- que nao precisa gerar OC para essa OS.
-    -- Aderencia observada: 73 pct das OS DISPONIVEL nao tem OC ativa.
+    -- Aderencia observada: 73 pct das OS DISPONIVEL nao tem OC ativa
+    -- (medida com tproduto.estoque_disponivel_uso; desde 05/10/2026 a
+    -- cobertura vem da alocação do depósito 1 - ver estoque_alocado).
     SELECT lm.cod_empresa, lm.cod_os,
            COUNT(*)                                              AS n_itens_lm,
            COUNT(*) FILTER (
-               WHERE COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0)
-                                         - COALESCE(lm.qtde_compra,0)
-                     > COALESCE(p.estoque_disponivel_uso,0)
+               WHERE COALESCE(al.precisa, 0) > 0 AND NOT COALESCE(al.coberto_estoque, FALSE)
            )                                                     AS n_itens_descobertos
     FROM   public.tlis_mat lm
-    LEFT   JOIN public.tproduto p
-           ON p.cod_empresa = lm.cod_empresa
-          AND p.codigo_interno = lm.cod_interno
+    LEFT   JOIN estoque_alocado al
+           ON al.cod_empresa = lm.cod_empresa
+          AND al.cod_os      = lm.cod_os
+          AND al.cod_os_aux  = lm.cod_os_aux
+          AND al.guid_linha  = lm.guid_linha
     GROUP  BY lm.cod_empresa, lm.cod_os
 ),
 -- Liga OS ao orçamento que a gerou (cod_orcamento aponta para torcamento.codigo).
@@ -1423,7 +1475,8 @@ LIMIT %(limite)s;
 
 
 SQL_VISIBILITY_DETALHADA = """
-WITH oc_sc AS (
+WITH """ + _ALOCACAO_ESTOQUE_CTE + """,
+oc_sc AS (
     SELECT cod_empresa,
            cod_os,
            cod_os_aux,
@@ -1449,7 +1502,7 @@ WITH oc_sc AS (
         COALESCE(lm.qtde, 0)                         AS qtde_necessaria,
         COALESCE(lm.qtde_entregue, 0)                AS qtde_entregue,
         (COALESCE(lm.qtde, 0) - COALESCE(lm.qtde_entregue, 0)) AS qtde_pendente,
-        COALESCE(p.estoque_disponivel_uso, 0)        AS estoque_disponivel_uso,
+        COALESCE(pd.qtde_disponivel, 0)              AS estoque_disponivel_uso,
         oc.n_sc,
         oc.n_oc,
         CASE
@@ -1459,12 +1512,12 @@ WITH oc_sc AS (
                  THEN 'OC EMITIDA'
             WHEN oc.n_sc IS NOT NULL
                  THEN 'SOLICITACAO'
-            WHEN COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0)
-                 <= COALESCE(p.estoque_disponivel_uso,0)
-                 THEN 'COBERTO ESTOQUE'
+            -- Reserva antes da cobertura: linha já reservada não disputa o saldo livre.
             WHEN COALESCE(lm.qtde_reservada,0)
                  >= COALESCE(lm.qtde,0) - COALESCE(lm.qtde_entregue,0)
                  THEN 'RESERVADO'
+            WHEN al.coberto_estoque
+                 THEN 'COBERTO ESTOQUE'
             ELSE 'A COMPRAR'
         END                                          AS status_material,
         (CASE %(data_campo)s
@@ -1479,6 +1532,16 @@ WITH oc_sc AS (
     LEFT  JOIN public.tproduto p
             ON p.cod_empresa  = lm.cod_empresa
            AND p.codigo       = lm.cod_produto
+    -- Saldo real do depósito 1; tproduto.estoque_disponivel_uso fica desatualizado.
+    LEFT  JOIN public.tproduto_deposito pd
+            ON pd.cod_empresa = lm.cod_empresa
+           AND pd.cod_produto = lm.cod_produto
+           AND pd.cod_deposito = 1
+    LEFT  JOIN estoque_alocado al
+            ON al.cod_empresa = lm.cod_empresa
+           AND al.cod_os      = lm.cod_os
+           AND al.cod_os_aux  = lm.cod_os_aux
+           AND al.guid_linha  = lm.guid_linha
     LEFT  JOIN oc_sc           oc
             ON oc.cod_empresa = lm.cod_empresa
            AND oc.cod_os      = lm.cod_os
