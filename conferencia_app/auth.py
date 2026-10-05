@@ -53,6 +53,8 @@ PERMISSION_CATALOG = {
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
+    "PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento (ver o painel)",
+    "MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento > Tratar (o que será feito e situação)",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
     "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
@@ -150,6 +152,9 @@ BASE_ROLE_PERMISSIONS = {
     "Compras": {
         "PAGE_UPLOAD",
         "PAGE_COMPRAS_HOMOLOGACAO",
+        # Painel das divergências da conferência física: Compras vê e trata.
+        "PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO",
+        "MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO",
         "PAGE_XML_AUDITOR",
         "PAGE_COMPRAS_CPS",
         "PAGE_PRODUCAO",

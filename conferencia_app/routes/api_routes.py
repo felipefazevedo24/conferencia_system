@@ -1590,6 +1590,30 @@ def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota],
             }
         )
 
+    try:
+        from ..services.ocorrencia_recebimento_service import ocorrencia_da_nota, ocorrencia_para_dict
+
+        ocorrencia = ocorrencia_da_nota(numero_nota, str(itens[0].cnpj_emitente or "") if itens else "")
+        if ocorrencia:
+            oc = ocorrencia_para_dict(ocorrencia)
+            partes = [oc["status_label"]]
+            if oc["acao_label"]:
+                partes.append(oc["acao_label"])
+            if oc["responsavel"]:
+                partes.append(f"responsável {oc['responsavel']}")
+            descricao = " · ".join(partes) + (f". Último comentário: {oc['ultimo_comentario']}" if oc["ultimo_comentario"] else ".")
+            pendencias.append(
+                {
+                    "tipo": "tratativa_compras",
+                    "titulo": "Tratativa de Compras",
+                    "severidade": "info" if oc["finalizada"] else "warning",
+                    "descricao": descricao,
+                    "ocorrencia_id": oc["id"],
+                }
+            )
+    except Exception:
+        current_app.logger.exception("Falha ao ler a tratativa de Compras da NF %s", numero_nota)
+
     if itens and bool(itens[0].remessa) and _remessa_exige_codigo_material(itens):
         pendencias.append(
             {
@@ -6179,6 +6203,14 @@ def validar():
         payload["enderecamento_ids"] = enderecamento_ids
 
     if forcar_pendencia and total_divergencias > 0:
+        # Abre (ou complementa) a ocorrência para Compras tratar e avisa no
+        # Teams. Nunca derruba a conferência: falha fica só no log.
+        from ..services.ocorrencia_recebimento_service import abrir_ocorrencia, itens_da_conferencia
+
+        abrir_ocorrencia(
+            numero_nota, itens_da_conferencia(numero_nota, tentativa_numero), user, "Conferencia",
+            cnpj_emitente=str(itens_db[0].cnpj_emitente or "") if itens_db else "",
+        )
         payload["pendencia_confirmada"] = True
         payload["instrucoes_pendencia"] = {
             "titulo": "Recebimento com pendência registrado",
@@ -6359,6 +6391,14 @@ def solicitar_devolucao_recebimento():
     _release_lock(numero_nota)
     db.session.commit()
 
+    # Recusa também é divergência: Compras fica sabendo no mesmo grupo do Teams.
+    from ..services.ocorrencia_recebimento_service import abrir_ocorrencia
+
+    abrir_ocorrencia(
+        numero_nota,
+        [{"descricao": f"Recusa total da mercadoria: {motivo}", "motivo_tipo": "Recusa total", "registrado_por": usuario}],
+        usuario, "Recusa", cnpj_emitente=str(nota_db.cnpj_emitente or ""),
+    )
     return jsonify({"sucesso": True, "msg": "Solicitação enviada para aprovação admin."})
 
 
@@ -7644,7 +7684,7 @@ def conferencia_divergencia_produto():
             it.inicio_conferencia = agora
         it.fim_conferencia = agora
 
-    db.session.add(LogDivergencia(
+    log_divergencia = LogDivergencia(
         numero_nota=numero_nota,
         item_descricao="Divergência de produto",
         qtd_esperada=0,
@@ -7654,7 +7694,8 @@ def conferencia_divergencia_produto():
         motivo_tipo="Divergência de produto",
         destino_fisico="Documento de entrada",
         tentativa_numero=1,
-    ))
+    )
+    db.session.add(log_divergencia)
     try:
         db.session.add(LogEventoFiscalNota(
             numero_nota=numero_nota,
@@ -7667,6 +7708,14 @@ def conferencia_divergencia_produto():
         current_app.logger.exception("Falha ao registrar evento de divergencia de produto")
 
     db.session.commit()
+    from ..services.ocorrencia_recebimento_service import abrir_ocorrencia
+
+    abrir_ocorrencia(
+        numero_nota,
+        [{"log_divergencia_id": log_divergencia.id, "descricao": f"Divergência de produto: {motivo}",
+          "motivo_tipo": "Divergência de produto", "destino_fisico": "Documento de entrada", "registrado_por": user}],
+        user, "DivergenciaProduto", cnpj_emitente=str(itens[0].cnpj_emitente or ""),
+    )
     return jsonify({"sucesso": True})
 
 

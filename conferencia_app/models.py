@@ -4172,6 +4172,86 @@ class DivergenciaPedidoAprovacao(db.Model):
     cnpj_emitente = db.Column(db.String(14), index=True)
 
 
+class OcorrenciaRecebimento(db.Model):
+    """Divergência encontrada na conferência física, tratada por Compras.
+
+    Abre sozinha quando o conferente grava a conferência com divergência
+    (falta, sobra, avaria...), registra divergência de produto ou recusa a
+    mercadoria - e avisa no mesmo grupo do Teams da divergência XML x pedido.
+    Compras diz o que será feito (acao) e vai atualizando a situação (status);
+    cada mudança vira um OcorrenciaRecebimentoEvento (linha do tempo).
+
+    Se Compras decide "Devolver totalmente", a ocorrência passa para
+    AguardandoFiscal: o Fiscal informa a recusa da NF ou a NF de devolução
+    emitida, e só então ela fecha. Não bloqueia o lançamento da NF.
+
+    Uma ocorrência aberta por NF (numero + CNPJ): nova divergência na mesma NF
+    (recontagem depois de estorno) entra como item na ocorrência aberta."""
+
+    __tablename__ = "ocorrencia_recebimento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    cnpj_emitente = db.Column(db.String(14), index=True)
+    fornecedor = db.Column(db.String(160))
+    pedido_compra = db.Column(db.String(200))
+    origem = db.Column(db.String(30), nullable=False, default="Conferencia")  # Conferencia | DivergenciaProduto | Recusa
+    # Aberta | EmTratativa | AguardandoFornecedor | AguardandoFiscal | Resolvida | Cancelada
+    status = db.Column(db.String(30), nullable=False, default="Aberta", index=True)
+    # Reposicao | NotaDebito | DevolucaoTotal | AceitarDiferenca | Outro (vazio até Compras decidir)
+    acao = db.Column(db.String(30))
+    responsavel = db.Column(db.String(100))
+    previsao = db.Column(db.Date)
+    aberta_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    aberta_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    resolvida_em = db.Column(db.DateTime)
+    ultimo_lembrete_em = db.Column(db.DateTime)
+    # Etapa do Fiscal (só quando acao == DevolucaoTotal)
+    fiscal_tipo = db.Column(db.String(20))  # Recusa | NFDevolucao
+    fiscal_numero_nf = db.Column(db.String(30))
+    fiscal_data = db.Column(db.Date)
+    fiscal_observacao = db.Column(db.String(500))
+    fiscal_por = db.Column(db.String(100))
+    fiscal_em = db.Column(db.DateTime)
+
+    itens = db.relationship("OcorrenciaRecebimentoItem", backref="ocorrencia", cascade="all, delete-orphan",
+                            order_by="OcorrenciaRecebimentoItem.id")
+    eventos = db.relationship("OcorrenciaRecebimentoEvento", backref="ocorrencia", cascade="all, delete-orphan",
+                              order_by="OcorrenciaRecebimentoEvento.id")
+
+
+class OcorrenciaRecebimentoItem(db.Model):
+    __tablename__ = "ocorrencia_recebimento_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ocorrencia_id = db.Column(db.Integer, db.ForeignKey("ocorrencia_recebimento.id"), nullable=False, index=True)
+    log_divergencia_id = db.Column(db.Integer, index=True)  # LogDivergencia de origem (evita duplicar)
+    descricao = db.Column(db.String(300))
+    qtd_esperada = db.Column(db.Float)
+    qtd_contada = db.Column(db.Float)
+    motivo_tipo = db.Column(db.String(80))
+    destino_fisico = db.Column(db.String(80))
+    evidencia_path = db.Column(db.String(300))
+    registrado_por = db.Column(db.String(100))
+    registrado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class OcorrenciaRecebimentoEvento(db.Model):
+    __tablename__ = "ocorrencia_recebimento_evento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ocorrencia_id = db.Column(db.Integer, db.ForeignKey("ocorrencia_recebimento.id"), nullable=False, index=True)
+    em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    usuario = db.Column(db.String(100))
+    tipo = db.Column(db.String(20), nullable=False)  # Abertura | NovosItens | Atualizacao | Fiscal | Lembrete
+    status_anterior = db.Column(db.String(30))
+    status_novo = db.Column(db.String(30))
+    acao = db.Column(db.String(30))
+    comentario = db.Column(db.String(1000))
+
+
 class DivergenciaVinculoAjuste(db.Model):
     """Historico dos ajustes de vinculo NF x pedido feitos por Compras na tela
     de aprovacao da divergencia (/aprovar-divergencia/<token>). Uma linha por

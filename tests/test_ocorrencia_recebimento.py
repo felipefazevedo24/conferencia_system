@@ -1,0 +1,233 @@
+"""Divergências de recebimento (Compras > Divergências de recebimento).
+
+A conferência com pendência abre a ocorrência e avisa no Teams; Compras diz o
+que será feito; devolução total passa pelo Fiscal; parada gera lembrete.
+Teams sempre com patch - teste não pode depender de rede."""
+from datetime import timedelta
+from unittest.mock import patch
+
+from conferencia_app.extensions import db
+from conferencia_app.models import ItemNota, OcorrenciaRecebimento
+from conferencia_app.services import ocorrencia_recebimento_service as svc
+from conferencia_app.tempo import agora_br
+from tests.test_app import build_test_app, login_admin, set_logged_user
+
+TEAMS = "conferencia_app.services.teams_service.notificar_ocorrencia_recebimento"
+
+
+def _nota(app, numero="7001", qtd=10.0):
+    with app.app_context():
+        item = ItemNota(numero_nota=numero, fornecedor="Aços Brasil", cnpj_emitente="12345678000199",
+                        codigo="A1", descricao="Chapa A36", qtd_real=qtd, status="Pendente", pedido_compra="4500")
+        db.session.add(item)
+        db.session.commit()
+        return item.id
+
+
+def _conferir_com_falta(client, item_id, numero="7001", contado="7"):
+    return client.post("/validar", json={
+        "nota": numero,
+        "contagens": {str(item_id): contado},
+        "forcar_pendencia": True,
+        "motivos_itens": {str(item_id): "Falta de item"},
+        "motivos_tipos": {str(item_id): "Falta de item"},
+        "destinos_itens": {str(item_id): "Quarentena"},
+        "checklist": {"lacre_ok": True, "volumes_ok": True, "avaria_visual": True, "etiqueta_ok": True},
+    })
+
+
+def _abrir(app):
+    """Conferência com falta de 3 -> ocorrência aberta. Devolve o id."""
+    client = app.test_client()
+    login_admin(client)
+    item_id = _nota(app)
+    with patch(TEAMS) as teams:
+        resp = _conferir_com_falta(client, item_id)
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["pendencia_confirmada"] is True
+    with app.app_context():
+        oc = OcorrenciaRecebimento.query.one()
+        return client, oc.id, teams
+
+
+def test_conferencia_com_pendencia_abre_ocorrencia_e_avisa_no_teams(tmp_path):
+    app = build_test_app(tmp_path)
+    _client, oc_id, teams = _abrir(app)
+
+    with app.app_context():
+        oc = db.session.get(OcorrenciaRecebimento, oc_id)
+        assert (oc.numero_nota, oc.fornecedor, oc.pedido_compra, oc.origem, oc.status) == ("7001", "Aços Brasil", "4500", "Conferencia", "Aberta")
+        assert len(oc.itens) == 1
+        assert (oc.itens[0].qtd_esperada, oc.itens[0].qtd_contada) == (10.0, 7.0)
+        assert [e.tipo for e in oc.eventos] == ["Abertura"]
+
+    teams.assert_called_once()
+    assert teams.call_args.args[0] == "aberta"
+    kwargs = teams.call_args.kwargs
+    assert kwargs["numero_nota"] == "7001"
+    assert "faltam 3" in kwargs["linhas"][0]
+
+
+def test_nova_conferencia_da_mesma_nf_junta_na_ocorrencia_aberta(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+    with app.app_context():
+        item_id = ItemNota.query.filter_by(numero_nota="7001").one().id
+        ItemNota.query.filter_by(numero_nota="7001").update({"status": "Pendente"})
+        db.session.commit()
+
+    with patch(TEAMS) as teams:
+        resp = _conferir_com_falta(client, item_id, contado="8")
+    assert resp.status_code == 200, resp.get_json()
+
+    with app.app_context():
+        assert OcorrenciaRecebimento.query.count() == 1
+        oc = db.session.get(OcorrenciaRecebimento, oc_id)
+        assert len(oc.itens) == 2
+        assert [e.tipo for e in oc.eventos] == ["Abertura", "NovosItens"]
+    assert teams.call_args.args[0] == "novos_itens"
+
+
+def test_abrir_ocorrencia_nao_derruba_quando_teams_falha(tmp_path):
+    app = build_test_app(tmp_path)
+    _nota(app)
+    with app.app_context(), patch(TEAMS, side_effect=RuntimeError("webhook fora")):
+        oc = svc.abrir_ocorrencia("7001", [{"descricao": "X", "qtd_esperada": 1, "qtd_contada": 0}], "ana")
+        assert oc is not None and oc.status == "Aberta"
+
+
+def test_compras_atualiza_tratativa_e_resolve(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+
+    with patch(TEAMS) as teams:
+        resp = client.post(f"/api/compras/divergencias-recebimento/{oc_id}/atualizar", json={
+            "acao": "Reposicao", "status": "AguardandoFornecedor", "responsavel": "Bruna",
+            "previsao": "2026-10-10", "comentario": "Fornecedor envia as 3 peças na próxima coleta",
+        })
+    assert resp.status_code == 200, resp.get_json()
+    dados = resp.get_json()
+    assert (dados["status"], dados["acao"], dados["responsavel"], dados["previsao"]) == ("AguardandoFornecedor", "Reposicao", "Bruna", "2026-10-10")
+    assert dados["eventos"][-1]["comentario"].startswith("Fornecedor envia")
+    teams.assert_not_called()  # só avisa em devolução total e no encerramento
+
+    sem_mudanca = client.post(f"/api/compras/divergencias-recebimento/{oc_id}/atualizar", json={})
+    assert sem_mudanca.status_code == 400
+
+    with patch(TEAMS) as teams:
+        resp = client.post(f"/api/compras/divergencias-recebimento/{oc_id}/atualizar", json={"status": "Resolvida", "comentario": "Chegou"})
+    assert resp.get_json()["finalizada"] is True
+    assert teams.call_args.args[0] == "encerrada"
+
+    encerrada = client.post(f"/api/compras/divergencias-recebimento/{oc_id}/atualizar", json={"comentario": "de novo"})
+    assert encerrada.status_code == 400
+
+
+def test_regras_de_validacao_da_tratativa(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+    url = f"/api/compras/divergencias-recebimento/{oc_id}/atualizar"
+
+    assert client.post(url, json={"acao": "Outro"}).status_code == 400  # "Outro" sem comentário
+    assert client.post(url, json={"status": "Cancelada", "comentario": "x"}).status_code == 400  # cancelar sem motivo
+    assert client.post(url, json={"status": "Inventado"}).status_code == 400
+    assert client.post(url, json={"previsao": "10/10/2026"}).status_code == 400
+    assert client.get("/api/compras/divergencias-recebimento/999").status_code == 404
+
+
+def test_devolucao_total_passa_pelo_fiscal(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+    base = f"/api/compras/divergencias-recebimento/{oc_id}"
+
+    # Fiscal antes da decisão: não há etapa.
+    assert client.post(f"{base}/fiscal", json={"tipo": "Recusa"}).status_code == 400
+
+    with patch(TEAMS) as teams:
+        resp = client.post(f"{base}/atualizar", json={"acao": "DevolucaoTotal", "status": "EmTratativa", "comentario": "Material fora de especificação"})
+    assert resp.get_json()["status"] == "AguardandoFiscal"
+    assert teams.call_args.args[0] == "aguardando_fiscal"
+
+    # Compras não encerra devolução total.
+    assert client.post(f"{base}/atualizar", json={"status": "Resolvida", "comentario": "ok"}).status_code == 400
+    # NF de devolução exige o número.
+    assert client.post(f"{base}/fiscal", json={"tipo": "NFDevolucao"}).status_code == 400
+
+    with patch(TEAMS) as teams:
+        resp = client.post(f"{base}/fiscal", json={"tipo": "NFDevolucao", "numero_nf": "12345", "data": "2026-10-06", "observacao": "Saiu na coleta"})
+    assert resp.status_code == 200, resp.get_json()
+    dados = resp.get_json()
+    assert dados["status"] == "Resolvida"
+    assert (dados["fiscal"]["tipo"], dados["fiscal"]["numero_nf"], dados["fiscal"]["data"]) == ("NFDevolucao", "12345", "2026-10-06")
+    assert dados["eventos"][-1]["tipo"] == "Fiscal"
+    assert teams.call_args.args[0] == "encerrada"
+
+
+def test_compras_pode_desistir_da_devolucao_total(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+    url = f"/api/compras/divergencias-recebimento/{oc_id}/atualizar"
+    with patch(TEAMS):
+        client.post(url, json={"acao": "DevolucaoTotal", "comentario": "devolver"})
+        resp = client.post(url, json={"acao": "NotaDebito", "comentario": "Fornecedor aceitou abater"})
+    assert resp.get_json()["status"] == "EmTratativa"
+
+
+def test_lembrete_so_para_ocorrencia_parada(tmp_path):
+    app = build_test_app(tmp_path)
+    _abrir(app)
+    with app.app_context():
+        with patch(TEAMS) as teams:
+            assert svc.enviar_lembretes(dias=3)["enviados"] == 0
+        teams.assert_not_called()
+
+        daqui_4_dias = agora_br() + timedelta(days=4)
+        with patch(TEAMS) as teams:
+            resultado = svc.enviar_lembretes(agora=daqui_4_dias, dias=3)
+        assert resultado["enviados"] == 1
+        assert teams.call_args.args[0] == "lembrete"
+        assert teams.call_args.kwargs["sync"] is True
+        # Não repete no dia seguinte; repete depois de mais 3 dias.
+        with patch(TEAMS):
+            assert svc.enviar_lembretes(agora=daqui_4_dias + timedelta(days=1), dias=3)["enviados"] == 0
+            assert svc.enviar_lembretes(agora=daqui_4_dias + timedelta(days=3), dias=3)["enviados"] == 1
+
+
+def test_painel_renderiza_e_respeita_permissoes(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+
+    pagina = client.get("/compras/divergencias-recebimento")
+    assert pagina.status_code == 200
+    html = pagina.get_data(as_text=True)
+    assert "Divergências de recebimento" in html
+    assert "const PODE_TRATAR = true" in html
+    assert 'href="/compras/divergencias-recebimento"' in html  # link no menu
+
+    lista = client.get("/api/compras/divergencias-recebimento?abertas=1").get_json()
+    assert [o["id"] for o in lista["ocorrencias"]] == [oc_id]
+    assert lista["contagem"]["Aberta"] == 1
+    assert client.get("/api/compras/divergencias-recebimento?busca=Aços").get_json()["ocorrencias"]
+    assert not client.get("/api/compras/divergencias-recebimento?busca=zzz").get_json()["ocorrencias"]
+
+    # Portaria não vê o painel.
+    outro = app.test_client()
+    set_logged_user(outro, "portaria_x", "Portaria")
+    assert outro.get("/api/compras/divergencias-recebimento").status_code in (302, 403)
+
+
+def test_documento_entrada_mostra_tratativa_de_compras(tmp_path):
+    app = build_test_app(tmp_path)
+    client, oc_id, _ = _abrir(app)
+    with patch(TEAMS):
+        client.post(f"/api/compras/divergencias-recebimento/{oc_id}/atualizar",
+                    json={"acao": "Reposicao", "responsavel": "Bruna", "comentario": "Cobrado"})
+    with app.app_context():
+        from conferencia_app.routes.api_routes import _build_documento_entrada_pendencias
+
+        itens = ItemNota.query.filter_by(numero_nota="7001").all()
+        pendencias = _build_documento_entrada_pendencias("7001", itens, "4500")
+    tratativa = next(p for p in pendencias if p["tipo"] == "tratativa_compras")
+    assert "Cobrar reposição do fornecedor" in tratativa["descricao"]
+    assert "Bruna" in tratativa["descricao"]
+    assert "Cobrado" in tratativa["descricao"]

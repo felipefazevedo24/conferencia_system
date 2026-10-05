@@ -311,6 +311,102 @@ def notificar_divergencia_pedido(
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
 
 
+_OCORRENCIA_CABECALHO = {
+    # evento: (faixa, estilo do container, cor do texto, texto do botão)
+    "aberta": ("📦 DIVERGÊNCIA NA CONFERÊNCIA FÍSICA", "attention", "Attention", "Abrir tratativa"),
+    "novos_itens": ("📦 NOVA DIVERGÊNCIA NA MESMA NF", "attention", "Attention", "Abrir tratativa"),
+    "aguardando_fiscal": ("↩️ DEVOLUÇÃO TOTAL — AGUARDANDO FISCAL", "warning", "Warning", "Informar recusa ou NF de devolução"),
+    "encerrada": ("✅ DIVERGÊNCIA DE RECEBIMENTO ENCERRADA", "good", "Good", "Ver tratativa"),
+    "lembrete": ("⏰ DIVERGÊNCIA SEM ATUALIZAÇÃO", "warning", "Warning", "Atualizar tratativa"),
+}
+
+
+def notificar_ocorrencia_recebimento(
+    evento: str,
+    *,
+    numero_nota: str,
+    fornecedor: str,
+    pedido_compra: str = "",
+    origem: str = "",
+    situacao: str = "",
+    acao: str = "",
+    responsavel: str = "",
+    ultimo_comentario: str = "",
+    dias_sem_atualizacao: int = 0,
+    linhas: list | None = None,
+    link: str = "",
+    sync: bool = False,
+    env_var: str = "TEAMS_WEBHOOK_DIVERGENCIA_URL",
+    config_key: str = "webhook_divergencia_pedido",
+) -> bool | None:
+    """Divergência da conferência física tratada por Compras - no MESMO grupo
+    (webhook) da divergência XML x pedido, com faixa própria para não
+    confundir as duas. Eventos: aberta, novos_itens, aguardando_fiscal,
+    encerrada, lembrete."""
+    app = current_app._get_current_object()
+    url = _webhook_url(env_var, config_key)
+    if not url:
+        app.logger.info("TEAMS: webhook de divergencia nao configurado; ocorrencia de recebimento ignorada (NF %s).", numero_nota)
+        return False if sync else None
+
+    faixa, estilo, cor, botao = _OCORRENCIA_CABECALHO.get(evento, _OCORRENCIA_CABECALHO["aberta"])
+    payload = _card_payload("", "", None, mencionar_canal=True)
+    card_content = payload["attachments"][0]["content"]
+    corpo = [card_content["body"][0]]
+    corpo.append({
+        "type": "Container", "style": estilo, "bleed": True,
+        "items": [
+            {"type": "TextBlock", "text": faixa, "weight": "Bolder", "size": "Small", "color": cor, "spacing": "None"},
+            {"type": "TextBlock", "text": f"NF {numero_nota}", "weight": "Bolder", "size": "ExtraLarge", "spacing": "Small", "wrap": True},
+            {"type": "TextBlock", "text": fornecedor or "Fornecedor não identificado", "isSubtle": True, "spacing": "None", "wrap": True},
+        ],
+    })
+    fatos = []
+    if pedido_compra:
+        fatos.append({"title": "Pedido de compra", "value": str(pedido_compra)})
+    if origem and evento in ("aberta", "novos_itens"):
+        fatos.append({"title": "Origem", "value": origem})
+    if situacao:
+        fatos.append({"title": "Situação", "value": situacao})
+    if acao:
+        fatos.append({"title": "O que será feito", "value": acao})
+    if responsavel:
+        fatos.append({"title": "Responsável", "value": responsavel})
+    if evento == "lembrete":
+        fatos.append({"title": "Sem atualização há", "value": f"{dias_sem_atualizacao} dia(s)"})
+    if fatos:
+        corpo.append({"type": "FactSet", "facts": fatos, "spacing": "Medium"})
+    if evento == "aguardando_fiscal":
+        corpo.append({"type": "TextBlock", "wrap": True, "spacing": "Medium",
+                      "text": "Compras decidiu devolver a NF inteira. Fiscal: informe a recusa da NF ou a NF de devolução emitida."})
+    if linhas and evento in ("aberta", "novos_itens"):
+        corpo.append({"type": "TextBlock", "text": "O QUE O RECEBIMENTO ENCONTROU", "weight": "Bolder", "size": "Small",
+                      "isSubtle": True, "spacing": "Medium", "separator": True})
+        for linha in linhas[:15]:
+            corpo.append({"type": "TextBlock", "text": f"• {linha}", "wrap": True, "spacing": "Small"})
+        if len(linhas) > 15:
+            corpo.append({"type": "TextBlock", "text": f"… e mais {len(linhas) - 15}", "isSubtle": True, "spacing": "Small"})
+    if ultimo_comentario and evento in ("encerrada", "lembrete", "aguardando_fiscal"):
+        corpo.append({"type": "TextBlock", "text": f"💬 {ultimo_comentario}", "wrap": True, "spacing": "Medium", "isSubtle": True})
+    card_content["body"] = corpo
+    if link:
+        card_content["actions"] = [{"type": "Action.OpenUrl", "title": botao, "url": link, "style": "positive"}]
+    payload["evento"] = evento
+    payload["numero_nota"] = str(numero_nota or "")
+    payload["link"] = str(link or "")
+
+    if sync:
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            app.logger.warning("Falha ao enviar ocorrência de recebimento ao Teams (NF %s): %s", numero_nota, exc)
+            return False
+    threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
+    return None
+
+
 def notificar_relatorio_ajuste_inventario(
     numero_documento: str,
     qtd_itens: int,
