@@ -4247,8 +4247,9 @@ def liberar_nota_via_xml_auditor():
         ), 409
 
     # Retorno de industrialização: só vale para NF com TODAS as linhas em CFOP
-    # 5902/5903. O pedido tem que estar INFORMADO, mas não é conferido: não
-    # passa por comparação, divergência de Compras nem sincronização com ele.
+    # 5902/5903. O pedido é pedido na tela, mas não é obrigatório nem
+    # conferido: não passa por comparação, divergência de Compras nem
+    # sincronização com ele.
     retorno_industrializacao = bool(itens[0].retorno_industrializacao)
     if retorno_industrializacao:
         erro_retorno = _validar_retorno_industrializacao(itens)
@@ -4262,7 +4263,8 @@ def liberar_nota_via_xml_auditor():
     # NFS-e (servico) e detectada pelo tipo do documento da importacao.
     servico = str(itens[0].tipo_documento or "NFE").upper() == "NFSE"
     mercado_livre = bool(itens[0].mercado_livre)
-    if not material_cliente and not remessa and not pedidos_nota:
+    # Retorno de industrialização: a tela pede o pedido, mas ele não é obrigatório.
+    if not material_cliente and not remessa and not retorno_industrializacao and not pedidos_nota:
         return jsonify(
             {
                 "sucesso": False,

@@ -2159,10 +2159,6 @@ def test_retorno_de_industrializacao_vai_direto_para_lancamento_sem_conferente(t
     detalhe = client.get("/api/xml_auditor/nota/7101").get_json()
     assert detalhe["tem_cfop_retorno_industrializacao"] is True and detalhe["retorno_industrializacao"] is False
 
-    # O pedido continua obrigatório, como em qualquer NF.
-    resp = client.post("/api/xml_auditor/liberar", json={"nota": "7101", "retorno_industrializacao": True, "pedido_compra": ""})
-    assert resp.status_code == 409 and "pedido" in resp.get_json()["msg"]
-
     # Com o pedido informado, libera sem conferir nada contra ele.
     nao_confere = AssertionError("retorno de industrializacao nao confere o pedido")
     with patch("conferencia_app.routes.api_routes.comparar_pedido_com_nf", side_effect=nao_confere), \
@@ -2180,6 +2176,19 @@ def test_retorno_de_industrializacao_vai_direto_para_lancamento_sem_conferente(t
         # Não foi conferida: ninguém fica registrado como conferente.
         assert all(i.usuario_conferencia is None and i.inicio_conferencia is None for i in itens)
         assert all(i.sem_conferencia_logistica is False for i in itens)
+
+
+def test_retorno_de_industrializacao_libera_sem_pedido(tmp_path):
+    """A tela pede o pedido, mas no retorno ele não é obrigatório."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    _nf_retorno(app, "7104", ["5902"])
+    resp = client.post("/api/xml_auditor/liberar", json={"nota": "7104", "retorno_industrializacao": True, "pedido_compra": ""})
+    assert resp.status_code == 200, resp.get_json()
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="7104").one()
+        assert item.status == "Concluído" and item.pedido_compra is None and item.usuario_conferencia is None
 
 
 def test_retorno_de_industrializacao_recusa_nf_com_outro_cfop(tmp_path):
