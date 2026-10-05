@@ -510,8 +510,11 @@
     .de-chip { display: inline-flex; align-items: center; gap: 8px; }
     .de-chip__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--eui-muted); }
     .de-chip__value { font-size: 12.5px; font-weight: 600; color: var(--eui-text); font-variant-numeric: tabular-nums; }
-    .de-audit-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-    .de-audit-grid textarea { width: 100%; margin-top: 6px; }
+    /* Os três quadros com a mesma altura: o do pedido (com as caixas) dita a
+       altura e os de texto esticam junto, com a caixa de texto ocupando o resto. */
+    .de-audit-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+    .de-audit-grid > .box { display: flex; flex-direction: column; }
+    .de-audit-grid textarea { width: 100%; margin-top: 6px; flex: 1; min-height: 110px; resize: vertical; }
     .de-checks { margin-top: 12px; display: grid; gap: 8px; }
     .box .de-check { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--eui-text); }
     .de-hint { margin: 8px 0 0; font-size: 11px; color: var(--eui-muted); }
@@ -828,10 +831,12 @@
                                 <label class="de-check"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
                                 <label class="de-check"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
                                 <label class="de-check"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
-                                <label class="de-check"><input type="checkbox" id="mercadoLivre"> Mercado Livre</label>
+                                <label class="de-check"><input type="checkbox" id="mercadoLivre"> Compra pelo Mercado Livre</label>
+                                <label class="de-check" id="retornoIndustrializacaoWrap" hidden><input type="checkbox" id="retornoIndustrializacao"> Retorno de industrialização (CFOP 5902/5903)</label>
                             </div>
                             <p class="de-hint"><b>Sem conferência logística:</b> após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
-                            <p class="de-hint"><b>Mercado Livre:</b> o pedido continua obrigatório, mas quantidade e valor não são validados contra ele.</p>
+                            <p class="de-hint"><b>Compra pelo Mercado Livre:</b> informe o pedido normalmente. Como o anúncio não segue o pedido, quantidade e valor da NF não são comparados com ele e a NF não vai para a aprovação de divergência de Compras.</p>
+                            <p class="de-hint" id="retornoIndustrializacaoHint" hidden><b>Retorno de industrialização:</b> só para NF com todas as linhas em CFOP 5902 ou 5903 (com 5124 junto, siga o fluxo normal). Informe o pedido (é obrigatório, mas não é conferido contra a NF); ao liberar, a NF vai direto para lançamento, sem conferência física (não fica registrada como conferida).</p>
                         </div>
                         <div class="box">
                             <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
@@ -1670,6 +1675,7 @@
             remessa: !!document.getElementById('remessa')?.checked,
             sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
             mercado_livre: !!document.getElementById('mercadoLivre')?.checked,
+            retorno_industrializacao: !!document.getElementById('retornoIndustrializacao')?.checked,
         };
     }
     let confirmResolver = null;
@@ -1879,6 +1885,11 @@
             document.getElementById('remessa').checked = !!d.remessa;
             document.getElementById('semConferenciaLogistica').checked = !!d.sem_conferencia_logistica;
             document.getElementById('mercadoLivre').checked = !!d.mercado_livre;
+            // A caixa só aparece quando o XML tem CFOP de retorno (ou já está marcada).
+            const mostraRetorno = !!(d.tem_cfop_retorno_industrializacao || d.retorno_industrializacao);
+            document.getElementById('retornoIndustrializacaoWrap').hidden = !mostraRetorno;
+            document.getElementById('retornoIndustrializacaoHint').hidden = !mostraRetorno;
+            document.getElementById('retornoIndustrializacao').checked = !!d.retorno_industrializacao;
             alternarMaterialCliente();
             document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
             document.getElementById('obsFiscal').value = d.auditor_observacao || '';
@@ -2294,6 +2305,7 @@
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
             const badgeRateio = p.rateio_po ? '<span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;">Rateio de saldo do pedido</span>' : '';
+            const notaIndustrializacao = p.regra_industrializacao ? `<div class="vinc-grupo-info"><i class="fas fa-industry"></i> ${escapeHtml(p.regra_industrializacao)}</div>` : '';
             return `
                 <div class="vinculacao-card ${cardClasse}">
                     <span class="vinc-section-tag tag-xml"><i class="fas fa-file-invoice"></i> Nota Fiscal (XML) · Linha ${p.linha}</span>
@@ -2325,6 +2337,7 @@
                         </select>
                         ${statusHtml}
                         ${saldoInfoHtml}
+                        ${notaIndustrializacao}
                         ${grupoLinhasHtml}
                         ${usoOutrasNfsHtml}
                         ${detalheVinculoAuto}
@@ -2532,8 +2545,11 @@
         const remessa = document.getElementById('remessa').checked;
         const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
         const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+        const retorno_ind = !!document.getElementById('retornoIndustrializacao')?.checked;
         if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
-        const textoConfirmacao = sem_conferencia_logistica
+        const textoConfirmacao = retorno_ind
+            ? `Enviar a NF ${auditorNotaSelecionada.numero} direto para lançamento como retorno de industrialização? O Sync confere se todas as linhas são CFOP 5902/5903.`
+            : sem_conferencia_logistica
             ? `Deseja liberar a NF ${auditorNotaSelecionada.numero} sem conferência logística? Ela irá direto para lançamento.`
             : `Deseja liberar a NF ${auditorNotaSelecionada.numero} para a conferência física?`;
         const confirmado = await confirmarAcao(textoConfirmacao);

@@ -3267,6 +3267,9 @@ def detalhe_nota_xml_auditor(numero_nota):
             "remessa": bool(itens[0].remessa),
             "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
             "mercado_livre": bool(itens[0].mercado_livre),
+            "retorno_industrializacao": bool(itens[0].retorno_industrializacao),
+            # A tela só oferece a caixa "Retorno de industrialização" quando o XML tem esses CFOPs.
+            "tem_cfop_retorno_industrializacao": any(_cfop_retorno_industrializacao(i.cfop) for i in itens),
             "auditor_observacao": itens[0].auditor_observacao or "",
             "auditado_por": itens[0].auditor_usuario or "---",
             "auditado_em": itens[0].auditor_data.strftime("%d/%m/%Y %H:%M") if itens[0].auditor_data else "---",
@@ -3639,6 +3642,7 @@ def _detectar_e_notificar_divergencia_confirmada(numero_nota: str, numero_pedido
                     "linha_po_vinculada": i.linha_po_vinculada,
                     "valor_unit": valor_unit,
                     "valor_total_linha": valor_total_linha,
+                    "cfop": i.cfop or "",
                 }
             )
         resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
@@ -3712,6 +3716,7 @@ def _sincronizar_codigo_interno_por_pedido(
             "linha_po_vinculada": i.linha_po_vinculada,
             "valor_unit": round(float(i.valor_produto or 0) / float(i.qtd_real), 10) if float(i.qtd_real or 0) > 0 else 0.0,
             "valor_total_linha": float(i.valor_produto or 0),
+            "cfop": i.cfop or "",
         }
         for i in itens_nf
     ]
@@ -3788,6 +3793,7 @@ def vincular_pedido_xml_auditor():
     sem_conferencia_logistica = bool(data.get("sem_conferencia_logistica", False))
     # Só mexe na flag quando a tela manda: evita um chamador antigo desmarcar sem querer.
     mercado_livre_in_payload = "mercado_livre" in data
+    retorno_ind_in_payload = "retorno_industrializacao" in data
     observacao = str(data.get("observacao") or "").strip()
 
     if not numero_nota:
@@ -3802,6 +3808,12 @@ def vincular_pedido_xml_auditor():
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
+    retorno_ind = bool(data.get("retorno_industrializacao")) if retorno_ind_in_payload else bool(itens[0].retorno_industrializacao)
+    if retorno_ind_in_payload and retorno_ind:
+        erro_retorno = _validar_retorno_industrializacao(itens)
+        if erro_retorno:
+            return jsonify({"sucesso": False, "msg": erro_retorno}), 400
+
     novo_pedido = pedido_compra[:50] if pedido_compra else None
     for item in itens:
         pedido_anterior = item.pedido_compra
@@ -3810,6 +3822,8 @@ def vincular_pedido_xml_auditor():
         item.sem_conferencia_logistica = sem_conferencia_logistica
         if mercado_livre_in_payload:
             item.mercado_livre = bool(data.get("mercado_livre"))
+        if retorno_ind_in_payload:
+            item.retorno_industrializacao = retorno_ind
         item.pedido_compra = None if (material_cliente or remessa) else novo_pedido
         item.auditor_observacao = observacao[:500] if observacao else None
 
@@ -3820,7 +3834,8 @@ def vincular_pedido_xml_auditor():
     db.session.commit()
 
     # Tenta vincular automaticamente as linhas XML x PO imediatamente após informar a OC.
-    if not material_cliente and not remessa and pedido_compra:
+    # Retorno de industrialização: o pedido é só informado, não é conferido.
+    if not material_cliente and not remessa and not retorno_ind and pedido_compra:
         try:
             _sincronizar_codigo_interno_por_pedido(
                 numero_nota,
@@ -3844,13 +3859,16 @@ def vincular_pedido_xml_auditor():
     # tipo do documento escolhido na importacao (NF-e x NFS-e).
     eh_servico = str(itens[0].tipo_documento or "NFE").upper() == "NFSE"
     mercado_livre = bool(itens[0].mercado_livre)
-    if not material_cliente and not remessa and not eh_servico and not mercado_livre and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
+    if not material_cliente and not remessa and not retorno_ind and not eh_servico and not mercado_livre and pedido_compra and "[CONFIRMADO_DIVERGENCIA_VALOR]" in observacao:
         _detectar_e_notificar_divergencia_confirmada(numero_nota, pedido_compra, cnpj_emitente, fornecedor)
 
     return jsonify(
         {
             "sucesso": True,
             "msg": (
+                "Marcada como retorno de industrialização. Ao liberar, vai direto para lançamento (sem conferência física)."
+                if retorno_ind
+                else
                 "NF marcada para pular conferência logística. Após liberar no Auditor XML, irá direto para Documento de Entrada."
                 if sem_conferencia_logistica
                 else
@@ -3861,6 +3879,33 @@ def vincular_pedido_xml_auditor():
                 else "Pedido de compra vinculado no auditor. Integração com ERP ficará pendente até conexão da base externa."
             ),
         }
+    )
+
+
+# Retorno de industrialização: só o material que mandamos para o terceiro
+# voltando (5902 = utilizado na industrialização; 5903 = não aplicado), na
+# operação interna (5) ou interestadual (6).
+CFOPS_RETORNO_INDUSTRIALIZACAO = {"5902", "5903", "6902", "6903"}
+
+
+def _cfop_retorno_industrializacao(cfop) -> bool:
+    return re.sub(r"\D", "", str(cfop or ""))[:4] in CFOPS_RETORNO_INDUSTRIALIZACAO
+
+
+def _validar_retorno_industrializacao(itens) -> str | None:
+    """Mensagem de erro se a NF não é só de retorno de industrialização. Uma
+    NF que também traz o serviço (5124) ou compra precisa do fluxo normal."""
+    outros = sorted({
+        f"{(i.cfop or '').strip() or 'sem CFOP'}"
+        for i in itens
+        if not _cfop_retorno_industrializacao(i.cfop)
+    })
+    if not outros:
+        return None
+    return (
+        "Esta NF não é só de retorno de industrialização: tem linha(s) com CFOP "
+        f"{', '.join(outros)}. Só NF com todas as linhas em CFOP 5902 ou 5903 vai direto "
+        "para lançamento - desmarque \"Retorno de industrialização\" e siga o fluxo normal."
     )
 
 
@@ -3927,6 +3972,7 @@ def consultar_pedido_excel():
                     # A conversao automatica e aplicada na fase de comparacao.
                     "valor_unit": valor_unit,
                     "valor_total_linha": valor_total_linha,
+                    "cfop": i.cfop or "",
                 }
             )
 
@@ -4022,6 +4068,7 @@ def sugestoes_vinculacao():
             "qtd": item.qtd_real,
             "valor_unit": round(float(item.valor_produto or 0) / float(item.qtd_real), 10) if float(item.qtd_real or 0) > 0 else 0.0,
             "valor_total_linha": float(item.valor_produto or 0),
+            "cfop": item.cfop or "",
         }
         for i, item in enumerate(itens_db, 1)
     ]
@@ -4151,9 +4198,10 @@ def liberar_nota_via_xml_auditor():
     remessa_in_payload = "remessa" in data
     sem_conf_logistica_in_payload = "sem_conferencia_logistica" in data
     mercado_livre_in_payload = "mercado_livre" in data
+    retorno_ind_in_payload = "retorno_industrializacao" in data
     pedido_compra_in_payload = "pedido_compra" in data
     observacao_in_payload = "observacao" in data
-    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or mercado_livre_in_payload or pedido_compra_in_payload or observacao_in_payload:
+    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or mercado_livre_in_payload or retorno_ind_in_payload or pedido_compra_in_payload or observacao_in_payload:
         material_cliente_payload = bool(data.get("material_cliente", False))
         remessa_payload = bool(data.get("remessa", False))
         sem_conf_logistica_payload = bool(data.get("sem_conferencia_logistica", False))
@@ -4170,6 +4218,8 @@ def liberar_nota_via_xml_auditor():
                 item.sem_conferencia_logistica = sem_conf_logistica_payload
             if mercado_livre_in_payload:
                 item.mercado_livre = bool(data.get("mercado_livre"))
+            if retorno_ind_in_payload:
+                item.retorno_industrializacao = bool(data.get("retorno_industrializacao"))
 
             if item.material_cliente or bool(item.remessa):
                 item.pedido_compra = None
@@ -4196,6 +4246,15 @@ def liberar_nota_via_xml_auditor():
             }
         ), 409
 
+    # Retorno de industrialização: só vale para NF com TODAS as linhas em CFOP
+    # 5902/5903. O pedido tem que estar INFORMADO, mas não é conferido: não
+    # passa por comparação, divergência de Compras nem sincronização com ele.
+    retorno_industrializacao = bool(itens[0].retorno_industrializacao)
+    if retorno_industrializacao:
+        erro_retorno = _validar_retorno_industrializacao(itens)
+        if erro_retorno:
+            return jsonify({"sucesso": False, "erro": "retorno_industrializacao_invalido", "msg": erro_retorno}), 409
+
     pedidos_nota = _coletar_pedidos_nota(itens)
     material_cliente = bool(itens[0].material_cliente)
     remessa = bool(itens[0].remessa)
@@ -4213,7 +4272,7 @@ def liberar_nota_via_xml_auditor():
 
     # Divergência XML x pedido: Compras decide via Teams/tela de aprovação.
     # NFS-e (serviço) e Mercado Livre NÃO passam por essa aprovação de Compras.
-    if not material_cliente and not remessa and not servico and not mercado_livre:
+    if not material_cliente and not remessa and not servico and not mercado_livre and not retorno_industrializacao:
         ultima_decisao = (
             DivergenciaPedidoAprovacao.query
             .filter_by(numero_nota=numero_nota)
@@ -4280,7 +4339,7 @@ def liberar_nota_via_xml_auditor():
                 ), 409
 
     # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
-    if not material_cliente and not remessa and pedidos_nota:
+    if not material_cliente and not remessa and not retorno_industrializacao and pedidos_nota:
         try:
             _sincronizar_codigo_interno_por_pedido(
                 numero_nota,
@@ -4291,7 +4350,15 @@ def liberar_nota_via_xml_auditor():
         except Exception as exc:
             return jsonify({"sucesso": False, "msg": f"Não foi possível sincronizar código interno da OC: {exc}"}), 409
 
-    if sem_conferencia_logistica:
+    if retorno_industrializacao:
+        # Direto para lançamento SEM registrar conferente: a NF não foi
+        # conferida, só encaminhada (antes a importação marcava "Concluído"
+        # com quem importou no lugar do conferente).
+        ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
+        if ids_alvo:
+            ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update({"status": "Concluído"}, synchronize_session=False)
+        msg_liberacao = "NF de retorno de industrialização enviada direto para lançamento (sem conferência física)."
+    elif sem_conferencia_logistica:
         now = agora_br()
         ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
         if ids_alvo:

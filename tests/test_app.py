@@ -2101,7 +2101,26 @@ def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):
     assert itens[0].cfop == "5124"
 
 
-def test_importacao_xml_cfop_5902_sozinho_vai_direto_para_documento_entrada(tmp_path):
+def test_importacao_xml_ignora_cfop_5903_quando_nf_tem_cfop_5124(tmp_path):
+    app = build_test_app(tmp_path)
+    xml_bytes = build_test_nfe_xml(
+        "4002",
+        [
+            {"codigo": "RET2", "descricao": "Retorno nao aplicado", "cfop": "5903", "quantidade": "1.0000"},
+            {"codigo": "SRV2", "descricao": "Servico de industrializacao", "cfop": "5124", "quantidade": "2.0000"},
+        ],
+    )
+    with app.app_context():
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+        itens = ItemNota.query.filter_by(numero_nota="4002").all()
+    assert [i.cfop for i in itens] == ["5124"]
+
+
+def test_importacao_xml_cfop_5902_sozinho_fica_no_auditor_sem_conferente(tmp_path):
+    """Antes a importação mandava a NF só de 5902 direto para "Concluído",
+    com quem importou no lugar do conferente. Agora ela fica no Auditor e o
+    auditor marca "Retorno de industrialização"."""
     app = build_test_app(tmp_path)
 
     xml_bytes = build_test_nfe_xml(
@@ -2110,15 +2129,81 @@ def test_importacao_xml_cfop_5902_sozinho_vai_direto_para_documento_entrada(tmp_
     )
 
     with app.app_context():
-        assert process_xml_and_store(xml_bytes, "admin", status_inicial="Pendente") == 1
+        assert process_xml_and_store(xml_bytes, "admin", status_inicial="AguardandoLiberacao") == 1
         db.session.commit()
         item = ItemNota.query.filter_by(numero_nota="4001-5902").one()
 
-    assert item.status == "Concluído"
-    assert item.sem_conferencia_logistica is True
-    assert item.usuario_conferencia == "admin"
-    assert item.inicio_conferencia is not None
-    assert item.fim_conferencia is not None
+    assert item.status == "AguardandoLiberacao"
+    assert item.sem_conferencia_logistica is False
+    assert item.retorno_industrializacao is False
+    assert item.usuario_conferencia is None
+    assert item.inicio_conferencia is None and item.fim_conferencia is None
+
+
+def _nf_retorno(app, numero, cfops):
+    with app.app_context():
+        for n, cfop in enumerate(cfops, 1):
+            db.session.add(ItemNota(
+                numero_nota=numero, fornecedor="AGD USINAGEM", codigo=f"RET-{n}", descricao=f"Retorno {n}",
+                cfop=cfop, qtd_real=4.0, valor_produto=88.96, status="AguardandoLiberacao", auditor_status="SemInconsistencia",
+            ))
+        db.session.commit()
+
+
+def test_retorno_de_industrializacao_vai_direto_para_lancamento_sem_conferente(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    _nf_retorno(app, "7101", ["5902", "5903"])
+
+    detalhe = client.get("/api/xml_auditor/nota/7101").get_json()
+    assert detalhe["tem_cfop_retorno_industrializacao"] is True and detalhe["retorno_industrializacao"] is False
+
+    # O pedido continua obrigatório, como em qualquer NF.
+    resp = client.post("/api/xml_auditor/liberar", json={"nota": "7101", "retorno_industrializacao": True, "pedido_compra": ""})
+    assert resp.status_code == 409 and "pedido" in resp.get_json()["msg"]
+
+    # Com o pedido informado, libera sem conferir nada contra ele.
+    nao_confere = AssertionError("retorno de industrializacao nao confere o pedido")
+    with patch("conferencia_app.routes.api_routes.comparar_pedido_com_nf", side_effect=nao_confere), \
+            patch("conferencia_app.routes.api_routes._sincronizar_codigo_interno_por_pedido", side_effect=nao_confere), \
+            patch("conferencia_app.routes.api_routes._detectar_e_notificar_divergencia_confirmada", side_effect=nao_confere):
+        assert client.post("/api/xml_auditor/vincular_pedido", json={
+            "nota": "7101", "retorno_industrializacao": True, "pedido_compra": "12156"}).status_code == 200
+        resp = client.post("/api/xml_auditor/liberar", json={"nota": "7101", "retorno_industrializacao": True, "pedido_compra": "12156"})
+    assert resp.status_code == 200, resp.get_json()
+    assert "direto para lançamento" in resp.get_json()["msg"]
+    with app.app_context():
+        itens = ItemNota.query.filter_by(numero_nota="7101").all()
+        assert {i.status for i in itens} == {"Concluído"}
+        assert all(i.retorno_industrializacao and i.pedido_compra == "12156" for i in itens)
+        # Não foi conferida: ninguém fica registrado como conferente.
+        assert all(i.usuario_conferencia is None and i.inicio_conferencia is None for i in itens)
+        assert all(i.sem_conferencia_logistica is False for i in itens)
+
+
+def test_retorno_de_industrializacao_recusa_nf_com_outro_cfop(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    _nf_retorno(app, "7102", ["5902", "5124"])
+
+    # Ao salvar a marcação, já avisa.
+    resp = client.post("/api/xml_auditor/vincular_pedido", json={"nota": "7102", "retorno_industrializacao": True})
+    assert resp.status_code == 400 and "5124" in resp.get_json()["msg"]
+    # E a liberação também recusa, sem mexer na NF.
+    resp = client.post("/api/xml_auditor/liberar", json={"nota": "7102", "retorno_industrializacao": True})
+    assert resp.status_code == 409 and resp.get_json()["erro"] == "retorno_industrializacao_invalido"
+    with app.app_context():
+        assert {i.status for i in ItemNota.query.filter_by(numero_nota="7102").all()} == {"AguardandoLiberacao"}
+
+
+def test_nf_sem_cfop_de_retorno_nao_oferece_a_caixa(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    _nf_retorno(app, "7103", ["5101"])
+    assert client.get("/api/xml_auditor/nota/7103").get_json()["tem_cfop_retorno_industrializacao"] is False
 
 
 def test_importacao_xml_ignora_insumo_utilizado_servico_mesmo_com_cfop_5124(tmp_path):

@@ -86,6 +86,7 @@ def _itens_nf_para_comparacao(itens_db: list[ItemNota]) -> list[dict]:
                 "linha_po_vinculada": i.linha_po_vinculada,
                 "valor_unit": valor_unit,
                 "valor_total_linha": valor_total_linha,
+                "cfop": i.cfop or "",
             }
         )
     return itens_nf

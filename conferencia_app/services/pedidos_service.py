@@ -858,6 +858,69 @@ def qtd_em_kg_por_unidade(qtd, unidade):
     return round(qtd_float * fator_peso, 6)
 
 
+# Industrialização por terceiros (conferido no GRV real em 10/2026): a NF do
+# fornecedor traz a linha do SERVIÇO (CFOP 5124/6124) e, às vezes, a do
+# RETORNO do nosso material (5902/6902; 5903/6903 quando não foi aplicado).
+# O pedido no GRV separa as duas: "ProducaoTerceiros" (o serviço, com preço) e
+# "ProducaoPropria" (o material remetido, preço zero). Retorno de material
+# próprio não é compra: o pedido não tem preço para ele e a quantidade dele no
+# pedido pode vir zerada - comparar isso só gera divergência falsa.
+CFOPS_NF_RETORNO_INDUSTRIALIZACAO = {"5902", "6902", "5903", "6903"}
+CFOPS_NF_SERVICO_INDUSTRIALIZACAO = {"5124", "6124", "5125", "6125"}
+CLASSES_PO_INDUSTRIALIZACAO = {"ProducaoPropria", "ProducaoTerceiros"}
+
+
+def tipo_industrializacao_nf(nf_item: dict) -> str | None:
+    """"retorno" / "servico" pela CFOP da linha do XML, ou None."""
+    cfop = re.sub(r"\D", "", str((nf_item or {}).get("cfop") or ""))
+    if cfop in CFOPS_NF_RETORNO_INDUSTRIALIZACAO:
+        return "retorno"
+    if cfop in CFOPS_NF_SERVICO_INDUSTRIALIZACAO:
+        return "servico"
+    return None
+
+
+def _linhas_compativeis(nf_item: dict, po_item: dict | None) -> bool:
+    """Retorno de material só casa com linha de material do pedido, e serviço
+    só com linha de serviço - as duas descrevem a mesma OS e confundiam o
+    pareamento automático."""
+    if not po_item:
+        return True
+    tipo = tipo_industrializacao_nf(nf_item)
+    classe = str(po_item.get("classificacao_item") or "")
+    if tipo == "retorno" and classe == "ProducaoTerceiros":
+        return False
+    if tipo == "servico" and classe == "ProducaoPropria":
+        return False
+    return True
+
+
+def _aplicar_regra_industrializacao(nf_item: dict, met: dict, po_item: dict | None) -> dict:
+    """Relaxa o que não é divergência de verdade em industrialização e deixa
+    o motivo escrito (regra_industrializacao) para a tela mostrar."""
+    tipo = tipo_industrializacao_nf(nf_item)
+    classe = str((po_item or {}).get("classificacao_item") or "")
+    po_qtd = met.get("po_qtd")
+    regra = None
+    if tipo == "retorno":
+        met["valor_ok"] = True
+        met["qtd_ok"] = True
+        met["qtd_livre"] = True
+        regra = (
+            "Retorno de industrialização (material próprio): não é compra, quantidade e valor não são conferidos com o pedido."
+            if po_item else
+            "Retorno de industrialização (material próprio) sem linha no pedido: não é compra, não precisa de pedido."
+        )
+    elif classe in CLASSES_PO_INDUSTRIALIZACAO and (po_qtd is None or po_qtd <= 0):
+        met["qtd_ok"] = True
+        met["qtd_livre"] = True
+        regra = "Industrialização: o pedido não controla quantidade (saldo zerado); só o valor é conferido."
+    if regra:
+        met["ok"] = bool(met.get("qtd_ok") and met.get("valor_ok"))
+        met["regra_industrializacao"] = regra
+    return met
+
+
 def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     """
     Compara as linhas do pedido no ERP com as linhas da NF, uma a uma
@@ -1106,9 +1169,11 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         if len(candidatos_po) != 1:
             continue
         j = candidatos_po[0]
-        for i in indices_nf:
+        compativeis = [i for i in indices_nf if _linhas_compativeis(itens_nf[i], linhas_po[j])]
+        for i in compativeis:
             atribuicoes[i] = j
-        po_usadas.add(j)
+        if compativeis:
+            po_usadas.add(j)
 
     # 3) Match automático 1-para-1 pelo melhor score (sem duplicar linha PO).
     candidatos = []
@@ -1116,7 +1181,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         if atribuicoes[i] is not None:
             continue
         for j, po in enumerate(linhas_po):
-            if j in po_usadas:
+            if j in po_usadas or not _linhas_compativeis(nf, po):
                 continue
             met = _metricas_match(nf, po)
             candidatos.append((met["score"], met["ok"], met["qtd_ok"], met["valor_ok"], i, j))
@@ -1136,7 +1201,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     for i, _nf in enumerate(itens_nf):
         if atribuicoes[i] is not None:
             continue
-        if i < len(linhas_po) and i not in po_usadas:
+        if i < len(linhas_po) and i not in po_usadas and _linhas_compativeis(itens_nf[i], linhas_po[i]):
             atribuicoes[i] = i
             po_usadas.add(i)
 
@@ -1172,7 +1237,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
             "ok": False,
             "score": 0,
         }
-        mets.append(met)
+        mets.append(_aplicar_regra_industrializacao(nf, met, po_row))
 
     for po_index, indices in grupos_po.items():
         if len(indices) < 2:
@@ -1181,6 +1246,8 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         soma_nf_qtd = sum(mets[i]["nf_qtd"] for i in indices)
         qtd_diff = abs((po_qtd or 0) - soma_nf_qtd) if po_qtd is not None else float("inf")
         qtd_ok_grupo = po_qtd is not None and soma_nf_qtd <= po_qtd + 0.0001
+        # Industrialização sem controle de quantidade no pedido: a soma também não confere.
+        qtd_ok_grupo = qtd_ok_grupo or all(mets[i].get("qtd_livre") for i in indices)
         # Guarda quais linhas do XML (numero + quantidade) compoem a soma desta
         # linha do pedido, pra dar pra conferir de onde vem o total (diagnostico).
         linhas_grupo = [{"linha": i + 1, "nf_qtd": round(mets[i]["nf_qtd"], 6)} for i in indices]
@@ -1248,6 +1315,9 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "grupo_linhas_xml": met.get("grupo_linhas_xml"),
                 "po_saldo_antes": met.get("po_saldo_antes"),
                 "po_saldo_depois": met.get("po_saldo_depois"),
+                "nf_cfop": re.sub(r"\D", "", str(nf.get("cfop") or "")),
+                "po_classificacao": (linhas_po[po_index].get("classificacao_item") or "") if isinstance(po_index, int) and po_index < len(linhas_po) else "",
+                "regra_industrializacao": met.get("regra_industrializacao"),
             }
         )
 

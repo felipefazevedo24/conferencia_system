@@ -4,11 +4,12 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import ItemNota
-from ..tempo import agora_br
 
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
-CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
+# Retorno do material (5902 utilizado / 5903 não aplicado) numa NF que traz o
+# serviço de industrialização: a linha do retorno não entra na conferência.
+CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902", "5903", "6903"}
 DESCRICAO_EXCLUIR_SEM_CONFERENCIA = "INSUMO UTILIZADO SERVICO"
 
 
@@ -419,11 +420,6 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
             if _descricao_normalizada(DESCRICAO_EXCLUIR_SEM_CONFERENCIA)
             not in _descricao_normalizada(item["descricao"])
         ]
-        somente_cfop_5902 = bool(itens_filtrados) and all(
-            str(item["cfop"] or "").strip()[:4] == "5902" for item in itens_filtrados
-        )
-        agora_sem_conferencia = agora_br() if somente_cfop_5902 else None
-
         for item in itens_filtrados:
             db.session.add(
                 ItemNota(
@@ -457,12 +453,11 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     tipo_pagamento_xml=tipo_pagamento_xml,
                     valor_pagamento_xml=valor_pagamento_xml,
                     vencimento_pagamento_xml=vencimento_pagamento_xml,
-                    status="Concluído" if somente_cfop_5902 else status_inicial,
+                    # NF só de retorno de industrialização (5902/5903) NÃO pula
+                    # mais sozinha para lançamento como "conferida": fica no
+                    # Auditor e o auditor marca "Retorno de industrialização".
+                    status=status_inicial,
                     usuario_importacao=user,
-                    usuario_conferencia=user if somente_cfop_5902 else None,
-                    inicio_conferencia=agora_sem_conferencia,
-                    fim_conferencia=agora_sem_conferencia,
-                    sem_conferencia_logistica=somente_cfop_5902,
                     valor_total=txt_total,
                     valor_imposto=txt_imposto,
                     data_emissao=data_emissao,
