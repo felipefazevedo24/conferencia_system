@@ -8,7 +8,7 @@ from io import BytesIO
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 
-from ..auth import permission_required
+from ..auth import is_admin_session, permission_required
 from ..extensions import db
 from ..models import (
     ComprasHomologacaoEvidencia,
@@ -412,6 +412,9 @@ def api_atualizar(homologacao_id):
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>", methods=["DELETE"])
 @permission_required(PERMISSION)
 def api_excluir(homologacao_id):
+    # Exclusao e' definitiva (leva evidencias, fotos e plano de acao): so' Admin.
+    if not is_admin_session():
+        return jsonify({"error": "Só o administrador pode excluir uma homologação."}), 403
     homologacao = _obter(homologacao_id)
     if not homologacao:
         return jsonify({"error": "Homologação não encontrada."}), 404

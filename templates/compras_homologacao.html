@@ -207,6 +207,7 @@
         "Não Atende": "neg", "Não Conforme": "neg", "Nao Conforme": "neg", "Não Aplicável": "na", "Nao Aplicavel": "na" };
 
     let filtroStatus = "", filtroValidade = "", modelo = null, atual = null;
+    const IS_ADMIN = {{ (user_role == 'Admin') | tojson }};
 
     async function carregar() {
         try {
@@ -615,6 +616,8 @@
             b += `<button class="eui-btn eui-btn--subtle" data-act="reabrir"><i class="fas fa-rotate-left"></i> Reabrir</button>`;
         }
         if (atual.id) b += `<a class="eui-btn eui-btn--subtle" href="/api/compras/homologacao/${atual.id}/pdf" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> PDF</a>`;
+        // Homologado nao exclui (registro de auditoria): reabre e reprova antes.
+        if (IS_ADMIN && atual.id && atual.status !== "Homologado") b += `<button class="eui-btn eui-btn--danger" data-act="excluir"><i class="fas fa-trash"></i> Excluir</button>`;
         b += `<button class="eui-btn eui-btn--ghost" data-act="fechar">Fechar</button>`;
         $("hf-acoes").innerHTML = b;
     }
@@ -825,6 +828,15 @@
                 if (motivo === null) { btn.disabled = false; return; }
                 const r = await api(`/api/compras/homologacao/${atual.id}/devolver`, { method: "POST", body: JSON.stringify({ motivo }) });
                 atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "excluir") {
+                if (!confirm(`Excluir DEFINITIVAMENTE a homologação de ${atual.razao_social || "este fornecedor"}?
+
+Respostas, evidências, fotos e plano de ação serão apagados. Não dá para desfazer.`)) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}`, { method: "DELETE" });
+                toast(r.message, "success");
+                $("hf-modal").classList.remove("open");
+                carregar();
+                return;
             } else if (act === "reabrir") {
                 if (!confirm("Reabrir como rascunho? A decisão atual será desfeita.")) { btn.disabled = false; return; }
                 const r = await api(`/api/compras/homologacao/${atual.id}/reabrir`, { method: "POST" });
