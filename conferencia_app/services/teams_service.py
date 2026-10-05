@@ -318,6 +318,8 @@ _OCORRENCIA_CABECALHO = {
     "aguardando_fiscal": ("↩️ DEVOLUÇÃO TOTAL — AGUARDANDO FISCAL", "warning", "Warning", "Informar recusa ou NF de devolução"),
     "encerrada": ("✅ DIVERGÊNCIA DE RECEBIMENTO ENCERRADA", "good", "Good", "Ver tratativa"),
     "lembrete": ("⏰ DIVERGÊNCIA SEM ATUALIZAÇÃO", "warning", "Warning", "Atualizar tratativa"),
+    "reaberta": ("↩️ DIVERGÊNCIA DE RECEBIMENTO REABERTA", "warning", "Warning", "Ver tratativa"),
+    "conferencia_estornada": ("🔁 CONFERÊNCIA ESTORNADA — REAVALIAR TRATATIVA", "warning", "Warning", "Reavaliar tratativa"),
 }
 
 

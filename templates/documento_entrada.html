@@ -2820,6 +2820,8 @@
     function abrirModalLancamento() {
         if (!detalhesSelecionados) return;
         const dados = detalhesSelecionados;
+        const bloqueio = (dados.pendencias || []).find((p) => p.bloqueia_lancamento);
+        if (bloqueio) { exibirFeedback('error', 'Lançamento bloqueado', escapeHtml(bloqueio.descricao)); return; }
         document.getElementById('input-codigo-erp').value = '';
         document.getElementById('input-codigo-material').value = '';
         const checkManifestar = document.getElementById('input-manifestar-destinatario');

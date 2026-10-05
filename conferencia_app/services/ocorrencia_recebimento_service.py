@@ -13,8 +13,9 @@ Fluxo:
 4. Ocorrência parada há N dias sem atualização gera lembrete no Teams
    (enviar_lembretes, rodado pelo scripts/lembrete_ocorrencias_recebimento.py).
 
-Nada aqui bloqueia o lançamento da NF. O aviso ao Teams nunca derruba a
-conferência: falhou, fica no log.
+Enquanto Compras não decide o que será feito, a NF não pode ser lançada
+(lancamento_bloqueado). O aviso ao Teams nunca derruba a conferência:
+falhou, fica no log.
 """
 from __future__ import annotations
 
@@ -140,6 +141,7 @@ def ocorrencia_para_dict(oc: OcorrenciaRecebimento, completo: bool = False) -> d
         "qtd_itens": len(oc.itens or []),
         "ultimo_comentario": ultimo_comentario,
         "aguardando_fiscal": oc.status == "AguardandoFiscal",
+        "aguardando_decisao": _aguardando_decisao(oc),
         "fiscal": {
             "tipo": oc.fiscal_tipo,
             "tipo_label": TIPOS_FISCAL.get(oc.fiscal_tipo or "", ""),
@@ -151,6 +153,7 @@ def ocorrencia_para_dict(oc: OcorrenciaRecebimento, completo: bool = False) -> d
         } if oc.fiscal_tipo else None,
     }
     if completo:
+        dados["nf_lancada"] = _nf_lancada(oc)
         dados["itens"] = [item_para_dict(i) for i in oc.itens]
         dados["eventos"] = [evento_para_dict(e) for e in oc.eventos]
     return dados
@@ -194,6 +197,27 @@ def ocorrencia_da_nota(numero_nota: str, cnpj_emitente: str = "") -> OcorrenciaR
         query = query.filter(db.or_(OcorrenciaRecebimento.cnpj_emitente == cnpj, OcorrenciaRecebimento.cnpj_emitente.is_(None)))
     abertas = [o for o in query.order_by(OcorrenciaRecebimento.id.desc()).all()]
     return next((o for o in abertas if o.status not in STATUS_FINAIS), abertas[0] if abertas else None)
+
+
+def _nf_lancada(oc: OcorrenciaRecebimento) -> bool:
+    query = ItemNota.query.filter_by(numero_nota=oc.numero_nota, status="Lançado")
+    if oc.cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == oc.cnpj_emitente)
+    return query.first() is not None
+
+
+def _aguardando_decisao(oc: OcorrenciaRecebimento) -> bool:
+    """Decidir = escolher "o que será feito" (ou encerrar/cancelar)."""
+    return oc.status not in STATUS_FINAIS and not oc.acao
+
+
+def lancamento_bloqueado(numero_nota: str, cnpj_emitente: str = "") -> str | None:
+    """Mensagem de bloqueio se a NF tem divergência sem decisão de Compras."""
+    oc = ocorrencia_da_nota(numero_nota, cnpj_emitente)
+    if oc and _aguardando_decisao(oc):
+        return (f"NF {numero_nota} com divergência no recebimento aguardando decisão de Compras "
+                "(Compras > Divergências de recebimento). O lançamento libera quando Compras definir o que será feito.")
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -363,6 +387,9 @@ def registrar_etapa_fiscal(ocorrencia_id: int, usuario: str, *, tipo: str, numer
     numero_nf = str(numero_nf or "").strip()[:30]
     if tipo == "NFDevolucao" and not numero_nf:
         raise ValueError("Informe o número da NF de devolução.")
+    # A NF de devolução referencia a entrada: sem lançamento não há o que devolver.
+    if tipo == "NFDevolucao" and not _nf_lancada(oc):
+        raise ValueError("A NF precisa estar lançada antes da devolução. Lance a NF no Documento de entrada e depois informe a NF de devolução.")
     data_fiscal = _data(data) or agora_br().date()
     agora = agora_br()
     oc.fiscal_tipo, oc.fiscal_numero_nf, oc.fiscal_data = tipo, numero_nf or None, data_fiscal
@@ -381,6 +408,102 @@ def registrar_etapa_fiscal(ocorrencia_id: int, usuario: str, *, tipo: str, numer
     db.session.commit()
     _avisar_teams("encerrada", oc)
     return ocorrencia_para_dict(oc, completo=True)
+
+
+def estornar_resolucao(ocorrencia_id: int, usuario: str, motivo: str) -> dict | None:
+    """Reabre uma ocorrência Resolvida. Se quem fechou foi a etapa do Fiscal,
+    ela volta para AguardandoFiscal sem os dados fiscais (que ficam no
+    histórico); senão volta para EmTratativa com a mesma ação."""
+    oc = db.session.get(OcorrenciaRecebimento, ocorrencia_id)
+    if not oc:
+        return None
+    if oc.status != "Resolvida":
+        raise ValueError("Só uma ocorrência resolvida pode ser estornada.")
+    motivo = str(motivo or "").strip()
+    if len(motivo) < 5:
+        raise ValueError("Informe o motivo do estorno.")
+    comentario = f"Resolução estornada: {motivo}"
+    if oc.fiscal_tipo:
+        comentario += (f" (desfeito: {TIPOS_FISCAL.get(oc.fiscal_tipo, oc.fiscal_tipo)}"
+                       + (f" nº {oc.fiscal_numero_nf}" if oc.fiscal_numero_nf else "") + f", registrado por {oc.fiscal_por})")
+        novo_status = "AguardandoFiscal"
+        oc.fiscal_tipo = oc.fiscal_numero_nf = oc.fiscal_data = oc.fiscal_observacao = oc.fiscal_por = oc.fiscal_em = None
+    else:
+        novo_status = "EmTratativa"
+    agora = agora_br()
+    oc.status, oc.resolvida_em = novo_status, None
+    oc.atualizado_em, oc.atualizado_por = agora, usuario
+    oc.eventos.append(OcorrenciaRecebimentoEvento(
+        em=agora, usuario=usuario, tipo="Reabertura", status_anterior="Resolvida", status_novo=novo_status,
+        acao=oc.acao, comentario=comentario[:1000],
+    ))
+    db.session.commit()
+    _avisar_teams("reaberta", oc)
+    return ocorrencia_para_dict(oc, completo=True)
+
+
+# --------------------------------------------------------------------------
+# Estornos da NF
+# --------------------------------------------------------------------------
+
+def ao_estornar_conferencia(numero_nota: str, cnpj_emitente: str, usuario: str, motivo: str) -> None:
+    """A contagem que gerou a divergência deixou de valer.
+    Sem decisão de Compras: cancela (a nova conferência abre outra, se houver
+    diferença) - senão a ocorrência velha travaria o lançamento de uma NF
+    que talvez esteja certa. Com decisão: mantém e pede para reavaliar.
+    Faz o próprio commit e nunca levanta (quem chama é o estorno)."""
+    try:
+        oc = ocorrencia_da_nota(numero_nota, cnpj_emitente)
+        if not oc or oc.status in STATUS_FINAIS:
+            return
+        agora = agora_br()
+        status_anterior = oc.status
+        comentario = f"Conferência estornada por {usuario}: {motivo}"
+        if _aguardando_decisao(oc):
+            oc.status, oc.resolvida_em = "Cancelada", agora
+            comentario += ". Ocorrência cancelada automaticamente; se a nova conferência achar diferença, abre outra."
+        else:
+            comentario += ". Compras já tinha decidido: reavalie a tratativa depois da nova conferência."
+        oc.atualizado_em, oc.atualizado_por = agora, usuario
+        oc.eventos.append(OcorrenciaRecebimentoEvento(
+            em=agora, usuario=usuario, tipo="Estorno", status_anterior=status_anterior, status_novo=oc.status,
+            acao=oc.acao, comentario=comentario[:1000],
+        ))
+        db.session.commit()
+        _avisar_teams("encerrada" if oc.status == "Cancelada" else "conferencia_estornada", oc)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Ocorrência de recebimento: falha ao registrar estorno de conferência da NF %s", numero_nota)
+
+
+def estorno_lancamento_bloqueado(numero_nota: str, cnpj_emitente: str = "") -> str | None:
+    """A NF de devolução já saiu contra este lançamento: estornar a entrada
+    deixaria a devolução sem origem."""
+    query = OcorrenciaRecebimento.query.filter_by(numero_nota=str(numero_nota or "").strip(), fiscal_tipo="NFDevolucao")
+    cnpj = re.sub(r"\D", "", str(cnpj_emitente or ""))
+    if cnpj:
+        query = query.filter(db.or_(OcorrenciaRecebimento.cnpj_emitente == cnpj, OcorrenciaRecebimento.cnpj_emitente.is_(None)))
+    oc = query.order_by(OcorrenciaRecebimento.id.desc()).first()
+    if oc:
+        return (f"Não é possível estornar: a NF de devolução nº {oc.fiscal_numero_nf} já foi emitida contra este "
+                "lançamento (Compras > Divergências de recebimento).")
+    return None
+
+
+def ao_estornar_lancamento(numero_nota: str, cnpj_emitente: str, usuario: str, motivo: str) -> None:
+    """Só registra no histórico da ocorrência. Nunca levanta."""
+    try:
+        oc = ocorrencia_da_nota(numero_nota, cnpj_emitente)
+        if not oc:
+            return
+        oc.eventos.append(OcorrenciaRecebimentoEvento(
+            em=agora_br(), usuario=usuario, tipo="Estorno", status_anterior=oc.status, status_novo=oc.status,
+            acao=oc.acao, comentario=f"Lançamento da NF estornado por {usuario}: {motivo}"[:1000],
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Ocorrência de recebimento: falha ao registrar estorno de lançamento da NF %s", numero_nota)
 
 
 # --------------------------------------------------------------------------

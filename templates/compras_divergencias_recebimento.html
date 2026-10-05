@@ -35,7 +35,7 @@
     .dr-ev { border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: 8px; padding: 8px 12px; background: var(--eui-surface-2); font-size: 12.5px; }
     .dr-ev--Abertura, .dr-ev--NovosItens { border-left-color: var(--eui-danger); }
     .dr-ev--Fiscal { border-left-color: var(--eui-success); }
-    .dr-ev--Lembrete { border-left-color: var(--eui-warning); }
+    .dr-ev--Lembrete, .dr-ev--Estorno, .dr-ev--Reabertura { border-left-color: var(--eui-warning); }
     .dr-ev-cab { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--eui-muted); font-weight: 700; }
     .dr-ev-txt { margin-top: 4px; color: var(--eui-text); }
     .dr-fatos { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 14px; font-size: 12.5px; margin-bottom: 14px; }
@@ -145,6 +145,10 @@
     const fmtQ = (v) => (v === null || v === undefined) ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
     const badge = (st, rotulo) => `<span class="eui-badge eui-badge--${TOM[st] || "neutral"}"><span class="eui-badge__dot"></span>${esc(rotulo)}</span>`;
     const estado = { filtro: "abertas", atual: null };
+    // Dentro do conteúdo, um ancestral com transform/filter vira o "viewport"
+    // do position:fixed e o blur só cobre a área do conteúdo. No body, cobre a tela.
+    document.body.appendChild($("dr-modal"));
+    document.body.appendChild($("dr-toast"));
 
     function toast(msg, tipo) {
         const el = $("dr-toast");
@@ -181,7 +185,7 @@
                 <td>${esc(o.origem_label)}</td>
                 <td>${o.qtd_itens}</td>
                 <td>${badge(o.status, o.status_label)}</td>
-                <td>${esc(o.acao_label || "—")}${o.previsao ? `<span class="dr-sub">previsão ${dataBR(o.previsao)}</span>` : ""}</td>
+                <td>${o.aguardando_decisao ? `<span class="eui-badge eui-badge--danger" title="A NF não pode ser lançada até Compras definir o que será feito"><i class="fas fa-lock"></i> Lançamento bloqueado</span>` : esc(o.acao_label || "—")}${o.previsao ? `<span class="dr-sub">previsão ${dataBR(o.previsao)}</span>` : ""}</td>
                 <td>${esc(o.responsavel || "—")}</td>
                 <td style="white-space:nowrap;">${dataBR(o.aberta_em)}<span class="dr-sub">há ${o.dias_aberta} dia(s)</span></td>
                 <td style="white-space:nowrap;">${dataBR(o.atualizado_em)}<span class="dr-sub ${!o.finalizada && o.dias_sem_atualizacao >= 3 ? "dr-parada" : ""}">${o.atualizado_em ? o.atualizado_em.slice(11, 16) + " · " : ""}${esc(o.atualizado_por)}${!o.finalizada && o.dias_sem_atualizacao >= 1 ? ` · ${o.dias_sem_atualizacao} dia(s) parada` : ""}</span></td>
@@ -202,6 +206,15 @@
             $("dr-m-form-titulo").textContent = "Encerrada";
             $("dr-m-form").innerHTML = `<div class="dr-ok"><i class="fas fa-circle-check"></i> ${esc(o.status_label)} em ${dataHora(o.resolvida_em || o.atualizado_em)} por ${esc(o.atualizado_por)}.</div>`
                 + (f ? `<div style="margin-top:10px; font-size:13px;"><b>${esc(f.tipo_label)}</b>${f.numero_nf ? ` nº ${esc(f.numero_nf)}` : ""} em ${dataBR(f.data)} · por ${esc(f.por)}${f.observacao ? `<div class="dr-sub">${esc(f.observacao)}</div>` : ""}</div>` : "");
+            // Estornar desfaz quem fechou: etapa do Fiscal (Fiscal) ou Compras.
+            if (o.status === "Resolvida" && (f ? PODE_FISCAL : PODE_TRATAR)) {
+                $("dr-m-form").insertAdjacentHTML("beforeend", `<div class="dr-form" style="margin-top:14px; border-top:1px solid var(--eui-border); padding-top:12px;">
+                    <label class="eui-field"><span class="eui-field__label">Motivo do estorno</span><textarea id="dr-e-motivo" class="eui-input" maxlength="500" placeholder="Ex.: a reposição não chegou completa"></textarea></label>
+                    <div class="dr-sub">${f ? "Volta para \"Aguardando fiscal\" e desfaz o registro da " + esc(f.tipo_label.toLowerCase()) + " (fica no histórico)." : "Volta para \"Em tratativa\", com a mesma ação."}</div>
+                    <div style="display:flex; justify-content:flex-end;"><button class="eui-btn eui-btn--danger" id="dr-e-salvar"><i class="fas fa-rotate-left"></i> Estornar resolução</button></div>
+                </div>`);
+                $("dr-e-salvar").addEventListener("click", () => estornar(o));
+            }
             return;
         }
         if (o.aguardando_fiscal) {
@@ -214,18 +227,24 @@
                     <label class="eui-field"><span class="eui-field__label">Data</span><input type="date" id="dr-f-data" class="eui-input"></label>
                 </div>
                 <label class="eui-field" id="dr-f-nf-wrap"><span class="eui-field__label">Número da NF de devolução</span><input id="dr-f-nf" class="eui-input" maxlength="30"></label>
+                ${o.nf_lancada ? "" : `<div class="dr-aviso" id="dr-f-nao-lancada"><i class="fas fa-lock"></i> A NF ainda não foi lançada. Lance a NF no Documento de entrada antes de informar a NF de devolução.</div>`}
                 <label class="eui-field"><span class="eui-field__label">Observação</span><textarea id="dr-f-obs" class="eui-input" maxlength="500"></textarea></label>
                 <div style="display:flex; justify-content:flex-end;"><button class="eui-btn eui-btn--success" id="dr-f-salvar"><i class="fas fa-check"></i> Registrar e encerrar</button></div>
             </div>` + (PODE_TRATAR ? `<div style="margin-top:14px; border-top:1px solid var(--eui-border); padding-top:12px;"><div class="dr-sub" style="margin-bottom:8px;">Compras pode mudar a decisão:</div>${formCompras(o, false)}</div>` : "");
             const hoje = new Date(); $("dr-f-data").value = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
-            const trocaTipo = () => { $("dr-f-nf-wrap").style.display = $("dr-f-tipo").value === "NFDevolucao" ? "" : "none"; };
+            const trocaTipo = () => {
+                const devolucao = $("dr-f-tipo").value === "NFDevolucao";
+                $("dr-f-nf-wrap").style.display = devolucao ? "" : "none";
+                if ($("dr-f-nao-lancada")) $("dr-f-nao-lancada").style.display = devolucao ? "" : "none";
+            };
             $("dr-f-tipo").addEventListener("change", trocaTipo); trocaTipo();
             $("dr-f-salvar").addEventListener("click", () => salvarFiscal(o));
             ligarCompras(o);
             return;
         }
         $("dr-m-form-titulo").textContent = "Tratativa de Compras";
-        $("dr-m-form").innerHTML = PODE_TRATAR ? formCompras(o, false) : `<div class="dr-sub">Você pode acompanhar, mas só Compras atualiza a tratativa.</div>`;
+        const avisoBloqueio = o.aguardando_decisao ? `<div class="dr-aviso" style="margin-bottom:10px;"><i class="fas fa-lock"></i> A NF não pode ser lançada até Compras definir o que será feito.</div>` : "";
+        $("dr-m-form").innerHTML = avisoBloqueio + (PODE_TRATAR ? formCompras(o, false) : `<div class="dr-sub">Você pode acompanhar, mas só Compras atualiza a tratativa.</div>`);
         ligarCompras(o);
     }
 
@@ -270,6 +289,18 @@
         finally { btn.disabled = false; }
     }
 
+    async function estornar(o) {
+        const btn = $("dr-e-salvar"); btn.disabled = true;
+        try {
+            const d = await api(`/api/compras/divergencias-recebimento/${o.id}/estornar`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ motivo: $("dr-e-motivo").value }),
+            });
+            toast("Resolução estornada; ocorrência reaberta.", "success"); renderDetalhe(d); carregar();
+        } catch (e) { toast(e.message, "error"); }
+        finally { btn.disabled = false; }
+    }
+
     async function salvarFiscal(o) {
         const btn = $("dr-f-salvar"); btn.disabled = true;
         try {
@@ -299,7 +330,7 @@
         }).join("") || `<tr><td colspan="7" class="dr-empty">Sem itens.</td></tr>`;
         $("dr-m-eventos").innerHTML = (o.eventos || []).slice().reverse().map((e) => {
             const mudou = e.status_anterior && e.status_anterior !== e.status_novo ? `${esc(e.status_anterior_label)} → ${esc(e.status_novo_label)}` : (e.tipo === "Abertura" ? "Aberta" : "");
-            const titulo = { Abertura: "Divergência registrada", NovosItens: "Nova divergência na NF", Atualizacao: "Atualização de Compras", Fiscal: "Etapa do Fiscal", Lembrete: "Lembrete enviado" }[e.tipo] || e.tipo;
+            const titulo = { Abertura: "Divergência registrada", NovosItens: "Nova divergência na NF", Atualizacao: "Atualização de Compras", Fiscal: "Etapa do Fiscal", Lembrete: "Lembrete enviado", Estorno: "Estorno da NF", Reabertura: "Resolução estornada" }[e.tipo] || e.tipo;
             return `<div class="dr-ev dr-ev--${esc(e.tipo)}"><div class="dr-ev-cab"><span>${esc(titulo)} · ${esc(e.usuario)}</span><span>${dataHora(e.em)}</span></div>
                 ${mudou || e.acao_label ? `<div class="dr-sub">${mudou}${mudou && e.acao_label ? " · " : ""}${esc(e.acao_label || "")}</div>` : ""}
                 ${e.comentario ? `<div class="dr-ev-txt">${esc(e.comentario)}</div>` : ""}</div>`;

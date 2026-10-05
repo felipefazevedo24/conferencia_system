@@ -1602,13 +1602,16 @@ def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota],
             if oc["responsavel"]:
                 partes.append(f"responsável {oc['responsavel']}")
             descricao = " · ".join(partes) + (f". Último comentário: {oc['ultimo_comentario']}" if oc["ultimo_comentario"] else ".")
+            if oc["aguardando_decisao"]:
+                descricao = "Divergência no recebimento: o lançamento fica bloqueado até Compras definir o que será feito. " + descricao
             pendencias.append(
                 {
                     "tipo": "tratativa_compras",
-                    "titulo": "Tratativa de Compras",
-                    "severidade": "info" if oc["finalizada"] else "warning",
+                    "titulo": "Aguardando decisão de Compras" if oc["aguardando_decisao"] else "Tratativa de Compras",
+                    "severidade": "alta" if oc["aguardando_decisao"] else ("info" if oc["finalizada"] else "warning"),
                     "descricao": descricao,
                     "ocorrencia_id": oc["id"],
+                    "bloqueia_lancamento": oc["aguardando_decisao"],
                 }
             )
     except Exception:
@@ -6763,6 +6766,12 @@ def confirmar_lancamento():
             )
         return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
 
+    from ..services.ocorrencia_recebimento_service import lancamento_bloqueado
+
+    msg_bloqueio = lancamento_bloqueado(numero_nota, str(itens_concluidos[0].cnpj_emitente or ""))
+    if msg_bloqueio:
+        return jsonify({"sucesso": False, "msg": msg_bloqueio}), 400
+
     eh_material_cliente = bool(itens_concluidos[0].material_cliente)
     eh_remessa = bool(itens_concluidos[0].remessa)
     tipo_documento = str(itens_concluidos[0].tipo_documento or "NFE").upper()
@@ -6972,6 +6981,13 @@ def estornar_lancamento_fiscal():
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
 
+    from ..services.ocorrencia_recebimento_service import ao_estornar_lancamento, estorno_lancamento_bloqueado
+
+    cnpj_nota = str(possui_lancamento.cnpj_emitente or "")
+    msg_bloqueio = estorno_lancamento_bloqueado(numero_nota, cnpj_nota)
+    if msg_bloqueio:
+        return jsonify({"sucesso": False, "msg": msg_bloqueio}), 400
+
     ids_lancados = [int(i.id) for i in query_lancada.all()]
     if ids_lancados:
         ItemNota.query.filter(ItemNota.id.in_(ids_lancados)).update(
@@ -6991,6 +7007,7 @@ def estornar_lancamento_fiscal():
         )
     )
     db.session.commit()
+    ao_estornar_lancamento(numero_nota, cnpj_nota, usuario, motivo)
     return jsonify({"sucesso": True})
 
 
@@ -7057,6 +7074,11 @@ def estornar_conferencia_recebimento():
         item.auditor_data = None
 
     db.session.commit()
+
+    # A divergência da contagem estornada: cancela se Compras não decidiu, senão pede reavaliação.
+    from ..services.ocorrencia_recebimento_service import ao_estornar_conferencia
+
+    ao_estornar_conferencia(numero_nota, str(itens_nota[0].cnpj_emitente or "") if itens_nota else "", usuario, motivo)
 
     return jsonify({"sucesso": True, "msg": "Conferência estornada. NF voltou para a fila de conferência cega."})
 

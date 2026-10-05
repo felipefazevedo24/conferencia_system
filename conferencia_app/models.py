@@ -4183,7 +4183,8 @@ class OcorrenciaRecebimento(db.Model):
 
     Se Compras decide "Devolver totalmente", a ocorrência passa para
     AguardandoFiscal: o Fiscal informa a recusa da NF ou a NF de devolução
-    emitida, e só então ela fecha. Não bloqueia o lançamento da NF.
+    emitida, e só então ela fecha. Enquanto Compras não escolhe a ação
+    (acao vazia), a NF não pode ser lançada.
 
     Uma ocorrência aberta por NF (numero + CNPJ): nova divergência na mesma NF
     (recontagem depois de estorno) entra como item na ocorrência aberta."""
@@ -4245,7 +4246,7 @@ class OcorrenciaRecebimentoEvento(db.Model):
     ocorrencia_id = db.Column(db.Integer, db.ForeignKey("ocorrencia_recebimento.id"), nullable=False, index=True)
     em = db.Column(db.DateTime, default=agora_br, nullable=False)
     usuario = db.Column(db.String(100))
-    tipo = db.Column(db.String(20), nullable=False)  # Abertura | NovosItens | Atualizacao | Fiscal | Lembrete
+    tipo = db.Column(db.String(20), nullable=False)  # Abertura | NovosItens | Atualizacao | Fiscal | Lembrete | Estorno | Reabertura
     status_anterior = db.Column(db.String(30))
     status_novo = db.Column(db.String(30))
     acao = db.Column(db.String(30))

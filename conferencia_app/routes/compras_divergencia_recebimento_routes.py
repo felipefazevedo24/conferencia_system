@@ -76,6 +76,23 @@ def api_atualizar(ocorrencia_id: int):
     return jsonify(dados)
 
 
+@compras_divergencia_recebimento_bp.route("/api/compras/divergencias-recebimento/<int:ocorrencia_id>/estornar", methods=["POST"])
+@permission_required_any(PERM_TRATAR, PERM_FISCAL)
+def api_estornar(ocorrencia_id: int):
+    atual = svc.obter_ocorrencia(ocorrencia_id)
+    if atual is None:
+        return jsonify({"error": "Ocorrência não encontrada."}), 404
+    # Desfaz quem fechou: a etapa do Fiscal é do Fiscal; o resto, de Compras.
+    if not _pode(PERM_FISCAL if atual["fiscal"] else PERM_TRATAR):
+        return jsonify({"error": "Sem permissão para estornar esta resolução."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        dados = svc.estornar_resolucao(ocorrencia_id, session["username"], payload.get("motivo") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(dados)
+
+
 @compras_divergencia_recebimento_bp.route("/api/compras/divergencias-recebimento/<int:ocorrencia_id>/fiscal", methods=["POST"])
 @permission_required(PERM_FISCAL)
 def api_fiscal(ocorrencia_id: int):
