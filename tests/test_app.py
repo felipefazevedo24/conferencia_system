@@ -2207,6 +2207,44 @@ def test_retorno_de_industrializacao_recusa_nf_com_outro_cfop(tmp_path):
         assert {i.status for i in ItemNota.query.filter_by(numero_nota="7102").all()} == {"AguardandoLiberacao"}
 
 
+def test_nf_concluida_sem_conferencia_fisica_volta_para_o_auditor(tmp_path):
+    """NF que foi para lançamento sem conferência física (aqui, a regra antiga
+    do 5902) não tem checklist: o estorno é devolver ao Auditor."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        agora = datetime.now()
+        db.session.add(ItemNota(numero_nota="7105", fornecedor="AGD USINAGEM", codigo="RET-1", descricao="Retorno",
+                                cfop="5902", qtd_real=1.0, status="Concluído", sem_conferencia_logistica=True,
+                                usuario_conferencia="admin", inicio_conferencia=agora, fim_conferencia=agora,
+                                auditor_status="SemInconsistencia"))
+        db.session.commit()
+    resp = client.post("/api/fiscal/retornar_auditor", json={"nota": "7105", "motivo": "Marcar como retorno de industrializacao"})
+    assert resp.status_code == 200, resp.get_json()
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="7105").one()
+        assert item.status == "AguardandoLiberacao" and item.auditor_status == "NaoAuditado"
+        assert item.usuario_conferencia is None and item.inicio_conferencia is None and item.fim_conferencia is None
+
+
+def test_nf_lancada_ou_conferida_nao_volta_para_o_auditor(tmp_path):
+    from conferencia_app.models import ChecklistRecebimento
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+    with app.app_context():
+        db.session.add_all([
+            ItemNota(numero_nota="7106", fornecedor="F", codigo="A", descricao="A", qtd_real=1.0, status="Lançado"),
+            ItemNota(numero_nota="7107", fornecedor="F", codigo="B", descricao="B", qtd_real=1.0, status="Concluído"),
+            ChecklistRecebimento(numero_nota="7107", usuario="conferente"),
+        ])
+        db.session.commit()
+    assert client.post("/api/fiscal/retornar_auditor", json={"nota": "7106", "motivo": "teste"}).status_code == 400
+    resp = client.post("/api/fiscal/retornar_auditor", json={"nota": "7107", "motivo": "teste"})
+    assert resp.status_code == 400 and "Estornar conferência" in resp.get_json()["msg"]
+
+
 def test_nf_sem_cfop_de_retorno_nao_oferece_a_caixa(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

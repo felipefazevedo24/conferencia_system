@@ -7027,8 +7027,14 @@ _TIPOS_DOC_NAO_FISCAL_SET = {"FATURA", "DEBITO", "CONTA", "OUTRO"}
 @api_bp.route("/api/fiscal/retornar_auditor", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def retornar_doc_para_auditor():
-    """Retorna um documento não fiscal para o Auditor (AguardandoLiberacao),
-    permitindo editar a OC, alterar dados ou excluir o documento."""
+    """Retorna o documento para o Auditor (AguardandoLiberacao), permitindo
+    editar a OC, alterar dados ou excluir.
+
+    Vale para documento não fiscal e para NF que foi para lançamento SEM
+    conferência física (sem conferência logística, retorno de
+    industrialização, regra antiga do 5902): ela não tem checklist, então
+    "Estornar conferência" não se aplica e ficava sem saída. NF lançada ou com
+    conferência física registrada não volta por aqui."""
     data = request.get_json(silent=True) or {}
     numero_nota = str(data.get("nota") or "").strip()
     documento_ref = data.get("documento_ref")
@@ -7049,19 +7055,26 @@ def retornar_doc_para_auditor():
         return jsonify({"sucesso": False, "msg": "Documento não encontrado"}), 404
 
     tipo = str(itens[0].tipo_documento or "").upper()
+    campos = {
+        "status": "AguardandoLiberacao",
+        "auditor_status": "NaoAuditado",
+        "auditor_decisao": "PendenteDecisao",
+        "numero_lancamento": None,
+        "usuario_lancamento": None,
+        "data_lancamento": None,
+    }
     if tipo not in _TIPOS_DOC_NAO_FISCAL_SET:
-        return jsonify({"sucesso": False, "msg": "Esta operação é exclusiva para documentos não fiscais"}), 400
+        if any((i.status or "") == "Lançado" or i.data_lancamento for i in itens):
+            return jsonify({"sucesso": False, "msg": "NF já foi lançada. Estorne o lançamento fiscal primeiro."}), 400
+        if ChecklistRecebimento.query.filter_by(numero_nota=numero_nota).first():
+            return jsonify({"sucesso": False, "msg": "NF tem conferência física registrada: use \"Estornar conferência\"."}), 400
+        # Nunca foi conferida fisicamente: limpa o "conferente" que a liberação
+        # sem conferência gravou, para não parecer conferida.
+        campos.update({"usuario_conferencia": None, "inicio_conferencia": None, "fim_conferencia": None})
 
     ids_alvo = [int(i.id) for i in itens]
     if ids_alvo:
-        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update({
-            "status": "AguardandoLiberacao",
-            "auditor_status": "NaoAuditado",
-            "auditor_decisao": "PendenteDecisao",
-            "numero_lancamento": None,
-            "usuario_lancamento": None,
-            "data_lancamento": None,
-        }, synchronize_session=False)
+        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update(campos, synchronize_session=False)
     db.session.add(LogEstornoLancamento(
         numero_nota=numero_nota,
         usuario_estorno=session["username"],
