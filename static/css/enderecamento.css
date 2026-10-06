@@ -16,3 +16,4 @@
 .end-select{flex:0 0 auto;width:auto;max-width:230px;border:1px solid var(--eui-border,#dbe4ec);border-radius:8px;background:var(--eui-surface-2,#f8fafc);color:var(--eui-text,#183247);font:inherit;font-size:13px;padding:10px 12px;min-height:44px}
 .end-toolbar .end-check{flex:0 0 auto;white-space:nowrap}
 @media(max-width:600px){.end-select{max-width:none;width:100%}}
+.end-badge.end-badge--os{margin-top:4px;background:var(--eui-primary-soft);color:var(--eui-primary-soft-text)}

@@ -793,6 +793,25 @@ LIMIT 1000;
 
 SQL_HEALTHCHECK = "SELECT 1 AS ok;"
 
+# -------------------------------------------------------------------
+# Endereçamento: OS -> produto acabado (tos.cod_produto). Produto acabado =
+# tipo_item '04' (SPED); com o tipo em branco (cadastro novo, ex.: OS 11078
+# -> 23-01-05879), vale a família "N - 04 - PRODUTOS". Serviço/insumo com
+# tipo preenchido fica de fora. n_os é único (conferido em 06/10/2026).
+# -------------------------------------------------------------------
+SQL_OS_PRODUTO_ACABADO = """
+SELECT os.n_os, p.codigo_interno, p.nome, os.titulo,
+       COALESCE(os.concluido, 0) AS concluido, COALESCE(os.cancelado, 0) AS cancelado
+FROM public.tos os
+JOIN public.tproduto p ON p.cod_empresa = os.cod_empresa AND p.codigo = os.cod_produto
+LEFT JOIN public.tfamilia f ON f.cod_empresa = p.cod_empresa AND f.codigo = p.cod_familia
+WHERE os.cod_empresa = %(cod_empresa)s
+  AND os.n_os = %(n_os)s
+  AND (TRIM(COALESCE(p.tipo_item, '')) = '04'
+       OR (TRIM(COALESCE(p.tipo_item, '')) = '' AND COALESCE(f.nome, '') ~ '^[A-Z]+ - 04 - '))
+LIMIT 5;
+"""
+
 SQL_CLASSIFICACOES = """
 SELECT u_classificacao AS classificacao, COUNT(*) AS qtd
 FROM public.tos

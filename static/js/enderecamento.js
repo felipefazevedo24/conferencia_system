@@ -30,9 +30,13 @@
    for(const s of balances){
     const row=node('tr');
     cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
-    cell(row,'SKU',s.sku,'end-code');cell(row,'Descrição',s.descricao||'—');
+    cell(row,'SKU',s.sku,'end-code');
+    const desc=node('div');desc.append(node('div',s.descricao||'—'));
+    if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
+    cell(row,'Descrição',desc);
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
-    const actions=node('div',null,'end-actions');actions.append(button('Movimentar',()=>open(s)));
+    // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
+    const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
     actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }

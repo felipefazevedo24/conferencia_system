@@ -83,3 +83,31 @@ def test_fila_usa_o_sku_vigente_do_item_e_filtra_quem_nao_controla_estoque(app):
         dados = client.get("/api/recebimento/enderecamento?status=Pendente").get_json()
     assert [i["sku"] for i in dados["itens"]] == ["28-11-00145"]
     assert dados["contadores"]["Pendente"] == 1
+
+
+def test_busca_por_os_acha_o_produto_acabado_mesmo_sem_saldo(app):
+    client = app.test_client()
+    login_admin(client)
+    estoque = {"por_codigo": {
+        "23-01-05879": {"item": "MOLD HTX1100 FP SEXT25CM", "unidade": "PÇ", "qtde_total": 0, "localizacoes": [],
+                        "familia": "N - 04 - PRODUTOS", "grupo": "1", "controla_estoque": 1},
+        "19-01-00001": {"item": "CHAPA 11078", "unidade": "KG", "qtde_total": 5, "localizacoes": ["A-01"],
+                        "familia": "N - 01 - MATÉRIA-PRIMA", "grupo": "1", "controla_estoque": 1},
+    }}
+    os_grv = [{"n_os": "11078", "codigo_interno": "23-01-05879", "nome": "MOLD", "titulo": "MOLD HTX1100", "concluido": 0, "cancelado": 0}]
+    with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all", return_value=os_grv) as consulta:
+        dados = client.get("/api/enderecamento/saldos?busca=11078&saldo=1").get_json()
+    assert consulta.call_args.args[1] == {"cod_empresa": 1, "n_os": "11078"}
+    # O produto da OS vem primeiro, mesmo sem saldo e com "Somente com saldo" marcado.
+    primeiro = dados["itens"][0]
+    assert (primeiro["sku"], primeiro["endereco"], primeiro["os"]["n_os"], primeiro["os"]["situacao"]) == ("23-01-05879", "", "11078", "Em aberto")
+    # A busca por texto continua valendo junto ("11078" na descrição da chapa).
+    assert [i["sku"] for i in dados["itens"]] == ["23-01-05879", "19-01-00001"]
+
+    # Texto que não é número de OS não consulta o GRV; GRV fora não derruba a busca.
+    with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all") as consulta:
+        client.get("/api/enderecamento/saldos?busca=CHAPA")
+    consulta.assert_not_called()
+    with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all", side_effect=RuntimeError("bridge fora")):
+        r = client.get("/api/enderecamento/saldos?busca=11078")
+    assert r.status_code == 200 and [i["sku"] for i in r.get_json()["itens"]] == ["19-01-00001"]

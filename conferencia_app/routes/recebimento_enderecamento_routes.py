@@ -178,6 +178,29 @@ def movimento_json(m):
         sincronizado=bool(m.sincronizado_em), erro=m.erro)
 
 
+def _produto_acabado_da_os(busca):
+    """'11078', 'OS 11078' ou '11078/001' -> {sku: {n_os, titulo, ...}}.
+
+    Falha da bridge não derruba a busca: devolve vazio e a busca por texto segue."""
+    import re
+
+    achado = re.fullmatch(r'(?:OS\s*)?(\d{3,7})(?:/\d+)?', busca.strip().upper())
+    if not achado:
+        return {}
+    try:
+        from ..compras import queries
+        from ..compras.db import fetch_all
+
+        linhas = fetch_all(queries.SQL_OS_PRODUTO_ACABADO, {"cod_empresa": 1, "n_os": achado.group(1)})
+    except Exception:
+        current_app.logger.warning('Busca por OS no endereçamento: GRV indisponível.', exc_info=True)
+        return {}
+    return {str(l['codigo_interno']).strip().upper(): {
+                'n_os': l['n_os'], 'titulo': l.get('titulo') or '',
+                'situacao': 'Cancelada' if l.get('cancelado') else ('Concluída' if l.get('concluido') else 'Em aberto')}
+            for l in linhas if l.get('codigo_interno')}
+
+
 @recebimento_enderecamento_bp.get('/api/enderecamento/saldos')
 @permission_required(PERMISSION)
 def saldos():
@@ -229,12 +252,28 @@ def saldos():
         pass
     else:
         registros = registros + sem_endereco
+    os_achada = {}
     if busca:
-        registros = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
+        os_achada = _produto_acabado_da_os(busca)
+        filtrados = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
+        if os_achada:
+            # O produto da OS entra mesmo sem saldo ou fora do filtro: a ideia é
+            # achar o material para endereçar quando sai da produção.
+            vistos = {(r[0], r[1]) for r in filtrados}
+            por_codigo = estoque.get('por_codigo') or {}
+            for sku in os_achada:
+                agregado = por_codigo.get(sku) or {}
+                enderecos = sorted({e.strip() for b in agregado.get('localizacoes') or [] for e in str(b).split(';') if e.strip()}) or ['']
+                for endereco in enderecos:
+                    if (endereco, sku) not in vistos:
+                        filtrados.append((endereco, sku, str(agregado.get('item') or os_achada[sku]['titulo']).strip(),
+                                          str(agregado.get('unidade') or '').strip(), float(agregado.get('qtde_total') or 0)))
+        registros = filtrados
     # Sem endereço vai para o fim, como nas outras listagens do sistema.
-    registros.sort(key=lambda r: (r[0] == '', r[0], r[1]))
+    # Na busca por OS, o produto da OS vem primeiro.
+    registros.sort(key=lambda r: (r[1] not in os_achada, r[0] == '', r[0], r[1]))
     total = len(registros)
-    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo)
+    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s))
                           for e, s, d, u, saldo in registros[(pagina-1)*40:pagina*40]],
                    total=total, pagina=pagina,
                    metricas=dict(materiais=materiais, enderecos=enderecos,
