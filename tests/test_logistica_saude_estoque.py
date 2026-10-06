@@ -34,7 +34,7 @@ def test_pagina_renderiza_com_todas_as_checagens_e_link_no_menu(tmp_path):
     login_admin(client)
     html = client.get("/logistica/saude-estoque").get_data(as_text=True)
     assert "Saúde do estoque" in html
-    assert 'href="/logistica/saude-estoque"' in html
+    assert 'href="/logistica/saude-estoque"' not in html  # fora do menu lateral, só por link direto
     for c in svc.CHECAGENS:
         assert c["chave"] in html
 
@@ -141,3 +141,17 @@ def test_bridge_endpoint_roda_a_checagem_em_conexao_so_leitura(monkeypatch):
     assert resp["sucesso"] is True and resp["quantidade"] == 1 and resp["valor"] == 81958.42
     assert chamadas == [{"readonly": True}]
     assert client.post("/api/erp/estoque/saude", json={"chave": "x"}).status_code == 400
+
+
+def test_service_importa_na_vm_da_bridge_sem_tempo_py():
+    # A VM da bridge é atualizada arquivo a arquivo e não tem conferencia_app/tempo.py
+    # (05/10/2026: ImportError ao subir a Saúde do estoque). O que a bridge usa
+    # (executar_checagem) não pode depender dele: nada de import de tempo no topo do módulo.
+    import ast
+    import inspect
+
+    arvore = ast.parse(inspect.getsource(svc))
+    topo = [n for n in arvore.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    modulos = {(n.module or "") for n in topo if isinstance(n, ast.ImportFrom)} | {a.name for n in topo if isinstance(n, ast.Import) for a in n.names}
+    assert "tempo" not in modulos and "models" not in modulos, modulos
+    assert "agora_br" not in inspect.getsource(svc.executar_checagem)

@@ -25,7 +25,10 @@ from typing import Any
 from flask import current_app
 
 from ..extensions import db
-from ..tempo import agora_br
+
+# A bridge importa este módulo só para executar_checagem. Ela roda numa VM
+# atualizada arquivo a arquivo, sem conferencia_app/tempo.py (e sem tzdata
+# garantido para o zoneinfo): agora_br é importado dentro das funções do Sync.
 
 MAX_LINHAS = 500
 CACHE_SEGUNDOS = 30 * 60
@@ -291,37 +294,80 @@ ORDER BY valor DESC""",
         "categoria": "reposicao",
         "titulo": "Estoque mínimo × consumo",
         "descricao": "Mínimo sem consumo, mínimo acima de 6 meses de consumo, ou item consumido todo mês sem mínimo (depósito 1, 12 meses).",
-        "acao": "Revisar o mínimo no GRV pelo consumo médio. O lead time está zerado em todos os produtos: sem ele não há ponto de pedido.",
+        "acao": "Lançar no GRV o mínimo sugerido (coluna \"Mínimo sugerido\"). Sugestão = consumo no prazo de entrega + estoque de segurança de 95%. O lead time do cadastro está zerado em todos os produtos; o prazo usado é o real, da data da OC até a entrada no estoque (mediana das OCs dos últimos 24 meses; 30 dias quando o item não tem OC com entrada).",
         "colunas": [("situacao", "Situação", "texto"), ("codigo_interno", "Código", "texto"), ("nome", "Descrição", "texto"),
-                    ("unidade", "Un.", "texto"), ("minimo", "Mínimo", "qtd"), ("consumo_medio_mensal", "Consumo/mês", "qtd"),
+                    ("unidade", "Un.", "texto"), ("minimo", "Mínimo atual", "qtd"), ("minimo_sugerido", "Mínimo sugerido", "qtd"),
+                    ("consumo_medio_mensal", "Consumo/mês", "qtd"), ("prazo_entrega", "Prazo entrega", "texto"),
                     ("meses_com_consumo", "Meses c/ consumo", "int"), ("disponivel", "Disponível", "qtd"), ("valor", "Valor do mínimo", "moeda")],
         "valor": "valor",
-        "sql": """
-WITH cons AS (
-    SELECT cod_produto, SUM(ABS(qtde_movimentada)) / 12.0 AS media,
-           COUNT(DISTINCT DATE_TRUNC('month', dt_hora_movimentacao)) AS meses
+        # Mínimo sugerido = ponto de pedido:
+        #   consumo médio diário x prazo de entrega  (o que sai enquanto a compra chega)
+        # + 1,65 x desvio do consumo mensal x raiz(prazo/30)  (segurança: 95% de não faltar)
+        # Consumo: 12 meses fechados, mês sem saída conta como zero (senão o desvio
+        # de item intermitente sai subestimado). Prazo: mediana real OC -> 1a entrada
+        # no depósito 1 (05/10/2026: 187 de 197 itens frequentes têm; mediana 7 dias).
+        # Unidade inteira arredonda para cima.
+        "sql": f"""
+WITH meses AS (
+    SELECT GENERATE_SERIES(DATE_TRUNC('month', NOW()) - INTERVAL '12 months',
+                           DATE_TRUNC('month', NOW()) - INTERVAL '1 month', INTERVAL '1 month') AS mes
+), cons_mes AS (
+    SELECT cod_produto, DATE_TRUNC('month', dt_hora_movimentacao) AS mes, SUM(ABS(qtde_movimentada)) AS q
     FROM public.tproduto_cardex
     WHERE cod_empresa = %(empresa)s AND cod_deposito = 1 AND tipo_movimento = 1
       AND UPPER(tabela_link) IN ('TSAIDA_E', 'TOS', 'TSOL_MAT', 'TNOTA_FISCAL')
-      AND dt_hora_movimentacao >= NOW() - INTERVAL '12 months'
+      AND dt_hora_movimentacao >= DATE_TRUNC('month', NOW()) - INTERVAL '12 months'
+      AND dt_hora_movimentacao < DATE_TRUNC('month', NOW())
+    GROUP BY 1, 2
+), cons AS (
+    SELECT pr.cod_produto, AVG(COALESCE(c.q, 0)) AS media, COALESCE(STDDEV_SAMP(COALESCE(c.q, 0)), 0) AS desvio,
+           COUNT(c.q) AS meses
+    FROM (SELECT DISTINCT cod_produto FROM cons_mes) pr
+    CROSS JOIN meses m
+    LEFT JOIN cons_mes c ON c.cod_produto = pr.cod_produto AND c.mes = m.mes
+    GROUP BY 1
+), lt AS (
+    SELECT a.cod_produto, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ent.dt - o.data::date) AS dias, COUNT(*) AS n_oc
+    FROM public.tord_aux a
+    JOIN public.tord_com o ON o.cod_empresa = a.cod_empresa AND o.codigo = a.cod_ord_compra
+    JOIN LATERAL (
+        SELECT MIN(k.dt_hora_movimentacao)::date AS dt
+        FROM public.tcom_ordem_compra co
+        JOIN public.tproduto_cardex k
+          ON k.cod_empresa = co.cod_empresa AND UPPER(k.tabela_link) = 'TCOMPRAS'
+         AND k.chave_primaria_link = co.cod_empresa::text || ';' || co.cod_compra::text
+         AND k.cod_produto = a.cod_produto AND k.cod_deposito = 1 AND k.tipo_movimento = 0 AND k.qtde_movimentada > 0
+        WHERE co.cod_empresa = o.cod_empresa AND co.cod_ordem_compra = o.codigo AND k.dt_hora_movimentacao >= o.data
+    ) ent ON ent.dt IS NOT NULL
+    WHERE a.cod_empresa = %(empresa)s AND COALESCE(o.cancelado, 0) = 0 AND o.data >= NOW() - INTERVAL '24 months'
+      AND a.cod_produto IN (SELECT cod_produto FROM cons)
     GROUP BY 1
 ), base AS (
     SELECT p.codigo_interno, p.nome, p.unidade, COALESCE(d.estoque_minimo, 0) AS minimo,
-           COALESCE(c.media, 0) AS consumo_medio_mensal, COALESCE(c.meses, 0) AS meses_com_consumo,
-           COALESCE(d.qtde_disponivel, 0) AS disponivel, COALESCE(p.preco_custo, 0) AS custo
+           COALESCE(c.media, 0) AS consumo_medio_mensal, COALESCE(c.desvio, 0) AS desvio, COALESCE(c.meses, 0) AS meses_com_consumo,
+           COALESCE(d.qtde_disponivel, 0) AS disponivel, COALESCE(p.preco_custo, 0) AS custo,
+           lt.dias AS lt_real, lt.n_oc, COALESCE(lt.dias, 30) AS lt_dias,
+           UPPER(TRIM(p.unidade)) IN {UNIDADES_INTEIRAS} AS inteira
     FROM public.tproduto p
     LEFT JOIN public.tproduto_deposito d ON d.cod_empresa = p.cod_empresa AND d.cod_produto = p.codigo AND d.cod_deposito = 1
     LEFT JOIN cons c ON c.cod_produto = p.codigo
+    LEFT JOIN lt ON lt.cod_produto = p.codigo
     WHERE p.cod_empresa = %(empresa)s AND COALESCE(p.inativo, 0) = 0
+), sug AS (
+    SELECT *, consumo_medio_mensal / 30.0 * lt_dias + 1.65 * desvio * SQRT(lt_dias / 30.0) AS bruto FROM base
 ), cls AS (
     SELECT *, CASE
         WHEN minimo > 0 AND meses_com_consumo = 0 THEN 'Mínimo sem consumo em 12 meses'
         WHEN minimo > 0 AND consumo_medio_mensal > 0 AND minimo > consumo_medio_mensal * 6 THEN 'Mínimo acima de 6 meses de consumo'
         WHEN minimo <= 0 AND meses_com_consumo >= 6 THEN 'Consumido todo mês, sem mínimo'
-    END AS situacao
-    FROM base
+    END AS situacao,
+    CASE WHEN inteira THEN CEIL(bruto) ELSE CEIL(bruto * 100) / 100.0 END AS minimo_sugerido
+    FROM sug
 )
-SELECT situacao, codigo_interno, nome, unidade, minimo, consumo_medio_mensal, meses_com_consumo, disponivel,
+SELECT situacao, codigo_interno, nome, unidade, minimo, minimo_sugerido, consumo_medio_mensal,
+       CASE WHEN lt_real IS NULL THEN '30 dias (padrão, sem OC)'
+            ELSE ROUND(lt_real::numeric)::text || ' dias (' || n_oc || ' OC)' END AS prazo_entrega,
+       meses_com_consumo, disponivel,
        CASE WHEN minimo > 0 THEN minimo * custo END AS valor
 FROM cls WHERE situacao IS NOT NULL
 ORDER BY situacao, CASE WHEN minimo > 0 THEN minimo * custo ELSE 0 END DESC, meses_com_consumo DESC""",
@@ -434,6 +480,7 @@ def _consultar_bridge(chave: str) -> dict[str, Any]:
 
 def _gravar_foto(chave: str, quantidade: int, valor: float | None) -> None:
     from ..models import LogisticaEstoqueSaudeFoto
+    from ..tempo import agora_br
 
     try:
         hoje = agora_br().date()
@@ -451,6 +498,7 @@ def _gravar_foto(chave: str, quantidade: int, valor: float | None) -> None:
 def tendencia(chave: str) -> dict[str, Any] | None:
     """Comparação com a foto mais antiga dos últimos 30 dias (fora hoje)."""
     from ..models import LogisticaEstoqueSaudeFoto
+    from ..tempo import agora_br
 
     hoje = agora_br().date()
     foto = (LogisticaEstoqueSaudeFoto.query
@@ -465,6 +513,8 @@ def tendencia(chave: str) -> dict[str, Any] | None:
 def buscar_checagem(chave: str, forcar: bool = False) -> dict[str, Any] | None:
     """Resultado de uma checagem para a tela. None = chave desconhecida.
     Nunca levanta: falha na bridge volta com disponivel=False."""
+    from ..tempo import agora_br
+
     if chave not in POR_CHAVE:
         return None
     agora = time.time()
