@@ -38,21 +38,20 @@
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    if(data.erro)message(data.erro);
    for(const s of balances){
-    const row=node('tr',null,s.em_inventario||s.inventario_solicitado?'end-row--inventario':'');
+    const row=node('tr',null,s.em_inventario?'end-row--inventario':'');
     cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
     cell(row,'SKU',s.sku,'end-code');
     const desc=node('div');desc.append(node('div',s.descricao||'—'));
     if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
     if(s.em_inventario)desc.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));
-    if(s.inventario_solicitado)desc.append(node('span','Inventário solicitado','end-badge end-badge--inventario end-badge--pedido'));
     cell(row,'Descrição',desc);
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
     const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
     // Histórico e sincronização é só de admin (o servidor também confere).
     if(admin)actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
-    // Pedir contagem de um material endereçado: permissão própria (o servidor também confere).
-    if(podePedirInventario&&s.endereco&&(s.inventario_solicitado||!s.em_inventario))actions.append(button(s.inventario_solicitado?'Cancelar pedido':'Pedir inventário',()=>pedirInventario(s)));
+    // Inventário de um material endereçado: permissão própria (o servidor também confere).
+    if(podePedirInventario&&s.endereco&&!s.em_inventario)actions.append(button('Pedir inventário',()=>pedirInventario(s)));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
    if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
@@ -131,14 +130,17 @@
    await Promise.all([places(),refresh()]);
   }catch(e){message(e.message);}
  }
+ // Quem pede já informa o que contou: o inventário abre na hora.
  async function pedirInventario(s){
-  const cancelar=s.inventario_solicitado;
-  if(!confirm(cancelar?`Cancelar o pedido de inventário de ${s.sku}?`:`Pedir o inventário de ${s.sku} em ${s.endereco}? O material fica marcado como "Inventário solicitado" até ser contado.`))return;
+  const digitado=prompt(`Inventário de ${s.sku} em ${s.endereco}.\nQuantidade contada${s.unidade?` (${s.unidade})`:''}:`);
+  if(digitado===null)return;
+  const contado=Number(digitado.trim().replace(',','.'));
+  if(!digitado.trim()||!Number.isFinite(contado)||contado<=0){message('Informe a quantidade contada, maior que zero.');return;}
   try{
-   const resp=await fetch(base+'/pedido-inventario',{method:cancelar?'DELETE':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:s.sku,endereco:s.endereco})});
-   const data=await resp.json().catch(()=>({}));
-   if(!resp.ok)throw new Error(data.erro||'Não foi possível concluir. Verifique a conexão e tente novamente.');
-   message(cancelar?`Pedido de inventário de ${s.sku} cancelado.`:`Inventário de ${s.sku} solicitado.`);
+   const inv=(await request('/inventariar',{sku:s.sku,endereco:s.endereco,quantidade:digitado.trim()})).inventario;
+   message(inv.ajuste?`Inventário de ${s.sku} aberto: contado ${number(inv.contado)}, GRV ${number(inv.saldo_grv)}. O item está em análise de inventário.`
+    :inv.divergente?`Contagem de ${s.sku} registrada. O item já estava em análise de inventário neste endereço.`
+    :`Inventário de ${s.sku} registrado: a contagem confere com o saldo do GRV.`);
    await refresh();
   }catch(e){message(e.message);}
  }
@@ -188,7 +190,6 @@
    const meta=[sku];if(data.saldo!=null)meta.push(`Saldo no GRV: ${number(data.saldo)} ${data.unidade||''}`.trim());
    card.append(node('div',meta.join(' · '),'end-muted'));
    if(data.em_inventario){card.classList.add('end-material--inventario');card.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));}
-   if(data.inventario_solicitado){card.classList.add('end-material--inventario');card.append(node('span','Inventário solicitado','end-badge end-badge--inventario end-badge--pedido'));}
    const chips=node('div',null,'end-chips');
    if(atuais.length){
     chips.append(node('span','Hoje em:','end-muted'));

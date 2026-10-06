@@ -260,46 +260,45 @@ def skus_em_inventario(skus=None):
     return {str(codigo).strip().upper() for (codigo,) in query.distinct()}
 
 
-def _pedidos_abertos():
-    """Pedido aberto = ainda sem contagem do material feita depois dele."""
-    from ..models import EnderecamentoPedidoInventario as Pedido, LogisticaInventarioInicial as Contagem
-    contado = db.session.query(Contagem.id).filter(Contagem.codigo_produto == Pedido.sku,
-                                                   Contagem.criado_em >= Pedido.solicitado_em).exists()
-    return Pedido.query.filter(~contado)
+def _registrar_contagem(codigo, endereco, contado, usuario, observacao, estoque, agregado):
+    """Grava a contagem no inventário normal, com o retrato do GRV na hora.
+    Divergiu, o próprio inventário abre o ajuste em Validação."""
+    from ..models import LogisticaInventarioInicial as Contagem
+    from . import erp_estoque_service, logistica_inventario_ajuste_service as ajuste_svc
+    saldo_grv = float(agregado.get('qtde_total') or 0)
+    custo = erp_estoque_service.custo_medio_para(codigo, endereco, estoque)
+    agora = agora_br()
+    contagem = Contagem(local_codigo=endereco, codigo_produto=codigo,
+                        unidade_medida=str(agregado.get('unidade') or 'UN').strip().upper()[:20],
+                        quantidade=contado, observacao=observacao,
+                        criado_por=usuario, atualizado_em=agora, qtde_grv_no_momento=saldo_grv,
+                        custo_medio_no_momento=custo, grv_consultado_em=agora)
+    db.session.add(contagem)
+    db.session.commit()
+    ajuste = ajuste_svc.detectar_divergencia(contagem, saldo_grv, custo,
+                                             erp_estoque_service.descricao_para(codigo, estoque))
+    # Divergente e sem ajuste novo = já havia um aberto para este material neste endereço.
+    return {'contagem': contagem.id, 'ajuste': ajuste.id if ajuste else None,
+            'contado': contado, 'saldo_grv': saldo_grv,
+            'divergente': abs(contado - saldo_grv) > ajuste_svc.TOLERANCIA_DIVERGENCIA}
 
 
-def skus_com_inventario_pedido(skus=None):
-    from ..models import EnderecamentoPedidoInventario as Pedido
-    query = _pedidos_abertos()
-    if skus is not None:
-        alvo = {str(s or '').strip().upper() for s in skus} - {''}
-        if not alvo:
-            return set()
-        query = query.filter(Pedido.sku.in_(alvo))
-    return {p.sku for p in query}
-
-
-def pedir_inventario(sku, endereco, usuario):
-    from ..models import EnderecamentoPedidoInventario as Pedido
-    # Mesma grafia do inventário (código em maiúsculas), para a contagem fechar o pedido.
-    sku = texto(sku, 'o SKU', 80).upper()
+def inventariar_material(sku, endereco, contado, usuario):
+    """Inventário pedido no Endereçamento para um material já endereçado: quem
+    pede informa na hora a quantidade contada e a contagem entra no fluxo
+    normal. Diferente da movimentação, a contagem é gravada mesmo quando
+    confere com o GRV - foi um inventário feito, e isso fica registrado."""
+    from . import erp_estoque_service
+    # Mesma grafia do inventário: código em maiúsculas.
+    codigo = texto(sku, 'o SKU', 80).upper()
     endereco = normalizar(texto(endereco, 'um endereço', 80))
-    if skus_com_inventario_pedido([sku]):
-        raise ValueError('Este material já tem inventário solicitado.')
-    if skus_em_inventario([sku]):
-        raise ValueError('Este material já está em análise de inventário.')
-    db.session.add(Pedido(sku=sku, endereco=endereco, solicitado_por=usuario))
-    db.session.commit()
-
-
-def cancelar_pedido_inventario(sku):
-    sku = texto(sku, 'o SKU', 80).upper()
-    abertos = _pedidos_abertos().filter_by(sku=sku).all()
-    if not abertos:
-        raise ValueError('Este material não tem inventário solicitado em aberto.')
-    for pedido in abertos:
-        db.session.delete(pedido)
-    db.session.commit()
+    contado = float(quantidade(contado))
+    estoque = erp_estoque_service.buscar_estoque_grv()
+    agregado = (estoque.get('por_codigo') or {}).get(codigo)
+    if not agregado:
+        raise ValueError('Material não encontrado no estoque do GRV. Atualize a lista e tente novamente.')
+    return _registrar_contagem(codigo, endereco, contado, usuario,
+                               'Inventário pedido no endereçamento.', estoque, agregado)
 
 
 def abrir_inventario(mov_id, usuario):
@@ -310,7 +309,6 @@ def abrir_inventario(mov_id, usuario):
     mostra. A contagem cai no fluxo de sempre: divergiu, vira ajuste em
     Validação. Quem decide se há divergência é o servidor, não a tela.
     Devolve None quando não há o que abrir."""
-    from ..models import LogisticaInventarioInicial as Contagem
     from . import erp_estoque_service, logistica_inventario_ajuste_service as ajuste_svc
     mov = db.session.get(Movimento, mov_id)
     detalhes = dict(mov.detalhes or {})
@@ -328,21 +326,8 @@ def abrir_inventario(mov_id, usuario):
     saldo_grv = float(agregado.get('qtde_total') or 0)
     if abs(float(mov.quantidade) - saldo_grv) <= ajuste_svc.TOLERANCIA_DIVERGENCIA:
         return None
-    custo = erp_estoque_service.custo_medio_para(codigo, mov.destino, estoque)
-    agora = agora_br()
-    contagem = Contagem(local_codigo=mov.destino, codigo_produto=codigo,
-                        unidade_medida=str(agregado.get('unidade') or mov.unidade).strip().upper()[:20],
-                        quantidade=float(mov.quantidade),
-                        observacao=f'Aberto pelo endereçamento (movimentação {mov.id}).',
-                        criado_por=usuario, atualizado_em=agora, qtde_grv_no_momento=saldo_grv,
-                        custo_medio_no_momento=custo, grv_consultado_em=agora)
-    db.session.add(contagem)
-    db.session.commit()
-    ajuste = ajuste_svc.detectar_divergencia(contagem, saldo_grv, custo,
-                                             erp_estoque_service.descricao_para(codigo, estoque))
-    # Sem ajuste novo aqui = já havia um aberto para este material neste endereço.
-    resumo = {'contagem': contagem.id, 'ajuste': ajuste.id if ajuste else None,
-              'contado': float(mov.quantidade), 'saldo_grv': saldo_grv}
+    resumo = _registrar_contagem(codigo, mov.destino, float(mov.quantidade), usuario,
+                                 f'Aberto pelo endereçamento (movimentação {mov.id}).', estoque, agregado)
     mov.detalhes = {**detalhes, 'inventario': resumo}
     db.session.commit()
     return resumo

@@ -606,35 +606,44 @@ def test_quantidade_diferente_do_grv_abre_inventario_e_marca_o_item(app, state, 
     assert client.get('/api/enderecamento/material?sku=SKU-1').get_json()['em_inventario'] is False
 
 
-def test_pedido_de_inventario_marca_o_material_ate_a_contagem(app, state, monkeypatch):
-    """Pedir inventário de um material endereçado: permissão própria, marca o
-    item e fecha sozinho quando o material é contado."""
-    from conferencia_app.models import EnderecamentoPedidoInventario as Pedido, LogisticaInventarioInicial as Contagem
+def test_inventario_pedido_no_enderecamento_abre_na_hora(app, state, monkeypatch):
+    """Pedir inventário de um material endereçado: permissão própria; quem pede
+    informa a quantidade e o inventário abre na hora."""
+    from conferencia_app.models import LogisticaInventarioAjuste as Ajuste, LogisticaInventarioInicial as Contagem
+    from conferencia_app.services import teams_service
+    avisos = []
     monkeypatch.setattr(erp_estoque_service, 'buscar_estoque_grv', lambda **kw: ESTOQUE_GRV)
+    monkeypatch.setattr(teams_service, 'notificar_divergencia_inventario_gestor', lambda *a, **kw: avisos.append(a))
     client = app.test_client()
-    rota, material = '/api/enderecamento/pedido-inventario', '/api/enderecamento/material?sku=SKU-1'
-    # Conferente endereça, mas não pede inventário.
+    rota = '/api/enderecamento/inventariar'
+    # Conferente endereça, mas não abre inventário por aqui.
     with client.session_transaction() as sess:
         sess['username'] = 'operador'; sess['role'] = 'Conferente'
-    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code in (403, 302)
-    assert Pedido.query.count() == 0
+    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A', 'quantidade': '7'}).status_code in (403, 302)
+    assert Contagem.query.count() == 0
     with client.session_transaction() as sess:
         sess['username'] = 'admin'; sess['role'] = 'Admin'
-    assert client.post(rota, json={'sku': 'sku-1', 'endereco': 'A'}).status_code == 200
-    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 409  # já pedido
-    assert client.post(rota, json={'sku': 'SKU-2'}).status_code == 409  # sem endereço
-    assert client.get(material).get_json()['inventario_solicitado'] is True
-    marcados = {i['sku']: i['inventario_solicitado'] for i in client.get('/api/enderecamento/saldos').get_json()['itens']}
+    for invalido in ({'sku': 'SKU-1', 'endereco': 'A'}, {'sku': 'SKU-1', 'endereco': 'A', 'quantidade': '0'},
+                     {'sku': 'SKU-1', 'quantidade': '7'}, {'sku': 'NAO-EXISTE', 'endereco': 'A', 'quantidade': '7'}):
+        assert client.post(rota, json=invalido).status_code == 409
+    assert Contagem.query.count() == 0
+
+    # Confere com o GRV (SKU-2 tem 3): a contagem fica registrada, sem ajuste nem aviso.
+    inv = client.post(rota, json={'sku': 'SKU-2', 'endereco': 'B', 'quantidade': '3'}).get_json()['inventario']
+    assert (inv['ajuste'], inv['divergente']) == (None, False) and Contagem.query.count() == 1 and not avisos
+
+    # Diverge (GRV tem 10): abre o ajuste e o item passa a "em análise de inventário".
+    inv = client.post(rota, json={'sku': 'sku-1', 'endereco': 'a', 'quantidade': '7,5'}).get_json()['inventario']
+    ajuste = Ajuste.query.one()
+    assert (inv['ajuste'], inv['contado'], inv['saldo_grv']) == (ajuste.id, 7.5, 10)
+    assert (ajuste.codigo_produto, ajuste.local_codigo, ajuste.diferenca, ajuste.status_modulo) == ('SKU-1', 'A', -2.5, 'Validacao')
+    assert Contagem.query.filter_by(codigo_produto='SKU-1').one().criado_por == 'admin' and len(avisos) == 1
+    marcados = {i['sku']: i['em_inventario'] for i in client.get('/api/enderecamento/saldos').get_json()['itens']}
     assert marcados['SKU-1'] is True and marcados['SKU-2'] is False
-    assert [i['inventario_solicitado'] for i in client.get('/api/recebimento/enderecamento?status=Pendente').get_json()['itens']] == [True]
-    # Cancelar apaga o pedido; pedir de novo volta a marcar.
-    assert client.delete(rota, json={'sku': 'SKU-1'}).status_code == 200
-    assert client.delete(rota, json={'sku': 'SKU-1'}).status_code == 409
-    assert client.get(material).get_json()['inventario_solicitado'] is False
-    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 200
-    # Contou o material: o pedido fecha sozinho e fica como histórico.
-    db.session.add(Contagem(local_codigo='A', codigo_produto='SKU-1', quantidade=10, criado_por='conferente'))
-    db.session.commit()
-    assert client.get(material).get_json()['inventario_solicitado'] is False
-    assert Pedido.query.count() == 1
-    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 200  # novo pedido depois da contagem
+
+    # GRV fora do ar: não grava nada e devolve erro tratável, sem derrubar.
+    def fora(**kw):
+        raise RuntimeError('bridge fora')
+    monkeypatch.setattr(erp_estoque_service, 'buscar_estoque_grv', fora)
+    assert client.post(rota, json={'sku': 'SKU-2', 'endereco': 'B', 'quantidade': '1'}).status_code == 502
+    assert Contagem.query.count() == 2

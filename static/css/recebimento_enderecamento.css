@@ -17,7 +17,6 @@
 .pa-badge--concluido{background:var(--eui-success-soft,#dff4e8);color:var(--eui-success-soft-text,#166534)}
 /* Em análise de inventário: violeta, cor que nenhum outro estado da fila usa. */
 .pa-badge--inventario{margin-top:4px;background:var(--eui-violet-soft,#ede9fe);color:var(--eui-violet-soft-text,#5b21b6);border:1px solid var(--eui-violet,#6d28d9)}
-.pa-badge--pedido{background:var(--eui-surface,#fff);border-style:dashed}
 .pa-table tr.pa-row--inventario td{background:var(--eui-violet-soft,#ede9fe)}
 .pa-table tr.pa-row--inventario td:first-child{box-shadow:inset 4px 0 0 var(--eui-violet,#6d28d9)}
 .pa-alert--erro{background:var(--eui-danger-soft,#fee2e2);color:var(--eui-danger,#991b1b);border-left:4px solid var(--eui-danger,#dc2626)}
