@@ -3,6 +3,7 @@
  const $ = id => document.getElementById(id), base = '/api/enderecamento';
  const manage = $('end-module').dataset.manage === 'true';
  const admin = $('end-module').dataset.admin === 'true';
+ const podePedirInventario = $('end-module').dataset.pedirInventario === 'true';
  let page = 1, historyPage = 1, balances = [], busy = false, key, submitted = null, scanner, scanTarget, scanStarting = false;
  let listVersion = 0, historyVersion = 0, placesVersion = 0, atuais = null, atuaisSku = '';
  // Do material consultado no diálogo: saldo e unidade do GRV, e se já está em
@@ -37,18 +38,21 @@
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    if(data.erro)message(data.erro);
    for(const s of balances){
-    const row=node('tr',null,s.em_inventario?'end-row--inventario':'');
+    const row=node('tr',null,s.em_inventario||s.inventario_solicitado?'end-row--inventario':'');
     cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
     cell(row,'SKU',s.sku,'end-code');
     const desc=node('div');desc.append(node('div',s.descricao||'—'));
     if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
     if(s.em_inventario)desc.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));
+    if(s.inventario_solicitado)desc.append(node('span','Inventário solicitado','end-badge end-badge--inventario end-badge--pedido'));
     cell(row,'Descrição',desc);
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
     const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
     // Histórico e sincronização é só de admin (o servidor também confere).
     if(admin)actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
+    // Pedir contagem de um material endereçado: permissão própria (o servidor também confere).
+    if(podePedirInventario&&s.endereco&&(s.inventario_solicitado||!s.em_inventario))actions.append(button(s.inventario_solicitado?'Cancelar pedido':'Pedir inventário',()=>pedirInventario(s)));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
    if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
@@ -127,6 +131,17 @@
    await Promise.all([places(),refresh()]);
   }catch(e){message(e.message);}
  }
+ async function pedirInventario(s){
+  const cancelar=s.inventario_solicitado;
+  if(!confirm(cancelar?`Cancelar o pedido de inventário de ${s.sku}?`:`Pedir o inventário de ${s.sku} em ${s.endereco}? O material fica marcado como "Inventário solicitado" até ser contado.`))return;
+  try{
+   const resp=await fetch(base+'/pedido-inventario',{method:cancelar?'DELETE':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:s.sku,endereco:s.endereco})});
+   const data=await resp.json().catch(()=>({}));
+   if(!resp.ok)throw new Error(data.erro||'Não foi possível concluir. Verifique a conexão e tente novamente.');
+   message(cancelar?`Pedido de inventário de ${s.sku} cancelado.`:`Inventário de ${s.sku} solicitado.`);
+   await refresh();
+  }catch(e){message(e.message);}
+ }
  function showPanel(name){
   document.querySelectorAll('.end-tabs button').forEach(b=>{const on=b.dataset.panel===name;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
   for(const p of ['saldos','locais','receber','historico'])$('end-panel-'+p).hidden=p!==name;
@@ -173,6 +188,7 @@
    const meta=[sku];if(data.saldo!=null)meta.push(`Saldo no GRV: ${number(data.saldo)} ${data.unidade||''}`.trim());
    card.append(node('div',meta.join(' · '),'end-muted'));
    if(data.em_inventario){card.classList.add('end-material--inventario');card.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));}
+   if(data.inventario_solicitado){card.classList.add('end-material--inventario');card.append(node('span','Inventário solicitado','end-badge end-badge--inventario end-badge--pedido'));}
    const chips=node('div',null,'end-chips');
    if(atuais.length){
     chips.append(node('span','Hoje em:','end-muted'));

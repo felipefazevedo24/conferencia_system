@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/enderecamento.css') }}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-<div class="end-module" id="end-module" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}" data-admin="{{ 'true' if session.get('role') == 'Admin' else 'false' }}">
+<div class="end-module" id="end-module" data-manage="{{ 'true' if can_access('MANAGE_RECEBIMENTO_ENDERECAMENTO') else 'false' }}" data-admin="{{ 'true' if session.get('role') == 'Admin' else 'false' }}" data-pedir-inventario="{{ 'true' if can_access('PEDIR_INVENTARIO_ENDERECAMENTO') else 'false' }}">
  <header class="end-header"><div><div class="end-eyebrow">LOGÍSTICA / ARMAZENAGEM</div><h1><i class="fas fa-map-marked-alt" aria-hidden="true"></i> Endereçamento e movimentações</h1><p>Do recebimento ao destino certo. Consulte, movimente e acompanhe cada material.</p></div><a class="eui-btn eui-btn--secondary" href="/conferencia"><i class="fas fa-box-open"></i> Recebimento</a></header>
  <div class="end-metrics" aria-label="Resumo da armazenagem">
   <div><span class="end-metric-icon"><i class="fas fa-cubes"></i></span><div><strong id="end-kpi-materiais">—</strong><span>Materiais controlados</span></div></div>

@@ -260,6 +260,48 @@ def skus_em_inventario(skus=None):
     return {str(codigo).strip().upper() for (codigo,) in query.distinct()}
 
 
+def _pedidos_abertos():
+    """Pedido aberto = ainda sem contagem do material feita depois dele."""
+    from ..models import EnderecamentoPedidoInventario as Pedido, LogisticaInventarioInicial as Contagem
+    contado = db.session.query(Contagem.id).filter(Contagem.codigo_produto == Pedido.sku,
+                                                   Contagem.criado_em >= Pedido.solicitado_em).exists()
+    return Pedido.query.filter(~contado)
+
+
+def skus_com_inventario_pedido(skus=None):
+    from ..models import EnderecamentoPedidoInventario as Pedido
+    query = _pedidos_abertos()
+    if skus is not None:
+        alvo = {str(s or '').strip().upper() for s in skus} - {''}
+        if not alvo:
+            return set()
+        query = query.filter(Pedido.sku.in_(alvo))
+    return {p.sku for p in query}
+
+
+def pedir_inventario(sku, endereco, usuario):
+    from ..models import EnderecamentoPedidoInventario as Pedido
+    # Mesma grafia do inventário (código em maiúsculas), para a contagem fechar o pedido.
+    sku = texto(sku, 'o SKU', 80).upper()
+    endereco = normalizar(texto(endereco, 'um endereço', 80))
+    if skus_com_inventario_pedido([sku]):
+        raise ValueError('Este material já tem inventário solicitado.')
+    if skus_em_inventario([sku]):
+        raise ValueError('Este material já está em análise de inventário.')
+    db.session.add(Pedido(sku=sku, endereco=endereco, solicitado_por=usuario))
+    db.session.commit()
+
+
+def cancelar_pedido_inventario(sku):
+    sku = texto(sku, 'o SKU', 80).upper()
+    abertos = _pedidos_abertos().filter_by(sku=sku).all()
+    if not abertos:
+        raise ValueError('Este material não tem inventário solicitado em aberto.')
+    for pedido in abertos:
+        db.session.delete(pedido)
+    db.session.commit()
+
+
 def abrir_inventario(mov_id, usuario):
     """Abre um inventário normal a partir de uma movimentação cuja quantidade
     não bate com o saldo do GRV (o conferente respondeu "sim" na tela).

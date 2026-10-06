@@ -604,3 +604,37 @@ def test_quantidade_diferente_do_grv_abre_inventario_e_marca_o_item(app, state, 
     ajuste.status_modulo = 'Descartado'
     db.session.commit()
     assert client.get('/api/enderecamento/material?sku=SKU-1').get_json()['em_inventario'] is False
+
+
+def test_pedido_de_inventario_marca_o_material_ate_a_contagem(app, state, monkeypatch):
+    """Pedir inventário de um material endereçado: permissão própria, marca o
+    item e fecha sozinho quando o material é contado."""
+    from conferencia_app.models import EnderecamentoPedidoInventario as Pedido, LogisticaInventarioInicial as Contagem
+    monkeypatch.setattr(erp_estoque_service, 'buscar_estoque_grv', lambda **kw: ESTOQUE_GRV)
+    client = app.test_client()
+    rota, material = '/api/enderecamento/pedido-inventario', '/api/enderecamento/material?sku=SKU-1'
+    # Conferente endereça, mas não pede inventário.
+    with client.session_transaction() as sess:
+        sess['username'] = 'operador'; sess['role'] = 'Conferente'
+    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code in (403, 302)
+    assert Pedido.query.count() == 0
+    with client.session_transaction() as sess:
+        sess['username'] = 'admin'; sess['role'] = 'Admin'
+    assert client.post(rota, json={'sku': 'sku-1', 'endereco': 'A'}).status_code == 200
+    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 409  # já pedido
+    assert client.post(rota, json={'sku': 'SKU-2'}).status_code == 409  # sem endereço
+    assert client.get(material).get_json()['inventario_solicitado'] is True
+    marcados = {i['sku']: i['inventario_solicitado'] for i in client.get('/api/enderecamento/saldos').get_json()['itens']}
+    assert marcados['SKU-1'] is True and marcados['SKU-2'] is False
+    assert [i['inventario_solicitado'] for i in client.get('/api/recebimento/enderecamento?status=Pendente').get_json()['itens']] == [True]
+    # Cancelar apaga o pedido; pedir de novo volta a marcar.
+    assert client.delete(rota, json={'sku': 'SKU-1'}).status_code == 200
+    assert client.delete(rota, json={'sku': 'SKU-1'}).status_code == 409
+    assert client.get(material).get_json()['inventario_solicitado'] is False
+    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 200
+    # Contou o material: o pedido fecha sozinho e fica como histórico.
+    db.session.add(Contagem(local_codigo='A', codigo_produto='SKU-1', quantidade=10, criado_por='conferente'))
+    db.session.commit()
+    assert client.get(material).get_json()['inventario_solicitado'] is False
+    assert Pedido.query.count() == 1
+    assert client.post(rota, json={'sku': 'SKU-1', 'endereco': 'A'}).status_code == 200  # novo pedido depois da contagem

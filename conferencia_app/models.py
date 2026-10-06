@@ -1587,6 +1587,22 @@ class EnderecoMovimento(db.Model):
     erro = db.Column(db.String(500))
 
 
+class EnderecamentoPedidoInventario(db.Model):
+    """Pedido de contagem feito no Endereçamento para um material endereçado.
+
+    Workflow: quem tem a permissão pede; o material fica marcado como
+    "Inventário solicitado" até alguém contar. Não há coluna de status de
+    propósito: o pedido está aberto enquanto não existir contagem do material
+    (LogisticaInventarioInicial) posterior a ele - assim fecha sozinho, por
+    qualquer caminho de contagem, e nunca sai de sincronia. Cancelar apaga a
+    linha; pedido atendido fica como histórico."""
+    id = db.Column(db.Integer, primary_key=True)
+    sku = db.Column(db.String(120), nullable=False, index=True)
+    endereco = db.Column(db.String(80))
+    solicitado_por = db.Column(db.String(100), nullable=False)
+    solicitado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
 class LocalizacaoArmazem(db.Model):
     """Localização física no armazém (Rua-Prédio-Nível-Apartamento)"""
     id = db.Column(db.Integer, primary_key=True)

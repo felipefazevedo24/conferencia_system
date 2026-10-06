@@ -45,6 +45,7 @@ from flask import g, jsonify, redirect, render_template, request, session, url_f
 PERMISSION_CATALOG = {
     "PAGE_RECEBIMENTO_ENDERECAMENTO": "Logística > Recebimento > Endereçamento e movimentações",
     "MANAGE_RECEBIMENTO_ENDERECAMENTO": "Logística > Recebimento > Conferir saldos, gerenciar locais e autorizar destino alternativo",
+    "PEDIR_INVENTARIO_ENDERECAMENTO": "Logística > Recebimento > Endereçamento: pedir inventário de material endereçado",
     "PAGE_CONFERENCIA": "Logística > Recebimento > Conferência cega",
     "PAGE_PORTARIA": "Logística > Recebimento > Inclusão XML (Portaria)",
     "PAGE_FISCAL_LIBERADAS": "Logística > Recebimento > NF-e liberadas",

@@ -14,15 +14,19 @@ from ..tempo import agora_br
 recebimento_enderecamento_bp = Blueprint("recebimento_enderecamento", __name__)
 PERMISSION = "PAGE_RECEBIMENTO_ENDERECAMENTO"
 MANAGE = "MANAGE_RECEBIMENTO_ENDERECAMENTO"
+PEDIR_INVENTARIO = "PEDIR_INVENTARIO_ENDERECAMENTO"
 
 
-def serializar(t, inventariados=None):
-    """`inventariados`: SKUs em análise de inventário, quando quem chama já
-    consultou para a lista inteira (evita uma consulta por linha)."""
+def serializar(t, inventariados=None, pedidos=None):
+    """`inventariados`/`pedidos`: SKUs em análise de inventário e com inventário
+    solicitado, quando quem chama já consultou para a lista inteira (evita
+    consultas por linha)."""
     from ..services import enderecamento_service as modulo_svc
     sku_vigente = str(t.item.codigo_grv or "").strip() or t.sku
     if inventariados is None:
         inventariados = modulo_svc.skus_em_inventario([sku_vigente])
+    if pedidos is None:
+        pedidos = modulo_svc.skus_com_inventario_pedido([sku_vigente])
     return {"id": t.id, "item_id": t.item_nota_id, "nota": t.item.numero_nota,
             "chave": t.item.chave_acesso, "fornecedor": t.item.fornecedor,
             # O SKU vigente é o do item: a tarefa guarda o da criação, que fica
@@ -38,6 +42,7 @@ def serializar(t, inventariados=None):
             "erro": t.erro, "enviado": t.enderecos_enviados,
             "impedimento": svc.impedimento(t) if t.status == 'Pendente' else '',
             "em_inventario": str(sku_vigente or "").strip().upper() in inventariados,
+            "inventario_solicitado": str(sku_vigente or "").strip().upper() in pedidos,
             "recebimento_status": t.item.status}
 
 
@@ -121,8 +126,10 @@ def listar():
     listagem = pendencia_real(query) if status == "Pendente" else query
     tarefas = listagem.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
     from ..services import enderecamento_service as modulo_svc
-    inventariados = modulo_svc.skus_em_inventario(str(t.item.codigo_grv or "").strip() or t.sku for t in tarefas)
-    return jsonify(itens=[serializar(t, inventariados) for t in tarefas], contadores=contadores,
+    skus_da_pagina = [str(t.item.codigo_grv or "").strip() or t.sku for t in tarefas]
+    inventariados = modulo_svc.skus_em_inventario(skus_da_pagina)
+    pedidos = modulo_svc.skus_com_inventario_pedido(skus_da_pagina)
+    return jsonify(itens=[serializar(t, inventariados, pedidos) for t in tarefas], contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
 
@@ -319,8 +326,10 @@ def saldos():
     total = len(registros)
     visiveis = registros[(pagina-1)*40:pagina*40]
     inventariados = modulo_svc.skus_em_inventario(r[1] for r in visiveis)
+    pedidos = modulo_svc.skus_com_inventario_pedido(r[1] for r in visiveis)
     return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s),
-                               em_inventario=str(s).strip().upper() in inventariados)
+                               em_inventario=str(s).strip().upper() in inventariados,
+                               inventario_solicitado=str(s).strip().upper() in pedidos)
                           for e, s, d, u, saldo in visiveis],
                    total=total, pagina=pagina,
                    metricas=dict(materiais=materiais, enderecos=enderecos,
@@ -398,6 +407,25 @@ def _avisar_gestor_do_inventario(ajuste_id):
         link=f'{base}/logistica/inventario/ajustes')
 
 
+@recebimento_enderecamento_bp.route('/api/enderecamento/pedido-inventario', methods=['POST', 'DELETE'])
+@permission_required(PEDIR_INVENTARIO)
+def pedido_de_inventario():
+    """POST pede a contagem de um material endereçado; DELETE cancela o pedido."""
+    from ..services import enderecamento_service as modulo_svc
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro='Dados inválidos.'), 400
+    try:
+        if request.method == 'DELETE':
+            modulo_svc.cancelar_pedido_inventario(dados.get('sku'))
+        else:
+            modulo_svc.pedir_inventario(dados.get('sku'), dados.get('endereco'), session['username'])
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 409
+    return jsonify(ok=True)
+
+
 @recebimento_enderecamento_bp.post('/api/enderecamento/sincronizar')
 @permission_required(PERMISSION)
 def sincronizar_movimentos():
@@ -438,7 +466,8 @@ def material():
     return jsonify(sku=sku, enderecos=enderecos, descricao=str(info.get('item') or '').strip(),
                    unidade=str(info.get('unidade') or '').strip(),
                    saldo=float(info['qtde_total']) if info.get('qtde_total') is not None else None,
-                   em_inventario=bool(modulo_svc.skus_em_inventario([sku])))
+                   em_inventario=bool(modulo_svc.skus_em_inventario([sku])),
+                   inventario_solicitado=bool(modulo_svc.skus_com_inventario_pedido([sku])))
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/locais')
