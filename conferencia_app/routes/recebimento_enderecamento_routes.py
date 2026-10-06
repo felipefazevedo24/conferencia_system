@@ -263,12 +263,28 @@ def saldos():
     else:
         registros = registros + sem_endereco
     os_achada = {}
-    # "Buscar só por OS": sem o texto, para não trazer material cujo código ou
-    # descrição só tem números parecidos com os da OS.
-    so_os = request.args.get('os') == '1'
+    # "Buscar por": material (código/descrição), endereço (exato; com * no fim,
+    # prefixo - "AL-BI*" traz a estante) ou OS (só o produto acabado da OS).
+    # Sem o parâmetro (chamada antiga), vale a busca solta em tudo. A busca solta
+    # por endereço achava mais do que o pedido: "AL-BI-A1" trazia A10, A11...
+    por = request.args.get('por') or ('os' if request.args.get('os') == '1' else '')
     if busca:
-        os_achada = _produto_acabado_da_os(busca)
-        filtrados = [] if so_os else [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
+        os_achada = _produto_acabado_da_os(busca) if por in ('', 'os') else {}
+        if por == 'os':
+            filtrados = []
+        elif por == 'endereco':
+            alvo = modulo_svc.normalizar(busca)
+            if alvo.endswith('*'):
+                prefixo = alvo[:-1].strip()
+                filtrados = [r for r in registros if r[0] and modulo_svc.normalizar(r[0]).startswith(prefixo)]
+            else:
+                filtrados = [r for r in registros if modulo_svc.normalizar(r[0]) == alvo]
+        elif por == 'material':
+            # Todas as palavras em qualquer ordem: "chapa 3/8" acha "CHAPA A36 - 3/8''".
+            termos = busca.split()
+            filtrados = [r for r in registros if all(t in f'{r[1]} {r[2]}'.upper() for t in termos)]
+        else:
+            filtrados = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
         if os_achada:
             # O produto da OS entra mesmo sem saldo ou fora do filtro: a ideia é
             # achar o material para endereçar quando sai da produção.

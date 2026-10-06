@@ -22,7 +22,27 @@
  </nav>
  <div id="end-feedback" class="end-feedback" role="status" aria-live="polite"></div>
  <section id="end-panel-saldos" class="end-panel">
-  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-search" type="search" placeholder="Buscar SKU, descrição, endereço ou OS (produto acabado)" aria-label="Buscar SKU, descrição, endereço ou OS"></label><button id="end-scan-search" class="eui-btn eui-btn--secondary" type="button" data-scan="end-search"><i class="fas fa-qrcode"></i> O que tem aqui?</button><select id="end-filter" class="end-select" aria-label="Filtrar por endereço"><option value="todos">Todos os materiais</option><option value="com_endereco">Somente com endereço</option><option value="sem_endereco">Somente sem endereço</option></select><label class="end-check"><input id="end-only-stock" type="checkbox"> Somente com saldo</label><label class="end-check" title="Procura só pelo número da OS e traz apenas o produto acabado dela, sem misturar com materiais que tenham números parecidos no código ou na descrição"><input id="end-only-os" type="checkbox"> Buscar só por OS</label><button id="end-refresh" class="eui-btn eui-btn--secondary">Atualizar</button><button id="end-move" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
+  <div class="end-toolbar">
+   <div class="end-searchbar">
+    <div class="end-seg" id="end-por" role="radiogroup" aria-label="Buscar por">
+     <button type="button" data-por="material" role="radio" aria-checked="true" class="active"><i class="fas fa-box"></i> Material</button>
+     <button type="button" data-por="endereco" role="radio" aria-checked="false"><i class="fas fa-location-dot"></i> Endereço</button>
+     <button type="button" data-por="os" role="radio" aria-checked="false"><i class="fas fa-industry"></i> OS</button>
+    </div>
+    <div class="end-search"><i class="fas fa-search" aria-hidden="true"></i><input id="end-search" type="search" autocomplete="off" placeholder="Código ou descrição do material" aria-label="Buscar"><button id="end-scan-search" type="button" class="end-search-scan" title="Ler a etiqueta do endereço" aria-label="Ler a etiqueta do endereço pela câmera"><i class="fas fa-qrcode"></i></button></div>
+   </div>
+   <div class="end-toolbar-actions"><button id="end-refresh" type="button" class="eui-btn eui-btn--secondary" title="Atualizar" aria-label="Atualizar"><i class="fas fa-rotate"></i></button><button id="end-move" type="button" class="eui-btn eui-btn--primary"><i class="fas fa-exchange-alt"></i> Movimentar material</button></div>
+  </div>
+  <div class="end-filterbar">
+   <span class="end-filterbar-label">Situação</span>
+   <div class="end-seg end-seg--sm" id="end-filter" role="radiogroup" aria-label="Situação do endereço">
+    <button type="button" data-filtro="todos" role="radio" aria-checked="true" class="active">Todos</button>
+    <button type="button" data-filtro="com_endereco" role="radio" aria-checked="false">Com endereço</button>
+    <button type="button" data-filtro="sem_endereco" role="radio" aria-checked="false">Sem endereço</button>
+   </div>
+   <button type="button" id="end-only-stock" class="end-toggle" aria-pressed="false"><i class="fas fa-cubes"></i> Só com saldo</button>
+   <span id="end-search-summary" class="end-search-summary" aria-live="polite"></span>
+  </div>
   <p class="end-note"><i class="fas fa-info-circle"></i> Endereços lidos do GRV, que é quem controla o saldo. O Sync só atualiza em que endereço cada material está.</p>
   <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Material / SKU</th><th>Descrição</th><th>Saldo no GRV</th><th data-nosort>Ações</th></tr></thead><tbody id="end-balances"></tbody></table></div>
   <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>

@@ -5,6 +5,12 @@
  const admin = $('end-module').dataset.admin === 'true';
  let page = 1, historyPage = 1, balances = [], busy = false, key, submitted = null, scanner, scanTarget, scanStarting = false;
  let listVersion = 0, historyVersion = 0, placesVersion = 0, atuais = null, atuaisSku = '';
+ // Barra de busca: "buscar por" + situação + só com saldo.
+ let por = 'material', filtro = 'todos', comSaldo = false;
+ const PLACEHOLDER = {material:'Código ou descrição do material', endereco:'Endereço exato · use * no fim para a estante inteira (ex.: AL-BI*)', os:'Número da OS (ex.: 11078)'};
+ const ROTULO_POR = {material:'material', endereco:'endereço', os:'OS'};
+ function marcar(grupo, attr, valor){document.querySelectorAll(`#${grupo} button`).forEach(b=>{const on=b.dataset[attr]===valor;b.classList.toggle('active',on);b.setAttribute('aria-checked',String(on));});}
+ function setPor(valor){por=valor;marcar('end-por','por',valor);$('end-search').placeholder=PLACEHOLDER[valor];}
  const norm = value => String(value||'').trim().replace(/\s+/g,' ').toUpperCase();
  const node = (tag, text, cls) => {const n=document.createElement(tag); if(text!=null)n.textContent=text; if(cls)n.className=cls; return n;};
  const number = value => Number(value).toLocaleString('pt-BR', {maximumFractionDigits:6});
@@ -22,7 +28,7 @@
  async function refresh() {
   const version=++listVersion;
   try {
-   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page,filtro:$('end-filter').value,saldo:$('end-only-stock').checked?'1':'0',os:$('end-only-os').checked?'1':'0'}));
+   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page,filtro,saldo:comSaldo?'1':'0',por}));
    if(version!==listVersion)return;
    balances=data.itens; $('end-balances').replaceChildren();
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
@@ -42,6 +48,8 @@
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
    if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
+   const termo=$('end-search').value.trim();
+   $('end-search-summary').textContent=termo?`${data.total} resultado(s) para ${ROTULO_POR[por]} ${por==='endereco'&&!termo.endsWith('*')?'= ':''}"${termo}"`:`${data.total} registro(s)`;
    $('end-page').textContent=`Página ${page} · ${data.total} registro(s)`;$('end-prev').disabled=page===1;$('end-next').disabled=page*40>=data.total;
   }catch(e){message(e.message);}
  }
@@ -81,7 +89,7 @@
     cell(row,'Materiais agora',l.materiais?`${l.materiais} material(is)`:'Vazio');
     cell(row,'Situação',node('span',l.ativo?'Ativo':'Desativado','end-badge'+(l.ativo?'':' warn')));
     const actions=node('div',null,'end-actions');
-    actions.append(button('Ver materiais',()=>{$('end-search').value=l.codigo;page=1;showPanel('saldos');}));
+    actions.append(button('Ver materiais',()=>{setPor('endereco');$('end-search').value=l.codigo;page=1;showPanel('saldos');}));
     if(admin)actions.append(button(l.ativo?'Desativar':'Ativar',()=>alternarLocal(l)));
     cell(row,'Ações',actions);$('end-places').append(row);
    }
@@ -237,7 +245,11 @@
  for(const [a,b] of [['end-sku','end-origin'],['end-origin','end-destination'],['end-destination','end-quantity'],['end-quantity','end-unit'],['end-unit','end-reason']])$(a).onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$(b).focus();}};
  $('end-move').onclick=()=>open();
  $('end-refresh').onclick=refresh;$('end-search').onchange=()=>{page=1;refresh();};
- $('end-filter').onchange=$('end-only-stock').onchange=$('end-only-os').onchange=()=>{page=1;refresh();};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
+ document.querySelectorAll('#end-por button').forEach(b=>b.onclick=()=>{setPor(b.dataset.por);page=1;$('end-search').focus();if($('end-search').value.trim())refresh();});
+ document.querySelectorAll('#end-filter button').forEach(b=>b.onclick=()=>{filtro=b.dataset.filtro;marcar('end-filter','filtro',filtro);page=1;refresh();});
+ $('end-only-stock').onclick=()=>{comSaldo=!comSaldo;$('end-only-stock').setAttribute('aria-pressed',String(comSaldo));$('end-only-stock').classList.toggle('active',comSaldo);page=1;refresh();};
+ // Bipar a etiqueta responde "o que tem neste endereço?".
+ $('end-scan-search').onclick=()=>{setPor('endereco');scan('end-search');};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
  $('end-place-refresh').onclick=places;$('end-place-search').onchange=places;
  $('end-history-refresh').onclick=history;$('end-history-search').onchange=$('end-only-pending').onchange=()=>{historyPage=1;history();};$('end-history-prev').onclick=()=>{historyPage--;history();};$('end-history-next').onclick=()=>{historyPage++;history();};
  document.querySelectorAll('.end-tabs button').forEach(b=>b.onclick=()=>showPanel(b.dataset.panel));

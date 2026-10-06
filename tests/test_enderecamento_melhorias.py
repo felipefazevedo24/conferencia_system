@@ -154,3 +154,21 @@ def test_api_de_localizacao_so_manda_vazio_quando_autorizado(app):
     with patch.object(erp.requests, "patch", return_value=resposta) as chamada:
         erp.atualizar_localizacao_estoque("27-08-00147", "", permitir_vazio=True)
     assert chamada.call_args.kwargs["json"] == {"localizacao_estoque": ""}
+
+
+def test_buscar_por_endereco_e_exato_com_prefixo_opcional(app):
+    # 06/10/2026: buscar "AL-BI-A1" trazia também A10, A11 e descrições com o trecho.
+    client = app.test_client()
+    login_admin(client)
+    item = lambda loc, desc="X": {"item": desc, "unidade": "UN", "qtde_total": 1, "localizacoes": [loc],
+                                  "familia": "N - 01 - MATÉRIA-PRIMA", "grupo": "1", "controla_estoque": 1}
+    estoque = {"por_codigo": {"S1": item("AL-BI-A1"), "S2": item("AL-BI-A10"), "S3": item("AL-BI-A11"),
+                              "S4": item("ZZ-01", "PEÇA AL-BI-A1 VELHA"), "S5": item("AL-BX-01")}}
+    with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all") as os_grv:
+        exato = client.get("/api/enderecamento/saldos?por=endereco&busca=al-bi-a1").get_json()
+        prefixo = client.get("/api/enderecamento/saldos?por=endereco&busca=AL-BI*").get_json()
+        material = client.get("/api/enderecamento/saldos?por=material&busca=velha peça").get_json()
+    assert [i["sku"] for i in exato["itens"]] == ["S1"]
+    assert sorted(i["sku"] for i in prefixo["itens"]) == ["S1", "S2", "S3"]
+    assert [i["sku"] for i in material["itens"]] == ["S4"]
+    os_grv.assert_not_called()  # endereço/material não consultam OS no GRV
