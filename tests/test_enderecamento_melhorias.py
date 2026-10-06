@@ -75,9 +75,14 @@ def test_fila_usa_o_sku_vigente_do_item_e_filtra_quem_nao_controla_estoque(app):
     db.session.add_all([Tarefa(item_nota_id=estoque_item.id, sku="", quantidade=4, criado_por="c"),
                         Tarefa(item_nota_id=servico.id, sku="", quantidade=1, criado_por="c")])
     db.session.commit()
+    sem_saldo = _item(numero_nota="24446", descricao="ZERADO", codigo_grv="28-11-00999")
+    db.session.add(Tarefa(item_nota_id=sem_saldo.id, sku="28-11-00999", quantidade=1, criado_por="c"))
+    db.session.commit()
     estoque = {"por_codigo": {
-        "28-11-00145": {"familia": "N - 00 - MERCADORIA PARA REVENDA", "grupo": "1", "controla_estoque": 1},
-        "39-06-00001": {"familia": "N - 26 - OUTROS", "grupo": "22", "controla_estoque": 0},
+        "28-11-00145": {"familia": "N - 00 - MERCADORIA PARA REVENDA", "grupo": "1", "controla_estoque": 1, "qtde_total": 4},
+        "39-06-00001": {"familia": "N - 26 - OUTROS", "grupo": "22", "controla_estoque": 0, "qtde_total": 1},
+        # Sem saldo no GRV não há o que endereçar (06/10/2026).
+        "28-11-00999": {"familia": "N - 00 - MERCADORIA PARA REVENDA", "grupo": "1", "controla_estoque": 1, "qtde_total": 0},
     }}
     with patch(ESTOQUE, return_value=estoque):
         dados = client.get("/api/recebimento/enderecamento?status=Pendente").get_json()

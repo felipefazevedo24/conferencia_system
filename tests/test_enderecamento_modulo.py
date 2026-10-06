@@ -560,3 +560,47 @@ def test_duas_sessoes_concorrentes_nao_registram_a_mesma_movimentacao(tmp_path, 
         assert Movimento.query.count()==1
         assert Movimento.query.one().detalhes['depois']==['B']
         db.session.remove(); db.engine.dispose()
+
+
+def test_quantidade_diferente_do_grv_abre_inventario_e_marca_o_item(app, state, monkeypatch):
+    """Movimentar com quantidade diferente do saldo do GRV e responder "sim":
+    a movimentação segue e o material entra em análise de inventário."""
+    from conferencia_app.models import LogisticaInventarioAjuste as Ajuste, LogisticaInventarioInicial as Contagem
+    from conferencia_app.services import teams_service
+    avisos = []
+    monkeypatch.setattr(erp_estoque_service, 'buscar_estoque_grv', lambda **kw: ESTOQUE_GRV)
+    monkeypatch.setattr(teams_service, 'notificar_divergencia_inventario_gestor', lambda *a, **kw: avisos.append(a))
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess['username'] = 'operador'; sess['role'] = 'Conferente'
+
+    # Quantidade diferente, mas o conferente respondeu "não": nada de inventário.
+    r = client.post('/api/enderecamento/movimentar', json=operacao(sku='SKU-2', unidade='CX', quantidade='1'))
+    assert r.status_code == 200 and r.get_json()['inventario'] is None
+    # Respondeu "sim", mas a quantidade confere com o GRV: o servidor não abre.
+    r = client.post('/api/enderecamento/movimentar', json=operacao(sku='SKU-2', unidade='CX', quantidade='3', origem='', destino='C', abrir_inventario=True))
+    assert r.status_code == 200 and r.get_json()['inventario'] is None
+    assert Contagem.query.count() == 0 and not client.get('/api/enderecamento/material?sku=SKU-1').get_json()['em_inventario']
+
+    pedido = operacao(quantidade='7', abrir_inventario=True)  # GRV tem 10
+    r = client.post('/api/enderecamento/movimentar', json=pedido)
+    dados = r.get_json()
+    assert r.status_code == 200 and dados['item']['sincronizado'] and dados['inventario']['ajuste']
+    contagem, ajuste = Contagem.query.one(), Ajuste.query.one()
+    assert (contagem.codigo_produto, contagem.local_codigo, contagem.quantidade, contagem.qtde_grv_no_momento) == ('SKU-1', 'B', 7, 10)
+    assert (ajuste.contagem_id, ajuste.diferenca, ajuste.status_modulo) == (contagem.id, -3, 'Validacao')
+    assert len(avisos) == 1
+    # A mesma operação reenviada (rede incerta) não conta duas vezes.
+    assert client.post('/api/enderecamento/movimentar', json=pedido).get_json()['inventario']['ajuste'] == ajuste.id
+    assert Contagem.query.count() == 1 and len(avisos) == 1
+
+    # O item aparece marcado nas três telas; os outros, não.
+    assert client.get('/api/enderecamento/material?sku=SKU-1').get_json()['em_inventario'] is True
+    marcados = {i['sku']: i['em_inventario'] for i in client.get('/api/enderecamento/saldos').get_json()['itens']}
+    assert marcados['SKU-1'] is True and marcados['SKU-2'] is False
+    fila = client.get('/api/recebimento/enderecamento?status=Pendente').get_json()['itens']
+    assert [i['em_inventario'] for i in fila] == [True]
+    # Ajuste encerrado: a marcação some sozinha.
+    ajuste.status_modulo = 'Descartado'
+    db.session.commit()
+    assert client.get('/api/enderecamento/material?sku=SKU-1').get_json()['em_inventario'] is False

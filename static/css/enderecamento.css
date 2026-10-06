@@ -60,3 +60,12 @@ button.end-chip{cursor:pointer}button.end-chip:hover{border-color:var(--eui-prim
 /* No celular a tabela vira cartões; a regra global .erp-table{min-width:620px}
    (ui_erp.css) empurrava os valores para fora da tela. */
 @media(max-width:600px){.end-table.erp-table{min-width:0;width:100%}}
+
+/* Em análise de inventário: violeta, cor que nenhum outro estado do módulo usa
+   (amarelo = pendência, verde = ok, vermelho = erro). */
+.end-badge--inventario{background:var(--eui-violet-soft,#ede9fe);color:var(--eui-violet-soft-text,#5b21b6)}
+.end-table tr.end-row--inventario td{background:var(--eui-violet-soft,#ede9fe)}
+.end-table tr.end-row--inventario td:first-child{box-shadow:inset 4px 0 0 var(--eui-violet,#6d28d9)}
+.end-table tr.end-row--inventario .end-badge--inventario{margin-top:6px;border:1px solid var(--eui-violet,#6d28d9)}
+.end-material--inventario{border-color:var(--eui-violet,#6d28d9);background:var(--eui-violet-soft,#ede9fe)}
+.end-material--inventario .end-badge--inventario{justify-self:start;border:1px solid var(--eui-violet,#6d28d9)}

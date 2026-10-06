@@ -245,6 +245,67 @@ def registrar(dados, usuario):
         db.session.commit()
 
 
+def skus_em_inventario(skus=None):
+    """SKUs com ajuste de inventário ainda em análise (nem concluído, nem
+    descartado). Calculado na hora, não gravado: assim a marcação some sozinha
+    quando o ajuste termina, por qualquer caminho."""
+    from ..models import LogisticaInventarioAjuste as Ajuste
+    query = (db.session.query(Ajuste.codigo_produto)
+             .filter(Ajuste.status_modulo.notin_(('Concluido', 'Descartado'))))
+    if skus is not None:
+        alvo = {str(s or '').strip().upper() for s in skus} - {''}
+        if not alvo:
+            return set()
+        query = query.filter(Ajuste.codigo_produto.in_(alvo))
+    return {str(codigo).strip().upper() for (codigo,) in query.distinct()}
+
+
+def abrir_inventario(mov_id, usuario):
+    """Abre um inventário normal a partir de uma movimentação cuja quantidade
+    não bate com o saldo do GRV (o conferente respondeu "sim" na tela).
+
+    A comparação é com o saldo total do SKU, o mesmo número que o diálogo
+    mostra. A contagem cai no fluxo de sempre: divergiu, vira ajuste em
+    Validação. Quem decide se há divergência é o servidor, não a tela.
+    Devolve None quando não há o que abrir."""
+    from ..models import LogisticaInventarioInicial as Contagem
+    from . import erp_estoque_service, logistica_inventario_ajuste_service as ajuste_svc
+    mov = db.session.get(Movimento, mov_id)
+    detalhes = dict(mov.detalhes or {})
+    if detalhes.get('inventario'):
+        # Mesma operação reenviada: não conta nem avisa o gestor duas vezes.
+        return {**detalhes['inventario'], 'repetido': True}
+    codigo = mov.sku.strip().upper()
+    estoque = erp_estoque_service.buscar_estoque_grv()
+    agregado = (estoque.get('por_codigo') or {}).get(codigo)
+    if not agregado:
+        return None
+    # Unidade diferente da do GRV: os números não são comparáveis.
+    if agregado.get('unidade') and unidade_canonica(agregado['unidade']) != unidade_canonica(mov.unidade):
+        return None
+    saldo_grv = float(agregado.get('qtde_total') or 0)
+    if abs(float(mov.quantidade) - saldo_grv) <= ajuste_svc.TOLERANCIA_DIVERGENCIA:
+        return None
+    custo = erp_estoque_service.custo_medio_para(codigo, mov.destino, estoque)
+    agora = agora_br()
+    contagem = Contagem(local_codigo=mov.destino, codigo_produto=codigo,
+                        unidade_medida=str(agregado.get('unidade') or mov.unidade).strip().upper()[:20],
+                        quantidade=float(mov.quantidade),
+                        observacao=f'Aberto pelo endereçamento (movimentação {mov.id}).',
+                        criado_por=usuario, atualizado_em=agora, qtde_grv_no_momento=saldo_grv,
+                        custo_medio_no_momento=custo, grv_consultado_em=agora)
+    db.session.add(contagem)
+    db.session.commit()
+    ajuste = ajuste_svc.detectar_divergencia(contagem, saldo_grv, custo,
+                                             erp_estoque_service.descricao_para(codigo, estoque))
+    # Sem ajuste novo aqui = já havia um aberto para este material neste endereço.
+    resumo = {'contagem': contagem.id, 'ajuste': ajuste.id if ajuste else None,
+              'contado': float(mov.quantidade), 'saldo_grv': saldo_grv}
+    mov.detalhes = {**detalhes, 'inventario': resumo}
+    db.session.commit()
+    return resumo
+
+
 def materiais_no_endereco(endereco, atualizar=True):
     """SKUs que estão no endereço, segundo o GRV. Sem cache por padrão: quem
     chama está prestes a escrever, e agir sobre lista velha mexeria no material

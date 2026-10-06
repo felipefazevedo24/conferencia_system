@@ -16,7 +16,13 @@ PERMISSION = "PAGE_RECEBIMENTO_ENDERECAMENTO"
 MANAGE = "MANAGE_RECEBIMENTO_ENDERECAMENTO"
 
 
-def serializar(t):
+def serializar(t, inventariados=None):
+    """`inventariados`: SKUs em análise de inventário, quando quem chama já
+    consultou para a lista inteira (evita uma consulta por linha)."""
+    from ..services import enderecamento_service as modulo_svc
+    sku_vigente = str(t.item.codigo_grv or "").strip() or t.sku
+    if inventariados is None:
+        inventariados = modulo_svc.skus_em_inventario([sku_vigente])
     return {"id": t.id, "item_id": t.item_nota_id, "nota": t.item.numero_nota,
             "chave": t.item.chave_acesso, "fornecedor": t.item.fornecedor,
             # O SKU vigente é o do item: a tarefa guarda o da criação, que fica
@@ -31,11 +37,14 @@ def serializar(t):
             "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
             "erro": t.erro, "enviado": t.enderecos_enviados,
             "impedimento": svc.impedimento(t) if t.status == 'Pendente' else '',
+            "em_inventario": str(sku_vigente or "").strip().upper() in inventariados,
             "recebimento_status": t.item.status}
 
 
 def skus_que_nao_enderecam(query, so_cache=False):
-    """Dos SKUs com tarefa aberta, quais são de família/grupo que não endereça.
+    """Dos SKUs com tarefa aberta, quais não entram na fila: família/grupo que
+    não endereça ou sem saldo no GRV (depósito 1) - sem saldo não há o que
+    endereçar (decisão da Logística, 06/10/2026).
 
     A consulta é restrita aos SKUs que têm tarefa, para o filtro não virar um
     IN gigante. Falha do GRV não filtra nada: esconder trabalho da fila é pior
@@ -57,7 +66,11 @@ def skus_que_nao_enderecam(query, so_cache=False):
                                    exc_info=True)
         return None
     def nao_endereca(sku):
-        agregado = por_codigo.get(str(sku).strip().upper()) or {}
+        agregado = por_codigo.get(str(sku).strip().upper())
+        if not agregado:
+            return False  # SKU fora do snapshot: sem informação, não esconde
+        if float(agregado.get('qtde_total') or 0) <= 0:
+            return True
         return modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque'))
 
     return {sku for sku in skus if nao_endereca(sku)}
@@ -107,7 +120,9 @@ def listar():
     pagina = max(1, request.args.get("pagina", 1, type=int))
     listagem = pendencia_real(query) if status == "Pendente" else query
     tarefas = listagem.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
-    return jsonify(itens=[serializar(t) for t in tarefas], contadores=contadores,
+    from ..services import enderecamento_service as modulo_svc
+    inventariados = modulo_svc.skus_em_inventario(str(t.item.codigo_grv or "").strip() or t.sku for t in tarefas)
+    return jsonify(itens=[serializar(t, inventariados) for t in tarefas], contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
 
@@ -302,8 +317,11 @@ def saldos():
     # Na busca por OS, o produto da OS vem primeiro.
     registros.sort(key=lambda r: (r[1] not in os_achada, r[0] == '', r[0], r[1]))
     total = len(registros)
-    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s))
-                          for e, s, d, u, saldo in registros[(pagina-1)*40:pagina*40]],
+    visiveis = registros[(pagina-1)*40:pagina*40]
+    inventariados = modulo_svc.skus_em_inventario(r[1] for r in visiveis)
+    return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s),
+                               em_inventario=str(s).strip().upper() in inventariados)
+                          for e, s, d, u, saldo in visiveis],
                    total=total, pagina=pagina,
                    metricas=dict(materiais=materiais, enderecos=enderecos,
                                  sem_endereco=len(sem_endereco), sincronizar=pendentes))
@@ -351,7 +369,33 @@ def movimentar():
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Movimentação salva; sincronização será repetida')
-    return jsonify(item=movimento_json(db.session.get(Movimento, mov_id)))
+    # O conferente pediu inventário porque a quantidade não bateu com o GRV.
+    # A movimentação já está salva: falha aqui só deixa de abrir o inventário.
+    inventario = None
+    if dados.get('abrir_inventario') is True:
+        try:
+            inventario = modulo_svc.abrir_inventario(mov_id, session['username'])
+            if inventario and inventario.get('ajuste') and not inventario.get('repetido'):
+                _avisar_gestor_do_inventario(inventario['ajuste'])
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Movimentação %s salva; o inventário não foi aberto', mov_id)
+            inventario = {'erro': True}
+    return jsonify(item=movimento_json(db.session.get(Movimento, mov_id)), inventario=inventario)
+
+
+def _avisar_gestor_do_inventario(ajuste_id):
+    """Mesmo aviso no Teams que a contagem do inventário dispara."""
+    from ..models import LogisticaInventarioAjuste
+    from ..services import teams_service
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    base = str(current_app.config.get('PUBLIC_BASE_URL') or '').strip().rstrip('/') or request.url_root.rstrip('/')
+    teams_service.notificar_divergencia_inventario_gestor(
+        ajuste.codigo_produto, ajuste.local_codigo, ajuste.diferenca,
+        descricao=ajuste.descricao_produto, unidade=ajuste.unidade_medida,
+        qtde_contada=ajuste.qtde_contada, qtde_sistema=ajuste.qtde_estoque_no_momento,
+        custo_medio=ajuste.custo_medio, contado_por=session.get('username'),
+        link=f'{base}/logistica/inventario/ajustes')
 
 
 @recebimento_enderecamento_bp.post('/api/enderecamento/sincronizar')
@@ -393,7 +437,8 @@ def material():
         current_app.logger.warning('Diálogo de movimentação sem o snapshot do GRV.', exc_info=True)
     return jsonify(sku=sku, enderecos=enderecos, descricao=str(info.get('item') or '').strip(),
                    unidade=str(info.get('unidade') or '').strip(),
-                   saldo=float(info['qtde_total']) if info.get('qtde_total') is not None else None)
+                   saldo=float(info['qtde_total']) if info.get('qtde_total') is not None else None,
+                   em_inventario=bool(modulo_svc.skus_em_inventario([sku])))
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/locais')

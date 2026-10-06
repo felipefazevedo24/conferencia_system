@@ -5,6 +5,9 @@
  const admin = $('end-module').dataset.admin === 'true';
  let page = 1, historyPage = 1, balances = [], busy = false, key, submitted = null, scanner, scanTarget, scanStarting = false;
  let listVersion = 0, historyVersion = 0, placesVersion = 0, atuais = null, atuaisSku = '';
+ // Do material consultado no diálogo: saldo e unidade do GRV, e se já está em
+ // análise de inventário. respostaInventario guarda o "sim/não" da tentativa.
+ let material = null, respostaInventario = false;
  // Barra de busca: "buscar por" + situação + só com saldo.
  let por = 'material', filtro = 'todos', comSaldo = false, situacaoLocal = 'todos', soPendentes = false;
  const PLACEHOLDER = {material:'Código ou descrição do material', endereco:'Endereço exato · use * no fim para a estante inteira (ex.: AL-BI*)', os:'Número da OS (ex.: 11078)'};
@@ -34,11 +37,12 @@
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    if(data.erro)message(data.erro);
    for(const s of balances){
-    const row=node('tr');
+    const row=node('tr',null,s.em_inventario?'end-row--inventario':'');
     cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
     cell(row,'SKU',s.sku,'end-code');
     const desc=node('div');desc.append(node('div',s.descricao||'—'));
     if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
+    if(s.em_inventario)desc.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));
     cell(row,'Descrição',desc);
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
@@ -145,7 +149,7 @@
  }
  function open(s={}){
   key=crypto.randomUUID?crypto.randomUUID():Array.from(crypto.getRandomValues(new Uint32Array(4)),n=>n.toString(16)).join('-');submitted=null;
-  $('end-form').reset();message('',true);atuais=null;atuaisSku='';$('end-current').replaceChildren();
+  $('end-form').reset();message('',true);atuais=null;atuaisSku='';material=null;respostaInventario=false;$('end-current').replaceChildren();
   $('end-sku').value=s.sku||'';$('end-unit').value=s.unidade||'';$('end-origin').value=s.endereco||'';
   $('end-destination').value='';$('end-quantity').value='';
   // Material sem endereço não tem de onde sair: abre direto em "Inclusão de endereço".
@@ -157,17 +161,18 @@
  async function consultarMaterial(){
   const sku=$('end-sku').value.trim();
   if(!sku||sku===atuaisSku)return;
-  atuaisSku=sku;atuais=null;$('end-current').replaceChildren(node('span','Consultando o material no GRV…','end-muted'));
+  atuaisSku=sku;atuais=null;material=null;$('end-current').replaceChildren(node('span','Consultando o material no GRV…','end-muted'));
   try{
    const data=await request('/material?'+new URLSearchParams({sku}));
    if($('end-sku').value.trim()!==sku)return;
-   atuais=data.enderecos||[];
+   atuais=data.enderecos||[];material=data;
    // Unidade do GRV: evita grafia diferente da do estoque (M x MT).
    if(data.unidade&&!$('end-unit').value.trim())$('end-unit').value=data.unidade;
    const card=node('div',null,'end-material');
    card.append(node('strong',data.descricao||sku));
    const meta=[sku];if(data.saldo!=null)meta.push(`Saldo no GRV: ${number(data.saldo)} ${data.unidade||''}`.trim());
    card.append(node('div',meta.join(' · '),'end-muted'));
+   if(data.em_inventario){card.classList.add('end-material--inventario');card.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));}
    const chips=node('div',null,'end-chips');
    if(atuais.length){
     chips.append(node('span','Hoje em:','end-muted'));
@@ -215,12 +220,21 @@
   e.preventDefault();if(busy)return;
   if(modo==='transferir'&&!$('end-origin').value.trim()){message('Informe de qual endereço o material sai, ou escolha "Inclusão de endereço".',true);$('end-origin').focus();return;}
   const data={chave:key,sku:$('end-sku').value.trim(),origem:modo==='transferir'?$('end-origin').value.trim():'',destino:$('end-destination').value.trim(),quantidade:$('end-quantity').value.trim(),unidade:$('end-unit').value.trim(),motivo:$('end-reason').value.trim()};
+  // Quantidade diferente do saldo do GRV: oferece abrir inventário. Não
+  // pergunta de novo se o material já está em análise, nem na repetição da
+  // mesma tentativa (a resposta anterior continua valendo).
+  const informado=Number(data.quantidade.replace(',','.'));
+  const comparavel=material&&material.sku===data.sku&&material.saldo!=null&&!material.em_inventario&&Number.isFinite(informado)&&norm(material.unidade)===norm(data.unidade);
+  if(!submitted)respostaInventario=!!(comparavel&&Math.abs(informado-material.saldo)>0.001&&await dialogRecebimento({titulo:'Quantidade diferente do GRV',mensagem:`Você informou ${number(informado)} ${data.unidade} e o saldo no GRV é ${number(material.saldo)} ${material.unidade}.\n\nDeseja abrir um inventário para este material?`,confirmar:'Sim, abrir inventário',cancelar:'Não'}));
+  if(respostaInventario)data.abrir_inventario=true;
   // Resultado de rede incerto: repetir exatamente a mesma chave e conteúdo.
   if(submitted&&JSON.stringify(data)!==submitted){message('A tentativa anterior pode ter sido salva. Consulte o histórico antes de alterar os dados e iniciar outra operação.',true);return;}
   submitted=JSON.stringify(data);setBusy(true);message('Registrando operação…',true);
   try{
    const result=await request('/movimentar',data);
-   $('end-work').close();message(result.item.sincronizado?'Operação registrada e endereços sincronizados com o GRV.':'Operação registrada no Sync. O envio ao GRV está pendente e será repetido automaticamente.');
+   const inv=result.inventario;
+   const avisoInventario=!data.abrir_inventario?'':inv?.erro?'\nNão foi possível abrir o inventário agora; registre a contagem em Logística > Inventário.':inv?(inv.ajuste?'\nInventário aberto: o item está em análise de inventário.':'\nContagem registrada: o item já estava em análise de inventário neste endereço.'):'\nInventário não aberto: a quantidade confere com o saldo atual do GRV.';
+   $('end-work').close();message((result.item.sincronizado?'Operação registrada e endereços sincronizados com o GRV.':'Operação registrada no Sync. O envio ao GRV está pendente e será repetido automaticamente.')+avisoInventario);
    await Promise.all([refresh(),history()]);
   }catch(err){message(err.message,true);/* Preserve chave em falha de rede; validações podem ser corrigidas. */
    if(err.status===409||err.status===403)submitted=null;

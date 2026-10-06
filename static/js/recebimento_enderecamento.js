@@ -85,10 +85,11 @@
      $('pa-list').append(row);
     }
    items.forEach(item => {
-     const card = el('tr', null, 'pa-row');
+     const card = el('tr', null, item.em_inventario ? 'pa-row pa-row--inventario' : 'pa-row');
      const skuCell = el('td', item.sku || 'Sem vínculo', item.sku ? 'pa-sku' : 'pa-sku pa-sku--pendente');
      const materialCell = el('td', null, 'pa-description');
      materialCell.append(el('div', item.descricao || 'Material sem descrição', 'pa-desc'), el('div', item.fornecedor || '', 'pa-meta'));
+     if (item.em_inventario) materialCell.append(el('span', 'Em análise de inventário', 'pa-badge pa-badge--inventario'));
      const badgeCls = {'Pendente': 'pa-badge--pendente', 'Aguardando sincronização': 'pa-badge--aguardando', 'Concluído': 'pa-badge--concluido'}[item.status] || '';
      const statusCell = el('td');
      statusCell.append(el('span', item.status, `pa-badge ${item.erro ? 'pa-badge--erro' : badgeCls}`));
