@@ -48,13 +48,32 @@
   <div class="end-pages"><button id="end-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-page"></span><button id="end-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
  </section>
  <section id="end-panel-locais" class="end-panel" hidden>
-  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-place-search" type="search" placeholder="Buscar endereço" aria-label="Buscar endereço"></label><button id="end-scan-place" class="eui-btn eui-btn--secondary" type="button" data-scan="end-place-search"><i class="fas fa-qrcode"></i> Bipar endereço</button><button id="end-place-refresh" class="eui-btn eui-btn--secondary">Atualizar</button></div>
+  <div class="end-toolbar">
+   <div class="end-searchbar"><div class="end-search"><i class="fas fa-search" aria-hidden="true"></i><input id="end-place-search" type="search" autocomplete="off" placeholder="Endereço exato · use * no fim para a estante inteira (ex.: AL-BI*)" aria-label="Buscar endereço"><button id="end-scan-place" type="button" class="end-search-scan" data-scan="end-place-search" title="Ler a etiqueta do endereço" aria-label="Ler a etiqueta do endereço pela câmera"><i class="fas fa-qrcode"></i></button></div></div>
+   <div class="end-toolbar-actions"><button id="end-place-refresh" type="button" class="eui-btn eui-btn--secondary" title="Atualizar" aria-label="Atualizar"><i class="fas fa-rotate"></i></button></div>
+  </div>
+  <div class="end-filterbar">
+   <span class="end-filterbar-label">Situação</span>
+   <div class="end-seg end-seg--sm" id="end-place-filter" role="radiogroup" aria-label="Situação do endereço">
+    <button type="button" data-situacao="todos" role="radio" aria-checked="true" class="active">Todos</button>
+    <button type="button" data-situacao="ocupados" role="radio" aria-checked="false">Ocupados</button>
+    <button type="button" data-situacao="vazios" role="radio" aria-checked="false">Vazios</button>
+    <button type="button" data-situacao="desativados" role="radio" aria-checked="false">Desativados</button>
+   </div>
+   <span id="end-place-summary" class="end-search-summary" aria-live="polite"></span>
+  </div>
   <p class="end-note"><i class="fas fa-info-circle"></i> Endereços não têm cadastro prévio: o local passa a existir quando o operador o usa pela primeira vez. Desativar serve para tirar de circulação um endereço que não pode mais receber material.</p>
   <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Materiais agora</th><th>Situação</th><th data-nosort>Ações</th></tr></thead><tbody id="end-places"></tbody></table></div>
  </section>
  <section id="end-panel-receber" class="end-panel" hidden><div class="end-section-head"><h2>Endereçar o que chegou</h2><p>A mesma fila do recebimento, com os materiais mais antigos primeiro.</p></div>{% include 'recebimento_enderecamento_painel.html' %}</section>
  <section id="end-panel-historico" class="end-panel" hidden>
-  <div class="end-toolbar"><label class="end-search"><i class="fas fa-search"></i><input id="end-history-search" type="search" placeholder="Buscar SKU ou endereço" aria-label="Buscar no histórico"></label><label class="end-check"><input id="end-only-pending" type="checkbox"> Somente envios pendentes</label><button id="end-history-refresh" class="eui-btn eui-btn--secondary">Atualizar histórico</button></div>
+  <div class="end-toolbar">
+   <div class="end-searchbar"><div class="end-search"><i class="fas fa-search" aria-hidden="true"></i><input id="end-history-search" type="search" autocomplete="off" placeholder="SKU ou endereço" aria-label="Buscar no histórico"></div></div>
+   <div class="end-toolbar-actions"><button id="end-history-refresh" type="button" class="eui-btn eui-btn--secondary" title="Atualizar" aria-label="Atualizar histórico"><i class="fas fa-rotate"></i></button></div>
+  </div>
+  <div class="end-filterbar">
+   <button type="button" id="end-only-pending" class="end-toggle" aria-pressed="false"><i class="fas fa-cloud-arrow-up"></i> Só envios pendentes</button>
+  </div>
   <div id="end-history" class="end-history"></div><div class="end-pages"><button id="end-history-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-history-page"></span><button id="end-history-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
  </section>
  <dialog id="end-work" class="end-dialog" aria-labelledby="end-work-title"><form id="end-form">

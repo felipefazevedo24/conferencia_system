@@ -172,3 +172,17 @@ def test_buscar_por_endereco_e_exato_com_prefixo_opcional(app):
     assert sorted(i["sku"] for i in prefixo["itens"]) == ["S1", "S2", "S3"]
     assert [i["sku"] for i in material["itens"]] == ["S4"]
     os_grv.assert_not_called()  # endereço/material não consultam OS no GRV
+
+
+def test_aba_enderecos_busca_exata_ou_por_prefixo(app):
+    from conferencia_app.models import LocalizacaoArmazem
+    client = app.test_client()
+    login_admin(client)
+    for codigo in ("AL-BI-A1", "AL-BI-A10", "AL-BX-01"):
+        db.session.add(LocalizacaoArmazem(codigo=codigo, corredor="", prateleira="", posicao=""))
+    db.session.commit()
+    with patch(ESTOQUE, return_value={"por_codigo": {}}):
+        exato = client.get("/api/enderecamento/locais?busca=al-bi-a1").get_json()["itens"]
+        prefixo = client.get("/api/enderecamento/locais?busca=AL-BI*").get_json()["itens"]
+    assert [l["codigo"] for l in exato] == ["AL-BI-A1"]
+    assert sorted(l["codigo"] for l in prefixo) == ["AL-BI-A1", "AL-BI-A10"]

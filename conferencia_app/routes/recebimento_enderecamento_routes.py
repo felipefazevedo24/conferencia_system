@@ -417,8 +417,13 @@ def catalogo_de_locais():
         current_app.logger.exception('Falha ao consultar a ocupação dos endereços no GRV')
         indisponivel = True
     locais_query = LocalizacaoArmazem.query
+    # Mesma regra da busca de materiais: endereço exato; com * no fim, prefixo
+    # ("AL-BI*" traz a estante). "contém" trazia AL-BI-A10 ao buscar AL-BI-A1.
+    prefixo = busca.endswith('*')
+    busca = busca.rstrip('*').strip()
     if busca:
-        locais_query = locais_query.filter(LocalizacaoArmazem.codigo.contains(busca, autoescape=True))
+        locais_query = locais_query.filter(LocalizacaoArmazem.codigo.startswith(busca, autoescape=True) if prefixo
+                                           else LocalizacaoArmazem.codigo == busca)
     itens = [dict(codigo=l.codigo, ativo=bool(l.ativo),
                   materiais=len(ocupacao.get(modulo_svc.normalizar(l.codigo), ())))
              for l in locais_query.order_by(LocalizacaoArmazem.codigo).limit(500)]
@@ -426,7 +431,7 @@ def catalogo_de_locais():
     conhecidos = {modulo_svc.normalizar(l['codigo']) for l in itens}
     itens += [dict(codigo=endereco, ativo=True, materiais=len(skus), fora_do_catalogo=True)
               for endereco, skus in sorted(ocupacao.items())
-              if endereco not in conhecidos and (not busca or busca in endereco)]
+              if endereco not in conhecidos and (not busca or (endereco.startswith(busca) if prefixo else endereco == busca))]
     itens.sort(key=lambda l: l['codigo'])
     return jsonify(itens=itens, total=len(itens), indisponivel=indisponivel)
 

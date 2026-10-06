@@ -87,3 +87,13 @@
 .pa-kpi-label{font-size:11px;text-transform:none;letter-spacing:0}
 @media(max-width:700px){.pa-filterbar{grid-template-columns:1fr}.pa-kpi{flex:1 1 auto;justify-content:center}}
 .pa-table .pa-age--atraso{color:var(--eui-warning,#b45309);font-weight:700}.putaway a.pa-act{text-decoration:none}
+
+/* Barra da fila no mesmo padrão da tela de endereçamento (busca com ícone,
+   atualizar como ícone). Vale também na Conferência, que usa este painel. */
+.putaway .pa-filterbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.putaway .pa-search{flex:1 1 360px;min-height:44px;border-radius:8px}
+.putaway .pa-search input{font-size:13.5px}
+.putaway .pa-filterbar .eui-btn{flex:0 0 auto;width:auto;min-height:40px}
+.putaway .pa-icon-btn{width:42px!important;padding:0!important;justify-content:center}
+@media(max-width:700px){.putaway .pa-search{flex-basis:100%}.putaway #pa-clear-filter{flex:1}}
+

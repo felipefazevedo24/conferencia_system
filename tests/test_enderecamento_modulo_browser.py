@@ -117,7 +117,7 @@ def test_modulo_desktop_mobile_movimentacoes_e_retry(tmp_path, monkeypatch):
             pw.expect(page.locator('#end-work')).not_to_be_visible()
             pw.expect(page.locator('#end-feedback')).to_contain_text('envio ao GRV está pendente')
             page.locator('[data-panel="historico"]').click()
-            page.locator('#end-only-pending').check()
+            page.locator('#end-only-pending').click()
             pw.expect(page.locator('#end-history')).to_contain_text('Envio pendente')
             patch.side_effect=update
             page.get_by_role('button',name='Tentar sincronizar',exact=True).click()

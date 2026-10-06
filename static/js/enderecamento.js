@@ -6,7 +6,7 @@
  let page = 1, historyPage = 1, balances = [], busy = false, key, submitted = null, scanner, scanTarget, scanStarting = false;
  let listVersion = 0, historyVersion = 0, placesVersion = 0, atuais = null, atuaisSku = '';
  // Barra de busca: "buscar por" + situação + só com saldo.
- let por = 'material', filtro = 'todos', comSaldo = false;
+ let por = 'material', filtro = 'todos', comSaldo = false, situacaoLocal = 'todos', soPendentes = false;
  const PLACEHOLDER = {material:'Código ou descrição do material', endereco:'Endereço exato · use * no fim para a estante inteira (ex.: AL-BI*)', os:'Número da OS (ex.: 11078)'};
  const ROTULO_POR = {material:'material', endereco:'endereço', os:'OS'};
  function marcar(grupo, attr, valor){document.querySelectorAll(`#${grupo} button`).forEach(b=>{const on=b.dataset[attr]===valor;b.classList.toggle('active',on);b.setAttribute('aria-checked',String(on));});}
@@ -56,7 +56,7 @@
  async function history(){
   const version=++historyVersion;
   try{
-   const data=await request('/historico?'+new URLSearchParams({busca:$('end-history-search').value,pagina:historyPage,pendentes:$('end-only-pending').checked?'1':'0'}));
+   const data=await request('/historico?'+new URLSearchParams({busca:$('end-history-search').value,pagina:historyPage,pendentes:soPendentes?'1':'0'}));
    if(version!==historyVersion)return;
    $('end-history').replaceChildren();
    if(!data.itens.length)$('end-history').append(node('p','Nenhuma movimentação para este filtro.','end-empty'));
@@ -83,6 +83,11 @@
    const data=await request('/locais?'+new URLSearchParams({busca:$('end-place-search').value}));
    if(version!==placesVersion)return;
    $('end-places').replaceChildren();
+   // Situação filtra na tela: a lista de endereços já vem inteira.
+   const filtroLocal={todos:()=>true,ocupados:l=>l.ativo&&l.materiais>0,vazios:l=>l.ativo&&!l.materiais,desativados:l=>!l.ativo}[situacaoLocal];
+   data.itens=data.itens.filter(filtroLocal);
+   const termoLocal=$('end-place-search').value.trim();
+   $('end-place-summary').textContent=`${data.itens.length} endereço(s)${termoLocal?` para "${termoLocal}"`:''}`;
    if(data.indisponivel)message('Ocupação indisponível: a consulta ao GRV falhou. A lista de endereços continua válida.');
    for(const l of data.itens){
     const row=node('tr');cell(row,'Endereço',node('span',l.codigo,'end-location'));
@@ -251,7 +256,9 @@
  // Bipar a etiqueta responde "o que tem neste endereço?".
  $('end-scan-search').onclick=()=>{setPor('endereco');scan('end-search');};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
  $('end-place-refresh').onclick=places;$('end-place-search').onchange=places;
- $('end-history-refresh').onclick=history;$('end-history-search').onchange=$('end-only-pending').onchange=()=>{historyPage=1;history();};$('end-history-prev').onclick=()=>{historyPage--;history();};$('end-history-next').onclick=()=>{historyPage++;history();};
+ $('end-history-refresh').onclick=history;$('end-history-search').onchange=()=>{historyPage=1;history();};
+ $('end-only-pending').onclick=()=>{soPendentes=!soPendentes;$('end-only-pending').setAttribute('aria-pressed',String(soPendentes));$('end-only-pending').classList.toggle('active',soPendentes);historyPage=1;history();};
+ document.querySelectorAll('#end-place-filter button').forEach(b=>b.onclick=()=>{situacaoLocal=b.dataset.situacao;marcar('end-place-filter','situacao',situacaoLocal);places();});$('end-history-prev').onclick=()=>{historyPage--;history();};$('end-history-next').onclick=()=>{historyPage++;history();};
  document.querySelectorAll('.end-tabs button').forEach(b=>b.onclick=()=>showPanel(b.dataset.panel));
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera();});window.addEventListener('pagehide',stopCamera);
  $('end-search').value=new URLSearchParams(location.search).get('sku')||'';
