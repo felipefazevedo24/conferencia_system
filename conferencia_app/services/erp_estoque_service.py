@@ -590,7 +590,7 @@ class LocalizacaoEstoqueNaoEncontrada(Exception):
     """codigo_interno nao encontrado na tabela tproduto do ERP (HTTP 404)."""
 
 
-def atualizar_localizacao_estoque(codigo_interno: str, localizacao_estoque: str) -> dict:
+def atualizar_localizacao_estoque(codigo_interno: str, localizacao_estoque: str, *, permitir_vazio: bool = False) -> dict:
     """Atualiza a localizacao de estoque (rua/prateleira) de um produto
     direto no ERP: PATCH .../producao/estoque/{codigo_interno}/localizacao,
     body {"localizacao_estoque": "..."}.
@@ -604,7 +604,10 @@ def atualizar_localizacao_estoque(codigo_interno: str, localizacao_estoque: str)
     localizacao_estoque = str(localizacao_estoque or "").strip()
     if not codigo_interno:
         raise ValueError("codigo_interno é obrigatório.")
-    if not localizacao_estoque:
+    # Vazio só quando pedido explicitamente (desativação de endereço). A API
+    # aceita "" e limpa o campo - testado em 06/10/2026 no 27-08-00147 (200,
+    # empresas 1 e 2) -, mas fora desse caso vazio é erro de quem chamou.
+    if not localizacao_estoque and not permitir_vazio:
         raise ValueError("localizacao_estoque é obrigatório.")
 
     app = current_app._get_current_object()

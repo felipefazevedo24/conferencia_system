@@ -49,11 +49,13 @@ def skus_que_nao_enderecam(query, so_cache=False):
     try:
         estoque = (erp_estoque_service.estoque_grv_em_cache() if so_cache
                    else erp_estoque_service.buscar_estoque_grv())
+        if estoque is None:
+            return None  # só acontece no modo so_cache, com o cache deste processo frio
         por_codigo = (estoque or {}).get('por_codigo') or {}
     except Exception:
         current_app.logger.warning('Fila de endereçamento sem o GRV: nada foi filtrado por família.',
                                    exc_info=True)
-        return set()
+        return None
     def nao_endereca(sku):
         agregado = por_codigo.get(str(sku).strip().upper()) or {}
         return modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque'))
@@ -81,8 +83,16 @@ def listar():
     # Item sem vínculo de SKU não tem como ser endereçado, e material de
     # família/grupo que não endereça nunca vai ter endereço: nenhum dos dois é
     # pendência de endereçamento. Os dois voltam sozinhos se o cadastro mudar.
-    excluidos = skus_que_nao_enderecam(query.filter(Tarefa.status == "Pendente"),
-                                       so_cache=request.args.get("auto") == "1")
+    auto = request.args.get("auto") == "1"
+    excluidos = skus_que_nao_enderecam(query.filter(Tarefa.status == "Pendente"), so_cache=auto)
+    if excluidos is None:
+        # Cada worker do PythonAnywhere tem o próprio cache: na atualização
+        # automática, cair num worker frio devolvia a fila SEM o filtro de
+        # família (06/10/2026: 10093/002-1, família 03/grupo 2, reaparecia).
+        # A tela mantém a lista que já tem.
+        if auto:
+            return jsonify(sem_filtro=True)
+        excluidos = set()
 
     def pendencia_real(consulta):
         consulta = consulta.filter(ItemNota.codigo_grv.isnot(None), ItemNota.codigo_grv != "")
@@ -354,9 +364,20 @@ def material():
     from ..services import enderecamento_service as modulo_svc
     try:
         sku = modulo_svc.texto(request.args.get('sku'), 'o SKU', 80)
-        return jsonify(sku=sku, enderecos=modulo_svc.enderecos_atuais(sku))
+        enderecos = modulo_svc.enderecos_atuais(sku)
     except ValueError as exc:
         return jsonify(erro=str(exc)), 409
+    # Descrição/unidade/saldo vêm do snapshot do estoque (com cache); faltar
+    # não impede a operação, só deixa o cartão do material mais pobre.
+    info = {}
+    try:
+        from ..services.erp_estoque_service import buscar_estoque_grv
+        info = (buscar_estoque_grv().get('por_codigo') or {}).get(sku.strip().upper()) or {}
+    except Exception:
+        current_app.logger.warning('Diálogo de movimentação sem o snapshot do GRV.', exc_info=True)
+    return jsonify(sku=sku, enderecos=enderecos, descricao=str(info.get('item') or '').strip(),
+                   unidade=str(info.get('unidade') or '').strip(),
+                   saldo=float(info['qtde_total']) if info.get('qtde_total') is not None else None)
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/locais')

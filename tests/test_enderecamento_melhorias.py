@@ -142,3 +142,15 @@ def test_bridge_oc_aberta_calcula_pendente_na_unidade_do_estoque(monkeypatch):
     sql = cur.execute.call_args.args[0]
     assert "coalesce(item.qtde, 0) - coalesce(item.qtde_entregue, 0)" in sql
     assert "coalesce(item.qtde_compra" not in sql
+
+
+def test_api_de_localizacao_so_manda_vazio_quando_autorizado(app):
+    from unittest.mock import MagicMock
+    from conferencia_app.services import erp_estoque_service as erp
+
+    with pytest.raises(ValueError, match="obrigatório"):
+        erp.atualizar_localizacao_estoque("27-08-00147", "")
+    resposta = MagicMock(status_code=200, content=b"{}", json=lambda: {"status": "sucesso"})
+    with patch.object(erp.requests, "patch", return_value=resposta) as chamada:
+        erp.atualizar_localizacao_estoque("27-08-00147", "", permitir_vazio=True)
+    assert chamada.call_args.kwargs["json"] == {"localizacao_estoque": ""}

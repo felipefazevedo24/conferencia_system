@@ -259,7 +259,9 @@ def test_fila_nao_mostra_familia_que_nao_endereca(app, state, monkeypatch):
     # A atualização automática da tela não espera a bridge: usa só o cache.
     monkeypatch.setattr(erp_estoque_service, 'estoque_grv_em_cache', lambda: None)
     auto = client.get('/api/recebimento/enderecamento?auto=1').get_json()
-    assert auto['contadores']['Pendente'] == 1
+    # Cache frio neste worker: não devolve a fila sem o filtro de família (a
+    # tela mantém a lista que tem). Antes devolvia o item escondido de volta.
+    assert auto == {'sem_filtro': True}
     monkeypatch.setattr(erp_estoque_service, 'estoque_grv_em_cache', lambda: estoque)
     auto = client.get('/api/recebimento/enderecamento?auto=1').get_json()
     assert auto['contadores']['Pendente'] == 0
@@ -403,7 +405,8 @@ def test_familia_03_so_sai_no_cruzamento_com_o_grupo(app, state):
 
 
 def test_desativar_endereco_tira_ele_dos_materiais(app, state, monkeypatch):
-    """Desativar B: SKU-1 fica só em A; SKU-2 não tem outro endereço e é reportado."""
+    """Desativar B: SKU-1 fica só em A; SKU-2 só estava em B e fica sem endereço
+    no GRV (06/10/2026: a API aceita localização vazia na desativação)."""
     _, lookup, update = state
     client = app.test_client()
     with client.session_transaction() as sess:
@@ -414,10 +417,12 @@ def test_desativar_endereco_tira_ele_dos_materiais(app, state, monkeypatch):
     r = client.post('/api/recebimento/enderecamento/locais', json={'codigo': 'B', 'ativo': False})
     assert r.status_code == 200
     relatorio = r.get_json()['relatorio']
-    assert relatorio['limpos'] == ['SKU-1']
+    assert sorted(relatorio['limpos']) == ['SKU-1', 'SKU-2']
     assert relatorio['sem_outro_endereco'] == ['SKU-2']
     assert relatorio['falhas'] == []
-    update.assert_called_once_with('SKU-1', 'A')
+    assert sorted(c.args for c in update.call_args_list) == [('SKU-1', 'A'), ('SKU-2', '')]
+    assert {c.args[0]: c.kwargs.get('permitir_vazio', False) for c in update.call_args_list} == {'SKU-1': False, 'SKU-2': True}
+    assert Movimento.query.filter_by(sku='SKU-2').one().sincronizado_em
     assert not LocalizacaoArmazem.query.filter_by(codigo='B').one().ativo
     assert Movimento.query.filter_by(sku='SKU-1').one().tipo == 'Endereço desativado'
     assert Movimento.query.filter_by(sku='SKU-1').one().sincronizado_em
@@ -440,6 +445,11 @@ def test_api_movimenta_e_filtra_historico(app, state):
         sess['username'] = 'operador'; sess['role'] = 'Conferente'
     r = client.post('/api/enderecamento/movimentar', json=operacao())
     assert r.status_code == 200 and r.get_json()['item']['sincronizado']
+    # Histórico e sincronização é só de admin (06/10/2026).
+    assert client.get('/api/enderecamento/historico').status_code == 403
+    assert client.post('/api/enderecamento/sincronizar', json={'sku': 'SKU-1'}).status_code == 403
+    with client.session_transaction() as sess:
+        sess['username'] = 'admin'; sess['role'] = 'Admin'
     assert client.get('/api/enderecamento/historico?pendentes=1').get_json()['total'] == 0
     assert client.get('/api/enderecamento/historico?busca=INEXISTENTE').get_json()['total'] == 0
     assert client.get('/api/enderecamento/historico?busca=B').get_json()['total'] == 1
@@ -447,7 +457,7 @@ def test_api_movimenta_e_filtra_historico(app, state):
 
 
 def test_lista_vazia_de_enderecos_nao_vira_sucesso_ficticio(state):
-    """Guarda defensiva: o GRV não aceita limpar a última localização."""
+    """Guarda: só a desativação de endereço pode deixar o material sem endereço."""
     db.session.add(Movimento(chave='operacao:vazia', sku='SKU-1', unidade='UN',
         tipo='Movimentação', origem='A', destino='B', quantidade=Decimal('1'),
         usuario='operador', motivo='Registro sem endereço resultante',
@@ -455,7 +465,7 @@ def test_lista_vazia_de_enderecos_nao_vira_sucesso_ficticio(state):
     db.session.commit()
     svc.sincronizar('SKU-1')
     assert not Movimento.query.one().sincronizado_em
-    assert 'última localização' in Movimento.query.one().erro
+    assert 'sem endereço' in Movimento.query.one().erro
     state[2].assert_not_called()
 
 

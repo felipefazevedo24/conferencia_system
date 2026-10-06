@@ -68,9 +68,13 @@ def test_modulo_desktop_mobile_movimentacoes_e_retry(tmp_path, monkeypatch):
             page.locator('#end-sku').fill('SKU-1'); page.locator('#end-sku').press('Enter')
             pw.expect(page.locator('#end-origin')).to_be_focused()
             # A prévia diz onde está hoje e como fica depois, antes de confirmar.
-            pw.expect(page.locator('#end-current')).to_contain_text('Hoje em: B')
+            pw.expect(page.locator('#end-current')).to_contain_text('Hoje em:')
+            pw.expect(page.locator('#end-current .end-chip')).to_have_text(['B'])
+            # "Só acrescentar endereço" = operação sem origem (06/10/2026: era o campo vazio).
+            page.locator('[data-mode="acrescentar"]').click()
+            pw.expect(page.locator('#end-origin-label')).to_be_hidden()
             page.locator('#end-destination').fill('C'); page.locator('#end-quantity').fill('4')
-            pw.expect(page.locator('#end-preview')).to_contain_text('Depois: B · C')
+            pw.expect(page.locator('#end-preview .end-preview-row').last.locator('.end-chip')).to_have_text(['B', 'C'])
             page.locator('#end-unit').fill('UN')
             page.locator('#end-reason').fill('Sobra guardada em outro vão')
             page.locator('#end-submit').click()

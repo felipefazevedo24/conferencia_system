@@ -72,6 +72,8 @@
    const query = new URLSearchParams({status, pagina:page, busca:$('pa-search').value, ids, auto:auto?'1':'0'});
    const data = await request(`${api}?${query}`);
    if (version !== listRequest) return;
+   // Servidor sem o filtro de família neste momento: mantém a lista atual.
+   if (data.sem_filtro) return;
    items = data.itens; $('pa-list').replaceChildren();
    if (!ids && !$('pa-search').value && $('dash-enderecamento')) $('dash-enderecamento').textContent = data.contadores.Pendente;
    document.querySelectorAll('#pa-tabs button').forEach(b => { b.classList.toggle('active', b.dataset.status === status); b.setAttribute('aria-pressed', String(b.dataset.status === status)); b.querySelector('.pa-kpi-num').textContent = b.dataset.status === 'Concluído' ? data.concluidos_hoje : data.contadores[b.dataset.status]; });

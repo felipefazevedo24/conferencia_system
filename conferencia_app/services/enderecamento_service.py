@@ -263,10 +263,10 @@ def materiais_no_endereco(endereco, atualizar=True):
 def esvaziar(endereco, usuario):
     """Tira o endereço de todos os materiais que estão nele.
 
-    Usado ao desativar um endereço: o lugar sai de circulação e nada mais deve
-    apontar para ele. Material que ficaria sem endereço nenhum não é tocado —
-    a integração do GRV recusa localização vazia (HTTP 422) — e volta no
-    relatório para o responsável decidir o destino."""
+    Usado ao desativar um endereço (só admin): o lugar sai de circulação e
+    nada mais deve apontar para ele. Material que só estava nele fica SEM
+    endereço no GRV - a API aceita localização vazia (testado em 06/10/2026)
+    - e volta no relatório para alguém endereçar de novo."""
     endereco = normalizar(texto(endereco, 'um endereço', 80))
     relatorio = {'endereco': endereco, 'limpos': [], 'sem_outro_endereco': [], 'falhas': []}
     for sku in materiais_no_endereco(endereco):
@@ -278,7 +278,6 @@ def esvaziar(endereco, usuario):
                 continue  # saiu de lá entre a consulta e agora
             if not depois:
                 relatorio['sem_outro_endereco'].append(sku)
-                continue
             db.session.add(Movimento(
                 chave=f'desativacao:{endereco}:{sku}:{agora_br().isoformat()}',
                 sku=sku, unidade='', tipo='Endereço desativado', origem=endereco,
@@ -312,14 +311,17 @@ def sincronizar(sku):
             return
         # Cada operação guardou a lista completa que deve valer depois dela, e
         # encadeia a anterior — um envio só resolve a fila inteira.
-        locais = []
+        locais, ultima = [], None
         for mov in pendentes:
-            if isinstance(mov.detalhes, dict) and mov.detalhes.get('depois'):
-                locais = list(mov.detalhes['depois'])
-        # A integração existente não aceita localização vazia; não registrar sucesso fictício.
-        if not locais:
-            raise ValueError('O GRV não permite limpar a última localização por esta integração.')
-        resposta = receb.atualizar_localizacao_estoque(sku, ';'.join(locais))
+            if isinstance(mov.detalhes, dict) and 'depois' in mov.detalhes:
+                locais, ultima = list(mov.detalhes['depois'] or []), mov
+        # Ficar sem endereço só vale quando a última operação é a desativação
+        # do endereço (feita por admin). Fora disso, lista vazia é engano: não
+        # apagar o endereço do GRV nem registrar sucesso fictício.
+        if not locais and not (ultima is not None and ultima.tipo == 'Endereço desativado'):
+            raise ValueError('Esta operação deixaria o material sem endereço no GRV. Só a desativação de endereço pode fazer isso.')
+        extra = {} if locais else {'permitir_vazio': True}
+        resposta = receb.atualizar_localizacao_estoque(sku, ';'.join(locais), **extra)
         if isinstance(resposta, dict) and (resposta.get('sucesso') is False or resposta.get('success') is False):
             raise ValueError('GRV recusou a atualização. Tente sincronizar novamente.')
         for mov in pendentes:
