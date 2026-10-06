@@ -42,8 +42,11 @@ def criar_pendencias(itens, contagens, conversoes, ids_conformes, usuario):
             continue
         tarefa = Tarefa.query.filter_by(item_nota_id=item.id).first()
         if not tarefa:
+            # Com conversão (4 PÇ -> 24.000 mm), a quantidade já está na
+            # unidade convertida: a unidade da tarefa tem que acompanhar.
+            unidade_conv = str(cfg.get("unidade") or "").strip().upper()[:20] if fator != 1 else ""
             tarefa = Tarefa(item_nota_id=item.id, sku=str(item.codigo_grv or "").strip(),
-                            quantidade=qtd, unidade=item.unidade_comercial, criado_por=usuario)
+                            quantidade=qtd, unidade=unidade_conv or item.unidade_comercial, criado_por=usuario)
             db.session.add(tarefa)
             db.session.flush()
             evento(tarefa, "Criado", {"quantidade": qtd, "nota": item.numero_nota,

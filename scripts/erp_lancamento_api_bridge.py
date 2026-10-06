@@ -868,7 +868,9 @@ ESTOQUE_SQL = """
         -- Inventario exige o lote na contagem quando o item e' controlado
         -- por lote no GRV.
         coalesce(p.tipo_controle::text, '') as tipo_controle,
-        coalesce(p.controle_lote_serie::text, '') as controle_lote_serie
+        coalesce(p.controle_lote_serie::text, '') as controle_lote_serie,
+        -- Endereçamento: item que não controla estoque não tem endereço.
+        coalesce(p.controla_estoque, 0) as controla_estoque
     from public.tproduto p
     left join estoque_deposito d
       on d.cod_empresa = p.cod_empresa

@@ -202,7 +202,7 @@ class Config:
     # SERVICOS" e' o 09); a lista cresce conforme a Logistica identifica mais.
     ENDERECAMENTO_FAMILIAS_SEM_ENDERECO = [
         codigo.strip() for codigo in os.environ.get(
-            "ENDERECAMENTO_FAMILIAS_SEM_ENDERECO", "09,41").split(",") if codigo.strip()
+            "ENDERECAMENTO_FAMILIAS_SEM_ENDERECO", "09,33,41").split(",") if codigo.strip()
     ]
 
     # Exclusoes que valem so no cruzamento familia+grupo: "produto em processo"

@@ -39,7 +39,8 @@ def quantidade(valor):
 # Serviço e uso-e-consumo sem estoque entram no recebimento mas não têm
 # endereço. O padrão fica aqui, não só no config, para a regra não virar
 # inócua em silêncio onde a configuração não estiver carregada.
-FAMILIAS_SEM_ENDERECO = ('09', '41')
+# 33 (bens de pequeno valor) entrou em 06/10/2026: controla_estoque = 0 no GRV.
+FAMILIAS_SEM_ENDERECO = ('09', '33', '41')
 
 # Exclusões que valem só no cruzamento família+grupo: produto em processo
 # (família 03) não é endereçado quando é produção por terceiros, mas o que é
@@ -55,12 +56,14 @@ def codigo_familia(familia):
     return achado.group(0).lstrip('0').zfill(2) if achado else None
 
 
-def sem_enderecamento(familia, grupo=None):
+def sem_enderecamento(familia, grupo=None, controla_estoque=None):
     """Material que não controla estoque nem tem endereço.
 
-    Vale pela família sozinha (serviço, uso e consumo sem estoque) ou pelo
-    cruzamento família+grupo, quando a família só é excluída em parte dos
-    casos."""
+    O que manda é o "controla estoque" do produto no GRV. Bridge antiga não
+    manda o campo (None): aí vale a família sozinha (serviço, uso e consumo
+    sem estoque) ou o cruzamento família+grupo."""
+    if controla_estoque is not None and str(controla_estoque).strip() in ('0', 'False', 'false'):
+        return True
     codigo = codigo_familia(familia)
     if not codigo:
         return False
@@ -93,10 +96,33 @@ def local(codigo, recebe=True):
     return codigo
 
 
+# Grafias da mesma unidade (06/10/2026: conferente digitou "M" num SKU
+# controlado em "MT" e o endereçamento travou). Só sinônimos de verdade:
+# PC e UN continuam diferentes, não dá para afirmar que são a mesma coisa.
+SINONIMOS_UNIDADE = {
+    'M': ('M', 'MT', 'MTS', 'MTR', 'METRO', 'METROS'),
+    'UN': ('UN', 'UND', 'UNID', 'UNIDADE', 'UNIDADES'),
+    'PC': ('PC', 'PÇ', 'PCS', 'PÇS', 'PCA', 'PECA', 'PEÇA', 'PECAS', 'PEÇAS'),
+    'KG': ('KG', 'KGS', 'QUILO', 'QUILOS'),
+    'L': ('L', 'LT', 'LTS', 'LITRO', 'LITROS'),
+    'M2': ('M2', 'M²'),
+    'M3': ('M3', 'M³'),
+}
+_UNIDADE_CANONICA = {grafia: base for base, grafias in SINONIMOS_UNIDADE.items() for grafia in grafias}
+
+
+def unidade_canonica(unidade):
+    texto = ' '.join(str(unidade or '').split()).upper().rstrip('.')
+    return _UNIDADE_CANONICA.get(texto, texto)
+
+
 def saldo(sku, endereco, unidade, conferido=False):
     outros = Saldo.query.filter_by(sku=sku).first()
-    if outros and outros.unidade != unidade:
-        raise ValueError(f'Este SKU é controlado em {outros.unidade}. Use a mesma unidade.')
+    if outros and unidade_canonica(outros.unidade) != unidade_canonica(unidade):
+        raise ValueError(f'Este SKU é controlado em {outros.unidade} no endereçamento e a quantidade veio em {unidade}. '
+                         f'Converta para {outros.unidade} antes de registrar.')
+    if outros:
+        unidade = outros.unidade  # mesma grafia em todos os endereços do SKU
     registro = Saldo.query.filter_by(sku=sku, endereco=endereco).first()
     if not registro:
         registro = Saldo(sku=sku, endereco=endereco, unidade=unidade,

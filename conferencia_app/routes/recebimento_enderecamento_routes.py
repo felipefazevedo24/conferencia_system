@@ -19,7 +19,11 @@ MANAGE = "MANAGE_RECEBIMENTO_ENDERECAMENTO"
 def serializar(t):
     return {"id": t.id, "item_id": t.item_nota_id, "nota": t.item.numero_nota,
             "chave": t.item.chave_acesso, "fornecedor": t.item.fornecedor,
-            "descricao": t.item.descricao, "sku": t.sku, "quantidade": t.quantidade,
+            # O SKU vigente é o do item: a tarefa guarda o da criação, que fica
+            # vazio quando o vínculo veio depois (NF 24444: lançada no GRV após
+            # a conferência e mostrada como "Sem vínculo").
+            "descricao": t.item.descricao, "sku": str(t.item.codigo_grv or "").strip() or t.sku,
+            "quantidade": t.quantidade, "unidade_nf": t.item.unidade_comercial, "qtd_nf": t.item.qtd_real,
             "conferencia_por": t.item.usuario_conferencia,
             "conferencia_em": t.item.fim_conferencia.isoformat() if t.item.fim_conferencia else None,
             "unidade": t.unidade, "status": t.status, "alocacoes": t.alocacoes,
@@ -39,7 +43,7 @@ def skus_que_nao_enderecam(query, so_cache=False):
     atualização automática da tela, não se espera a bridge em nenhum caso."""
     from ..services import erp_estoque_service
     from ..services import enderecamento_service as modulo_svc
-    skus = [s for (s,) in query.with_entities(Tarefa.sku).distinct() if s]
+    skus = [s for (s,) in query.with_entities(ItemNota.codigo_grv).distinct() if s]
     if not skus:
         return set()
     try:
@@ -50,10 +54,11 @@ def skus_que_nao_enderecam(query, so_cache=False):
         current_app.logger.warning('Fila de endereçamento sem o GRV: nada foi filtrado por família.',
                                    exc_info=True)
         return set()
-    return {sku for sku in skus
-            if modulo_svc.sem_enderecamento(
-                (por_codigo.get(str(sku).strip().upper()) or {}).get('familia'),
-                (por_codigo.get(str(sku).strip().upper()) or {}).get('grupo'))}
+    def nao_endereca(sku):
+        agregado = por_codigo.get(str(sku).strip().upper()) or {}
+        return modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque'))
+
+    return {sku for sku in skus if nao_endereca(sku)}
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento")
@@ -64,6 +69,7 @@ def listar():
     if busca:
         query = query.filter(or_(ItemNota.numero_nota.contains(busca, autoescape=True),
                                  Tarefa.sku.contains(busca, autoescape=True),
+                                 ItemNota.codigo_grv.contains(busca, autoescape=True),
                                  ItemNota.descricao.contains(busca, autoescape=True),
                                  ItemNota.fornecedor.contains(busca, autoescape=True)))
     ids = request.args.get("ids", "")
@@ -80,7 +86,7 @@ def listar():
 
     def pendencia_real(consulta):
         consulta = consulta.filter(ItemNota.codigo_grv.isnot(None), ItemNota.codigo_grv != "")
-        return consulta.filter(~Tarefa.sku.in_(excluidos)) if excluidos else consulta
+        return consulta.filter(~ItemNota.codigo_grv.in_(excluidos)) if excluidos else consulta
 
     contadores = {s: (pendencia_real(query) if s == "Pendente" else query)
                   .filter(Tarefa.status == s).count()
@@ -198,7 +204,7 @@ def saldos():
     for sku, agregado in (estoque.get('por_codigo') or {}).items():
         # Serviço e uso-e-consumo sem estoque nunca vão ter endereço: listar
         # esses itens como pendência seria ruído permanente.
-        if modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo')):
+        if modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque')):
             continue
         descricao = str(agregado.get('item') or '').strip()
         unidade = str(agregado.get('unidade') or '').strip()

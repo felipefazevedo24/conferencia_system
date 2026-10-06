@@ -156,6 +156,8 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             # None = bridge antiga, que ainda nao manda o campo (nao da pra
             # afirmar que o item NAO controla lote).
             "tipo_controle": item.get("tipo_controle"),
+            # None = bridge antiga, sem o campo: aí vale só a regra por família.
+            "controla_estoque": item.get("controla_estoque"),
             "localizacoes": [],
             "_custo_total": 0.0,  # acumulador interno pra media ponderada - nao exposto
         })

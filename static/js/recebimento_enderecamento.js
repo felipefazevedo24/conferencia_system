@@ -90,13 +90,26 @@
      const badgeCls = {'Pendente': 'pa-badge--pendente', 'Aguardando sincronização': 'pa-badge--aguardando', 'Concluído': 'pa-badge--concluido'}[item.status] || '';
      const statusCell = el('td');
      statusCell.append(el('span', item.status, `pa-badge ${item.erro ? 'pa-badge--erro' : badgeCls}`));
-     const qtdCell = el('td', `${item.quantidade} ${item.unidade || ''}`); qtdCell.dataset.label = 'Quantidade';
+     const qtdCell = el('td', null); qtdCell.dataset.label = 'Quantidade';
+     qtdCell.append(el('div', `${item.quantidade} ${item.unidade || ''}`));
+     // Conversão feita na conferência (4 PÇ na NF -> 24.000 MM no estoque): mostra a origem.
+     const unNf = String(item.unidade_nf || '').trim().toUpperCase(), unTarefa = String(item.unidade || '').trim().toUpperCase();
+     if (item.qtd_nf != null && unNf && (unNf !== unTarefa || Number(item.qtd_nf) !== Number(item.quantidade))) qtdCell.append(el('div', `NF: ${item.qtd_nf} ${item.unidade_nf}`, 'pa-meta'));
      const nfCell = el('td', item.nota, 'pa-nf'); nfCell.dataset.label = 'NF-e';
-     const dateCell = el('td', date(item.criado_em), 'pa-date'); dateCell.dataset.label = 'Recebido em';
+     const dateCell = el('td', null, 'pa-date'); dateCell.dataset.label = 'Recebido em';
+     dateCell.append(el('div', date(item.criado_em)));
+     // Quanto tempo o material está parado esperando endereço.
+     const dias = item.status === 'Pendente' && item.criado_em ? Math.floor((Date.now() - new Date(item.criado_em).getTime()) / 86400000) : 0;
+     if (dias >= 1) dateCell.append(el('div', `parado há ${dias} dia${dias > 1 ? 's' : ''}`, dias >= 2 ? 'pa-meta pa-age--atraso' : 'pa-meta'));
      card.append(skuCell, materialCell, qtdCell, nfCell, dateCell, statusCell);
     const actions = el('div', null, 'pa-tools');
     if (item.status === 'Pendente') {
-     if (item.impedimento) actions.append(el('span', item.impedimento, 'pa-meta'));
+     if (item.impedimento) {
+      actions.append(el('span', item.impedimento, 'pa-meta'));
+      const corrigir = el('a', null, 'pa-act'); corrigir.href = '/conferencia';
+      corrigir.append(el('i', null, 'fas fa-arrow-up-right-from-square'), document.createTextNode(' Corrigir no recebimento'));
+      actions.append(corrigir);
+     }
      else actions.append(button('Endereçar material', () => openWork(item), 'fa-qrcode', 'primary'));
     }
     const syncActions = item.erro ? el('div', null, 'pa-sync-error') : actions;

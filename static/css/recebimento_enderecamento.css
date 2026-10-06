@@ -86,3 +86,4 @@
 .pa-kpi-num{font-size:14px;font-weight:700}
 .pa-kpi-label{font-size:11px;text-transform:none;letter-spacing:0}
 @media(max-width:700px){.pa-filterbar{grid-template-columns:1fr}.pa-kpi{flex:1 1 auto;justify-content:center}}
+.pa-table .pa-age--atraso{color:var(--eui-warning,#b45309);font-weight:700}.putaway a.pa-act{text-decoration:none}
