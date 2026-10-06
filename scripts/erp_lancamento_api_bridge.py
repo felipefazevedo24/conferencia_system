@@ -2747,7 +2747,10 @@ def create_app() -> Flask:
                     oc.codigo::text as ordem_compra,
                     coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social, 'Fornecedor nao informado') as fornecedor,
                     oc.prazo_entrega as prazo_entrega,
-                    sum(greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0))::double precision as quantidade_pendente
+                    -- qtde e qtde_entregue estão na unidade do ESTOQUE; qtde_compra é
+                    -- a de compra (1 PÇ = 5.999,88 mm). Misturar as duas dava pendente
+                    -- "1" em barra controlada em mm e 98 CX fantasma em OC já entregue.
+                    sum(greatest(coalesce(item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0))::double precision as quantidade_pendente
                 from public.tord_com oc
                 join public.tord_aux item
                   on item.cod_empresa = oc.cod_empresa
@@ -2758,7 +2761,7 @@ def create_app() -> Flask:
                 where oc.cod_empresa = %s
                   and coalesce(oc.cancelado, 0) = 0
                   and regexp_replace(upper(trim(item.cod_interno::text)), '[^A-Z0-9]', '', 'g') = any(%s::text[])
-                  and coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0) > 0.000001
+                  and coalesce(item.qtde, 0) - coalesce(item.qtde_entregue, 0) > 0.000001
                 group by item.cod_interno, oc.codigo, oc.fornecedor, f.nome, f.razao_social, oc.prazo_entrega
                 order by item.cod_interno, oc.prazo_entrega nulls last, oc.codigo desc
             """

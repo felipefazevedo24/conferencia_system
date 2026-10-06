@@ -40,14 +40,18 @@ def quantidade(valor):
 # endereço. O padrão fica aqui, não só no config, para a regra não virar
 # inócua em silêncio onde a configuração não estiver carregada.
 # 33 (bens de pequeno valor) entrou em 06/10/2026: controla_estoque = 0 no GRV.
-FAMILIAS_SEM_ENDERECO = ('09', '33', '41')
+# 07 (insumos administrativos), 37 (material de terceiro) e 42 (matéria-prima
+# material específico): decisão da Logística em 06/10/2026. Só saem das listas;
+# endereçar pelo "Movimentar" continua permitido.
+FAMILIAS_SEM_ENDERECO = ('07', '09', '33', '37', '41', '42')
 
 # Exclusões que valem só no cruzamento família+grupo: produto em processo
 # (família 03) não é endereçado quando é produção por terceiros, mas o que é
 # feito aqui dentro continua sendo. O GRV manda o grupo como CÓDIGO numérico
 # (p.cod_grupo), não como nome, então os pares esperam o código do grupo.
 # Vazio = regra inativa: um cruzamento sem grupo conhecido não casa com nada.
-FAMILIA_GRUPO_SEM_ENDERECO = ()  # ex.: (('03', '12'),)
+# 03 + grupo 2 = "PRODUÇÃO POR TERCEIROS" (o grupo 1, produção própria, segue).
+FAMILIA_GRUPO_SEM_ENDERECO = (('03', '2'),)
 
 
 def codigo_familia(familia):

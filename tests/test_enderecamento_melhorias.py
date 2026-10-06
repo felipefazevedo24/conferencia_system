@@ -103,6 +103,10 @@ def test_busca_por_os_acha_o_produto_acabado_mesmo_sem_saldo(app):
     assert (primeiro["sku"], primeiro["endereco"], primeiro["os"]["n_os"], primeiro["os"]["situacao"]) == ("23-01-05879", "", "11078", "Em aberto")
     # A busca por texto continua valendo junto ("11078" na descrição da chapa).
     assert [i["sku"] for i in dados["itens"]] == ["23-01-05879", "19-01-00001"]
+    # "Buscar só por OS": só o produto da OS, sem o material de número parecido.
+    with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all", return_value=os_grv):
+        so_os = client.get("/api/enderecamento/saldos?busca=11078&os=1").get_json()
+    assert [i["sku"] for i in so_os["itens"]] == ["23-01-05879"]
 
     # Texto que não é número de OS não consulta o GRV; GRV fora não derruba a busca.
     with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all") as consulta:
@@ -111,3 +115,30 @@ def test_busca_por_os_acha_o_produto_acabado_mesmo_sem_saldo(app):
     with patch(ESTOQUE, return_value=estoque), patch("conferencia_app.compras.db.fetch_all", side_effect=RuntimeError("bridge fora")):
         r = client.get("/api/enderecamento/saldos?busca=11078")
     assert r.status_code == 200 and [i["sku"] for i in r.get_json()["itens"]] == ["19-01-00001"]
+
+
+def test_familias_que_saem_das_listas(app):
+    # 06/10/2026: 07, 37 e 42 inteiras; 03 só "PRODUÇÃO POR TERCEIROS" (grupo 2).
+    for familia in ("N - 07 - INSUMOS ADMINISTRATIVOS", "N - 37 - MATERIAL DE TERCEIRO", "N - 42 - MATÉRIA-PRIMA - MATERIAL ESPECÍFICO"):
+        assert end.sem_enderecamento(familia, "1", 1) is True
+    assert end.sem_enderecamento("N - 03 - PRODUTO EM PROCESSO", "2", 1) is True
+    assert end.sem_enderecamento("N - 03 - PRODUTO EM PROCESSO", "1", 1) is False
+    assert end.sem_enderecamento("N - 01 - MATÉRIA-PRIMA", "1", 1) is False
+
+
+def test_bridge_oc_aberta_calcula_pendente_na_unidade_do_estoque(monkeypatch):
+    # 1 PÇ comprada = 5.999,88 mm no estoque: o pendente é em mm, não "1".
+    from unittest.mock import MagicMock
+    from scripts import erp_lancamento_api_bridge as bridge
+
+    monkeypatch.setattr(bridge, "_config", lambda: {"host": "h", "database": "d", "user": "u"})
+    monkeypatch.setattr(bridge, "_authorized", lambda cfg: True)
+    conn = MagicMock()
+    cur = conn.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cur.description = [("codigo_key",), ("codigo_interno",), ("ordem_compra",), ("fornecedor",), ("prazo_entrega",), ("quantidade_pendente",)]
+    cur.fetchall.return_value = []
+    monkeypatch.setattr(bridge, "_conectar", lambda cfg, **kw: conn)
+    bridge.create_app().test_client().post("/api/erp/estoque/ordens-compra-abertas", json={"codigos": ["19-01-00296"]})
+    sql = cur.execute.call_args.args[0]
+    assert "coalesce(item.qtde, 0) - coalesce(item.qtde_entregue, 0)" in sql
+    assert "coalesce(item.qtde_compra" not in sql

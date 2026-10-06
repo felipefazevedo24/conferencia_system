@@ -22,7 +22,7 @@
  async function refresh() {
   const version=++listVersion;
   try {
-   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page,filtro:$('end-filter').value,saldo:$('end-only-stock').checked?'1':'0'}));
+   const data=await request('/saldos?'+new URLSearchParams({busca:$('end-search').value,pagina:page,filtro:$('end-filter').value,saldo:$('end-only-stock').checked?'1':'0',os:$('end-only-os').checked?'1':'0'}));
    if(version!==listVersion)return;
    balances=data.itens; $('end-balances').replaceChildren();
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
@@ -37,7 +37,8 @@
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
     const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
-    actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
+    // Histórico e sincronização é só de admin (o servidor também confere).
+    if(admin)actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
    if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
@@ -112,6 +113,7 @@
  function showPanel(name){
   document.querySelectorAll('.end-tabs button').forEach(b=>{const on=b.dataset.panel===name;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
   for(const p of ['saldos','locais','receber','historico'])$('end-panel-'+p).hidden=p!==name;
+  if(name==='historico'&&!admin)return showPanel('saldos');
   if(name==='historico')history();
   if(name==='saldos')refresh();
   if(name==='locais')places();
@@ -190,7 +192,7 @@
  for(const [a,b] of [['end-sku','end-origin'],['end-origin','end-destination'],['end-destination','end-quantity'],['end-quantity','end-unit'],['end-unit','end-reason']])$(a).onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$(b).focus();}};
  $('end-move').onclick=()=>open();
  $('end-refresh').onclick=refresh;$('end-search').onchange=()=>{page=1;refresh();};
- $('end-filter').onchange=$('end-only-stock').onchange=()=>{page=1;refresh();};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
+ $('end-filter').onchange=$('end-only-stock').onchange=$('end-only-os').onchange=()=>{page=1;refresh();};$('end-prev').onclick=()=>{page--;refresh();};$('end-next').onclick=()=>{page++;refresh();};
  $('end-place-refresh').onclick=places;$('end-place-search').onchange=places;
  $('end-history-refresh').onclick=history;$('end-history-search').onchange=$('end-only-pending').onchange=()=>{historyPage=1;history();};$('end-history-prev').onclick=()=>{historyPage--;history();};$('end-history-next').onclick=()=>{historyPage++;history();};
  document.querySelectorAll('.end-tabs button').forEach(b=>b.onclick=()=>showPanel(b.dataset.panel));

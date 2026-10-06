@@ -202,7 +202,7 @@ class Config:
     # SERVICOS" e' o 09); a lista cresce conforme a Logistica identifica mais.
     ENDERECAMENTO_FAMILIAS_SEM_ENDERECO = [
         codigo.strip() for codigo in os.environ.get(
-            "ENDERECAMENTO_FAMILIAS_SEM_ENDERECO", "09,33,41").split(",") if codigo.strip()
+            "ENDERECAMENTO_FAMILIAS_SEM_ENDERECO", "07,09,33,37,41,42").split(",") if codigo.strip()
     ]
 
     # Exclusoes que valem so no cruzamento familia+grupo: "produto em processo"
@@ -212,7 +212,7 @@ class Config:
     # Vazio = regra inativa, porque cruzamento sem grupo nao casa com nada.
     ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO = [
         tuple(par.split(":", 1)) for par in os.environ.get(
-            "ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO", "").split(",")
+            "ENDERECAMENTO_FAMILIA_GRUPO_SEM_ENDERECO", "03:2").split(",")
         if ":" in par
     ]
 

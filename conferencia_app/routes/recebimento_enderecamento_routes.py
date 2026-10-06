@@ -253,9 +253,12 @@ def saldos():
     else:
         registros = registros + sem_endereco
     os_achada = {}
+    # "Buscar só por OS": sem o texto, para não trazer material cujo código ou
+    # descrição só tem números parecidos com os da OS.
+    so_os = request.args.get('os') == '1'
     if busca:
         os_achada = _produto_acabado_da_os(busca)
-        filtrados = [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
+        filtrados = [] if so_os else [r for r in registros if busca in r[0] or busca in r[1] or busca in r[2].upper()]
         if os_achada:
             # O produto da OS entra mesmo sem saldo ou fora do filtro: a ideia é
             # achar o material para endereçar quando sai da produção.
@@ -283,6 +286,8 @@ def saldos():
 @recebimento_enderecamento_bp.get('/api/enderecamento/historico')
 @permission_required(PERMISSION)
 def movimentos():
+    if not is_admin_session():
+        return jsonify(erro='Histórico e sincronização: acesso restrito ao administrador.'), 403
     from ..models import EnderecoMovimento as Movimento
     query = Movimento.query
     busca = str(request.args.get('busca') or '').strip()[:100]
@@ -326,6 +331,8 @@ def movimentar():
 @recebimento_enderecamento_bp.post('/api/enderecamento/sincronizar')
 @permission_required(PERMISSION)
 def sincronizar_movimentos():
+    if not is_admin_session():
+        return jsonify(erro='Histórico e sincronização: acesso restrito ao administrador.'), 403
     from ..services import enderecamento_service as modulo_svc
     from ..models import EnderecoMovimento as Movimento
     dados = request.get_json(silent=True)
