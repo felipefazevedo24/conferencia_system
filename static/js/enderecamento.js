@@ -119,7 +119,7 @@
   if(name==='locais')places();
   if(name==='receber')document.dispatchEvent(new CustomEvent('recebimento:abrir-enderecamento'));
  }
- // Transferir: sai da origem. Acrescentar: o material passa a constar
+ // Transferência: sai da origem. Inclusão de endereço: o material passa a constar
  // também no destino (no servidor, é a operação sem origem).
  let modo = 'transferir';
  function setModo(valor){
@@ -127,6 +127,7 @@
   document.querySelectorAll('.end-mode button').forEach(b=>{const on=b.dataset.mode===valor;b.classList.toggle('active',on);b.setAttribute('aria-checked',String(on));});
   $('end-origin-label').hidden=valor!=='transferir';$('end-origin').required=valor==='transferir';
   if(valor!=='transferir')$('end-origin').value='';
+  $('end-destination-label').textContent=`${valor==='transferir'?3:2} · Endereço de destino`;
   preview();
  }
  function open(s={}){
@@ -134,7 +135,7 @@
   $('end-form').reset();message('',true);atuais=null;atuaisSku='';$('end-current').replaceChildren();
   $('end-sku').value=s.sku||'';$('end-unit').value=s.unidade||'';$('end-origin').value=s.endereco||'';
   $('end-destination').value='';$('end-quantity').value='';
-  // Material sem endereço não tem de onde sair: abre direto em "acrescentar".
+  // Material sem endereço não tem de onde sair: abre direto em "Inclusão de endereço".
   setModo(s.sku&&!s.endereco?'acrescentar':'transferir');
   $('end-work').showModal();preview();(s.sku?$(modo==='transferir'&&!s.endereco?'end-origin':'end-destination'):$('end-sku')).focus();
   if(s.sku)consultarMaterial();
@@ -163,7 +164,7 @@
      b.onclick=()=>{setModo('transferir');$('end-origin').value=e;$('end-destination').focus();marcarOrigem();preview();};
      chips.append(b);
     }
-   }else chips.append(node('span','Sem endereço no GRV: use "Só acrescentar endereço".','end-muted'));
+   }else chips.append(node('span','Sem endereço no GRV: use "Inclusão de endereço".','end-muted'));
    card.append(chips);$('end-current').replaceChildren(card);
    if(!atuais.length&&modo==='transferir'&&!$('end-origin').value.trim())setModo('acrescentar');
   }catch(e){atuais=null;if($('end-sku').value.trim()===sku)$('end-current').replaceChildren(node('span',e.message,'end-muted end-erro'));}
@@ -179,7 +180,7 @@
   const q=$('end-quantity').value.trim(),unit=$('end-unit').value.trim();
   const resumo=node('div',null,'end-preview-line');
   resumo.append(node('strong',$('end-sku').value.trim()||'Material'));
-  resumo.append(document.createTextNode(` · ${q||'…'} ${unit} · ${modo==='transferir'?($('end-origin').value.trim()||'origem?')+' → ':'acrescentar '}${$('end-destination').value.trim()||'destino?'}`));
+  resumo.append(document.createTextNode(` · ${q||'…'} ${unit} · ${modo==='transferir'?($('end-origin').value.trim()||'origem?')+' → ':'inclusão em '}${$('end-destination').value.trim()||'destino?'}`));
   box.append(resumo);
   marcarOrigem();
   if(!atuais)return;
@@ -199,7 +200,7 @@
  function setBusy(value){busy=value;for(const elem of $('end-form').elements)elem.disabled=value;}
  $('end-form').onsubmit=async e=>{
   e.preventDefault();if(busy)return;
-  if(modo==='transferir'&&!$('end-origin').value.trim()){message('Informe de qual endereço o material sai, ou escolha "Só acrescentar endereço".',true);$('end-origin').focus();return;}
+  if(modo==='transferir'&&!$('end-origin').value.trim()){message('Informe de qual endereço o material sai, ou escolha "Inclusão de endereço".',true);$('end-origin').focus();return;}
   const data={chave:key,sku:$('end-sku').value.trim(),origem:modo==='transferir'?$('end-origin').value.trim():'',destino:$('end-destination').value.trim(),quantidade:$('end-quantity').value.trim(),unidade:$('end-unit').value.trim(),motivo:$('end-reason').value.trim()};
   // Resultado de rede incerto: repetir exatamente a mesma chave e conteúdo.
   if(submitted&&JSON.stringify(data)!==submitted){message('A tentativa anterior pode ter sido salva. Consulte o histórico antes de alterar os dados e iniciar outra operação.',true);return;}
