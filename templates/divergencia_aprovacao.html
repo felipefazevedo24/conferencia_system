@@ -616,20 +616,43 @@
       document.getElementById('btn-pdf').classList.toggle('hidden', !data.tem_pdf);
       setStatusChip(reg.status);
 
-      // Resumo textual (é o mesmo texto que foi pro Teams).
+      // "O que divergiu" vem da comparação ao vivo (a mesma da tabela). O texto
+      // gravado na abertura (o que foi pro Teams) é uma foto: se o pedido mudou
+      // no GRV depois, ele contradiz a tabela (06/10/2026: NF 997 dizia "valor
+      // diverge" com o unitário idêntico). A foto só aparece como nota quando difere.
       const linhasDet = String(reg.detalhe || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const cmpAoVivo = data.comparacao;
+      const paresAoVivo = (cmpAoVivo && Array.isArray(cmpAoVivo.pares)) ? cmpAoVivo.pares : [];
       const lista = document.getElementById('diverg-list');
-      if (linhasDet.length) {
+      const itemHtml = (nf, cod, destino, motivo) => `<div class="diverg-item">
+            <div class="diverg-ico"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="diverg-txt"><strong>Linha ${esc(nf)} da NF</strong> · ${esc(cod)}<small>comparada com ${esc(destino)}</small></div>
+            <span class="tag no">${esc(motivo)}</span>
+          </div>`;
+      if (paresAoVivo.length) {
+        const divergentes = paresAoVivo.filter(p => !p.ok);
+        const atual = divergentes.map(p => {
+          const destino = p.po_linha ? `linha ${p.po_linha} do pedido${p.po_pedido ? ' ' + p.po_pedido : ''}` : 'nenhuma linha do pedido';
+          return { html: itemHtml(p.linha, p.nf_codigo || '—', destino, motivoDivergencia(p)),
+                   chave: `${p.linha}|${!p.qtd_ok}|${!p.valor_ok}` };
+        });
+        // Mesma divergência da abertura? Compara linha + tipo, não o texto.
+        const naAbertura = linhasDet.map(t => {
+          const q = parseLinhaDetalhe(t);
+          return q ? `${q.nf}|${/quantidade/i.test(q.motivo)}|${/valor/i.test(q.motivo)}` : t;
+        });
+        const mudou = linhasDet.length && naAbertura.slice().sort().join('#') !== atual.map(a => a.chave).sort().join('#');
+        lista.innerHTML = (atual.length
+          ? atual.map(a => a.html).join('')
+          : '<div class="inline-note"><i class="fas fa-circle-check"></i><span>Pela comparação de agora, todas as linhas da NF batem com o pedido.</span></div>')
+          + (mudou ? `<div class="inline-note"><i class="fas fa-clock-rotate-left"></i><span>Na abertura${reg.solicitado_em ? ' (' + esc(reg.solicitado_em) + ')' : ''} o sistema apontou: ${linhasDet.map(t => { const q = parseLinhaDetalhe(t); return q ? `linha ${esc(q.nf)} – ${esc(q.motivo)}` : esc(t); }).join('; ')}. O pedido pode ter sido alterado no GRV depois; vale o que está acima.</span></div>` : '');
+      } else if (linhasDet.length) {
         lista.innerHTML = linhasDet.map(t => {
           const p = parseLinhaDetalhe(t);
           if (!p) return `<div class="diverg-item"><div class="diverg-ico"><i class="fas fa-triangle-exclamation"></i></div><div class="diverg-txt">${esc(t)}</div></div>`;
           const motivo = p.motivo.charAt(0).toUpperCase() + p.motivo.slice(1);
           const destino = p.destino.charAt(0).toLowerCase() + p.destino.slice(1);
-          return `<div class="diverg-item">
-            <div class="diverg-ico"><i class="fas fa-triangle-exclamation"></i></div>
-            <div class="diverg-txt"><strong>Linha ${esc(p.nf)} da NF</strong> · ${esc(p.cod)}<small>comparada com ${esc(destino)}</small></div>
-            <span class="tag no">${esc(motivo)}</span>
-          </div>`;
+          return itemHtml(p.nf, p.cod, destino, motivo);
         }).join('');
       } else {
         lista.innerHTML = '<div class="inline-note"><i class="fas fa-circle-info"></i><span>Divergência entre a nota e o pedido de compra.</span></div>';

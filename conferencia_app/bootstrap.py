@@ -1886,11 +1886,14 @@ def _ensure_agendamento_veiculos() -> None:
         },
     ]
 
+    # Só cria os veículos padrão numa base nova. Antes regravava a cada boot
+    # (placa vazia, ativo=True): editar ou desativar um deles na Central de
+    # Viagens voltava atrás no próximo Reload.
     for payload in veiculos:
-        registro = AgendamentoVeiculo.query.filter_by(codigo=payload["codigo"]).first()
-        if not registro:
-            registro = AgendamentoVeiculo(codigo=payload["codigo"])
-            db.session.add(registro)
+        if AgendamentoVeiculo.query.filter_by(codigo=payload["codigo"]).first():
+            continue
+        registro = AgendamentoVeiculo(codigo=payload["codigo"])
+        db.session.add(registro)
         registro.nome_exibicao = payload["nome_exibicao"]
         registro.placa = payload["placa"]
         registro.cor_kanban = payload["cor_kanban"]

@@ -3072,33 +3072,6 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
-    @app.post("/api/erp/estoque/saude")
-    def consultar_estoque_saude():
-        """Uma checagem da Saude do estoque. Entrada: {"chave": "...", "empresa": 1}.
-        O SQL mora em conferencia_app/services/estoque_saude_service.py."""
-        cfg = _config()
-        if not _authorized(cfg):
-            return jsonify({"erro": "nao_autorizado"}), 401
-        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
-            return jsonify({"erro": "postgres_nao_configurado"}), 500
-        try:
-            from conferencia_app.services import estoque_saude_service
-
-            payload = request.get_json(silent=True) or {}
-            chave = str(payload.get("chave") or "").strip()
-            if chave not in estoque_saude_service.POR_CHAVE:
-                return jsonify({"sucesso": False, "erro": "checagem_desconhecida"}), 400
-            try:
-                empresa = int(payload.get("empresa") or 1)
-            except (TypeError, ValueError):
-                empresa = 1
-            with _conectar(cfg, readonly=True) as conn:
-                resultado = estoque_saude_service.executar_checagem(conn, chave, empresa)
-            return jsonify({"sucesso": True, **resultado})
-        except Exception as exc:
-            app.logger.exception("Falha ao consultar a saude do estoque no ERP")
-            return jsonify({"sucesso": False, "erro": str(exc)}), 500
-
     @app.post("/api/erp/estoque/cardex")
     def consultar_estoque_cardex():
         """Movimento cru do kardex a partir de `desde` (ate' hoje, ou ate' `ate`).

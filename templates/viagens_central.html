@@ -84,6 +84,25 @@
     .vt-toast.success { border-left: 4px solid #16a34a; }
     .vt-toast.error { border-left: 4px solid #dc2626; }
     .vt-toast.warning { border-left: 4px solid #d97706; }
+    .cad-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border); }
+    .cad-tab { border: none; background: transparent; padding: 8px 12px; font-weight: 700; font-size: 13px; color: var(--eui-text-muted); border-bottom: 2px solid transparent; cursor: pointer; }
+    .cad-tab.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .cad-lista { display: grid; gap: 8px; }
+    .cad-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--eui-border); border-radius: 10px; background: var(--eui-surface); }
+    .cad-item.is-inativo { opacity: .6; background: var(--eui-surface-2); }
+    .cad-item__info { flex: 1; min-width: 0; }
+    .cad-item__nome { font-weight: 700; font-size: 14px; }
+    .cad-item__acoes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .cad-cor { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+    .cad-form { border: 1px solid var(--eui-border); border-radius: 10px; padding: 12px; background: var(--eui-surface-2); display: grid; gap: 10px; }
+    .cad-form .vt-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .cad-link { border: 1px solid var(--eui-border); border-radius: 10px; padding: 12px; display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; align-items: center; }
+    .cad-link img { width: 150px; height: 150px; border: 1px solid var(--eui-border); border-radius: 8px; background: #fff; }
+    .cad-link input { font-size: 12px; }
+    @media (max-width: 760px) {
+        .cad-form .vt-grid-3, .cad-link { grid-template-columns: 1fr; }
+        .cad-item { flex-wrap: wrap; }
+    }
     @media (max-width: 760px) {
         .vt-toolbar { align-items: stretch; }
         .vt-tabs { width: 100%; }
@@ -94,7 +113,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="eui-scope vt-wrap" data-current-user-role="{{ user_role or '' }}" data-pode-excluir="{{ 'true' if can_access('MANAGE_LOGISTICA_VIAGEM_EXCLUIR') else 'false' }}">
+<div class="eui-scope vt-wrap" data-current-user-role="{{ user_role or '' }}" data-pode-excluir="{{ 'true' if can_access('MANAGE_LOGISTICA_VIAGEM_EXCLUIR') else 'false' }}" data-pode-cadastros="{{ 'true' if can_access('MANAGE_LOGISTICA_VIAGEM_CADASTROS') else 'false' }}">
     <header class="eui-page-header">
         <div>
             <div class="eui-page-header__eyebrow">LOGÍSTICA • TRANSPORTES</div>
@@ -103,6 +122,9 @@
         </div>
         <div class="vt-header-actions">
           <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--ghost"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
+            {% if can_access('MANAGE_LOGISTICA_VIAGEM_CADASTROS') %}
+            <button id="btnCadastrosFrota" class="eui-btn eui-btn--ghost" onclick="abrirCadastros()"><i class="fas fa-id-card"></i> Veículos e motoristas</button>
+            {% endif %}
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}
@@ -403,6 +425,28 @@
     </div>
   </div>
 </div>
+<div id="modalCadastros" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:820px;">
+    <div class="vt-modal__head">
+      <strong><i class="fas fa-id-card"></i> Veículos e motoristas</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCadastros')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <div class="cad-tabs">
+        <button class="cad-tab is-active" data-cad-tab="motoristas" onclick="trocarAbaCadastro('motoristas')"><i class="fas fa-user"></i> Motoristas</button>
+        <button class="cad-tab" data-cad-tab="veiculos" onclick="trocarAbaCadastro('veiculos')"><i class="fas fa-truck"></i> Veículos</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <label class="vt-mini"><input type="checkbox" id="cad-inativos" onchange="renderCadastros()"> Mostrar inativos</label>
+        <button class="eui-btn eui-btn--primary eui-btn--sm" id="cad-novo" onclick="novoCadastro()"><i class="fas fa-plus"></i> Novo motorista</button>
+      </div>
+      <div id="cad-form-wrap"></div>
+      <div id="cad-link-wrap"></div>
+      <div class="cad-lista" id="cad-lista"><div class="vt-mini">Carregando…</div></div>
+    </div>
+    <div class="vt-modal__foot"><button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCadastros')">Fechar</button></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -423,6 +467,7 @@ const PODE_EXCLUIR = document.querySelector('.vt-wrap')?.dataset.podeExcluir ===
   'modalConfirmacao',
   'modalCancelarViagem',
   'modalAdicionarSolicitacaoViagem',
+  'modalCadastros',
 ].forEach((id) => {
   const element = document.getElementById(id);
   if (element) document.body.appendChild(element);
@@ -2330,5 +2375,193 @@ if (btnExcluirSelecionadas) {
     await acaoAbrirViagem(vid);
   }
 })();
+
+// ---------------------------------------------------------------- Veículos e motoristas
+// Permissão própria (MANAGE_LOGISTICA_VIAGEM_CADASTROS); o servidor confere de novo.
+const cad = { aba: 'motoristas', veiculos: [], motoristas: [], cores: [] };
+const CAD_COR = { blue: '#2563eb', gold: '#ca8a04', green: '#16a34a', red: '#dc2626', purple: '#7c3aed', orange: '#ea580c', teal: '#0d9488', gray: '#64748b' };
+const CAD_COR_NOME = { blue: 'Azul', gold: 'Amarelo', green: 'Verde', red: 'Vermelho', purple: 'Roxo', orange: 'Laranja', teal: 'Turquesa', gray: 'Cinza' };
+const cadEsc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function abrirCadastros() {
+  openModal('modalCadastros');
+  document.getElementById('cad-form-wrap').innerHTML = '';
+  document.getElementById('cad-link-wrap').innerHTML = '';
+  await carregarCadastros();
+}
+
+async function carregarCadastros() {
+  const r = await fetch('/api/viagem/cadastros', { credentials: 'same-origin' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    document.getElementById('cad-lista').innerHTML = `<div class="vt-mini">${cadEsc(d.msg || d.error || 'Falha ao carregar os cadastros.')}</div>`;
+    return;
+  }
+  cad.veiculos = d.veiculos || [];
+  cad.motoristas = d.motoristas || [];
+  cad.cores = d.cores || [];
+  renderCadastros();
+}
+
+function trocarAbaCadastro(aba) {
+  cad.aba = aba;
+  document.querySelectorAll('.cad-tab').forEach((b) => b.classList.toggle('is-active', b.dataset.cadTab === aba));
+  document.getElementById('cad-novo').innerHTML = `<i class="fas fa-plus"></i> ${aba === 'motoristas' ? 'Novo motorista' : 'Novo veículo'}`;
+  document.getElementById('cad-form-wrap').innerHTML = '';
+  document.getElementById('cad-link-wrap').innerHTML = '';
+  renderCadastros();
+}
+
+function renderCadastros() {
+  const inativos = document.getElementById('cad-inativos').checked;
+  const lista = document.getElementById('cad-lista');
+  if (cad.aba === 'motoristas') {
+    const rows = cad.motoristas.filter((m) => inativos || m.ativo);
+    lista.innerHTML = rows.length ? rows.map((m) => `
+      <div class="cad-item ${m.ativo ? '' : 'is-inativo'}">
+        <i class="fas fa-user" style="color:var(--eui-text-muted)"></i>
+        <div class="cad-item__info">
+          <div class="cad-item__nome">${cadEsc(m.nome)} ${m.ativo ? '' : '<span class="vt-chip">Inativo</span>'}</div>
+          <div class="vt-mini">${cadEsc(m.telefone || 'sem celular')}${m.cnh ? ' · CNH ' + cadEsc(m.cnh) : ''}${m.usuario ? ' · usuário do Sync: ' + cadEsc(m.usuario) : ''}</div>
+        </div>
+        <div class="cad-item__acoes">
+          ${m.ativo ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="mostrarLinkMotorista(${m.id})"><i class="fas fa-mobile-screen"></i> Link do app</button>` : ''}
+          <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="editarCadastro(${m.id})"><i class="fas fa-pen"></i> Editar</button>
+          <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="alternarAtivo(${m.id})">${m.ativo ? 'Desativar' : 'Reativar'}</button>
+        </div>
+      </div>`).join('') : '<div class="vt-mini">Nenhum motorista.</div>';
+  } else {
+    const rows = cad.veiculos.filter((v) => inativos || v.ativo);
+    lista.innerHTML = rows.length ? rows.map((v) => `
+      <div class="cad-item ${v.ativo ? '' : 'is-inativo'}">
+        <span class="cad-cor" style="background:${CAD_COR[v.cor] || '#94a3b8'}"></span>
+        <div class="cad-item__info">
+          <div class="cad-item__nome">${cadEsc(v.nome)} ${v.ativo ? '' : '<span class="vt-chip">Inativo</span>'}</div>
+          <div class="vt-mini">${v.placa ? 'Placa ' + cadEsc(v.placa) : 'sem placa'} · viagem padrão de ${cadEsc(v.duracao_padrao_min)} min</div>
+        </div>
+        <div class="cad-item__acoes">
+          <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="editarCadastro(${v.id})"><i class="fas fa-pen"></i> Editar</button>
+          <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="alternarAtivo(${v.id})">${v.ativo ? 'Desativar' : 'Reativar'}</button>
+        </div>
+      </div>`).join('') : '<div class="vt-mini">Nenhum veículo.</div>';
+  }
+}
+
+function novoCadastro() { editarCadastro(null); }
+
+function fecharFormCadastro() { document.getElementById('cad-form-wrap').innerHTML = ''; }
+
+function editarCadastro(id) {
+  document.getElementById('cad-link-wrap').innerHTML = '';
+  const wrap = document.getElementById('cad-form-wrap');
+  const botoes = `<div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="fecharFormCadastro()">Cancelar</button>
+        <button class="eui-btn eui-btn--primary eui-btn--sm" onclick="salvarCadastro(${id || 'null'})"><i class="fas fa-floppy-disk"></i> Salvar</button>
+      </div>`;
+  if (cad.aba === 'motoristas') {
+    const m = cad.motoristas.find((x) => x.id === id) || { ativo: true };
+    wrap.innerHTML = `<div class="cad-form">
+      <strong>${id ? 'Editar motorista' : 'Novo motorista'}</strong>
+      <div class="vt-grid-2">
+        <label><span class="eui-field__label">Nome *</span><input id="cad-m-nome" class="eui-input" maxlength="160" value="${cadEsc(m.nome)}"></label>
+        <label><span class="eui-field__label">Celular (WhatsApp)</span><input id="cad-m-tel" class="eui-input" maxlength="40" placeholder="(11) 91234-5678" value="${cadEsc(m.telefone)}"></label>
+        <label><span class="eui-field__label">CNH</span><input id="cad-m-cnh" class="eui-input" maxlength="40" value="${cadEsc(m.cnh)}"></label>
+        <label><span class="eui-field__label">Observações</span><input id="cad-m-obs" class="eui-input" maxlength="500" value="${cadEsc(m.observacoes)}"></label>
+      </div>
+      <div class="vt-mini">Com o celular preenchido, o link do app já sai pronto para enviar no WhatsApp.</div>
+      ${botoes}</div>`;
+    document.getElementById('cad-m-nome').focus();
+  } else {
+    const v = cad.veiculos.find((x) => x.id === id) || { ativo: true, cor: 'blue', duracao_padrao_min: 120, janela_conflito_min: 30, ordem: 100 };
+    const cores = (cad.cores.length ? cad.cores : Object.keys(CAD_COR))
+      .map((c) => `<option value="${c}" ${c === v.cor ? 'selected' : ''}>${CAD_COR_NOME[c] || c}</option>`).join('');
+    wrap.innerHTML = `<div class="cad-form">
+      <strong>${id ? 'Editar veículo' : 'Novo veículo'}</strong>
+      <div class="vt-grid-3">
+        <label><span class="eui-field__label">Nome *</span><input id="cad-v-nome" class="eui-input" maxlength="60" placeholder="Ex.: FIORINO" value="${cadEsc(v.nome)}"></label>
+        <label><span class="eui-field__label">Placa</span><input id="cad-v-placa" class="eui-input" maxlength="8" placeholder="ABC1D23" value="${cadEsc(v.placa)}"></label>
+        <label><span class="eui-field__label">Cor no quadro</span><select id="cad-v-cor" class="eui-select">${cores}</select></label>
+        <label><span class="eui-field__label">Duração padrão da viagem (min)</span><input id="cad-v-dur" class="eui-input" type="number" min="15" value="${cadEsc(v.duracao_padrao_min)}"></label>
+        <label title="Intervalo mínimo entre duas viagens do mesmo veículo"><span class="eui-field__label">Intervalo entre viagens (min)</span><input id="cad-v-jan" class="eui-input" type="number" min="0" value="${cadEsc(v.janela_conflito_min)}"></label>
+        <label><span class="eui-field__label">Ordem na lista</span><input id="cad-v-ord" class="eui-input" type="number" min="0" value="${cadEsc(v.ordem)}"></label>
+      </div>
+      ${botoes}</div>`;
+    document.getElementById('cad-v-nome').focus();
+  }
+}
+
+async function enviarCadastro(payload) {
+  const url = cad.aba === 'motoristas' ? '/api/viagem/cadastros/motoristas' : '/api/viagem/cadastros/veiculos';
+  const r = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) { showToast(d.msg || d.error || 'Não foi possível salvar.', 'error'); return null; }
+  return d;
+}
+
+async function salvarCadastro(id) {
+  const val = (el) => document.getElementById(el).value.trim();
+  let payload;
+  if (cad.aba === 'motoristas') {
+    const atual = cad.motoristas.find((x) => x.id === id);
+    payload = { id, nome: val('cad-m-nome'), telefone: val('cad-m-tel'), cnh: val('cad-m-cnh'), observacoes: val('cad-m-obs'), ativo: atual ? atual.ativo : true };
+  } else {
+    const atual = cad.veiculos.find((x) => x.id === id);
+    payload = { id, nome: val('cad-v-nome'), placa: val('cad-v-placa'), cor: val('cad-v-cor'), duracao_padrao_min: val('cad-v-dur'),
+                janela_conflito_min: val('cad-v-jan'), ordem: val('cad-v-ord'), ativo: atual ? atual.ativo : true };
+  }
+  const d = await enviarCadastro(payload);
+  if (!d) return;
+  showToast(cad.aba === 'motoristas' ? 'Motorista salvo.' : 'Veículo salvo.', 'success');
+  fecharFormCadastro();
+  await carregarCadastros();
+  if (typeof loadDashboard === 'function') loadDashboard();
+  // Motorista novo: o próximo passo é mandar o link do app.
+  if (cad.aba === 'motoristas' && !id && d.motorista) mostrarLinkMotorista(d.motorista.id);
+}
+
+async function alternarAtivo(id) {
+  const lista = cad.aba === 'motoristas' ? cad.motoristas : cad.veiculos;
+  const item = lista.find((x) => x.id === id);
+  if (!item) return;
+  const payload = cad.aba === 'motoristas'
+    ? { id, nome: item.nome, telefone: item.telefone, cnh: item.cnh, observacoes: item.observacoes, ativo: !item.ativo }
+    : { id, nome: item.nome, placa: item.placa, cor: item.cor, duracao_padrao_min: item.duracao_padrao_min,
+        janela_conflito_min: item.janela_conflito_min, ordem: item.ordem, ativo: !item.ativo };
+  if (!(await enviarCadastro(payload))) return;
+  showToast(item.ativo ? 'Desativado: não aparece mais para alocar. O histórico continua.' : 'Reativado.', 'success');
+  await carregarCadastros();
+  if (typeof loadDashboard === 'function') loadDashboard();
+}
+
+async function mostrarLinkMotorista(id) {
+  const wrap = document.getElementById('cad-link-wrap');
+  fecharFormCadastro();
+  wrap.innerHTML = '<div class="vt-mini">Gerando link…</div>';
+  const r = await fetch(`/api/viagem/motorista/${Number(id)}/painel-link`, { credentials: 'same-origin' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) { wrap.innerHTML = ''; showToast(d.msg || 'Falha ao gerar o link do motorista.', 'error'); return; }
+  const whats = d.whatsapp
+    ? `<a class="eui-btn eui-btn--success eui-btn--sm" href="${cadEsc(d.whatsapp)}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Enviar no WhatsApp</a>`
+    : '<span class="vt-mini">Cadastre o celular do motorista para enviar direto no WhatsApp.</span>';
+  wrap.innerHTML = `<div class="cad-link">
+      <img src="${cadEsc(d.qr)}" alt="QR code do link do app">
+      <div style="display:grid; gap:8px; min-width:0;">
+        <strong>App do motorista — ${cadEsc(d.motorista && d.motorista.nome)}</strong>
+        <div class="vt-mini">O motorista abre o link no celular e toca em ⋮ → "Adicionar à tela inicial", ou aponta a câmera para o QR code. O link é fixo: pode reenviar quando precisar.</div>
+        <input id="cad-link-url" class="eui-input" readonly value="${cadEsc(d.url)}" onclick="this.select()">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="eui-btn eui-btn--primary eui-btn--sm" onclick="copiarLinkMotorista()"><i class="fas fa-copy"></i> Copiar link</button>
+          ${whats}
+          <a class="eui-btn eui-btn--ghost eui-btn--sm" href="${cadEsc(d.url)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Abrir</a>
+        </div>
+      </div></div>`;
+}
+
+async function copiarLinkMotorista() {
+  const input = document.getElementById('cad-link-url');
+  try { await navigator.clipboard.writeText(input.value); }
+  catch (_) { input.select(); document.execCommand('copy'); }
+  showToast('Link copiado.', 'success');
+}
 </script>
 {% endblock %}

@@ -74,6 +74,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_FROTA": "Logística > Transporte > Gestão de Frota",
     "PAGE_LOGISTICA_VIAGEM": "Logística > Transporte > Gestão de Viagens",
     "MANAGE_LOGISTICA_VIAGEM_EXCLUIR": "Logística > Transporte > Central de Viagens > Apagar viagens e solicitações",
+    "MANAGE_LOGISTICA_VIAGEM_CADASTROS": "Logística > Transporte > Central de Viagens > Cadastrar e gerenciar veículos e motoristas",
     "PAGE_LOGISTICA_INVENTARIO": "Logística > Inventário > Inventariar (contagem)",
     "PAGE_LOGISTICA_ESTOQUE": "Logística > Estoque (consulta: saldo, mínimo/lote sugeridos e fornecimentos)",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestão (Admin)",

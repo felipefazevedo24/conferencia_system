@@ -2186,22 +2186,6 @@ class LogisticaCardexDesconsiderado(db.Model):
     removido_por = db.Column(db.String(100))
 
 
-class LogisticaEstoqueSaudeFoto(db.Model):
-    """Foto diária de cada checagem da Saúde do estoque (quantidade e valor),
-    para mostrar a lista diminuindo conforme a Logística corrige no GRV.
-    Uma linha por dia e checagem: a última consulta do dia sobrescreve."""
-
-    __tablename__ = "logistica_estoque_saude_foto"
-    __table_args__ = (db.UniqueConstraint("dia", "chave", name="uq_estoque_saude_foto_dia_chave"),)
-
-    id = db.Column(db.Integer, primary_key=True)
-    dia = db.Column(db.Date, nullable=False, index=True)
-    chave = db.Column(db.String(40), nullable=False, index=True)
-    quantidade = db.Column(db.Integer, nullable=False, default=0)
-    valor = db.Column(db.Float)
-    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
-
-
 class LogisticaConsumoChapaNesting(db.Model):
     """Um "Nesting" (Programa de corte) importado do relatorio HTML gerado
     pela maquina de corte a laser/plasma (FastReport 5.0 - ver

@@ -2264,9 +2264,57 @@ def motorista_minhas_viagens():
     })
 
 
+# --------------------------------------------------------------------------- CADASTRO DE VEÍCULOS E MOTORISTAS (Central)
+PERM_CADASTROS = "MANAGE_LOGISTICA_VIAGEM_CADASTROS"
+
+
+@viagem_bp.route("/cadastros", methods=["GET"])
+@permission_required(PERM_CADASTROS)
+def cadastros_listar():
+    from ..services.agendamento_service import CORES_VEICULO, listar_motoristas_agendamento, listar_veiculos_cadastro
+
+    sincronizar_motoristas_usuarios(commit=True)
+    motoristas = listar_motoristas_agendamento(incluir_inativos=True)
+    usuarios = {m.id: m.usuario_username for m in AgendamentoMotorista.query.all()}
+    for m in motoristas:
+        m["usuario"] = usuarios.get(m["id"]) or ""
+    return jsonify({"veiculos": listar_veiculos_cadastro(), "motoristas": motoristas, "cores": list(CORES_VEICULO)})
+
+
+@viagem_bp.route("/cadastros/veiculos", methods=["POST"])
+@permission_required(PERM_CADASTROS)
+def cadastros_salvar_veiculo():
+    from ..services.agendamento_service import salvar_veiculo_agendamento, serializar_veiculo
+
+    try:
+        row = salvar_veiculo_agendamento(request.get_json(silent=True) or {})
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True, "veiculo": serializar_veiculo(row)})
+
+
+@viagem_bp.route("/cadastros/motoristas", methods=["POST"])
+@permission_required(PERM_CADASTROS)
+def cadastros_salvar_motorista():
+    from ..services.agendamento_service import salvar_motorista_agendamento, serializar_motorista
+
+    payload = request.get_json(silent=True) or {}
+    if payload.get("id") not in (None, "") and not db.session.get(AgendamentoMotorista, int(payload["id"]) if str(payload["id"]).isdigit() else 0):
+        return jsonify({"sucesso": False, "msg": "Motorista não encontrado."}), 404
+    try:
+        row = salvar_motorista_agendamento(payload)
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True, "motorista": serializar_motorista(row)})
+
+
 # --------------------------------------------------------------------------- LINK DO PAINEL DO MOTORISTA (gestor)
 @viagem_bp.route("/motorista/<int:mid>/painel-link", methods=["GET"])
-@permission_required(PERM)
+@permission_required_any(PERM, PERM_CADASTROS)
 def motorista_painel_link(mid: int):
     mot = db.session.get(AgendamentoMotorista, mid)
     if not mot:

@@ -691,6 +691,92 @@ def localizar_cadastro(tipo: str, *, codigo: str = "", documento: str = "", nome
     return None
 
 
+CORES_VEICULO = ("blue", "gold", "green", "red", "purple", "orange", "teal", "gray")
+
+
+def serializar_veiculo(row: AgendamentoVeiculo | None) -> dict | None:
+    if not row:
+        return None
+    return {
+        "id": row.id,
+        "codigo": row.codigo,
+        "nome": row.nome_exibicao,
+        "placa": row.placa or "",
+        "cor": row.cor_kanban or "",
+        "duracao_padrao_min": row.duracao_padrao_min,
+        "janela_conflito_min": row.janela_conflito_min,
+        "ordem": row.ordem_exibicao,
+        "ativo": bool(row.ativo),
+    }
+
+
+def listar_veiculos_cadastro() -> list[dict]:
+    """Todos os veículos, inclusive inativos (tela de gestão da Central)."""
+    rows = (AgendamentoVeiculo.query
+            .order_by(AgendamentoVeiculo.ativo.desc(), AgendamentoVeiculo.ordem_exibicao.asc(), AgendamentoVeiculo.nome_exibicao.asc())
+            .all())
+    return [serializar_veiculo(r) for r in rows]
+
+
+def _inteiro(valor, padrao: int, minimo: int, maximo: int, campo: str) -> int:
+    if valor in (None, ""):
+        return padrao
+    try:
+        numero = int(float(str(valor).replace(",", ".")))
+    except (TypeError, ValueError):
+        raise ValueError(f"{campo}: informe um número inteiro.")
+    if not minimo <= numero <= maximo:
+        raise ValueError(f"{campo}: use um valor entre {minimo} e {maximo}.")
+    return numero
+
+
+def salvar_veiculo_agendamento(payload: dict) -> AgendamentoVeiculo:
+    """Cria ou edita veículo. Não apaga: veículo com viagem no histórico só
+    é desativado (sai das listas de alocação, o histórico continua)."""
+    row = None
+    if payload.get("id") not in (None, ""):
+        try:
+            row = db.session.get(AgendamentoVeiculo, int(payload.get("id")))
+        except (TypeError, ValueError):
+            row = None
+        if not row:
+            raise ValueError("Veículo não encontrado.")
+    nome = " ".join(str(payload.get("nome") or "").split())[:60]
+    if not nome:
+        raise ValueError("Informe o nome do veículo.")
+    placa = re.sub(r"[^A-Z0-9]", "", str(payload.get("placa") or "").upper())[:12]
+    if placa and not re.fullmatch(r"[A-Z]{3}[0-9][A-Z0-9][0-9]{2}", placa):
+        raise ValueError("Placa inválida. Use o formato ABC1234 ou ABC1D23.")
+    # Código é a chave estável (usada em regras/relatórios): nasce do nome e não muda na edição.
+    codigo = row.codigo if row else re.sub(r"[^A-Z0-9]+", "_", nome.upper()).strip("_")[:20] or "VEICULO"
+    if not row:
+        base, n = codigo, 2
+        while AgendamentoVeiculo.query.filter_by(codigo=codigo).first():
+            sufixo = f"_{n}"
+            codigo = base[:20 - len(sufixo)] + sufixo
+            n += 1
+    if placa:
+        dono = AgendamentoVeiculo.query.filter(AgendamentoVeiculo.placa == placa).first()
+        if dono and (not row or dono.id != row.id):
+            raise ValueError(f"A placa {placa} já está no veículo {dono.nome_exibicao}.")
+    cor = str(payload.get("cor") or "").strip().lower()
+    if cor and cor not in CORES_VEICULO:
+        raise ValueError("Cor inválida.")
+    if not row:
+        row = AgendamentoVeiculo(codigo=codigo, created_at=agora_br())
+        db.session.add(row)
+    row.nome_exibicao = nome
+    row.placa = placa or None
+    row.cor_kanban = cor or row.cor_kanban or "blue"
+    row.duracao_padrao_min = _inteiro(payload.get("duracao_padrao_min"), row.duracao_padrao_min or 120, 15, 24 * 60, "Duração padrão")
+    row.janela_conflito_min = _inteiro(payload.get("janela_conflito_min"), row.janela_conflito_min or 30, 0, 24 * 60, "Janela de conflito")
+    row.ordem_exibicao = _inteiro(payload.get("ordem"), row.ordem_exibicao or 100, 0, 9999, "Ordem")
+    row.ativo = bool(payload.get("ativo", True))
+    row.updated_at = agora_br()
+    db.session.flush()
+    return row
+
+
 def listar_veiculos_agendamento() -> list[AgendamentoVeiculo]:
     return (
         AgendamentoVeiculo.query

@@ -71,7 +71,6 @@ from .routes.frota_routes import frota_bp
 from .routes.solicitacao_nf_routes import solicitacao_nf_bp
 from .routes.logistica_inventario_routes import logistica_inventario_bp
 from .routes.logistica_cardex_routes import logistica_cardex_bp
-from .routes.logistica_estoque_saude_routes import logistica_estoque_saude_bp
 from .routes.recebimento_enderecamento_routes import recebimento_enderecamento_bp
 from .routes.logistica_consumo_chapa_routes import logistica_consumo_chapa_bp
 from .routes.intralog_picking_routes import intralog_picking_bp
@@ -132,7 +131,6 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(frota_bp)
     app.register_blueprint(logistica_inventario_bp)
     app.register_blueprint(logistica_cardex_bp)
-    app.register_blueprint(logistica_estoque_saude_bp)
     app.register_blueprint(recebimento_enderecamento_bp)
     app.register_blueprint(logistica_consumo_chapa_bp)
     app.register_blueprint(intralog_picking_bp)
