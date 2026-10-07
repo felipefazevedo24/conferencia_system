@@ -94,6 +94,12 @@
    </div><div id="end-preview" class="end-preview"></div><p class="end-note">Quantidade e unidade ficam só no histórico desta operação: o saldo continua sendo o do GRV. O que o Sync envia é o endereço do material.</p>
   </div><div class="end-dialog-foot"><button type="button" id="end-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="end-submit" class="eui-btn eui-btn--primary">Confirmar movimentação</button></div>
  </form></dialog>
+ <dialog id="end-count" class="end-dialog end-dialog--sm" aria-labelledby="end-count-title"><form id="end-count-form">
+  <div class="end-dialog-head"><div><div class="end-eyebrow">INVENTÁRIO</div><h2 id="end-count-title">Pedir inventário</h2></div><button type="button" id="end-count-close" class="eui-btn eui-btn--secondary" aria-label="Fechar"><i class="fas fa-times"></i></button></div>
+  <div class="end-dialog-body"><p id="end-count-hint"></p><div id="end-count-feedback" class="end-feedback" role="status"></div>
+   <div class="end-form-grid"><label class="end-full"><span id="end-count-label">Quantidade contada</span><input id="end-count-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label></div>
+  </div><div class="end-dialog-foot"><button type="button" id="end-count-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="end-count-submit" class="eui-btn eui-btn--primary">Abrir inventário</button></div>
+ </form></dialog>
  <dialog id="end-camera" class="end-dialog" aria-label="Ler etiqueta"><div class="end-dialog-body"><h2>Ler etiqueta</h2><div id="end-reader"></div><p id="end-camera-feedback" role="status"></p><button id="end-camera-close" class="eui-btn eui-btn--secondary">Cancelar leitura</button></div></dialog>
 </div>
 {% include 'recebimento_dialog.html' %}

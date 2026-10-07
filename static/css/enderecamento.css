@@ -61,6 +61,8 @@ button.end-chip{cursor:pointer}button.end-chip:hover{border-color:var(--eui-prim
    (ui_erp.css) empurrava os valores para fora da tela. */
 @media(max-width:600px){.end-table.erp-table{min-width:0;width:100%}}
 
+.end-module .end-more{min-width:40px;padding-left:0;padding-right:0;justify-content:center}
+.end-dialog--sm{width:min(440px,calc(100% - 24px))}
 /* Em análise de inventário: violeta, cor que nenhum outro estado do módulo usa
    (amarelo = pendência, verde = ok, vermelho = erro). */
 .end-badge--inventario{background:var(--eui-violet-soft,#ede9fe);color:var(--eui-violet-soft-text,#5b21b6)}

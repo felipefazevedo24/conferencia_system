@@ -28,6 +28,29 @@
  }
  const request = (path, body) => requestAbsolute(base+path, body);
  function button(text, action, cls='eui-btn--secondary') {const b=node('button',text,'eui-btn '+cls);b.type='button';b.onclick=action;return b;}
+ // Menu de três pontos, com o mesmo visual do da fila "A endereçar" (pa-menu-*).
+ let menuAberto=null;
+ function fecharMenu(){if(menuAberto){menuAberto.remove();menuAberto=null;}}
+ document.addEventListener('click',e=>{if(menuAberto&&!menuAberto.contains(e.target)&&!e.target.closest('.end-more'))fecharMenu();});
+ document.addEventListener('scroll',fecharMenu,true);
+ function maisAcoes(itens){
+  const b=node('button',null,'eui-btn eui-btn--secondary end-more');b.type='button';b.title='Mais ações';b.setAttribute('aria-label','Mais ações');
+  const i=node('i',null,'fas fa-ellipsis-v');i.setAttribute('aria-hidden','true');b.append(i);
+  b.onclick=()=>{
+   if(menuAberto){fecharMenu();return;}
+   const lista=node('div',null,'pa-menu-list');
+   for(const {texto,icone,acao} of itens){
+    const item=node('button',null,'pa-menu-item');item.type='button';
+    const ic=node('i',null,'fas '+icone);ic.setAttribute('aria-hidden','true');item.append(ic,document.createTextNode(texto));
+    item.onclick=()=>{fecharMenu();acao();};lista.append(item);
+   }
+   document.body.append(lista);
+   const r=b.getBoundingClientRect();
+   lista.style.top=`${r.bottom+4}px`;lista.style.left=`${Math.max(8,r.right-lista.offsetWidth)}px`;
+   menuAberto=lista;
+  };
+  return b;
+ }
  function cell(row,label,value,cls) {const td=node('td',null,cls);td.dataset.label=label;td.append(value instanceof Node?value:document.createTextNode(value));row.append(td);}
  async function refresh() {
   const version=++listVersion;
@@ -48,10 +71,13 @@
     cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
     const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
+    // Ações secundárias ficam no menu de três pontos; a linha mostra só a principal.
+    const extras=[];
     // Histórico e sincronização é só de admin (o servidor também confere).
-    if(admin)actions.append(button('Histórico',()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}));
+    if(admin)extras.push({texto:'Histórico',icone:'fa-history',acao:()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}});
     // Inventário de um material endereçado: permissão própria (o servidor também confere).
-    if(podePedirInventario&&s.endereco&&!s.em_inventario)actions.append(button('Pedir inventário',()=>pedirInventario(s)));
+    if(podePedirInventario&&s.endereco&&!s.em_inventario)extras.push({texto:'Pedir inventário',icone:'fa-clipboard-check',acao:()=>pedirInventario(s)});
+    if(extras.length)actions.append(maisAcoes(extras));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
    if(!balances.length&&!data.erro){const tr=node('tr'),td=node('td','Nenhum endereço encontrado no GRV para este filtro.','end-empty');td.colSpan=5;tr.append(td);$('end-balances').append(tr);}
@@ -115,7 +141,7 @@
    const aviso=l.materiais
     ? `Desativar ${l.codigo} vai tirar este endereço de ${l.materiais} material(is) no GRV. Confirmar?`
     : `Desativar ${l.codigo}? Ele deixa de receber material.`;
-   if(!confirm(aviso))return;
+   if(!await dialogRecebimento({titulo:'Desativar endereço',mensagem:aviso,confirmar:'Desativar',cancelar:'Cancelar'}))return;
   }
   try{
    const r=await requestAbsolute('/api/recebimento/enderecamento/locais',{codigo:l.codigo,ativo:!l.ativo});
@@ -131,19 +157,30 @@
   }catch(e){message(e.message);}
  }
  // Quem pede já informa o que contou: o inventário abre na hora.
- async function pedirInventario(s){
-  const digitado=prompt(`Inventário de ${s.sku} em ${s.endereco}.\nQuantidade contada${s.unidade?` (${s.unidade})`:''}:`);
-  if(digitado===null)return;
-  const contado=Number(digitado.trim().replace(',','.'));
-  if(!digitado.trim()||!Number.isFinite(contado)||contado<=0){message('Informe a quantidade contada, maior que zero.');return;}
+ let contando=null;
+ function pedirInventario(s){
+  contando=s;$('end-count-form').reset();$('end-count-feedback').textContent='';
+  $('end-count-hint').textContent=`${s.sku}${s.descricao?' · '+s.descricao:''} · endereço ${s.endereco}`;
+  $('end-count-label').textContent=`Quantidade contada${s.unidade?` (${s.unidade})`:''}`;
+  $('end-count').showModal();$('end-count-quantity').focus();
+ }
+ function contagemOcupada(valor){for(const elem of $('end-count-form').elements)elem.disabled=valor;}
+ $('end-count-form').onsubmit=async e=>{
+  e.preventDefault();
+  const s=contando,digitado=$('end-count-quantity').value.trim(),contado=Number(digitado.replace(',','.'));
+  if(!digitado||!Number.isFinite(contado)||contado<=0){$('end-count-feedback').textContent='Informe a quantidade contada, maior que zero.';$('end-count-quantity').focus();return;}
+  contagemOcupada(true);$('end-count-feedback').textContent='Abrindo o inventário…';
   try{
-   const inv=(await request('/inventariar',{sku:s.sku,endereco:s.endereco,quantidade:digitado.trim()})).inventario;
+   const inv=(await request('/inventariar',{sku:s.sku,endereco:s.endereco,quantidade:digitado})).inventario;
+   $('end-count').close();
    message(inv.ajuste?`Inventário de ${s.sku} aberto: contado ${number(inv.contado)}, GRV ${number(inv.saldo_grv)}. O item está em análise de inventário.`
     :inv.divergente?`Contagem de ${s.sku} registrada. O item já estava em análise de inventário neste endereço.`
     :`Inventário de ${s.sku} registrado: a contagem confere com o saldo do GRV.`);
    await refresh();
-  }catch(e){message(e.message);}
- }
+  }catch(err){$('end-count-feedback').textContent=err.message;}
+  finally{contagemOcupada(false);}
+ };
+ $('end-count-close').onclick=$('end-count-cancel').onclick=()=>$('end-count').close();
  function showPanel(name){
   document.querySelectorAll('.end-tabs button').forEach(b=>{const on=b.dataset.panel===name;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
   for(const p of ['saldos','locais','receber','historico'])$('end-panel-'+p).hidden=p!==name;
