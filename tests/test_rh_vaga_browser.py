@@ -171,3 +171,49 @@ def test_gestao_de_acessos_cria_cargo_e_muda_cargo_do_usuario(tmp_path):
             assert Usuario.query.filter_by(username="FULANO").one().role == "Gerente de Manufatura"
     finally:
         server.shutdown()
+
+
+def test_corrigir_requisicao_abre_so_o_formulario_e_o_fundo_cobre_a_tela(tmp_path):
+    app = build_test_app(tmp_path)
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with patch("conferencia_app.routes.rh_vaga_routes.enviar_mensagem_smtp"), sync_playwright() as playwright:
+            if not Path(playwright.chromium.executable_path).exists():
+                pytest.skip("Instale o Chromium do Playwright para executar este teste.")
+            browser = playwright.chromium.launch(headless=True)
+            # Monitor largo: o conteudo do layout para em 1560px, o fundo do modal nao pode parar junto.
+            page = browser.new_page(viewport={"width": 1906, "height": 905})
+            erros_js = []
+            page.on("pageerror", lambda erro: erros_js.append(str(erro)))
+
+            assert page.request.post(f"{base}/login", data={"username": "admin", "password": "admin1234"}).ok
+            criada = page.request.post(f"{base}/api/rh/vagas", data={
+                "tipo": "nova", "cargo_nome": "Gerente", "perfil": "Teste", "departamento": "Suprimentos",
+                "justificativa": "Área nova.",
+            })
+            rid = criada.json()["requisicao"]["id"]
+            assert page.request.post(f"{base}/api/rh/vagas/{rid}/reprovar", data={"motivo": "Falta a faixa."}).ok
+
+            page.goto(f"{base}/rh/vagas")
+            page.locator("#rh-tbody [data-abrir]").first.click()
+            fundo = page.locator("#rh-modal-detalhe").bounding_box()
+            assert (fundo["x"], fundo["width"]) == (0, 1906)
+
+            page.locator("#rh-d-acoes").get_by_role("button", name="Corrigir e reenviar").click()
+            expect(page.locator("#rh-modal-detalhe")).to_be_hidden()
+            expect(page.locator("#rh-modal-form")).to_be_visible()
+            fundo = page.locator("#rh-modal-form").bounding_box()
+            assert (fundo["x"], fundo["width"]) == (0, 1906)
+            expect(page.locator("#rh-f-cargo-nome")).to_have_value("Gerente")
+
+            page.locator("#rh-f-justificativa").fill("Área nova, com faixa revisada.")
+            page.locator("#rh-form-salvar").click()
+            expect(page.locator("#rh-modal-form")).to_be_hidden()
+            expect(page.locator("#rh-tbody")).to_contain_text("Aguardando Diretoria")
+
+            browser.close()
+            assert erros_js == []
+    finally:
+        server.shutdown()
