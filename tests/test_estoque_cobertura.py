@@ -226,3 +226,49 @@ def test_maior_saida_chega_na_api_e_tela_tem_aviso(tmp_path):
     html = client.get("/logistica/estoque").get_data(as_text=True)
     assert "function picoSaida" in html
     assert "Maior saída" in html
+
+
+def test_cache_por_codigo_evita_nova_consulta_ao_filtrar_e_atualizar_forca(tmp_path):
+    from unittest.mock import MagicMock
+    from conferencia_app.services import erp_estoque_service as svc
+
+    def resposta(url, json=None, **kwargs):
+        resp = MagicMock()
+        if url.endswith("/kardex-consumo"):
+            resp.json.return_value = {"sucesso": True, "janela_dias": 90, "fonte": "public.tproduto_cardex",
+                                      "consumos": {c: {"consumo_medio_diario": 2} for c in json["codigos"]}}
+        elif url.endswith("/reservas-produto-acabado"):
+            resp.json.return_value = {"sucesso": True, "reservas": [{"codigo_key": "1901A", "qtde": 5}]}
+        else:
+            resp.json.return_value = {"sucesso": True, "ordens_compra": [{"codigo_key": "1901A", "quantidade_pendente": 9}]}
+        return resp
+
+    app = build_test_app(tmp_path)
+    app.config["ERP_LANCAMENTO_API_URL"] = "http://bridge"
+    svc._POR_CODIGO_CACHE.clear()
+    with app.app_context(), patch.dict("os.environ", {"ERP_LANCAMENTO_API_URL": ""}), \
+         patch.object(svc.requests, "post", side_effect=resposta) as post:
+        todos = ["19-01-A", "19-01-B"]
+        assert set(svc.buscar_consumo_kardex_grv(codigos=todos, janela_dias=90)["por_codigo"]) == {"1901A", "1901B"}
+        assert svc.buscar_reservas_produto_acabado_grv(codigos=todos) == {"1901A": [{"codigo_key": "1901A", "qtde": 5}]}
+        assert list(svc.buscar_ordens_compra_abertas_grv(codigos=todos)) == ["1901A"]
+        assert post.call_count == 3
+        # Busca na tela = subconjunto dos codigos: sai tudo do cache, inclusive
+        # o item sem reserva/OC (1901B), que nao pode voltar ao ERP.
+        consumo = svc.buscar_consumo_kardex_grv(codigos=["19-01-B"], janela_dias=90)
+        assert consumo["por_codigo"] == {"1901B": {
+            "consumo_medio_diario": 2.0, "saida_total_periodo": 0.0, "dias_com_saida": 0.0,
+            "estoque_medio_periodo": 0.0, "maior_saida": 0.0, "maior_saida_data": None,
+        }}
+        assert consumo["janela_dias"] == 90
+        assert svc.buscar_reservas_produto_acabado_grv(codigos=["19-01-B"]) == {}
+        assert svc.buscar_ordens_compra_abertas_grv(codigos=["19-01-A"]) == {"1901A": [{"codigo_key": "1901A", "quantidade_pendente": 9}]}
+        assert post.call_count == 3
+        # Codigo novo consulta so' o que falta.
+        svc.buscar_reservas_produto_acabado_grv(codigos=["19-01-A", "19-01-C"])
+        assert post.call_args.kwargs["json"]["codigos"] == ["1901C"]
+        # "Atualizar" da tela ignora o cache.
+        svc.buscar_ordens_compra_abertas_grv(codigos=todos, forcar_atualizacao=True)
+        assert post.call_args.kwargs["json"]["codigos"] == ["1901A", "1901B"]
+        assert post.call_count == 5
+    svc._POR_CODIGO_CACHE.clear()

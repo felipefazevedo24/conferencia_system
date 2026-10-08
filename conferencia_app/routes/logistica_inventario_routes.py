@@ -391,7 +391,7 @@ def estoque_materia_prima_api():
             current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
             consumo_por_codigo = {}
         try:
-            reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos)
+            reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos, forcar_atualizacao=refresh)
         except Exception:
             current_app.logger.warning("Nao foi possivel consultar reservas de estoque.", exc_info=True)
             reservas_por_codigo = {}
@@ -458,7 +458,7 @@ def estoque_materia_prima_api():
         codigos_reposicao = [row["codigo"] for row in rows if row["consumo_diario"] > 0]
         if codigos_reposicao:
             try:
-                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao)
+                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao, forcar_atualizacao=refresh)
             except Exception:
                 current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque em reposicao.", exc_info=True)
     for row in rows:

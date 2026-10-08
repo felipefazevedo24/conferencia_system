@@ -22,8 +22,14 @@ from flask import current_app
 
 _CACHE: dict[str, Any] = {"dados": None, "expira_em": 0.0}
 _CACHE_TTL_SEGUNDOS = 300
-_KARDEX_CACHE: dict[str, Any] = {"dados": {}, "expira_em": 0.0}
 _KARDEX_CACHE_TTL_SEGUNDOS = 900
+# Reserva e OC em aberto mudam ao longo do dia: mesmo prazo do saldo (_CACHE),
+# e o "Atualizar" da tela forca a consulta.
+_RESERVAS_OC_CACHE_TTL_SEGUNDOS = 300
+# Consumo, reservas e OCs ficam em cache POR CODIGO. A tela de estoque filtra a
+# lista a cada busca; com a chave sendo a lista inteira o cache nunca repetia
+# e toda tecla digitada virava consulta nova no ERP.
+_POR_CODIGO_CACHE: dict[tuple, tuple[float, Any]] = {}
 # Historico mensal desde 2019: muda devagar e a consulta e' pesada. Uma vez
 # por dia basta (o "Atualizar" da tela nao forca esta).
 _PLANEJAMENTO_CACHE: dict[str, Any] = {}
@@ -193,6 +199,36 @@ def estoque_grv_em_cache() -> dict[str, Any] | None:
     return None
 
 
+def _com_cache_por_codigo(
+    prefixo: tuple,
+    codigos: list[str],
+    ttl: float,
+    forcar_atualizacao: bool,
+    consultar,
+) -> dict[str, Any]:
+    """Devolve {codigo: valor} consultando a bridge so' pelos codigos que nao
+    estao em cache. Codigo sem resposta tambem fica guardado (como None), senao
+    item sem reserva/OC seria consultado de novo a cada carga."""
+    agora = time.monotonic()
+    resultado: dict[str, Any] = {}
+    faltando = []
+    for codigo in codigos:
+        em_cache = _POR_CODIGO_CACHE.get((*prefixo, codigo))
+        if not forcar_atualizacao and em_cache and agora < em_cache[0]:
+            if em_cache[1] is not None:
+                resultado[codigo] = em_cache[1]
+        else:
+            faltando.append(codigo)
+    if faltando:
+        novos = consultar(faltando)
+        for codigo in faltando:
+            valor = novos.get(codigo)
+            _POR_CODIGO_CACHE[(*prefixo, codigo)] = (agora + ttl, valor)
+            if valor is not None:
+                resultado[codigo] = valor
+    return resultado
+
+
 def buscar_consumo_kardex_grv(
     codigos: list[str],
     empresa: int = 1,
@@ -216,56 +252,49 @@ def buscar_consumo_kardex_grv(
         janela = 30
     janela = max(7, min(janela, 180))
 
-    cache_key = f"{empresa}:{janela}:{'|'.join(codigos_norm)}"
-    agora = time.monotonic()
-    if not forcar_atualizacao and agora < float(_KARDEX_CACHE.get("expira_em") or 0):
-        dados_cache = _KARDEX_CACHE.get("dados") or {}
-        if cache_key in dados_cache:
-            return dados_cache[cache_key]
+    meta = {"fonte": "cache", "janela_dias": janela}
 
-    cfg = _bridge_config()
-    if not cfg["api_url"]:
-        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar kardex no GRV.")
+    def _consultar(faltando: list[str]) -> dict[str, dict[str, float]]:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar kardex no GRV.")
 
-    resp = requests.post(
-        f"{cfg['api_url']}/api/erp/estoque/kardex-consumo",
-        headers=_headers(cfg),
-        json={"empresa": empresa, "janela_dias": janela, "codigos": codigos_norm},
-        timeout=cfg["timeout"],
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/estoque/kardex-consumo",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "janela_dias": janela, "codigos": faltando},
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de kardex."))
+
+        por_codigo: dict[str, dict[str, float]] = {}
+        raw = data.get("consumos") or {}
+        if isinstance(raw, dict):
+            for codigo, payload in raw.items():
+                if not isinstance(payload, dict):
+                    continue
+                chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
+                if not chave:
+                    continue
+                por_codigo[chave] = {
+                    "consumo_medio_diario": float(payload.get("consumo_medio_diario") or 0),
+                    "saida_total_periodo": float(payload.get("saida_total_periodo") or 0),
+                    "dias_com_saida": float(payload.get("dias_com_saida") or 0),
+                    "estoque_medio_periodo": float(payload.get("estoque_medio_periodo") or 0),
+                    "maior_saida": float(payload.get("maior_saida") or 0),
+                    "maior_saida_data": payload.get("maior_saida_data") or None,
+                }
+        meta["fonte"] = str(data.get("fonte") or "")
+        meta["janela_dias"] = int(data.get("janela_dias") or janela)
+        return por_codigo
+
+    por_codigo = _com_cache_por_codigo(
+        ("kardex", empresa, janela), codigos_norm, _KARDEX_CACHE_TTL_SEGUNDOS, forcar_atualizacao, _consultar
     )
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict) or not data.get("sucesso"):
-        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de kardex."))
-
-    por_codigo: dict[str, dict[str, float]] = {}
-    raw = data.get("consumos") or {}
-    if isinstance(raw, dict):
-        for codigo, payload in raw.items():
-            if not isinstance(payload, dict):
-                continue
-            chave = re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
-            if not chave:
-                continue
-            por_codigo[chave] = {
-                "consumo_medio_diario": float(payload.get("consumo_medio_diario") or 0),
-                "saida_total_periodo": float(payload.get("saida_total_periodo") or 0),
-                "dias_com_saida": float(payload.get("dias_com_saida") or 0),
-                "estoque_medio_periodo": float(payload.get("estoque_medio_periodo") or 0),
-                "maior_saida": float(payload.get("maior_saida") or 0),
-                "maior_saida_data": payload.get("maior_saida_data") or None,
-            }
-
-    resultado = {
-        "por_codigo": por_codigo,
-        "fonte": str(data.get("fonte") or ""),
-        "janela_dias": int(data.get("janela_dias") or janela),
-    }
-    dados_cache = _KARDEX_CACHE.get("dados") or {}
-    dados_cache[cache_key] = resultado
-    _KARDEX_CACHE["dados"] = dados_cache
-    _KARDEX_CACHE["expira_em"] = agora + _KARDEX_CACHE_TTL_SEGUNDOS
-    return resultado
+    return {"por_codigo": por_codigo, "fonte": meta["fonte"], "janela_dias": meta["janela_dias"]}
 
 
 def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, dict[str, Any]]:
@@ -385,6 +414,7 @@ def buscar_fornecimentos_grv(codigo: str, empresa: int = 1) -> list[dict[str, An
 def buscar_reservas_produto_acabado_grv(
     codigos: list[str],
     empresa: int = 1,
+    forcar_atualizacao: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     codigos_norm = []
     vistos = set()
@@ -396,32 +426,38 @@ def buscar_reservas_produto_acabado_grv(
     if not codigos_norm:
         return {}
 
-    cfg = _bridge_config()
-    if not cfg["api_url"]:
-        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar reservas no GRV.")
+    def _consultar(faltando: list[str]) -> dict[str, list[dict[str, Any]]]:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar reservas no GRV.")
 
-    resp = requests.post(
-        f"{cfg['api_url']}/api/erp/estoque/reservas-produto-acabado",
-        headers=_headers(cfg),
-        json={"empresa": empresa, "codigos": codigos_norm},
-        timeout=cfg["timeout"],
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/estoque/reservas-produto-acabado",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "codigos": faltando},
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de reservas."))
+
+        por_codigo: dict[str, list[dict[str, Any]]] = {}
+        for row in data.get("reservas") or []:
+            codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
+            if codigo:
+                por_codigo.setdefault(codigo, []).append(row)
+        return por_codigo
+
+    return _com_cache_por_codigo(
+        ("reservas", empresa), codigos_norm, _RESERVAS_OC_CACHE_TTL_SEGUNDOS, forcar_atualizacao, _consultar
     )
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict) or not data.get("sucesso"):
-        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de reservas."))
-
-    por_codigo: dict[str, list[dict[str, Any]]] = {}
-    for row in data.get("reservas") or []:
-        codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
-        if codigo:
-            por_codigo.setdefault(codigo, []).append(row)
-    return por_codigo
 
 
 def buscar_ordens_compra_abertas_grv(
     codigos: list[str],
     empresa: int = 1,
+    forcar_atualizacao: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     codigos_norm = []
     vistos = set()
@@ -433,27 +469,32 @@ def buscar_ordens_compra_abertas_grv(
     if not codigos_norm:
         return {}
 
-    cfg = _bridge_config()
-    if not cfg["api_url"]:
-        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar OCs abertas no GRV.")
+    def _consultar(faltando: list[str]) -> dict[str, list[dict[str, Any]]]:
+        cfg = _bridge_config()
+        if not cfg["api_url"]:
+            raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar OCs abertas no GRV.")
 
-    resp = requests.post(
-        f"{cfg['api_url']}/api/erp/estoque/ordens-compra-abertas",
-        headers=_headers(cfg),
-        json={"empresa": empresa, "codigos": codigos_norm},
-        timeout=cfg["timeout"],
+        resp = requests.post(
+            f"{cfg['api_url']}/api/erp/estoque/ordens-compra-abertas",
+            headers=_headers(cfg),
+            json={"empresa": empresa, "codigos": faltando},
+            timeout=cfg["timeout"],
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de OCs abertas."))
+
+        por_codigo: dict[str, list[dict[str, Any]]] = {}
+        for row in data.get("ordens_compra") or []:
+            codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
+            if codigo:
+                por_codigo.setdefault(codigo, []).append(row)
+        return por_codigo
+
+    return _com_cache_por_codigo(
+        ("ocs", empresa), codigos_norm, _RESERVAS_OC_CACHE_TTL_SEGUNDOS, forcar_atualizacao, _consultar
     )
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict) or not data.get("sucesso"):
-        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de OCs abertas."))
-
-    por_codigo: dict[str, list[dict[str, Any]]] = {}
-    for row in data.get("ordens_compra") or []:
-        codigo = re.sub(r"[^A-Z0-9]", "", str(row.get("codigo_key") or row.get("codigo_interno") or "").upper())
-        if codigo:
-            por_codigo.setdefault(codigo, []).append(row)
-    return por_codigo
 
 
 def buscar_saldo_chapa_por_lote(codigos: list[str], empresa: int = 1) -> dict[str, Any]:

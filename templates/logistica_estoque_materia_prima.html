@@ -46,6 +46,9 @@
     .mp-bola.esporadico { background: transparent; border: 1.5px solid var(--eui-muted); }
     .mp-bola.sem_consumo { background: var(--eui-border-strong, var(--eui-border)); }
     .mp-oc-ico { color: var(--eui-muted); font-size: 11px; margin-left: 2px; }
+    .mp-curva { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid var(--eui-border); color: var(--eui-muted); }
+    .mp-curva.a { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
+    .mp-curva.b { background: var(--eui-primary-soft); border-color: transparent; color: var(--eui-text); }
 
     /* Painel lateral: o detalhe abre ao lado, a lista não se mexe. */
     .mp-painel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 2300; background: var(--eui-surface); border-left: 1px solid var(--eui-border); box-shadow: -12px 0 40px rgba(15, 23, 42, .18); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .18s ease; }
@@ -322,6 +325,7 @@
             <th>Código</th>
             <th>Descrição</th>
             <th>Un</th>
+            ${plano ? '<th title="Curva ABC pelo valor consumido em 12 meses: A = itens que somam 80% do valor, B = até 95%, C = o resto">Curva</th>' : ''}
             <th class="num">Disponível</th>
             <th class="num" id="mp-th-consumo">${plano ? 'Consumo/mês' : 'Consumo/dia'}</th>
             <th class="num" title="${plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`}">Cobertura</th>
@@ -341,6 +345,7 @@
             <td class="c-cod">${esc(item.codigo || '-')}</td>
             <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
             <td class="c-un">${esc(item.unidade || '')}</td>
+            ${planejamentoAtivo ? `<td>${p ? `<span class="mp-curva ${esc(String(p.classe_abc || '').toLowerCase())}">${esc(p.classe_abc || '-')}</span>` : '—'}</td>` : ''}
             <td class="num c-forte">${fmt(item.saldo_disponivel)}</td>
             <td class="num">${consumoTexto(item)}</td>
             <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
