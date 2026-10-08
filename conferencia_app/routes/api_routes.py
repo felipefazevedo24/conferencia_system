@@ -18,7 +18,7 @@ from datetime import timedelta
 import requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
 from marshmallow import ValidationError
-from sqlalchemy import String, case, cast, func, literal, or_
+from sqlalchemy import String, case, cast, func, inspect as sa_inspect, literal, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -27,6 +27,7 @@ from ..auth import (
     get_effective_permissions,
     get_permission_catalog,
     is_admin_role,
+    listar_cargos,
     login_required,
     permission_required,
     permission_required_any,
@@ -36,6 +37,7 @@ from ..extensions import db
 from ..models import (
     ActiveSession,
     AvisoAtualizacao,
+    CargoAcesso,
     ConferenciaLock,
     DivergenciaPedidoAprovacao,
     ExpedicaoConferencia,
@@ -1942,6 +1944,8 @@ def registrar():
         role = data.get("role")
         if role == "Logistica":
             role = "Logística"
+        if role not in listar_cargos():
+            return jsonify({"sucesso": False, "msg": "Cargo inválido."}), 400
 
         ativo = bool(data.get("ativo", True))
 
@@ -2713,22 +2717,100 @@ def baixar_anexo_nao_fiscal(item_id):
 @api_bp.route("/api/permissoes/catalogo", methods=["GET"])
 @roles_required("Admin")
 def listar_catalogo_permissoes():
-    from ..auth import BASE_ROLE_PERMISSIONS
     catalogo = get_permission_catalog()
     return jsonify(
         {
             "catalogo": [{"key": key, "label": label} for key, label in catalogo.items()],
-            "roles": list(BASE_ROLE_PERMISSIONS.keys()),
+            "roles": listar_cargos(),
+            "cargos_personalizados": [row.nome for row in CargoAcesso.query.order_by(CargoAcesso.nome).all()],
         }
     )
+
+
+def _tamanho_coluna_cargo() -> int:
+    """Tamanho REAL de usuario.role no banco. O model ja' diz 60, mas ate a
+    migration rodar em producao a coluna segue com 20 - e ai um cargo maior
+    estouraria so' na hora de criar o usuario."""
+    try:
+        for coluna in sa_inspect(db.engine).get_columns("usuario"):
+            if coluna["name"] == "role":
+                return int(getattr(coluna["type"], "length", None) or 60)
+    except Exception:
+        pass
+    return 60
+
+
+@api_bp.route("/api/permissoes/cargos", methods=["POST"])
+@roles_required("Admin")
+def criar_cargo_acesso():
+    from ..auth import _normalize_role_key
+
+    nome = re.sub(r"\s+", " ", str((request.get_json(silent=True) or {}).get("nome") or "")).strip()
+    if len(nome) < 2:
+        return jsonify({"sucesso": False, "msg": "Informe o nome do cargo."}), 400
+    limite = _tamanho_coluna_cargo()
+    if len(nome) > limite:
+        return jsonify({"sucesso": False, "msg": f"Nome muito longo: o banco aceita até {limite} caracteres no cargo."}), 400
+    # is_admin_role libera TUDO pra qualquer cargo com "admin" no nome
+    # ("Gerente Administrativo" viraria administrador do sistema).
+    if is_admin_role(nome):
+        return jsonify({"sucesso": False, "msg": 'O nome não pode conter "admin": o sistema trataria o cargo como Administrador, com acesso total.'}), 400
+    if "/" in nome:
+        return jsonify({"sucesso": False, "msg": 'O nome não pode conter "/".'}), 400
+    if _normalize_role_key(nome) in {_normalize_role_key(c) for c in listar_cargos()} or _normalize_role_key(nome) in {"pcp", "logistica"}:
+        return jsonify({"sucesso": False, "msg": "Já existe um cargo com esse nome."}), 400
+
+    db.session.add(CargoAcesso(nome=nome, criado_por=session.get("username")))
+    _registrar_auditoria_usuario("-", "CRIAR_CARGO", {"cargo": nome})
+    db.session.commit()
+    return jsonify({"sucesso": True, "cargo": nome, "msg": f"Cargo {nome} criado. Ele nasce sem nenhuma permissão: configure abaixo."})
+
+
+@api_bp.route("/api/permissoes/cargos/<nome>", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_cargo_acesso(nome):
+    cargo = CargoAcesso.query.filter_by(nome=(nome or "").strip()).first()
+    if not cargo:
+        return jsonify({"sucesso": False, "msg": "Só cargos criados pela Gestão de Acessos podem ser excluídos."}), 404
+    em_uso = Usuario.query.filter_by(role=cargo.nome).count()
+    if em_uso:
+        return jsonify({"sucesso": False, "msg": f"{em_uso} usuário(s) ainda estão neste cargo. Mude o cargo deles antes de excluir."}), 400
+    PermissaoAcesso.query.filter_by(scope_type="ROLE", scope_id=cargo.nome).delete()
+    _registrar_auditoria_usuario("-", "EXCLUIR_CARGO", {"cargo": cargo.nome})
+    db.session.delete(cargo)
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@api_bp.route("/api/admin/usuario/<username>/cargo", methods=["POST"])
+@roles_required("Admin")
+def admin_usuario_alterar_cargo(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    if (username or "").upper() == (session.get("username") or "").upper():
+        return jsonify({"sucesso": False, "msg": "Você não pode mudar o próprio cargo."}), 400
+    novo = str((request.get_json(silent=True) or {}).get("role") or "").strip()
+    if novo not in listar_cargos():
+        return jsonify({"sucesso": False, "msg": "Cargo inválido."}), 400
+    anterior = user.role
+    if novo == anterior:
+        return jsonify({"sucesso": True, "role": novo})
+    user.role = novo
+    user.atualizado_em = agora_br()
+    user.atualizado_por = session.get("username")
+    # A sessao guarda o cargo do login: derruba as sessoes pra ele valer ja'.
+    ActiveSession.query.filter_by(username=user.username).update({"is_active": False})
+    _registrar_auditoria_usuario(user.username, "ALTERAR_CARGO", {"de": anterior, "para": novo})
+    db.session.commit()
+    return jsonify({"sucesso": True, "role": novo})
 
 
 @api_bp.route("/api/permissoes/role/<role>", methods=["GET"])
 @roles_required("Admin")
 def obter_permissoes_role(role):
-    from ..auth import BASE_ROLE_PERMISSIONS
     role = (role or "").strip()
-    if role not in BASE_ROLE_PERMISSIONS:
+    if role not in listar_cargos():
         return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
 
     base = get_base_role_permissions(role)
@@ -2744,9 +2826,8 @@ def obter_permissoes_role(role):
 @api_bp.route("/api/permissoes/role/<role>", methods=["POST"])
 @roles_required("Admin")
 def salvar_permissoes_role(role):
-    from ..auth import BASE_ROLE_PERMISSIONS
     role = (role or "").strip()
-    if role not in BASE_ROLE_PERMISSIONS:
+    if role not in listar_cargos():
         return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
 
     data = request.get_json() or {}

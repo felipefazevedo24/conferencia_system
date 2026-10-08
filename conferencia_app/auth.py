@@ -96,6 +96,10 @@ PERMISSION_CATALOG = {
     "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
     "EXECUTE_RPA_GRV": "Produção > Executar apontamento agrupado no GRV",
+    "PAGE_RH_REQUISICAO": "RH > Requisição de vaga (abrir e acompanhar as próprias)",
+    "APROVAR_RH_DIRETORIA": "RH > Aprovar requisição de vaga (Diretoria)",
+    "APROVAR_RH_FINANCEIRO": "RH > Aprovar requisição de vaga (Financeiro)",
+    "PAGE_RH_GESTAO": "RH > Gestão de vagas (aprovação do RH, publicação, candidatos e cadastros)",
 }
 
 
@@ -178,11 +182,31 @@ BASE_ROLE_PERMISSIONS = {
     "Qualidade": {
         "PAGE_QUALIDADE",
     },
+    "RH": {
+        "PAGE_RH_REQUISICAO",
+        "PAGE_RH_GESTAO",
+    },
 }
 
 
 def get_permission_catalog() -> dict:
     return dict(PERMISSION_CATALOG)
+
+
+def listar_cargos() -> list[str]:
+    """Cargos fixos do codigo + os criados na Gestao de Acessos (CargoAcesso)."""
+    cargos = list(BASE_ROLE_PERMISSIONS.keys())
+    try:
+        from .models import CargoAcesso
+
+        existentes = {_normalize_role_key(c) for c in cargos}
+        for row in CargoAcesso.query.order_by(CargoAcesso.nome).all():
+            if _normalize_role_key(row.nome) not in existentes:
+                cargos.append(row.nome)
+    except Exception:
+        # Tabela ainda nao criada/banco fora: os cargos fixos continuam valendo.
+        pass
+    return cargos
 
 
 def _normalize_role_key(role: str | None) -> str:

@@ -703,8 +703,8 @@ def criar_inventario_inicial():
     lote = str(payload.get("lote") or "").strip()
     observacao = str(payload.get("observacao") or "").strip()
 
-    if not local_codigo:
-        return jsonify({"error": "Local e obrigatorio."}), 400
+    # Local e' opcional (decisao da logistica em 08/10/2026): sem ele a
+    # contagem compara com o saldo total do codigo no GRV.
     if not codigo_produto:
         return jsonify({"error": "Codigo do produto e obrigatorio."}), 400
 
@@ -775,8 +775,10 @@ def criar_inventario_inicial():
     # salvo com sucesso independente disso.
     localizacao_erp = {"sincronizado": False}
     try:
-        localizacao_erp["resposta"] = atualizar_localizacao_estoque(codigo_produto, local_codigo)
-        localizacao_erp["sincronizado"] = True
+        # Contagem sem local nao mexe na localizacao que o ERP ja' tem.
+        if local_codigo:
+            localizacao_erp["resposta"] = atualizar_localizacao_estoque(codigo_produto, local_codigo)
+            localizacao_erp["sincronizado"] = True
     except LocalizacaoEstoqueNaoEncontrada as exc:
         localizacao_erp["erro"] = str(exc)
     except Exception as exc:  # noqa: BLE001

@@ -47,7 +47,7 @@
     <div class="eui-card__body">
         <div class="invc-grid">
             <div class="invc-field">
-                <label for="inv-local">Local</label>
+                <label for="inv-local">Local (opcional)</label>
                 <div class="invc-scan">
                     <input id="inv-local" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o local" />
                     <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
@@ -266,7 +266,6 @@
         const lote = (document.getElementById('inv-lote').value || '').trim();
         const observacao = (document.getElementById('inv-obs').value || '').trim();
 
-        if (!localCodigo) { showStatus('Informe o Local.', 'err'); return; }
         const extras = linhasExtras();
         if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
         if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }

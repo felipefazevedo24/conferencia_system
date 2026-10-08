@@ -1,0 +1,625 @@
+{% extends "base.html" %}
+
+{% block title %}RH | Requisição de Vaga{% endblock %}
+{% block shell_title %}RH — Requisição de Vaga{% endblock %}
+
+{% block extra_head %}
+<style>
+    .rh-wrap { display: grid; gap: 18px; }
+    .rh-table-wrap { overflow-x: auto; }
+    .rh-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .rh-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
+    .rh-tab { border: 0; background: transparent; padding: 9px 14px; font-weight: 700; font-size: 13px; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; }
+    .rh-tab.active { color: var(--eui-primary, #4f46e5); border-bottom-color: var(--eui-primary, #4f46e5); }
+
+    .rh-toast { position: fixed; top: 20px; right: 20px; z-index: 11010; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; max-width: 380px; display: none; }
+    .rh-toast.show { display: block; }
+    .rh-toast.error { border-left-color: var(--eui-danger); }
+    .rh-toast.success { border-left-color: var(--eui-success); }
+
+    .rh-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 11005; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .rh-modal-backdrop.open { display: flex; }
+    .rh-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 860px; max-height: 92vh; overflow-y: auto; padding: 22px; }
+    .rh-modal.sm { max-width: 480px; }
+    .rh-modal h3 { margin: 0 0 4px; font-size: 17px; }
+    .rh-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
+    .rh-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+    /* Dialogo de confirmacao fica acima do modal de detalhe. */
+    #rh-dialogo { z-index: 11008; }
+
+    .rh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .rh-grid .full { grid-column: 1 / -1; }
+    .rh-field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+    .rh-field textarea { min-height: 84px; resize: vertical; width: 100%; }
+    .rh-field .eui-input, .rh-field .eui-select { width: 100%; }
+    .rh-ajuda { font-size: 11.5px; color: var(--eui-muted); margin-top: 4px; }
+    .rh-erro { color: var(--eui-danger, #b91c1c); font-size: 12.5px; font-weight: 700; margin-top: 10px; min-height: 16px; }
+    @media (max-width: 640px) { .rh-grid { grid-template-columns: 1fr; } }
+
+    .rh-badge { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .rh-badge.aprovacao { background: #e0e7ff; color: #3730a3; }
+    .rh-badge.correcao { background: #fef3c7; color: #92400e; }
+    .rh-badge.aprovada { background: #cffafe; color: #155e75; }
+    .rh-badge.publicada { background: #dcfce7; color: #166534; }
+    .rh-badge.encerrada { background: #f1f5f9; color: #475569; }
+    .rh-badge.cancelada { background: #fee2e2; color: #991b1b; }
+    .rh-vez { font-size: 10.5px; font-weight: 800; color: #b45309; margin-left: 6px; white-space: nowrap; }
+
+    .rh-passos { display: flex; gap: 4px; margin: 4px 0 16px; flex-wrap: wrap; }
+    .rh-passo { flex: 1; min-width: 96px; text-align: center; font-size: 11.5px; font-weight: 700; padding: 7px 6px; border-radius: 6px; background: #f1f5f9; color: #64748b; }
+    .rh-passo.feito { background: #dcfce7; color: #166534; }
+    .rh-passo.atual { background: #e0e7ff; color: #3730a3; box-shadow: inset 0 0 0 1px #6366f1; }
+
+    .rh-dl { display: grid; grid-template-columns: 170px 1fr; gap: 6px 14px; font-size: 13px; margin: 0; }
+    .rh-dl dt { color: var(--eui-muted); font-weight: 700; font-size: 12px; }
+    .rh-dl dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (max-width: 640px) { .rh-dl { grid-template-columns: 1fr; } }
+    .rh-secao { border-top: 1px solid var(--eui-border, #e5e7eb); margin-top: 16px; padding-top: 14px; }
+    .rh-secao h4 { margin: 0 0 10px; font-size: 13.5px; }
+    .rh-evento { font-size: 12.5px; padding: 7px 0; border-bottom: 1px solid #f1f5f9; }
+    .rh-evento:last-child { border-bottom: 0; }
+    .rh-evento small { color: var(--eui-muted); }
+    .rh-evento p { margin: 3px 0 0; white-space: pre-wrap; color: #334155; }
+    .rh-link { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .rh-link img { width: 150px; height: 150px; border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; background: #fff; }
+    .rh-link input { font-family: monospace; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rh-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">RH</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-user-plus"></i> Requisição de Vaga</h1>
+            <p class="eui-page-header__sub">{% if ve_todas %}Abertura, aprovações (Diretoria, Financeiro e Gerência de RH) e publicação das vagas.{% else %}Abra uma requisição de vaga e acompanhe as aprovações. Você vê apenas as requisições que abriu.{% endif %}</p>
+        </div>
+    </header>
+
+    <div class="eui-stats">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-folder-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Requisições</span><span class="eui-stat__value" id="rh-m-total">—</span></div></div>
+        {% if ve_todas %}<div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hand-point-right"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando minha aprovação</span><span class="eui-stat__value" id="rh-m-mim">—</span></div></div>{% endif %}
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em aprovação</span><span class="eui-stat__value" id="rh-m-aprovacao">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-pen"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em correção</span><span class="eui-stat__value" id="rh-m-correcao">—</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-bullhorn"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Publicadas</span><span class="eui-stat__value" id="rh-m-publicadas">—</span></div></div>
+    </div>
+
+    {% if pode_gestao %}
+    <div class="rh-tabs">
+        <button class="rh-tab active" data-aba="requisicoes" type="button">Requisições</button>
+        <button class="rh-tab" data-aba="cargos" type="button">Cargos e faixas salariais</button>
+    </div>
+    {% endif %}
+
+    <div class="eui-card" id="rh-aba-requisicoes">
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px; gap: 8px; flex-wrap: wrap;">
+                <input type="search" id="rh-busca" class="eui-input" autocomplete="off" placeholder="Buscar por número, cargo, departamento…" style="flex:1; min-width:200px; max-width:420px;">
+                <select id="rh-status" class="eui-select" style="min-width:190px;"><option value="">Todos os status</option></select>
+                <span style="flex:1;"></span>
+                {% if pode_abrir %}<button class="eui-btn eui-btn--primary" id="rh-btn-nova" type="button"><i class="fas fa-plus"></i> Nova requisição</button>{% endif %}
+            </div>
+            <div class="rh-table-wrap">
+                <table class="erp-table">
+                    <thead><tr>
+                        <th>Nº</th><th>Cargo</th><th>Tipo</th><th>Departamento</th>
+                        {% if ve_todas %}<th>Solicitante</th>{% endif %}
+                        <th>Status</th>
+                        {% if pode_gestao %}<th>Candidatos</th>{% endif %}
+                        <th>Aberta em</th><th style="text-align:right;">Ação</th>
+                    </tr></thead>
+                    <tbody id="rh-tbody"><tr><td colspan="9" class="rh-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if pode_gestao %}
+    <div class="eui-card" id="rh-aba-cargos" style="display:none;">
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <span style="font-size:12.5px; color:var(--eui-muted);">Perfil e faixa salarial padronizados por cargo. A faixa só aparece para o RH e para quem aprova.</span>
+                <span style="flex:1;"></span>
+                <button class="eui-btn eui-btn--primary" id="rh-btn-cargo" type="button"><i class="fas fa-plus"></i> Novo cargo</button>
+            </div>
+            <div class="rh-table-wrap">
+                <table class="erp-table">
+                    <thead><tr><th>Cargo</th><th>Faixa salarial</th><th>Situação</th><th style="text-align:right;">Ação</th></tr></thead>
+                    <tbody id="rh-cargos-tbody"><tr><td colspan="4" class="rh-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="rh-toast" id="rh-toast"></div>
+
+<!-- Modal: abrir / corrigir requisicao -->
+<div class="rh-modal-backdrop" id="rh-modal-form">
+    <div class="rh-modal">
+        <h3 id="rh-form-titulo">Nova requisição de vaga</h3>
+        <p class="rh-modal-sub" id="rh-form-sub">Depois de enviada, a requisição segue para Diretoria, Financeiro e Gerência de RH.</p>
+        <div class="rh-grid">
+            <div class="rh-field"><label for="rh-f-tipo">Tipo</label>
+                <select id="rh-f-tipo" class="eui-select"><option value="">Selecione…</option><option value="substituicao">Substituição</option><option value="nova">Vaga nova</option></select></div>
+            <div class="rh-field"><label for="rh-f-cargo">Cargo</label>
+                <select id="rh-f-cargo" class="eui-select"></select></div>
+            <div class="rh-field full" id="rh-w-cargo-nome"><label for="rh-f-cargo-nome">Nome do cargo</label>
+                <input id="rh-f-cargo-nome" class="eui-input" maxlength="120"></div>
+            <div class="rh-field full"><label for="rh-f-perfil">Perfil da vaga</label>
+                <textarea id="rh-f-perfil" class="eui-input" placeholder="Formação, experiência, atividades e competências esperadas"></textarea>
+                <div class="rh-ajuda" id="rh-f-perfil-ajuda"></div></div>
+            <div class="rh-field" id="rh-w-faixa-min"><label for="rh-f-faixa-min">Faixa salarial proposta — mínimo (R$)</label>
+                <input id="rh-f-faixa-min" class="eui-input" inputmode="decimal" placeholder="Opcional"></div>
+            <div class="rh-field" id="rh-w-faixa-max"><label for="rh-f-faixa-max">Faixa salarial proposta — máximo (R$)</label>
+                <input id="rh-f-faixa-max" class="eui-input" inputmode="decimal" placeholder="Opcional"></div>
+            <div class="rh-field full" id="rh-w-substituido"><label for="rh-f-substituido">Quem está sendo substituído</label>
+                <input id="rh-f-substituido" class="eui-input" maxlength="120"></div>
+            <div class="rh-field"><label for="rh-f-departamento">Departamento</label>
+                <input id="rh-f-departamento" class="eui-input" maxlength="80"></div>
+            <div class="rh-field"><label for="rh-f-quantidade">Quantidade de vagas</label>
+                <input id="rh-f-quantidade" class="eui-input" type="number" min="1" max="50" value="1"></div>
+            <div class="rh-field full"><label for="rh-f-justificativa">Justificativa da necessidade</label>
+                <textarea id="rh-f-justificativa" class="eui-input"></textarea></div>
+        </div>
+        <div class="rh-erro" id="rh-form-erro"></div>
+        <div class="rh-modal-foot">
+            <button class="eui-btn eui-btn--ghost" type="button" data-fechar="rh-modal-form">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" type="button" id="rh-form-salvar"><i class="fas fa-paper-plane"></i> Enviar para aprovação</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: detalhe da requisicao -->
+<div class="rh-modal-backdrop" id="rh-modal-detalhe">
+    <div class="rh-modal">
+        <h3 id="rh-d-titulo"></h3>
+        <p class="rh-modal-sub" id="rh-d-sub"></p>
+        <div id="rh-d-corpo"></div>
+        <div class="rh-modal-foot" id="rh-d-acoes"></div>
+    </div>
+</div>
+
+{% if pode_gestao %}
+<!-- Modal: cargo do cadastro -->
+<div class="rh-modal-backdrop" id="rh-modal-cargo">
+    <div class="rh-modal">
+        <h3 id="rh-c-titulo">Novo cargo</h3>
+        <p class="rh-modal-sub">O perfil e a faixa são copiados para a requisição na abertura: alterar aqui não muda requisições já abertas.</p>
+        <div class="rh-grid">
+            <div class="rh-field full"><label for="rh-c-nome">Cargo</label><input id="rh-c-nome" class="eui-input" maxlength="120"></div>
+            <div class="rh-field full"><label for="rh-c-perfil">Perfil padronizado</label><textarea id="rh-c-perfil" class="eui-input"></textarea></div>
+            <div class="rh-field"><label for="rh-c-min">Faixa salarial — mínimo (R$)</label><input id="rh-c-min" class="eui-input" inputmode="decimal"></div>
+            <div class="rh-field"><label for="rh-c-max">Faixa salarial — máximo (R$)</label><input id="rh-c-max" class="eui-input" inputmode="decimal"></div>
+            <div class="rh-field"><label for="rh-c-ativo">Situação</label>
+                <select id="rh-c-ativo" class="eui-select"><option value="1">Ativo</option><option value="0">Inativo (não aparece em novas requisições)</option></select></div>
+        </div>
+        <div class="rh-erro" id="rh-c-erro"></div>
+        <div class="rh-modal-foot">
+            <button class="eui-btn eui-btn--ghost" type="button" data-fechar="rh-modal-cargo">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" type="button" id="rh-c-salvar">Salvar</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dialogo da propria tela para confirmar/pedir texto (sem popup do navegador) -->
+<div class="rh-modal-backdrop" id="rh-dialogo">
+    <div class="rh-modal sm">
+        <h3 id="rh-dg-titulo"></h3>
+        <p class="rh-modal-sub" id="rh-dg-texto"></p>
+        <div id="rh-dg-campos"></div>
+        <div class="rh-erro" id="rh-dg-erro"></div>
+        <div class="rh-modal-foot">
+            <button class="eui-btn eui-btn--ghost" type="button" id="rh-dg-cancelar">Voltar</button>
+            <button class="eui-btn eui-btn--primary" type="button" id="rh-dg-ok">Confirmar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PODE_GESTAO = {{ 'true' if pode_gestao else 'false' }};
+    const VE_TODAS = {{ 'true' if ve_todas else 'false' }};
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const moeda = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const faixa = (a, b) => (a == null && b == null) ? 'Não informada' : `${moeda(a)} a ${moeda(b)}`;
+
+    let cargos = [];
+    let cargosCadastro = [];
+    let editandoId = null;
+    let cargoEditandoId = null;
+    let detalheAtual = null;
+
+    function toast(msg, tipo) {
+        const el = $('rh-toast');
+        el.textContent = msg;
+        el.className = `rh-toast show ${tipo || ''}`;
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => { el.className = 'rh-toast'; }, 4200);
+    }
+
+    async function api(url, opts = {}) {
+        if (opts.body !== undefined) opts = { ...opts, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(opts.body) };
+        const res = await fetch(url, opts);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.msg || 'Falha na operação.');
+        return data;
+    }
+
+    const abrir = (id) => $(id).classList.add('open');
+    const fechar = (id) => $(id).classList.remove('open');
+    document.querySelectorAll('[data-fechar]').forEach((b) => b.addEventListener('click', () => fechar(b.dataset.fechar)));
+
+    // Dialogo proprio: confirma uma acao e, se pedido, coleta campos de texto.
+    function dialogo({ titulo, texto, campos = [], confirmar = 'Confirmar', perigo = false }) {
+        return new Promise((resolve) => {
+            $('rh-dg-titulo').textContent = titulo;
+            $('rh-dg-texto').textContent = texto || '';
+            $('rh-dg-erro').textContent = '';
+            $('rh-dg-campos').innerHTML = campos.map((c, i) => `<div class="rh-field" style="margin-bottom:10px;"><label for="rh-dg-c${i}">${esc(c.rotulo)}</label>${
+                c.linha ? `<input id="rh-dg-c${i}" class="eui-input" maxlength="160" value="${esc(c.valor || '')}">`
+                        : `<textarea id="rh-dg-c${i}" class="eui-input" style="min-height:${c.alto ? 200 : 84}px;">${esc(c.valor || '')}</textarea>`}</div>`).join('');
+            const ok = $('rh-dg-ok');
+            ok.textContent = confirmar;
+            ok.className = `eui-btn ${perigo ? 'eui-btn--danger' : 'eui-btn--primary'}`;
+            const encerrar = (valor) => { fechar('rh-dialogo'); ok.onclick = null; $('rh-dg-cancelar').onclick = null; resolve(valor); };
+            ok.onclick = () => {
+                const valores = campos.map((c, i) => $(`rh-dg-c${i}`).value.trim());
+                const falta = campos.findIndex((c, i) => c.obrigatorio && !valores[i]);
+                if (falta >= 0) { $('rh-dg-erro').textContent = `Preencha: ${campos[falta].rotulo}.`; return; }
+                encerrar(valores);
+            };
+            $('rh-dg-cancelar').onclick = () => encerrar(null);
+            abrir('rh-dialogo');
+            if (campos.length) $('rh-dg-c0').focus();
+        });
+    }
+
+    function badge(status) {
+        const classe = { 'Em correção': 'correcao', 'Aprovada': 'aprovada', 'Publicada': 'publicada', 'Encerrada': 'encerrada', 'Cancelada': 'cancelada' }[status] || 'aprovacao';
+        return `<span class="rh-badge ${classe}">${esc(status)}</span>`;
+    }
+
+    // ── Lista ───────────────────────────────────────────────────────────
+    async function carregar() {
+        const params = new URLSearchParams({ status: $('rh-status').value, busca: $('rh-busca').value.trim() });
+        let data;
+        try { data = await api(`/api/rh/vagas?${params}`); }
+        catch (e) { $('rh-tbody').innerHTML = `<tr><td colspan="9" class="rh-empty">${esc(e.message)}</td></tr>`; return; }
+        cargos = data.cargos || [];
+        const m = data.metricas || {};
+        $('rh-m-total').textContent = m.total ?? 0;
+        if ($('rh-m-mim')) $('rh-m-mim').textContent = m.aguardando_mim ?? 0;
+        $('rh-m-aprovacao').textContent = m.em_aprovacao ?? 0;
+        $('rh-m-correcao').textContent = m.em_correcao ?? 0;
+        $('rh-m-publicadas').textContent = m.publicadas ?? 0;
+        const sel = $('rh-status');
+        if (sel.options.length <= 1) (data.status || []).forEach((s) => sel.add(new Option(s, s)));
+
+        const linhas = (data.requisicoes || []).map((r) => `<tr>
+            <td style="font-family:monospace; font-weight:700;">${esc(r.numero)}</td>
+            <td>${esc(r.cargo_nome)}${r.quantidade > 1 ? ` <small>(${r.quantidade} vagas)</small>` : ''}</td>
+            <td>${esc(r.tipo_label)}</td>
+            <td>${esc(r.departamento || '—')}</td>
+            ${VE_TODAS ? `<td>${esc(r.solicitante)}</td>` : ''}
+            <td>${badge(r.status)}${r.pode_aprovar ? '<span class="rh-vez"><i class="fas fa-hand-point-left"></i> sua vez</span>' : ''}${r.pode_editar ? '<span class="rh-vez">corrigir</span>' : ''}</td>
+            ${PODE_GESTAO ? `<td>${r.candidatos || '—'}</td>` : ''}
+            <td>${esc(r.criado_em || '')}</td>
+            <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-abrir="${r.id}" type="button">Abrir</button></td>
+        </tr>`).join('');
+        $('rh-tbody').innerHTML = linhas || '<tr><td colspan="9" class="rh-empty">Nenhuma requisição encontrada.</td></tr>';
+    }
+
+    $('rh-tbody').addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-abrir]');
+        if (b) abrirDetalhe(Number(b.dataset.abrir));
+    });
+    $('rh-status').addEventListener('change', carregar);
+    let buscaT;
+    $('rh-busca').addEventListener('input', () => { clearTimeout(buscaT); buscaT = setTimeout(carregar, 300); });
+
+    // ── Formulario de requisicao ────────────────────────────────────────
+    function montarCargos(selecionado) {
+        const sel = $('rh-f-cargo');
+        const nova = $('rh-f-tipo').value === 'nova';
+        sel.innerHTML = '<option value="">Selecione…</option>'
+            + cargos.map((c) => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+            + (nova ? '<option value="livre">Cargo fora do cadastro…</option>' : '');
+        if (selecionado != null && [...sel.options].some((o) => o.value === String(selecionado))) sel.value = String(selecionado);
+        ajustarFormulario();
+    }
+
+    function ajustarFormulario() {
+        const tipo = $('rh-f-tipo').value;
+        const escolha = $('rh-f-cargo').value;
+        const livre = escolha === 'livre';
+        const cargo = cargos.find((c) => String(c.id) === escolha);
+        $('rh-w-cargo-nome').style.display = livre ? '' : 'none';
+        $('rh-w-faixa-min').style.display = livre ? '' : 'none';
+        $('rh-w-faixa-max').style.display = livre ? '' : 'none';
+        $('rh-w-substituido').style.display = tipo === 'substituicao' ? '' : 'none';
+        const perfil = $('rh-f-perfil');
+        perfil.readOnly = !livre;
+        if (cargo) perfil.value = cargo.perfil || '';
+        else if (!livre) perfil.value = '';
+        $('rh-f-perfil-ajuda').textContent = livre
+            ? 'Cargo fora do cadastro: descreva o perfil. O RH avalia na aprovação.'
+            : (cargo ? 'Perfil padronizado do cadastro do RH.' : (tipo === 'substituicao' ? 'Em substituição o cargo vem do cadastro do RH.' : 'Escolha o cargo, ou "Cargo fora do cadastro" se for uma função nova.'));
+    }
+
+    $('rh-f-tipo').addEventListener('change', () => montarCargos($('rh-f-cargo').value));
+    $('rh-f-cargo').addEventListener('change', ajustarFormulario);
+
+    function abrirFormulario(req) {
+        editandoId = req ? req.id : null;
+        $('rh-form-titulo').textContent = req ? `Corrigir requisição ${req.numero}` : 'Nova requisição de vaga';
+        $('rh-form-sub').textContent = req
+            ? 'Ao reenviar, as aprovações recomeçam pela Diretoria.'
+            : 'Depois de enviada, a requisição segue para Diretoria, Financeiro e Gerência de RH.';
+        $('rh-form-erro').textContent = '';
+        $('rh-f-tipo').value = req ? req.tipo : '';
+        montarCargos(req ? (req.cargo_id || 'livre') : '');
+        $('rh-f-cargo-nome').value = req && !req.cargo_id ? req.cargo_nome : '';
+        if (req && !req.cargo_id) $('rh-f-perfil').value = req.perfil || '';
+        $('rh-f-faixa-min').value = req && req.faixa_min != null && !req.cargo_id ? String(req.faixa_min).replace('.', ',') : '';
+        $('rh-f-faixa-max').value = req && req.faixa_max != null && !req.cargo_id ? String(req.faixa_max).replace('.', ',') : '';
+        $('rh-f-substituido').value = req ? (req.substituido_nome || '') : '';
+        $('rh-f-departamento').value = req ? (req.departamento || '') : '';
+        $('rh-f-quantidade').value = req ? req.quantidade : 1;
+        $('rh-f-justificativa').value = req ? (req.justificativa || '') : '';
+        abrir('rh-modal-form');
+    }
+
+    if ($('rh-btn-nova')) $('rh-btn-nova').addEventListener('click', () => abrirFormulario(null));
+
+    $('rh-form-salvar').addEventListener('click', async () => {
+        const escolha = $('rh-f-cargo').value;
+        const livre = escolha === 'livre';
+        const body = {
+            tipo: $('rh-f-tipo').value,
+            cargo_id: livre ? null : (escolha || null),
+            cargo_nome: livre ? $('rh-f-cargo-nome').value : '',
+            perfil: livre ? $('rh-f-perfil').value : '',
+            faixa_min: livre ? $('rh-f-faixa-min').value : '',
+            faixa_max: livre ? $('rh-f-faixa-max').value : '',
+            substituido_nome: $('rh-f-substituido').value,
+            departamento: $('rh-f-departamento').value,
+            quantidade: $('rh-f-quantidade').value,
+            justificativa: $('rh-f-justificativa').value,
+        };
+        if (!livre && !escolha && body.tipo) { $('rh-form-erro').textContent = 'Escolha o cargo.'; return; }
+        const btn = $('rh-form-salvar');
+        btn.disabled = true;
+        try {
+            const data = await api(editandoId ? `/api/rh/vagas/${editandoId}` : '/api/rh/vagas', { method: editandoId ? 'PUT' : 'POST', body });
+            fechar('rh-modal-form');
+            fechar('rh-modal-detalhe');
+            toast(data.message, 'success');
+            carregar();
+        } catch (e) { $('rh-form-erro').textContent = e.message; }
+        finally { btn.disabled = false; }
+    });
+
+    // ── Detalhe ─────────────────────────────────────────────────────────
+    async function abrirDetalhe(id) {
+        try {
+            const data = await api(`/api/rh/vagas/${id}`);
+            renderDetalhe(data.requisicao);
+            abrir('rh-modal-detalhe');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function passos(r) {
+        const ordem = ['Aguardando Diretoria', 'Aguardando Financeiro', 'Aguardando RH', 'Aprovada'];
+        let atual = ordem.indexOf(r.status) + 1;           // 1..4 = etapa em andamento
+        if (r.status === 'Publicada' || r.status === 'Encerrada') atual = 5;
+        if (atual === 0) return '';                         // em correcao / cancelada: so' o badge
+        const nomes = ['Abertura', 'Diretoria', 'Financeiro', 'Gerência de RH', 'Publicação'];
+        return `<div class="rh-passos">${nomes.map((n, i) => `<div class="rh-passo ${i < atual ? 'feito' : (i === atual ? 'atual' : '')}">${n}</div>`).join('')}</div>`;
+    }
+
+    function renderDetalhe(r) {
+        detalheAtual = r;
+        $('rh-d-titulo').innerHTML = `${esc(r.numero)} — ${esc(r.cargo_nome)} ${badge(r.status)}`;
+        $('rh-d-sub').textContent = `Aberta por ${r.solicitante} em ${r.criado_em}${r.ciclo > 1 ? ` · ${r.ciclo}º ciclo (reaberta)` : ''}`;
+        const linhas = [
+            ['Tipo', esc(r.tipo_label)],
+            r.substituido_nome ? ['Substitui', esc(r.substituido_nome)] : null,
+            ['Departamento', esc(r.departamento || '—')],
+            ['Quantidade', esc(r.quantidade)],
+            ['Cargo', esc(r.cargo_nome) + (r.cargo_id ? '' : ' <span class="rh-badge correcao">fora do cadastro</span>')],
+            ['Perfil', esc(r.perfil || '—')],
+            r.ver_salario ? [r.cargo_id ? 'Faixa salarial' : 'Faixa salarial proposta', esc(faixa(r.faixa_min, r.faixa_max))] : null,
+            ['Justificativa', esc(r.justificativa || '—')],
+            r.cancelamento_motivo ? ['Motivo do cancelamento', esc(r.cancelamento_motivo)] : null,
+        ].filter(Boolean);
+        let html = passos(r) + `<dl class="rh-dl">${linhas.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+
+        if (PODE_GESTAO && r.link_publico) {
+            html += `<div class="rh-secao"><h4><i class="fas fa-bullhorn"></i> Divulgação — ${esc(r.titulo_publico || '')}</h4>
+                <div class="rh-link">
+                    <img src="/api/rh/vagas/${r.id}/qrcode.svg" alt="QR code da vaga">
+                    <div style="flex:1; min-width:240px;">
+                        <div class="rh-field"><label>Link de candidatura</label><input class="eui-input" id="rh-d-link" readonly value="${esc(r.link_publico)}"></div>
+                        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                            <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="rh-d-copiar"><i class="fas fa-copy"></i> Copiar link</button>
+                            <a class="eui-btn eui-btn--ghost eui-btn--sm" href="/api/rh/vagas/${r.id}/qrcode.svg?download=1"><i class="fas fa-download"></i> Baixar QR code</a>
+                            <a class="eui-btn eui-btn--ghost eui-btn--sm" href="${esc(r.link_publico)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Ver página</a>
+                        </div>
+                        <div class="rh-ajuda">Publicada por ${esc(r.publicada_por || '')} em ${esc(r.publicada_em || '')}. O link deixa de funcionar quando a vaga é encerrada ou cancelada.</div>
+                    </div>
+                </div></div>`;
+        }
+        if (PODE_GESTAO && (r.candidatos || r.status === 'Publicada' || r.status === 'Encerrada')) {
+            html += `<div class="rh-secao"><h4><i class="fas fa-users"></i> Candidatos (${r.candidatos || 0})</h4><div id="rh-d-candidatos" class="rh-ajuda">Carregando…</div></div>`;
+        }
+        html += `<div class="rh-secao"><h4><i class="fas fa-clock-rotate-left"></i> Histórico</h4>${(r.eventos || []).slice().reverse().map((e) => `<div class="rh-evento">
+            <strong>${esc(e.acao)}</strong> <small>· ${esc(e.usuario)} · ${esc(e.criado_em)}${r.ciclo > 1 ? ` · ciclo ${e.ciclo}` : ''}</small>
+            ${e.comentario ? `<p>${esc(e.comentario)}</p>` : ''}</div>`).join('')}</div>`;
+        $('rh-d-corpo').innerHTML = html;
+
+        const acoes = [];
+        if (r.pode_aprovar) {
+            acoes.push('<button class="eui-btn eui-btn--danger" type="button" data-acao="reprovar"><i class="fas fa-rotate-left"></i> Devolver para correção</button>');
+            acoes.push(`<button class="eui-btn eui-btn--success" type="button" data-acao="aprovar"><i class="fas fa-check"></i> Aprovar (${esc(r.etapa)})</button>`);
+        }
+        if (r.pode_editar) acoes.push('<button class="eui-btn eui-btn--primary" type="button" data-acao="editar"><i class="fas fa-pen"></i> Corrigir e reenviar</button>');
+        if (r.pode_publicar) acoes.push('<button class="eui-btn eui-btn--primary" type="button" data-acao="publicar"><i class="fas fa-bullhorn"></i> Publicar vaga</button>');
+        if (r.pode_encerrar) acoes.push('<button class="eui-btn eui-btn--subtle" type="button" data-acao="encerrar"><i class="fas fa-flag-checkered"></i> Encerrar vaga</button>');
+        if (r.pode_reabrir) acoes.push('<button class="eui-btn eui-btn--primary" type="button" data-acao="reabrir"><i class="fas fa-rotate"></i> Reabrir vaga</button>');
+        if (r.pode_cancelar) acoes.push('<button class="eui-btn eui-btn--ghost" type="button" data-acao="cancelar" style="color:var(--eui-danger,#b91c1c);"><i class="fas fa-ban"></i> Cancelar requisição</button>');
+        acoes.push('<button class="eui-btn eui-btn--ghost" type="button" data-fechar-detalhe>Fechar</button>');
+        $('rh-d-acoes').innerHTML = acoes.join('');
+
+        if ($('rh-d-copiar')) $('rh-d-copiar').addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(r.link_publico); }
+            catch (_) { $('rh-d-link').select(); document.execCommand('copy'); }
+            toast('Link copiado.', 'success');
+        });
+        if ($('rh-d-candidatos')) carregarCandidatos(r.id);
+    }
+
+    async function carregarCandidatos(id) {
+        const alvo = $('rh-d-candidatos');
+        try {
+            const data = await api(`/api/rh/vagas/${id}/candidatos`);
+            const lista = data.candidatos || [];
+            alvo.className = '';
+            alvo.innerHTML = lista.length ? `<div class="rh-table-wrap"><table class="erp-table"><thead><tr><th>Nome</th><th>Contato</th><th>Recebido em</th><th style="text-align:right;">Currículo</th></tr></thead><tbody>${lista.map((c) => `<tr>
+                <td><strong>${esc(c.nome)}</strong>${c.mensagem ? `<div class="rh-ajuda" style="white-space:pre-wrap;">${esc(c.mensagem)}</div>` : ''}</td>
+                <td>${esc(c.email)}<br><small>${esc(c.telefone || '')}</small></td>
+                <td>${esc(c.criado_em || '')}</td>
+                <td style="text-align:right; white-space:nowrap;">
+                    <a class="eui-btn eui-btn--ghost eui-btn--sm" href="/api/rh/candidatos/${c.id}/curriculo" title="${esc(c.curriculo_nome || '')} · ${c.curriculo_kb} KB"><i class="fas fa-file-pdf"></i> Baixar</a>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" data-excluir-candidato="${c.id}" data-nome="${esc(c.nome)}" title="Excluir candidato e currículo"><i class="fas fa-trash"></i></button>
+                </td></tr>`).join('')}</tbody></table></div>
+                <div class="rh-ajuda">Cada download de currículo fica registrado com usuário e horário.</div>`
+                : '<span class="rh-ajuda">Nenhuma candidatura recebida ainda.</span>';
+            alvo.innerHTML += `<div style="margin-top:8px;"><button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" data-ver-acessos="${id}"><i class="fas fa-shield-halved"></i> Registro de acessos aos currículos</button><div id="rh-d-acessos"></div></div>`;
+        } catch (e) { alvo.textContent = e.message; }
+    }
+
+    async function carregarAcessos(id) {
+        const alvo = $('rh-d-acessos');
+        try {
+            const data = await api(`/api/rh/vagas/${id}/acessos`);
+            alvo.innerHTML = (data.acessos || []).map((a) => `<div class="rh-evento"><strong>${esc(a.usuario)}</strong> ${a.acao === 'excluiu' ? 'excluiu o candidato' : 'baixou o currículo de'} <strong>${esc(a.candidato || '')}</strong> <small>· ${esc(a.criado_em || '')}</small></div>`).join('')
+                || '<div class="rh-ajuda" style="margin-top:6px;">Nenhum currículo foi baixado ainda.</div>';
+        } catch (e) { alvo.textContent = e.message; }
+    }
+
+    async function executar(url, body) {
+        try {
+            const data = await api(url, { method: 'POST', body: body || {} });
+            toast(data.message, 'success');
+            renderDetalhe(data.requisicao);
+            carregar();
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    $('rh-modal-detalhe').addEventListener('click', async (ev) => {
+        if (ev.target.closest('[data-fechar-detalhe]')) { fechar('rh-modal-detalhe'); return; }
+        const r = detalheAtual;
+        const acessos = ev.target.closest('[data-ver-acessos]');
+        if (acessos) { carregarAcessos(acessos.dataset.verAcessos); return; }
+        const exc = ev.target.closest('[data-excluir-candidato]');
+        if (exc) {
+            const ok = await dialogo({ titulo: 'Excluir candidato', texto: `Excluir ${exc.dataset.nome} e o currículo enviado? Não dá para desfazer.`, confirmar: 'Excluir', perigo: true });
+            if (!ok) return;
+            try {
+                const data = await api(`/api/rh/candidatos/${exc.dataset.excluirCandidato}`, { method: 'DELETE' });
+                toast(data.message, 'success');
+                abrirDetalhe(r.id);
+                carregar();
+            } catch (e) { toast(e.message, 'error'); }
+            return;
+        }
+        const b = ev.target.closest('[data-acao]');
+        if (!b || !r) return;
+        const base = `/api/rh/vagas/${r.id}`;
+        const acao = b.dataset.acao;
+        if (acao === 'editar') { abrirFormulario(r); return; }
+        if (acao === 'aprovar') {
+            const v = await dialogo({ titulo: `Aprovar — ${r.etapa}`, texto: `Requisição ${r.numero} · ${r.cargo_nome}`, campos: [{ rotulo: 'Comentário (opcional)' }], confirmar: 'Aprovar' });
+            if (v) executar(`${base}/aprovar`, { comentario: v[0] });
+        } else if (acao === 'reprovar') {
+            const v = await dialogo({ titulo: 'Devolver para correção', texto: 'A requisição volta para o solicitante. Depois de corrigida, as aprovações recomeçam pela Diretoria.', campos: [{ rotulo: 'O que precisa ser corrigido', obrigatorio: true }], confirmar: 'Devolver', perigo: true });
+            if (v) executar(`${base}/reprovar`, { motivo: v[0] });
+        } else if (acao === 'cancelar') {
+            const v = await dialogo({ titulo: 'Cancelar requisição', texto: r.status === 'Publicada' ? 'A vaga está publicada: o link de candidatura será desativado.' : 'O processo é interrompido. Dá para reabrir depois, reiniciando as aprovações.', campos: [{ rotulo: 'Justificativa do cancelamento', obrigatorio: true }], confirmar: 'Cancelar requisição', perigo: true });
+            if (v) executar(`${base}/cancelar`, { motivo: v[0] });
+        } else if (acao === 'reabrir') {
+            const v = await dialogo({ titulo: 'Reabrir vaga', texto: 'O processo recomeça do início: Diretoria, Financeiro e Gerência de RH aprovam de novo.', confirmar: 'Reabrir' });
+            if (v) executar(`${base}/reabrir`);
+        } else if (acao === 'publicar') {
+            const v = await dialogo({ titulo: 'Publicar vaga', texto: 'Este texto aparece na página pública de candidatura. A faixa salarial não é exibida.', campos: [
+                { rotulo: 'Título da vaga', obrigatorio: true, linha: true, valor: r.titulo_publico || r.cargo_nome },
+                { rotulo: 'Descrição para divulgação', obrigatorio: true, alto: true, valor: r.descricao_publica || r.perfil || '' },
+            ], confirmar: 'Publicar' });
+            if (v) executar(`${base}/publicar`, { titulo: v[0], descricao: v[1] });
+        } else if (acao === 'encerrar') {
+            const v = await dialogo({ titulo: 'Encerrar vaga', texto: 'O link e o QR code deixam de aceitar candidaturas. Os candidatos já recebidos continuam aqui.', campos: [{ rotulo: 'Comentário (opcional)' }], confirmar: 'Encerrar' });
+            if (v) executar(`${base}/encerrar`, { comentario: v[0] });
+        }
+    });
+
+    // ── Cadastro de cargos (RH) ─────────────────────────────────────────
+    async function carregarCargos() {
+        try {
+            const data = await api('/api/rh/cargos');
+            cargosCadastro = data.cargos || [];
+            $('rh-cargos-tbody').innerHTML = cargosCadastro.map((c) => `<tr>
+                <td><strong>${esc(c.nome)}</strong></td>
+                <td>${esc(faixa(c.faixa_min, c.faixa_max))}</td>
+                <td>${c.ativo ? '<span class="rh-badge publicada">Ativo</span>' : '<span class="rh-badge encerrada">Inativo</span>'}</td>
+                <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" data-cargo="${c.id}">Editar</button></td>
+            </tr>`).join('') || '<tr><td colspan="4" class="rh-empty">Nenhum cargo cadastrado.</td></tr>';
+        } catch (e) { $('rh-cargos-tbody').innerHTML = `<tr><td colspan="4" class="rh-empty">${esc(e.message)}</td></tr>`; }
+    }
+
+    function abrirCargo(c) {
+        cargoEditandoId = c ? c.id : null;
+        $('rh-c-titulo').textContent = c ? `Editar cargo — ${c.nome}` : 'Novo cargo';
+        $('rh-c-erro').textContent = '';
+        $('rh-c-nome').value = c ? c.nome : '';
+        $('rh-c-perfil').value = c ? (c.perfil || '') : '';
+        $('rh-c-min').value = c && c.faixa_min != null ? String(c.faixa_min).replace('.', ',') : '';
+        $('rh-c-max').value = c && c.faixa_max != null ? String(c.faixa_max).replace('.', ',') : '';
+        $('rh-c-ativo').value = !c || c.ativo ? '1' : '0';
+        abrir('rh-modal-cargo');
+    }
+
+    if (PODE_GESTAO) {
+        document.querySelectorAll('.rh-tab').forEach((t) => t.addEventListener('click', () => {
+            document.querySelectorAll('.rh-tab').forEach((x) => x.classList.toggle('active', x === t));
+            $('rh-aba-requisicoes').style.display = t.dataset.aba === 'requisicoes' ? '' : 'none';
+            $('rh-aba-cargos').style.display = t.dataset.aba === 'cargos' ? '' : 'none';
+            if (t.dataset.aba === 'cargos') carregarCargos(); else carregar();
+        }));
+        $('rh-btn-cargo').addEventListener('click', () => abrirCargo(null));
+        $('rh-cargos-tbody').addEventListener('click', (ev) => {
+            const b = ev.target.closest('[data-cargo]');
+            if (b) abrirCargo(cargosCadastro.find((c) => c.id === Number(b.dataset.cargo)));
+        });
+        $('rh-c-salvar').addEventListener('click', async () => {
+            const body = { nome: $('rh-c-nome').value, perfil: $('rh-c-perfil').value, faixa_min: $('rh-c-min').value, faixa_max: $('rh-c-max').value, ativo: $('rh-c-ativo').value === '1' };
+            try {
+                const data = await api(cargoEditandoId ? `/api/rh/cargos/${cargoEditandoId}` : '/api/rh/cargos', { method: cargoEditandoId ? 'PUT' : 'POST', body });
+                fechar('rh-modal-cargo');
+                toast(data.message, 'success');
+                carregarCargos();
+            } catch (e) { $('rh-c-erro').textContent = e.message; }
+        });
+    }
+
+    carregar();
+})();
+</script>
+{% endblock %}

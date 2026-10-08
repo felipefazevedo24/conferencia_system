@@ -9,7 +9,8 @@ class LoginSchema(Schema):
 class RegisterSchema(Schema):
     username = fields.Str(required=True, validate=validate.Length(min=3, max=80))
     email = fields.Email(required=True, validate=validate.Length(min=5, max=160))
-    role = fields.Str(required=True, validate=validate.OneOf(["Admin", "Fiscal", "Logística", "Logistica", "Comex", "Portaria", "Financeiro", "Controladoria", "Compras", "Produção", "Motorista", "Solicitante", "Qualidade"]))
+    # Lista de cargos validada na rota (inclui os criados na Gestão de Acessos).
+    role = fields.Str(required=True, validate=validate.Length(min=1, max=60))
     ativo = fields.Bool(required=False, load_default=True)
 
 

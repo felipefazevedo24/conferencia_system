@@ -291,7 +291,7 @@
                     </div>
                     <div class="eui-field" id="wrap-role" style="margin-bottom:0;">
                         <label class="eui-field__label">Cargo</label>
-                        <select id="perm-role" class="eui-select">
+                        <select id="perm-role" class="eui-select" onchange="atualizarBotaoExcluirCargo()">
                             <option value="Admin">Admin</option>
                             <option value="Fiscal">Fiscal</option>
                             <option value="Controladoria">Controladoria</option>
@@ -312,6 +312,17 @@
                     </div>
                     <button class="eui-btn eui-btn--ghost" onclick="carregarPermissoesAlvo()"><i class="fas fa-filter"></i> Carregar</button>
                     <button class="eui-btn eui-btn--primary" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar permissões</button>
+                    <button class="eui-btn eui-btn--ghost" onclick="alternarNovoCargo()"><i class="fas fa-plus"></i> Novo cargo</button>
+                    <button class="eui-btn eui-btn--ghost" id="btn-excluir-cargo" style="display:none;" onclick="excluirCargoSelecionado()"><i class="fas fa-trash"></i> Excluir cargo</button>
+                </div>
+
+                <div id="wrap-novo-cargo" class="ua-perm-toolbar" style="display:none;">
+                    <div class="eui-field" style="margin-bottom:0; min-width:280px;">
+                        <label class="eui-field__label">Nome do novo cargo</label>
+                        <input id="novo-cargo-nome" class="eui-input" maxlength="60" placeholder="Ex: Gerente de Manufatura" autocomplete="off">
+                    </div>
+                    <button class="eui-btn eui-btn--primary" onclick="criarCargo()"><i class="fas fa-check"></i> Criar cargo</button>
+                    <span class="eui-field__hint">O cargo nasce sem nenhuma permissão: marque abaixo o que ele pode acessar e salve.</span>
                 </div>
 
                 <div class="eui-toolbar__search ua-perm-search">
@@ -349,7 +360,17 @@
             <button class="ua-drawer-tab" data-tab="auditoria" onclick="setDrawerTab('auditoria')">Auditoria</button>
         </div>
 
-        <div class="ua-drawer-pane active" data-pane="resumo"><div class="ua-kv" id="ua-detail-resumo"></div></div>
+        <div class="ua-drawer-pane active" data-pane="resumo">
+            <div class="ua-kv" id="ua-detail-resumo"></div>
+            <div class="ua-perm-toolbar" style="margin-top:16px;">
+                <div class="eui-field" style="margin-bottom:0; min-width:220px;">
+                    <label class="eui-field__label">Mudar cargo</label>
+                    <select id="ua-detail-cargo" class="eui-select"></select>
+                </div>
+                <button class="eui-btn eui-btn--ghost" onclick="alterarCargoUsuario()"><i class="fas fa-user-tag"></i> Alterar cargo</button>
+            </div>
+            <div class="eui-field__hint">Ao mudar o cargo, as sessões abertas do usuário são encerradas e ele precisa entrar de novo.</div>
+        </div>
         <div class="ua-drawer-pane" data-pane="permissoes"><div class="ua-list" id="ua-detail-permissoes"></div></div>
         <div class="ua-drawer-pane" data-pane="sessoes"><div class="ua-list" id="ua-detail-sessoes"></div></div>
         <div class="ua-drawer-pane" data-pane="auditoria"><div class="ua-list" id="ua-detail-auditoria"></div></div>
@@ -725,12 +746,110 @@
         const scope = document.getElementById('perm-scope').value;
         document.getElementById('wrap-role').style.display = scope === 'ROLE' ? '' : 'none';
         document.getElementById('wrap-user').style.display = scope === 'USER' ? '' : 'none';
+        atualizarBotaoExcluirCargo();
     }
+
+    let cargosDisponiveis = [];
+    let cargosPersonalizados = [];
 
     async function carregarCatalogoPermissoes() {
         const res = await fetch('/api/permissoes/catalogo');
         const data = await res.json();
         catalogoPermissoes = data.catalogo || [];
+        cargosDisponiveis = data.roles || [];
+        cargosPersonalizados = data.cargos_personalizados || [];
+        preencherSelectsDeCargo();
+    }
+
+    const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    // Acrescenta aos selects fixos do HTML os cargos que so' existem no
+    // servidor (os criados aqui e os novos do codigo), sem repetir opcao.
+    function preencherSelectsDeCargo() {
+        const completar = (select, ignorar = []) => {
+            [...select.options].forEach((o) => {
+                if (o.dataset.dinamico && !cargosDisponiveis.includes(o.value)) o.remove();
+            });
+            const presentes = new Set([...select.options].map((o) => semAcento(o.value)));
+            cargosDisponiveis.forEach((cargo) => {
+                if (presentes.has(semAcento(cargo)) || ignorar.includes(cargo)) return;
+                const opcao = new Option(cargo, cargo);
+                if (cargosPersonalizados.includes(cargo)) opcao.dataset.dinamico = '1';
+                select.add(opcao);
+            });
+        };
+        // Financeiro e Conferente sao cargos legados: nao se cria usuario novo neles.
+        completar(document.getElementById('reg-role'), ['Financeiro', 'Conferente']);
+        completar(document.getElementById('perm-role'));
+        atualizarBotaoExcluirCargo();
+    }
+
+    function atualizarBotaoExcluirCargo() {
+        const escopoCargo = document.getElementById('perm-scope').value === 'ROLE';
+        const personalizado = cargosPersonalizados.includes(document.getElementById('perm-role').value);
+        document.getElementById('btn-excluir-cargo').style.display = escopoCargo && personalizado ? '' : 'none';
+    }
+
+    function alternarNovoCargo() {
+        const wrap = document.getElementById('wrap-novo-cargo');
+        wrap.style.display = wrap.style.display === 'none' ? '' : 'none';
+        if (wrap.style.display !== 'none') document.getElementById('novo-cargo-nome').focus();
+    }
+
+    async function criarCargo() {
+        const nome = document.getElementById('novo-cargo-nome').value.trim();
+        if (!nome) { notify('Informe o nome do cargo.', 'error'); return; }
+        try {
+            const data = await api('/api/permissoes/cargos', { method: 'POST', body: JSON.stringify({ nome }) });
+            notify(data.msg || 'Cargo criado.', 'success');
+            document.getElementById('novo-cargo-nome').value = '';
+            document.getElementById('wrap-novo-cargo').style.display = 'none';
+            await carregarCatalogoPermissoes();
+            document.getElementById('perm-scope').value = 'ROLE';
+            alternarEscopoPermissao();
+            document.getElementById('perm-role').value = data.cargo;
+            atualizarBotaoExcluirCargo();
+            await carregarPermissoesAlvo();
+        } catch (err) {
+            notify(err.message || 'Falha ao criar cargo.', 'error');
+        }
+    }
+
+    // Sem popup do navegador: o primeiro clique arma o botao, o segundo exclui.
+    async function excluirCargoSelecionado() {
+        const btn = document.getElementById('btn-excluir-cargo');
+        const cargo = document.getElementById('perm-role').value;
+        const rotulo = '<i class="fas fa-trash"></i> Excluir cargo';
+        if (btn.dataset.armado !== cargo) {
+            btn.dataset.armado = cargo;
+            btn.innerHTML = `<i class="fas fa-trash"></i> Confirmar exclusão de ${escapeHtml(cargo)}`;
+            setTimeout(() => { btn.dataset.armado = ''; btn.innerHTML = rotulo; }, 5000);
+            return;
+        }
+        btn.dataset.armado = '';
+        btn.innerHTML = rotulo;
+        try {
+            await api(`/api/permissoes/cargos/${encodeURIComponent(cargo)}`, { method: 'DELETE' });
+            notify(`Cargo ${cargo} excluído.`, 'success');
+            await carregarCatalogoPermissoes();
+            await carregarPermissoesAlvo();
+        } catch (err) {
+            notify(err.message || 'Falha ao excluir cargo.', 'error');
+        }
+    }
+
+    async function alterarCargoUsuario() {
+        const user = (drawerDetalhes && drawerDetalhes.usuario) || {};
+        const role = document.getElementById('ua-detail-cargo').value;
+        if (!user.username || !role || role === user.role) return;
+        try {
+            await api(`/api/admin/usuario/${encodeURIComponent(user.username)}/cargo`, { method: 'POST', body: JSON.stringify({ role }) });
+            notify(`Cargo de ${user.username} alterado para ${role}.`, 'success');
+            await carregarUsuarios();
+            await openUserDrawer(user.username);
+        } catch (err) {
+            notify(err.message || 'Falha ao alterar cargo.', 'error');
+        }
     }
 
     function renderPermissoesGrid(efetivo, base = {}, overrides = {}) {
@@ -916,6 +1035,12 @@
             <div>Último login</div><div>${formatDatePt(user.ultimo_login_em)}</div>
             <div>Último acesso</div><div>${formatDatePt(user.ultimo_acesso_em)}</div>
         `;
+
+        const seletorCargo = document.getElementById('ua-detail-cargo');
+        seletorCargo.innerHTML = '';
+        cargosDisponiveis.forEach((cargo) => seletorCargo.add(new Option(cargo, cargo)));
+        if (user.role && !cargosDisponiveis.includes(user.role)) seletorCargo.add(new Option(user.role, user.role));
+        seletorCargo.value = user.role || '';
 
         const permissoes = Object.entries((payload.permissoes || {}).efetivo || {})
             .filter(([, v]) => !!v)

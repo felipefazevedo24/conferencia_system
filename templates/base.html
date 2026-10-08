@@ -415,6 +415,18 @@
                 </div>
                 {% endif %}
 
+                {% if can_access('PAGE_RH_REQUISICAO') or can_access('APROVAR_RH_DIRETORIA') or can_access('APROVAR_RH_FINANCEIRO') or can_access('PAGE_RH_GESTAO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-rh" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-people-group"></i><span>RH</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-rh">
+                        <a href="/rh/vagas" class="list-group-item list-group-item-action"><i class="fas fa-user-plus"></i> Requisição de vaga</a>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_ATUALIZACOES') or can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_EMAILS_NFE') or can_access('PAGE_PLANEJAMENTO_TAREFAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">

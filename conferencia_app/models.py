@@ -20,7 +20,7 @@ class Usuario(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(160), unique=True, nullable=True, index=True)
     password = db.Column(db.String(255), nullable=True)
-    role = db.Column(db.String(20), default="Logística")
+    role = db.Column(db.String(60), default="Logística")
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     nome_exibicao = db.Column(db.String(120), nullable=True)
     telefone = db.Column(db.String(40), nullable=True)
@@ -4577,3 +4577,140 @@ class AssistenciaProducaoPecaHistorico(db.Model):
     motivo = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
+class CargoAcesso(db.Model):
+    """Cargo (perfil de acesso) criado pela Gestao de Acessos, alem dos
+    fixos de auth.BASE_ROLE_PERMISSIONS. Nasce sem permissao nenhuma: o que
+    ele pode fazer vem so' das excecoes por cargo em PermissaoAcesso."""
+
+    __tablename__ = "cargo_acesso"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(60), nullable=False, unique=True, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class RhCargoVaga(db.Model):
+    """Cargo padronizado do RH (perfil + faixa salarial) usado na requisicao
+    de vaga. Nao confundir com CargoAcesso, que e' o perfil de acesso ao Sync.
+
+    A requisicao COPIA perfil e faixa na abertura: mudar o cadastro depois
+    nao altera o que a Diretoria/Financeiro ja aprovaram."""
+
+    __tablename__ = "rh_cargo_vaga"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    perfil = db.Column(db.Text)
+    faixa_min = db.Column(db.Numeric(12, 2))
+    faixa_max = db.Column(db.Numeric(12, 2))
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime)
+
+
+class RhRequisicaoVaga(db.Model):
+    """Requisicao de vaga (RH). Workflow:
+
+        Aguardando Diretoria -> Aguardando Financeiro -> Aguardando RH
+            -> Aprovada -> Publicada -> Encerrada
+
+    Reprovar em qualquer aprovacao manda pra "Em correção" (volta pro
+    solicitante, com motivo); reenviar recomeca da Diretoria, pra ninguem
+    aprovar uma versao diferente da que o anterior viu. Cancelar exige
+    justificativa e reabrir inicia um ciclo novo - o historico dos ciclos
+    anteriores fica em RhRequisicaoEvento.
+
+    token_publico fica em claro (nao so' o hash): o RH precisa reexibir o
+    link e o QR code da vaga a qualquer momento, e o link so' abre a pagina
+    de candidatura enquanto o status for Publicada."""
+
+    __tablename__ = "rh_requisicao_vaga"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(12), nullable=False, unique=True, index=True)
+    tipo = db.Column(db.String(20), nullable=False)  # substituicao / nova
+    cargo_id = db.Column(db.Integer, db.ForeignKey("rh_cargo_vaga.id"), index=True)
+    cargo_nome = db.Column(db.String(120), nullable=False)
+    perfil = db.Column(db.Text)
+    faixa_min = db.Column(db.Numeric(12, 2))
+    faixa_max = db.Column(db.Numeric(12, 2))
+    substituido_nome = db.Column(db.String(120))
+    departamento = db.Column(db.String(80))
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+    justificativa = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, index=True)
+    ciclo = db.Column(db.Integer, nullable=False, default=1)
+    solicitante = db.Column(db.String(100), nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime)
+    cancelamento_motivo = db.Column(db.Text)
+    titulo_publico = db.Column(db.String(160))
+    descricao_publica = db.Column(db.Text)
+    token_publico = db.Column(db.String(64), unique=True, index=True)
+    publicada_em = db.Column(db.DateTime)
+    publicada_por = db.Column(db.String(100))
+    encerrada_em = db.Column(db.DateTime)
+
+    eventos = db.relationship(
+        "RhRequisicaoEvento", backref="requisicao", cascade="all, delete-orphan",
+        order_by="RhRequisicaoEvento.id",
+    )
+    candidatos = db.relationship(
+        "RhCandidato", backref="requisicao", cascade="all, delete-orphan",
+        order_by="RhCandidato.id",
+    )
+
+
+class RhRequisicaoEvento(db.Model):
+    """Trilha da requisicao de vaga: quem fez o que, em qual ciclo."""
+
+    __tablename__ = "rh_requisicao_evento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    requisicao_id = db.Column(db.Integer, db.ForeignKey("rh_requisicao_vaga.id"), nullable=False, index=True)
+    ciclo = db.Column(db.Integer, nullable=False, default=1)
+    acao = db.Column(db.String(60), nullable=False)
+    comentario = db.Column(db.Text)
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class RhCandidato(db.Model):
+    """Candidatura recebida pela pagina publica da vaga (sem login). O
+    curriculo (so' PDF) fica no banco e so' sai por rota de Gestao do RH."""
+
+    __tablename__ = "rh_candidato"
+
+    id = db.Column(db.Integer, primary_key=True)
+    requisicao_id = db.Column(db.Integer, db.ForeignKey("rh_requisicao_vaga.id"), nullable=False, index=True)
+    nome = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(160), nullable=False, index=True)
+    telefone = db.Column(db.String(40))
+    mensagem = db.Column(db.Text)
+    curriculo_nome = db.Column(db.String(260))
+    curriculo_tamanho = db.Column(db.Integer)
+    # deferred: listar candidatos nao pode carregar todos os PDFs da vaga.
+    curriculo_dados = db.deferred(db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql")))
+    consentimento_em = db.Column(db.DateTime, nullable=False)
+    ip_address = db.Column(db.String(64), index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+
+
+class RhCandidatoAcesso(db.Model):
+    """Quem baixou o curriculo de qual candidato (dado pessoal - LGPD).
+    Guarda o nome do candidato porque o registro sobrevive a exclusao dele."""
+
+    __tablename__ = "rh_candidato_acesso"
+
+    id = db.Column(db.Integer, primary_key=True)
+    requisicao_id = db.Column(db.Integer, nullable=False, index=True)
+    candidato_id = db.Column(db.Integer, nullable=False, index=True)
+    candidato_nome = db.Column(db.String(120))
+    acao = db.Column(db.String(20), nullable=False)  # baixou / excluiu
+    usuario = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)

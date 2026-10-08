@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if vaga %}{{ vaga.titulo_publico }} | {% endif %}Trabalhe conosco — Columbia Machine Brasil</title>
+  <meta name="theme-color" content="#06070a">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+  <style>
+    /* Pagina isolada: nada do Sync (menu, scripts, CDN) carrega aqui. */
+    *, *::before, *::after { box-sizing: border-box; }
+    :root { --line: rgba(160, 184, 215, .24); --text: #eef5ff; --muted: #92a3bd; }
+    body {
+      margin: 0; min-height: 100vh; font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; color: var(--text);
+      background: radial-gradient(1200px 460px at 12% -5%, rgba(47, 137, 255, .24), transparent 58%), linear-gradient(180deg, #090b10 0%, #05060a 100%);
+    }
+    .hero { padding: 26px 20px 34px; border-bottom: 1px solid rgba(255,255,255,.08); background: linear-gradient(160deg, rgba(15,18,25,.95), rgba(8,9,13,.98)); }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand img { width: 52px; height: 52px; object-fit: contain; }
+    .brand span { color: #a9cdff; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .2em; }
+    h1 { font-size: clamp(22px, 4vw, 32px); line-height: 1.15; margin: 16px 0 4px; }
+    .subtitle { margin: 0; color: #c4d3ea; font-size: 14px; }
+    .main { max-width: 760px; margin: -14px auto 0; padding: 0 16px 60px; }
+    .section { background: rgba(16, 18, 24, .92); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.5); padding: 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    .descricao { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.65; color: #d6e2f5; margin: 0; }
+    label { display: block; font-size: 11px; font-weight: 800; color: #9bb0cd; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    input[type=text], input[type=email], input[type=tel], input[type=file], textarea {
+      width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 15px; font-family: inherit;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #4b9bff; }
+    textarea { resize: vertical; min-height: 90px; }
+    .field { margin-bottom: 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+    .ajuda { font-size: 12px; color: var(--muted); margin-top: 5px; }
+    .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: #c4d3ea; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .consent input { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; }
+    button { width: 100%; border: 0; border-radius: 10px; padding: 13px 18px; font-size: 15px; font-weight: 800; font-family: inherit; color: #fff; background: linear-gradient(135deg, #2f89ff, #1c6fe0); cursor: pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+    .msg { border-radius: 8px; padding: 11px 14px; font-size: 14px; font-weight: 600; margin-bottom: 14px; display: none; }
+    .msg.erro { display: block; background: rgba(251, 113, 133, .16); border: 1px solid rgba(251, 113, 133, .45); color: #fecdd3; }
+    .msg.ok { display: block; background: rgba(52, 211, 153, .16); border: 1px solid rgba(52, 211, 153, .45); color: #bbf7d0; }
+    /* Campo isca pra robo: fora da tela, nao "display:none" (robo simples pula campo escondido assim). */
+    .isca { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="brand"><img src="/static/columbia_logo.png" alt=""><span>Columbia Machine Brasil</span></div>
+      {% if vaga %}
+      <h1>{{ vaga.titulo_publico }}</h1>
+      <p class="subtitle">Trabalhe conosco{% if vaga.quantidade and vaga.quantidade > 1 %} · {{ vaga.quantidade }} vagas{% endif %}</p>
+      {% else %}
+      <h1>Vaga indisponível</h1>
+      <p class="subtitle">Esta vaga não está mais recebendo candidaturas.</p>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if vaga %}
+  <main class="main">
+    <section class="section">
+      <h2>Sobre a vaga</h2>
+      <p class="descricao">{{ vaga.descricao_publica }}</p>
+    </section>
+
+    <section class="section">
+      <h2>Candidate-se</h2>
+      <div class="msg" id="msg" role="status"></div>
+      <form id="form" novalidate>
+        <div class="isca" aria-hidden="true"><label for="site">Não preencha este campo</label><input type="text" id="site" name="site" tabindex="-1" autocomplete="off"></div>
+        <div class="field"><label for="nome">Nome completo</label><input type="text" id="nome" name="nome" maxlength="120" autocomplete="name" required></div>
+        <div class="grid2">
+          <div class="field"><label for="email">E-mail</label><input type="email" id="email" name="email" maxlength="160" autocomplete="email" required></div>
+          <div class="field"><label for="telefone">Telefone / WhatsApp</label><input type="tel" id="telefone" name="telefone" maxlength="40" autocomplete="tel" required></div>
+        </div>
+        <div class="field"><label for="curriculo">Currículo (PDF)</label><input type="file" id="curriculo" name="curriculo" accept="application/pdf,.pdf" required>
+          <div class="ajuda">Somente PDF, até {{ max_mb }} MB.</div></div>
+        <div class="field"><label for="mensagem">Mensagem (opcional)</label><textarea id="mensagem" name="mensagem" maxlength="2000"></textarea></div>
+        <div class="field">
+          <label class="consent"><input type="checkbox" id="consentimento" name="consentimento" value="1" required>
+            <span>Autorizo a Columbia Machine Brasil a usar os dados e o currículo enviados exclusivamente para este processo seletivo, conforme a Lei Geral de Proteção de Dados (LGPD). Cada e-mail participa uma vez por vaga.</span></label>
+        </div>
+        <button type="submit" id="enviar">Enviar candidatura</button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+  (function () {
+    var form = document.getElementById('form');
+    var msg = document.getElementById('msg');
+    var botao = document.getElementById('enviar');
+    var MAX = {{ max_mb }} * 1024 * 1024;
+    function avisar(texto, tipo) { msg.textContent = texto; msg.className = 'msg ' + tipo; msg.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var arquivo = document.getElementById('curriculo').files[0];
+      if (!document.getElementById('nome').value.trim() || !document.getElementById('email').value.trim() || !document.getElementById('telefone').value.trim()) return avisar('Preencha nome, e-mail e telefone.', 'erro');
+      if (!arquivo) return avisar('Anexe seu currículo em PDF.', 'erro');
+      if (!/\.pdf$/i.test(arquivo.name)) return avisar('O currículo precisa ser um arquivo PDF.', 'erro');
+      if (arquivo.size > MAX) return avisar('Currículo muito grande (máximo {{ max_mb }} MB).', 'erro');
+      if (!document.getElementById('consentimento').checked) return avisar('É preciso autorizar o uso dos seus dados para participar.', 'erro');
+
+      botao.disabled = true;
+      botao.textContent = 'Enviando…';
+      fetch({{ ('/api/vagas/' ~ token ~ '/candidatura') | tojson }}, { method: 'POST', body: new FormData(form) })
+        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (r) {
+          if (!r.ok) { botao.disabled = false; botao.textContent = 'Enviar candidatura'; return avisar(r.data.error || 'Não foi possível enviar. Tente novamente.', 'erro'); }
+          form.style.display = 'none';
+          avisar(r.data.message || 'Candidatura recebida. Obrigado!', 'ok');
+        })
+        .catch(function () { botao.disabled = false; botao.textContent = 'Enviar candidatura'; avisar('Falha de conexão. Tente novamente.', 'erro'); });
+    });
+  })();
+  </script>
+  {% endif %}
+</body>
+</html>

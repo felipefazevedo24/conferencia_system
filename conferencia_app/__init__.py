@@ -81,6 +81,7 @@ from .routes.viagem_routes import viagem_bp, motorista_bp
 from .routes.comex_routes import comex_bp
 from .routes.comex_fornecedor_routes import comex_fornecedor_bp
 from .routes.divergencia_aprovacao_routes import divergencia_aprovacao_bp
+from .routes.rh_vaga_routes import rh_vaga_bp
 
 
 def create_app(test_config=None) -> Flask:
@@ -141,6 +142,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(motorista_bp)
     app.register_blueprint(solicitacao_nf_bp)
     app.register_blueprint(divergencia_aprovacao_bp)
+    app.register_blueprint(rh_vaga_bp)
 
     register_error_handlers(app)
 
