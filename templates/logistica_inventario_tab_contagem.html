@@ -52,7 +52,7 @@
                     <option value="">Selecione o motivo…</option>
                     {% for motivo in motivos_inventario %}<option value="{{ motivo }}">{{ motivo }}</option>{% endfor %}
                 </select>
-                <div class="invc-hint">Em "Correção de saldo", só vai para ajuste se a quantidade for diferente do GRV. Nos demais motivos a contagem sempre vai para análise do gestor.</div>
+                <div class="invc-hint">Em "Item sem Saldo", só vai para ajuste se a quantidade for diferente do GRV. Nos demais motivos a contagem sempre vai para análise do gestor. O motivo vira o Tipo de Ajuste do relatório.</div>
             </div>
             <div class="invc-field">
                 <label for="inv-local">Local (opcional)</label>

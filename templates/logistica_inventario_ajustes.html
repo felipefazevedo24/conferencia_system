@@ -907,6 +907,14 @@
             return;
         }
         const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
+        // O Tipo de Ajuste e' um so' pro lote e nasce do motivo da contagem:
+        // motivos diferentes vao em relatorios separados. Motivo fora da
+        // lista atual (contagem antiga) nao entra na comparacao.
+        const motivosLote = [...new Set(itens.map((a) => a.motivo_inventario).filter((m) => opcoesRelatorio.tipos_ajuste.includes(m)))];
+        if (motivosLote.length > 1) {
+            toast(`Os itens selecionados têm motivos de inventário diferentes (${motivosLote.join(", ")}). Gere um relatório por motivo.`, "error");
+            return;
+        }
         $("ia-relatorio-qtd").textContent = itens.length;
         // Justificativa vem pre-carregada da confirmacao da divergencia
         // (gestor_justificativa) - atrelada a esse item, nao um texto
@@ -921,9 +929,10 @@
                 <td>${imagemJustificativaCellHtml(a)}</td>
             </tr>
         `).join("");
-        $("ia-rel-tipo-ajuste").value = opcoesRelatorio.tipos_ajuste[0] || "";
+        // Ja' vem com o motivo escolhido na contagem; o gestor ainda pode trocar.
+        $("ia-rel-tipo-ajuste").value = motivosLote[0] || opcoesRelatorio.tipos_ajuste[0] || "";
         $("ia-rel-tipo-detalhe").value = "";
-        $("ia-rel-tipo-detalhe-wrap").style.display = "none";
+        $("ia-rel-tipo-detalhe-wrap").style.display = $("ia-rel-tipo-ajuste").value === "Outros" ? "" : "none";
         $("ia-rel-motivo").value = opcoesRelatorio.motivos_ajuste[0] || "";
         $("ia-rel-deposito-tipo").value = opcoesRelatorio.deposito_tipos[0] || "";
         $("ia-rel-deposito-local").value = "";

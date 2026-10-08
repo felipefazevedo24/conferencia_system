@@ -1,4 +1,4 @@
-"""Inventario: quem conta informa o motivo. "Correção de saldo" so' abre
+"""Inventario: quem conta informa o motivo. "Item sem Saldo" so' abre
 ajuste quando a quantidade difere do GRV; nos demais motivos a contagem
 sempre vai pro gestor analisar, mesmo batendo."""
 from unittest.mock import patch
@@ -33,22 +33,22 @@ def test_motivo_e_obrigatorio_e_vem_da_lista(contar):
     with contar.app.app_context():
         assert LogisticaInventarioInicial.query.count() == 0
 
-    resp = contar(motivo="Inventário rotativo")
+    resp = contar(motivo="Inventário Cíclico")
     assert resp.status_code == 201, resp.get_json()
-    assert resp.get_json()["registro"]["motivo"] == "Inventário rotativo"
+    assert resp.get_json()["registro"]["motivo"] == "Inventário Cíclico"
 
 
-def test_correcao_de_saldo_so_abre_ajuste_quando_a_quantidade_difere(contar):
-    assert contar(motivo="Correção de saldo").get_json()["ajuste_aberto"] is None
-    diverge = contar(motivo="Correção de saldo", codigo_produto="SKU-B", quantidade=5).get_json()
+def test_item_sem_saldo_so_abre_ajuste_quando_a_quantidade_difere(contar):
+    assert contar(motivo="Item sem Saldo").get_json()["ajuste_aberto"] is None
+    diverge = contar(motivo="Item sem Saldo", codigo_produto="SKU-B", quantidade=5).get_json()
     assert diverge["ajuste_aberto"]["diferenca"] == -3
     with contar.app.app_context():
         ajuste = LogisticaInventarioAjuste.query.one()
-        assert (ajuste.codigo_produto, ajuste.motivo_inventario) == ("SKU-B", "Correção de saldo")
+        assert (ajuste.codigo_produto, ajuste.motivo_inventario) == ("SKU-B", "Item sem Saldo")
     assert contar.teams.call_count == 1
 
 
-@pytest.mark.parametrize("motivo", [m for m in INVENTARIO_MOTIVOS if m != "Correção de saldo"])
+@pytest.mark.parametrize("motivo", [m for m in INVENTARIO_MOTIVOS if m != "Item sem Saldo"])
 def test_demais_motivos_sempre_vao_para_analise_do_gestor(contar, motivo):
     # Quantidade igual a do GRV: mesmo assim abre o ajuste, com diferenca zero.
     resp = contar(motivo=motivo).get_json()
@@ -72,3 +72,42 @@ def test_tela_de_contagem_oferece_os_motivos(contar):
     assert 'id="inv-motivo"' in html
     for motivo in INVENTARIO_MOTIVOS:
         assert f'<option value="{motivo}">' in html
+
+
+def test_motivos_da_contagem_sao_os_tipos_de_ajuste_do_formulario():
+    from conferencia_app.models import RELATORIO_AJUSTE_TIPOS
+
+    assert INVENTARIO_MOTIVOS == RELATORIO_AJUSTE_TIPOS
+
+
+def test_relatorio_nao_mistura_motivos_e_aceita_o_tipo_do_motivo(contar):
+    from conferencia_app.extensions import db
+
+    contar(motivo="Inventário Cíclico")
+    contar(motivo="Inventário Geral", codigo_produto="SKU-B", quantidade=5)
+    with contar.app.app_context():
+        ajustes = LogisticaInventarioAjuste.query.order_by(LogisticaInventarioAjuste.id).all()
+        for ajuste in ajustes:
+            ajuste.status_modulo = "Relatorio"
+        ciclico, geral = [a.id for a in ajustes]
+        db.session.commit()
+
+    def gerar(ids, tipo):
+        with patch(f"{ROTAS}.teams_service.notificar_relatorio_ajuste_inventario"):
+            return contar.client.post("/api/logistica/inventario-ajustes/relatorio", json={
+                "ajuste_ids": ids, "tipo_ajuste": tipo, "motivo_ajuste": "Erro de contagem",
+                "deposito_tipo": "Depósito - Principal",
+                "justificativas": {str(i): "Conferido pelo gestor." for i in ids},
+            })
+
+    misto = gerar([ciclico, geral], "Inventário Cíclico")
+    assert misto.status_code == 400
+    assert "motivos de inventário diferentes" in misto.get_json()["error"]
+
+    # Lote de um motivo so': gera; o gestor pode manter o tipo ou trocar.
+    assert gerar([ciclico], "Inventário Cíclico").status_code == 200
+    assert gerar([geral], "Outros").status_code == 400  # "Outros" exige o detalhe, como antes
+
+    # A tela recebe o motivo de cada ajuste pra pre-selecionar o Tipo de Ajuste.
+    listado = contar.client.get("/api/logistica/inventario-ajustes").get_json()["ajustes"]
+    assert {a["id"]: a["motivo_inventario"] for a in listado} == {ciclico: "Inventário Cíclico", geral: "Inventário Geral"}

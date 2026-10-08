@@ -1805,14 +1805,17 @@ class WMSInventarioCiclico(db.Model):
 
 
 # Motivo da contagem, escolhido por quem conta (obrigatorio desde 08/10/2026;
-# contagens anteriores ficam sem). So' "Correção de saldo" segue a regra
-# antiga de abrir ajuste apenas quando a quantidade difere do GRV: nos
+# contagens anteriores ficam sem). As opcoes sao as MESMAS do "Tipo de
+# Ajuste" do FORM-08.52 (RELATORIO_AJUSTE_TIPOS, mais abaixo): o relatorio ja'
+# abre com o tipo igual ao motivo da contagem. So' "Item sem Saldo" segue a
+# regra antiga de abrir ajuste apenas quando a quantidade difere do GRV: nos
 # demais a contagem SEMPRE vai pro gestor analisar, mesmo batendo.
-INVENTARIO_MOTIVO_CORRECAO_SALDO = "Correção de saldo"
+INVENTARIO_MOTIVO_SO_DIVERGENCIA = "Item sem Saldo"
 INVENTARIO_MOTIVOS = [
-    "Transferência de depósito",
-    INVENTARIO_MOTIVO_CORRECAO_SALDO,
-    "Inventário rotativo",
+    "Inventário Cíclico",
+    "Inventário Geral",
+    INVENTARIO_MOTIVO_SO_DIVERGENCIA,
+    "Transferência de Código",
     "Outros",
 ]
 

@@ -8,7 +8,7 @@ from conferencia_app.models import LogisticaInventarioAjuste, LogisticaInventari
 from tests.test_app import build_test_app, login_admin
 
 ROTAS = "conferencia_app.routes.logistica_inventario_routes"
-MOTIVO = "Correção de saldo"
+MOTIVO = "Item sem Saldo"
 ESTOQUE = {
     "por_local": {"SKU-A|A01-02": {"qtde_total": 4}},
     "por_codigo": {"SKU-A": {"qtde_total": 10.0}, "SKU-B": {"qtde_total": 8.0}},

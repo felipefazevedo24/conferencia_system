@@ -45,7 +45,7 @@ def test_contagem_trava_unidade_e_exige_lote_conforme_grv(tmp_path):
             lote_req = page.locator("#inv-lote-req")
 
             # Item com lote: unidade trava em KG e o asterisco do lote aparece.
-            page.select_option("#inv-motivo", "Correção de saldo")
+            page.select_option("#inv-motivo", "Item sem Saldo")
             page.fill("#inv-local", "A01")
             page.fill("#inv-codigo", "CHAPA-01")
             page.locator("#inv-codigo").blur()

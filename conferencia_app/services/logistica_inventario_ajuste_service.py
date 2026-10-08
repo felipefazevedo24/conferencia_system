@@ -446,6 +446,16 @@ def gerar_relatorio_ajuste(
             "ou estão em outra etapa)."
         )
 
+    # O Tipo de Ajuste do formulario e' um so' pro lote e nasce do motivo da
+    # contagem: itens de motivos diferentes vao em relatorios separados.
+    # Motivo fora da lista atual (contagem antiga) nao entra na comparacao.
+    motivos_lote = sorted({a.motivo_inventario for a in ajustes if a.motivo_inventario in RELATORIO_AJUSTE_TIPOS})
+    if len(motivos_lote) > 1:
+        raise ValueError(
+            "Os itens selecionados têm motivos de inventário diferentes ("
+            + ", ".join(motivos_lote) + "). Gere um relatório por motivo."
+        )
+
     # Justificativa por item: usa a que o gestor mandar agora (edicao no
     # relatorio) ou, se nao mandar, a que ja tinha sido dada na aprovacao
     # (Modulo 02). Nunca fica generica - cada item precisa da sua.

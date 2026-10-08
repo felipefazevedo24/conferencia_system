@@ -23,7 +23,7 @@ from ..models import (
     ChapaControleExclusao,
     ChapaAuditoria,
     ChapaLoteCorrecao,
-    INVENTARIO_MOTIVO_CORRECAO_SALDO,
+    INVENTARIO_MOTIVO_SO_DIVERGENCIA,
     INVENTARIO_MOTIVOS,
     ItemNota,
     LogisticaInventarioAjuste,
@@ -821,7 +821,7 @@ def criar_inventario_inicial():
         descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
         ajuste = ajuste_svc.detectar_divergencia(
             row, qtde_grv, custo_medio, descricao_produto,
-            sempre_abrir=motivo != INVENTARIO_MOTIVO_CORRECAO_SALDO,
+            sempre_abrir=motivo != INVENTARIO_MOTIVO_SO_DIVERGENCIA,
         )
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
