@@ -46,6 +46,14 @@
     </div>
     <div class="eui-card__body">
         <div class="invc-grid">
+            <div class="invc-field" style="grid-column: 1 / -1;">
+                <label for="inv-motivo">Motivo do inventário <span class="invc-req">*</span></label>
+                <select id="inv-motivo" class="eui-input">
+                    <option value="">Selecione o motivo…</option>
+                    {% for motivo in motivos_inventario %}<option value="{{ motivo }}">{{ motivo }}</option>{% endfor %}
+                </select>
+                <div class="invc-hint">Em "Correção de saldo", só vai para ajuste se a quantidade for diferente do GRV. Nos demais motivos a contagem sempre vai para análise do gestor.</div>
+            </div>
             <div class="invc-field">
                 <label for="inv-local">Local (opcional)</label>
                 <div class="invc-scan">
@@ -265,7 +273,9 @@
         const quantidadeTxt = (document.getElementById('inv-quantidade').value || '').trim();
         const lote = (document.getElementById('inv-lote').value || '').trim();
         const observacao = (document.getElementById('inv-obs').value || '').trim();
+        const motivo = document.getElementById('inv-motivo').value;
 
+        if (!motivo) { showStatus('Selecione o motivo do inventário.', 'err'); document.getElementById('inv-motivo').focus(); return; }
         const extras = linhasExtras();
         if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
         if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }
@@ -311,6 +321,7 @@
                     quantidade,
                     lote,
                     observacao,
+                    motivo,
                     ...(lotes ? { lotes } : {}),
                 }),
             });

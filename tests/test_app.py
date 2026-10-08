@@ -3691,11 +3691,11 @@ def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
         return_value=estoque_fake,
     ):
         client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01-02", "codigo_produto": "SKU-OK",
+            "motivo": "Correção de saldo", "local_codigo": "A01-02", "codigo_produto": "SKU-OK",
             "unidade_medida": "UN", "quantidade": 10,
         })
         client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01-03", "codigo_produto": "SKU-DIV",
+            "motivo": "Correção de saldo", "local_codigo": "A01-03", "codigo_produto": "SKU-DIV",
             "unidade_medida": "UN", "quantidade": 5,
         })
 
@@ -3741,11 +3741,11 @@ def test_inventario_ajuste_calcula_impacto_financeiro_com_custo_medio_do_grv(tmp
         return_value=estoque_fake,
     ):
         resp_com_custo = client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01-05", "codigo_produto": "SKU-CUSTO",
+            "motivo": "Correção de saldo", "local_codigo": "A01-05", "codigo_produto": "SKU-CUSTO",
             "unidade_medida": "UN", "quantidade": 10,
         })
         resp_sem_custo = client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01-06", "codigo_produto": "SKU-SEM-CUSTO",
+            "motivo": "Correção de saldo", "local_codigo": "A01-06", "codigo_produto": "SKU-SEM-CUSTO",
             "unidade_medida": "UN", "quantidade": 5,
         })
 
@@ -7590,14 +7590,14 @@ def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
 
         # Item com lote: sem lote nao salva.
         sem_lote = client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN", "quantidade": 480,
+            "motivo": "Correção de saldo", "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN", "quantidade": 480,
         })
         assert sem_lote.status_code == 400
         assert "lote" in sem_lote.get_json()["error"]
 
         # Com lote salva - e a unidade gravada e' a do GRV, nao a da tela.
         com_lote = client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN",
+            "motivo": "Correção de saldo", "local_codigo": "A01", "codigo_produto": "CHAPA-01", "unidade_medida": "UN",
             "quantidade": 480, "lote": "L-2026-07",
         })
         assert com_lote.status_code == 201
@@ -7605,12 +7605,12 @@ def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
 
         # Item sem controle de lote: lote segue opcional.
         assert client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A02", "codigo_produto": "PARAF-01", "unidade_medida": "UN", "quantidade": 90,
+            "motivo": "Correção de saldo", "local_codigo": "A02", "codigo_produto": "PARAF-01", "unidade_medida": "UN", "quantidade": 90,
         }).status_code == 201
 
         # Bridge antiga (sem tipo_controle): nao da pra afirmar lote -> nao exige.
         assert client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A03", "codigo_produto": "LEGADO-01", "unidade_medida": "UN", "quantidade": 3,
+            "motivo": "Correção de saldo", "local_codigo": "A03", "codigo_produto": "LEGADO-01", "unidade_medida": "UN", "quantidade": 3,
         }).status_code == 201
 
     # GRV fora do ar: a contagem nao para, vale a unidade escolhida na tela.
@@ -7619,7 +7619,7 @@ def test_inventario_contagem_usa_unidade_e_controle_de_lote_do_grv(tmp_path):
             "disponivel": False, "encontrado": False,
         }
         resp = client.post("/api/logistica/inventario-inicial", json={
-            "local_codigo": "A04", "codigo_produto": "CHAPA-01", "unidade_medida": "M", "quantidade": 2,
+            "motivo": "Correção de saldo", "local_codigo": "A04", "codigo_produto": "CHAPA-01", "unidade_medida": "M", "quantidade": 2,
         })
         assert resp.status_code == 201
         assert resp.get_json()["registro"]["unidade_medida"] == "M"

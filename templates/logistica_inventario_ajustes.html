@@ -427,7 +427,7 @@
                 <td class="ia-select-col">${checkboxHtml}</td>
                 <td>${escapeHtml(a.criado_em)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
-                <td>${escapeHtml(a.codigo_produto)}</td>
+                <td>${escapeHtml(a.codigo_produto)}${a.motivo_inventario ? `<div class="ia-hist">Motivo: ${escapeHtml(a.motivo_inventario)}</div>` : ""}</td>
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
                 <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>

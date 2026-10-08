@@ -1804,6 +1804,19 @@ class WMSInventarioCiclico(db.Model):
     aprovado_em = db.Column(db.DateTime)
 
 
+# Motivo da contagem, escolhido por quem conta (obrigatorio desde 08/10/2026;
+# contagens anteriores ficam sem). So' "Correção de saldo" segue a regra
+# antiga de abrir ajuste apenas quando a quantidade difere do GRV: nos
+# demais a contagem SEMPRE vai pro gestor analisar, mesmo batendo.
+INVENTARIO_MOTIVO_CORRECAO_SALDO = "Correção de saldo"
+INVENTARIO_MOTIVOS = [
+    "Transferência de depósito",
+    INVENTARIO_MOTIVO_CORRECAO_SALDO,
+    "Inventário rotativo",
+    "Outros",
+]
+
+
 class LogisticaInventarioInicial(db.Model):
     """Inventario inicial simplificado da operacao de Logistica."""
 
@@ -1816,6 +1829,7 @@ class LogisticaInventarioInicial(db.Model):
     quantidade = db.Column(db.Float, nullable=False, default=0)
     lote = db.Column(db.String(120))
     observacao = db.Column(db.String(800))
+    motivo = db.Column(db.String(60))  # um de INVENTARIO_MOTIVOS
     criado_por = db.Column(db.String(100), nullable=False, index=True)
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
@@ -1897,6 +1911,8 @@ class LogisticaInventarioAjuste(db.Model):
     descricao_produto = db.Column(db.String(200))
     local_codigo = db.Column(db.String(120), nullable=False, index=True)
     unidade_medida = db.Column(db.String(20), nullable=False, default="UN")
+    # Snapshot do motivo da contagem que abriu o ajuste (INVENTARIO_MOTIVOS).
+    motivo_inventario = db.Column(db.String(60))
 
     qtde_contada = db.Column(db.Float, nullable=False)
     qtde_estoque_no_momento = db.Column(db.Float, nullable=False)

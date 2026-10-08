@@ -56,12 +56,13 @@
                         <th>Qtd GRV</th>
                         <th>Situação</th>
                         <th>Lote</th>
+                        <th>Motivo</th>
                         <th>Obs</th>
                         <th>Usuário</th>
                     </tr>
                 </thead>
                 <tbody id="tb-consulta">
-                    <tr><td colspan="10" style="text-align:center;color:var(--eui-muted);padding:14px;">Carregando...</td></tr>
+                    <tr><td colspan="11" style="text-align:center;color:var(--eui-muted);padding:14px;">Carregando...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -122,7 +123,7 @@
 
     function render(rows) {
         if (!rows || !rows.length) {
-            tb.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--eui-muted);padding:14px;">Nenhum registro encontrado.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--eui-muted);padding:14px;">Nenhum registro encontrado.</td></tr>';
             return;
         }
         tb.innerHTML = rows.map((r) => `
@@ -135,6 +136,7 @@
                 <td>${(r.qtde_grv === null || r.qtde_grv === undefined) ? '—' : fmtQtd(r.qtde_grv)}</td>
                 <td>${situacaoHtml(r)}</td>
                 <td>${(r.lotes || []).length ? r.lotes.map((l) => `<div style="white-space:nowrap;">${esc(l.lote)}: <b>${fmtQtd(l.quantidade)}</b></div>`).join('') : esc(r.lote || '-')}</td>
+                <td>${esc(r.motivo || '-')}</td>
                 <td>${esc(r.observacao || '-')}</td>
                 <td>${esc(r.criado_por || '-')}</td>
             </tr>
@@ -159,7 +161,7 @@
                 avisoGrv.style.display = 'none';
             }
         } catch (err) {
-            tb.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--eui-danger,#b91c1c);padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+            tb.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--eui-danger,#b91c1c);padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
         }
     }
 

@@ -23,6 +23,8 @@ from ..models import (
     ChapaControleExclusao,
     ChapaAuditoria,
     ChapaLoteCorrecao,
+    INVENTARIO_MOTIVO_CORRECAO_SALDO,
+    INVENTARIO_MOTIVOS,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -117,6 +119,7 @@ def _fmt_registro(row: LogisticaInventarioInicial, incluir_grv: bool = False) ->
         "lote": row.lote or "",
         "lotes": [{"lote": item.lote, "quantidade": item.quantidade} for item in row.lotes],
         "observacao": row.observacao or "",
+        "motivo": row.motivo or "",
         "criado_por": row.criado_por,
         "criado_em": row.criado_em.isoformat() if row.criado_em else None,
         "atualizado_em": row.atualizado_em.isoformat() if row.atualizado_em else None,
@@ -278,6 +281,7 @@ def _render_inventario(aba: str):
         user=session["username"],
         user_role=session.get("role", ""),
         aba_inicial=aba,
+        motivos_inventario=INVENTARIO_MOTIVOS,
         pode_inventariar=has_permission(PERMISSION),
         pode_analisar=_pode_analisar(),
         pode_validar=has_permission(PERMISSION_VALIDACAO),
@@ -649,6 +653,7 @@ def exportar_inventario_inicial_excel():
         "Lote",
         "Observacao",
         "Criado Por",
+        "Motivo",
     ]
     if comparar_grv:
         headers += ["Qtde GRV", "Divergente"]
@@ -664,6 +669,7 @@ def exportar_inventario_inicial_excel():
             ("; ".join(f"{item.lote}: {item.quantidade:g}" for item in row.lotes) if row.lotes else (row.lote or "")),
             row.observacao or "",
             row.criado_por,
+            row.motivo or "",
         ]
         if comparar_grv:
             qtde_grv = row.qtde_grv_no_momento
@@ -702,7 +708,10 @@ def criar_inventario_inicial():
     unidade_medida = str(payload.get("unidade_medida") or "UN").strip().upper() or "UN"
     lote = str(payload.get("lote") or "").strip()
     observacao = str(payload.get("observacao") or "").strip()
+    motivo = str(payload.get("motivo") or "").strip()
 
+    if motivo not in INVENTARIO_MOTIVOS:
+        return jsonify({"error": "Selecione o motivo do inventario."}), 400
     # Local e' opcional (decisao da logistica em 08/10/2026): sem ele a
     # contagem compara com o saldo total do codigo no GRV.
     if not codigo_produto:
@@ -762,6 +771,7 @@ def criar_inventario_inicial():
         quantidade=quantidade,
         lote=lote[:120] if lote else None,
         observacao=observacao[:800] if observacao else None,
+        motivo=motivo,
         criado_por=session.get("username", "sistema"),
         atualizado_em=agora_br(),
     )
@@ -809,9 +819,15 @@ def criar_inventario_inicial():
         row.grv_consultado_em = agora_br()
         db.session.commit()
         descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
-        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
+        ajuste = ajuste_svc.detectar_divergencia(
+            row, qtde_grv, custo_medio, descricao_produto,
+            sempre_abrir=motivo != INVENTARIO_MOTIVO_CORRECAO_SALDO,
+        )
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
+        # O card do Teams e' de DIVERGENCIA: contagem que bateu e so' foi pra
+        # analise por causa do motivo fica na fila do gestor, sem card.
+        if ajuste and abs(ajuste.diferenca) > ajuste_svc.TOLERANCIA_DIVERGENCIA:
             # Aviso no Teams pro gestor validar - assincrono, nao afeta a contagem.
             base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
             teams_service.notificar_divergencia_inventario_gestor(
@@ -898,6 +914,7 @@ def _fmt_ajuste(a) -> dict:
         "id": a.id,
         "codigo_produto": a.codigo_produto,
         "local_codigo": a.local_codigo,
+        "motivo_inventario": a.motivo_inventario or "",
         "unidade_medida": a.unidade_medida,
         "qtde_contada": a.qtde_contada,
         "qtde_estoque_no_momento": a.qtde_estoque_no_momento,
