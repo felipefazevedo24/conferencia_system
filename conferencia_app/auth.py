@@ -54,6 +54,7 @@ PERMISSION_CATALOG = {
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
+    "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO": "Compras > Homologação de fornecedores > Validação financeira (parecer do Financeiro)",
     "PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento (ver o painel)",
     "MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento > Tratar (o que será feito e situação)",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
@@ -121,6 +122,7 @@ BASE_ROLE_PERMISSIONS = {
     "Financeiro": {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
+        "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO",
     },
     "Controladoria": {
         "PAGE_FISCAL_LIBERADAS",

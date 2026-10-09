@@ -4,7 +4,9 @@ Regras de negocio: pontuacao do formulario, workflow de aprovacao e
 controle de validade. A definicao do formulario em si (secoes, perguntas
 e pesos) fica em compras_homologacao_form.py.
 
-Workflow:
+Workflow (o F 066 rev. 04 passa pela validacao financeira antes do gestor -
+ver compras_homologacao_financeiro_service; o formulario antigo vai direto):
+    Rascunho ---enviar--> [Validacao financeira --aprovar-->] Em aprovacao
     Rascunho ---enviar--> Em aprovacao ---homologar--> Homologado
                                |         \\--reprovar--> Reprovado
                                \\--devolver--> Rascunho
@@ -401,16 +403,24 @@ def enviar_para_aprovacao(homologacao: Homologacao, usuario: str) -> Homologacao
         raise ValueError("Só um rascunho pode ser enviado para aprovação.")
     validar_para_envio(homologacao)
     recalcular(homologacao)
-    homologacao.status = Homologacao.STATUS_EM_APROVACAO
     homologacao.enviado_em = agora_br()
     homologacao.enviado_por = usuario
+    if eh_rev04(homologacao):
+        # Rev. 04: o Financeiro da' o parecer antes de ir pro gestor.
+        from . import compras_homologacao_financeiro_service as fin_svc
+        fin_svc.abrir_rodada(homologacao, usuario)
+    else:
+        homologacao.status = Homologacao.STATUS_EM_APROVACAO
     db.session.commit()
     return homologacao
 
 
 def devolver_para_rascunho(homologacao: Homologacao, usuario: str, motivo: str = "") -> Homologacao:
-    if homologacao.status != Homologacao.STATUS_EM_APROVACAO:
+    if homologacao.status not in (Homologacao.STATUS_EM_APROVACAO, Homologacao.STATUS_VALIDACAO_FINANCEIRA):
         raise ValueError("Só uma homologação em aprovação pode ser devolvida.")
+    if homologacao.status == Homologacao.STATUS_VALIDACAO_FINANCEIRA:
+        from . import compras_homologacao_financeiro_service as fin_svc
+        fin_svc.cancelar_rodada(homologacao)
     homologacao.status = Homologacao.STATUS_RASCUNHO
     homologacao.enviado_em = None
     homologacao.enviado_por = None
@@ -521,6 +531,7 @@ def metricas(registros: list[Homologacao]) -> dict:
     contagem = {
         "total": len(registros),
         Homologacao.STATUS_RASCUNHO: 0,
+        Homologacao.STATUS_VALIDACAO_FINANCEIRA: 0,
         Homologacao.STATUS_EM_APROVACAO: 0,
         Homologacao.STATUS_HOMOLOGADO: 0,
         Homologacao.STATUS_REPROVADO: 0,

@@ -2337,6 +2337,9 @@ class ComprasHomologacaoFornecedor(db.Model):
     # Self assessment: link publico aberto, fornecedor preenchendo. Cabe no
     # String(20) da coluna ("Aguardando fornecedor" nao caberia).
     STATUS_COM_FORNECEDOR = "Com fornecedor"
+    # F 066 rev. 04: parecer do Financeiro antes de ir pro gestor (20
+    # caracteres - o limite da coluna). Reprovado aqui volta pra Rascunho.
+    STATUS_VALIDACAO_FINANCEIRA = "Validação financeira"
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -2431,6 +2434,12 @@ class ComprasHomologacaoFornecedor(db.Model):
         cascade="all, delete-orphan",
         order_by="ComprasHomologacaoConvite.id",
     )
+    validacoes_financeiras = db.relationship(
+        "ComprasHomologacaoFinanceiro",
+        backref="homologacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoFinanceiro.id",
+    )
     planos_acao = db.relationship(
         "ComprasHomologacaoPlanoAcao",
         backref="homologacao",
@@ -2498,6 +2507,65 @@ class ComprasHomologacaoConvite(db.Model):
     enviado_por = db.Column(db.String(100))
     respondido_em = db.Column(db.DateTime)
     cancelado_em = db.Column(db.DateTime)
+
+
+class ComprasHomologacaoFinanceiro(db.Model):
+    """Validacao financeira de uma homologacao (F 066 rev. 04) - uma linha por
+    rodada: cada envio de Compras abre uma nova, e as anteriores ficam como
+    historico (ex.: reprovada, corrigida e reenviada).
+
+    Pendente -> Aprovado (segue pro gestor) | Reprovado (volta pra Rascunho,
+    com o motivo) | Cancelado (Compras recolheu o envio)."""
+
+    __tablename__ = "compras_homologacao_financeiro"
+
+    STATUS_PENDENTE = "Pendente"
+    STATUS_APROVADO = "Aprovado"
+    STATUS_REPROVADO = "Reprovado"
+    STATUS_CANCELADO = "Cancelado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True
+    )
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDENTE, index=True)
+    solicitado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    solicitado_por = db.Column(db.String(100))
+
+    # Campos de analise (todos opcionais - o parecer e' o que decide).
+    restricao_serasa = db.Column(db.String(3))  # Sim | Não
+    score = db.Column(db.String(40))
+    limite_credito = db.Column(db.Float)
+    condicao_pagamento = db.Column(db.String(160))
+    observacao = db.Column(db.Text)
+
+    decidido_em = db.Column(db.DateTime)
+    decidido_por = db.Column(db.String(100))
+
+    anexos = db.relationship(
+        "ComprasHomologacaoFinanceiroAnexo",
+        backref="validacao",
+        cascade="all, delete-orphan",
+        order_by="ComprasHomologacaoFinanceiroAnexo.id",
+    )
+
+
+class ComprasHomologacaoFinanceiroAnexo(db.Model):
+    """Documento da analise financeira (consulta de credito, Serasa, balanco),
+    guardado no banco como as demais evidencias da homologacao."""
+
+    __tablename__ = "compras_homologacao_financeiro_anexo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    validacao_id = db.Column(
+        db.Integer, db.ForeignKey("compras_homologacao_financeiro.id"), nullable=False, index=True
+    )
+    nome_arquivo = db.Column(db.String(260))
+    content_type = db.Column(db.String(80))
+    tamanho_bytes = db.Column(db.Integer)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    enviado_por = db.Column(db.String(100))
 
 
 class ComprasHomologacaoPlanoAcao(db.Model):

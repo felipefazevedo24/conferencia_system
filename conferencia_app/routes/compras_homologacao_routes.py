@@ -8,7 +8,7 @@ from io import BytesIO
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 
-from ..auth import is_admin_session, permission_required
+from ..auth import has_permission, is_admin_session, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     ComprasHomologacaoEvidencia,
@@ -17,6 +17,7 @@ from ..models import (
 )
 from ..services import compras_homologacao_form as form
 from ..services import compras_homologacao_form_rev04 as form_r04
+from ..services import compras_homologacao_financeiro_service as fin_svc
 from ..services import compras_homologacao_pdf as pdf_svc
 from ..services import compras_homologacao_plano_service as plano_svc
 from ..services import compras_homologacao_service as svc
@@ -106,6 +107,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
     dados["itens_faltando"] = len(svc.itens_faltando(homologacao))
     dados["itens_sem_evidencia"] = len(svc.pendencias_evidencia(homologacao))
     dados["itens_sem_justificativa"] = len(svc.pendencias_justificativa(homologacao))
+    dados["financeiro"] = _fmt_financeiro(homologacao)
     dados["plano_acao"] = _fmt_plano(plano_svc.plano_ativo(homologacao), "/api/compras/homologacao/planos/evidencias/{id}")
     dados["plano_pode_criar"] = (
         not dados["plano_acao"]
@@ -122,6 +124,39 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "respondido_em": _dt(convite.respondido_em),
     } if convite else None
     return dados
+
+
+def _fmt_validacao(v) -> dict:
+    return {
+        "id": v.id,
+        "status": v.status,
+        "solicitado_em": _dt(v.solicitado_em),
+        "solicitado_por": v.solicitado_por,
+        "restricao_serasa": v.restricao_serasa,
+        "score": v.score,
+        "limite_credito": v.limite_credito,
+        "condicao_pagamento": v.condicao_pagamento,
+        "observacao": v.observacao,
+        "decidido_em": _dt(v.decidido_em),
+        "decidido_por": v.decidido_por,
+        "anexos": [
+            {"id": a.id, "nome_arquivo": a.nome_arquivo, "enviado_em": _dt(a.enviado_em), "enviado_por": a.enviado_por,
+             "url": f"/api/compras/homologacao/financeiro/anexos/{a.id}"}
+            for a in v.anexos
+        ],
+    }
+
+
+def _fmt_financeiro(homologacao: Homologacao) -> dict | None:
+    """Rodada atual da validacao financeira + as anteriores (historico)."""
+    rodadas = homologacao.validacoes_financeiras
+    if not rodadas:
+        return None
+    return {
+        **_fmt_validacao(rodadas[-1]),
+        "pendente": homologacao.status == Homologacao.STATUS_VALIDACAO_FINANCEIRA,
+        "anteriores": [_fmt_validacao(v) for v in reversed(rodadas[:-1])],
+    }
 
 
 def _fmt_plano(plano, url_evidencia: str) -> dict | None:
@@ -301,17 +336,19 @@ def _usuario() -> str:
 
 
 @compras_homologacao_bp.route("/compras/homologacao")
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def homologacao_page():
     return render_template(
         "compras_homologacao.html",
         user=session["username"],
         user_role=session.get("role", ""),
+        pode_compras=has_permission(PERMISSION),
+        pode_financeiro=has_permission(fin_svc.PERMISSION),
     )
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_listar():
     registros = svc.listar(
         status=request.args.get("status") or "",
@@ -376,7 +413,7 @@ def api_consultar_cnpj(cnpj):
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_detalhe(homologacao_id):
     homologacao = _obter(homologacao_id)
     if not homologacao:
@@ -439,8 +476,19 @@ def _acao(homologacao_id, funcao, mensagem, **kwargs):
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/enviar", methods=["POST"])
 @permission_required(PERMISSION)
 def api_enviar(homologacao_id):
-    return _acao(homologacao_id, svc.enviar_para_aprovacao,
-                 "Enviado para aprovação.", usuario=_usuario())
+    resposta = _acao(homologacao_id, svc.enviar_para_aprovacao,
+                     "Enviado para aprovação.", usuario=_usuario())
+    homologacao = _obter(homologacao_id)
+    if homologacao and homologacao.status == Homologacao.STATUS_VALIDACAO_FINANCEIRA and not isinstance(resposta, tuple):
+        corpo = resposta.get_json()
+        corpo["message"] = "Enviado para a validação financeira."
+        # O envio ja' foi gravado: falha no aviso so' vai pro log.
+        try:
+            _avisar_financeiro(homologacao)
+        except Exception:  # noqa: BLE001
+            current_app.logger.exception("Falha ao avisar o Financeiro (homologacao %s)", homologacao.id)
+        return jsonify(corpo)
+    return resposta
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/devolver", methods=["POST"])
@@ -474,7 +522,7 @@ def api_reabrir(homologacao_id):
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/pdf", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_pdf(homologacao_id):
     homologacao = _obter(homologacao_id)
     if not homologacao:
@@ -505,7 +553,7 @@ def api_anexar_foto(homologacao_id):
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/fotos/<int:foto_id>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_baixar_foto(foto_id):
     foto = db.session.get(ComprasHomologacaoFoto, foto_id)
     if not foto or not foto.dados:
@@ -605,7 +653,7 @@ def api_cancelar_fornecedor(homologacao_id):
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/evidencias/<int:evidencia_id>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_baixar_evidencia(evidencia_id):
     evidencia = db.session.get(ComprasHomologacaoEvidencia, evidencia_id)
     if not evidencia or not evidencia.dados:
@@ -871,7 +919,7 @@ def api_plano_recusar(plano_id, item_id):
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/planos/evidencias/<int:evidencia_id>", methods=["GET"])
-@permission_required(PERMISSION)
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
 def api_plano_baixar_evidencia(evidencia_id):
     from ..models import ComprasHomologacaoPlanoEvidencia
 
@@ -1020,3 +1068,136 @@ def api_plano_fornecedor_remover(token, evidencia_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Evidência removida.", **_payload_plano_publico(plano, token)})
+
+
+# ── Validacao financeira (rev. 04) ──────────────────────────────────────
+def _enviar_email(destinatarios: list[str], assunto: str, corpo_html: str) -> None:
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = assunto
+    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    msg["To"] = ", ".join(destinatarios)
+    msg.attach(MIMEText(corpo_html, "html", "utf-8"))
+    enviar_mensagem_smtp(current_app, msg)
+
+
+def _avisar_financeiro(homologacao: Homologacao) -> None:
+    destinatarios = fin_svc.emails_do_financeiro()
+    if not destinatarios:
+        current_app.logger.warning(
+            "Homologacao %s aguardando validacao financeira, mas nenhum usuario com a permissao tem e-mail.", homologacao.id
+        )
+        return
+    link = url_for("compras_homologacao.homologacao_page", _external=True)
+    nota = f"{(homologacao.nota or 0) * 100:.1f}".replace(".", ",")
+    _enviar_email(
+        destinatarios,
+        f"Validação financeira pendente – {homologacao.razao_social}",
+        f"<p>Olá,</p>"
+        f"<p>A homologação do fornecedor <strong>{html.escape(homologacao.razao_social or '')}</strong> "
+        f"({html.escape(homologacao.cnpj or '')}) foi enviada por {html.escape(homologacao.enviado_por or '')} "
+        f"e aguarda a <strong>validação financeira</strong>.</p>"
+        f"<p>Nota da avaliação: <strong>{nota}%</strong> ({html.escape(homologacao.classificacao or '')}).</p>"
+        f"<p>Abra a homologação, registre o parecer e aprove ou reprove:</p>"
+        f"<p><a href=\"{link}\">{link}</a></p>"
+        f"<p>Columbia Sync</p>",
+    )
+
+
+def _avisar_compras_do_parecer(homologacao: Homologacao, aprovado: bool) -> None:
+    """E-mail pra quem enviou a homologacao (ou, na falta, quem criou)."""
+    from sqlalchemy import func
+
+    from ..models import Usuario
+
+    validacao = fin_svc.validacao_atual(homologacao)
+    destinatario = None
+    for username in (validacao.solicitado_por if validacao else None, homologacao.criado_por):
+        if not username:
+            continue
+        usuario = Usuario.query.filter(func.lower(Usuario.username) == username.strip().lower()).first()
+        if usuario and usuario.email:
+            destinatario = usuario.email.strip()
+            break
+    if not destinatario:
+        return
+    link = url_for("compras_homologacao.homologacao_page", _external=True)
+    situacao = ("<strong>aprovada</strong> pelo Financeiro e seguiu para a aprovação do gestor" if aprovado
+                else "<strong>reprovada</strong> pelo Financeiro e voltou para Rascunho")
+    _enviar_email(
+        [destinatario],
+        f"Validação financeira {'aprovada' if aprovado else 'reprovada'} – {homologacao.razao_social}",
+        f"<p>Olá,</p>"
+        f"<p>A homologação de <strong>{html.escape(homologacao.razao_social or '')}</strong> foi {situacao}.</p>"
+        + (f"<p>Parecer: {html.escape(validacao.observacao)}</p>" if validacao and validacao.observacao else "")
+        + f"<p><a href=\"{link}\">{link}</a></p><p>Columbia Sync</p>",
+    )
+
+
+def _acao_financeiro(homologacao_id, funcao, mensagem, avisar=None):
+    homologacao = _obter(homologacao_id)
+    if not homologacao:
+        return jsonify({"error": "Homologação não encontrada."}), 404
+    try:
+        funcao(homologacao)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if avisar is not None:
+        try:
+            _avisar_compras_do_parecer(homologacao, avisar)
+        except Exception:  # noqa: BLE001
+            current_app.logger.exception("Falha ao avisar Compras do parecer financeiro (homologacao %s)", homologacao.id)
+    return jsonify({"message": mensagem, "homologacao": _fmt(homologacao, completo=True)})
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/financeiro", methods=["PUT"])
+@permission_required(fin_svc.PERMISSION)
+def api_financeiro_salvar(homologacao_id):
+    dados = request.get_json(silent=True) or {}
+    return _acao_financeiro(homologacao_id, lambda h: fin_svc.salvar(h, dados), "Parecer financeiro salvo.")
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/financeiro/aprovar", methods=["POST"])
+@permission_required(fin_svc.PERMISSION)
+def api_financeiro_aprovar(homologacao_id):
+    dados = request.get_json(silent=True) or {}
+    return _acao_financeiro(homologacao_id, lambda h: fin_svc.aprovar(h, _usuario(), dados),
+                            "Validação financeira aprovada - seguiu para a aprovação do gestor.", avisar=True)
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/financeiro/reprovar", methods=["POST"])
+@permission_required(fin_svc.PERMISSION)
+def api_financeiro_reprovar(homologacao_id):
+    dados = request.get_json(silent=True) or {}
+    return _acao_financeiro(homologacao_id, lambda h: fin_svc.reprovar(h, _usuario(), dados),
+                            "Validação financeira reprovada - a homologação voltou para Compras.", avisar=False)
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/financeiro/anexos", methods=["POST"])
+@permission_required(fin_svc.PERMISSION)
+def api_financeiro_anexar(homologacao_id):
+    if (request.content_length or 0) > fin_svc.MAX_ANEXO_BYTES + 64 * 1024:
+        return jsonify({"error": "Arquivo muito grande (máximo 10 MB)."}), 400
+    arquivo = request.files.get("arquivo")
+    return _acao_financeiro(homologacao_id, lambda h: fin_svc.anexar(h, arquivo, _usuario()), "Anexo adicionado.")
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/financeiro/anexos/<int:anexo_id>", methods=["GET"])
+@permission_required_any(PERMISSION, fin_svc.PERMISSION)
+def api_financeiro_baixar_anexo(anexo_id):
+    anexo = fin_svc.obter_anexo(anexo_id)
+    if not anexo or not anexo.dados:
+        return jsonify({"error": "Anexo não encontrado."}), 404
+    return _enviar_evidencia(anexo)
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/financeiro/anexos/<int:anexo_id>", methods=["DELETE"])
+@permission_required(fin_svc.PERMISSION)
+def api_financeiro_remover_anexo(anexo_id):
+    anexo = fin_svc.obter_anexo(anexo_id)
+    if not anexo:
+        return jsonify({"error": "Anexo não encontrado."}), 404
+    try:
+        homologacao = fin_svc.remover_anexo(anexo)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Anexo removido.", "homologacao": _fmt(homologacao, completo=True)})
