@@ -70,6 +70,11 @@ PERMISSION_ESTOQUE = "PAGE_LOGISTICA_ESTOQUE"
 # Analisar (realizados/ajustes/analise de causa) exige permissao propria;
 # a permissao base (PERMISSION) da acesso so a aba de contagem.
 PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+# Abre SO a fila de Analise de Causa Raiz (ver e registrar), sem Realizados nem
+# Ajuste de Estoque: e' pro conferente que investiga o motivo e devolve pro
+# gestor. Quem ja tem PERMISSOES_ANALISE continua vendo a fila.
+PERMISSION_ANALISE_CAUSA = "PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA"
+PERMISSOES_ANALISE_CAUSA = PERMISSOES_ANALISE + (PERMISSION_ANALISE_CAUSA,)
 ABAS_INVENTARIO = ("inventariar", "realizados", "ajustes", "analise")
 INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
@@ -284,6 +289,7 @@ def _render_inventario(aba: str):
         motivos_inventario=INVENTARIO_MOTIVOS,
         pode_inventariar=has_permission(PERMISSION),
         pode_analisar=_pode_analisar(),
+        pode_analise_causa=any(has_permission(p) for p in PERMISSOES_ANALISE_CAUSA),
         pode_validar=has_permission(PERMISSION_VALIDACAO),
         pode_finance=has_permission(PERMISSION_FINANCE),
         pode_fiscal=has_permission(PERMISSION_FISCAL),
@@ -292,11 +298,14 @@ def _render_inventario(aba: str):
 
 
 @logistica_inventario_bp.route("/logistica/inventario")
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION, *PERMISSOES_ANALISE_CAUSA)
 def inventario_home_page():
     aba = str(request.args.get("aba") or "")
     if aba not in ABAS_INVENTARIO:
-        aba = "inventariar" if has_permission(PERMISSION) else "ajustes"
+        if has_permission(PERMISSION):
+            aba = "inventariar"
+        else:
+            aba = "ajustes" if _pode_analisar() else "analise"
     return _render_inventario(aba)
 
 
@@ -1446,13 +1455,13 @@ def api_pular_etapa_ajuste(ajuste_id):
 
 # ── Analise de Causa Raiz (fila separada, nao bloqueia Finance/Fiscal) ────
 @logistica_inventario_bp.route("/logistica/inventario/analise-causa")
-@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(*PERMISSOES_ANALISE_CAUSA)
 def inventario_analise_causa_page():
     return _render_inventario("analise")
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-analise-causa", methods=["GET"])
-@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(*PERMISSOES_ANALISE_CAUSA)
 def api_listar_analise_causa():
     status = request.args.get("status") or None
     analises = ajuste_svc.listar_analises_causa(status=status)
@@ -1460,7 +1469,7 @@ def api_listar_analise_causa():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-analise-causa/<int:analise_id>/preencher", methods=["POST"])
-@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(*PERMISSOES_ANALISE_CAUSA)
 def api_preencher_analise_causa(analise_id):
     analise = db.session.get(LogisticaInventarioAnaliseCausa, analise_id)
     if not analise:

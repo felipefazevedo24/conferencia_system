@@ -5379,6 +5379,74 @@ def test_inventario_analise_causa_fila_separada_nao_bloqueia_fluxo(tmp_path):
     assert resp_page.status_code == 200
 
 
+def test_inventario_analise_causa_permissao_propria_abre_so_a_fila(tmp_path):
+    """PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA e' pro conferente que investiga
+    o motivo e devolve pro gestor: ve a fila e registra a analise, mas nao
+    ganha Realizados nem Ajuste de Estoque. Sem ela, o conferente fica de fora
+    (regressao da unificacao das abas, que tirou a permissao base dessas rotas)."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import (
+            LogisticaInventarioAjuste,
+            LogisticaInventarioAnaliseCausa,
+            PermissaoAcesso,
+            Usuario,
+        )
+
+        db.session.add(Usuario(username="conferente_cr", password="x", role="Conferente"))
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="SKU-CR2", local_codigo="A01-02", unidade_medida="UN",
+            qtde_contada=10, qtde_estoque_no_momento=6, diferenca=4,
+            status_modulo="Finance", status_slug="finance",
+        )
+        db.session.add(ajuste)
+        db.session.flush()
+        analise = LogisticaInventarioAnaliseCausa(ajuste_id=ajuste.id, solicitado_por="gestor")
+        db.session.add(analise)
+        db.session.commit()
+        analise_id = analise.id
+
+    set_logged_user(client, "conferente_cr", "Conferente")
+
+    # Sem a permissao: nem a tela nem a fila.
+    assert client.get("/api/logistica/inventario-analise-causa").status_code == 403
+    assert client.get("/logistica/inventario/analise-causa").status_code in (302, 403)
+
+    with app.app_context():
+        db.session.add(PermissaoAcesso(
+            scope_type="USER", scope_id="conferente_cr",
+            permission_key="PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA", allow=True,
+        ))
+        db.session.commit()
+
+    resp_lista = client.get("/api/logistica/inventario-analise-causa")
+    assert resp_lista.status_code == 200
+    assert len(resp_lista.get_json()["analises"]) == 1
+
+    resp_preencher = client.post(
+        f"/api/logistica/inventario-analise-causa/{analise_id}/preencher",
+        json={"motivo": "contagem em local errado"},
+    )
+    assert resp_preencher.status_code == 200
+    assert resp_preencher.get_json()["analise"]["status"] == "Concluida"
+
+    # A tela abre direto na aba de analise e so com ela (e o menu mostra o link).
+    resp_page = client.get("/logistica/inventario")
+    assert resp_page.status_code == 200
+    html = resp_page.get_data(as_text=True)
+    assert 'data-aba="analise"' in html
+    assert 'data-aba="ajustes"' not in html
+    assert 'data-aba="realizados"' not in html
+    assert 'data-aba="inventariar"' not in html
+    assert 'href="/logistica/inventario"' in html
+
+    # Continua sem acesso ao fluxo de ajuste.
+    assert client.get("/api/logistica/inventario-ajustes").status_code == 403
+    assert client.get("/api/logistica/inventario-inicial").status_code == 403
+
+
 def test_comex_anexar_documento_guarda_no_banco_sem_drive(tmp_path):
     """Anexar documento no Comex (HBL, invoice, packing list etc.) grava o
     conteudo direto na coluna `dados` do banco - nao depende de Google Drive

@@ -90,6 +90,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
     "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
+    "PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA": "Logística > Inventário > Análise de Causa Raiz (ver a fila e registrar a análise)",
     "PAGE_LOGISTICA_CARDEX": "Logística > Inventário > Cardex (movimento valorizado, Modelo 7)",
     "PAGE_LOGISTICA_CARDEX_FECHAR": "Logística > Inventário > Cardex > Fechar e reabrir mês",
     "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Intralog > Consumo de Chapa (Nesting)",

@@ -30,16 +30,16 @@
         {% if pode_analisar %}
         <button type="button" data-aba="realizados"><i class="fas fa-magnifying-glass"></i> Realizados</button>
         <button type="button" data-aba="ajustes"><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</button>
-        <button type="button" data-aba="analise"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</button>
         {% endif %}
+        {% if pode_analise_causa %}<button type="button" data-aba="analise"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</button>{% endif %}
     </nav>
 
     {% if pode_inventariar %}<section class="invu-panel" data-panel="inventariar">{% include "logistica_inventario_tab_contagem.html" %}</section>{% endif %}
     {% if pode_analisar %}
     <section class="invu-panel" data-panel="realizados">{% include "logistica_inventario_tab_realizados.html" %}</section>
     <section class="invu-panel" data-panel="ajustes">{% include "logistica_inventario_ajustes.html" %}</section>
-    <section class="invu-panel" data-panel="analise">{% include "logistica_inventario_analise_causa.html" %}</section>
     {% endif %}
+    {% if pode_analise_causa %}<section class="invu-panel" data-panel="analise">{% include "logistica_inventario_analise_causa.html" %}</section>{% endif %}
 </div>
 {% endblock %}
 
