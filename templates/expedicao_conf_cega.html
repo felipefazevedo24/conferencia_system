@@ -944,6 +944,7 @@
                     fecharMenuAcoes();
                     if (act === "conferir" || act === "ver") abrirConferencia(cod);
                     else if (act === "corrigir-nf") corrigirNf(cod);
+                    else if (act === "alterar-volumes") alterarVolumes(cod);
                     else if (act === "informar-nf") informarNf(cod);
                     else if (act === "fotos") abrirModalFotosPreexpedicao(cfg.apiBase, cod, ordemPorCod(cod));
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
@@ -1007,6 +1008,10 @@
                 }
             } else {
                 itens += it("ver", "fa-eye", "Detalhes");
+            }
+            // So' a quantidade de volumes, sem reabrir a conferencia.
+            if (cfg.podeAlterarVolumes && s !== "expedido" && s !== "finalizado_sem_conf") {
+                itens += "<hr>" + it("alterar-volumes", "fa-boxes-stacked", "Alterar qtde. de volumes");
             }
             if (CE_IS_ADMIN) {
                 itens += "<hr>" + it("excluir", "fa-trash", "Excluir ordem", true);
@@ -1703,6 +1708,25 @@
             }
         }
 
+        async function alterarVolumes(cod) {
+            const o = ordemPorCod(cod) || {};
+            const atual = String(o.qtde_volumes || "").trim();
+            const novo = prompt(`Quantidade de volumes${atual ? " (atual: " + atual + ")" : ""}:`, atual);
+            if (novo === null) return; // cancelou
+            if (!/^[1-9]\d{0,3}$/.test(novo.trim())) { toast("Informe um número inteiro a partir de 1.", "error"); return; }
+            if (novo.trim() === atual) return;
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod) + "/alterar-volumes", {
+                    method: "POST", body: JSON.stringify({ qtde_volumes: novo.trim() }),
+                });
+                const rom = (r.romaneios_atualizados || []).length ? ` Romaneio ${r.romaneios_atualizados.join(", ")} atualizado.` : "";
+                toast(`Volumes alterados para ${r.qtde_volumes}.${rom}`, "success");
+                carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
         async function corrigirNf(cod) {
             if (!CE_IS_ADMIN || !cod) return;
             const numeroNovo = await pedirMotivo({
@@ -2092,6 +2116,7 @@
         refTipo: "fat",
         internacional: true,
         podeCorrigirNf: true,
+        podeAlterarVolumes: true,
         podeInformarNf: true,
         podeExpedirSemConf: true,
         colunas: (o) => [o.nf_manual ? `NF ${o.numero_nf} (manual)` : "#" + o.cod_ordem_fat, o.cliente, o.orcamento],

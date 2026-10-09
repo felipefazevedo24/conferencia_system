@@ -1345,6 +1345,96 @@ def corrigir_nf_ordem_fat(cod_ordem_fat):
     return jsonify({"sucesso": True, "numero_nf": ordem.numero_nf})
 
 
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/alterar-volumes", methods=["POST"])
+@roles_required(*ROLES)
+def alterar_volumes_ordem_fat(cod_ordem_fat):
+    """Muda SO' a quantidade de volumes da ordem (ex.: volume refeito ou
+    dividido depois da conferencia), sem reabrir a conferencia nem mexer em
+    pesos/itens. Se a NF ja esta num romaneio em Rascunho, a linha dela e os
+    totais do romaneio acompanham - senao os dois ficariam divergentes."""
+    from ..models import ExpedicaoRomaneio, ExpedicaoRomaneioNF
+    from .expedicao_romaneio_routes import _recalcular_totais_romaneio
+
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    if ordem.status in (svc.STATUS_EXPEDIDO, svc.STATUS_FINALIZADO_SEM_CONF):
+        return jsonify({"error": f"Ordem '{ordem.status}' não pode mais ter os volumes alterados."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        novo = int(str(payload.get("qtde_volumes") or "").strip())
+    except (TypeError, ValueError):
+        novo = 0
+    if not (1 <= novo <= 9999):
+        return jsonify({"error": "Informe a quantidade de volumes (número inteiro, a partir de 1)."}), 400
+
+    # Internacional: a quantidade sai da lista de volumes do embarque.
+    if ExpedicaoOrdemFatVolume.query.filter_by(ordem_id=ordem.id).count():
+        return jsonify({
+            "error": "Operação internacional: os volumes são detalhados na conferência - altere por lá."
+        }), 400
+
+    linhas_romaneio = []
+    if ordem.numero_nf:
+        linhas_romaneio = (
+            db.session.query(ExpedicaoRomaneioNF, ExpedicaoRomaneio)
+            .join(ExpedicaoRomaneio, ExpedicaoRomaneioNF.romaneio_id == ExpedicaoRomaneio.id)
+            .filter(ExpedicaoRomaneioNF.numero_nf == ordem.numero_nf)
+            .all()
+        )
+    travado = next((rom for _, rom in linhas_romaneio if rom.status != "Rascunho"), None)
+    if travado is not None:
+        return jsonify({
+            "error": f"A NF já está no romaneio {travado.numero_romaneio} ({travado.status}) - "
+                     "volte o romaneio para Rascunho antes de alterar os volumes."
+        }), 400
+
+    anterior = ordem.qtde_volumes
+    agora = agora_br()
+    usuario = session.get("username") or "desconhecido"
+    ordem.qtde_volumes = str(novo)
+    ordem.updated_at = agora
+    for linha, romaneio in linhas_romaneio:
+        linha.qtde_volumes = novo
+        _recalcular_totais_romaneio(romaneio)
+        romaneio.atualizado_em = agora
+
+    log_svc.registrar_log(
+        origem="fat",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_fat,
+        acao="alterar_volumes",
+        usuario=usuario,
+        status_anterior=ordem.status,
+        status_novo=ordem.status,
+        divergente=bool(ordem.divergente),
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=[{"campo": "qtde_volumes", "label": "Qtde. de volumes", "de": anterior or "", "para": str(novo)}],
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    # O ERP guarda a quantidade que a conferencia mandou: avisa a mudanca
+    # (assincrono, best-effort, igual a conferencia). NF incluida manualmente
+    # nao tem ordem de faturamento no ERP.
+    if not svc.eh_nf_manual(ordem):
+        try:
+            from ..services import erp_ordem_fat_client as erp_fat_svc
+
+            erp_fat_svc.atualizar_ordem_faturamento(ordem.cod_ordem_fat, qtde_volumes=ordem.qtde_volumes)
+        except Exception:
+            current_app.logger.exception(
+                "Falha ao acionar atualizacao de volumes no emitente (%s)", cod_ordem_fat
+            )
+
+    return jsonify({
+        "sucesso": True,
+        "qtde_volumes": ordem.qtde_volumes,
+        "romaneios_atualizados": [rom.numero_romaneio for _, rom in linhas_romaneio],
+    })
+
+
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/informar-nf", methods=["POST"])
 @roles_required("Admin")
 def informar_nf_ordem_fat(cod_ordem_fat):
