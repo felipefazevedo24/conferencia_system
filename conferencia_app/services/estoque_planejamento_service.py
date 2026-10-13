@@ -132,8 +132,8 @@ def _meses_fechados(hoje: date, quantidade: int) -> list[str]:
 
 
 def classificar_abc(valores: dict[str, float]) -> dict[str, str]:
-    """Curva ABC pelo valor consumido: A até 80% do acumulado, B até 95%, C o
-    resto. Item sem consumo (ou sem custo) é C."""
+    """Curva ABC pelo peso de cada item (hoje, o número de retiradas): A até
+    80% do acumulado, B até 95%, C o resto. Item sem retirada é C."""
     total = sum(v for v in valores.values() if v > 0)
     classes = {codigo: "C" for codigo in valores}
     if total <= 0:
@@ -318,19 +318,19 @@ def calcular_planejamento(
     relativa ao conjunto e mudaria a cada busca."""
     hoje = hoje or agora_br().date()
     custos = {}
-    valores = {}
-    meses_12 = set(_meses_fechados(hoje, 12))
+    retiradas = {}
     for codigo, item in itens.items():
         historico = historicos.get(codigo) or {}
         # tproduto.preco_custo vale mesmo com saldo zero; o custo médio do
         # saldo some quando o item zera.
         custo = historico.get("preco_custo") or item.get("custo_medio")
         custos[codigo] = float(custo) if custo else None
-        consumo_12m = sum(
-            float(m.get("saida") or 0) for m in historico.get("serie_mensal") or [] if m.get("mes") in meses_12
-        )
-        valores[codigo] = consumo_12m * (custos[codigo] or 0)
-    classes = classificar_abc(valores)
+        # Curva pelo giro (número de retiradas em 24 meses), não pelo valor
+        # consumido: por valor, 1 saída de uma máquina de R$ 1 milhão virava
+        # curva A com confiança baixa (decisão da logística em 13/10/2026).
+        # Quantidade consumida não serve de peso: KG, MM e PÇ não se somam.
+        retiradas[codigo] = float((historico.get("retiradas_24m") or {}).get("quantidade") or 0)
+    classes = classificar_abc(retiradas)
     return {
         codigo: calcular_item(
             historicos.get(codigo) or {},

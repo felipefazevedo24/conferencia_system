@@ -50,6 +50,21 @@
     .mp-curva.a { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
     .mp-curva.b { background: var(--eui-primary-soft); border-color: transparent; color: var(--eui-text); }
 
+    /* Filtro e ordenação por coluna. O menu é fixed e fica fora da tabela:
+       dentro dela o overflow-x do .mp-table-wrap cortaria. */
+    .mp-th-btn { border: 0; background: transparent; color: var(--eui-muted); cursor: pointer; padding: 2px 4px; margin-left: 4px; border-radius: 4px; font-size: 10.5px; line-height: 1; }
+    .mp-th-btn:hover, .mp-th-btn.ativo { color: var(--eui-primary); background: var(--eui-primary-soft); }
+    .mp-th-btn i + i { margin-left: 3px; }
+    .mp-filtro { position: fixed; z-index: 2200; width: 264px; display: grid; gap: 6px; padding: 8px; background: var(--eui-surface); color: var(--eui-text); border: 1px solid var(--eui-border); border-radius: 10px; box-shadow: 0 12px 32px rgba(15, 23, 42, .22); font-size: 13px; }
+    .mp-filtro[hidden] { display: none; }
+    .mp-filtro__acao { border: 0; background: transparent; color: var(--eui-text); text-align: left; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+    .mp-filtro__acao:hover, .mp-filtro__acao.ativa { background: var(--eui-surface-2); }
+    .mp-filtro__acao i { color: var(--eui-muted); width: 14px; }
+    .mp-filtro__lista { max-height: 220px; overflow-y: auto; border: 1px solid var(--eui-border); border-radius: 6px; padding: 4px 6px; }
+    .mp-filtro label { display: flex; gap: 8px; align-items: center; margin: 0; padding: 3px 2px; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--eui-text); white-space: nowrap; cursor: pointer; }
+    .mp-filtro label span { overflow: hidden; text-overflow: ellipsis; }
+    .mp-filtro__foot { display: flex; justify-content: space-between; gap: 6px; }
+
     /* Painel lateral: o detalhe abre ao lado, a lista não se mexe. */
     .mp-painel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 2300; background: var(--eui-surface); border-left: 1px solid var(--eui-border); box-shadow: -12px 0 40px rgba(15, 23, 42, .18); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .18s ease; }
     .mp-painel.aberto { transform: none; }
@@ -156,6 +171,7 @@
                 <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
                 <div class="mp-filters__end">
                     <span class="mp-muted" id="mp-updated"></span>
+                    <button class="eui-btn eui-btn--ghost" id="mp-limpar-filtros" type="button" style="display:none;"><i class="fas fa-filter-circle-xmark"></i> Limpar filtros das colunas</button>
                     <button class="eui-btn eui-btn--ghost" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>
@@ -187,6 +203,18 @@
     </div>
     <div class="mp-painel__corpo" id="mp-painel-corpo" aria-live="polite"></div>
 </aside>
+
+<div class="mp-filtro" id="mp-filtro" role="dialog" aria-label="Filtrar e ordenar coluna" hidden>
+    <button type="button" class="mp-filtro__acao" data-ord="asc"><i class="fas fa-arrow-up"></i> <span id="mp-filtro-asc"></span></button>
+    <button type="button" class="mp-filtro__acao" data-ord="desc"><i class="fas fa-arrow-down"></i> <span id="mp-filtro-desc"></span></button>
+    <input class="eui-input" id="mp-filtro-busca" type="search" placeholder="Pesquisar valores..." aria-label="Pesquisar valores">
+    <label><input type="checkbox" id="mp-filtro-todos"> <span>(Selecionar tudo)</span></label>
+    <div class="mp-filtro__lista" id="mp-filtro-lista"></div>
+    <div class="mp-filtro__foot">
+        <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-filtro-limpar">Limpar coluna</button>
+        <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="mp-filtro-ok">Aplicar</button>
+    </div>
+</div>
 
 <dialog id="mp-param-dialog" class="mp-dialog" aria-labelledby="mp-param-title">
     <form method="dialog" id="mp-param-form">
@@ -225,6 +253,12 @@
     let selecionado = null;   // código do item aberto no painel
     let abaAtual = 'resumo';
     const fornCache = {};     // fornecimentos já consultados (por código), até recarregar a página
+    let filtros = {};         // coluna -> Set dos valores marcados (como aparecem na tela)
+    let ordem = null;         // { col, dir } ou null = ordem de prioridade que vem do servidor
+    let totalEncontrado = 0;
+    let filtroCol = null;     // coluna com o menu de filtro aberto
+    let filtroValores = [];
+    let filtroMarcados = new Set();
 
     function fmt(valor, casas = 2) {
         return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
@@ -315,32 +349,171 @@
         return partes.join(' · ');
     }
 
+    function minimoTexto(item) {
+        const p = item.planejamento;
+        if (!p) return '—';
+        return p.tipo_demanda === 'sem_giro' ? 'não estocar' : fmt(p.estoque_minimo_sugerido);
+    }
+
+    function loteTexto(item) {
+        const p = item.planejamento;
+        return p && p.lote_economico_sugerido != null ? fmt(p.lote_economico_sugerido) : '—';
+    }
+
+    // ------------------------------------------------- filtro e ordenação
+
+    // Filtro e ordenação no cabeçalho, como no Excel. `texto` é o valor que
+    // aparece na célula e na lista do filtro; `num` é a chave de ordenação
+    // (null = sem valor, vai pro fim nas duas direções).
+    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5 };
+    const COLUNAS = {
+        codigo: { texto: (i) => i.codigo || '-' },
+        descricao: { texto: (i) => i.descricao || '-' },
+        unidade: { texto: (i) => i.unidade || '' },
+        curva: { texto: (i) => (i.planejamento && i.planejamento.classe_abc) || '—' },
+        disponivel: { texto: (i) => fmt(i.saldo_disponivel), num: (i) => Number(i.saldo_disponivel || 0) },
+        consumo: {
+            texto: consumoTexto,
+            num: (i) => (consumoTexto(i) === '—' ? null : Number(i.planejamento ? i.planejamento.consumo_mensal : i.consumo_diario)),
+        },
+        cobertura: {
+            texto: coberturaTexto,
+            num: (i) => {
+                if (coberturaTexto(i) === '—') return null;
+                const p = i.planejamento;
+                // Esporádico mede em retiradas, não em dias: fica depois de todos os que têm dias.
+                if (p && p.cobertura_dias == null) return 1e9 + Number(p.cobre_retirada_pct || 0);
+                return Number(i.cobertura_dias || 0);
+            },
+        },
+        minimo: {
+            texto: minimoTexto,
+            num: (i) => (i.planejamento && i.planejamento.tipo_demanda !== 'sem_giro' ? Number(i.planejamento.estoque_minimo_sugerido || 0) : null),
+        },
+        lote: {
+            texto: loteTexto,
+            num: (i) => (i.planejamento && i.planejamento.lote_economico_sugerido != null ? Number(i.planejamento.lote_economico_sugerido) : null),
+        },
+        reservas: { texto: (i) => String((i.reservas || []).length || '—'), num: (i) => (i.reservas || []).length },
+        status: { texto: statusCurto, num: (i) => ORDEM_STATUS[i.nivel || 'normal'] ?? 9 },
+    };
+
+    function colunasAtivas() {
+        const plano = planejamentoAtivo;
+        return [
+            'codigo', 'descricao', 'unidade', ...(plano ? ['curva'] : []), 'disponivel', 'consumo', 'cobertura',
+            ...(plano ? ['minimo', 'lote'] : []), ...(visaoAtual === 'produto_acabado' ? ['reservas'] : []), 'status',
+        ];
+    }
+
+    function comparar(col, a, b, dir = 1) {
+        const def = COLUNAS[col];
+        if (!def.num) return dir * def.texto(a).localeCompare(def.texto(b), 'pt-BR', { numeric: true });
+        const va = def.num(a);
+        const vb = def.num(b);
+        if (va == null || vb == null) return (va == null) - (vb == null);
+        return dir * (va - vb);
+    }
+
+    // `exceto`: a lista de valores de uma coluna considera os filtros das outras, não o dela.
+    function filtrar(exceto) {
+        const ativos = Object.entries(filtros).filter(([col]) => col !== exceto);
+        return itens.filter((item) => ativos.every(([col, marcados]) => marcados.has(COLUNAS[col].texto(item))));
+    }
+
+    function visiveis() {
+        const lista = filtrar();
+        // sort é estável: empate mantém a ordem de prioridade do servidor.
+        if (ordem) lista.sort((a, b) => comparar(ordem.col, a, b, ordem.dir === 'desc' ? -1 : 1));
+        return lista;
+    }
+
+    function renderLista() {
+        const ativas = colunasAtivas();
+        // Coluna que saiu da tela (troca de visão, planejamento fora do ar) leva o filtro junto.
+        Object.keys(filtros).forEach((col) => { if (!ativas.includes(col)) delete filtros[col]; });
+        if (ordem && !ativas.includes(ordem.col)) ordem = null;
+        const filtrando = Object.keys(filtros).length > 0;
+        const lista = visiveis();
+        renderCabecalho();
+        $('mp-body').innerHTML = lista.length
+            ? lista.map(linha).join('')
+            : `<tr><td colspan="${ativas.length + 1}" class="mp-muted" style="cursor:default;">Nenhum item com os filtros das colunas.</td></tr>`;
+        $('mp-k-itens').textContent = lista.length;
+        $('mp-k-itens-hint').textContent = filtrando
+            ? `de ${itens.length} com os filtros das colunas`
+            : (totalEncontrado > itens.length ? `de ${totalEncontrado} encontrados` : '');
+        $('mp-limpar-filtros').style.display = filtrando || ordem ? '' : 'none';
+    }
+
+    function fecharFiltro() {
+        filtroCol = null;
+        $('mp-filtro').hidden = true;
+    }
+
+    function renderValoresFiltro() {
+        const termo = $('mp-filtro-busca').value.trim().toLowerCase();
+        const lista = filtroValores.filter((v) => !termo || v.toLowerCase().includes(termo));
+        $('mp-filtro-lista').innerHTML = lista.length
+            ? lista.map((v) => `<label><input type="checkbox" value="${esc(v)}"${filtroMarcados.has(v) ? ' checked' : ''}> <span title="${esc(v)}">${esc(v === '' ? '(vazio)' : v)}</span></label>`).join('')
+            : '<span class="mp-muted">Nenhum valor.</span>';
+        const marcados = lista.filter((v) => filtroMarcados.has(v)).length;
+        $('mp-filtro-todos').checked = lista.length > 0 && marcados === lista.length;
+        $('mp-filtro-todos').indeterminate = marcados > 0 && marcados < lista.length;
+        $('mp-filtro-ok').disabled = marcados === 0;
+    }
+
+    function abrirFiltro(col, botao) {
+        const def = COLUNAS[col];
+        const porValor = new Map();
+        filtrar(col).forEach((item) => { if (!porValor.has(def.texto(item))) porValor.set(def.texto(item), item); });
+        filtroValores = [...porValor.entries()].sort((a, b) => comparar(col, a[1], b[1])).map(([valor]) => valor);
+        filtroMarcados = new Set(filtros[col] ? filtroValores.filter((v) => filtros[col].has(v)) : filtroValores);
+        filtroCol = col;
+        $('mp-filtro-asc').textContent = def.num ? 'Ordenar do menor para o maior' : 'Ordenar de A a Z';
+        $('mp-filtro-desc').textContent = def.num ? 'Ordenar do maior para o menor' : 'Ordenar de Z a A';
+        document.querySelectorAll('#mp-filtro [data-ord]').forEach((b) => b.classList.toggle('ativa', !!ordem && ordem.col === col && ordem.dir === b.dataset.ord));
+        $('mp-filtro-busca').value = '';
+        renderValoresFiltro();
+        const menu = $('mp-filtro');
+        menu.hidden = false;
+        const alvo = botao.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(alvo.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+        menu.style.top = Math.max(8, Math.min(alvo.bottom + 4, window.innerHeight - menu.offsetHeight - 8)) + 'px';
+        $('mp-filtro-busca').focus();
+    }
+
     function renderCabecalho() {
         const plano = planejamentoAtivo;
-        const pa = visaoAtual === 'produto_acabado';
         const statusAjuda = plano
             ? 'Crítico: acaba antes do lead time · Abaixo do mínimo: passou do ponto de pedido · Esporádica: demanda irregular, ver % de 1 retirada'
             : `Crítico: até ${diasCritico} dias · Monitorar: até ${diasAtencao} dias de cobertura`;
-        $('mp-head').innerHTML = `<tr>
-            <th>Código</th>
-            <th>Descrição</th>
-            <th>Un</th>
-            ${plano ? '<th title="Curva ABC pelo valor consumido em 12 meses: A = itens que somam 80% do valor, B = até 95%, C = o resto">Curva</th>' : ''}
-            <th class="num">Disponível</th>
-            <th class="num" id="mp-th-consumo">${plano ? 'Consumo/mês' : 'Consumo/dia'}</th>
-            <th class="num" title="${plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`}">Cobertura</th>
-            ${plano ? '<th class="num" id="mp-th-sugestao">Mín. sugerido</th><th class="num">Lote sugerido</th>' : ''}
-            ${pa ? '<th class="num">Reservas</th>' : ''}
-            <th title="${esc(statusAjuda)}">Status</th>
-            <th class="c-seta" aria-hidden="true"></th>
-        </tr>`;
+        // [rótulo, atributos do th, dica]
+        const cabecalhos = {
+            codigo: ['Código', ''],
+            descricao: ['Descrição', ''],
+            unidade: ['Un', ''],
+            curva: ['Curva', '', 'Curva ABC pelo giro (número de retiradas em 24 meses): A = itens que somam 80% das retiradas, B = até 95%, C = o resto'],
+            disponivel: ['Disponível', ' class="num"'],
+            consumo: [plano ? 'Consumo/mês' : 'Consumo/dia', ' class="num" id="mp-th-consumo"'],
+            cobertura: ['Cobertura', ' class="num"', plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`],
+            minimo: ['Mín. sugerido', ' class="num" id="mp-th-sugestao"'],
+            lote: ['Lote sugerido', ' class="num"'],
+            reservas: ['Reservas', ' class="num"'],
+            status: ['Status', '', statusAjuda],
+        };
+        $('mp-head').innerHTML = '<tr>' + colunasAtivas().map((col) => {
+            const [rotulo, atributos, dica] = cabecalhos[col];
+            const ordenada = ordem && ordem.col === col;
+            const icones = (ordenada ? `<i class="fas fa-arrow-${ordem.dir === 'desc' ? 'down' : 'up'}"></i>` : '')
+                + (filtros[col] ? '<i class="fas fa-filter"></i>' : '');
+            return `<th${atributos}${dica ? ` title="${esc(dica)}"` : ''}>${rotulo}<button type="button" class="mp-th-btn${icones ? ' ativo' : ''}" data-col="${col}" aria-label="Filtrar e ordenar ${rotulo}">${icones || '<i class="fas fa-caret-down"></i>'}</button></th>`;
+        }).join('') + '<th class="c-seta" aria-hidden="true"></th></tr>';
     }
 
     function linha(item) {
         const p = item.planejamento;
         const sel = item.codigo === selecionado ? ' selecionado' : '';
-        const minimo = p ? (p.tipo_demanda === 'sem_giro' ? 'não estocar' : fmt(p.estoque_minimo_sugerido)) : '';
-        const lote = p ? (p.lote_economico_sugerido != null ? fmt(p.lote_economico_sugerido) : '—') : '';
         return `<tr class="mp-item-row${sel}" data-codigo="${esc(item.codigo || '')}">
             <td class="c-cod">${esc(item.codigo || '-')}</td>
             <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
@@ -349,7 +522,7 @@
             <td class="num c-forte">${fmt(item.saldo_disponivel)}</td>
             <td class="num">${consumoTexto(item)}</td>
             <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
-            ${planejamentoAtivo ? `<td class="num">${p ? minimo : '—'}</td><td class="num">${p ? lote : '—'}</td>` : ''}
+            ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td>` : ''}
             ${visaoAtual === 'produto_acabado' ? `<td class="num">${(item.reservas || []).length || '—'}</td>` : ''}
             <td>${statusCell(item)}</td>
             <td class="c-seta"><i class="fas fa-chevron-right"></i></td>
@@ -370,9 +543,7 @@
             : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
         $('mp-k-criticos-hint').textContent = planejamentoAtivo ? 'Acabam antes da reposição chegar' : `Até ${diasCritico} dias de cobertura`;
         $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'Abaixo do mínimo sugerido' : `Até ${diasAtencao} dias de cobertura`;
-        $('mp-k-itens').textContent = resumo.itens || 0;
-        const total = Number(resumo.total_filtrado || 0);
-        $('mp-k-itens-hint').textContent = total > Number(resumo.itens || 0) ? `de ${total} encontrados` : '';
+        totalEncontrado = Number(resumo.total_filtrado || 0);
         $('mp-k-criticos').textContent = resumo.criticos || 0;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
         $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
@@ -382,13 +553,14 @@
             $('mp-table').style.display = 'none';
             $('mp-state').style.display = 'block';
             $('mp-state').textContent = 'Nenhum item encontrado.';
+            $('mp-k-itens').textContent = 0;
+            $('mp-k-itens-hint').textContent = '';
             fecharPainel();
             return;
         }
         $('mp-state').style.display = 'none';
         $('mp-table').style.display = 'table';
-        renderCabecalho();
-        $('mp-body').innerHTML = itens.map(linha).join('');
+        renderLista();
         // Atualização em segundo plano: o painel aberto acompanha os números novos.
         if (selecionado) {
             const atual = itens.find((i) => i.codigo === selecionado);
@@ -644,6 +816,65 @@
         if (item) renderPainel(item);
     });
     $('mp-painel-fechar').addEventListener('click', fecharPainel);
+
+    $('mp-head').addEventListener('click', (event) => {
+        const botao = event.target.closest('.mp-th-btn');
+        if (!botao) return;
+        if (filtroCol === botao.dataset.col) fecharFiltro(); else abrirFiltro(botao.dataset.col, botao);
+    });
+    $('mp-filtro').addEventListener('click', (event) => {
+        const ord = event.target.closest('[data-ord]');
+        if (!ord) return;
+        ordem = { col: filtroCol, dir: ord.dataset.ord };
+        fecharFiltro();
+        renderLista();
+    });
+    $('mp-filtro-busca').addEventListener('input', renderValoresFiltro);
+    $('mp-filtro-lista').addEventListener('change', (event) => {
+        if (event.target.checked) filtroMarcados.add(event.target.value); else filtroMarcados.delete(event.target.value);
+        renderValoresFiltro();
+    });
+    $('mp-filtro-todos').addEventListener('change', (event) => {
+        // Com pesquisa digitada, vale só pro que está aparecendo na lista.
+        document.querySelectorAll('#mp-filtro-lista input').forEach((caixa) => {
+            if (event.target.checked) filtroMarcados.add(caixa.value); else filtroMarcados.delete(caixa.value);
+        });
+        renderValoresFiltro();
+    });
+    $('mp-filtro-ok').addEventListener('click', () => {
+        const termo = $('mp-filtro-busca').value.trim().toLowerCase();
+        const escolhidos = filtroValores.filter((v) => filtroMarcados.has(v) && (!termo || v.toLowerCase().includes(termo)));
+        // Tudo marcado = sem filtro: valor novo que aparecer depois não fica escondido.
+        if (escolhidos.length === filtroValores.length) delete filtros[filtroCol]; else filtros[filtroCol] = new Set(escolhidos);
+        fecharFiltro();
+        renderLista();
+    });
+    $('mp-filtro-limpar').addEventListener('click', () => {
+        delete filtros[filtroCol];
+        if (ordem && ordem.col === filtroCol) ordem = null;
+        fecharFiltro();
+        renderLista();
+    });
+    $('mp-limpar-filtros').addEventListener('click', () => {
+        filtros = {};
+        ordem = null;
+        fecharFiltro();
+        renderLista();
+    });
+    document.addEventListener('mousedown', (event) => {
+        if (filtroCol && !event.target.closest('#mp-filtro, .mp-th-btn')) fecharFiltro();
+    });
+    // O menu é fixed: se a página ou a tabela rolarem, ele ficaria solto longe da coluna.
+    window.addEventListener('scroll', (event) => {
+        if (filtroCol && !(event.target instanceof Element && event.target.closest('#mp-filtro'))) fecharFiltro();
+    }, true);
+    window.addEventListener('resize', fecharFiltro);
+    // Na captura, pra fechar só o menu e não o painel lateral junto.
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || !filtroCol) return;
+        event.stopPropagation();
+        fecharFiltro();
+    }, true);
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && selecionado && !document.querySelector('dialog[open]')) fecharPainel();
     });
@@ -664,6 +895,8 @@
         if ($('mp-estoque-minimo').checked) params.set('estoque_minimo', '1');
         if ($('mp-sem-saldo').checked) params.set('incluir_sem_saldo', '1');
         if (refresh) params.set('refresh', '1');
+        // Máximo da API: filtro de coluna só enxerga o que foi carregado.
+        params.set('limit', '800');
         try {
             const resp = await fetch('/api/logistica/estoque?' + params.toString());
             const data = await resp.json().catch(() => ({}));
@@ -693,6 +926,9 @@
             document.querySelectorAll('.mp-view-btn').forEach((item) => item.classList.remove('active'));
             btn.classList.add('active');
             visaoAtual = btn.dataset.visao || 'materia_prima';
+            filtros = {};
+            ordem = null;
+            fecharFiltro();
             fecharPainel();
             carregar(false);
         });

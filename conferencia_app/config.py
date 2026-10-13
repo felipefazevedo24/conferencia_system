@@ -389,6 +389,12 @@ class Config:
     ENTRADA_CHAPA_EMAIL_DESTINATARIOS = os.environ.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", "fiscal@colmac.com")
     ENTRADA_CHAPA_EMAIL_CC = os.environ.get("ENTRADA_CHAPA_EMAIL_CC", "")
     ENTRADA_CHAPA_CFOPS = os.environ.get("ENTRADA_CHAPA_CFOPS", "1901,1915,1924")
+
+    # Avisos de estoque (reserva sem saldo e curva A em alerta), separados por
+    # virgula. Vazio = nada e' enviado.
+    ESTOQUE_ALERTA_EMAIL_DESTINATARIOS = os.environ.get(
+        "ESTOQUE_ALERTA_EMAIL_DESTINATARIOS", "felaze@colmac.com,compras@colmac.com,filoli@colmac.com"
+    )
     ENTRADA_CHAPA_CONTROLE_LOTE_VALORES = os.environ.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")
 
     # Valores de tproduto.tipo_controle que tornam o lote obrigatorio na

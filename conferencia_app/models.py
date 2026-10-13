@@ -4506,6 +4506,32 @@ class EstoquePlanejamentoParametro(db.Model):
     atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
 
+class EstoqueAlertaEstado(db.Model):
+    """O que o aviso de estoque por e-mail já comunicou: 1 linha por item em alerta.
+
+    Reserva sem saldo e curva A em alerta são estado do GRV, calculados a cada
+    verificação e nunca gravados. Aqui fica só a memória do que já foi avisado:
+    sem ela a checagem de reservas (a cada 5 min) mandaria o mesmo e-mail o dia
+    inteiro, e o resumo não saberia marcar o que é novo. A linha some quando o
+    item sai do alerta - se ele voltar, avisa de novo.
+    """
+
+    __tablename__ = "estoque_alerta_estado"
+    __table_args__ = (
+        db.UniqueConstraint("tipo", "codigo", name="ux_estoque_alerta_estado_tipo_codigo"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(20), nullable=False)  # reserva | curva_a
+    codigo = db.Column(db.String(60), nullable=False)  # sem pontuação, igual ao kardex
+    # curva_a: visão do item. Se o histórico de uma família não responder, as
+    # linhas dela ficam como estão em vez de sumirem e voltarem como "novo".
+    visao = db.Column(db.String(30))
+    situacao = db.Column(db.String(20))  # curva_a: abaixo_minimo | critico | zerado
+    quantidade = db.Column(db.Float)  # reserva: total reservado no último aviso
+    desde = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class ProducaoObservacao(db.Model):
     """Observacao operacional da estrutura, mantida no banco do Sync."""
 
