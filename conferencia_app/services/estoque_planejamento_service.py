@@ -55,6 +55,9 @@ _LIMITES = {
 ADI_CORTE = 1.32
 CV2_CORTE = 0.49
 MESES_CLASSIFICACAO = 24
+# Curva ABC: meses com saída, dentro dos últimos MESES_GIRO_A meses fechados.
+MESES_GIRO_A = 6
+MESES_GIRO_B = 3
 # Com menos meses com saída que isso não dá pra medir variação: esporádico.
 MIN_MESES_COM_SAIDA = 3
 DIAS_POR_MES = 30.4
@@ -131,22 +134,18 @@ def _meses_fechados(hoje: date, quantidade: int) -> list[str]:
     return list(reversed(meses))
 
 
-def classificar_abc(valores: dict[str, float]) -> dict[str, str]:
-    """Curva ABC pelo peso de cada item (hoje, o número de retiradas): A até
-    80% do acumulado, B até 95%, C o resto. Item sem retirada é C."""
-    total = sum(v for v in valores.values() if v > 0)
-    classes = {codigo: "C" for codigo in valores}
-    if total <= 0:
-        return classes
-    acumulado = 0.0
-    for codigo, valor in sorted(valores.items(), key=lambda kv: kv[1], reverse=True):
-        if valor <= 0:
-            break
-        # A classe é decidida pelo acumulado ANTES do item: o item que cruza os
-        # 80% ainda é A (senão uma base com 1 item dominante não teria A).
-        classes[codigo] = "A" if acumulado < 0.80 * total else ("B" if acumulado < 0.95 * total else "C")
-        acumulado += valor
-    return classes
+def classificar_giro(meses_com_saida: int) -> str:
+    """Curva ABC pelo giro recente: A = saiu em todos os últimos 6 meses
+    fechados, B = em pelo menos 3 deles, C = o resto.
+
+    Decisão da logística em 13/10/2026, olhando o GRV: pelo valor consumido,
+    1 saída de uma máquina de R$ 1 milhão era curva A; pelo acumulado de
+    retiradas em 24 meses, a revenda (saídas espalhadas em 1.320 itens) tinha
+    504 itens A, 384 deles com 3 retiradas ou menos. A só fica quem dá pra
+    afirmar que gira: janela curta e saída em todos os meses."""
+    if meses_com_saida >= MESES_GIRO_A:
+        return "A"
+    return "B" if meses_com_saida >= MESES_GIRO_B else "C"
 
 
 def _lead_time(amostras: list[dict[str, Any]], hoje: date, padrao_dias: int) -> dict[str, Any]:
@@ -318,19 +317,17 @@ def calcular_planejamento(
     relativa ao conjunto e mudaria a cada busca."""
     hoje = hoje or agora_br().date()
     custos = {}
-    retiradas = {}
+    classes = {}
+    meses_giro = set(_meses_fechados(hoje, MESES_GIRO_A))
     for codigo, item in itens.items():
         historico = historicos.get(codigo) or {}
         # tproduto.preco_custo vale mesmo com saldo zero; o custo médio do
         # saldo some quando o item zera.
         custo = historico.get("preco_custo") or item.get("custo_medio")
         custos[codigo] = float(custo) if custo else None
-        # Curva pelo giro (número de retiradas em 24 meses), não pelo valor
-        # consumido: por valor, 1 saída de uma máquina de R$ 1 milhão virava
-        # curva A com confiança baixa (decisão da logística em 13/10/2026).
-        # Quantidade consumida não serve de peso: KG, MM e PÇ não se somam.
-        retiradas[codigo] = float((historico.get("retiradas_24m") or {}).get("quantidade") or 0)
-    classes = classificar_abc(retiradas)
+        classes[codigo] = classificar_giro(sum(
+            1 for m in historico.get("serie_mensal") or [] if m.get("mes") in meses_giro and float(m.get("saida") or 0) > 0
+        ))
     return {
         codigo: calcular_item(
             historicos.get(codigo) or {},

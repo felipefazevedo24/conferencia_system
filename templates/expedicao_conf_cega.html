@@ -510,6 +510,16 @@
                 <div id="{{ prefix }}-conf-historico" class="ce-historico"></div>
             </div>
         </div>
+
+        <div class="eui-card hidden" id="{{ prefix }}-card-trilha-grv">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-route"></i> Trilha no GRV</h2>
+                <p class="eui-card__sub">Quem movimentou o orçamento, a produção e a nota desta ordem no ERP. O GRV não registra quem criou a ordem de faturamento.</p>
+            </div>
+            <div class="eui-card__body">
+                <div id="{{ prefix }}-conf-trilha-grv" class="ce-historico"></div>
+            </div>
+        </div>
     </div>
 </div>
 {% endmacro %}
@@ -1526,6 +1536,55 @@
             }).join("");
         }
 
+        // Trilha da ordem no GRV. Carrega à parte, depois da tela abrir: a
+        // consulta vai no ERP e não pode segurar a conferência.
+        async function renderTrilhaGrv(cod) {
+            const card = el("card-trilha-grv");
+            const wrap = el("conf-trilha-grv");
+            if (!card || !wrap) return;
+            card.classList.add("hidden");
+            wrap.innerHTML = "";
+            // Só ordem de faturamento tem trilha; serviço de terceiro não.
+            if (cfg.codKey !== "cod_ordem_fat") return;
+            let d;
+            try {
+                const r = await fetch(`${cfg.apiBase}/ordens/${encodeURIComponent(cod)}/trilha-grv`, { headers: { "Accept": "application/json" } });
+                d = await r.json();
+                if (!r.ok) return;
+            } catch (e) {
+                return;
+            }
+            // O usuário pode ter aberto outra ordem enquanto o GRV respondia.
+            if (!currentOrdem || String(codDe(currentOrdem)) !== String(cod)) return;
+            if (d.motivo === "nf_manual" || d.motivo === "nao_encontrada" || d.motivo === "nao_configurado") return;
+            card.classList.remove("hidden");
+            if (!d.disponivel) {
+                wrap.innerHTML = `<div class="ce-hist-empty">${d.motivo === "bridge_desatualizado"
+                    ? "A ponte do ERP ainda não tem esta consulta: atualize a ponte na VM para ver a trilha."
+                    : "O GRV não respondeu agora. Abra a ordem de novo em instantes."}</div>`;
+                return;
+            }
+            const eventos = d.eventos || [];
+            if (!eventos.length) {
+                wrap.innerHTML = '<div class="ce-hist-empty">Nenhum movimento desta ordem encontrado no GRV.</div>';
+                return;
+            }
+            const rotulos = { orcamento: "Orçamento", reserva: "Reserva", producao: "Produção", solicitacao: "Faturamento", nf: "Nota fiscal", outro: "Estoque" };
+            wrap.innerHTML = eventos.map((e) => {
+                const quando = e.sem_hora ? fmtDataBR(e.data) : fmtDataHora(e.data);
+                const usuario = e.usuario ? escapeHtml(e.usuario) : "não registrado";
+                return `<div class="ce-hist-item">
+                    <div class="ce-hist-head">
+                        <span class="ce-hist-acao">${rotulos[e.tipo] || rotulos.outro}</span>
+                        <strong>${escapeHtml(e.titulo)}</strong>
+                        <span class="ce-hist-meta"><i class="fas fa-user"></i> ${usuario}</span>
+                        <span class="ce-hist-meta"><i class="fas fa-clock"></i> ${quando}</span>
+                    </div>
+                    ${e.detalhe ? `<div class="ce-hist-empty">${escapeHtml(e.detalhe)}</div>` : ""}
+                </div>`;
+            }).join("");
+        }
+
         async function renderFollowup(cod) {
             const card = el("card-followup");
             const wrap = el("conf-followup");
@@ -1582,6 +1641,7 @@
                 renderItens(o);
                 renderHistorico(o.historico);
                 renderFollowup(cod);
+                renderTrilhaGrv(cod);
 
                 el("card-header-form").classList.toggle("hidden", !o.editavel);
                 el("h-peso-liq").value = o.peso_liquido || "";

@@ -1774,6 +1774,93 @@ def _cardex_grv(
     return {"produtos": produtos, "movimentos": movimentos, "notas": notas, "historico": historico, "depositos": depositos}
 
 
+# Trilha de uma ordem de faturamento. O GRV NAO grava quem criou a OF
+# (tordem_fat nao tem usuario e thistorico_alteracoes nao cobre a tabela -
+# conferido em 13/10/2026 com a OF 1724), entao a trilha e' o que existe em
+# volta dela: os estagios do orcamento e os movimentos de kardex dos itens.
+SQL_TRILHA_OF_CABECALHO = """
+    select codigo, cliente, numero_nf, u_dt_solicitacao_fat
+    from public.tordem_fat
+    where cod_empresa = %(empresa)s and codigo = %(of)s
+"""
+
+SQL_TRILHA_OF_ESTAGIOS = """
+    select distinct o.n_orcamento::text as orcamento, e.estagio, e.data, e.usuario
+    from public.tordem_fat_itens i
+    join public.torcamento o
+      on o.cod_empresa = i.cod_empresa and o.n_orcamento::text = i.n_orcamento::text
+    join public.torcamento_estagios e
+      on e.cod_empresa = o.cod_empresa and e.cod_orcamento = o.codigo
+    where i.cod_empresa = %(empresa)s and i.cod_ordem_fat = %(of)s
+      and coalesce(i.n_orcamento::text, '') <> ''
+    order by e.data
+"""
+
+# So' os movimentos dos itens da OF que citam o orcamento dela (entrada de
+# producao, solicitacao de material) ou a NF dela. Um evento gera varias
+# linhas no kardex (fisico, reservado, solicitado, 1 por item) com
+# milissegundos de diferenca: fica 1 por documento/usuario/dia, com a hora da
+# primeira e a observacao mais informativa.
+SQL_TRILHA_OF_KARDEX = """
+    with itens as (
+        select distinct i.cod_produto, i.cod_interno, coalesce(i.n_orcamento::text, '') as orcamento
+        from public.tordem_fat_itens i
+        where i.cod_empresa = %(empresa)s and i.cod_ordem_fat = %(of)s
+    )
+    select min(c.dt_hora_movimentacao) as data,
+           c.tabela_link, c.chave_primaria_link, c.usuario,
+           count(distinct c.cod_produto) as itens,
+           max(c.obs) filter (where c.tipo_movimento in (0, 1)) as obs_principal,
+           max(c.obs) as obs
+    from public.tproduto_cardex c
+    join itens it on it.cod_produto = c.cod_produto
+    where c.cod_empresa = %(empresa)s
+      and (
+        (c.tabela_link = 'TNOTA_FISCAL' and %(nf)s <> '' and split_part(c.chave_primaria_link, ';', 5) = %(nf)s)
+        or (it.orcamento <> '' and c.obs ~* ('OR[ÇC]AMENTO:? *' || it.orcamento || '([^0-9]|$)'))
+      )
+    group by c.tabela_link, c.chave_primaria_link, c.usuario, c.dt_hora_movimentacao::date
+    order by 1
+"""
+
+
+def _trilha_ordem_fat(cur, empresa: int, cod_ordem_fat: int) -> dict[str, Any] | None:
+    params = {"empresa": empresa, "of": cod_ordem_fat}
+    cur.execute(SQL_TRILHA_OF_CABECALHO, params)
+    cabecalho = cur.fetchone()
+    if not cabecalho:
+        return None
+    _, cliente, numero_nf, dt_solicitacao = cabecalho
+    nf = str(numero_nf or "").strip()
+    nf = "" if nf == "0" else nf
+
+    cur.execute(SQL_TRILHA_OF_ESTAGIOS, params)
+    estagios = [
+        {"orcamento": orcamento, "estagio": estagio, "data": data, "usuario": usuario}
+        for orcamento, estagio, data, usuario in cur.fetchall()
+    ]
+    cur.execute(SQL_TRILHA_OF_KARDEX, {**params, "nf": nf})
+    movimentos = [
+        {
+            "data": data,
+            "tabela": tabela,
+            "chave": chave,
+            "usuario": usuario,
+            "itens": int(itens or 0),
+            "obs": obs_principal or obs,
+        }
+        for data, tabela, chave, usuario, itens, obs_principal, obs in cur.fetchall()
+    ]
+    return {
+        "cod_ordem_fat": cod_ordem_fat,
+        "cliente": cliente,
+        "numero_nf": nf,
+        "dt_solicitacao_fat": dt_solicitacao,
+        "estagios": estagios,
+        "movimentos": movimentos,
+    }
+
+
 def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date) -> dict[str, dict[str, Any]]:
     """Historico cru por codigo; as contas (classificacao, minimo, lote) ficam
     no Sync, que tem os parametros e pode mudar sem redeploy da VM."""
@@ -3075,6 +3162,31 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "codigo": codigo, "fornecimentos": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/expedicao/trilha-ordem-fat")
+    def consultar_trilha_ordem_fat():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+                cod_ordem_fat = int(payload.get("cod_ordem_fat") or 0)
+            except (TypeError, ValueError):
+                return jsonify({"sucesso": False, "erro": "cod_ordem_fat_invalido"}), 400
+            if cod_ordem_fat <= 0:
+                return jsonify({"sucesso": False, "erro": "cod_ordem_fat_obrigatorio"}), 400
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    trilha = _trilha_ordem_fat(cur, empresa, cod_ordem_fat)
+            return jsonify({"sucesso": True, "encontrada": trilha is not None, "trilha": _json_safe(trilha)})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar a trilha da ordem de faturamento no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/estoque/cardex")

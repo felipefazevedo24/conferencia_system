@@ -30,6 +30,7 @@ from ..services import expedicao_desenho_service as desenho_svc
 from ..services import expedicao_etiqueta_pdf as etiqueta_pdf
 from ..services import expedicao_etiqueta_service as etiqueta_svc
 from ..services import expedicao_fat_service as svc
+from ..services import expedicao_grv_trilha_service as grv_trilha_svc
 from ..services import expedicao_log_service as log_svc
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 from ..tempo import agora_br
@@ -634,6 +635,20 @@ def upload_fotos_preexpedicao(cod_ordem_fat):
         return jsonify({"error": f"Falha ao salvar as fotos: {exc}"}), 502
 
     return jsonify({"sucesso": True, **_fotos_preexpedicao_payload(registro)})
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/trilha-grv", methods=["GET"])
+@permission_required(PERMISSION)
+def trilha_grv_ordem_conf_cega(cod_ordem_fat):
+    # Rota separada do detalhe da ordem: a consulta vai no GRV e a tela da
+    # conferencia nao pode ficar esperando o bridge pra abrir.
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    if svc.eh_nf_manual(ordem):
+        # NF lancada a mao no Sync: o cod_ordem_fat nao e' uma OF do GRV.
+        return jsonify({"disponivel": False, "motivo": "nf_manual", "eventos": []})
+    return jsonify(grv_trilha_svc.buscar_trilha_grv(cod_ordem_fat))
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>", methods=["DELETE"])

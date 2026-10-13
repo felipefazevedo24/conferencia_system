@@ -562,7 +562,7 @@ def enviar_resumo_curva_a(teste_para: str | None = None) -> dict[str, Any]:
                  ("Manter em estoque", True), ("Comprar agora", True), ("Dilui em", True)],
                 linhas,
             )
-        miolo += _nota(_COMO_LER + " <b>Curva A</b> são os itens que somam 80% das retiradas do estoque em 24 meses.")
+        miolo += _nota(_COMO_LER + " <b>Curva A</b> são os itens que tiveram saída em todos os últimos 6 meses.")
         avisos = []
         if oc_sem_resposta:
             avisos.append("As ordens de compra abertas não responderam: a lista pode incluir item que já tem reposição a caminho.")

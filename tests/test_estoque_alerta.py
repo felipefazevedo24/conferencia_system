@@ -194,7 +194,8 @@ def test_sem_destinatario_configurado_nao_envia_nem_grava(tmp_path):
 HISTORICOS = {
     "190100001": _regular(mensal=1000, preco=50),
     "190100002": _regular(mensal=800, preco=50),
-    "190100003": _regular(mensal=10, preco=1),
+    # Sem saída nos 2 últimos meses: 4 de 6, não é curva A.
+    "190100003": {**_regular(mensal=10, preco=1), "serie_mensal": _regular(mensal=10, preco=1)["serie_mensal"][:-2]},
     "190100004": _regular(mensal=900, preco=50),
 }
 
@@ -238,18 +239,19 @@ def test_resumo_curva_a_lista_completa_e_marca_o_que_e_novo(tmp_path):
         assert _estados("curva_a")["190100004"].situacao == "zerado"
 
 
-def test_resumo_curva_a_ignora_item_de_saida_esporadica_mesmo_caro(tmp_path):
+def test_item_caro_de_poucas_saidas_nao_e_curva_a_nem_entra_no_resumo(tmp_path):
     from tests.test_estoque_planejamento import METALON
 
     app = _app(tmp_path)
-    # Poucas saídas, mas caras: vira curva A pelo valor e vive zerado (comprado sob encomenda).
+    # Saídas caras, mas só 1 nos últimos 6 meses: pelo valor seria curva A; pelo giro não é.
     historicos = {**HISTORICOS, "190100009": {**METALON, "preco_custo": 15.0}}
     estoque = _estoque_curva()
     estoque["por_codigo"]["19-01-00009"] = {"familia": FAMILIA_MP, "item": "MAQUINA SOB ENCOMENDA", "unidade": "UN", "qtde_total": 0, "qtde_disponivel": 0}
     with app.app_context():
         with _grv(estoque, historicos):
             planos = alerta._planos_da_visao(estoque["por_codigo"], "materia_prima", dict(planejamento_svc.PADROES))[2]
-        assert (planos["190100009"]["classe_abc"], planos["190100009"]["tipo_demanda"]) == ("A", "esporadico")
+        assert (planos["190100009"]["classe_abc"], planos["190100009"]["tipo_demanda"]) == ("C", "esporadico")
+        assert planos["190100001"]["classe_abc"] == "A"
         with _grv(estoque, historicos) as smtp:
             alerta.enviar_resumo_curva_a()
         assert "19-01-00009" not in _html(smtp)

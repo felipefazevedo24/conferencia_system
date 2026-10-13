@@ -130,9 +130,26 @@ def test_candidato_a_estoque_quando_comprado_para_os_com_frequencia():
     assert _calcular(historico, saldo=1000)["candidato_estoque"] is True
 
 
-def test_curva_abc_pelo_valor_consumido():
-    classes = svc.classificar_abc({"X": 7000, "Y": 1500, "Z": 1000, "W": 500, "V": 0})
-    assert classes == {"X": "A", "Y": "A", "Z": "B", "W": "C", "V": "C"}
+def test_curva_abc_pelo_giro_dos_ultimos_6_meses():
+    assert [svc.classificar_giro(n) for n in (6, 5, 3, 2, 0)] == ["A", "B", "B", "C", "C"]
+
+    # HOJE = 28/09/2026: os 6 meses fechados vão de 03/2026 a 08/2026.
+    def saidas(*meses, preco=10):
+        return {**_regular(preco=preco), "serie_mensal": [{"mes": m, "saida": 100.0, "saida_os": 0.0} for m in meses]}
+
+    seis = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
+    historicos = {
+        "GIRA": saidas(*seis, preco=1),                         # barato, mas saiu nos 6 meses
+        "MAQUINA": saidas("2026-07", preco=1000000),            # 1 saída cara: por valor seria A
+        "FALHOU1": saidas(*seis[1:]),                           # 5 de 6: não dá pra afirmar, fica B
+        "PAROU": saidas("2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06"),
+        "MESATUAL": saidas(*seis[:5], "2026-09"),               # o mês corrente (parcial) não conta
+    }
+    itens = {codigo: {"saldo_disponivel": 10, "custo_medio": None} for codigo in historicos}
+    planos = svc.calcular_planejamento(itens, historicos, dict(svc.PADROES), hoje=HOJE)
+    assert {c: p["classe_abc"] for c, p in planos.items()} == {
+        "GIRA": "A", "MAQUINA": "C", "FALHOU1": "B", "PAROU": "C", "MESATUAL": "B",
+    }
 
 
 def test_sem_custo_nao_calcula_lote():
