@@ -66,6 +66,7 @@
     .hf-badge.homologado { background: #dcfce7; color: #166534; }
     .hf-badge.reprovado { background: #fee2e2; color: #991b1b; }
     .hf-badge.fornecedor { background: #fef3c7; color: #92400e; }
+    .hf-badge.financeiro { background: #cffafe; color: #155e75; }
     .hf-evid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
     .hf-evid a { font-size: 11px; font-weight: 600; background: #eef2ff; color: #3730a3; border-radius: 5px; padding: 2px 7px; text-decoration: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hf-evid-falta { font-size: 11px; font-weight: 700; color: #b45309; margin-top: 5px; }
@@ -124,6 +125,7 @@
         <div class="eui-stat is-clickable is-active" data-filter="" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todas</span><span class="eui-stat__value" id="hf-m-total">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Rascunho" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-pen-to-square"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Rascunho</span><span class="eui-stat__value" id="hf-m-rascunho">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Com fornecedor" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-envelope-open-text"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Com fornecedor</span><span class="eui-stat__value" id="hf-m-fornecedor">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Validação financeira" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Validação financeira</span><span class="eui-stat__value" id="hf-m-financeiro">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Em aprovação" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em aprovação</span><span class="eui-stat__value" id="hf-m-aprovacao">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Homologado" data-tipo="status"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Homologados</span><span class="eui-stat__value" id="hf-m-homologado">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="a_vencer" data-tipo="validade"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A vencer (30d)</span><span class="eui-stat__value" id="hf-m-avencer">0</span></div></div>
@@ -200,7 +202,7 @@
     const pct = (v) => (v == null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%");
     const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
 
-    const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado", "Com fornecedor": "fornecedor" };
+    const SLUG_STATUS = { "Rascunho": "rascunho", "Em aprovação": "aprovacao", "Homologado": "homologado", "Reprovado": "reprovado", "Com fornecedor": "fornecedor", "Validação financeira": "financeiro" };
     const SLUG_CLASSE = { "Aprovado": "aprovado", "Aprovado com ressalvas": "ressalvas", "Reprovado": "reprovado", "Em análise": "analise",
         "Eficiente / Qualificado": "aprovado", "Qualificado c/ plano de ação": "ressalvas", "Desqualificado": "reprovado" };
     const SLUG_OPT = { "Sim": "", "Conforme": "", "Atende": "", "Parcial": "meio", "Atende Parcial": "meio", "Não": "neg", "Nao": "neg",
@@ -208,6 +210,10 @@
 
     let filtroStatus = "", filtroValidade = "", modelo = null, atual = null;
     const IS_ADMIN = {{ (user_role == 'Admin') | tojson }};
+    // Quem so' tem a permissao do Financeiro consulta a homologacao e mexe
+    // apenas no parecer financeiro.
+    const PODE_COMPRAS = {{ pode_compras | tojson }};
+    const PODE_FINANCEIRO = {{ pode_financeiro | tojson }};
 
     async function carregar() {
         try {
@@ -222,6 +228,7 @@
             $("hf-m-rascunho").textContent = m["Rascunho"] || 0;
             $("hf-m-aprovacao").textContent = m["Em aprovação"] || 0;
             $("hf-m-fornecedor").textContent = m["Com fornecedor"] || 0;
+            $("hf-m-financeiro").textContent = m["Validação financeira"] || 0;
             $("hf-m-homologado").textContent = m["Homologado"] || 0;
             $("hf-m-avencer").textContent = m.a_vencer || 0;
             $("hf-m-vencido").textContent = m.vencido || 0;
@@ -345,6 +352,45 @@
             </div></div></div>`;
     }
 
+    // ── Validacao financeira (rev. 04): parecer antes do gestor ───────────
+    const moeda = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+    function campoFin(rotulo, valor) {
+        return `<div class="hf-field"><label>${rotulo}</label><div style="font-size:12.5px;">${esc(valor || "—")}</div></div>`;
+    }
+    function rodadaFin(f, editavel) {
+        const anexos = (f.anexos || []).map((a) => `<a href="${esc(a.url)}" target="_blank" rel="noopener" title="${esc(a.enviado_por || "")}"><i class="fas fa-paperclip"></i> ${esc(a.nome_arquivo)}</a>${editavel ? `<button type="button" class="hf-evid-del" data-del-fin-anexo="${a.id}" title="Remover anexo"><i class="fas fa-xmark"></i></button>` : ""}`).join("");
+        const upload = editavel ? '<label class="hf-evid-add"><i class="fas fa-upload"></i> Anexar documento<input type="file" accept=".pdf,.jpg,.jpeg,.png" data-fin-anexo></label>' : "";
+        if (editavel) {
+            return `<div class="hf-form-grid" style="margin-bottom:8px;">
+                <div class="hf-field"><label>Restrição no Serasa?</label><select data-fin="restricao_serasa"><option value="">—</option>${["Sim", "Não"].map((v) => `<option ${f.restricao_serasa === v ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+                <div class="hf-field"><label>Score</label><input data-fin="score" value="${esc(f.score || "")}"></div>
+                <div class="hf-field"><label>Limite de crédito sugerido (R$)</label><input data-fin="limite_credito" inputmode="decimal" value="${f.limite_credito == null ? "" : String(f.limite_credito).replace(".", ",")}"></div>
+                <div class="hf-field"><label>Condição de pagamento</label><input data-fin="condicao_pagamento" value="${esc(f.condicao_pagamento || "")}"></div>
+                <div class="hf-field wide"><label>Parecer / observação (obrigatório para reprovar)</label><textarea data-fin="observacao" rows="3">${esc(f.observacao || "")}</textarea></div>
+            </div><div class="hf-evid">${anexos}${upload}</div>`;
+        }
+        return `<div class="hf-form-grid" style="margin-bottom:8px;">
+            ${campoFin("Restrição no Serasa?", f.restricao_serasa)}${campoFin("Score", f.score)}
+            ${campoFin("Limite de crédito sugerido", f.limite_credito == null ? "" : moeda(f.limite_credito))}${campoFin("Condição de pagamento", f.condicao_pagamento)}
+            <div class="hf-field wide"><label>Parecer / observação</label><div style="font-size:12.5px;white-space:pre-line;">${esc(f.observacao || "—")}</div></div>
+        </div>${anexos ? `<div class="hf-evid">${anexos}</div>` : ""}`;
+    }
+    function blocoFinanceiro(f) {
+        const editavel = f.pendente && PODE_FINANCEIRO;
+        const quem = f.decidido_por ? ` · ${esc(f.status.toLowerCase())} por ${esc(f.decidido_por)} em ${esc(f.decidido_em || "")}` : ` · enviado por ${esc(f.solicitado_por || "—")} em ${esc(f.solicitado_em || "")}`;
+        const anteriores = (f.anteriores || []).map((r) => `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;font-weight:700;">Rodada anterior: ${esc(r.status)}${r.decidido_por ? " por " + esc(r.decidido_por) + " em " + esc(r.decidido_em || "") : ""}</summary><div style="padding-top:8px;">${rodadaFin(r, false)}</div></details>`).join("");
+        return `<div class="hf-secao" id="hf-financeiro"><div class="hf-secao-head">
+            <span class="hf-secao-titulo"><i class="fas fa-coins"></i> Validação financeira</span>
+            <span class="hf-secao-peso">${esc(f.pendente ? "Pendente" : f.status)}</span>
+            <span class="hf-secao-prog">${quem}</span></div>
+            <div class="hf-secao-body" style="padding:10px 14px;">${rodadaFin(f, editavel)}${anteriores}</div></div>`;
+    }
+    function coletarFinanceiro() {
+        const dados = {};
+        $("hf-corpo").querySelectorAll("[data-fin]").forEach((el) => { dados[el.dataset.fin] = el.value; });
+        return dados;
+    }
+
     // ── Plano de acao (fase 2): corre em paralelo depois de homologar ─────
     const SLUG_PLANO = { "Pendente": "pendente", "Em análise": "analise", "Aceito": "aceito" };
     function blocoPlano(p) {
@@ -452,7 +498,7 @@
     }
 
     function desenhar(titulo) {
-        const ed = atual.status === "Rascunho";
+        const ed = PODE_COMPRAS && atual.status === "Rascunho";
         $("hf-modal-titulo").textContent = titulo;
         $("hf-modal-sub").textContent = atual.id
             ? `#${atual.id} · ${atual.status} · criado por ${atual.criado_por || "—"} em ${atual.criado_em || "—"}`
@@ -471,6 +517,9 @@
                 : `<div class="hf-aviso"><i class="fas fa-envelope-open-text"></i> Aguardando o fornecedor responder a autoavaliação. Link enviado para <b>${esc(cv.email)}</b> em ${esc(cv.enviado_em)} por ${esc(cv.enviado_por || "—")}, válido até ${esc(cv.expira_em)}. Para editar, cancele o envio.</div>`;
         } else if (ed && cv && cv.situacao === "respondido") {
             $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;"><i class="fas fa-circle-check"></i> Autoavaliação respondida pelo fornecedor (${esc(cv.email)}) em ${esc(cv.respondido_em)}. Revise as respostas e as evidências antes de enviar para aprovação.</div>`;
+        }
+        if (atual.status === "Validação financeira") {
+            $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfeff;border-color:#a5f3fc;color:#155e75;"><i class="fas fa-coins"></i> Aguardando o parecer do <b>Financeiro</b>. Depois de aprovada, segue para a aprovação do gestor; se reprovada, volta para Compras.</div>`;
         }
         if (atual.justificativa_decisao) {
             $("hf-avisos").innerHTML += `<div class="hf-aviso"><b>Justificativa:</b> ${esc(atual.justificativa_decisao)}</div>`;
@@ -539,6 +588,7 @@
                 `</div></div></div>`;
         }
 
+        if (atual.financeiro) html = blocoFinanceiro(atual.financeiro) + html;
         if (atual.plano_acao) html += blocoPlano(atual.plano_acao);
         else if (atual.plano_pode_criar) {
             html += `<div class="hf-secao" id="hf-plano"><div class="hf-secao-head">
@@ -597,22 +647,30 @@
     }
 
     function desenharAcoes() {
-        const ed = atual.status === "Rascunho";
+        const ed = PODE_COMPRAS && atual.status === "Rascunho";
         let b = "";
         if (ed) b += `<button class="eui-btn eui-btn--primary" data-act="salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>`;
         if (ed) b += `<button class="eui-btn eui-btn--subtle" data-act="salvar-fechar"><i class="fas fa-floppy-disk"></i> Salvar e fechar</button>`;
         if (ed) b += `<button class="eui-btn eui-btn--subtle" data-act="fornecedor"><i class="fas fa-envelope"></i> Enviar ao fornecedor</button>`;
         if (ed && atual.id) b += `<button class="eui-btn eui-btn--success" data-act="enviar"><i class="fas fa-paper-plane"></i> Enviar para aprovação</button>`;
-        if (atual.status === "Com fornecedor") {
+        if (atual.status === "Validação financeira") {
+            if (PODE_FINANCEIRO) {
+                b += `<button class="eui-btn eui-btn--primary" data-act="fin-salvar"><i class="fas fa-floppy-disk"></i> Salvar parecer</button>`;
+                b += `<button class="eui-btn eui-btn--success" data-act="fin-aprovar"><i class="fas fa-circle-check"></i> Aprovar (Financeiro)</button>`;
+                b += `<button class="eui-btn eui-btn--danger" data-act="fin-reprovar"><i class="fas fa-ban"></i> Reprovar (Financeiro)</button>`;
+            }
+            if (PODE_COMPRAS) b += `<button class="eui-btn eui-btn--subtle" data-act="devolver"><i class="fas fa-rotate-left"></i> Recolher envio</button>`;
+        }
+        if (PODE_COMPRAS && atual.status === "Com fornecedor") {
             b += `<button class="eui-btn eui-btn--primary" data-act="fornecedor"><i class="fas fa-envelope"></i> Reenviar link</button>`;
             b += `<button class="eui-btn eui-btn--subtle" data-act="cancelar-fornecedor"><i class="fas fa-link-slash"></i> Cancelar envio</button>`;
         }
-        if (atual.status === "Em aprovação") {
+        if (PODE_COMPRAS && atual.status === "Em aprovação") {
             b += `<button class="eui-btn eui-btn--success" data-act="homologar"><i class="fas fa-circle-check"></i> Homologar</button>`;
             b += `<button class="eui-btn eui-btn--danger" data-act="reprovar"><i class="fas fa-ban"></i> Reprovar</button>`;
             b += `<button class="eui-btn eui-btn--subtle" data-act="devolver"><i class="fas fa-rotate-left"></i> Devolver</button>`;
         }
-        if (["Homologado", "Reprovado"].includes(atual.status)) {
+        if (PODE_COMPRAS && ["Homologado", "Reprovado"].includes(atual.status)) {
             b += `<button class="eui-btn eui-btn--subtle" data-act="reabrir"><i class="fas fa-rotate-left"></i> Reabrir</button>`;
         }
         if (atual.id) b += `<a class="eui-btn eui-btn--subtle" href="/api/compras/homologacao/${atual.id}/pdf" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> PDF</a>`;
@@ -716,6 +774,8 @@
         if (e.target.matches('[data-iso="certificado"]')) { guardarDigitado(); desenhar($("hf-modal-titulo").textContent); return; }
         const up = e.target.closest("[data-up-evid]");
         if (up) { anexarEvidencia(up); return; }
+        const finAnexo = e.target.closest("[data-fin-anexo]");
+        if (finAnexo) { anexarFinanceiro(finAnexo); return; }
         if (e.target.matches('[data-campo="cnpj"]')) buscarCnpj(false);
     });
 
@@ -739,6 +799,35 @@
         } catch (err) { toast(err.message, "error"); input.value = ""; }
     }
 
+    // Anexo do Financeiro: salva o parecer digitado antes, porque a janela e'
+    // redesenhada com o que o servidor devolve.
+    async function anexarFinanceiro(input) {
+        const arquivo = input.files && input.files[0];
+        if (!arquivo) return;
+        try {
+            await api(`/api/compras/homologacao/${atual.id}/financeiro`, { method: "PUT", body: JSON.stringify(coletarFinanceiro()) });
+            const fd = new FormData();
+            fd.append("arquivo", arquivo);
+            const resp = await fetch(`/api/compras/homologacao/${atual.id}/financeiro/anexos`, { method: "POST", body: fd });
+            const d = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(d.error || ("Erro " + resp.status));
+            atual = d.homologacao;
+            toast(d.message, "success");
+            desenhar(atual.razao_social || "Homologação");
+        } catch (err) { toast(err.message, "error"); input.value = ""; }
+    }
+
+    async function removerAnexoFinanceiro(id) {
+        if (!confirm("Remover este anexo?")) return;
+        try {
+            await api(`/api/compras/homologacao/${atual.id}/financeiro`, { method: "PUT", body: JSON.stringify(coletarFinanceiro()) });
+            const d = await api(`/api/compras/homologacao/financeiro/anexos/${id}`, { method: "DELETE" });
+            atual = d.homologacao;
+            toast(d.message, "success");
+            desenhar(atual.razao_social || "Homologação");
+        } catch (err) { toast(err.message, "error"); }
+    }
+
     async function removerEvidencia(id) {
         if (!confirm("Remover esta evidência?")) return;
         try {
@@ -759,6 +848,8 @@
         if (delEv) removerEvidencia(delEv.dataset.delEvid);
         const btnPlano = e.target.closest("[data-plano-act]");
         if (btnPlano) acaoPlano(btnPlano);
+        const delFin = e.target.closest("[data-del-fin-anexo]");
+        if (delFin) removerAnexoFinanceiro(delFin.dataset.delFinAnexo);
         const criarPlano = e.target.closest("#hf-plano-criar");
         if (criarPlano) {
             criarPlano.disabled = true;
@@ -828,6 +919,19 @@
                 if (motivo === null) { btn.disabled = false; return; }
                 const r = await api(`/api/compras/homologacao/${atual.id}/devolver`, { method: "POST", body: JSON.stringify({ motivo }) });
                 atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "fin-salvar") {
+                const r = await api(`/api/compras/homologacao/${atual.id}/financeiro`, { method: "PUT", body: JSON.stringify(coletarFinanceiro()) });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "fin-aprovar") {
+                if (!confirm("Aprovar a validação financeira? A homologação segue para a aprovação do gestor.")) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/financeiro/aprovar`, { method: "POST", body: JSON.stringify(coletarFinanceiro()) });
+                atual = r.homologacao; toast(r.message, "success");
+            } else if (act === "fin-reprovar") {
+                const dados = coletarFinanceiro();
+                if (!(dados.observacao || "").trim()) { toast("Informe o motivo da reprovação no campo Parecer / observação.", "error"); btn.disabled = false; return; }
+                if (!confirm("Reprovar a validação financeira? A homologação volta para Compras (Rascunho) com o seu parecer.")) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/financeiro/reprovar`, { method: "POST", body: JSON.stringify(dados) });
+                atual = r.homologacao; toast(r.message, "success");
             } else if (act === "excluir") {
                 if (!confirm(`Excluir DEFINITIVAMENTE a homologação de ${atual.razao_social || "este fornecedor"}?
 
@@ -879,6 +983,7 @@ Respostas, evidências, fotos e plano de ação serão apagados. Não dá para d
         if (a) { e.preventDefault(); abrir(a.dataset.abrir).catch((err) => toast(err.message, "error")); }
     });
     $("hf-btn-novo").addEventListener("click", () => abrirNovo().catch((e) => toast(e.message, "error")));
+    if (!PODE_COMPRAS) $("hf-btn-novo").style.display = "none";
     // A janela so' fecha pelos botoes (Fechar, Salvar e fechar, X). Clicar no
     // fundo escuro fechava - um toque sem querer no tablet perdia o que foi
     // preenchido.
