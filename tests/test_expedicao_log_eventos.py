@@ -304,3 +304,78 @@ def test_trilha_do_registro_de_expedicao_guarda_usuario_e_rota_e_some_no_rollbac
         db.session.flush()
         db.session.rollback()
     assert len(_trilha(app)) == 2
+
+
+# ── Desenho da peca no Nº OS ────────────────────────────────────────────────
+
+def _erp_falso(documentos, falha=None):
+    """Substitui as leituras do ERP usadas pelo desenho (teste nao usa rede)."""
+    from conferencia_app.services import producao_service
+
+    def obter_ordem(numero_os):
+        if falha:
+            raise falha
+        if numero_os != '10954':
+            raise LookupError('OS nao encontrada')
+        return {'codigo': 19678, 'n_os': '10954'}
+
+    return (
+        patch.object(producao_service, '_obter_ordem', side_effect=obter_ordem),
+        patch.object(producao_service, '_metadata_read', return_value=[{'aux_code': 1}]),
+        patch.object(producao_service, 'obter_documentos', return_value=documentos),
+        patch.object(producao_service, 'obter_arquivo', return_value=(b'%PDF-desenho', 'DES-BOL.010-002 - FRENTE QUADRO.PDF')),
+    )
+
+
+DESENHO = {'id': 1, 'kind': 'drawing', 'source_kind': 'drawing', 'filename': 'DES-BOL.010-002 - FRENTE QUADRO.PDF',
+           'aux_code': 1, 'source_cod_os': 19678, 'source_aux_code': 1, 'is_primary': True}
+
+
+def test_numero_os_com_desenho_devolve_link_e_abre_o_pdf(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, 'davmor', 'Admin')
+    p1, p2, p3, p4 = _erp_falso([DESENHO])
+    with p1, p2, p3, p4 as obter_arquivo:
+        consulta = client.get('/api/expedicao/conf-cega/desenho/10954').get_json()
+        assert consulta == {
+            'tem_desenho': True, 'arquivo': 'DES-BOL.010-002 - FRENTE QUADRO.PDF',
+            'url': '/api/expedicao/conf-cega/desenho/10954/arquivo',
+        }
+        arquivo = client.get(consulta['url'])
+        assert arquivo.status_code == 200
+        assert arquivo.mimetype == 'application/pdf'
+        assert arquivo.data == b'%PDF-desenho'
+        assert arquivo.headers['Content-Disposition'].startswith('inline')
+        # Busca exatamente o documento escolhido, na OS/item de onde ele veio.
+        assert obter_arquivo.call_args.args == ('10954', 1, 'drawing', 1)
+        assert obter_arquivo.call_args.kwargs['source_cod_os'] == 19678
+
+        # OS que nao existe no ERP: sem link, sem erro.
+        assert client.get('/api/expedicao/conf-cega/desenho/99999').get_json() == {'tem_desenho': False}
+        assert client.get('/api/expedicao/conf-cega/desenho/99999/arquivo').status_code == 404
+
+
+def test_numero_os_sem_desenho_ou_com_erp_fora_nao_quebra_a_conferencia(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, 'davmor', 'Admin')
+
+    p1, p2, p3, p4 = _erp_falso([])
+    with p1, p2, p3, p4:
+        assert client.get('/api/expedicao/conf-cega/desenho/10954').get_json() == {'tem_desenho': False}
+
+    p1, p2, p3, p4 = _erp_falso([DESENHO], falha=RuntimeError('bridge fora'))
+    with p1, p2, p3, p4:
+        resposta = client.get('/api/expedicao/conf-cega/desenho/10954')
+        assert resposta.status_code == 200
+        assert resposta.get_json() == {'tem_desenho': False, 'erp_indisponivel': True}
+        assert client.get('/api/expedicao/conf-cega/desenho/10954/arquivo').status_code == 503
+
+
+def test_desenho_exige_permissao_da_conferencia_de_expedicao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, 'fulano', 'Qualidade')
+    assert client.get('/api/expedicao/conf-cega/desenho/10954').status_code == 403
+    assert client.get('/api/expedicao/conf-cega/desenho/10954/arquivo').status_code == 403

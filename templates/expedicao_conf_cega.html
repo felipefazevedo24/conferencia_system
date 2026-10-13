@@ -68,15 +68,16 @@
     .ce-itens-table .ce-col-centro { text-align: center; font-weight: 800; color: var(--eui-muted); }
     .ce-itens-table .ce-os-mobile { display: none; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--eui-muted); }
     .ce-status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--eui-border); border: 2px solid var(--eui-surface); box-shadow: 0 0 0 1px var(--eui-border); }
-    .ce-conf-item.contado .ce-status-dot, .ce-conf-item.ok-line .ce-status-dot { background: var(--eui-success); box-shadow: 0 0 0 1px var(--eui-success); }
-    .ce-conf-item.divergente .ce-status-dot, .ce-conf-item.js-faltando .ce-status-dot { background: var(--eui-danger); box-shadow: 0 0 0 1px var(--eui-danger); }
+    /* Conferencia cega: a bolinha so' diz "ja' tem contagem", em cor neutra.
+       Nada de verde/vermelho na linha - cor de certo/errado e' pista. */
+    .ce-conf-item.contado .ce-status-dot, .ce-conf-item.ok-line .ce-status-dot, .ce-conf-item.divergente .ce-status-dot { background: var(--eui-text); box-shadow: 0 0 0 1px var(--eui-text); }
     .ce-conf-item input.qtd { min-height: 42px; width: 130px; max-width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
-    .ce-conf-item.contado td, .ce-conf-item.ok-line td { background: var(--eui-success-soft); }
-    .ce-conf-item.divergente td, .ce-conf-item.js-faltando td { background: var(--eui-danger-soft); }
+    .ce-os-link { font-weight: 800; text-decoration: underline; color: var(--eui-text); cursor: pointer; }
+    .ce-os-link:hover { color: var(--eui-primary); }
     .ce-conf-item.js-faltando input.qtd { border-color: var(--eui-danger); box-shadow: 0 0 0 2px var(--eui-danger-soft); }
     .ce-reveal { font-size: 11px; font-weight: 700; margin-top: 4px; }
     .ce-reveal.bad { color: var(--eui-danger); }
-    .ce-reveal.good { color: var(--eui-success); }
+    .ce-reveal.good { color: var(--eui-muted); }
     .ce-final-qtd { text-align: center; font-size: 18px; font-weight: 700; color: var(--eui-text); }
 
     .ce-header-form { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
@@ -1374,8 +1375,8 @@
             const linhas = (o.itens || []).map((it) => {
                 const celulas = `<td style="text-align:center"><span class="ce-status-dot"></span></td>
                     <td class="ce-col-cod">${escapeHtml(it.cod_interno || "—")}</td>
-                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS ${escapeHtml(it.n_os || "—")}</span></td>
-                    <td class="ce-col-centro ce-col-os">${escapeHtml(it.n_os || "—")}</td>`;
+                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS <span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span></span></td>
+                    <td class="ce-col-centro ce-col-os"><span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span></td>`;
                 if (conferido && !editavel) {
                     const cls = it.divergente ? "divergente" : "ok-line";
                     // Conferencia CEGA: nunca exibimos a quantidade esperada.
@@ -1418,6 +1419,47 @@
                 inp.addEventListener("input", () => {
                     const row = inp.closest(".ce-conf-item");
                     if (row) row.classList.toggle("contado", inp.value.trim() !== "");
+                });
+            });
+            marcarDesenhos(wrap);
+        }
+
+        // Nº OS com desenho no ERP vira link (negrito + sublinhado) que abre o
+        // PDF. A consulta e' feita depois de a tabela estar na tela e uma vez
+        // por OS: ERP lento ou fora nao atrasa nem trava a conferencia.
+        function marcarDesenhos(wrap) {
+            const cache = (window.__ceDesenhosOS = window.__ceDesenhosOS || new Map());
+            const porOs = new Map();
+            wrap.querySelectorAll("[data-os]").forEach((alvo) => {
+                const os = (alvo.dataset.os || "").trim();
+                if (!/^[A-Za-z0-9._-]+$/.test(os)) return;
+                if (!porOs.has(os)) porOs.set(os, []);
+                porOs.get(os).push(alvo);
+            });
+            porOs.forEach((alvos, os) => {
+                if (!cache.has(os)) {
+                    cache.set(os, fetch("/api/expedicao/conf-cega/desenho/" + encodeURIComponent(os), { headers: { "Accept": "application/json" } })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((d) => {
+                            // Falha do ERP nao fica em cache: tenta de novo na proxima abertura.
+                            if (!d || d.erp_indisponivel) cache.delete(os);
+                            return d;
+                        })
+                        .catch(() => { cache.delete(os); return null; }));
+                }
+                cache.get(os).then((d) => {
+                    if (!d || !d.tem_desenho) return;
+                    alvos.forEach((alvo) => {
+                        if (!alvo.isConnected) return;
+                        const link = document.createElement("a");
+                        link.className = "ce-os-link";
+                        link.href = d.url;
+                        link.target = "_blank";
+                        link.rel = "noopener";
+                        link.title = "Abrir desenho: " + (d.arquivo || "");
+                        link.textContent = os;
+                        alvo.replaceWith(link);
+                    });
                 });
             });
         }

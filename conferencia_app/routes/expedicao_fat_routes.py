@@ -26,6 +26,7 @@ from ..models import (
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesFoto,
 )
+from ..services import expedicao_desenho_service as desenho_svc
 from ..services import expedicao_etiqueta_pdf as etiqueta_pdf
 from ..services import expedicao_etiqueta_service as etiqueta_svc
 from ..services import expedicao_fat_service as svc
@@ -118,6 +119,43 @@ def conferencia_expedicao_page():
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
     )
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/desenho/<n_os>")
+@permission_required(PERMISSION)
+def consultar_desenho_os(n_os):
+    """A OS do item tem desenho no ERP? Atende as abas FAT e ST. A tela chama
+    depois de montar os itens: se o ERP estiver fora, o Nº OS so' nao vira
+    link - a conferencia segue normalmente."""
+    try:
+        documento = desenho_svc.localizar(n_os)
+    except Exception:  # noqa: BLE001
+        current_app.logger.warning("Desenho da OS %s indisponivel (ERP fora)", n_os, exc_info=True)
+        return jsonify({"tem_desenho": False, "erp_indisponivel": True})
+    if not documento:
+        return jsonify({"tem_desenho": False})
+    return jsonify({
+        "tem_desenho": True,
+        "arquivo": documento["filename"],
+        "url": f"/api/expedicao/conf-cega/desenho/{documento['numero_os']}/arquivo",
+    })
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/desenho/<n_os>/arquivo")
+@permission_required(PERMISSION)
+def abrir_desenho_os(n_os):
+    try:
+        conteudo, nome = desenho_svc.obter_arquivo(n_os)
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Falha ao buscar o desenho da OS %s", n_os)
+        return jsonify({"error": "Não foi possível buscar o desenho no ERP agora. Tente de novo em instantes."}), 503
+    tipo = "application/pdf" if nome.lower().endswith(".pdf") else (
+        "image/png" if nome.lower().endswith(".png") else "application/octet-stream")
+    return current_app.response_class(conteudo, mimetype=tipo, headers={
+        "Content-Disposition": f'inline; filename="{secure_filename(nome) or "desenho"}"',
+    })
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/sync", methods=["POST"])
