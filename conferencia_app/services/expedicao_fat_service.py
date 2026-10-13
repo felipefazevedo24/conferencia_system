@@ -14,6 +14,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemFatItem
 from ..tempo import agora_br
+from . import expedicao_log_service as log_svc
 
 
 STATUS_PENDENTE = "Pendente de conferência"
@@ -152,8 +153,10 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
             db.session.flush()
             ordem.codigo_interno = f"OF-{ordem.id:06d}"
             criadas += 1
+            ordem_nova = True
         else:
             atualizadas += 1
+            ordem_nova = False
 
         ordem.cliente = str(head.get("cliente") or "").strip() or ordem.cliente
         ordem.orcamento = str(head.get("orcamento") or "").strip() or ordem.orcamento
@@ -187,6 +190,7 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
                 for it in ExpedicaoOrdemFatItem.query.filter_by(ordem_id=ordem.id).all()
             }
             linhas_atuais = set()
+            previsto_diff = []
             for idx, r in enumerate(rows):
                 linhas_atuais.add(idx)
                 cod_interno = str(r.get("cod_interno") or "").strip()
@@ -195,11 +199,25 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
                 qtde = _parse_int(r.get("qtde_a_faturar"))
                 item_db = existentes.get(idx)
                 if item_db:
+                    if item_db.qtde_a_faturar != qtde or (item_db.cod_interno or "") != cod_interno:
+                        previsto_diff.append({
+                            "id": item_db.id,
+                            "cod_interno": cod_interno,
+                            "item": nome_item if (item_db.cod_interno or "") == cod_interno
+                            else f"{nome_item} (código era {item_db.cod_interno or '—'})",
+                            "n_os": n_os,
+                            "de": item_db.qtde_a_faturar,
+                            "para": qtde,
+                        })
                     item_db.cod_interno = cod_interno
                     item_db.item = nome_item
                     item_db.n_os = n_os
                     item_db.qtde_a_faturar = qtde
                 else:
+                    previsto_diff.append({
+                        "id": None, "cod_interno": cod_interno, "item": f"{nome_item} (item novo)",
+                        "n_os": n_os, "de": None, "para": qtde,
+                    })
                     db.session.add(ExpedicaoOrdemFatItem(
                         ordem_id=ordem.id,
                         linha=idx,
@@ -210,7 +228,31 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
                     ))
             for linha, item_db in existentes.items():
                 if linha not in linhas_atuais:
+                    # A linha some junto com a contagem ja' salva nela.
+                    contado = (
+                        f" (item removido; contagem salva: {item_db.qtde_conferida})"
+                        if item_db.qtde_conferida is not None else " (item removido)"
+                    )
+                    previsto_diff.append({
+                        "id": item_db.id, "cod_interno": item_db.cod_interno,
+                        "item": f"{item_db.item or ''}{contado}", "n_os": item_db.n_os,
+                        "de": item_db.qtde_a_faturar, "para": None,
+                    })
                     db.session.delete(item_db)
+            # O ERP mudou o que estava previsto numa ordem ja' na fila. Este log
+            # mostra a quantidade esperada, entao so' Admin enxerga (ver
+            # ACOES_SO_ADMIN): no historico do conferente quebraria a
+            # conferencia cega.
+            if previsto_diff and not ordem_nova:
+                log_svc.registrar_evento(
+                    origem="fat",
+                    ordem=ordem,
+                    cod_ordem=ordem.cod_ordem_fat,
+                    acao="previsto_alterado",
+                    usuario=log_svc.USUARIO_SISTEMA,
+                    status_anterior=ordem.status,
+                    diff_itens=previsto_diff,
+                )
 
         # Deteccao de faturado (NF preenchida na origem).
         #  - Se ja estava Conferido -> Faturado (fluxo normal).
@@ -219,6 +261,8 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
         #    liberar a expedicao.
         if ordem.status in (STATUS_PENDENTE, STATUS_CONFERIDO):
             if _origem_indica_faturado(origem_status, numero_nf):
+                status_anterior = ordem.status
+                nf_anterior = ordem.numero_nf
                 if numero_nf:
                     ordem.numero_nf = numero_nf
                 ordem.faturado_at = agora
@@ -228,6 +272,17 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
                 else:
                     ordem.status = STATUS_FATURADO_SEM_CONF
                     faturadas_sem_conf += 1
+                # O faturamento vem da origem (ERP), nao de quem estava logado
+                # quando a sincronizacao rodou: fica em nome do sistema.
+                log_svc.registrar_evento(
+                    origem="fat",
+                    ordem=ordem,
+                    cod_ordem=ordem.cod_ordem_fat,
+                    acao="faturamento",
+                    usuario=log_svc.USUARIO_SISTEMA,
+                    status_anterior=status_anterior,
+                    diff_cabecalho=[log_svc.mudanca("numero_nf", "NF", nf_anterior, ordem.numero_nf)],
+                )
 
         ordem.updated_at = agora
 
@@ -264,12 +319,21 @@ def marcar_expedido_por_nf(numero_nf, registro_id=None, usuario=None) -> int:
         if ordem.status == STATUS_FATURADO_SEM_CONF:
             continue
         if ordem.status != STATUS_EXPEDIDO:
+            status_anterior = ordem.status
             ordem.status = STATUS_EXPEDIDO
             ordem.expedido_at = agora
             ordem.expedido_by = usuario
             if registro_id:
                 ordem.expedicao_registro_id = registro_id
             ordem.updated_at = agora
+            log_svc.registrar_evento(
+                origem="fat",
+                ordem=ordem,
+                cod_ordem=ordem.cod_ordem_fat,
+                acao="expedicao",
+                usuario=usuario or log_svc.usuario_da_sessao(),
+                status_anterior=status_anterior,
+            )
             afetadas += 1
     if afetadas:
         db.session.commit()
@@ -296,8 +360,17 @@ def marcar_em_romaneio_por_nf(numero_nf, *, commit=True) -> int:
     agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_FATURADO:
+            status_anterior = ordem.status
             ordem.status = STATUS_EM_ROMANEIO
             ordem.updated_at = agora
+            log_svc.registrar_evento(
+                origem="fat",
+                ordem=ordem,
+                cod_ordem=ordem.cod_ordem_fat,
+                acao="romaneio",
+                usuario=log_svc.usuario_da_sessao(),
+                status_anterior=status_anterior,
+            )
             afetadas += 1
     if afetadas and commit:
         db.session.commit()
@@ -317,8 +390,17 @@ def reverter_romaneio_por_nf(numero_nf) -> int:
     agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_EM_ROMANEIO:
+            status_anterior = ordem.status
             ordem.status = STATUS_FATURADO
             ordem.updated_at = agora
+            log_svc.registrar_evento(
+                origem="fat",
+                ordem=ordem,
+                cod_ordem=ordem.cod_ordem_fat,
+                acao="romaneio_estorno",
+                usuario=log_svc.usuario_da_sessao(),
+                status_anterior=status_anterior,
+            )
             afetadas += 1
     if afetadas:
         db.session.commit()
@@ -337,11 +419,20 @@ def reverter_expedicao_por_nf(numero_nf) -> int:
     agora = agora_br()
     for ordem in ordens:
         if ordem.status == STATUS_EXPEDIDO:
+            status_anterior = ordem.status
             ordem.status = STATUS_EM_ROMANEIO
             ordem.expedido_at = None
             ordem.expedido_by = None
             ordem.expedicao_registro_id = None
             ordem.updated_at = agora
+            log_svc.registrar_evento(
+                origem="fat",
+                ordem=ordem,
+                cod_ordem=ordem.cod_ordem_fat,
+                acao="expedicao_estorno",
+                usuario=log_svc.usuario_da_sessao(),
+                status_anterior=status_anterior,
+            )
             afetadas += 1
     if afetadas:
         db.session.commit()

@@ -18,6 +18,8 @@ from ..auth import roles_required
 from ..extensions import db
 from ..models import ExpedicaoConferenciaLog, ExpedicaoOrdemFat, ExpedicaoOrdemST
 from ..services import expedicao_log_service as log_svc
+# Importar este service tambem liga a gravacao automatica da trilha (listeners).
+from ..services import expedicao_trilha_service as trilha_svc
 
 
 expedicao_auditoria_bp = Blueprint("expedicao_auditoria", __name__)
@@ -166,6 +168,16 @@ def detalhar_ordem(origem, ordem_id):
     if not ordem:
         return jsonify({"error": "Ordem não encontrada."}), 404
     return jsonify(_resultado_fat(ordem) if origem == "fat" else _resultado_st(ordem))
+
+
+@expedicao_auditoria_bp.route("/api/expedicao/auditoria/trilha")
+@roles_required("Admin")
+def listar_trilha():
+    """Trilha do Registro de expedicao e do Romaneio (mais recentes primeiro)."""
+    return jsonify(eventos=trilha_svc.listar(
+        q=request.args.get("q") or "",
+        entidade=(request.args.get("entidade") or "").strip().lower(),
+    ))
 
 
 @expedicao_auditoria_bp.route("/api/expedicao/auditoria/buscar", methods=["GET"])

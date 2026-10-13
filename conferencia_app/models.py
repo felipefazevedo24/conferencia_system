@@ -895,6 +895,38 @@ class ExpedicaoConferenciaLog(db.Model):
     created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
+class ExpedicaoTrilhaLog(db.Model):
+    """Trilha de auditoria do Registro de expedicao e do Romaneio.
+
+    Diferente do ExpedicaoConferenciaLog (gravado rota a rota), esta trilha e'
+    gravada AUTOMATICAMENTE a cada insert/update/delete nas tabelas auditadas
+    (ver services/expedicao_trilha_service.py). Registros e romaneios sao
+    criados e alterados por varios modulos (conferencia, romaneio, assistencia
+    tecnica, solicitacao de NF): logar na camada do banco garante que nenhuma
+    tela, atual ou futura, grave sem deixar rastro. Nunca e' editada nem
+    apagada pelo sistema."""
+
+    __tablename__ = "expedicao_trilha_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # "registro" (Registro de expedicao) | "romaneio"
+    entidade = db.Column(db.String(20), nullable=False, index=True)
+    entidade_id = db.Column(db.Integer, nullable=False, index=True)
+    # Tabela e linha que de fato mudaram (ex.: uma NF dentro do romaneio).
+    tabela = db.Column(db.String(60), nullable=False)
+    registro_id = db.Column(db.Integer)
+    # criado | alterado | excluido
+    operacao = db.Column(db.String(10), nullable=False)
+    # NF(s) envolvidas, para a busca na auditoria.
+    numero_nf = db.Column(db.String(160), index=True)
+    usuario = db.Column(db.String(100))
+    # De onde veio a gravacao (ex.: "POST expedicao_romaneio.expedir_romaneio").
+    rota = db.Column(db.String(160))
+    # JSON: [{campo, de, para}]
+    detalhes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+
+
 class SolicitacaoNF(db.Model):
     """Solicitacao de saida de material sem venda direta (garantia,
     bonificacao, teste ou atendimento tecnico), aberta por qualquer

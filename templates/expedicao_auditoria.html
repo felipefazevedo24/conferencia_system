@@ -132,6 +132,25 @@
         </div>
     </div>
     </details>
+    <details class="eui-card aud-search-section" id="aud-trilha-section">
+        <summary class="eui-card__head">Registro de expedição e romaneio — trilha de alterações</summary>
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h3 class="eui-card__title"><i class="fas fa-shoe-prints"></i> Trilha de alterações</h3>
+                    <p class="eui-card__sub">Toda criação, alteração e exclusão em registros de expedição e romaneios: quem fez, quando e o valor anterior de cada campo.</p>
+                </div>
+            </div>
+            <div class="eui-card__body">
+                <form id="aud-trilha-filtros" class="aud-filters">
+                    <div class="aud-filter aud-filter--search"><label for="aud-trilha-busca">Buscar</label><input class="eui-input" type="search" id="aud-trilha-busca" placeholder="NF, nº do romaneio ou nº do registro"></div>
+                    <div class="aud-filter"><label for="aud-trilha-entidade">Tipo</label><select class="eui-select" id="aud-trilha-entidade"><option value="">Todos</option><option value="registro">Registro de expedição</option><option value="romaneio">Romaneio</option></select></div>
+                    <button class="eui-btn eui-btn--primary" type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+                </form>
+            </div>
+            <div id="aud-trilha-lista" aria-live="polite"></div>
+        </div>
+    </details>
 </div>
 <dialog id="aud-detalhe" class="aud-dialog" aria-labelledby="aud-detalhe-title">
     <div class="aud-dialog-head"><h3 id="aud-detalhe-title">Histórico da ordem</h3><button type="button" class="eui-btn eui-btn--ghost" id="aud-detalhe-fechar" aria-label="Fechar histórico"><i class="fas fa-xmark"></i></button></div>
@@ -253,7 +272,19 @@
         return '<div class="aud-historico">' + logs.map((h) => {
             const isEd = h.acao === "edicao";
             const isExc = h.acao === "exclusao";
-            const acaoLabel = isExc ? "Exclusão" : (isEd ? "Edição" : "Conferência");
+            // Eventos que nao sao a conferencia em si (ver registrar_evento).
+            const acaoEvento = {
+                salvar_parcial: "Progresso salvo",
+                tentativa_bloqueada: "Tentativa bloqueada",
+                fotos: "Fotos",
+                faturamento: "Faturamento",
+                romaneio: "Entrou em romaneio",
+                romaneio_estorno: "Saiu do romaneio",
+                expedicao: "Expedição",
+                expedicao_estorno: "Estorno de expedição",
+                previsto_alterado: "Previsto alterado (ERP)",
+            }[h.acao];
+            const acaoLabel = acaoEvento || (isExc ? "Exclusão" : (isEd ? "Edição" : "Conferência"));
             const quando = fmtDataHora(h.created_at);
             const usuario = escapeHtml(h.usuario || "—");
             const codigo = h.codigo_interno ? `<span class="aud-hist-meta" style="font-family:monospace;">${escapeHtml(h.codigo_interno)}</span>` : "";
@@ -261,6 +292,9 @@
             if (h.divergente) tags.push('<span class="aud-hist-meta"><i class="fas fa-triangle-exclamation"></i> Divergente</span>');
             if (h.pos_faturamento) tags.push('<span class="aud-hist-meta"><i class="fas fa-clock-rotate-left"></i> Pós-faturamento</span>');
             const changes = [];
+            if (acaoEvento && h.status_anterior && h.status_novo && h.status_anterior !== h.status_novo) {
+                changes.push(`<li>Status: <span class="aud-hist-de">${escapeHtml(h.status_anterior)}</span> → <span class="aud-hist-para">${escapeHtml(h.status_novo)}</span></li>`);
+            }
             (h.cabecalho || []).forEach((c) => {
                 changes.push(`<li>${escapeHtml(c.label || c.campo)}: <span class="aud-hist-de">${escapeHtml(String(c.de ?? "—"))}</span> → <span class="aud-hist-para">${escapeHtml(String(c.para ?? "—"))}</span></li>`);
             });
@@ -340,6 +374,55 @@
         if (e.key === "Enter") buscar();
     });
     document.getElementById("aud-resultados").innerHTML = '<div class="aud-empty">Digite um código interno, cliente/fornecedor ou nº de ordem para buscar.</div>';
+
+    const TRILHA_OPERACAO = { criado: "Criado", alterado: "Alterado", excluido: "Excluído" };
+    const TRILHA_TABELA = {
+        expedicao_conferencia_simples: "Registro de expedição",
+        expedicao_conferencia_simples_foto: "Foto do material",
+        expedicao_conferencia_simples_estorno: "Pedido de estorno",
+        expedicao_romaneio: "Romaneio",
+        expedicao_romaneio_nf: "NF do romaneio",
+        expedicao_romaneio_foto_carregamento: "Foto de carregamento",
+        expedicao_romaneio_exclusao: "Pedido de exclusão",
+        expedicao_romaneio_estorno: "Pedido de estorno",
+    };
+
+    async function carregarTrilha() {
+        const lista = document.getElementById("aud-trilha-lista");
+        lista.innerHTML = '<div class="aud-empty"><i class="fas fa-spinner fa-spin"></i> Carregando…</div>';
+        const params = new URLSearchParams({
+            q: document.getElementById("aud-trilha-busca").value.trim(),
+            entidade: document.getElementById("aud-trilha-entidade").value,
+        });
+        try {
+            const resp = await fetch("/api/expedicao/auditoria/trilha?" + params);
+            if (!resp.ok) throw new Error("Falha ao carregar a trilha.");
+            const eventos = (await resp.json()).eventos || [];
+            if (!eventos.length) {
+                lista.innerHTML = '<div class="aud-empty">Nenhuma alteração registrada para este filtro.</div>';
+                return;
+            }
+            lista.innerHTML = '<div class="aud-historico" style="padding:16px;">' + eventos.map((e) => {
+                const mudancas = (e.mudancas || []).map((m) => `<li>${escapeHtml(m.campo)}: <span class="aud-hist-de">${escapeHtml(String(m.de ?? "—"))}</span> → <span class="aud-hist-para">${escapeHtml(String(m.para ?? "—"))}</span></li>`).join("");
+                return `<div class="aud-hist-item ${e.operacao === "excluido" ? "is-exclusao" : (e.operacao === "alterado" ? "is-edicao" : "")}">
+                    <div class="aud-hist-head">
+                        <span class="aud-hist-acao">${escapeHtml(TRILHA_OPERACAO[e.operacao] || e.operacao)}</span>
+                        <span class="aud-hist-meta"><strong>${escapeHtml(e.referencia || (e.entidade + " #" + e.entidade_id))}</strong> · ${escapeHtml(TRILHA_TABELA[e.tabela] || e.tabela)}</span>
+                        ${e.numero_nf ? `<span class="aud-hist-meta">NF ${escapeHtml(e.numero_nf)}</span>` : ""}
+                        <span class="aud-hist-meta"><i class="fas fa-user"></i> ${escapeHtml(e.usuario || "—")}</span>
+                        <span class="aud-hist-meta"><i class="fas fa-clock"></i> ${fmtDataHora(e.created_at)}</span>
+                        ${e.rota ? `<span class="aud-hist-meta" style="font-family:monospace;">${escapeHtml(e.rota)}</span>` : ""}
+                    </div>
+                    <ul class="aud-hist-changes">${mudancas}</ul>
+                </div>`;
+            }).join("") + "</div>";
+        } catch (err) {
+            lista.innerHTML = `<div class="aud-empty">${escapeHtml(err.message)}</div>`;
+        }
+    }
+    document.getElementById("aud-trilha-filtros").addEventListener("submit", (e) => { e.preventDefault(); carregarTrilha(); });
+    document.getElementById("aud-trilha-section").addEventListener("toggle", (e) => { if (e.target.open) carregarTrilha(); });
+
     carregarExcluidas();
 </script>
 {% endblock %}

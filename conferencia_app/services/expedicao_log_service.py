@@ -8,6 +8,9 @@ identica: o que mudou no cabecalho e nos itens, quem fez e quando.
 import json
 from datetime import datetime
 
+from flask import has_request_context, session
+
+from ..auth import is_admin_session
 from ..extensions import db
 from ..models import ExpedicaoConferenciaLog
 from ..tempo import agora_br
@@ -76,6 +79,56 @@ def registrar_log(
     return log
 
 
+USUARIO_SISTEMA = "SISTEMA"
+
+# Acoes cujo log revela a quantidade PREVISTA. O historico da ordem aparece
+# na tela do conferente, entao estas so' sao listadas para Admin.
+ACOES_SO_ADMIN = {"previsto_alterado"}
+
+
+def usuario_da_sessao() -> str:
+    """Quem esta' logado. Fora de requisicao (scheduler da sincronizacao) nao
+    existe sessao: o evento fica em nome do sistema."""
+    if has_request_context():
+        return session.get("username") or USUARIO_SISTEMA
+    return USUARIO_SISTEMA
+
+
+def registrar_evento(
+    *,
+    origem: str,
+    ordem,
+    cod_ordem,
+    acao: str,
+    usuario: str,
+    status_anterior: str,
+    diff_cabecalho: list | None = None,
+    diff_itens: list | None = None,
+    divergente: bool | None = None,
+) -> ExpedicaoConferenciaLog:
+    """Log de um evento que NAO e' a conferencia em si (progresso salvo, fotos,
+    faturamento, romaneio, expedicao): tudo que grava na ordem precisa deixar
+    rastro de quem fez e quando, mesmo sem mudar status."""
+    return registrar_log(
+        origem=origem,
+        ordem_id=ordem.id,
+        cod_ordem=cod_ordem,
+        acao=acao,
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=bool(ordem.divergente) if divergente is None else divergente,
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=diff_cabecalho or [],
+        diff_itens=diff_itens or [],
+    )
+
+
+def mudanca(campo: str, label: str, de, para) -> dict:
+    """Entrada de cabecalho para campos fora de _CAMPOS_CABECALHO (NF, fotos...)."""
+    return {"campo": campo, "label": label, "de": _norm(de), "para": _norm(para)}
+
+
 def listar_logs(origem: str, ordem_id: int) -> list:
     """Retorna o historico (mais recente primeiro) serializavel de uma ordem."""
     logs = (
@@ -84,8 +137,11 @@ def listar_logs(origem: str, ordem_id: int) -> list:
         .order_by(ExpedicaoConferenciaLog.created_at.desc(), ExpedicaoConferenciaLog.id.desc())
         .all()
     )
+    ve_tudo = has_request_context() and is_admin_session()
     resultado = []
     for lg in logs:
+        if lg.acao in ACOES_SO_ADMIN and not ve_tudo:
+            continue
         try:
             detalhes = json.loads(lg.detalhes) if lg.detalhes else {}
         except (ValueError, TypeError):

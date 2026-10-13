@@ -56,18 +56,23 @@
     .ce-pill span { display: block; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--eui-muted); }
     .ce-pill strong { display: block; margin-top: 6px; font-size: 15px; color: var(--eui-text); font-weight: 700; }
 
-    .ce-conf-item { display: grid; grid-template-columns: 42px 1fr 150px; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--eui-border); }
-    .ce-conf-item .idx { width: 32px; height: 32px; border-radius: var(--eui-radius); background: var(--eui-surface-3); color: var(--eui-muted); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-    .ce-conf-item .info strong { display: block; font-size: 14px; color: var(--eui-text); font-weight: 600; }
-    .ce-conf-item .info small { color: var(--eui-muted); font-weight: 500; }
-    .ce-item-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-    .ce-meta-chip { display: inline-flex; flex-direction: column; padding: 6px 12px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); min-width: 0; }
-    .ce-meta-chip span { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--eui-muted); }
-    .ce-meta-chip strong { font-size: 13px; color: var(--eui-text); font-weight: 700; }
-    .ce-conf-item input.qtd { min-height: 42px; width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
-    .ce-conf-item.divergente { background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
-    .ce-conf-item.ok-line { background: var(--eui-success-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
-    .ce-conf-item.js-faltando { background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
+    /* Itens em tabela, no mesmo molde da conferencia de recebimento
+       (conferente.html): Status | codigo | descricao | contagem fisica. */
+    .ce-itens-wrap { overflow-x: auto; }
+    .ce-itens-table { width: 100%; border-collapse: collapse; }
+    .ce-itens-table th { background: var(--eui-surface-2); padding: 15px; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 2px solid var(--eui-border); color: var(--eui-muted); font-weight: 800; }
+    .ce-itens-table td { padding: 14px 15px; border-bottom: 1px solid var(--eui-border); vertical-align: middle; }
+    .ce-itens-table tr:last-child td { border-bottom: 0; }
+    .ce-itens-table .ce-col-cod { font-family: monospace; font-weight: 800; color: var(--eui-primary); white-space: nowrap; }
+    .ce-itens-table .ce-col-desc { font-weight: 600; color: var(--eui-text); }
+    .ce-itens-table .ce-col-centro { text-align: center; font-weight: 800; color: var(--eui-muted); }
+    .ce-itens-table .ce-os-mobile { display: none; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--eui-muted); }
+    .ce-status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--eui-border); border: 2px solid var(--eui-surface); box-shadow: 0 0 0 1px var(--eui-border); }
+    .ce-conf-item.contado .ce-status-dot, .ce-conf-item.ok-line .ce-status-dot { background: var(--eui-success); box-shadow: 0 0 0 1px var(--eui-success); }
+    .ce-conf-item.divergente .ce-status-dot, .ce-conf-item.js-faltando .ce-status-dot { background: var(--eui-danger); box-shadow: 0 0 0 1px var(--eui-danger); }
+    .ce-conf-item input.qtd { min-height: 42px; width: 130px; max-width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
+    .ce-conf-item.contado td, .ce-conf-item.ok-line td { background: var(--eui-success-soft); }
+    .ce-conf-item.divergente td, .ce-conf-item.js-faltando td { background: var(--eui-danger-soft); }
     .ce-conf-item.js-faltando input.qtd { border-color: var(--eui-danger); box-shadow: 0 0 0 2px var(--eui-danger-soft); }
     .ce-reveal { font-size: 11px; font-weight: 700; margin-top: 4px; }
     .ce-reveal.bad { color: var(--eui-danger); }
@@ -125,7 +130,14 @@
         .ce-conf-meta, .ce-header-form { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 640px) {
-        .ce-conf-item { grid-template-columns: 32px 1fr 90px; }
+        /* Tela estreita: o Nº OS desce para baixo da descricao, senao a
+           tabela nao cabe e a coluna do codigo fica cortada. */
+        .ce-itens-table th, .ce-itens-table td { padding: 10px 6px; }
+        .ce-itens-table .ce-col-os { display: none; }
+        .ce-itens-table .ce-os-mobile { display: block; }
+        .ce-itens-table .ce-col-cod { white-space: normal; font-size: 12px; overflow-wrap: anywhere; }
+        .ce-itens-table .ce-col-desc { font-size: 13px; }
+        .ce-conf-item input.qtd { width: 84px; }
     }
 
     /* View "Romaneios" — embute a tela de romaneios (mesmo layout/UI) sem
@@ -397,10 +409,13 @@
 
         <div class="eui-card">
             <div class="eui-card__head">
-                <h2 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Itens da conferência</h2>
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Itens da conferência</h2>
+                    <p class="eui-card__sub">Conferência cega — informe a contagem física de cada item.</p>
+                </div>
             </div>
-            <div class="eui-card__body">
-                <div id="{{ prefix }}-conf-itens"></div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="ce-itens-wrap" id="{{ prefix }}-conf-itens"></div>
             </div>
         </div>
 
@@ -1351,37 +1366,55 @@
             const wrap = el("conf-itens");
             const editavel = o.editavel;
             const conferido = o.conferido;
-            wrap.innerHTML = (o.itens || []).map((it, i) => {
-                const nome = escapeHtml(it.item || "—");
-                const meta = `<div class="ce-item-meta">
-                    <span class="ce-meta-chip"><span>Item</span><strong>${nome}</strong></span>
-                    <span class="ce-meta-chip"><span>Cód. interno</span><strong>${escapeHtml(it.cod_interno || "—")}</strong></span>
-                    <span class="ce-meta-chip"><span>Nº OS</span><strong>${escapeHtml(it.n_os || "—")}</strong></span>
-                </div>`;
+            const linhas = (o.itens || []).map((it) => {
+                const celulas = `<td style="text-align:center"><span class="ce-status-dot"></span></td>
+                    <td class="ce-col-cod">${escapeHtml(it.cod_interno || "—")}</td>
+                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS ${escapeHtml(it.n_os || "—")}</span></td>
+                    <td class="ce-col-centro ce-col-os">${escapeHtml(it.n_os || "—")}</td>`;
                 if (conferido && !editavel) {
                     const cls = it.divergente ? "divergente" : "ok-line";
                     // Conferencia CEGA: nunca exibimos a quantidade esperada.
                     // Mostramos apenas o que foi contado e um alerta de divergencia.
                     const rev = it.divergente
-                        ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
-                        : `<div class="ce-reveal good">OK · conferido ${it.qtde_conferida}</div>`;
-                    return `<div class="ce-conf-item ${cls}">
-                        <div class="idx">${i + 1}</div>
-                        <div class="info">${meta}${rev}</div>
-                        <div class="ce-final-qtd">${it.qtde_conferida}</div>
-                    </div>`;
+                        ? `<div class="ce-reveal bad">Divergência detectada</div>`
+                        : `<div class="ce-reveal good">OK</div>`;
+                    return `<tr class="ce-conf-item ${cls}">
+                        ${celulas}
+                        <td style="text-align:center"><div class="ce-final-qtd">${it.qtde_conferida}</div><div class="info">${rev}</div></td>
+                    </tr>`;
                 }
-                const valAtual = (it.qtde_conferida !== undefined && it.qtde_conferida !== null) ? it.qtde_conferida : "";
+                const temValor = it.qtde_conferida !== undefined && it.qtde_conferida !== null;
+                const valAtual = temValor ? it.qtde_conferida : "";
                 const alerta = (conferido && it.divergente)
                     ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
                     : "";
-                const clsLinha = (conferido && it.divergente) ? " divergente" : "";
-                return `<div class="ce-conf-item${clsLinha}" data-item-id="${it.id}">
-                    <div class="idx">${i + 1}</div>
-                    <div class="info">${meta}${alerta}</div>
-                    <input class="eui-input qtd" type="number" min="0" inputmode="numeric" data-qtd="${it.id}" placeholder="0" value="${valAtual}">
-                </div>`;
+                const clsLinha = (conferido && it.divergente) ? " divergente" : (temValor ? " contado" : "");
+                return `<tr class="ce-conf-item${clsLinha}" data-item-id="${it.id}">
+                    ${celulas}
+                    <td style="text-align:center">
+                        <input class="eui-input qtd" type="number" min="0" inputmode="numeric" data-qtd="${it.id}" placeholder="0" value="${valAtual}">
+                        <div class="info">${alerta}</div>
+                    </td>
+                </tr>`;
             }).join("");
+            wrap.innerHTML = `<table class="ce-itens-table">
+                <thead><tr>
+                    <th style="text-align:center; width:50px">Status</th>
+                    <th>Cód. interno</th>
+                    <th>Descrição do material</th>
+                    <th class="ce-col-os" style="text-align:center">Nº OS</th>
+                    <th style="text-align:center">Contagem física</th>
+                </tr></thead>
+                <tbody>${linhas}</tbody>
+            </table>`;
+            // Bolinha de status verde assim que a linha tem contagem digitada,
+            // como na conferencia de recebimento.
+            wrap.querySelectorAll("input[data-qtd]").forEach((inp) => {
+                inp.addEventListener("input", () => {
+                    const row = inp.closest(".ce-conf-item");
+                    if (row) row.classList.toggle("contado", inp.value.trim() !== "");
+                });
+            });
         }
 
         function renderHistorico(historico) {
@@ -1398,13 +1431,28 @@
             wrap.innerHTML = logs.map((h) => {
                 const isEd = h.acao === "edicao";
                 const isExc = h.acao === "exclusao";
-                const acaoLabel = isExc ? "Exclusão" : (isEd ? "Edição" : "Conferência");
+                // Eventos que nao sao a conferencia em si (ver registrar_evento).
+                const acaoEvento = {
+                    salvar_parcial: "Progresso salvo",
+                    tentativa_bloqueada: "Tentativa bloqueada",
+                    fotos: "Fotos",
+                    faturamento: "Faturamento",
+                    romaneio: "Entrou em romaneio",
+                    romaneio_estorno: "Saiu do romaneio",
+                    expedicao: "Expedição",
+                    expedicao_estorno: "Estorno de expedição",
+                    previsto_alterado: "Previsto alterado (ERP)",
+                }[h.acao];
+                const acaoLabel = acaoEvento || (isExc ? "Exclusão" : (isEd ? "Edição" : "Conferência"));
                 const quando = h.created_at ? fmtDataHora(h.created_at) : "—";
                 const usuario = escapeHtml(h.usuario || "—");
                 const tags = [];
                 if (h.divergente) tags.push('<span class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</span>');
                 if (h.pos_faturamento) tags.push('<span class="ce-posfat"><i class="fas fa-clock-rotate-left"></i> Pós-faturamento</span>');
                 const changes = [];
+                if (acaoEvento && h.status_anterior && h.status_novo && h.status_anterior !== h.status_novo) {
+                    changes.push(`<li>Status: <span class="ce-hist-de">${escapeHtml(h.status_anterior)}</span> → <span class="ce-hist-para">${escapeHtml(h.status_novo)}</span></li>`);
+                }
                 (h.cabecalho || []).forEach((c) => {
                     changes.push(`<li>${escapeHtml(c.label || c.campo)}: <span class="ce-hist-de">${escapeHtml(String(c.de ?? "—"))}</span> → <span class="ce-hist-para">${escapeHtml(String(c.para ?? "—"))}</span></li>`);
                 });
@@ -1414,7 +1462,7 @@
                 });
                 const changesHtml = changes.length
                     ? `<ul class="ce-hist-changes">${changes.join("")}</ul>`
-                    : (isExc ? '<div class="ce-hist-empty">Ordem excluída.</div>' : (isEd ? '<div class="ce-hist-empty">Sem alterações de valores.</div>' : '<div class="ce-hist-empty">Conferência registrada.</div>'));
+                    : (isExc ? '<div class="ce-hist-empty">Ordem excluída.</div>' : ((isEd || acaoEvento) ? '<div class="ce-hist-empty">Sem alterações de valores.</div>' : '<div class="ce-hist-empty">Conferência registrada.</div>'));
                 const codInternoLog = h.codigo_interno
                     ? `<span class="ce-hist-meta" style="font-family:monospace;">${escapeHtml(h.codigo_interno)}</span>`
                     : "";

@@ -249,18 +249,33 @@ def upload_fotos_preexpedicao_st(cod_ordem_compra):
     try:
         registro = _obter_ou_criar_registro_rascunho(ordem, usuario)
         fotos_dir = _fotos_dir()
+        diff_fotos = []
         for foto in fotos_material:
             nome, caminho = _salvar_foto_expedicao(foto, fotos_dir, "material", registro.id)
+            diff_fotos.append(log_svc.mudanca("foto_material", "Foto do material", "", nome))
             db.session.add(ExpedicaoConferenciaSimplesFoto(
                 conferencia_id=registro.id, file_name=nome, file_path=caminho,
             ))
         if foto_cliente and foto_cliente.filename:
             nome, caminho = _salvar_foto_expedicao(foto_cliente, fotos_dir, "cliente", registro.id)
+            # "de" preenchido = a foto anterior do cliente foi substituida.
+            diff_fotos.append(log_svc.mudanca(
+                "foto_cliente", "Foto do cliente", registro.foto_cliente_file_name, nome,
+            ))
             registro.foto_cliente_file_name = nome
             registro.foto_cliente_file_path = caminho
             registro.foto_cliente_uploaded_at = agora
             registro.foto_cliente_uploaded_by = usuario
         registro.updated_at = agora
+        log_svc.registrar_evento(
+            origem="st",
+            ordem=ordem,
+            cod_ordem=ordem.cod_ordem_compra,
+            acao="fotos",
+            usuario=usuario,
+            status_anterior=ordem.status,
+            diff_cabecalho=diff_fotos,
+        )
         db.session.commit()
     except Exception as exc:  # noqa: BLE001
         db.session.rollback()
@@ -516,6 +531,7 @@ def conferir_ordem_conf_st(cod_ordem_compra):
     ordem_divergente = False
     resultado_itens = []
     diff_itens = []
+    tentativa_itens = []
     for it in itens:
         qtd = contagens.get(it.id)
         de = qtd_antes.get(it.id)
@@ -532,6 +548,15 @@ def conferir_ordem_conf_st(cod_ordem_compra):
         it.divergente = (qtd != it.qtde_a_faturar)
         if it.divergente:
             ordem_divergente = True
+        tentativa_itens.append({
+            "id": it.id,
+            "cod_interno": it.cod_interno,
+            "item": it.item,
+            "n_os": it.n_os,
+            "de": de,
+            "para": qtd,
+            "divergente": it.divergente,
+        })
         resultado_itens.append({
             "id": it.id,
             "cod_interno": it.cod_interno,
@@ -546,6 +571,20 @@ def conferir_ordem_conf_st(cod_ordem_compra):
     # memoria (rollback) e devolve os itens divergentes para o front destacar.
     if ordem_divergente:
         db.session.rollback()
+        # A tentativa nao grava contagem nenhuma, mas fica na trilha: numa
+        # conferencia cega, redigitar ate' a quantidade passar precisa deixar
+        # rastro do que foi informado em cada tentativa.
+        log_svc.registrar_evento(
+            origem="st",
+            ordem=ordem,
+            cod_ordem=ordem.cod_ordem_compra,
+            acao="tentativa_bloqueada",
+            usuario=session.get("username") or "desconhecido",
+            status_anterior=status_anterior,
+            diff_itens=tentativa_itens,
+            divergente=True,
+        )
+        db.session.commit()
         return jsonify({
             "sucesso": False,
             "bloqueado": True,
@@ -649,6 +688,11 @@ def salvar_parcial_conf_st(cod_ordem_compra):
     payload = request.get_json(silent=True) or {}
     itens_por_id = {it.id: it for it in ordem.itens}
 
+    # Snapshot ANTES das alteracoes (para a trilha de auditoria).
+    campos_cabecalho = ("peso_liquido", "peso_bruto", "qtde_volumes", "especie_volumes")
+    header_antes = {campo: getattr(ordem, campo) for campo in campos_cabecalho}
+    diff_itens = []
+
     salvos = 0
     for entry in payload.get("itens") or []:
         try:
@@ -661,15 +705,37 @@ def salvar_parcial_conf_st(cod_ordem_compra):
         qtd = svc._parse_int(entry.get("qtde_conferida"), None)
         if qtd is None:
             continue
+        if item.qtde_conferida != qtd:
+            diff_itens.append({
+                "id": item.id,
+                "cod_interno": item.cod_interno,
+                "item": item.item,
+                "n_os": item.n_os,
+                "de": item.qtde_conferida,
+                "para": qtd,
+            })
         item.qtde_conferida = qtd
         salvos += 1
 
-    for campo in ("peso_liquido", "peso_bruto", "qtde_volumes", "especie_volumes"):
+    for campo in campos_cabecalho:
         valor = str(payload.get(campo) or "").strip()
         if valor:
             setattr(ordem, campo, valor)
 
     ordem.updated_at = agora_br()
+    # Mesmo motivo do FAT: o checkpoint grava contagem e precisa deixar rastro.
+    log_svc.registrar_evento(
+        origem="st",
+        ordem=ordem,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="salvar_parcial",
+        usuario=session.get("username") or "desconhecido",
+        status_anterior=ordem.status,
+        diff_cabecalho=log_svc.montar_diff_cabecalho(
+            header_antes, {campo: getattr(ordem, campo) for campo in campos_cabecalho},
+        ),
+        diff_itens=diff_itens,
+    )
     db.session.commit()
 
     return jsonify({
