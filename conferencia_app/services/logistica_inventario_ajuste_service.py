@@ -85,7 +85,6 @@ def detectar_divergencia(
     qtde_grv: float | None,
     custo_medio: float | None = None,
     descricao_produto: str | None = None,
-    sempre_abrir: bool = False,
 ) -> LogisticaInventarioAjuste | None:
     """Chamado logo apos salvar uma contagem (Modulo 01). Se `qtde_grv` for
     None (codigo nao encontrado no GRV, ou API do GRV fora do ar), nao ha
@@ -95,12 +94,14 @@ def detectar_divergencia(
     fica None se o GRV nao tiver custo pro codigo - e vira snapshot no
     ajuste pra calcular o impacto financeiro (R$) da divergencia.
 
-    `sempre_abrir` (motivo da contagem diferente de "Correção de saldo")
-    manda a contagem pro gestor mesmo quando a quantidade bate com o GRV."""
+    So' abre ajuste quando a quantidade difere do GRV, qualquer que seja o
+    motivo da contagem: sem diferenca nao ha o que o gestor validar (decisao
+    da logistica em 14/10/2026 - de 08/10 a 14/10 os motivos diferentes de
+    "Item sem Saldo" abriam ajuste mesmo batendo)."""
     if qtde_grv is None:
         return None
     diferenca = float(contagem.quantidade or 0) - float(qtde_grv)
-    if abs(diferenca) <= TOLERANCIA_DIVERGENCIA and not sempre_abrir:
+    if abs(diferenca) <= TOLERANCIA_DIVERGENCIA:
         return None
     if ajuste_aberto_para(contagem.codigo_produto, contagem.local_codigo):
         return None

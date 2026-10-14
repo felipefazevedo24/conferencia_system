@@ -2499,6 +2499,9 @@ def reprocessar_solicitacoes_cif():
     )
 
     regra = str((request.get_json(silent=True) or {}).get("regra") or "").strip().lower()
+    if regra == "coleta" and not current_app.config.get("SOLICITACAO_CIF_COLETA_ENABLED", False):
+        # Desligada desde 14/10/2026: OC com frete CIF nao gera coleta.
+        return jsonify({"error": "A coleta automática de OC CIF está desligada."}), 400
     try:
         if regra == "coleta":
             resultado = {"coleta": gerar_solicitacoes_coleta_cif()}

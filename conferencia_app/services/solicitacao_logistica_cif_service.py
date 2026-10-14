@@ -9,11 +9,16 @@ Regra 1 - Coleta (Pedido de Compra CIF):
     numero da OC, fornecedor, endereco de coleta, previsao de entrega e
     observacoes. Evita duplicidade e recalcula a data se a previsao mudar.
 
-Regra 2 - Entrega (NF de Saida com Romaneio CIF/DAP):
-    Sempre que um Romaneio de saida com frete CIF ou DAP estiver em status
-    Pronto ou Expedido, gera uma Solicitacao de Entrega herdando as NFs, o
-    cliente, o romaneio, o volume/peso e o responsavel pela emissao. Evita
-    duplicidade.
+Regra 2 - Entrega (NF de Saida com Romaneio DAP):
+    Sempre que um Romaneio de saida com frete DAP (transporte proprio) estiver
+    em status Pronto ou Expedido, gera uma Solicitacao de Entrega herdando as
+    NFs, o cliente, o romaneio, o volume/peso e o responsavel pela emissao.
+    Evita duplicidade. Romaneio CIF NAO gera (pedido da logistica em
+    14/10/2026: no CIF quem leva e' a transportadora, nao ha viagem nossa).
+    As entregas AutoCIF criadas antes disso continuam valendo e o estorno do
+    romaneio ainda as cancela.
+
+A Regra 1 ficou desligada por padrao na mesma data (SOLICITACAO_CIF_COLETA_ENABLED).
 
 Regras gerais atendidas: log de criacao automatica (historico), rastreabilidade
 via payload_origem (numero da OC / romaneio_id) e origem_documento AutoCIF/AutoDAP.
@@ -38,7 +43,7 @@ from ..tempo import agora_br
 
 ORIGEM_AUTO_CIF = "AutoCIF"
 ORIGEM_AUTO_DAP = "AutoDAP"
-FRETES_ENTREGA_AUTOMATICA = ("CIF", "PROP_REM", "DAP")
+FRETES_ENTREGA_AUTOMATICA = ("PROP_REM", "DAP")
 
 # Chaves candidatas para a coluna "frete por conta" no cabecalho da OC.
 _FRETE_KEY_TOKENS = (
@@ -298,17 +303,17 @@ def gerar_solicitacao_entrega_para_romaneio(
     solicitante: str = "sistema",
     commit: bool = True,
 ) -> tuple[bool, list[AgendamentoSolicitacao], str]:
-    """Gera (ou reaproveita) UMA Solicitacao de Entrega por NF do romaneio CIF/DAP.
+    """Gera (ou reaproveita) UMA Solicitacao de Entrega por NF do romaneio DAP.
 
     Um romaneio pode reunir varias entregas (uma por NF/cliente), portanto cada
     NF vira uma entrega/parada propria - obrigatoriamente, mesmo que a NF em si
-    seja FOB (o romaneio e CIF; eventual divergencia e tratada por CC-e)."""
+    seja FOB (vale a modalidade do romaneio; eventual divergencia e tratada por CC-e)."""
     if not romaneio:
         return False, [], "Romaneio inexistente."
     frete = str(romaneio.tipo_frete or "").strip().upper()
     if frete not in FRETES_ENTREGA_AUTOMATICA:
-        return False, [], "Romaneio nao e CIF/DAP."
-    modalidade = "DAP" if frete in ("PROP_REM", "DAP") else "CIF"
+        return False, [], "Romaneio nao e DAP."
+    modalidade = "DAP"
     status = str(romaneio.status or "").strip()
     if status not in ("Pronto", "Expedido"):
         return False, [], f"Romaneio em status '{status}' (aguardando Pronto/Expedido)."
@@ -379,7 +384,7 @@ def gerar_solicitacao_entrega_para_romaneio(
 
 
 def gerar_solicitacoes_entrega_cif(app=None) -> dict:
-    """Varre romaneios CIF/DAP em Pronto/Expedido e gera as entregas faltantes."""
+    """Varre romaneios DAP em Pronto/Expedido e gera as entregas faltantes."""
 
     def _run() -> dict:
         romaneios = (
@@ -697,7 +702,7 @@ def executar_ciclo(app=None) -> dict:
         resultado: dict[str, Any] = {}
         if current_app.config.get("SOLICITACAO_CIF_ENTREGA_ENABLED", True):
             resultado["entrega"] = gerar_solicitacoes_entrega_cif()
-        if current_app.config.get("SOLICITACAO_CIF_COLETA_ENABLED", True):
+        if current_app.config.get("SOLICITACAO_CIF_COLETA_ENABLED", False):
             resultado["coleta"] = gerar_solicitacoes_coleta_cif()
         return resultado
 

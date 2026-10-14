@@ -63,14 +63,15 @@ def _parse_int(valor, default=0) -> int:
 
 def _gerar_solicitacao_entrega_cif(romaneio) -> tuple[bool, str]:
     """Gatilho imediato da Regra 2: gera a Solicitacao de Entrega de um
-    romaneio CIF/DAP assim que ele fica Pronto ou Expedido. Best-effort: nunca
+    romaneio DAP assim que ele fica Pronto ou Expedido (CIF nao gera desde
+    14/10/2026: quem leva e' a transportadora). Best-effort: nunca
     interrompe o fluxo do romaneio (o scheduler cobre eventuais falhas)."""
     try:
         if not current_app.config.get("SOLICITACAO_CIF_AUTO_ENABLED", True):
             return False, "Automação de entregas está desabilitada."
         if not current_app.config.get("SOLICITACAO_CIF_ENTREGA_ENABLED", True):
             return False, "Automação de entregas está desabilitada."
-        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) not in ("CIF", "PROP_REM"):
+        if _normalizar_tipo_frete(getattr(romaneio, "tipo_frete", "")) != "PROP_REM":
             return False, "Romaneio sem entrega automática para esta modalidade de frete."
         from ..services.solicitacao_logistica_cif_service import (
             gerar_solicitacao_entrega_para_romaneio,

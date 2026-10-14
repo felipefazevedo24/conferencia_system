@@ -29,6 +29,7 @@ from ..models import (
 from ..services import expedicao_desenho_service as desenho_svc
 from ..services import expedicao_etiqueta_pdf as etiqueta_pdf
 from ..services import expedicao_etiqueta_service as etiqueta_svc
+from ..services import expedicao_fat_comparacao_nf_service as comparacao_nf_svc
 from ..services import expedicao_fat_service as svc
 from ..services import expedicao_grv_trilha_service as grv_trilha_svc
 from ..services import expedicao_log_service as log_svc
@@ -213,6 +214,9 @@ def listar_ordens_conf_cega():
         ExpedicaoOrdemFat.cod_ordem_fat.desc(),
     ).all()
 
+    # Conferido x faturado: so' o que ja' esta' guardado, sem ir no ERP.
+    divergentes_nf = comparacao_nf_svc.ordens_divergentes(ordens)
+
     # Contagem de itens em lote para evitar N+1
     contagens: dict[int, int] = {}
     for oid, total in (
@@ -296,6 +300,7 @@ def listar_ordens_conf_cega():
         elif slug and sl != slug:
             continue
         resumo = _ordem_resumo(ordem, contagens.get(ordem.id, 0))
+        resumo["divergente_nf"] = ordem.id in divergentes_nf
         if sl in ("romaneio", "expedido"):
             resumo["romaneio"] = romaneio_info
         resumos.append(resumo)
@@ -635,6 +640,17 @@ def upload_fotos_preexpedicao(cod_ordem_fat):
         return jsonify({"error": f"Falha ao salvar as fotos: {exc}"}), 502
 
     return jsonify({"sucesso": True, **_fotos_preexpedicao_payload(registro)})
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/comparacao-nf", methods=["GET"])
+@permission_required(PERMISSION)
+def comparacao_nf_ordem_conf_cega(cod_ordem_fat):
+    # Rota separada do detalhe: pode precisar baixar o XML da NF no ERP. So'
+    # devolve quantidade da nota depois da conferencia oficial (ver o service).
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    return jsonify(comparacao_nf_svc.verificar(ordem))
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/trilha-grv", methods=["GET"])

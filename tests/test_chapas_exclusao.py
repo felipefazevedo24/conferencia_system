@@ -568,3 +568,45 @@ def test_codigo_zerado_no_grv_manda_todos_os_lotes_pro_historico(app, monkeypatc
     _saldo_grv(monkeypatch, 0, qtde_codigo=0)
     data = client_for(app).get('/api/logistica/chapas').get_json()
     assert all(l['historico'] for l in data['itens'])
+
+
+def test_menu_do_lote_nao_e_cortado_pelo_card(app):
+    """O card da lista tem overflow:hidden: o menu ⋯ do último lote saía cortado."""
+    from werkzeug.serving import make_server
+    pw = pytest.importorskip('playwright.sync_api')
+
+    @app.before_request
+    def login():
+        session['username'] = 'teste'; session['role'] = 'Admin'
+
+    @app.context_processor
+    def context():
+        return dict(can_access=lambda key: True, user='teste', asset_version='test')
+
+    server = make_server('127.0.0.1', 0, app)
+    thread = Thread(target=server.serve_forever, daemon=True); thread.start()
+    try:
+        with pw.sync_playwright() as p:
+            if not Path(p.chromium.executable_path).exists():
+                pytest.skip('Chromium não instalado')
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 1366, 'height': 900})
+            page.goto(f'http://127.0.0.1:{server.server_port}/logistica/estoque/chapas')
+            page.locator('.ch-row__main').click()
+            # O último lote da lista é o que encosta no fim do card.
+            toggle = page.locator('[data-menu]').last
+            item = toggle.get_attribute('data-menu')
+            toggle.click()
+            botoes = page.locator(f'[data-menu-box="{item}"] button')
+            pw.expect(botoes.first).to_be_visible()
+            # Cada opção é o que está de fato na tela naquele ponto (nada por cima, nada cortado).
+            for i in range(botoes.count()):
+                assert botoes.nth(i).evaluate(
+                    "b => { const r = b.getBoundingClientRect();"
+                    " return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)); }"
+                ), botoes.nth(i).inner_text()
+            botoes.filter(has_text='Histórico do lote').click()
+            pw.expect(page.locator(f'[data-menu-box="{item}"]')).not_to_be_visible()
+            browser.close()
+    finally:
+        server.shutdown(); thread.join(timeout=5)

@@ -15,6 +15,8 @@ from ..models import (LocalizacaoArmazem, RecebimentoEnderecamento as Tarefa,
 from .erp_estoque_service import buscar_localizacao_produto_grv, atualizar_localizacao_estoque
 from ..tempo import agora_br
 
+UNIDADE_CHAPA = "UND"
+
 
 def enderecos(valor):
     return list(dict.fromkeys(x.strip() for x in str(valor or "").split(";") if x.strip()))
@@ -45,8 +47,12 @@ def criar_pendencias(itens, contagens, conversoes, ids_conformes, usuario):
             # Com conversão (4 PÇ -> 24.000 mm), a quantidade já está na
             # unidade convertida: a unidade da tarefa tem que acompanhar.
             unidade_conv = str(cfg.get("unidade") or "").strip().upper()[:20] if fator != 1 else ""
+            unidade = unidade_conv or item.unidade_comercial
+            # Chapa: endereça as chapas contadas, não o peso da nota (14/10/2026).
+            if float(item.qtd_chapas_und or 0) > 0:
+                qtd, unidade = float(item.qtd_chapas_und), UNIDADE_CHAPA
             tarefa = Tarefa(item_nota_id=item.id, sku=str(item.codigo_grv or "").strip(),
-                            quantidade=qtd, unidade=unidade_conv or item.unidade_comercial, criado_por=usuario)
+                            quantidade=qtd, unidade=unidade, criado_por=usuario)
             db.session.add(tarefa)
             db.session.flush()
             evento(tarefa, "Criado", {"quantidade": qtd, "nota": item.numero_nota,

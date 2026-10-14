@@ -310,6 +310,18 @@ def test_creation_only_conforming_and_idempotent(app):
         assert Tarefa.query.first().quantidade == 5
 
 
+def test_chapa_e_enderecada_em_und_e_nao_no_peso_da_nota(app):
+    with app.test_request_context():
+        session['username'] = 'tester'
+        chapa = ItemNota(numero_nota='1', codigo_grv='CHAPA', qtd_real=1250.5, unidade_comercial='KG', qtd_chapas_und=12)
+        comum = ItemNota(numero_nota='1', codigo_grv='BARRA', qtd_real=300, unidade_comercial='KG')
+        db.session.add_all([chapa, comum]); db.session.flush()
+        counts = {str(chapa.id): 1250.5, str(comum.id): 300}
+        svc.criar_pendencias([chapa, comum], counts, {}, {chapa.id, comum.id}, 'tester')
+        tarefas = {t.sku: (t.quantidade, t.unidade) for t in Tarefa.query.all()}
+        assert tarefas == {'CHAPA': (12, 'UND'), 'BARRA': (300, 'KG')}
+
+
 def test_api_permissions_and_filtered_list(app, state):
     client = app.test_client()
     assert client.get('/api/recebimento/enderecamento').status_code in (302,401,403)

@@ -239,15 +239,18 @@ class Config:
     ENDERECAMENTO_RETRY_AUTO_ENABLED = os.environ.get("ENDERECAMENTO_RETRY_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
     ENDERECAMENTO_RETRY_POLL_INTERVAL_SECONDS = int(os.environ.get("ENDERECAMENTO_RETRY_POLL_INTERVAL_SECONDS", "600"))
 
-    # Automacao de Solicitacoes Logisticas por modalidade de frete CIF.
+    # Automacao de Solicitacoes Logisticas por modalidade de frete.
     #   Regra 1 (Coleta): Pedido de Compra (OC) com frete CIF -> gera Solicitacao
     #     de Coleta com data programada = N dias antes da previsao de entrega.
-    #   Regra 2 (Entrega): Romaneio de saida CIF em status Pronto/Expedido -> gera
-    #     Solicitacao de Entrega herdando NF, cliente, endereco, volumes e peso.
+    #     DESLIGADA por padrao desde 14/10/2026 (pedido da logistica: frete CIF
+    #     nao gera coleta nem viagem). Religar so' com SOLICITACAO_CIF_COLETA_ENABLED=1.
+    #   Regra 2 (Entrega): Romaneio de saida DAP (transporte proprio) em status
+    #     Pronto/Expedido -> gera Solicitacao de Entrega herdando NF, cliente,
+    #     endereco, volumes e peso. Romaneio CIF nao gera mais (14/10/2026).
     # A coluna "frete por conta" da OC no ERP e descoberta dinamicamente (to_jsonb)
     # e classificada como CIF via SOLICITACAO_CIF_VALORES_CIF (tolerante).
     SOLICITACAO_CIF_AUTO_ENABLED = os.environ.get("SOLICITACAO_CIF_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
-    SOLICITACAO_CIF_COLETA_ENABLED = os.environ.get("SOLICITACAO_CIF_COLETA_ENABLED", "1") not in ("0", "false", "False", "")
+    SOLICITACAO_CIF_COLETA_ENABLED = os.environ.get("SOLICITACAO_CIF_COLETA_ENABLED", "0") not in ("0", "false", "False", "")
     SOLICITACAO_CIF_ENTREGA_ENABLED = os.environ.get("SOLICITACAO_CIF_ENTREGA_ENABLED", "1") not in ("0", "false", "False", "")
     SOLICITACAO_CIF_POLL_INTERVAL_SECONDS = int(os.environ.get("SOLICITACAO_CIF_POLL_INTERVAL_SECONDS", "1800"))
     SOLICITACAO_CIF_COLETA_ANTECEDENCIA_DIAS = int(os.environ.get("SOLICITACAO_CIF_COLETA_ANTECEDENCIA_DIAS", "2"))

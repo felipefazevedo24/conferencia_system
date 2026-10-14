@@ -101,7 +101,7 @@ def test_item_ja_marcado_como_chapa_continua_pegando_o_peso_da_nf(tmp_path):
         assert ultimo.qtd_convertida == pytest.approx(314.0)
 
 
-def test_enderecamento_recebe_a_quantidade_da_nf(tmp_path):
+def test_enderecamento_recebe_as_chapas_em_und(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -116,8 +116,10 @@ def test_enderecamento_recebe_a_quantidade_da_nf(tmp_path):
     assert resposta.status_code == 200
     with app.app_context():
         tarefa = Tarefa.query.filter_by(item_nota_id=item_id).one()
-        assert tarefa.quantidade == pytest.approx(314.0)
-        assert tarefa.unidade == "KG"
+        # A conferência continua no peso da NF (314 KG); o endereçamento é
+        # das chapas contadas (14/10/2026).
+        assert tarefa.quantidade == pytest.approx(2.0)
+        assert tarefa.unidade == "UND"
 
 
 def test_item_em_kg_sem_marcar_chapa_continua_exigindo_a_contagem(tmp_path):

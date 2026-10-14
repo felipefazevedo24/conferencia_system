@@ -1,6 +1,5 @@
-"""Inventario: quem conta informa o motivo. "Item sem Saldo" so' abre
-ajuste quando a quantidade difere do GRV; nos demais motivos a contagem
-sempre vai pro gestor analisar, mesmo batendo."""
+"""Inventario: quem conta informa o motivo. Em qualquer motivo, so' abre
+ajuste (e vai pro gestor) quando a quantidade difere do GRV."""
 from unittest.mock import patch
 
 import pytest
@@ -38,33 +37,22 @@ def test_motivo_e_obrigatorio_e_vem_da_lista(contar):
     assert resp.get_json()["registro"]["motivo"] == "Inventário Cíclico"
 
 
-def test_item_sem_saldo_so_abre_ajuste_quando_a_quantidade_difere(contar):
-    assert contar(motivo="Item sem Saldo").get_json()["ajuste_aberto"] is None
-    diverge = contar(motivo="Item sem Saldo", codigo_produto="SKU-B", quantidade=5).get_json()
+@pytest.mark.parametrize("motivo", INVENTARIO_MOTIVOS)
+def test_qualquer_motivo_so_abre_ajuste_quando_a_quantidade_difere(contar, motivo):
+    # Quantidade igual a do GRV: nada pro gestor validar.
+    assert contar(motivo=motivo).get_json()["ajuste_aberto"] is None
+    with contar.app.app_context():
+        assert LogisticaInventarioAjuste.query.count() == 0
+    contar.teams.assert_not_called()
+
+    diverge = contar(motivo=motivo, codigo_produto="SKU-B", quantidade=5).get_json()
     assert diverge["ajuste_aberto"]["diferenca"] == -3
     with contar.app.app_context():
         ajuste = LogisticaInventarioAjuste.query.one()
-        assert (ajuste.codigo_produto, ajuste.motivo_inventario) == ("SKU-B", "Item sem Saldo")
+        assert (ajuste.codigo_produto, ajuste.motivo_inventario, ajuste.status_modulo) == ("SKU-B", motivo, "Validacao")
     assert contar.teams.call_count == 1
-
-
-@pytest.mark.parametrize("motivo", [m for m in INVENTARIO_MOTIVOS if m != "Item sem Saldo"])
-def test_demais_motivos_sempre_vao_para_analise_do_gestor(contar, motivo):
-    # Quantidade igual a do GRV: mesmo assim abre o ajuste, com diferenca zero.
-    resp = contar(motivo=motivo).get_json()
-    assert resp["ajuste_aberto"]["diferenca"] == 0
-    with contar.app.app_context():
-        ajuste = LogisticaInventarioAjuste.query.one()
-        assert (ajuste.motivo_inventario, ajuste.status_modulo, ajuste.qtde_contada, ajuste.qtde_estoque_no_momento) == (motivo, "Validacao", 10, 10)
-    # Sem divergencia nao tem card de divergencia no Teams.
-    contar.teams.assert_not_called()
-
     listado = contar.client.get("/api/logistica/inventario-ajustes").get_json()
     assert [a["motivo_inventario"] for a in listado["ajustes"]] == [motivo]
-
-    # Com diferenca de verdade o card continua saindo.
-    contar(motivo=motivo, codigo_produto="SKU-B", quantidade=5)
-    assert contar.teams.call_count == 1
 
 
 def test_tela_de_contagem_oferece_os_motivos(contar):
@@ -83,7 +71,7 @@ def test_motivos_da_contagem_sao_os_tipos_de_ajuste_do_formulario():
 def test_relatorio_nao_mistura_motivos_e_aceita_o_tipo_do_motivo(contar):
     from conferencia_app.extensions import db
 
-    contar(motivo="Inventário Cíclico")
+    contar(motivo="Inventário Cíclico", quantidade=12)
     contar(motivo="Inventário Geral", codigo_produto="SKU-B", quantidade=5)
     with contar.app.app_context():
         ajustes = LogisticaInventarioAjuste.query.order_by(LogisticaInventarioAjuste.id).all()

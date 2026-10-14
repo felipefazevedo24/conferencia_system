@@ -47,6 +47,17 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             app.logger.warning("Scheduler Expedicao FAT: falha: %s", exc)
             resumo["fat_erro"] = str(exc)
 
+        # Conferido x faturado das ordens que acabaram de ganhar NF (e do
+        # passivo, aos poucos). Falha aqui nao marca a sincronizacao como erro.
+        try:
+            from . import expedicao_fat_comparacao_nf_service as comparacao_nf_svc
+            resumo["fat_comparacoes_nf"] = comparacao_nf_svc.verificar_pendentes()
+        except Exception as exc:  # noqa: BLE001
+            from ..extensions import db
+
+            db.session.rollback()
+            app.logger.warning("Scheduler Expedicao FAT: conferido x faturado falhou: %s", exc)
+
         # --- Servico de Terceiro (ST) ---
         if app.config.get("EXPEDICAO_SYNC_ST_ENABLED", True):
             try:

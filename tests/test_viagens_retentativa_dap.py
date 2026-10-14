@@ -40,7 +40,8 @@ def criar_romaneio(app, frete, status="Rascunho"):
 
 
 @pytest.mark.parametrize("frete,origem", [
-    ("PROP_REM", "AutoDAP"), ("DAP", "AutoDAP"), ("CIF", "AutoCIF"),
+    # CIF nao gera entrega desde 14/10/2026: quem leva e' a transportadora.
+    ("PROP_REM", "AutoDAP"), ("DAP", "AutoDAP"), ("CIF", None),
     ("FOB", None), ("PROP_DEST", None),
 ])
 def test_finalizar_romaneio_gera_entregas_na_central(ambiente, frete, origem):

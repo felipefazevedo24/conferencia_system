@@ -111,7 +111,8 @@ def test_tela_tem_o_cartao_da_trilha(tmp_path):
     client = _app(tmp_path)
     html = client.get("/expedicao/conferencia-cega").get_data(as_text=True)
     assert "card-trilha-grv" in html
-    assert "function renderTrilhaGrv" in html
+    assert "function carregarTrilhaGrv" in html
+    assert "Linha do tempo no GRV" in html
     assert "O GRV não registra quem criou a ordem de faturamento." in html
 
 

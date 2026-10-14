@@ -23,7 +23,6 @@ from ..models import (
     ChapaControleExclusao,
     ChapaAuditoria,
     ChapaLoteCorrecao,
-    INVENTARIO_MOTIVO_SO_DIVERGENCIA,
     INVENTARIO_MOTIVOS,
     ItemNota,
     LogisticaInventarioAjuste,
@@ -828,15 +827,10 @@ def criar_inventario_inicial():
         row.grv_consultado_em = agora_br()
         db.session.commit()
         descricao_produto = descricao_para(row.codigo_produto, estoque_grv)
-        ajuste = ajuste_svc.detectar_divergencia(
-            row, qtde_grv, custo_medio, descricao_produto,
-            sempre_abrir=motivo != INVENTARIO_MOTIVO_SO_DIVERGENCIA,
-        )
+        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv, custo_medio, descricao_produto)
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
-        # O card do Teams e' de DIVERGENCIA: contagem que bateu e so' foi pra
-        # analise por causa do motivo fica na fila do gestor, sem card.
-        if ajuste and abs(ajuste.diferenca) > ajuste_svc.TOLERANCIA_DIVERGENCIA:
+        if ajuste:
             # Aviso no Teams pro gestor validar - assincrono, nao afeta a contagem.
             base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
             teams_service.notificar_divergencia_inventario_gestor(

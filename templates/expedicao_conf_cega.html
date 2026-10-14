@@ -48,6 +48,11 @@
     .ce-hist-de { color: var(--eui-danger); text-decoration: line-through; }
     .ce-hist-para { color: var(--eui-success, #15803d); font-weight: 700; }
     .ce-hist-empty { color: var(--eui-text-muted, #64748b); font-size: 12px; }
+    .ce-recolhe { display: block; width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+    .ce-recolhe__seta { margin-left: 6px; transition: transform .15s ease; }
+    .ce-recolhe[aria-expanded="true"] .ce-recolhe__seta { transform: rotate(180deg); }
+    .ce-comp-ok { color: var(--eui-success, #15803d); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .ce-comp-ico { color: var(--eui-danger); width: 28px; text-align: center; }
     .ce-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
 
     /* Painel de conferência */
@@ -501,6 +506,14 @@
             </div>
         </div>
 
+        <div class="eui-card hidden" id="{{ prefix }}-card-comparacao-nf">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-scale-balanced"></i> Conferido x faturado</h2>
+                <p class="eui-card__sub" id="{{ prefix }}-comparacao-nf-sub"></p>
+            </div>
+            <div class="eui-card__body" id="{{ prefix }}-comparacao-nf-corpo"></div>
+        </div>
+
         <div class="eui-card" id="{{ prefix }}-card-historico">
             <div class="eui-card__head">
                 <h2 class="eui-card__title"><i class="fas fa-clock-rotate-left"></i> Histórico de conferências e edições</h2>
@@ -512,11 +525,13 @@
         </div>
 
         <div class="eui-card hidden" id="{{ prefix }}-card-trilha-grv">
-            <div class="eui-card__head">
-                <h2 class="eui-card__title"><i class="fas fa-route"></i> Trilha no GRV</h2>
-                <p class="eui-card__sub">Quem movimentou o orçamento, a produção e a nota desta ordem no ERP. O GRV não registra quem criou a ordem de faturamento.</p>
-            </div>
-            <div class="eui-card__body">
+            {# Recolhida por padrão: só consulta o GRV quando alguém abre. #}
+            <button type="button" class="eui-card__head ce-recolhe" id="{{ prefix }}-trilha-grv-toggle" aria-expanded="false">
+                <h2 class="eui-card__title"><i class="fas fa-route"></i> Linha do tempo no GRV</h2>
+                <p class="eui-card__sub">Quem movimentou o orçamento, a produção e a nota desta ordem no ERP. <i class="fas fa-chevron-down ce-recolhe__seta"></i></p>
+            </button>
+            <div class="eui-card__body hidden" id="{{ prefix }}-trilha-grv-corpo">
+                <p class="ce-hist-empty" style="margin:0 0 10px;">O GRV não registra quem criou a ordem de faturamento.</p>
                 <div id="{{ prefix }}-conf-trilha-grv" class="ce-historico"></div>
             </div>
         </div>
@@ -1316,6 +1331,9 @@
                 const acao = `<button class="ce-actions-btn" data-kebab="${escapeHtml(cod)}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button>`;
                 const nf = o.numero_nf ? escapeHtml(o.numero_nf) : "—";
                 const div = o.divergente ? `<div class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</div>` : "";
+                const divNf = o.divergente_nf
+                    ? `<div class="ce-diverg" title="O que foi conferido não bate com os itens da nota fiscal. Abra a ordem para ver."><i class="fas fa-triangle-exclamation"></i> Conferido ≠ faturado</div>`
+                    : "";
                 const posFat = o.conferido_pos_faturamento
                     ? `<div class="ce-posfat" title="Conferência realizada após o faturamento (NF já emitida)"><i class="fas fa-clock-rotate-left"></i> Conf. pós-faturamento</div>`
                     : "";
@@ -1336,7 +1354,7 @@
                     <td>${prev}</td>
                     <td style="text-align:center;">${o.total_itens}</td>
                     <td>${nf}</td>
-                    <td>${badge(o.status_slug, o.status)}${div}${posFat}${semConf}${romInfo}</td>
+                    <td>${badge(o.status_slug, o.status)}${div}${divNf}${posFat}${semConf}${romInfo}</td>
                     <td style="text-align:right;">${acao}</td>
                 </tr>`;
             }).join("");
@@ -1536,32 +1554,41 @@
             }).join("");
         }
 
-        // Trilha da ordem no GRV. Carrega à parte, depois da tela abrir: a
-        // consulta vai no ERP e não pode segurar a conferência.
-        async function renderTrilhaGrv(cod) {
+        // Linha do tempo da ordem no GRV. Recolhida por padrão: a consulta vai
+        // no ERP, então só acontece quando alguém abre o cartão.
+        let trilhaGrvCod = null;      // ordem cuja linha do tempo já foi pedida
+
+        function prepararTrilhaGrv(cod, ordem) {
             const card = el("card-trilha-grv");
+            if (!card) return;
+            trilhaGrvCod = null;
+            el("conf-trilha-grv").innerHTML = "";
+            el("trilha-grv-corpo").classList.add("hidden");
+            el("trilha-grv-toggle").setAttribute("aria-expanded", "false");
+            // Só ordem de faturamento do GRV tem linha do tempo: serviço de
+            // terceiro e NF lançada à mão no Sync não.
+            card.classList.toggle("hidden", cfg.codKey !== "cod_ordem_fat" || !!ordem.nf_manual);
+        }
+
+        async function carregarTrilhaGrv(cod) {
             const wrap = el("conf-trilha-grv");
-            if (!card || !wrap) return;
-            card.classList.add("hidden");
-            wrap.innerHTML = "";
-            // Só ordem de faturamento tem trilha; serviço de terceiro não.
-            if (cfg.codKey !== "cod_ordem_fat") return;
-            let d;
+            trilhaGrvCod = cod;
+            wrap.innerHTML = '<div class="ce-hist-empty">Consultando o GRV...</div>';
+            let d = null;
             try {
                 const r = await fetch(`${cfg.apiBase}/ordens/${encodeURIComponent(cod)}/trilha-grv`, { headers: { "Accept": "application/json" } });
-                d = await r.json();
-                if (!r.ok) return;
-            } catch (e) {
-                return;
-            }
+                if (r.ok) d = await r.json();
+            } catch (e) { /* cai no aviso de indisponível */ }
             // O usuário pode ter aberto outra ordem enquanto o GRV respondia.
-            if (!currentOrdem || String(codDe(currentOrdem)) !== String(cod)) return;
-            if (d.motivo === "nf_manual" || d.motivo === "nao_encontrada" || d.motivo === "nao_configurado") return;
-            card.classList.remove("hidden");
-            if (!d.disponivel) {
-                wrap.innerHTML = `<div class="ce-hist-empty">${d.motivo === "bridge_desatualizado"
-                    ? "A ponte do ERP ainda não tem esta consulta: atualize a ponte na VM para ver a trilha."
-                    : "O GRV não respondeu agora. Abra a ordem de novo em instantes."}</div>`;
+            if (trilhaGrvCod !== cod) return;
+            if (!d || !d.disponivel) {
+                const motivo = d ? d.motivo : "";
+                trilhaGrvCod = null;  // deixa tentar de novo ao reabrir o cartão
+                wrap.innerHTML = `<div class="ce-hist-empty">${motivo === "bridge_desatualizado"
+                    ? "A ponte do ERP ainda não tem esta consulta: atualize a ponte na VM para ver a linha do tempo."
+                    : (motivo === "nao_encontrada"
+                        ? "Esta ordem não foi encontrada no GRV."
+                        : "O GRV não respondeu agora. Feche e abra este cartão para tentar de novo.")}</div>`;
                 return;
             }
             const eventos = d.eventos || [];
@@ -1583,6 +1610,64 @@
                     ${e.detalhe ? `<div class="ce-hist-empty">${escapeHtml(e.detalhe)}</div>` : ""}
                 </div>`;
             }).join("");
+        }
+
+        if (el("trilha-grv-toggle")) {
+            el("trilha-grv-toggle").addEventListener("click", () => {
+                const corpo = el("trilha-grv-corpo");
+                const abrir = corpo.classList.contains("hidden");
+                corpo.classList.toggle("hidden", !abrir);
+                el("trilha-grv-toggle").setAttribute("aria-expanded", String(abrir));
+                const cod = currentOrdem ? codDe(currentOrdem) : null;
+                if (abrir && cod != null && trilhaGrvCod !== cod) carregarTrilhaGrv(cod);
+            });
+        }
+
+        // Conferido x faturado: o que o conferente contou contra os itens da
+        // NF. Carrega à parte porque pode precisar baixar o XML no ERP.
+        async function renderComparacaoNf(cod) {
+            const card = el("card-comparacao-nf");
+            if (!card) return;
+            card.classList.add("hidden");
+            if (cfg.codKey !== "cod_ordem_fat") return;
+            let d;
+            try {
+                const r = await fetch(`${cfg.apiBase}/ordens/${encodeURIComponent(cod)}/comparacao-nf`, { headers: { "Accept": "application/json" } });
+                if (!r.ok) return;
+                d = await r.json();
+            } catch (e) {
+                return;
+            }
+            if (!currentOrdem || String(codDe(currentOrdem)) !== String(cod)) return;
+            // Sem NF ou sem conferência oficial não há o que comparar.
+            if (d.status !== "ok" && d.status !== "indisponivel") return;
+            card.classList.remove("hidden");
+            const nf = escapeHtml(d.numero_nf || "");
+            const corpo = el("comparacao-nf-corpo");
+            if (d.status === "indisponivel") {
+                el("comparacao-nf-sub").textContent = `NF ${d.numero_nf || ""}`;
+                corpo.innerHTML = '<div class="ce-hist-empty">Não foi possível ler a nota fiscal no ERP agora. A comparação será refeita automaticamente.</div>';
+                return;
+            }
+            const divergencias = d.divergencias || [];
+            el("comparacao-nf-sub").textContent = `Itens conferidos contra os itens da NF ${d.numero_nf || ""} (código e quantidade).`;
+            if (!divergencias.length) {
+                corpo.innerHTML = `<div class="ce-comp-ok"><i class="fas fa-circle-check"></i> O que foi conferido bate com a NF ${nf}.</div>`;
+                return;
+            }
+            const qt = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 }));
+            corpo.innerHTML = `<div class="ce-diverg" style="margin:0 0 10px; font-size:13px;"><i class="fas fa-triangle-exclamation"></i> ${divergencias.length} ${divergencias.length === 1 ? "item diverge" : "itens divergem"} da NF ${nf}</div>
+                <div class="ce-table-wrap"><table class="erp-table ce-table">
+                    <thead><tr><th></th><th>Código</th><th>Item</th><th style="text-align:right;">Conferido</th><th style="text-align:right;">Faturado</th><th>Divergência</th></tr></thead>
+                    <tbody>${divergencias.map((x) => `<tr>
+                        <td class="ce-comp-ico"><i class="fas fa-triangle-exclamation" title="${escapeHtml(x.tipo_label || "")}"></i></td>
+                        <td><b>${escapeHtml(x.cod_interno || "—")}</b></td>
+                        <td>${escapeHtml(x.item || "—")}</td>
+                        <td style="text-align:right;">${qt(x.conferido)}</td>
+                        <td style="text-align:right;">${qt(x.faturado)}</td>
+                        <td>${escapeHtml(x.tipo_label || "")}</td>
+                    </tr>`).join("")}</tbody>
+                </table></div>`;
         }
 
         async function renderFollowup(cod) {
@@ -1641,7 +1726,8 @@
                 renderItens(o);
                 renderHistorico(o.historico);
                 renderFollowup(cod);
-                renderTrilhaGrv(cod);
+                renderComparacaoNf(cod);
+                prepararTrilhaGrv(cod, o);
 
                 el("card-header-form").classList.toggle("hidden", !o.editavel);
                 el("h-peso-liq").value = o.peso_liquido || "";

@@ -775,6 +775,30 @@ class ExpedicaoOrdemFatItem(db.Model):
     divergente = db.Column(db.Boolean, nullable=False, default=False)
 
 
+class ExpedicaoFatComparacaoNF(db.Model):
+    """Resultado da comparação entre o que foi conferido e o que saiu na NF
+    (código e quantidade de cada item) de uma ordem de faturamento.
+
+    Fica gravado porque a lista da Conferência de Expedição precisa do
+    triângulo de divergência e não dá pra baixar o XML de cada NF a cada
+    carga. Não sai de sincronia: a NF autorizada não muda, e a linha só vale
+    enquanto `numero_nf` e `conferido_at` forem os da ordem - refez a
+    conferência ou trocou a NF, a comparação é refeita.
+    """
+
+    __tablename__ = "expedicao_fat_comparacao_nf"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(db.Integer, db.ForeignKey("expedicao_ordem_fat.id"), nullable=False, unique=True, index=True)
+    numero_nf = db.Column(db.String(80))
+    conferido_at = db.Column(db.DateTime)
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+    detalhes = db.Column(db.Text)  # JSON: lista de divergências
+    # Preenchido quando a NF não pôde ser lida no ERP; aí tenta de novo depois.
+    erro = db.Column(db.String(200))
+    verificado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class ExpedicaoOrdemST(db.Model):
     """Cabecalho de uma Ordem de Compra com material de Servico de Terceiro (ST)
     a faturar, para a Conferencia de Expedicao (aba ST). A cadeia de origem e:
@@ -1839,9 +1863,8 @@ class WMSInventarioCiclico(db.Model):
 # Motivo da contagem, escolhido por quem conta (obrigatorio desde 08/10/2026;
 # contagens anteriores ficam sem). As opcoes sao as MESMAS do "Tipo de
 # Ajuste" do FORM-08.52 (RELATORIO_AJUSTE_TIPOS, mais abaixo): o relatorio ja'
-# abre com o tipo igual ao motivo da contagem. So' "Item sem Saldo" segue a
-# regra antiga de abrir ajuste apenas quando a quantidade difere do GRV: nos
-# demais a contagem SEMPRE vai pro gestor analisar, mesmo batendo.
+# abre com o tipo igual ao motivo da contagem. Em qualquer motivo, so' abre
+# ajuste quando a quantidade difere do GRV (desde 14/10/2026).
 INVENTARIO_MOTIVO_SO_DIVERGENCIA = "Item sem Saldo"
 INVENTARIO_MOTIVOS = [
     "Inventário Cíclico",

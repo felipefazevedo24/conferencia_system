@@ -660,6 +660,24 @@
     function fecharMenus(exceto) {
         document.querySelectorAll('.ch-menu.open').forEach((m) => { if (m !== exceto) m.classList.remove('open'); });
     }
+    // O card da lista tem overflow:hidden e cortava o menu: ele abre fixo na
+    // tela, alinhado ao botão, e pra cima quando não cabe embaixo.
+    function posicionarMenu(box, botao) {
+        const r = botao.getBoundingClientRect();
+        box.style.position = 'fixed';
+        box.style.right = 'auto';
+        box.style.left = Math.max(8, Math.min(r.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8)) + 'px';
+        const cabeEmbaixo = r.bottom + 4 + box.offsetHeight <= window.innerHeight - 8;
+        box.style.top = (cabeEmbaixo ? r.bottom + 4 : Math.max(8, r.top - 4 - box.offsetHeight)) + 'px';
+        // O .ch-wrap tem container-type, que vira referência do "fixed": corrige
+        // pela posição real em vez de supor que a referência é a janela.
+        const alvo = { left: parseFloat(box.style.left), top: parseFloat(box.style.top) };
+        const real = box.getBoundingClientRect();
+        box.style.left = (alvo.left * 2 - real.left) + 'px';
+        box.style.top = (alvo.top * 2 - real.top) + 'px';
+    }
+    window.addEventListener('scroll', () => fecharMenus(), true);
+    window.addEventListener('resize', () => fecharMenus());
     // Um único listener pra lista inteira: o render refaz o HTML a cada carga.
     $('ch-groups').addEventListener('click', (e) => {
         const head = e.target.closest('.ch-row__main');
@@ -674,6 +692,7 @@
             const box = document.querySelector(`[data-menu-box="${toggle.dataset.menu}"]`);
             fecharMenus(box);
             box.classList.toggle('open');
+            if (box.classList.contains('open')) posicionarMenu(box, toggle);
             return;
         }
         const btn = e.target.closest('[data-acao]');
