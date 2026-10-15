@@ -8,8 +8,11 @@
     /* O fundo ocupa a área toda; só o conteúdo fica limitado na largura
        padrão. Com o fundo preso em 1560px, dar zoom out deixava uma caixa
        flutuando no meio da tela. */
-    .content-body > .dash { width: 100%; max-width: none; }
-    .dash-inner { max-width: var(--content-max-width, 1560px); margin: 0 auto; }
+    .content-body > .dash { width: 100%; max-width: none; min-width: 0; }
+    .dash-inner { max-width: var(--content-max-width, 1560px); margin: 0 auto; min-width: 0; }
+    /* O canvas do Chart.js mede a largura do pai: sem min-width:0 o gráfico
+       empurrava a grade pra fora da tela. */
+    .dash-card, .dash-chart, .dash-chart-body { min-width: 0; }
     /* Abaixo do conteúdo a área continua com a cor do painel, sem faixa. */
     .content-body:has(> .dash) { background: #f1f6fb; }
     [data-theme="escuro"] .content-body:has(> .dash) { background: #070c14; }
@@ -301,6 +304,7 @@
         font-weight: 700;
         padding: 5px 12px;
         border-radius: 999px;
+        white-space: nowrap;
         cursor: pointer;
         transition: background 0.16s ease, color 0.16s ease;
     }
