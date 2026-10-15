@@ -5,6 +5,14 @@
 {% block extra_head %}
 <style>
     .content-body:has(.dash) { padding: 0 !important; }
+    /* O fundo ocupa a área toda; só o conteúdo fica limitado na largura
+       padrão. Com o fundo preso em 1560px, dar zoom out deixava uma caixa
+       flutuando no meio da tela. */
+    .content-body > .dash { width: 100%; max-width: none; }
+    .dash-inner { max-width: var(--content-max-width, 1560px); margin: 0 auto; }
+    /* Abaixo do conteúdo a área continua com a cor do painel, sem faixa. */
+    .content-body:has(> .dash) { background: #f1f6fb; }
+    [data-theme="escuro"] .content-body:has(> .dash) { background: #070c14; }
 
     .dash {
         --dash-bg: #f1f6fb;
@@ -143,9 +151,12 @@
     }
 
     /* ---- Cards KPI ---- */
+    /* auto-fit + teto por quantidade de cards: quem vê poucos cards não fica
+       com colunas vazias nem com um card esticado na tela inteira. */
     .dash-kpis {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        max-width: calc(var(--n, 6) * 300px);
         gap: 14px;
         margin-bottom: 30px;
     }
@@ -240,6 +251,7 @@
     .dash-charts {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        max-width: calc(var(--n, 3) * 560px);
         gap: 14px;
     }
     .dash-chart {
@@ -294,8 +306,9 @@
     }
     .dash-range button.active {
         background: var(--dash-range-pill);
-        color: #eaf3fc;
+        color: var(--dash-blue-soft);
     }
+    [data-theme="escuro"] .dash-range button.active { color: #eaf3fc; }
 
     /* ---- Estado vazio ---- */
     .dash-empty {
@@ -318,6 +331,7 @@
 
 {% block content %}
 <div class="dash">
+<div class="dash-inner">
     <header class="dash-head">
         <div>
             <h1>Dashboard</h1>
@@ -345,7 +359,7 @@
             <strong>Prioridades operacionais</strong>
             <div class="dash-section-line"></div>
         </div>
-        <div class="dash-kpis">
+        <div class="dash-kpis" style="--n: {{ total_indicadores }}">
             {% for section in dashboard_sections %}
             {% for card in section.cards %}
             <a href="{{ card.href }}" class="dash-card tone-{{ card.tone }}">
@@ -369,7 +383,7 @@
             <strong>Visão de fila e andamento</strong>
             <div class="dash-section-line"></div>
         </div>
-        <div class="dash-charts">
+        <div class="dash-charts" style="--n: {{ dashboard_charts|length }}">
             {% if dashboard_charts.fluxo_notas %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
@@ -405,6 +419,7 @@
     {% endif %}
 
     {% endif %}
+</div>
 </div>
 {% endblock %}
 
@@ -504,8 +519,8 @@
             const valores = labels.map((k) => obj[k]);
             if (!valores.some((v) => v > 0)) {
                 const ctx = el.getContext("2d");
-                ctx.font = "13px 'IBM Plex Sans'";
-                ctx.fillStyle = "rgba(200,219,238,0.55)";
+                ctx.font = "13px 'IBM Plex Sans', sans-serif";
+                ctx.fillStyle = cssVar("--dash-muted", "#60758d");
                 ctx.textAlign = "center";
                 ctx.fillText("Sem dados no período", el.width / 2, el.height / 2);
                 return;

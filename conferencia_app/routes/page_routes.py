@@ -801,19 +801,28 @@ def _build_dashboard_charts(metrics: dict) -> dict:
     def ok(keys) -> bool:
         return any(perms.get(k, False) for k in keys)
 
+    # Cada fatia exige a mesma permissão do card correspondente: o gráfico
+    # não pode mostrar número de módulo que o usuário não acessa.
+    perm_recebidos = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS")
+    perm_pend_receb = ("PAGE_CONFERENCIA", "PAGE_PORTARIA")
     charts: dict = {}
     if ok(_PERM_RECEBIMENTO + _PERM_COMPRAS):
         charts["fluxo_notas"] = _serie_fluxo_notas_por_dia()
+    if ok(perm_recebidos) and ok(_PERM_EXPEDICAO):
         charts["recebido_vs_expedido"] = {
             "Materiais recebidos": int(metrics["materiais_recebidos"]),
             "Materiais expedidos": int(metrics["materiais_expedidos"]),
         }
-    if ok(_PERM_RECEBIMENTO + _PERM_EXPEDICAO + ("PAGE_CADASTRO_WORKFLOW",)):
-        charts["pendencias_chave"] = {
-            "Pendência recebimento": int(metrics["recebimento_pendente"]),
-            "Pendência expedição": int(metrics["expedicao_aberta"]),
-            "Cadastros aguardando validação": int(metrics["cadastro_pendente"]),
-        }
+    pendencias = {}
+    if ok(perm_pend_receb):
+        pendencias["Pendência recebimento"] = int(metrics["recebimento_pendente"])
+    if ok(_PERM_EXPEDICAO):
+        pendencias["Pendência expedição"] = int(metrics["expedicao_aberta"])
+    if ok(("PAGE_CADASTRO_WORKFLOW",)):
+        pendencias["Cadastros aguardando validação"] = int(metrics["cadastro_pendente"])
+    # Rosca de uma fatia só não compara nada: o card já mostra esse número.
+    if len(pendencias) > 1:
+        charts["pendencias_chave"] = pendencias
     return charts
 
 
