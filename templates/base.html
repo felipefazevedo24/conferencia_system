@@ -244,7 +244,7 @@
                     </button>
                     <div class="submenu-panel" id="menu-recebimento">
                         {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusao XML</a>{% endif %}
-                        {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
+                        {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-check"></i> NF-e liberadas</a>{% endif %}
                     </div>
                 </div>
                 {% else %}
@@ -255,9 +255,9 @@
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-compras">
-                        {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Documento de entrada</a>{% endif %}
+                        {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Documento de entrada</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras" class="list-group-item list-group-item-action"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
-                        {% if can_access('PAGE_COMPRAS_HOMOLOGACAO') or can_access('PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO') %}<a href="/compras/homologacao" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Homologação de fornecedores</a>{% endif %}
+                        {% if can_access('PAGE_COMPRAS_HOMOLOGACAO') or can_access('PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO') %}<a href="/compras/homologacao" class="list-group-item list-group-item-action"><i class="fas fa-certificate"></i> Homologação de fornecedores</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO') or can_access('MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO') or can_access('PAGE_LANCAMENTO') %}<a href="/compras/divergencias-recebimento" class="list-group-item list-group-item-action"><i class="fas fa-triangle-exclamation"></i> Divergências de recebimento</a>{% endif %}
                         {% if can_access('PAGE_CADASTRO_WORKFLOW') %}<a href="/cadastros/" class="list-group-item list-group-item-action"><i class="fas fa-diagram-project"></i> Workflow de cadastros</a>{% endif %}
                     </div>
@@ -286,9 +286,9 @@
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-box-open submenu-icon"></i> Recebimento <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferência de Recebimento</a>{% endif %}
-                                {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marked-alt"></i> Endereçamento e movimentações</a>{% endif %}
-                                {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
-                                {% if can_access('PAGE_QUALIDADE') %}<a href="/qualidade" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Qualidade</a>{% endif %}
+                                {% if can_access('PAGE_RECEBIMENTO_ENDERECAMENTO') %}<a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-right-left"></i> Endereçamento e movimentações</a>{% endif %}
+                                {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-check"></i> NF-e liberadas</a>{% endif %}
+                                {% if can_access('PAGE_QUALIDADE') %}<a href="/qualidade" class="list-group-item list-group-item-action"><i class="fas fa-award"></i> Qualidade</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}
@@ -298,7 +298,7 @@
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-truck-loading submenu-icon"></i> Expedição <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_EXPEDICAO_CONF_CEGA') %}<a href="/expedicao/conferencia-cega" class="list-group-item list-group-item-action"><i class="fas fa-boxes-packing"></i> Conferência de expedição</a>{% endif %}
-                                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
+                                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-truck-ramp-box"></i> Registro de expedição</a>{% endif %}
                                 {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
                             </div>
                         </div>
@@ -309,8 +309,8 @@
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-warehouse submenu-icon"></i> WMS <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_WMS') %}
-                                <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-compass"></i> Central WMS</a>
-                                <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
+                                <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-warehouse"></i> Central WMS</a>
+                                <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-location-dot"></i> Endereçamento</a>
                                 <a href="/wms/estoque" class="list-group-item list-group-item-action"><i class="fas fa-cubes"></i> Estoque Tempo Real</a>
                                 {% endif %}
                                 {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
@@ -370,7 +370,7 @@
                         <a href="/logistica/consumo-chapa" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Consumo de Chapa (Nesting)</a>
                         {% endif %}
                         {% if can_access('PAGE_INTRALOG_PICKING') %}
-                        <a href="/intralog/picking" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-box"></i> Picking Almoxarifado</a>
+                        <a href="/intralog/picking" class="list-group-item list-group-item-action"><i class="fas fa-cart-flatbed"></i> Picking Almoxarifado</a>
                         {% endif %}
                     </div>
                 </div>
@@ -383,8 +383,8 @@
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-producao">
-                        <a href="/producao" class="list-group-item list-group-item-action"><i class="fas fa-industry"></i> Acompanhamento de OS</a>
-                        <a href="/producao/rpa-agrupamento" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> RPA agrupamento</a>
+                        <a href="/producao" class="list-group-item list-group-item-action"><i class="fas fa-chart-gantt"></i> Acompanhamento de OS</a>
+                        <a href="/producao/rpa-agrupamento" class="list-group-item list-group-item-action"><i class="fas fa-robot"></i> RPA agrupamento</a>
                     </div>
                 </div>
                 {% endif %}
@@ -396,7 +396,7 @@
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-comex">
-                        <a href="/comex" class="list-group-item list-group-item-action"><i class="fas fa-ship"></i> Processos de Importação/Exportação</a>
+                        <a href="/comex" class="list-group-item list-group-item-action"><i class="fas fa-globe"></i> Processos de Importação/Exportação</a>
                         <a href="/comex/fornecedores" class="list-group-item list-group-item-action"><i class="fas fa-address-book"></i> Fornecedores</a>
                     </div>
                 </div>
