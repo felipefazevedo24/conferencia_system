@@ -102,24 +102,30 @@ def _prever_envio(
     hoje: date,
     lead: dict[str, float],
     retorno: date | None = None,
-) -> date:
+) -> tuple[date, list[dict]]:
     """Soma o tempo historico dos processos que faltam antes do ST.
+    Devolve a data de envio e a previsao de termino de cada etapa.
 
     `retorno`: o item esta em outro fornecedor e volta nessa data. Ai o
     primeiro passo (o ST em andamento) termina no retorno, nao na mediana."""
-    dias = [lead.get(s, _DIAS_PADRAO) for s in pendentes]
     if retorno is not None and (not pendentes or "TERCEIRO" in pendentes[0]):
         fim = max(retorno, hoje + timedelta(days=1))
+        etapas = [("VOLTA DO FORNECEDOR", fim)]
     elif not pendentes:
-        return hoje
+        return hoje, []
     else:
         # O processo atual conta a partir de quando o anterior acabou; se ja
         # estourou o tempo normal, assume que termina a qualquer momento.
-        fim = (pronto_desde or hoje) + timedelta(days=math.ceil(dias[0]))
+        fim = (pronto_desde or hoje) + timedelta(days=math.ceil(lead.get(pendentes[0], _DIAS_PADRAO)))
         if fim <= hoje:
             fim = hoje + timedelta(days=1)
-    fim += timedelta(days=math.ceil(sum(dias[1:])))
-    return _ajustar_dia_util(fim)
+        etapas = [(pendentes[0], fim)]
+    for servico in pendentes[1:]:
+        fim += timedelta(days=math.ceil(lead.get(servico, _DIAS_PADRAO)))
+        etapas.append((servico, fim))
+    return _ajustar_dia_util(fim), [
+        {"processo": p, "fim": _ajustar_dia_util(f).isoformat()} for p, f in etapas
+    ]
 
 
 def _dias_st(lead: dict[str, float]) -> float:
@@ -145,6 +151,16 @@ def montar_previsao() -> dict:
         solicitado = int(row.get("solicitado") or 0) == 1
         enviado = int(row.get("enviado") or 0) == 1
         dt_envio_nf = _data(row.get("dt_envio"))
+        fornecedor = row.get("fornecedor")
+
+        fora = bool(row.get("fora_fornecedor") or row.get("fora_dt_envio")) and not enviado
+        if fora and not tem_linha and not pendentes:
+            # ST sem linha propria na tserv_te (cod_relaciona solto, ex.: '2'):
+            # a peca no fornecedor e este mesmo ST, que ja foi enviado.
+            enviado = solicitado = True
+            dt_envio_nf = _data(row.get("fora_dt_envio"))
+            fornecedor = row.get("fora_fornecedor")
+            fora = False
 
         if enviado:
             # Ja faturado no ERP: fica visivel alguns dias para a Logistica
@@ -152,7 +168,6 @@ def montar_previsao() -> dict:
             if dt_envio_nf is None or (hoje - dt_envio_nf).days > _DIAS_FATURADO_VISIVEL:
                 continue
 
-        fora = bool(row.get("fora_fornecedor") or row.get("fora_dt_envio")) and not enviado
         retorno = None
         if fora:
             retorno = _data(row.get("fora_retorno_previsto"))
@@ -172,7 +187,7 @@ def montar_previsao() -> dict:
                 continue
 
         pronto_desde = _data(row.get("pronto_desde"))
-        envio = hoje if pronto else _prever_envio(pendentes, pronto_desde, hoje, lead, retorno)
+        envio, etapas = (hoje, []) if pronto else _prever_envio(pendentes, pronto_desde, hoje, lead, retorno)
         nf_sync = (ordem.numero_nf or None) if ordem else None
         dt_faturado = dt_envio_nf or (_data(ordem.faturado_at) if ordem else None)
         itens.append({
@@ -184,9 +199,10 @@ def montar_previsao() -> dict:
             "pendentes": pendentes,
             "atual_iniciado": bool(row.get("atual_iniciado")),
             "dt_envio": envio.isoformat(),
+            "etapas": etapas,
             "solicitado": solicitado or ordem is not None,
             "oc": ordem.cod_ordem_compra if ordem else None,
-            "fornecedor": row.get("fornecedor") or (ordem.fornecedor if ordem else None),
+            "fornecedor": fornecedor or (ordem.fornecedor if ordem else None),
             "faturado": enviado or bool(nf_sync),
             "numero_nf": nf_sync,
             "dt_faturado": dt_faturado.isoformat() if dt_faturado else None,

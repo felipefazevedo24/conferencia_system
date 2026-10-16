@@ -51,6 +51,8 @@
     .pst-pill.andamento { background: var(--eui-violet-soft); color: var(--eui-violet-soft-text); }
     .pst-pill.andamento::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .pst-antigo { color: var(--eui-danger); }
+    .pst-ate { font-size: 12px; font-weight: 700; color: var(--eui-text-soft); margin-left: 6px; white-space: nowrap; }
+    .pst-proximo { font-size: 12.5px; font-weight: 700; color: var(--eui-text-soft); margin-top: 2px; }
 
     /* SC -> OC -> NF */
     .pst-etapas { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -98,7 +100,7 @@
             <table class="pst-table">
                 <thead>
                     <tr>
-                        <th>Envio</th>
+                        <th>Pode enviar</th>
                         <th>OS</th>
                         <th>Cliente</th>
                         <th>Onde está</th>
@@ -175,15 +177,18 @@
     function colOnde(i) {
         if (i.pronto && i.faturado) return '<span class="pst-pill faturado"><i class="fas fa-file-invoice"></i> Faturado</span>';
         if (i.pronto) return '<span class="pst-pill pronto"><i class="fas fa-check"></i> Pronto</span>';
+        const etapas = i.etapas || [];
+        const proximas = etapas.slice(1).map((e) => `<span class="pst-sub">→ ${esc(e.processo)} · até ${dm(e.fim)}</span>`).join("");
         if (i.no_fornecedor) {
+            // Peca em outro ST; quando voltar, segue para o ST desta linha.
             const atrasado = i.retorno_previsto && i.retorno_previsto < dados.hoje;
-            const depois = i.pendentes.length > 1 ? ` → ${esc(i.pendentes.slice(1).join(" → "))}` : "";
-            return `<span class="pst-pill fora"><i class="fas fa-truck-arrow-right"></i> ${esc(i.no_fornecedor)}</span>`
-                + `<span class="pst-sub ${atrasado ? "pst-antigo" : ""}">volta prev. ${dm(i.retorno_previsto)}${atrasado ? " (atrasado)" : ""}${depois}</span>`;
+            return `<span class="pst-pill fora"><i class="fas fa-truck-arrow-right"></i> Em ${esc(i.no_fornecedor)}</span>`
+                + `<span class="pst-sub ${atrasado ? "pst-antigo" : ""}">volta prev. ${dm(i.retorno_previsto)}${atrasado ? " (atrasada)" : ""}</span>` + proximas;
         }
-        const atual = `<span class="pst-pill ${i.atual_iniciado ? "andamento" : "processo"}" title="${i.atual_iniciado ? "em andamento" : "aguardando"}">${esc(i.pendentes[0])}</span>`;
-        const depois = i.pendentes.length > 1 ? `<span class="pst-sub">depois: ${esc(i.pendentes.slice(1).join(" → "))}</span>` : "";
-        return atual + depois;
+        const e = etapas[0] || { processo: i.pendentes[0], fim: i.dt_envio };
+        const atual = `<span class="pst-pill ${i.atual_iniciado ? "andamento" : "processo"}" title="${i.atual_iniciado ? "em andamento" : "aguardando"}">${esc(e.processo)}</span>`
+            + `<span class="pst-ate">até ${dm(e.fim)}</span>`;
+        return atual + proximas;
     }
 
     function etapa(nome, ok, valor) {
@@ -192,7 +197,9 @@
 
     function colCompra(i) {
         const forn = i.fornecedor ? `<div class="pst-fornecedor">${esc(i.fornecedor)}</div>` : "";
-        if (!i.pronto && !i.solicitado) return `<span class="pst-sub">${i.no_fornecedor ? "depois vai para" : "ainda em produção"}</span>` + forn;
+        if (!i.pronto && !i.solicitado) {
+            return `<span class="pst-sub">próximo ST</span><div class="pst-proximo">${i.fornecedor ? esc(i.fornecedor) : "fornecedor a definir"}</div>`;
+        }
         const nf = i.faturado ? [i.numero_nf, i.dt_faturado ? dm(i.dt_faturado) : ""].filter(Boolean).join(" · ") : null;
         return `<div class="pst-etapas">${etapa("SC", i.solicitado)}${etapa("OC", !!i.oc, i.oc)}${etapa("NF", i.faturado, nf)}</div>` + forn;
     }
