@@ -597,7 +597,6 @@ function setShellCollapsed(collapsed) {
     menuToggle.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
     menuToggle.setAttribute("title", collapsed ? "Expandir menu" : "Recolher menu");
     if (mobileMenuToggle) mobileMenuToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    if (typeof window.closeSidebarFlyouts === "function") window.closeSidebarFlyouts();
 }
 
 function confirmarLogout() {
@@ -945,84 +944,55 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // Menu lateral em modo "flyout": cada modulo abre um painel flutuante
-    // com os submodulos ao lado da barra, em vez de expandir inline.
-    const sidebarWrapper = document.getElementById("sidebar-wrapper");
+    // Menu lateral estilo Protheus: a lista mostra os modulos; clicar num
+    // modulo troca o menu inteiro pelos submodulos dele, com botao de voltar.
+    // Quem esconde/mostra e o CSS (classes drill-open/drill-active).
+    const accordionSidebar = document.getElementById("accordionSidebar");
     const sidebarScroll = document.querySelector(".sidebar-scroll");
-    const flyoutMap = new Map();
 
+    function fecharModulo() {
+        accordionSidebar.classList.remove("drill-open");
+        accordionSidebar.querySelectorAll(".menu-item.drill-active").forEach(item => item.classList.remove("drill-active"));
+        menuButtons.forEach(b => b.setAttribute("aria-expanded", "false"));
+    }
+
+    function abrirModulo(button) {
+        const item = button.closest(".menu-item");
+        if (!item) return;
+        fecharModulo();
+        item.classList.add("drill-active");
+        accordionSidebar.classList.add("drill-open");
+        button.setAttribute("aria-expanded", "true");
+        if (sidebarScroll) sidebarScroll.scrollTop = 0;
+    }
+
+    fecharModulo();
     menuButtons.forEach(button => {
         const panel = document.getElementById(button.dataset.shellTarget);
         if (!panel) return;
 
-        panel.classList.add("sidebar-flyout");
-        panel.classList.remove("open");
-
-        const label = button.querySelector(".nav-group-title span")?.textContent?.trim();
-        if (label && !panel.querySelector(".sidebar-flyout-title")) {
-            const title = document.createElement("div");
-            title.className = "sidebar-flyout-title";
-            title.textContent = label;
-            panel.insertBefore(title, panel.firstChild);
+        const head = document.createElement("div");
+        head.className = "drill-head";
+        head.innerHTML = '<button type="button" class="drill-back" aria-label="Voltar aos módulos" title="Voltar aos módulos"><i class="fas fa-arrow-left"></i></button>';
+        const titulo = button.querySelector(".nav-group-title")?.cloneNode(true);
+        if (titulo) {
+            titulo.classList.add("drill-title");
+            head.appendChild(titulo);
         }
-
-        document.body.appendChild(panel);
-        flyoutMap.set(button, panel);
-    });
-
-    function closeAllFlyouts() {
-        flyoutMap.forEach((panel, button) => {
-            panel.classList.remove("open");
-            button.setAttribute("aria-expanded", "false");
-            button.classList.remove("flyout-active");
+        head.querySelector(".drill-back").addEventListener("click", function (e) {
+            e.preventDefault();
+            fecharModulo();
+            button.focus();
         });
-    }
-    window.closeSidebarFlyouts = closeAllFlyouts;
-
-    function positionFlyout(button, panel) {
-        const wrapRect = sidebarWrapper.getBoundingClientRect();
-        const btnRect = button.getBoundingClientRect();
-        panel.style.left = (wrapRect.right + 8) + "px";
-        panel.style.top = btnRect.top + "px";
-        const panelHeight = panel.offsetHeight;
-        let top = btnRect.top;
-        if (top + panelHeight > window.innerHeight - 12) {
-            top = Math.max(12, window.innerHeight - 12 - panelHeight);
-        }
-        panel.style.top = top + "px";
-    }
-
-    menuButtons.forEach(button => {
-        const panel = flyoutMap.get(button);
-        if (!panel) return;
+        panel.insertBefore(head, panel.firstChild);
 
         button.addEventListener("click", function (e) {
             e.preventDefault();
-            e.stopPropagation();
-            const isOpen = panel.classList.contains("open");
-            closeAllFlyouts();
-            if (!isOpen) {
-                panel.classList.add("open");
-                button.setAttribute("aria-expanded", "true");
-                button.classList.add("flyout-active");
-                positionFlyout(button, panel);
-            }
-        });
-
-        panel.addEventListener("click", function (e) {
-            if (e.target.closest("a")) closeAllFlyouts();
+            // Na barra recolhida (so icones) o clique expande e ja abre o modulo.
+            if (wrapper.classList.contains("toggled")) setShellCollapsed(false);
+            abrirModulo(button);
         });
     });
-
-    document.addEventListener("click", function (e) {
-        if (e.target.closest(".sidebar-flyout") || e.target.closest(".menu-toggle")) return;
-        closeAllFlyouts();
-    });
-    document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape") closeAllFlyouts();
-    });
-    window.addEventListener("resize", closeAllFlyouts);
-    sidebarScroll?.addEventListener("scroll", closeAllFlyouts, { passive: true });
 
     // Subgrupos colapsáveis (Recebimento/Expedição/Transporte dentro de Logística)
     const SUBGROUP_KEY = "sidebar:subgroups:collapsed:v1";
@@ -1046,6 +1016,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     let recentCandidate = null;
+    let moduloAtual = null;
 
     allLinks.forEach(link => {
         link.addEventListener("click", function () {
@@ -1067,9 +1038,13 @@ document.addEventListener("DOMContentLoaded", function () {
             const parentButton = document.querySelector(`.menu-toggle[data-shell-target="${parentPanel.id}"]`);
             if (parentButton) {
                 parentButton.classList.add("active");
+                moduloAtual = moduloAtual || parentButton;
             }
         }
     });
+
+    // Abre o menu ja no modulo da pagina atual.
+    if (moduloAtual) abrirModulo(moduloAtual);
 
     if (!recentCandidate) {
         recentCandidate = document.querySelector("#accordionSidebar a.list-group-item.active");
