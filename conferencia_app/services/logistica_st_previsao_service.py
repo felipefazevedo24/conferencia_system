@@ -162,12 +162,6 @@ def montar_previsao() -> dict:
             fornecedor = row.get("fora_fornecedor")
             fora = False
 
-        if enviado:
-            # Ja faturado no ERP: fica visivel alguns dias para a Logistica
-            # ver a NF; depois disso o material ja saiu.
-            if dt_envio_nf is None or (hoje - dt_envio_nf).days > _DIAS_FATURADO_VISIVEL:
-                continue
-
         retorno = None
         if fora:
             retorno = _data(row.get("fora_retorno_previsto"))
@@ -186,10 +180,24 @@ def montar_previsao() -> dict:
             if ordem is not None and (ordem.status == "Expedido" or ordem.expedido_at):
                 continue
 
+        # Faturado = NF confirmada no Sync. O "enviado" da tserv_te e marcado
+        # antes da NF sair (ex.: 10510/007, OC 12910, enviado 16/10 sem NF),
+        # entao sozinho ele vira "enviado no ERP", nunca "faturado".
+        faturado = bool(ordem is not None and (ordem.numero_nf or ordem.faturado_at))
+        dt_faturado = _data(ordem.faturado_at) if faturado else None
+        enviado_erp = enviado and not faturado
+        # Fica visivel alguns dias para a Logistica ver a NF; depois disso o
+        # material ja saiu.
+        if faturado and dt_faturado is not None and (hoje - dt_faturado).days > _DIAS_FATURADO_VISIVEL:
+            continue
+        # Sem a OC no Sync nao ha como confirmar a NF: o "enviado" do ERP so
+        # vale como sinal de que ja saiu depois de alguns dias.
+        if enviado_erp and ordem is None and (dt_envio_nf is None or (hoje - dt_envio_nf).days > _DIAS_FATURADO_VISIVEL):
+            continue
+
         pronto_desde = _data(row.get("pronto_desde"))
         envio, etapas = (hoje, []) if pronto else _prever_envio(pendentes, pronto_desde, hoje, lead, retorno)
         nf_sync = (ordem.numero_nf or None) if ordem else None
-        dt_faturado = dt_envio_nf or (_data(ordem.faturado_at) if ordem else None)
         itens.append({
             "cod_os_completo": row.get("cod_os_completo"),
             "descricao": row.get("subtitulo"),
@@ -203,7 +211,9 @@ def montar_previsao() -> dict:
             "solicitado": solicitado or ordem is not None,
             "oc": ordem.cod_ordem_compra if ordem else None,
             "fornecedor": fornecedor or (ordem.fornecedor if ordem else None),
-            "faturado": enviado or bool(nf_sync),
+            "faturado": faturado,
+            "enviado_erp": enviado_erp,
+            "dt_enviado_erp": dt_envio_nf.isoformat() if enviado_erp and dt_envio_nf else None,
             "numero_nf": nf_sync,
             "dt_faturado": dt_faturado.isoformat() if dt_faturado else None,
             "no_fornecedor": row.get("fora_fornecedor") if fora else None,

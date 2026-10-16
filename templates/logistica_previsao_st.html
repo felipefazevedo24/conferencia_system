@@ -176,6 +176,9 @@
 
     function colOnde(i) {
         if (i.pronto && i.faturado) return '<span class="pst-pill faturado"><i class="fas fa-file-invoice"></i> Faturado</span>';
+        // ERP marcou "enviado", mas a NF ainda nao apareceu no Sync.
+        if (i.pronto && i.enviado_erp) return '<span class="pst-pill processo" title="Marcado como enviado no ERP, sem NF no Sync"><i class="fas fa-paper-plane"></i> Enviado no ERP</span>'
+            + (i.dt_enviado_erp ? `<span class="pst-sub">em ${dm(i.dt_enviado_erp)} · sem NF</span>` : '<span class="pst-sub">sem NF</span>');
         if (i.pronto) return '<span class="pst-pill pronto"><i class="fas fa-check"></i> Pronto</span>';
         const etapas = i.etapas || [];
         const proximas = etapas.slice(1).map((e) => `<span class="pst-sub">→ ${esc(e.processo)} · até ${dm(e.fim)}</span>`).join("");
