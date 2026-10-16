@@ -83,10 +83,10 @@
     }
     .dash-head h1 {
         margin: 0;
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: clamp(26px, 3vw, 34px);
-        font-weight: 800;
-        letter-spacing: -0.03em;
+        font-family: inherit;
+        font-size: clamp(26px, 3vw, 32px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
         color: var(--dash-ink-strong);
     }
     .dash-head p {
@@ -141,7 +141,7 @@
         font-size: 14px;
     }
     .dash-section-head strong {
-        font-family: 'Space Grotesk', sans-serif;
+        font-family: inherit;
         font-size: 16px;
         font-weight: 700;
         letter-spacing: -0.01em;
@@ -209,11 +209,12 @@
     .fila:hover .fila-ir { opacity: 1; transform: translateX(2px); }
     .fila-num {
         margin-top: 4px;
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 34px;
-        font-weight: 800;
+        font-family: inherit;
+        font-size: 32px;
+        font-weight: 700;
         line-height: 1;
-        letter-spacing: -0.04em;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
         color: var(--dash-ink-strong);
     }
     .fila--ok .fila-num { color: var(--dash-muted); }
@@ -276,7 +277,7 @@
         color: var(--dash-blue-soft);
         font-size: 14px;
     }
-    .hoje-valor { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 800; line-height: 1; color: var(--dash-ink-strong); }
+    .hoje-valor { font-family: inherit; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--dash-ink-strong); }
     .hoje-titulo { font-size: 12px; font-weight: 600; color: var(--dash-ink); margin-top: 3px; }
     .hoje-ontem { font-size: 11px; color: var(--dash-muted); margin-top: 1px; }
 
@@ -304,7 +305,7 @@
         margin-bottom: 14px;
     }
     .dash-chart-head strong {
-        font-family: 'Space Grotesk', sans-serif;
+        font-family: inherit;
         font-size: 15px;
         font-weight: 700;
         color: var(--dash-ink-strong);
@@ -354,7 +355,7 @@
         background: var(--dash-empty-bg);
     }
     .dash-empty i { font-size: 30px; color: var(--dash-blue-soft); display: block; margin-bottom: 12px; }
-    .dash-empty strong { display: block; color: var(--dash-empty-ink); font-size: 15px; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
+    .dash-empty strong { display: block; color: var(--dash-empty-ink); font-size: 15px; margin-bottom: 6px; font-family: inherit; }
 
     @media (max-width: 900px) {
         .dash-charts { grid-template-columns: 1fr; }
@@ -451,7 +452,7 @@
                 <div>
                     <div class="hoje-valor">{{ h.valor }}</div>
                     <div class="hoje-titulo">{{ h.titulo }}</div>
-                    <div class="hoje-ontem">{% if h.ontem is not none %}ontem: {{ h.ontem }}{% else %}agora{% endif %}</div>
+                    <div class="hoje-ontem">{% if h.ontem is not none %}ontem: {{ h.ontem }}{% else %}{{ h.rotulo or 'agora' }}{% endif %}</div>
                 </div>
             {% if h.href %}</a>{% else %}</div>{% endif %}
             {% endfor %}
