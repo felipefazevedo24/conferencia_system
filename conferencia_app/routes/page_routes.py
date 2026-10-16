@@ -7,17 +7,9 @@ from ..auth import get_effective_permissions, login_required, permission_require
 from ..extensions import db
 from ..models import (
     ActiveSession,
-    AgendamentoSolicitacao,
-    CadastroWorkflowSolicitacao,
-    ComexProcesso,
     ExpedicaoConferencia,
-    ExpedicaoConferenciaSimples,
     ItemNota,
-    PlannerBoardPessoal,
-    PlannerCard,
-    PlannerColumn,
     Usuario,
-    Viagem,
 )
 from ..tempo import agora_br
 
@@ -368,116 +360,6 @@ def _fmt_metric(value: int | float, singular: str, plural: str | None = None) ->
     return f"{int(value) if float(value).is_integer() else value} {label}"
 
 
-def _build_home_metrics() -> dict:
-    today = agora_br().date()
-    metrics = {
-        "materiais_expedidos": 0,
-        "materiais_recebidos": 0,
-        "recebimento_pendente": 0,
-        "notas_concluidas": 0,
-        "notas_lancadas": 0,
-        "auditoria_pendente": 0,
-        "planner_abertas": 0,
-        "agendamento_ativo": 0,
-        "expedicao_aberta": 0,
-        "sessoes_ativas": 0,
-        "importadas_hoje": 0,
-        "lancadas_hoje": 0,
-        "comex_ativo": 0,
-        "cadastro_pendente": 0,
-        "viagens_em_andamento": 0,
-    }
-    try:
-        metrics["recebimento_pendente"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(ItemNota.status == "Pendente")
-            .scalar()
-            or 0
-        )
-        metrics["notas_concluidas"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(ItemNota.status == "Concluído")
-            .scalar()
-            or 0
-        )
-        metrics["notas_lancadas"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(ItemNota.status == "Lançado")
-            .scalar()
-            or 0
-        )
-        metrics["materiais_recebidos"] = int(metrics["notas_lancadas"])
-        metrics["materiais_expedidos"] = (
-            db.session.query(func.count(func.distinct(ExpedicaoConferenciaSimples.numero_nf)))
-            .filter(
-                ExpedicaoConferenciaSimples.status.in_(["Expedido", "Finalizado"]),
-                ExpedicaoConferenciaSimples.numero_nf.isnot(None),
-                ExpedicaoConferenciaSimples.numero_nf != "",
-            )
-            .scalar()
-            or 0
-        )
-        metrics["auditoria_pendente"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(ItemNota.auditor_decisao == "PendenteDecisao")
-            .scalar()
-            or 0
-        )
-        metrics["planner_abertas"] = (
-            db.session.query(func.count(PlannerCard.id))
-            .join(PlannerColumn, PlannerColumn.id == PlannerCard.column_id)
-            .filter(PlannerColumn.is_done.is_(False))
-            # So' o board da equipe: os de "Minhas tarefas" sao privados.
-            .filter(PlannerColumn.board_id.notin_(db.session.query(PlannerBoardPessoal.board_id)))
-            .scalar()
-            or 0
-        )
-        metrics["agendamento_ativo"] = (
-            AgendamentoSolicitacao.query
-            .filter(AgendamentoSolicitacao.status.notin_(["Concluida", "Cancelada"]))
-            .count()
-        )
-        metrics["viagens_em_andamento"] = (
-            Viagem.query
-            .filter(Viagem.status == "EmAndamento")
-            .count()
-        )
-        metrics["expedicao_aberta"] = (
-            ExpedicaoConferencia.query
-            .filter(ExpedicaoConferencia.status.in_(["Aberta", "PendenteDecisao"]))
-            .count()
-        ) + (
-            ExpedicaoConferenciaSimples.query
-            .filter(ExpedicaoConferenciaSimples.status == "Pendente de expedição")
-            .count()
-        )
-        metrics["sessoes_ativas"] = ActiveSession.query.filter_by(is_active=True).count()
-        metrics["comex_ativo"] = (
-            ComexProcesso.query.filter(ComexProcesso.processo_concluido_em.is_(None)).count()
-        )
-        metrics["importadas_hoje"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(func.date(ItemNota.data_importacao) == today)
-            .scalar()
-            or 0
-        )
-        metrics["lancadas_hoje"] = (
-            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-            .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) == today)
-            .scalar()
-            or 0
-        )
-        metrics["cadastro_pendente"] = (
-            CadastroWorkflowSolicitacao.query
-            .filter(CadastroWorkflowSolicitacao.status.notin_(["Finalizada", "Cancelada"]))
-            .count()
-        )
-    except Exception:
-        db.session.rollback()
-
-    return metrics
-
-
 def _build_available_modules(metrics: dict) -> list[dict]:
     perms = get_effective_permissions()
     modules = []
@@ -592,26 +474,6 @@ def _build_priority_actions(modules: list[dict], metrics: dict) -> list[dict]:
     return actions[:4]
 
 
-def _build_user_context(metrics: dict) -> dict:
-    username = session.get("username", "Usuário")
-    role = session.get("role", "Operação")
-    role_display = "Controladoria" if role == "Financeiro" else role
-    ultima_sessao = (
-        ActiveSession.query
-        .filter(ActiveSession.username == username)
-        .order_by(ActiveSession.last_activity.desc())
-        .first()
-    )
-    return {
-        "username": username,
-        "role": role_display,
-        "active_sessions": int(metrics["sessoes_ativas"]),
-        "importadas_hoje": int(metrics["importadas_hoje"]),
-        "lancadas_hoje": int(metrics["lancadas_hoje"]),
-        "last_seen": ultima_sessao.last_activity.strftime("%d/%m/%Y %H:%M") if ultima_sessao and ultima_sessao.last_activity else "Agora",
-    }
-
-
 # ---------------------------------------------------------------------------
 # Dashboard inicial (home): indicadores e gráficos variáveis por permissão.
 # Cada card/gráfico só aparece se o usuário tem acesso à área correspondente.
@@ -619,8 +481,6 @@ def _build_user_context(metrics: dict) -> dict:
 # ---------------------------------------------------------------------------
 _PERM_RECEBIMENTO = ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_FISCAL_LIBERADAS")
 _PERM_COMPRAS = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
-_PERM_EXPEDICAO = ("PAGE_EXPEDICAO_CONFERENCIA", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_ROMANEIO")
-_PERM_LOGISTICA = ("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO", "PAGE_LOGISTICA_VIAGEM")
 
 
 def _serie_entradas_por_dia(dias: int = 14) -> dict:
@@ -718,164 +578,22 @@ def _dist_expedicao_status() -> dict:
     return dados
 
 
-def _build_dashboard(metrics: dict) -> list[dict]:
-    perms = get_effective_permissions()
-
-    def ok(keys) -> bool:
-        return any(perms.get(k, False) for k in keys)
-
-    raw_sections = [
-        {
-            "name": "Operação agora",
-            "icon": "fa-bolt",
-            "cards": [
-                {
-                    "perms": _PERM_EXPEDICAO,
-                    "label": "Materiais expedidos",
-                    "value": metrics["materiais_expedidos"],
-                    "caption": "Notas fiscais com status finalizado no Registro de Expedição.",
-                    "icon": "fa-box-open",
-                    "href": "/expedicao/conferencia",
-                    "tone": "emerald",
-                },
-                {
-                    "perms": ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS"),
-                    "label": "Materiais recebidos",
-                    "value": metrics["materiais_recebidos"],
-                    "caption": "Notas fiscais com status lançado no Documento de Entrada.",
-                    "icon": "fa-file-circle-check",
-                    "href": "/upload",
-                    "tone": "blue",
-                },
-                {
-                    "perms": _PERM_EXPEDICAO,
-                    "label": "Materiais com pendência de expedição",
-                    "value": metrics["expedicao_aberta"],
-                    "caption": "Pendentes na conferência de expedição.",
-                    "icon": "fa-boxes-packing",
-                    "href": "/expedicao/conferencia-cega",
-                    "tone": "amber",
-                },
-                {
-                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"),
-                    "label": "Materiais com pendência de recebimento",
-                    "value": metrics["recebimento_pendente"],
-                    "caption": "Pendentes na conferência de recebimento.",
-                    "icon": "fa-inbox",
-                    "href": "/conferencia",
-                    "tone": "violet",
-                },
-                {
-                    "perms": _PERM_LOGISTICA,
-                    "label": "Viagens sendo realizadas",
-                    "value": metrics["viagens_em_andamento"],
-                    "caption": "Viagens com status EmAndamento.",
-                    "icon": "fa-truck-fast",
-                    "href": "/logistica/viagens?viagens=EM_ANDAMENTO",
-                    "tone": "teal",
-                },
-                {
-                    "perms": ("PAGE_CADASTRO_WORKFLOW",),
-                    "label": "Cadastros aguardando validação",
-                    "value": metrics["cadastro_pendente"],
-                    "caption": "Cadastros com status diferente de concluído.",
-                    "icon": "fa-diagram-project",
-                    "href": "/cadastros/",
-                    "tone": "sky",
-                },
-                {
-                    "perms": ("PAGE_XML_AUDITOR",),
-                    "label": "Notas aguardando auditoria",
-                    "value": metrics["auditoria_pendente"],
-                    "caption": "Pendentes de decisão no Auditor XML.",
-                    "icon": "fa-file-shield",
-                    "href": "/upload",
-                    "tone": "amber",
-                },
-                {
-                    "perms": ("PAGE_COMEX",),
-                    "label": "Processos Comex em andamento",
-                    "value": metrics["comex_ativo"],
-                    "caption": "Importações e exportações não concluídas.",
-                    "icon": "fa-ship",
-                    "href": "/comex",
-                    "tone": "blue",
-                },
-                {
-                    "perms": _PERM_LOGISTICA,
-                    "label": "Coletas e entregas abertas",
-                    "value": metrics["agendamento_ativo"],
-                    "caption": "Solicitações não concluídas na Central de Viagens.",
-                    "icon": "fa-route",
-                    "href": "/logistica/viagens",
-                    "tone": "teal",
-                },
-                {
-                    "perms": ("PAGE_PLANEJAMENTO_TAREFAS",),
-                    "label": "Tarefas abertas da equipe",
-                    "value": metrics["planner_abertas"],
-                    "caption": "Cartões fora da coluna de concluídos.",
-                    "icon": "fa-list-check",
-                    "href": "/planejamento",
-                    "tone": "violet",
-                },
-            ],
-        }
-    ]
-
-    sections = []
-    for sec in raw_sections:
-        cards = [c for c in sec["cards"] if ok(c["perms"])]
-        if cards:
-            sections.append({"name": sec["name"], "icon": sec["icon"], "cards": cards})
-    return sections
-
-
-def _build_dashboard_charts(metrics: dict) -> dict:
-    perms = get_effective_permissions()
-
-    def ok(keys) -> bool:
-        return any(perms.get(k, False) for k in keys)
-
-    # Cada fatia exige a mesma permissão do card correspondente: o gráfico
-    # não pode mostrar número de módulo que o usuário não acessa.
-    perm_recebidos = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS")
-    perm_pend_receb = ("PAGE_CONFERENCIA", "PAGE_PORTARIA")
-    charts: dict = {}
-    if ok(_PERM_RECEBIMENTO + _PERM_COMPRAS):
-        charts["fluxo_notas"] = _serie_fluxo_notas_por_dia()
-    if ok(perm_recebidos) and ok(_PERM_EXPEDICAO):
-        charts["recebido_vs_expedido"] = {
-            "Materiais recebidos": int(metrics["materiais_recebidos"]),
-            "Materiais expedidos": int(metrics["materiais_expedidos"]),
-        }
-    pendencias = {}
-    if ok(perm_pend_receb):
-        pendencias["Pendência recebimento"] = int(metrics["recebimento_pendente"])
-    if ok(_PERM_EXPEDICAO):
-        pendencias["Pendência expedição"] = int(metrics["expedicao_aberta"])
-    if ok(("PAGE_CADASTRO_WORKFLOW",)):
-        pendencias["Cadastros aguardando validação"] = int(metrics["cadastro_pendente"])
-    # Rosca de uma fatia só não compara nada: o card já mostra esse número.
-    if len(pendencias) > 1:
-        charts["pendencias_chave"] = pendencias
-    return charts
-
-
 @page_bp.route("/")
 @login_required
 def home():
-    metrics = _build_home_metrics()
-    sections = _build_dashboard(metrics)
-    total_indicadores = sum(len(sec["cards"]) for sec in sections)
+    from ..services.dashboard_home_service import montar_filas, montar_hoje
+
+    perms = get_effective_permissions()
+    fluxo = None
+    if any(perms.get(k, False) for k in _PERM_RECEBIMENTO + _PERM_COMPRAS):
+        fluxo = _serie_fluxo_notas_por_dia()
     return render_template(
         "dashboard_home.html",
         user=session.get("username", "Usuário"),
-        user_context=_build_user_context(metrics),
-        dashboard_sections=sections,
-        dashboard_charts=_build_dashboard_charts(metrics),
-        total_indicadores=total_indicadores,
-        home_metrics=metrics,
+        filas=montar_filas(),
+        hoje=montar_hoje(),
+        fluxo_notas=fluxo,
+        mostrar_previsao_st=bool(perms.get("PAGE_LOGISTICA_VIAGEM", False)),
     )
 
 

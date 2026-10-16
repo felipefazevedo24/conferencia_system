@@ -153,21 +153,20 @@
         background: linear-gradient(90deg, var(--dash-border), transparent);
     }
 
-    /* ---- Cards KPI ---- */
-    /* auto-fit + teto por quantidade de cards: quem vê poucos cards não fica
-       com colunas vazias nem com um card esticado na tela inteira. */
-    .dash-kpis {
+    /* ---- Filas que pedem acao ---- */
+    /* Cor com significado: vermelho = tem atraso, ambar = tem fila, verde = em dia. */
+    .dash-filas {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        max-width: calc(var(--n, 6) * 300px);
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
         gap: 14px;
-        margin-bottom: 30px;
     }
-    .dash-card {
+    .fila {
+        --fila-cor: #10b981;
         position: relative;
         display: flex;
         flex-direction: column;
-        padding: 16px 16px 15px;
+        gap: 6px;
+        padding: 16px 18px 15px;
         border-radius: 16px;
         border: 1px solid var(--dash-border);
         background: var(--dash-card-bg);
@@ -176,79 +175,110 @@
         overflow: hidden;
         transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
     }
-    .dash-card::before {
+    .fila::before {
         content: "";
         position: absolute;
         inset: 0 auto 0 0;
         width: 4px;
-        background: var(--card-accent, var(--dash-blue));
-        opacity: 0.9;
+        background: var(--fila-cor);
     }
-    .dash-card:hover {
+    .fila:hover {
         transform: translateY(-3px);
         border-color: var(--dash-border-strong);
         box-shadow: var(--dash-card-hover-shadow);
         color: inherit;
     }
-    .dash-card-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 12px;
-    }
-    .dash-card-ico {
-        width: 38px;
-        height: 38px;
-        border-radius: 11px;
+    .fila--atrasado { --fila-cor: #dc2626; }
+    .fila--pendente { --fila-cor: #f59e0b; }
+    .fila--ok { --fila-cor: #10b981; }
+    .fila--neutro { --fila-cor: #94a3b8; }
+    .fila-top { display: flex; align-items: center; gap: 10px; }
+    .fila-ico {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
         display: grid;
         place-items: center;
-        font-size: 15px;
         flex-shrink: 0;
-        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 20%, transparent);
-        color: var(--card-accent, var(--dash-blue-soft));
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-accent, var(--dash-blue)) 32%, transparent);
+        font-size: 14px;
+        background: color-mix(in srgb, var(--fila-cor) 14%, transparent);
+        color: var(--fila-cor);
     }
-    .dash-card-tag {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        padding: 4px 9px;
-        border-radius: 999px;
-        white-space: nowrap;
-        color: color-mix(in srgb, var(--card-accent, var(--dash-blue-soft)) 78%, #ffffff);
-        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 14%, transparent);
-        border: 1px solid color-mix(in srgb, var(--card-accent, var(--dash-blue)) 26%, transparent);
-    }
-    .dash-card-value {
+    .fila-titulo { flex: 1; font-size: 13px; font-weight: 700; color: var(--dash-ink); }
+    .fila-ir { font-size: 12px; color: var(--dash-muted); opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease; }
+    .fila:hover .fila-ir { opacity: 1; transform: translateX(2px); }
+    .fila-num {
+        margin-top: 4px;
         font-family: 'Space Grotesk', sans-serif;
-        font-size: 32px;
+        font-size: 34px;
         font-weight: 800;
         line-height: 1;
         letter-spacing: -0.04em;
         color: var(--dash-ink-strong);
     }
-    .dash-card-label {
-        margin-top: 8px;
-        font-size: 12.5px;
-        font-weight: 700;
-        color: var(--dash-ink);
-    }
-    .dash-card-caption {
-        margin-top: 4px;
-        font-size: 11px;
-        line-height: 1.45;
-        color: var(--dash-muted);
-    }
+    .fila--ok .fila-num { color: var(--dash-muted); }
+    .fila-status { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--dash-muted); }
+    .fila-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fila-cor); flex-shrink: 0; }
+    .fila--atrasado .fila-status { color: #dc2626; }
+    [data-theme="escuro"] .fila--atrasado .fila-status { color: #f87171; }
 
-    /* tons dos cards */
-    .tone-amber { --card-accent: #f59e0b; }
-    .tone-blue { --card-accent: #1c86f2; }
-    .tone-violet { --card-accent: #8b5cf6; }
-    .tone-emerald { --card-accent: #10b981; }
-    .tone-sky { --card-accent: #38bdf8; }
-    .tone-teal { --card-accent: #14b8a6; }
+    /* Filas zeradas viram uma linha discreta, sem disputar atencao. */
+    .dash-emdia {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+        font-size: 12px;
+    }
+    .dash-emdia-label { font-weight: 700; color: #10b981; margin-right: 4px; }
+    .dash-emdia-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: var(--dash-surface);
+        color: var(--dash-muted);
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .dash-emdia-item:hover { border-color: var(--dash-border-strong); color: var(--dash-ink); }
+    .dash-emdia-item i { font-size: 11px; }
+
+    /* ---- Movimento de hoje ---- */
+    .dash-hoje {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 12px;
+    }
+    .hoje-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--dash-border);
+        background: var(--dash-surface);
+        text-decoration: none;
+        color: inherit;
+    }
+    a.hoje-item:hover { border-color: var(--dash-border-strong); color: inherit; }
+    .hoje-ico {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        background: rgba(28, 134, 242, 0.12);
+        color: var(--dash-blue-soft);
+        font-size: 14px;
+    }
+    .hoje-valor { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 800; line-height: 1; color: var(--dash-ink-strong); }
+    .hoje-titulo { font-size: 12px; font-weight: 600; color: var(--dash-ink); margin-top: 3px; }
+    .hoje-ontem { font-size: 11px; color: var(--dash-muted); margin-top: 1px; }
 
     /* ---- Gráficos ---- */
     .dash-charts {
@@ -330,16 +360,25 @@
         .dash-charts { grid-template-columns: 1fr; }
         .dash { padding: 20px 16px 32px; }
     }
+    /* Abaixo de 992px aparece o botao fixo do menu no canto; como o
+       dashboard zera o padding da pagina, o titulo precisa descer. */
+    @media (max-width: 991px) {
+        .dash { padding-top: 72px; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+{% set atrasadas = filas|selectattr('estado', 'equalto', 'atrasado')|list %}
 <div class="dash">
 <div class="dash-inner">
     <header class="dash-head">
         <div>
-            <h1>Dashboard</h1>
-            <p>Olá, {{ (current_user_display or user)|title }} — panorama da sua operação em tempo real.</p>
+            <h1><span id="dashSaudacao">Olá</span>, {{ (current_user_display or user)|title }}</h1>
+            <p>
+                <span id="dashData"></span>
+                {% if filas %} · {% if atrasadas %}{{ atrasadas|length }} {{ 'fila com atraso' if atrasadas|length == 1 else 'filas com atraso' }}{% else %}nenhuma fila atrasada{% endif %}{% endif %}
+            </p>
         </div>
         <div class="dash-head-actions">
             <span class="dash-updated" id="dashUpdated"></span>
@@ -349,7 +388,7 @@
         </div>
     </header>
 
-    {% if not dashboard_sections %}
+    {% if not filas and not hoje and not fluxo_notas and not mostrar_previsao_st %}
     <div class="dash-empty">
         <i class="fas fa-compass"></i>
         <strong>Seu painel está pronto</strong>
@@ -357,41 +396,80 @@
     </div>
     {% else %}
 
+    {% if filas or mostrar_previsao_st %}
     <section class="dash-section">
         <div class="dash-section-head">
-            <div class="dash-section-ico"><i class="fas fa-gauge-high"></i></div>
-            <strong>Prioridades operacionais</strong>
+            <div class="dash-section-ico"><i class="fas fa-bell"></i></div>
+            <strong>Precisa de ação</strong>
             <div class="dash-section-line"></div>
         </div>
-        <div class="dash-kpis" style="--n: {{ total_indicadores }}">
-            {% for section in dashboard_sections %}
-            {% for card in section.cards %}
-            <a href="{{ card.href }}" class="dash-card tone-{{ card.tone }}">
-                <div class="dash-card-top">
-                    <div class="dash-card-ico"><i class="fas {{ card.icon }}"></i></div>
-                    <span class="dash-card-tag">{{ section.name }}</span>
+        <div class="dash-filas" id="dashFilas">
+            {% for f in filas if f.estado != 'ok' %}
+            <a href="{{ f.href }}" class="fila fila--{{ f.estado }}" data-estado="{{ f.estado }}">
+                <div class="fila-top">
+                    <span class="fila-ico"><i class="fas {{ f.icone }}"></i></span>
+                    <span class="fila-titulo">{{ f.titulo }}</span>
+                    <i class="fas fa-arrow-right fila-ir"></i>
                 </div>
-                <div class="dash-card-value">{{ card.value }}</div>
-                <div class="dash-card-label">{{ card.label }}</div>
-                <div class="dash-card-caption">{{ card.caption }}</div>
+                <div class="fila-num">{{ '{:,}'.format(f.total).replace(',', '.') }}</div>
+                <div class="fila-status">{{ f.status }}</div>
             </a>
             {% endfor %}
+            {% if mostrar_previsao_st %}
+            <a href="/logistica/previsao-st" class="fila fila--neutro" id="filaST" data-estado="neutro">
+                <div class="fila-top">
+                    <span class="fila-ico"><i class="fas fa-calendar-week"></i></span>
+                    <span class="fila-titulo">ST a enviar</span>
+                    <i class="fas fa-arrow-right fila-ir"></i>
+                </div>
+                <div class="fila-num" id="filaSTNum">—</div>
+                <div class="fila-status" id="filaSTStatus">consultando o ERP…</div>
+            </a>
+            {% endif %}
+        </div>
+        {% set em_dia = filas|selectattr('estado', 'equalto', 'ok')|list %}
+        {% if em_dia %}
+        <div class="dash-emdia">
+            <span class="dash-emdia-label"><i class="fas fa-circle-check"></i> Em dia</span>
+            {% for f in em_dia %}<a href="{{ f.href }}" class="dash-emdia-item"><i class="fas {{ f.icone }}"></i> {{ f.titulo }}</a>{% endfor %}
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% if hoje %}
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div class="dash-section-ico"><i class="fas fa-sun"></i></div>
+            <strong>Hoje</strong>
+            <div class="dash-section-line"></div>
+        </div>
+        <div class="dash-hoje">
+            {% for h in hoje %}
+            {% if h.href %}<a href="{{ h.href }}" class="hoje-item">{% else %}<div class="hoje-item">{% endif %}
+                <span class="hoje-ico"><i class="fas {{ h.icone }}"></i></span>
+                <div>
+                    <div class="hoje-valor">{{ h.valor }}</div>
+                    <div class="hoje-titulo">{{ h.titulo }}</div>
+                    <div class="hoje-ontem">{% if h.ontem is not none %}ontem: {{ h.ontem }}{% else %}agora{% endif %}</div>
+                </div>
+            {% if h.href %}</a>{% else %}</div>{% endif %}
             {% endfor %}
         </div>
     </section>
+    {% endif %}
 
-    {% if dashboard_charts.fluxo_notas or dashboard_charts.recebido_vs_expedido or dashboard_charts.pendencias_chave %}
+    {% if fluxo_notas %}
     <section class="dash-section">
         <div class="dash-section-head">
             <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
-            <strong>Visão de fila e andamento</strong>
+            <strong>Últimos dias</strong>
             <div class="dash-section-line"></div>
         </div>
-        <div class="dash-charts" style="--n: {{ dashboard_charts|length }}">
-            {% if dashboard_charts.fluxo_notas %}
+        <div class="dash-charts" style="--n: 3">
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Fluxo diário: entradas x lançamentos</strong>
+                    <strong>Notas: entradas x lançamentos</strong>
                     <div class="dash-range" id="dashRange">
                         <button type="button" data-dias="7">7 dias</button>
                         <button type="button" data-dias="14" class="active">14 dias</button>
@@ -399,25 +477,6 @@
                 </div>
                 <div class="dash-chart-body"><canvas id="chartFluxo"></canvas></div>
             </div>
-            {% endif %}
-            {% if dashboard_charts.recebido_vs_expedido %}
-            <div class="dash-chart">
-                <div class="dash-chart-head">
-                    <strong>Materiais recebidos x expedidos</strong>
-                    <span>Comparativo acumulado do fluxo</span>
-                </div>
-                <div class="dash-chart-body"><canvas id="chartRecebidoExpedido"></canvas></div>
-            </div>
-            {% endif %}
-            {% if dashboard_charts.pendencias_chave %}
-            <div class="dash-chart">
-                <div class="dash-chart-head">
-                    <strong>Pendências que exigem ação</strong>
-                    <span>Recebimento, expedição e validação cadastral</span>
-                </div>
-                <div class="dash-chart-body"><canvas id="chartPendencias"></canvas></div>
-            </div>
-            {% endif %}
         </div>
     </section>
     {% endif %}
@@ -430,12 +489,51 @@
 {% block extra_js %}
 <script>
     (function () {
-        const DASH = {{ dashboard_charts|tojson }};
+        const FLUXO = {{ fluxo_notas|tojson }};
+        const agora = new Date();
 
+        const saud = document.getElementById("dashSaudacao");
+        if (saud) {
+            const h = agora.getHours();
+            saud.textContent = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+        }
+        const dataEl = document.getElementById("dashData");
+        if (dataEl) {
+            const txt = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+            dataEl.textContent = txt.charAt(0).toUpperCase() + txt.slice(1);
+        }
         const upd = document.getElementById("dashUpdated");
         if (upd) {
-            const agora = new Date();
             upd.textContent = "Atualizado às " + agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        // ----- ST a enviar: vem do ERP pela Previsao de ST. Carrega depois
+        // da pagina para a tela inicial nunca esperar (nem cair) pelo ERP.
+        const filaST = document.getElementById("filaST");
+        if (filaST) {
+            const num = document.getElementById("filaSTNum");
+            const status = document.getElementById("filaSTStatus");
+            fetch("/api/viagem/previsao-st")
+                .then((r) => r.json())
+                .then((d) => {
+                    if (!d || d.erp_indisponivel) throw new Error("erp");
+                    const limite = new Date(d.hoje + "T00:00:00");
+                    limite.setDate(limite.getDate() + 7);
+                    const ate = `${limite.getFullYear()}-${String(limite.getMonth() + 1).padStart(2, "0")}-${String(limite.getDate()).padStart(2, "0")}`;
+                    const itens = d.itens || [];
+                    const prontos = itens.filter((i) => i.pronto && !i.faturado).length;
+                    const semana = itens.filter((i) => !i.pronto && i.dt_envio <= ate).length;
+                    num.textContent = prontos;
+                    status.textContent = prontos
+                        ? `prontos agora · +${semana} em 7 dias`
+                        : semana ? `${semana} nos próximos 7 dias` : "nada previsto em 7 dias";
+                    const estado = prontos ? "pendente" : "ok";
+                    filaST.className = "fila fila--" + estado;
+                    filaST.dataset.estado = estado;
+                })
+                .catch(() => {
+                    status.textContent = "ERP indisponível agora";
+                });
         }
 
         if (typeof Chart === "undefined") return;
@@ -450,17 +548,16 @@
         Chart.defaults.color = cssVar("--dash-muted", "rgba(96, 117, 141, 0.9)");
         Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
         const GRID = cssVar("--dash-border", "rgba(15, 50, 77, 0.15)");
-        const AZUL = "#1c86f2";
         const VERDE = "#10b981";
 
         // ----- Fluxo diário de notas (entrada x lançamento) -----
         let chartFluxo = null;
         const elFluxo = document.getElementById("chartFluxo");
-        if (elFluxo && DASH.fluxo_notas) {
+        if (elFluxo && FLUXO) {
             const render = (dias) => {
-                const labels = DASH.fluxo_notas.labels.slice(-dias);
-                const importadas = DASH.fluxo_notas.importadas.slice(-dias);
-                const lancadas = DASH.fluxo_notas.lancadas.slice(-dias);
+                const labels = FLUXO.labels.slice(-dias);
+                const importadas = FLUXO.importadas.slice(-dias);
+                const lancadas = FLUXO.lancadas.slice(-dias);
                 const ctx = elFluxo.getContext("2d");
                 const grad = ctx.createLinearGradient(0, 0, 0, 260);
                 grad.addColorStop(0, "rgba(28, 134, 242, 0.82)");
@@ -513,33 +610,6 @@
                 });
             }
         }
-
-        // ----- Doughnut helper -----
-        const PALETA = ["#f59e0b", "#1c86f2", "#10b981", "#8b5cf6", "#38bdf8", "#f472b6", "#14b8a6"];
-        function doughnut(elId, obj) {
-            const el = document.getElementById(elId);
-            if (!el || !obj) return;
-            const labels = Object.keys(obj);
-            const valores = labels.map((k) => obj[k]);
-            if (!valores.some((v) => v > 0)) {
-                const ctx = el.getContext("2d");
-                ctx.font = "13px 'IBM Plex Sans', sans-serif";
-                ctx.fillStyle = cssVar("--dash-muted", "#60758d");
-                ctx.textAlign = "center";
-                ctx.fillText("Sem dados no período", el.width / 2, el.height / 2);
-                return;
-            }
-            new Chart(el.getContext("2d"), {
-                type: "doughnut",
-                data: { labels: labels, datasets: [{ data: valores, backgroundColor: PALETA, borderColor: cssVar("--dash-surface", "#ffffff"), borderWidth: 2 }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false, cutout: "62%",
-                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 14 } } }
-                }
-            });
-        }
-        doughnut("chartRecebidoExpedido", DASH.recebido_vs_expedido);
-        doughnut("chartPendencias", DASH.pendencias_chave);
     })();
 </script>
 {% endblock %}
