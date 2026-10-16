@@ -36,15 +36,29 @@
         }
     }
 
+    // Sem impressora padrao o Browser Print responde "{}" (aconteceu depois de
+    // ele perder a configuracao): ai' usa a Zebra que ele enxerga, preferindo a
+    // ligacao USB direta a' que passa pelo driver do Windows.
+    const _valida = (d) => d && typeof d === "object" && (d.uid || d.name);
+
     async function impressoraPadrao() {
         if (cache) return cache;
         for (const base of BASES) {
             try {
                 const texto = await _req(base + "default?type=printer", { method: "GET" }, 2500);
-                if (texto && texto.trim()) {
-                    cache = { base, device: JSON.parse(texto) };
+                const padrao = texto && texto.trim() ? JSON.parse(texto) : null;
+                if (_valida(padrao)) {
+                    cache = { base, device: padrao };
                     return cache;
                 }
+                const lista = JSON.parse((await _req(base + "available", { method: "GET" }, 4000)) || "{}");
+                const impressoras = (lista.printer || []).filter(_valida);
+                const escolhida = impressoras.find((d) => d.connection === "usb") || impressoras[0];
+                if (escolhida) {
+                    cache = { base, device: escolhida };
+                    return cache;
+                }
+                return null;  // Browser Print respondeu, mas nao ve nenhuma Zebra
             } catch (e) { /* tenta a proxima porta */ }
         }
         return null;
