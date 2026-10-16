@@ -29,6 +29,8 @@ _RE_OS_ITEM = re.compile(r"^\s*0*(\d+)\s*/\s*0*(\d+)")
 
 # Processo sem historico suficiente (menos de 5 passagens em 180 dias).
 _DIAS_PADRAO = 3.0
+# ST ja faturado continua na tela por esses dias, para a NF aparecer.
+_DIAS_FATURADO_VISIVEL = 7
 # O tempo historico muda devagar; a consulta varre a tpro_pro inteira.
 _LEAD_TIME_TTL = 6 * 3600
 _lead_time_cache: dict = {"em": 0.0, "dias": {}}
@@ -87,21 +89,41 @@ def _ocs_por_item() -> dict[tuple[str, int], ExpedicaoOrdemST]:
     return mapa
 
 
-def _prever_envio(pendentes: list[str], pronto_desde: date | None, hoje: date, lead: dict[str, float]) -> date:
-    """Soma o tempo historico dos processos que faltam antes do ST."""
-    if not pendentes:
-        return hoje
-    dias = [lead.get(s, _DIAS_PADRAO) for s in pendentes]
-    # O processo atual conta a partir de quando o anterior acabou; se ja
-    # estourou o tempo normal, assume que termina a qualquer momento.
-    fim = (pronto_desde or hoje) + timedelta(days=math.ceil(dias[0]))
-    if fim <= hoje:
-        fim = hoje + timedelta(days=1)
-    fim += timedelta(days=math.ceil(sum(dias[1:])))
+def _ajustar_dia_util(dia: date) -> date:
     # A mediana e em dias corridos; a fabrica nao trabalha sabado/domingo.
-    if fim.weekday() >= 5:
-        fim += timedelta(days=7 - fim.weekday())
-    return fim
+    if dia.weekday() >= 5:
+        dia += timedelta(days=7 - dia.weekday())
+    return dia
+
+
+def _prever_envio(
+    pendentes: list[str],
+    pronto_desde: date | None,
+    hoje: date,
+    lead: dict[str, float],
+    retorno: date | None = None,
+) -> date:
+    """Soma o tempo historico dos processos que faltam antes do ST.
+
+    `retorno`: o item esta em outro fornecedor e volta nessa data. Ai o
+    primeiro passo (o ST em andamento) termina no retorno, nao na mediana."""
+    dias = [lead.get(s, _DIAS_PADRAO) for s in pendentes]
+    if retorno is not None and (not pendentes or "TERCEIRO" in pendentes[0]):
+        fim = max(retorno, hoje + timedelta(days=1))
+    elif not pendentes:
+        return hoje
+    else:
+        # O processo atual conta a partir de quando o anterior acabou; se ja
+        # estourou o tempo normal, assume que termina a qualquer momento.
+        fim = (pronto_desde or hoje) + timedelta(days=math.ceil(dias[0]))
+        if fim <= hoje:
+            fim = hoje + timedelta(days=1)
+    fim += timedelta(days=math.ceil(sum(dias[1:])))
+    return _ajustar_dia_util(fim)
+
+
+def _dias_st(lead: dict[str, float]) -> float:
+    return next((d for s, d in lead.items() if "TERCEIRO" in s), _DIAS_PADRAO)
 
 
 def montar_previsao() -> dict:
@@ -118,26 +140,58 @@ def montar_previsao() -> dict:
     itens = []
     for row in rows:
         pendentes = [str(s) for s in (row.get("pendentes_lista") or []) if s]
+        # Sem linha na tserv_te (None) a situacao e desconhecida; 0/1 vem do ERP.
+        tem_linha = row.get("solicitado") is not None or row.get("enviado") is not None
+        solicitado = int(row.get("solicitado") or 0) == 1
+        enviado = int(row.get("enviado") or 0) == 1
+        dt_envio_nf = _data(row.get("dt_envio"))
+
+        if enviado:
+            # Ja faturado no ERP: fica visivel alguns dias para a Logistica
+            # ver a NF; depois disso o material ja saiu.
+            if dt_envio_nf is None or (hoje - dt_envio_nf).days > _DIAS_FATURADO_VISIVEL:
+                continue
+
+        fora = bool(row.get("fora_fornecedor") or row.get("fora_dt_envio")) and not enviado
+        retorno = None
+        if fora:
+            retorno = _data(row.get("fora_retorno_previsto"))
+            if retorno is None:
+                saiu = _data(row.get("fora_dt_envio")) or hoje
+                retorno = saiu + timedelta(days=math.ceil(_dias_st(lead)))
+
+        pronto = (not pendentes and not fora) or enviado
         ordem = None
-        if not pendentes:
-            # A OC so nasce depois que o processo anterior acaba, entao ela so
-            # e considerada quando o ST e o proximo da fila.
-            ordem = ocs.get(_chave_item(row.get("cod_os_completo")))
-            if ordem is not None and (ordem.numero_nf or ordem.faturado_at or ordem.expedido_at):
-                continue  # ja saiu
+        if not pendentes and not fora:
+            # A OC so nasce depois que o processo anterior acaba. A OC do
+            # Sync pode ser de um ST anterior do mesmo item; a tserv_te diz
+            # se este ST ja foi solicitado.
+            if solicitado or not tem_linha:
+                ordem = ocs.get(_chave_item(row.get("cod_os_completo")))
+            if ordem is not None and (ordem.status == "Expedido" or ordem.expedido_at):
+                continue
+
         pronto_desde = _data(row.get("pronto_desde"))
-        envio = _prever_envio(pendentes, pronto_desde, hoje, lead)
+        envio = hoje if pronto else _prever_envio(pendentes, pronto_desde, hoje, lead, retorno)
+        nf_sync = (ordem.numero_nf or None) if ordem else None
+        dt_faturado = dt_envio_nf or (_data(ordem.faturado_at) if ordem else None)
         itens.append({
             "cod_os_completo": row.get("cod_os_completo"),
             "descricao": row.get("subtitulo"),
             "cliente": row.get("cliente"),
-            "pronto": not pendentes,
-            "pronto_desde": pronto_desde.isoformat() if pronto_desde and not pendentes else None,
+            "pronto": pronto,
+            "pronto_desde": pronto_desde.isoformat() if pronto_desde and pronto else None,
             "pendentes": pendentes,
             "atual_iniciado": bool(row.get("atual_iniciado")),
             "dt_envio": envio.isoformat(),
+            "solicitado": solicitado or ordem is not None,
             "oc": ordem.cod_ordem_compra if ordem else None,
-            "fornecedor": ordem.fornecedor if ordem else None,
+            "fornecedor": row.get("fornecedor") or (ordem.fornecedor if ordem else None),
+            "faturado": enviado or bool(nf_sync),
+            "numero_nf": nf_sync,
+            "dt_faturado": dt_faturado.isoformat() if dt_faturado else None,
+            "no_fornecedor": row.get("fora_fornecedor") if fora else None,
+            "retorno_previsto": retorno.isoformat() if retorno else None,
         })
 
     # Prontos: mais recente primeiro - o antigo tende a ser ST que ja foi e

@@ -596,6 +596,9 @@ SQL_PRODUCAO_ST_PREVISAO = """
 SELECT os.n_os, item.cod_os_completo, item.subtitulo, os.cliente,
        st.codigo AS processo_st, st.seq AS seq_st, st.tiposervico AS servico_st,
        antes.pendentes_antes, antes.pronto_desde, antes.pendentes_lista,
+       serv.solicitado, serv.enviado, serv.dt_envio, serv.fornecedor,
+       fora.fornecedor AS fora_fornecedor, fora.dt_envio AS fora_dt_envio,
+       fora.dt_prevista_entrega AS fora_retorno_previsto,
        atual.tiposervico AS processo_atual,
        -- pcp_dt_primeiro_apont/data_inicio vem vazios no ERP mesmo com
        -- processo apontado; hs_realizadas e o que de fato se move.
@@ -629,6 +632,30 @@ LEFT JOIN LATERAL (
     ORDER BY prev.seq
     LIMIT 1
 ) atual ON TRUE
+-- Linha do ST na tela de Servico de Terceiro do ERP: cod_relaciona aponta
+-- para tpro_pro.codigo (ex.: 10780/002 -> 183338). Comparado como texto
+-- porque ha linhas antigas com valor solto (ex.: '2').
+LEFT JOIN LATERAL (
+    SELECT te.solicitado, te.enviado, te.dt_envio, te.fornecedor
+    FROM public.tserv_te te
+    WHERE te.cod_empresa = st.cod_empresa AND te.cod_os = st.cod_os
+      AND te.cod_os_aux = st.cod_os_aux
+      AND te.cod_relaciona::text = st.codigo::text
+    ORDER BY te.aut_ DESC
+    LIMIT 1
+) serv ON TRUE
+-- Item fisicamente em outro fornecedor (enviado e nao recebido): o proximo
+-- ST so sai quando ele voltar.
+LEFT JOIN LATERAL (
+    SELECT te.fornecedor, te.dt_envio, te.dt_prevista_entrega
+    FROM public.tserv_te te
+    WHERE te.cod_empresa = st.cod_empresa AND te.cod_os = st.cod_os
+      AND te.cod_os_aux = st.cod_os_aux
+      AND COALESCE(te.enviado, 0) = 1 AND COALESCE(te.recebido, 0) = 0
+      AND COALESCE(te.cod_relaciona::text, '') <> st.codigo::text
+    ORDER BY te.dt_envio DESC NULLS LAST
+    LIMIT 1
+) fora ON TRUE
 WHERE st.cod_empresa = %(cod_empresa)s
   AND COALESCE(st.finalizado, 0) = 0
   AND UPPER(COALESCE(st.tiposervico, '')) LIKE '%%TERCEIRO%%'

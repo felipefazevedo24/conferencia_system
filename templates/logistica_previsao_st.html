@@ -5,23 +5,67 @@
 
 {% block extra_head %}
 <style>
-    .pst-wrap { display: grid; gap: 18px; }
-    .pst-table-wrap { overflow-x: auto; }
-    .pst-empty { padding: 32px; text-align: center; color: var(--eui-muted); font-weight: 600; }
-    .pst-aviso { padding: 12px 16px; border-radius: 8px; background: #fef3c7; color: #92400e; font-weight: 600; font-size: 13px; }
-    .pst-os { font-family: monospace; font-weight: 700; }
-    .pst-sub { display: block; font-size: 11.5px; color: var(--eui-muted); }
-    .pst-antigo { color: var(--eui-muted); }
+    .pst-wrap { display: grid; gap: 20px; }
+    .pst-aviso { padding: 12px 16px; border-radius: var(--eui-radius); background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); font-weight: 600; font-size: 13px; }
 
-    .pst-dias { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
-    .pst-dia { border: 1px solid var(--eui-border, #e5e7eb); background: var(--eui-surface, #fff); border-radius: 10px; padding: 10px 8px; text-align: center; cursor: pointer; font: inherit; color: inherit; }
-    .pst-dia:hover { border-color: var(--eui-primary); }
-    .pst-dia.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); background: var(--eui-surface-2, #f8fafc); }
-    .pst-dia b { display: block; font-size: 24px; line-height: 1.1; }
-    .pst-dia small { display: block; font-size: 11.5px; color: var(--eui-muted); font-weight: 600; }
-    .pst-dia.agora b { color: #b45309; }
-    .pst-dia.vazio b { color: var(--eui-muted); opacity: .45; }
-    .pst-tag { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: #ede9fe; color: #5b21b6; margin-left: 4px; }
+    /* Faixa de dias */
+    .pst-faixa { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; }
+    .pst-faixa-sep { width: 1px; background: var(--eui-border); margin: 6px 4px; flex-shrink: 0; }
+    .pst-dia { flex: 1 1 0; min-width: 76px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 8px 10px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); background: var(--eui-surface); box-shadow: var(--eui-shadow-xs); cursor: pointer; font: inherit; color: var(--eui-text); transition: var(--eui-trans); }
+    .pst-dia:hover { border-color: var(--eui-primary); transform: translateY(-1px); box-shadow: var(--eui-shadow-sm); }
+    .pst-dia__nome { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); }
+    .pst-dia__qtd { font-size: 28px; font-weight: 800; line-height: 1.1; font-family: var(--eui-font-display); }
+    .pst-dia__sub { font-size: 11px; color: var(--eui-muted-2); }
+    .pst-dia.vazio .pst-dia__qtd { color: var(--eui-muted-2); opacity: .5; }
+    .pst-dia.agora { flex-grow: 1.3; border-color: var(--eui-warning); background: var(--eui-warning-soft); }
+    .pst-dia.agora .pst-dia__qtd, .pst-dia.agora .pst-dia__nome { color: var(--eui-warning-soft-text); }
+    .pst-dia.is-active { background: var(--eui-primary); border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .pst-dia.is-active .pst-dia__nome, .pst-dia.is-active .pst-dia__qtd, .pst-dia.is-active .pst-dia__sub { color: var(--eui-primary-contrast); opacity: 1; }
+
+    /* Lista */
+    .pst-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--eui-border); }
+    .pst-head h2 { margin: 0; font-size: 17px; font-weight: 800; }
+    .pst-head h2 small { font-size: 13px; font-weight: 600; color: var(--eui-muted); margin-left: 6px; }
+    .pst-ferramentas { display: flex; gap: 8px; align-items: center; }
+    .pst-busca { position: relative; }
+    .pst-busca i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--eui-muted-2); font-size: 13px; pointer-events: none; }
+    .pst-busca input { width: 280px; padding-left: 32px; }
+    .pst-table-wrap { overflow-x: auto; }
+    .pst-table { width: 100%; border-collapse: collapse; }
+    .pst-table th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); padding: 10px 16px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .pst-table td { padding: 12px 16px; border-bottom: 1px solid var(--eui-border); vertical-align: middle; font-size: 13px; }
+    .pst-table tr:last-child td { border-bottom: 0; }
+    .pst-table tbody tr:hover { background: var(--eui-surface-2); }
+    .pst-empty { padding: 40px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+
+    .pst-data { font-weight: 800; white-space: nowrap; }
+    .pst-sub { display: block; font-size: 11.5px; color: var(--eui-muted); margin-top: 2px; }
+    .pst-os { font-family: ui-monospace, monospace; font-weight: 800; font-size: 13.5px; }
+    .pst-cliente { color: var(--eui-text-soft); max-width: 280px; }
+
+    .pst-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .pst-pill.pronto { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .pst-pill.faturado { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .pst-pill.fora { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .pst-pill.processo { background: var(--eui-surface-3); color: var(--eui-text); }
+    .pst-pill.andamento { background: var(--eui-violet-soft); color: var(--eui-violet-soft-text); }
+    .pst-pill.andamento::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .pst-antigo { color: var(--eui-danger); }
+
+    /* SC -> OC -> NF */
+    .pst-etapas { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pst-etapa { display: flex; flex-direction: column; min-width: 64px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 4px 8px; background: var(--eui-surface); }
+    .pst-etapa b { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; color: var(--eui-muted); }
+    .pst-etapa span { font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .pst-etapa.ok { border-color: transparent; background: var(--eui-success-soft); }
+    .pst-etapa.ok b, .pst-etapa.ok span { color: var(--eui-success-soft-text); }
+    .pst-etapa.falta span { color: var(--eui-muted-2); }
+    .pst-fornecedor { font-size: 11.5px; color: var(--eui-muted); margin-top: 4px; }
+
+    @media (max-width: 640px) {
+        .pst-busca input { width: 100%; }
+        .pst-ferramentas, .pst-busca { width: 100%; }
+    }
 </style>
 {% endblock %}
 
@@ -31,37 +75,38 @@
         <div>
             <div class="eui-page-header__eyebrow">Logística</div>
             <h1 class="eui-page-header__title"><i class="fas fa-calendar-week"></i> Previsão de ST</h1>
-            <p class="eui-page-header__sub">Quando cada peça deve sair para serviço de terceiro, pelo tempo real que a fábrica leva em cada processo.</p>
+            <p class="eui-page-header__sub">Quando cada peça de molde deve sair para serviço de terceiro.</p>
         </div>
     </header>
 
     <div class="pst-aviso hidden" id="pst-aviso"></div>
 
-    <div class="pst-dias" id="pst-dias"></div>
+    <div class="pst-faixa" id="pst-faixa"></div>
 
     <div class="eui-card">
-        <div class="eui-card__head">
-            <h2 class="eui-card__title" id="pst-titulo">—</h2>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <input type="search" id="pst-busca" class="eui-input" autocomplete="off" placeholder="Buscar OS, cliente, processo, OC…" style="min-width:260px;">
-                <button class="eui-btn eui-btn--primary" id="pst-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        <div class="pst-head">
+            <h2 id="pst-titulo">—</h2>
+            <div class="pst-ferramentas">
+                <div class="pst-busca">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input type="search" id="pst-busca" class="eui-input" autocomplete="off" placeholder="Buscar OS, cliente, processo, OC, NF…">
+                </div>
+                <button class="eui-btn eui-btn--subtle" id="pst-btn-atualizar" title="Atualizar"><i class="fas fa-rotate"></i></button>
             </div>
         </div>
-        <div class="eui-card__body eui-card__body--tight">
-            <div class="pst-table-wrap">
-                <table class="erp-table">
-                    <thead>
-                        <tr>
-                            <th>Envio previsto</th>
-                            <th>OS</th>
-                            <th>Cliente</th>
-                            <th>Onde está</th>
-                            <th>OC</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pst-tbody"><tr><td colspan="5" class="pst-empty">Carregando…</td></tr></tbody>
-                </table>
-            </div>
+        <div class="pst-table-wrap">
+            <table class="pst-table">
+                <thead>
+                    <tr>
+                        <th>Envio</th>
+                        <th>OS</th>
+                        <th>Cliente</th>
+                        <th>Onde está</th>
+                        <th>Solicitação · OC · NF</th>
+                    </tr>
+                </thead>
+                <tbody id="pst-tbody"><tr><td colspan="5" class="pst-empty">Carregando…</td></tr></tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -77,13 +122,15 @@
 
     const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const br = (iso) => iso ? iso.split("-").reverse().join("/") : "";
+    const dm = (iso) => br(iso).slice(0, 5);
     const dt = (iso) => new Date(iso + "T00:00:00");
     const diff = (a, b) => Math.round((dt(a) - dt(b)) / 86400000);
+    const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     function addDias(iso, n) {
         const d = dt(iso);
         d.setDate(d.getDate() + n);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return isoLocal(d);
     }
 
     // Faixas: prontos, os proximos 7 dias uteis um a um, depois agrupado.
@@ -100,51 +147,78 @@
             ultimo = iso;
             lista.push({
                 id: "d" + n,
-                nome: n === 1 ? "Amanhã" : `${SEMANA[d.getDay()]} ${br(iso).slice(0, 5)}`,
+                nome: n === 1 ? "Amanhã" : `${SEMANA[d.getDay()]} ${dm(iso)}`,
+                titulo: n === 1 ? `Amanhã, ${dm(iso)}` : `${SEMANA[d.getDay()]}, ${dm(iso)}`,
                 sub: `em ${n} ${n === 1 ? "dia" : "dias"}`,
                 teste: (i) => !i.pronto && i.dt_envio === iso,
             });
         }
         const ate14 = addDias(dados.hoje, 14), ate30 = addDias(dados.hoje, 30);
         const entre = (de, ate) => (i) => !i.pronto && i.dt_envio > de && (ate == null || i.dt_envio <= ate);
-        lista.push({ id: "s2", nome: `até ${br(ate14).slice(0, 5)}`, sub: "2 semanas", teste: entre(ultimo, ate14) });
-        lista.push({ id: "m1", nome: `até ${br(ate30).slice(0, 5)}`, sub: "30 dias", teste: entre(ate14, ate30) });
-        lista.push({ id: "mais", nome: "+30 dias", sub: "mais pra frente", teste: entre(ate30, null) });
+        lista.push({ id: "s2", sep: true, nome: `até ${dm(ate14)}`, titulo: `Até ${dm(ate14)}`, sub: "2 semanas", teste: entre(ultimo, ate14) });
+        lista.push({ id: "m1", nome: `até ${dm(ate30)}`, titulo: `Até ${dm(ate30)}`, sub: "30 dias", teste: entre(ate14, ate30) });
+        lista.push({ id: "mais", nome: "+30 dias", titulo: "Mais de 30 dias", sub: "mais pra frente", teste: entre(ate30, null) });
         return lista;
     }
 
-    function ondeEsta(i) {
+    function colEnvio(i) {
         if (i.pronto) {
-            if (!i.pronto_desde) return "Pronto";
-            const antigo = diff(dados.hoje, i.pronto_desde) > 60;
-            return `<span class="${antigo ? "pst-antigo" : ""}">Pronto desde ${br(i.pronto_desde)}</span>`;
+            if (i.faturado) return `<span class="pst-data">Agora</span><span class="pst-sub">faturado${i.dt_faturado ? " " + dm(i.dt_faturado) : ""}</span>`;
+            if (!i.pronto_desde) return '<span class="pst-data">Agora</span>';
+            const dias = diff(dados.hoje, i.pronto_desde);
+            const quando = dias <= 0 ? "pronto hoje" : `pronto há ${dias} ${dias === 1 ? "dia" : "dias"}`;
+            return `<span class="pst-data">Agora</span><span class="pst-sub ${dias > 60 ? "pst-antigo" : ""}">${quando}</span>`;
         }
-        const atual = esc(i.pendentes[0]) + (i.atual_iniciado ? '<span class="pst-tag">em andamento</span>' : "");
+        return `<span class="pst-data">${dm(i.dt_envio)}</span><span class="pst-sub">${SEMANA[dt(i.dt_envio).getDay()]}</span>`;
+    }
+
+    function colOnde(i) {
+        if (i.pronto && i.faturado) return '<span class="pst-pill faturado"><i class="fas fa-file-invoice"></i> Faturado</span>';
+        if (i.pronto) return '<span class="pst-pill pronto"><i class="fas fa-check"></i> Pronto</span>';
+        if (i.no_fornecedor) {
+            const atrasado = i.retorno_previsto && i.retorno_previsto < dados.hoje;
+            const depois = i.pendentes.length > 1 ? ` → ${esc(i.pendentes.slice(1).join(" → "))}` : "";
+            return `<span class="pst-pill fora"><i class="fas fa-truck-arrow-right"></i> ${esc(i.no_fornecedor)}</span>`
+                + `<span class="pst-sub ${atrasado ? "pst-antigo" : ""}">volta prev. ${dm(i.retorno_previsto)}${atrasado ? " (atrasado)" : ""}${depois}</span>`;
+        }
+        const atual = `<span class="pst-pill ${i.atual_iniciado ? "andamento" : "processo"}" title="${i.atual_iniciado ? "em andamento" : "aguardando"}">${esc(i.pendentes[0])}</span>`;
         const depois = i.pendentes.length > 1 ? `<span class="pst-sub">depois: ${esc(i.pendentes.slice(1).join(" → "))}</span>` : "";
         return atual + depois;
     }
 
+    function etapa(nome, ok, valor) {
+        return `<div class="pst-etapa ${ok ? "ok" : "falta"}"><b>${nome}</b><span>${ok ? esc(valor || "✓") : "—"}</span></div>`;
+    }
+
+    function colCompra(i) {
+        const forn = i.fornecedor ? `<div class="pst-fornecedor">${esc(i.fornecedor)}</div>` : "";
+        if (!i.pronto && !i.solicitado) return `<span class="pst-sub">${i.no_fornecedor ? "depois vai para" : "ainda em produção"}</span>` + forn;
+        const nf = i.faturado ? [i.numero_nf, i.dt_faturado ? dm(i.dt_faturado) : ""].filter(Boolean).join(" · ") : null;
+        return `<div class="pst-etapas">${etapa("SC", i.solicitado)}${etapa("OC", !!i.oc, i.oc)}${etapa("NF", i.faturado, nf)}</div>` + forn;
+    }
+
     function render() {
         const fx = faixas();
-        $("pst-dias").innerHTML = fx.map((f) => {
+        $("pst-faixa").innerHTML = fx.map((f) => {
             const n = dados.itens.filter(f.teste).length;
             const cls = ["pst-dia", f.id === "agora" ? "agora" : "", n ? "" : "vazio", f.id === selecionado ? "is-active" : ""].join(" ");
-            return `<button type="button" class="${cls}" data-faixa="${f.id}"><small>${esc(f.nome)}</small><b>${n}</b><small>${esc(f.sub)}</small></button>`;
+            return (f.sep ? '<div class="pst-faixa-sep"></div>' : "")
+                + `<button type="button" class="${cls}" data-faixa="${f.id}"><span class="pst-dia__nome">${esc(f.nome)}</span><span class="pst-dia__qtd">${n}</span><span class="pst-dia__sub">${esc(f.sub)}</span></button>`;
         }).join("");
-        $("pst-dias").querySelectorAll(".pst-dia").forEach((b) => b.addEventListener("click", () => { selecionado = b.dataset.faixa; render(); }));
+        $("pst-faixa").querySelectorAll(".pst-dia").forEach((b) => b.addEventListener("click", () => { selecionado = b.dataset.faixa; render(); }));
 
         const faixa = fx.find((f) => f.id === selecionado) || fx[0];
         const busca = $("pst-busca").value.trim().toLowerCase();
         const linhas = dados.itens.filter((i) => faixa.teste(i) && (!busca ||
-            [i.cod_os_completo, i.descricao, i.cliente, i.fornecedor, i.oc, i.pendentes.join(" ")].join(" ").toLowerCase().includes(busca)));
-        $("pst-titulo").textContent = `${faixa.nome} · ${linhas.length} ${linhas.length === 1 ? "peça" : "peças"}`;
+            [i.cod_os_completo, i.descricao, i.cliente, i.fornecedor, i.oc, i.numero_nf, i.pendentes.join(" ")].join(" ").toLowerCase().includes(busca)));
+        $("pst-titulo").innerHTML = `${esc(faixa.titulo || faixa.nome)}<small>${linhas.length} ${linhas.length === 1 ? "peça" : "peças"}</small>`;
         $("pst-tbody").innerHTML = linhas.length ? linhas.map((i) => `
             <tr>
-                <td><b>${i.pronto ? "Agora" : br(i.dt_envio)}</b>${i.pronto ? "" : `<span class="pst-sub">${SEMANA[dt(i.dt_envio).getDay()]}</span>`}</td>
+                <td>${colEnvio(i)}</td>
                 <td><span class="pst-os">${esc(i.cod_os_completo)}</span><span class="pst-sub">${esc(i.descricao)}</span></td>
-                <td>${esc(i.cliente)}</td>
-                <td>${ondeEsta(i)}</td>
-                <td>${i.oc ? `OC ${esc(i.oc)}<span class="pst-sub">${esc(i.fornecedor || "")}</span>` : '<span class="pst-sub">sem OC</span>'}</td>
+                <td class="pst-cliente">${esc(i.cliente)}</td>
+                <td>${colOnde(i)}</td>
+                <td>${colCompra(i)}</td>
             </tr>`).join("") : '<tr><td colspan="5" class="pst-empty">Nada previsto.</td></tr>';
     }
 
@@ -156,10 +230,7 @@
         } catch (e) {
             dados = { itens: [], hoje: "", erp_indisponivel: true };
         }
-        if (!dados.hoje) {
-            const d = new Date();
-            dados.hoje = addDias(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, 0);
-        }
+        if (!dados.hoje) dados.hoje = isoLocal(new Date());
         const aviso = dados.erp_indisponivel ? "ERP indisponível no momento. Tente atualizar em instantes."
             : dados.sem_historico ? "Sem histórico de tempo dos processos agora. As datas usam 3 dias por processo." : "";
         $("pst-aviso").textContent = aviso;
