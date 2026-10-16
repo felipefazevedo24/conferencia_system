@@ -7,16 +7,21 @@
 <style>
     .pst-wrap { display: grid; gap: 18px; }
     .pst-table-wrap { overflow-x: auto; }
-    .pst-empty { padding: 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .pst-empty { padding: 32px; text-align: center; color: var(--eui-muted); font-weight: 600; }
     .pst-aviso { padding: 12px 16px; border-radius: 8px; background: #fef3c7; color: #92400e; font-weight: 600; font-size: 13px; }
     .pst-os { font-family: monospace; font-weight: 700; }
     .pst-sub { display: block; font-size: 11.5px; color: var(--eui-muted); }
-    .pst-head-sub { font-size: 12.5px; color: var(--eui-muted); font-weight: 500; margin-left: 8px; }
-    .pst-count { display: inline-block; min-width: 26px; text-align: center; border-radius: 999px; padding: 1px 9px; font-size: 13px; font-weight: 800; margin-left: 6px; }
-    .pst-count.enviar { background: #fef3c7; color: #92400e; }
-    .pst-count.maquina { background: #ede9fe; color: #5b21b6; }
-    .pst-count.programado { background: #f1f5f9; color: #475569; }
     .pst-antigo { color: var(--eui-muted); }
+
+    .pst-dias { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+    .pst-dia { border: 1px solid var(--eui-border, #e5e7eb); background: var(--eui-surface, #fff); border-radius: 10px; padding: 10px 8px; text-align: center; cursor: pointer; font: inherit; color: inherit; }
+    .pst-dia:hover { border-color: var(--eui-primary); }
+    .pst-dia.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); background: var(--eui-surface-2, #f8fafc); }
+    .pst-dia b { display: block; font-size: 24px; line-height: 1.1; }
+    .pst-dia small { display: block; font-size: 11.5px; color: var(--eui-muted); font-weight: 600; }
+    .pst-dia.agora b { color: #b45309; }
+    .pst-dia.vazio b { color: var(--eui-muted); opacity: .45; }
+    .pst-tag { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: #ede9fe; color: #5b21b6; margin-left: 4px; }
 </style>
 {% endblock %}
 
@@ -26,18 +31,39 @@
         <div>
             <div class="eui-page-header__eyebrow">Logística</div>
             <h1 class="eui-page-header__title"><i class="fas fa-calendar-week"></i> Previsão de ST</h1>
-            <p class="eui-page-header__sub">O que vai sair para serviço de terceiro, pelo andamento real da OS.</p>
+            <p class="eui-page-header__sub">Quando cada peça deve sair para serviço de terceiro, pelo tempo real que a fábrica leva em cada processo.</p>
         </div>
     </header>
 
-    <div class="pst-aviso hidden" id="pst-aviso">ERP indisponível no momento. Tente atualizar em instantes.</div>
+    <div class="pst-aviso hidden" id="pst-aviso"></div>
 
-    <div class="eui-toolbar" style="gap:8px;">
-        <input type="search" id="pst-busca" class="eui-input" autocomplete="off" placeholder="Buscar OS, cliente, fornecedor, OC…" style="flex:1; max-width:460px;">
-        <button class="eui-btn eui-btn--primary" id="pst-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+    <div class="pst-dias" id="pst-dias"></div>
+
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h2 class="eui-card__title" id="pst-titulo">—</h2>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input type="search" id="pst-busca" class="eui-input" autocomplete="off" placeholder="Buscar OS, cliente, processo, OC…" style="min-width:260px;">
+                <button class="eui-btn eui-btn--primary" id="pst-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="pst-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Envio previsto</th>
+                            <th>OS</th>
+                            <th>Cliente</th>
+                            <th>Onde está</th>
+                            <th>OC</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pst-tbody"><tr><td colspan="5" class="pst-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
     </div>
-
-    <div id="pst-grupos"></div>
 </div>
 {% endblock %}
 
@@ -45,73 +71,99 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
-    let dados = { itens: [], grupos: {} };
-
-    const SUB = {
-        enviar: "processo anterior acabou, ainda sem NF",
-        maquina: "último processo antes do ST em andamento",
-        programado: "ainda faltam processos",
-    };
-    const DETALHE = { enviar: "Pronto desde / OC", maquina: "Processo em andamento", programado: "Falta" };
+    const SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+    let dados = { itens: [], hoje: "" };
+    let selecionado = "agora";
 
     const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const br = (iso) => iso ? iso.split("-").reverse().join("/") : "";
+    const dt = (iso) => new Date(iso + "T00:00:00");
+    const diff = (a, b) => Math.round((dt(a) - dt(b)) / 86400000);
 
-    function diasDesde(iso) {
-        return Math.floor((Date.now() - new Date(iso + "T00:00:00").getTime()) / 86400000);
+    function addDias(iso, n) {
+        const d = dt(iso);
+        d.setDate(d.getDate() + n);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     }
 
-    function detalhe(i) {
-        if (i.grupo === "enviar") {
-            const desde = i.pronto_desde
-                ? `<span class="${diasDesde(i.pronto_desde) > 60 ? "pst-antigo" : ""}">${br(i.pronto_desde)}</span>` : "—";
-            const oc = i.oc ? `<span class="pst-sub">OC ${esc(i.oc)} · ${esc(i.fornecedor || "")}</span>` : '<span class="pst-sub">sem OC</span>';
-            return desde + oc;
+    // Faixas: prontos, os proximos 7 dias uteis um a um, depois agrupado.
+    // Sem sabado/domingo: a fabrica nao trabalha e o servico ja empurra
+    // essas datas para segunda.
+    function faixas() {
+        const lista = [{ id: "agora", nome: "Agora", sub: "já pode ir", teste: (i) => i.pronto }];
+        let n = 0, ultimo = dados.hoje;
+        while (lista.length < 8) {
+            n++;
+            const iso = addDias(dados.hoje, n);
+            const d = dt(iso);
+            if (d.getDay() === 0 || d.getDay() === 6) continue;
+            ultimo = iso;
+            lista.push({
+                id: "d" + n,
+                nome: n === 1 ? "Amanhã" : `${SEMANA[d.getDay()]} ${br(iso).slice(0, 5)}`,
+                sub: `em ${n} ${n === 1 ? "dia" : "dias"}`,
+                teste: (i) => !i.pronto && i.dt_envio === iso,
+            });
         }
-        if (i.grupo === "maquina") return esc(i.processo_atual);
-        const mais = i.pendentes_antes > 1 ? `<span class="pst-sub">+${i.pendentes_antes - 1} depois</span>` : "";
-        return esc(i.processo_atual) + mais;
+        const ate14 = addDias(dados.hoje, 14), ate30 = addDias(dados.hoje, 30);
+        const entre = (de, ate) => (i) => !i.pronto && i.dt_envio > de && (ate == null || i.dt_envio <= ate);
+        lista.push({ id: "s2", nome: `até ${br(ate14).slice(0, 5)}`, sub: "2 semanas", teste: entre(ultimo, ate14) });
+        lista.push({ id: "m1", nome: `até ${br(ate30).slice(0, 5)}`, sub: "30 dias", teste: entre(ate14, ate30) });
+        lista.push({ id: "mais", nome: "+30 dias", sub: "mais pra frente", teste: entre(ate30, null) });
+        return lista;
+    }
+
+    function ondeEsta(i) {
+        if (i.pronto) {
+            if (!i.pronto_desde) return "Pronto";
+            const antigo = diff(dados.hoje, i.pronto_desde) > 60;
+            return `<span class="${antigo ? "pst-antigo" : ""}">Pronto desde ${br(i.pronto_desde)}</span>`;
+        }
+        const atual = esc(i.pendentes[0]) + (i.atual_iniciado ? '<span class="pst-tag">em andamento</span>' : "");
+        const depois = i.pendentes.length > 1 ? `<span class="pst-sub">depois: ${esc(i.pendentes.slice(1).join(" → "))}</span>` : "";
+        return atual + depois;
     }
 
     function render() {
-        $("pst-aviso").classList.toggle("hidden", !dados.erp_indisponivel);
-        const busca = $("pst-busca").value.trim().toLowerCase();
-        const visiveis = dados.itens.filter((i) => !busca ||
-            [i.cod_os_completo, i.descricao, i.cliente, i.fornecedor, i.oc, i.processo_atual].join(" ").toLowerCase().includes(busca));
-
-        $("pst-grupos").innerHTML = Object.entries(dados.grupos || {}).map(([g, nome]) => {
-            const linhas = visiveis.filter((i) => i.grupo === g);
-            const corpo = linhas.length ? linhas.map((i) => `
-                <tr>
-                    <td><span class="pst-os">${esc(i.cod_os_completo)}</span><span class="pst-sub">${esc(i.descricao)}</span></td>
-                    <td>${esc(i.cliente)}</td>
-                    <td>${detalhe(i)}</td>
-                </tr>`).join("") : '<tr><td colspan="3" class="pst-empty">Nada aqui.</td></tr>';
-            return `
-                <div class="eui-card" style="margin-bottom:18px;">
-                    <div class="eui-card__head">
-                        <h2 class="eui-card__title">${esc(nome)}<span class="pst-count ${g}">${linhas.length}</span><span class="pst-head-sub">${SUB[g]}</span></h2>
-                    </div>
-                    <div class="eui-card__body eui-card__body--tight">
-                        <div class="pst-table-wrap">
-                            <table class="erp-table">
-                                <thead><tr><th style="width:40%;">OS</th><th>Cliente</th><th>${DETALHE[g]}</th></tr></thead>
-                                <tbody>${corpo}</tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>`;
+        const fx = faixas();
+        $("pst-dias").innerHTML = fx.map((f) => {
+            const n = dados.itens.filter(f.teste).length;
+            const cls = ["pst-dia", f.id === "agora" ? "agora" : "", n ? "" : "vazio", f.id === selecionado ? "is-active" : ""].join(" ");
+            return `<button type="button" class="${cls}" data-faixa="${f.id}"><small>${esc(f.nome)}</small><b>${n}</b><small>${esc(f.sub)}</small></button>`;
         }).join("");
+        $("pst-dias").querySelectorAll(".pst-dia").forEach((b) => b.addEventListener("click", () => { selecionado = b.dataset.faixa; render(); }));
+
+        const faixa = fx.find((f) => f.id === selecionado) || fx[0];
+        const busca = $("pst-busca").value.trim().toLowerCase();
+        const linhas = dados.itens.filter((i) => faixa.teste(i) && (!busca ||
+            [i.cod_os_completo, i.descricao, i.cliente, i.fornecedor, i.oc, i.pendentes.join(" ")].join(" ").toLowerCase().includes(busca)));
+        $("pst-titulo").textContent = `${faixa.nome} · ${linhas.length} ${linhas.length === 1 ? "peça" : "peças"}`;
+        $("pst-tbody").innerHTML = linhas.length ? linhas.map((i) => `
+            <tr>
+                <td><b>${i.pronto ? "Agora" : br(i.dt_envio)}</b>${i.pronto ? "" : `<span class="pst-sub">${SEMANA[dt(i.dt_envio).getDay()]}</span>`}</td>
+                <td><span class="pst-os">${esc(i.cod_os_completo)}</span><span class="pst-sub">${esc(i.descricao)}</span></td>
+                <td>${esc(i.cliente)}</td>
+                <td>${ondeEsta(i)}</td>
+                <td>${i.oc ? `OC ${esc(i.oc)}<span class="pst-sub">${esc(i.fornecedor || "")}</span>` : '<span class="pst-sub">sem OC</span>'}</td>
+            </tr>`).join("") : '<tr><td colspan="5" class="pst-empty">Nada previsto.</td></tr>';
     }
 
     async function carregar() {
-        $("pst-grupos").innerHTML = '<div class="pst-empty">Carregando…</div>';
+        $("pst-tbody").innerHTML = '<tr><td colspan="5" class="pst-empty">Carregando…</td></tr>';
         try {
             const resp = await fetch("/api/viagem/previsao-st");
             dados = await resp.json();
         } catch (e) {
-            dados = { itens: [], grupos: {}, erp_indisponivel: true };
+            dados = { itens: [], hoje: "", erp_indisponivel: true };
         }
+        if (!dados.hoje) {
+            const d = new Date();
+            dados.hoje = addDias(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, 0);
+        }
+        const aviso = dados.erp_indisponivel ? "ERP indisponível no momento. Tente atualizar em instantes."
+            : dados.sem_historico ? "Sem histórico de tempo dos processos agora. As datas usam 3 dias por processo." : "";
+        $("pst-aviso").textContent = aviso;
+        $("pst-aviso").classList.toggle("hidden", !aviso);
         render();
     }
 

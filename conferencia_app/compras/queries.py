@@ -589,12 +589,13 @@ ORDER BY process.cod_os_aux, process.seq NULLS LAST, process.codigo
 
 # Previsao de Servico de Terceiro (Logistica > Viagens). As datas previstas
 # do PCP (dt_incio_previsto) nao servem: a producao roda atrasada. A
-# previsao sai de onde o item esta no roteiro - quantos processos ainda
-# faltam antes do ST e se o ultimo deles ja comecou a ser apontado.
+# previsao sai de onde o item esta no roteiro - quais processos ainda
+# faltam antes do ST - somada ao tempo historico de cada um
+# (SQL_PRODUCAO_ST_LEAD_TIME).
 SQL_PRODUCAO_ST_PREVISAO = """
 SELECT os.n_os, item.cod_os_completo, item.subtitulo, os.cliente,
        st.codigo AS processo_st, st.seq AS seq_st, st.tiposervico AS servico_st,
-       antes.pendentes_antes, antes.pronto_desde,
+       antes.pendentes_antes, antes.pronto_desde, antes.pendentes_lista,
        atual.tiposervico AS processo_atual,
        -- pcp_dt_primeiro_apont/data_inicio vem vazios no ERP mesmo com
        -- processo apontado; hs_realizadas e o que de fato se move.
@@ -611,7 +612,9 @@ JOIN public.tos_aux item ON item.cod_empresa = st.cod_empresa
 CROSS JOIN LATERAL (
     -- pronto_desde separa demanda nova de ST antigo nunca finalizado no ERP.
     SELECT COUNT(*) FILTER (WHERE COALESCE(prev.finalizado, 0) = 0)::integer AS pendentes_antes,
-           MAX(prev.dt_finalizacao) AS pronto_desde
+           MAX(prev.dt_finalizacao) AS pronto_desde,
+           ARRAY_AGG(UPPER(BTRIM(prev.tiposervico)) ORDER BY prev.seq)
+               FILTER (WHERE COALESCE(prev.finalizado, 0) = 0) AS pendentes_lista
     FROM public.tpro_pro prev
     WHERE prev.cod_empresa = st.cod_empresa AND prev.cod_os = st.cod_os
       AND prev.cod_os_aux = st.cod_os_aux AND prev.seq < st.seq
@@ -629,10 +632,36 @@ LEFT JOIN LATERAL (
 WHERE st.cod_empresa = %(cod_empresa)s
   AND COALESCE(st.finalizado, 0) = 0
   AND UPPER(COALESCE(st.tiposervico, '')) LIKE '%%TERCEIRO%%'
+  -- A Logistica so planeja os envios de molde.
+  AND UPPER(BTRIM(COALESCE(os.u_classificacao, ''))) = 'MOLDE'
   AND os.n_os NOT LIKE 'E%%'
   AND os.concluido = 0 AND os.cancelado = 0 AND os.aprovado = 1
 ORDER BY antes.pendentes_antes, os.n_os, item.cod_os_completo, st.seq
 LIMIT 3000
+"""
+
+# Tempo real de passagem de cada processo nos ultimos 180 dias: dias entre
+# a finalizacao do processo anterior do item e a dele (fila + execucao).
+# Validado em 16/10/2026: USINAGEM 3 = 6 dias, CORTE LASER = 4-5; processos
+# de papelada (projeto, conferencia) dao 0 porque o PCP fecha em lote.
+SQL_PRODUCAO_ST_LEAD_TIME = """
+WITH fin AS (
+    SELECT UPPER(BTRIM(p.tiposervico)) AS servico,
+           p.dt_finalizacao::date AS fim,
+           LAG(p.dt_finalizacao::date) OVER (
+               PARTITION BY p.cod_os, p.cod_os_aux ORDER BY p.seq) AS fim_anterior
+    FROM public.tpro_pro p
+    WHERE p.cod_empresa = %(cod_empresa)s AND p.finalizado = 1
+      AND p.dt_finalizacao IS NOT NULL
+)
+SELECT servico, COUNT(*)::integer AS qtd,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY fim - fim_anterior) AS mediana_dias
+FROM fin
+WHERE fim_anterior IS NOT NULL
+  AND fim >= CURRENT_DATE - 180
+  AND fim >= fim_anterior
+GROUP BY servico
+HAVING COUNT(*) >= 5
 """
 
 SQL_PRODUCAO_MATERIAIS_ITEM = """
