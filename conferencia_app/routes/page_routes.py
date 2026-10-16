@@ -1077,6 +1077,17 @@ def mapa_frota_page():
     )
 
 
+@page_bp.route("/logistica/previsao-st")
+@permission_required("PAGE_LOGISTICA_VIAGEM")
+def previsao_st_page():
+    return render_template(
+        "logistica_previsao_st.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
 @page_bp.route("/logistica/frota")
 @permission_required("PAGE_LOGISTICA_FROTA")
 def frota_page():

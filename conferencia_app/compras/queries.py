@@ -587,6 +587,54 @@ WHERE process.cod_empresa = %(cod_empresa)s AND process.cod_os = %(cod_os)s
 ORDER BY process.cod_os_aux, process.seq NULLS LAST, process.codigo
 """
 
+# Previsao de Servico de Terceiro (Logistica > Viagens). As datas previstas
+# do PCP (dt_incio_previsto) nao servem: a producao roda atrasada. A
+# previsao sai de onde o item esta no roteiro - quantos processos ainda
+# faltam antes do ST e se o ultimo deles ja comecou a ser apontado.
+SQL_PRODUCAO_ST_PREVISAO = """
+SELECT os.n_os, item.cod_os_completo, item.subtitulo, os.cliente,
+       st.codigo AS processo_st, st.seq AS seq_st, st.tiposervico AS servico_st,
+       antes.pendentes_antes, antes.pronto_desde,
+       atual.tiposervico AS processo_atual,
+       -- pcp_dt_primeiro_apont/data_inicio vem vazios no ERP mesmo com
+       -- processo apontado; hs_realizadas e o que de fato se move.
+       (COALESCE(atual.hs_realizadas, 0) > 0 OR EXISTS (
+            SELECT 1 FROM public.taponta_aberto aberto
+            WHERE aberto.cod_empresa = atual.cod_empresa
+              AND aberto.cod_os = atual.cod_os
+              AND aberto.cod_os_aux = atual.cod_os_aux
+              AND aberto.seq_processo_prod = atual.seq)) AS atual_iniciado
+FROM public.tpro_pro st
+JOIN public.tos os ON os.cod_empresa = st.cod_empresa AND os.codigo = st.cod_os
+JOIN public.tos_aux item ON item.cod_empresa = st.cod_empresa
+    AND item.cod_os = st.cod_os AND item.codigo = st.cod_os_aux
+CROSS JOIN LATERAL (
+    -- pronto_desde separa demanda nova de ST antigo nunca finalizado no ERP.
+    SELECT COUNT(*) FILTER (WHERE COALESCE(prev.finalizado, 0) = 0)::integer AS pendentes_antes,
+           MAX(prev.dt_finalizacao) AS pronto_desde
+    FROM public.tpro_pro prev
+    WHERE prev.cod_empresa = st.cod_empresa AND prev.cod_os = st.cod_os
+      AND prev.cod_os_aux = st.cod_os_aux AND prev.seq < st.seq
+) antes
+LEFT JOIN LATERAL (
+    SELECT prev.cod_empresa, prev.cod_os, prev.cod_os_aux, prev.seq,
+           prev.tiposervico, prev.hs_realizadas
+    FROM public.tpro_pro prev
+    WHERE prev.cod_empresa = st.cod_empresa AND prev.cod_os = st.cod_os
+      AND prev.cod_os_aux = st.cod_os_aux AND prev.seq < st.seq
+      AND COALESCE(prev.finalizado, 0) = 0
+    ORDER BY prev.seq
+    LIMIT 1
+) atual ON TRUE
+WHERE st.cod_empresa = %(cod_empresa)s
+  AND COALESCE(st.finalizado, 0) = 0
+  AND UPPER(COALESCE(st.tiposervico, '')) LIKE '%%TERCEIRO%%'
+  AND os.n_os NOT LIKE 'E%%'
+  AND os.concluido = 0 AND os.cancelado = 0 AND os.aprovado = 1
+ORDER BY antes.pendentes_antes, os.n_os, item.cod_os_completo, st.seq
+LIMIT 3000
+"""
+
 SQL_PRODUCAO_MATERIAIS_ITEM = """
 SELECT material.guid_linha::text AS line_id, material.cod_interno,
              material.produto, material.unidade, material.qtde,

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Logística | Previsão de ST{% endblock %}
+{% block shell_title %}Logística — Previsão de ST{% endblock %}
+
+{% block extra_head %}
+<style>
+    .pst-wrap { display: grid; gap: 18px; }
+    .pst-table-wrap { overflow-x: auto; }
+    .pst-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .pst-aviso { padding: 12px 16px; border-radius: 8px; background: #fef3c7; color: #92400e; font-weight: 600; font-size: 13px; }
+    .pst-semanas { display: flex; gap: 10px; flex-wrap: wrap; padding: 12px 16px; }
+    .pst-semana { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; padding: 8px 12px; min-width: 120px; }
+    .pst-semana b { display: block; font-size: 18px; }
+    .pst-semana small { color: var(--eui-muted); font-size: 11.5px; }
+    .pst-semana.atrasada { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+    .pst-fase { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .pst-fase.coleta { background: #dbeafe; color: #1e40af; }
+    .pst-fase.oc_emitida { background: #dcfce7; color: #166534; }
+    .pst-fase.aguardando_oc { background: #fef3c7; color: #92400e; }
+    .pst-fase.maquina { background: #ede9fe; color: #5b21b6; }
+    .pst-fase.fila, .pst-fase.depois { background: #f1f5f9; color: #475569; }
+    .pst-atrasado { color: var(--eui-danger, #dc2626); font-weight: 700; }
+    .pst-os { font-family: monospace; font-weight: 700; }
+    .pst-sub { display: block; font-size: 11.5px; color: var(--eui-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pst-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-calendar-week"></i> Previsão de ST</h1>
+            <p class="eui-page-header__sub">Envios e coletas de serviço de terceiro, pelo andamento real da OS.</p>
+        </div>
+    </header>
+
+    <div class="pst-aviso hidden" id="pst-aviso">ERP indisponível no momento. Tente atualizar em instantes.</div>
+
+    <div class="eui-stats" id="pst-metrics">
+        <div class="eui-stat is-clickable" data-filter="coleta_atrasada"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas atrasadas</span><span class="eui-stat__value" id="pst-m-atrasadas">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="coleta_semana"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-truck-ramp-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas nesta semana</span><span class="eui-stat__value" id="pst-m-coletas">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="a_enviar"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-truck-fast"></i></div><div class="eui-stat__body"><span class="eui-stat__label">A enviar</span><span class="eui-stat__value" id="pst-m-enviar">0</span><span class="eui-stat__hint">processo anterior já acabou</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="maquina"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-gears"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Na máquina</span><span class="eui-stat__value" id="pst-m-maquina">0</span><span class="eui-stat__hint">próximos a enviar</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head"><h2 class="eui-card__title">Coletas por semana</h2></div>
+        <div class="eui-card__body eui-card__body--tight"><div class="pst-semanas" id="pst-semanas"></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head" style="justify-content:flex-end;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <select id="pst-fase" class="eui-input" style="min-width:190px;"><option value="">Todas as situações</option></select>
+                <button class="eui-btn eui-btn--primary" id="pst-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <input type="search" id="pst-busca" class="eui-input" autocomplete="off" placeholder="Buscar OS, cliente, fornecedor, OC…" style="width:100%; max-width:460px;">
+            </div>
+            <div class="pst-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Situação</th>
+                            <th>OS</th>
+                            <th>Cliente</th>
+                            <th>Onde está</th>
+                            <th>Fornecedor / OC</th>
+                            <th>Retorno previsto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pst-tbody"><tr><td colspan="6" class="pst-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    let dados = { itens: [], resumo: {}, fases: {}, hoje: "" };
+    let filtroCard = "";
+
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const br = (iso) => iso ? iso.split("-").reverse().join("/") : "";
+
+    function inicioSemana(iso) {
+        const d = new Date(iso + "T00:00:00");
+        d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        return d.toISOString().slice(0, 10);
+    }
+
+    function semanaAtualAte() {
+        const ini = new Date(inicioSemana(dados.hoje) + "T00:00:00");
+        ini.setDate(ini.getDate() + 6);
+        return ini.toISOString().slice(0, 10);
+    }
+
+    function passaCard(i) {
+        if (!filtroCard) return true;
+        if (filtroCard === "coleta_atrasada") return i.retorno_atrasado;
+        if (filtroCard === "coleta_semana") return i.fase === "coleta" && i.dt_prevista_retorno
+            && i.dt_prevista_retorno >= inicioSemana(dados.hoje) && i.dt_prevista_retorno <= semanaAtualAte();
+        if (filtroCard === "a_enviar") return i.fase === "oc_emitida" || i.fase === "aguardando_oc";
+        return i.fase === filtroCard;
+    }
+
+    function ondeEsta(i) {
+        if (i.fase === "coleta") return "No fornecedor" + (i.numero_nf ? `<span class="pst-sub">NF ${esc(i.numero_nf)}</span>` : "");
+        if (i.fase === "oc_emitida") return "Pronto, falta NF";
+        if (i.fase === "aguardando_oc") return "Pronto, falta OC" + (i.pronto_desde ? `<span class="pst-sub">desde ${br(i.pronto_desde)}</span>` : "");
+        const faltam = i.pendentes_antes > 1 ? `<span class="pst-sub">faltam ${i.pendentes_antes} processos</span>` : "";
+        return esc(i.processo_atual || "") + faltam;
+    }
+
+    function renderSemanas() {
+        const grupos = {};
+        let atrasadas = 0, semData = 0;
+        dados.itens.filter((i) => i.fase === "coleta").forEach((i) => {
+            if (!i.dt_prevista_retorno) { semData++; return; }
+            if (i.retorno_atrasado) { atrasadas++; return; }
+            const k = inicioSemana(i.dt_prevista_retorno);
+            grupos[k] = (grupos[k] || 0) + 1;
+        });
+        const html = [];
+        if (atrasadas) html.push(`<div class="pst-semana atrasada"><b>${atrasadas}</b><small>atrasadas</small></div>`);
+        Object.keys(grupos).sort().forEach((k) => html.push(`<div class="pst-semana"><b>${grupos[k]}</b><small>semana de ${br(k)}</small></div>`));
+        if (semData) html.push(`<div class="pst-semana"><b>${semData}</b><small>sem prazo na OC</small></div>`);
+        $("pst-semanas").innerHTML = html.join("") || '<span class="pst-sub">Nenhuma coleta pendente.</span>';
+    }
+
+    function renderTabela() {
+        const fase = $("pst-fase").value;
+        const busca = $("pst-busca").value.trim().toLowerCase();
+        const linhas = dados.itens.filter((i) => passaCard(i) && (!fase || i.fase === fase) && (!busca ||
+            [i.cod_os_completo, i.descricao, i.cliente, i.fornecedor, i.oc, i.processo_atual].join(" ").toLowerCase().includes(busca)));
+        if (!linhas.length) {
+            $("pst-tbody").innerHTML = '<tr><td colspan="6" class="pst-empty">Nada por aqui.</td></tr>';
+            return;
+        }
+        $("pst-tbody").innerHTML = linhas.map((i) => `
+            <tr>
+                <td><span class="pst-fase ${i.fase}">${esc(i.fase_label)}</span></td>
+                <td><span class="pst-os">${esc(i.cod_os_completo)}</span><span class="pst-sub">${esc(i.descricao)}</span></td>
+                <td>${esc(i.cliente)}</td>
+                <td>${ondeEsta(i)}</td>
+                <td>${esc(i.fornecedor || "")}${i.oc ? `<span class="pst-sub">OC ${esc(i.oc)}</span>` : ""}</td>
+                <td class="${i.retorno_atrasado ? "pst-atrasado" : ""}">${br(i.dt_prevista_retorno)}</td>
+            </tr>`).join("");
+    }
+
+    function render() {
+        const r = dados.resumo || {};
+        $("pst-m-atrasadas").textContent = r.coletas_atrasadas || 0;
+        $("pst-m-coletas").textContent = r.coletas_semana || 0;
+        $("pst-m-enviar").textContent = r.a_enviar || 0;
+        $("pst-m-maquina").textContent = r.na_maquina || 0;
+        $("pst-aviso").classList.toggle("hidden", !dados.erp_indisponivel);
+        renderSemanas();
+        renderTabela();
+    }
+
+    async function carregar() {
+        $("pst-tbody").innerHTML = '<tr><td colspan="6" class="pst-empty">Carregando…</td></tr>';
+        try {
+            const resp = await fetch("/api/viagem/previsao-st");
+            dados = await resp.json();
+        } catch (e) {
+            dados = { itens: [], resumo: {}, fases: {}, erp_indisponivel: true, hoje: "" };
+        }
+        const sel = $("pst-fase");
+        if (sel.options.length === 1) {
+            Object.entries(dados.fases || {}).forEach(([k, v]) => sel.add(new Option(v, k)));
+        }
+        render();
+    }
+
+    document.querySelectorAll("#pst-metrics .eui-stat").forEach((card) => {
+        card.addEventListener("click", () => {
+            filtroCard = filtroCard === card.dataset.filter ? "" : card.dataset.filter;
+            document.querySelectorAll("#pst-metrics .eui-stat").forEach((c) => c.classList.toggle("is-active", c.dataset.filter === filtroCard));
+            renderTabela();
+        });
+    });
+    $("pst-fase").addEventListener("change", renderTabela);
+    $("pst-busca").addEventListener("input", renderTabela);
+    $("pst-btn-atualizar").addEventListener("click", carregar);
+    carregar();
+})();
+</script>
+{% endblock %}

@@ -348,6 +348,7 @@
                             <div class="submenu-items">
                                 {% if can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a href="/logistica/viagens" class="list-group-item list-group-item-action"><i class="fas fa-route"></i> Central de Viagens</a>{% endif %}
                                 {% if can_access('PAGE_LOGISTICA_VIAGEM') %}<a href="/logistica/mapa-frota" class="list-group-item list-group-item-action"><i class="fas fa-map-location-dot"></i> Mapa da Frota</a>{% endif %}
+                                {% if can_access('PAGE_LOGISTICA_VIAGEM') %}<a href="/logistica/previsao-st" class="list-group-item list-group-item-action"><i class="fas fa-calendar-week"></i> Previsão de ST</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}

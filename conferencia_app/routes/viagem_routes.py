@@ -1046,6 +1046,13 @@ def mapa_frota():
     return jsonify(dados_mapa_frota())
 
 
+@viagem_bp.route("/previsao-st", methods=["GET"])
+@permission_required(PERM)
+def previsao_st():
+    from ..services.logistica_st_previsao_service import montar_previsao
+    return jsonify(montar_previsao())
+
+
 @viagem_bp.route("/agenda", methods=["GET"])
 @permission_required(PERM)
 def agenda_viagens():
