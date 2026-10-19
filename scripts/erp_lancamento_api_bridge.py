@@ -1824,6 +1824,91 @@ SQL_TRILHA_OF_KARDEX = """
 """
 
 
+# Sugestao de mascara de imposto no Documento de Entrada. A entrada no GRV nao
+# guarda o codigo da mascara, so os impostos que ela aplicou; o Sync compara
+# esses impostos com as mascaras pra descobrir qual foi usada.
+SQL_FISCAL_MASCARAS = """
+    select codigo, descricao, cod_situacao_tributaria, icms, cst_ipi, cst_pis, aliquota_pis,
+           cst_cofins, aliquota_cofins, numero_plano_contas
+    from public.tmascara_impostos
+    where cod_empresa = %(empresa)s
+"""
+
+SQL_FISCAL_FAMILIAS = """
+    select regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as produto, fam.nome as familia
+    from public.tproduto p
+    left join public.tfamilia fam on fam.cod_empresa = p.cod_empresa and fam.codigo = p.cod_familia
+    where p.cod_empresa = %(empresa)s
+      and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%(produtos)s::text[])
+"""
+
+# Impostos de cada item ja lancado dos produtos pedidos. So 4 meses: o
+# criterio do fiscal muda e, no teste de 19/10/2026, historico de 2 anos
+# acertou menos que o de 4 meses.
+SQL_FISCAL_HISTORICO = """
+    select regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as produto,
+           regexp_replace(coalesce(f.cgc, ''), '[^0-9]', '', 'g') as cnpj,
+           c.dt_lancamento, a.cfop, a.cst_n12, a.percentual_icms, a.cst_ipi, a.cst_q06, a.cst_s06,
+           a.numero_plano_contas
+    from public.tcompras c
+    join public.tcom_aux a on a.cod_empresa = c.cod_empresa and a.realciona_auto = c.codigo
+    join public.tproduto p on p.cod_empresa = a.cod_empresa and p.codigo = a.cod_produto
+    left join public.tfornece f on f.cod_empresa = c.cod_empresa and f.codigo = c.cod_fornecedor
+    where c.cod_empresa = %(empresa)s
+      and c.dt_lancamento >= current_date - 120
+      and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = any(%(produtos)s::text[])
+    order by c.dt_lancamento desc
+    limit 5000
+"""
+
+# Produto sem lancamento: o que a mesma familia costuma receber (1 ano, por
+# mes - o criterio do fiscal muda e o Sync pesa mais o recente).
+SQL_FISCAL_USO_FAMILIA = """
+    select fam.nome as familia, date_trunc('month', c.dt_lancamento)::date as mes,
+           a.cfop, a.cst_n12, a.percentual_icms, a.cst_ipi, a.cst_q06, a.cst_s06,
+           a.numero_plano_contas, count(*) as n
+    from public.tcompras c
+    join public.tcom_aux a on a.cod_empresa = c.cod_empresa and a.realciona_auto = c.codigo
+    join public.tproduto p on p.cod_empresa = a.cod_empresa and p.codigo = a.cod_produto
+    join public.tfamilia fam on fam.cod_empresa = p.cod_empresa and fam.codigo = p.cod_familia
+    where c.cod_empresa = %(empresa)s
+      and c.dt_lancamento >= current_date - 365
+      and fam.nome = any(%(familias)s::text[])
+    group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+"""
+
+_FISCAL_COLUNAS = ("cfop", "cst", "icms", "cst_ipi", "cst_pis", "cst_cofins", "conta")
+
+
+def _fiscal_mascaras_sugestao(cur, empresa: int, produtos: list[str]) -> dict[str, Any]:
+    params = {"empresa": empresa, "produtos": produtos}
+    cur.execute(SQL_FISCAL_MASCARAS, params)
+    mascaras = [
+        {"codigo": cod, "descricao": desc, "cst": cst, "icms": icms, "cst_ipi": cst_ipi, "cst_pis": cst_pis,
+         "aliquota_pis": apis, "cst_cofins": cst_cof, "aliquota_cofins": acof, "conta": conta}
+        for cod, desc, cst, icms, cst_ipi, cst_pis, apis, cst_cof, acof, conta in cur.fetchall()
+    ]
+    familias: dict[str, str] = {}
+    historico: list[dict[str, Any]] = []
+    uso_familia: list[dict[str, Any]] = []
+    if produtos:
+        cur.execute(SQL_FISCAL_FAMILIAS, params)
+        familias = {produto: familia or "" for produto, familia in cur.fetchall()}
+        cur.execute(SQL_FISCAL_HISTORICO, params)
+        historico = [
+            {"produto": produto, "cnpj": cnpj, "dt_lancamento": dt, **dict(zip(_FISCAL_COLUNAS, resto))}
+            for produto, cnpj, dt, *resto in cur.fetchall()
+        ]
+        nomes = sorted({f for f in familias.values() if f})
+        if nomes:
+            cur.execute(SQL_FISCAL_USO_FAMILIA, {"empresa": empresa, "familias": nomes})
+            uso_familia = [
+                {"familia": familia, "mes": mes, **dict(zip(_FISCAL_COLUNAS, resto[:-1])), "n": int(resto[-1] or 0)}
+                for familia, mes, *resto in cur.fetchall()
+            ]
+    return {"mascaras": mascaras, "familias": familias, "historico": historico, "uso_familia": uso_familia}
+
+
 def _trilha_ordem_fat(cur, empresa: int, cod_ordem_fat: int) -> dict[str, Any] | None:
     params = {"empresa": empresa, "of": cod_ordem_fat}
     cur.execute(SQL_TRILHA_OF_CABECALHO, params)
@@ -3162,6 +3247,32 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "codigo": codigo, "fornecimentos": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/fiscal/mascaras-sugestao")
+    def consultar_mascaras_sugestao():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            produtos_raw = payload.get("produtos") or []
+            if not isinstance(produtos_raw, list):
+                return jsonify({"sucesso": False, "erro": "produtos_deve_ser_lista"}), 400
+            produtos = sorted({re.sub(r"[^A-Z0-9]", "", str(p or "").upper()) for p in produtos_raw} - {""})[:200]
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    dados = _fiscal_mascaras_sugestao(cur, empresa, produtos)
+            return jsonify({"sucesso": True, **_json_safe(dados)})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar mascaras de imposto no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/expedicao/trilha-ordem-fat")

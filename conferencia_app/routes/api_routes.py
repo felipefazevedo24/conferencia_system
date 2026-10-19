@@ -83,6 +83,7 @@ from ..schemas.api_schemas import (
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services import chapa_oxicorte_service as chapa_oxicorte_svc
+from ..services import mascara_imposto_service as mascara_imposto_svc
 from ..services import teams_service
 from ..services import processo_recebimento_log_service as processo_log_svc
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
@@ -7290,6 +7291,25 @@ def listar_lancadas():
         )
 
     return jsonify(resposta)
+
+
+@api_bp.route("/api/detalhes_nf/<numero>/mascaras")
+@roles_required("Fiscal", "Admin")
+def detalhes_nf_mascaras(numero):
+    """Máscara de imposto sugerida por item, lida do GRV na hora. Bridge fora
+    não é erro: volta disponivel=False e a tela segue sem sugestão."""
+    query_itens = ItemNota.query.filter_by(numero_nota=numero)
+    query_itens = _filtrar_query_por_identidade_nf(
+        query_itens,
+        request.args.get("cnpj_emitente"),
+        request.args.get("fornecedor"),
+        request.args.get("chave_acesso") or request.args.get("chave"),
+        request.args.get("documento_ref"),
+    )
+    itens = query_itens.all()
+    if not itens:
+        return jsonify({"erro": "Nota não encontrada"}), 404
+    return jsonify(mascara_imposto_svc.sugerir_para_itens_nota(itens))
 
 
 @api_bp.route("/api/detalhes_nf/<numero>")

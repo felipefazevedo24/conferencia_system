@@ -544,6 +544,16 @@
     .doc-table th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--eui-muted); padding: 9px 12px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
     .doc-table td { padding: 9px 12px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); }
     .doc-table tbody tr:last-child td { border-bottom: none; }
+    .de-masc { min-width: 240px; max-width: 360px; }
+    .de-masc__linha { display: flex; align-items: baseline; gap: 6px; }
+    .de-masc__linha strong { color: var(--eui-text); }
+    .de-masc__desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+    .de-masc__nivel { flex: none; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; background: var(--eui-surface-2); color: var(--eui-muted); }
+    .de-masc__nivel.is-alta { background: var(--doc-success-soft); color: var(--doc-success); }
+    .de-masc__nivel.is-media { background: var(--doc-warning-soft); color: var(--warning-erp); }
+    .de-masc__motivo, .de-masc__outras, .de-masc__vazio { font-size: 11px; color: var(--eui-muted); margin-top: 2px; }
+    .de-masc__outras span { cursor: help; border-bottom: 1px dotted currentColor; }
+    .de-masc-aviso { margin: 0 0 10px; font-size: 12px; color: var(--eui-muted); }
 
     /* Modal de estorno — cartoes de tipo */
     .de-tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -2717,6 +2727,7 @@
                 <span class="doc-step-status">${etapa.estado === 'done' ? 'Concluída' : 'Pendente'}</span>
             </div>`).join('');
 
+        const mostrarMascara = String(dados.status_atual || '') !== 'Lançado';
         const itens = (dados.itens || []).map((item) => `
             <tr>
                 <td>${escapeHtml(item.codigo || '---')}</td>
@@ -2724,6 +2735,7 @@
                 <td>${escapeHtml(item.qtd ?? '---')}</td>
                 <td>${escapeHtml(item.unidade || 'UN')}</td>
                 <td>${escapeHtml(item.cfop || '---')}</td>
+                ${mostrarMascara ? `<td data-mascara-item="${escapeHtml(item.id)}"><span class="de-masc__vazio">Buscando…</span></td>` : ''}
                 <td>${escapeHtml(item.pedido_compra || '---')}</td>
             </tr>`).join('');
 
@@ -2785,9 +2797,10 @@
             </section>
             <section class="doc-card">
                 <h3>Itens do documento</h3>
+                <p class="de-masc-aviso" id="de-masc-aviso" hidden></p>
                 <div class="doc-table-wrap">
                     <table class="doc-table">
-                        <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>UN</th><th>CFOP</th><th>Pedido</th></tr></thead>
+                        <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>UN</th><th>CFOP</th>${mostrarMascara ? '<th>Máscara sugerida</th>' : ''}<th>Pedido</th></tr></thead>
                         <tbody>${itens}</tbody>
                     </table>
                 </div>
@@ -2799,6 +2812,48 @@
             </section>` : ''}
         `;
         atualizarBotoesDetalhe(dados);
+        if (mostrarMascara) carregarMascaras(dados);
+    }
+
+    const MASCARA_NIVEL = { alta: ['Alta', 'is-alta'], media: ['Média', 'is-media'], baixa: ['Regra', ''] };
+    const MASCARA_AVISO = {
+        bridge_desatualizado: 'Sugestão de máscara indisponível: a bridge do GRV precisa ser atualizada.',
+        nao_configurado: 'Sugestão de máscara indisponível: GRV não configurado.',
+    };
+
+    function htmlMascara(s) {
+        if (!s) return '<span class="de-masc__vazio">Sem histórico</span>';
+        const [rotulo, classe] = MASCARA_NIVEL[s.nivel] || MASCARA_NIVEL.baixa;
+        const outras = [...(s.equivalentes || []), ...(s.outras || [])];
+        const desc = escapeHtml(s.mascara.descricao);
+        return `<div class="de-masc">
+            <div class="de-masc__linha"><span class="de-masc__nivel ${classe}">${rotulo}</span><strong title="${desc}">${escapeHtml(s.mascara.codigo)}</strong><span class="de-masc__desc" title="${desc}">${desc}</span></div>
+            <div class="de-masc__motivo">${escapeHtml(s.motivo)}</div>
+            ${outras.length ? `<div class="de-masc__outras">Outras: ${outras.map((m) => `<span title="${escapeHtml(m.descricao)}">${escapeHtml(m.codigo)}</span>`).join(' · ')}</div>` : ''}
+        </div>`;
+    }
+
+    async function carregarMascaras(dados) {
+        const params = new URLSearchParams();
+        ['documento_ref', 'chave_acesso', 'cnpj_emitente', 'fornecedor'].forEach((campo) => { if (dados[campo]) params.set(campo, dados[campo]); });
+        let r = null;
+        try {
+            const resp = await fetch(`/api/detalhes_nf/${encodeURIComponent(dados.numero)}/mascaras?${params.toString()}`);
+            r = resp.ok ? await resp.json() : null;
+        } catch (e) { r = null; }
+        // Trocou de nota enquanto buscava.
+        if (detalhesSelecionados !== dados) return;
+        const celulas = document.querySelectorAll('#detail-body [data-mascara-item]');
+        if (!r || !r.disponivel) {
+            const aviso = document.getElementById('de-masc-aviso');
+            if (aviso) {
+                aviso.textContent = MASCARA_AVISO[r?.motivo] || 'Sugestão de máscara indisponível: GRV fora do ar.';
+                aviso.hidden = false;
+            }
+            celulas.forEach((td) => { td.innerHTML = '<span class="de-masc__vazio">---</span>'; });
+            return;
+        }
+        celulas.forEach((td) => { td.innerHTML = htmlMascara((r.itens || {})[td.dataset.mascaraItem]); });
     }
 
     function fecharModalLancamento() { document.getElementById('modal-lancamento').style.display = 'none'; }
