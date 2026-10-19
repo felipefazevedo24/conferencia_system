@@ -366,6 +366,15 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
     if ordem is None:
         ordem = ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
+    if ordem is None:
+        # Ordem faturada em mais de uma nota ("12064, 12065").
+        for modelo in (ExpedicaoOrdemFat, ExpedicaoOrdemST):
+            for candidata in modelo.query.filter(modelo.numero_nf.like(f"%{numero_nf}%")).all():
+                if numero_nf in fat_svc._nfs_da_string(candidata.numero_nf):
+                    ordem = candidata
+                    break
+            if ordem is not None:
+                break
 
     def _nfs_do_registro(reg) -> list:
         bruto = str(getattr(reg, "numero_nf", "") or "").replace(";", ",").replace("/", ",")
@@ -385,9 +394,18 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     #    unica NF. Registros compartilhados por varias NFs do mesmo orcamento
     #    (conf. cega faturada em varias notas) NAO sao reaproveitados: cada NF
     #    precisa do seu proprio Registro de Expedicao.
+    #    Rascunho SEM NF tambem serve: as fotos podem ser tiradas antes da
+    #    nota sair. Sem isso o romaneio criava outro registro e o rascunho,
+    #    com as fotos, ficava "Pendente de expedicao" pra sempre (107 casos
+    #    em producao em 19/10/2026).
     if registro is None and ordem is not None and ordem.expedicao_registro_id:
         candidato = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
-        if candidato is not None and _nfs_do_registro(candidato) == [numero_nf]:
+        nfs_candidato = _nfs_do_registro(candidato) if candidato is not None else None
+        rascunho_sem_nf = (
+            candidato is not None and not nfs_candidato
+            and candidato.status in ("Pendente de expedição", "Pendente de expedicao")
+        )
+        if candidato is not None and (nfs_candidato == [numero_nf] or rascunho_sem_nf):
             registro = candidato
 
     numero_os = str(getattr(nf, "numeros_os", "") or "").strip() or None
@@ -424,6 +442,8 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
         db.session.add(registro)
     else:
         registro.origem = "Romaneio"
+        if not str(registro.numero_nf or "").strip():
+            registro.numero_nf = numero_nf
         if not registro.numero_os and numero_os:
             registro.numero_os = numero_os
         if ordem_compra and not registro.ordem_compra:

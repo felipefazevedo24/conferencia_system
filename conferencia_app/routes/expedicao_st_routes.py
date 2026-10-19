@@ -159,6 +159,9 @@ def _obter_ou_criar_registro_rascunho(ordem: ExpedicaoOrdemST, usuario):
             .order_by(ExpedicaoConferenciaSimples.id.desc())
             .first()
         )
+    if registro is not None and not str(registro.numero_nf or "").strip() and ordem.numero_nf:
+        # Rascunho criado antes da nota sair: assume a NF assim que ela existe.
+        registro.numero_nf = ordem.numero_nf
     if registro is None:
         registro = ExpedicaoConferenciaSimples(
             orcamento="",
