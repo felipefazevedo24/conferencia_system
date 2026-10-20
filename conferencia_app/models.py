@@ -4882,3 +4882,109 @@ class RhCandidatoAcesso(db.Model):
     acao = db.Column(db.String(20), nullable=False)  # baixou / excluiu
     usuario = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class InventarioGeral(db.Model):
+    """Inventario geral (Logistica > Inventario) - conta todos os itens com
+    saldo no deposito principal de uma vez, com o estoque parado.
+
+    A 1a contagem e' o saldo do CPS lido pela API na abertura (estatico); a
+    2a e a 3a sao cegas e de pessoas diferentes. Duas contagens iguais
+    encerram o item (ver services/inventario_geral_service). Sem fluxo de
+    gestor/Finance: no fim o resultado vai pro CPS pela API (/simular e
+    /aplicar) e o retorno fica registrado em InventarioGeralEnvio."""
+
+    __tablename__ = "inventario_geral"
+
+    STATUS_ABERTO = "Em contagem"
+    STATUS_FINALIZADO = "Finalizado"
+    STATUS_ENVIADO = "Enviado ao ERP"
+
+    id = db.Column(db.Integer, primary_key=True)
+    descricao = db.Column(db.String(160))
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ABERTO, index=True)
+    aberto_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    aberto_por = db.Column(db.String(100))
+    finalizado_em = db.Column(db.DateTime)
+    finalizado_por = db.Column(db.String(100))
+
+    itens = db.relationship("InventarioGeralItem", backref="inventario", cascade="all, delete-orphan",
+                            order_by="InventarioGeralItem.id")
+    envios = db.relationship("InventarioGeralEnvio", backref="inventario", cascade="all, delete-orphan",
+                             order_by="InventarioGeralEnvio.id")
+
+
+class InventarioGeralItem(db.Model):
+    """Uma linha a contar: produto (sem lote) ou produto + lote. A 1a contagem
+    (qtde_sistema) e' o retrato da API na abertura; achado no fisico sem
+    saldo entra com qtde_sistema = 0 (adicionado_manual)."""
+
+    __tablename__ = "inventario_geral_item"
+
+    STATUS_PENDENTE = "Pendente"                 # falta a 2a contagem
+    STATUS_AGUARDA_3A = "Aguardando 3ª"          # 2a nao bateu com o sistema
+    STATUS_CONFERE = "Confere com o sistema"     # 2a ou 3a = 1a
+    STATUS_DIVERGENCIA = "Divergência confirmada"  # 3a = 2a (!= 1a)
+    STATUS_SEM_CORRESPONDENCIA = "Sem correspondência"  # nenhuma bateu
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    cod_produto = db.Column(db.Integer, nullable=False, index=True)
+    codigo_interno = db.Column(db.String(60), index=True)
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    tipo_controle = db.Column(db.Integer, nullable=False, default=0)
+    lote = db.Column(db.String(120))
+    qtde_sistema = db.Column(db.Float, nullable=False, default=0)  # 1a contagem
+    adicionado_manual = db.Column(db.Boolean, nullable=False, default=False)
+    adicionado_por = db.Column(db.String(100))
+
+    contagem2 = db.Column(db.Float)
+    contagem2_por = db.Column(db.String(100))
+    contagem2_em = db.Column(db.DateTime)
+    contagem3 = db.Column(db.Float)
+    contagem3_por = db.Column(db.String(100))
+    contagem3_em = db.Column(db.DateTime)
+    recontagens = db.Column(db.Integer, nullable=False, default=0)
+
+    status = db.Column(db.String(30), nullable=False, default=STATUS_PENDENTE, index=True)
+    qtde_final = db.Column(db.Float)
+
+
+class InventarioGeralProduto(db.Model):
+    """Retrato da API de TODOS os produtos elegiveis na abertura (inclusive
+    sem saldo): serve pra achar o item encontrado no fisico sem saldo e
+    guarda a versao/saldo que o /aplicar exige."""
+
+    __tablename__ = "inventario_geral_produto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    cod_produto = db.Column(db.Integer, nullable=False, index=True)
+    codigo_interno = db.Column(db.String(60), index=True)
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    tipo_controle = db.Column(db.Integer, nullable=False, default=0)
+    qtde_total = db.Column(db.Float, nullable=False, default=0)
+    versao = db.Column(db.String(80))
+
+    __table_args__ = (db.UniqueConstraint("inventario_id", "cod_produto", name="uq_inv_geral_produto"),)
+
+
+class InventarioGeralEnvio(db.Model):
+    """Cada chamada de /simular ou /aplicar no CPS: payload enviado e retorno.
+    O payload fica gravado ANTES do /aplicar - se der timeout, reenvia o
+    mesmo JSON com a mesma referencia (regra da API, nao duplica)."""
+
+    __tablename__ = "inventario_geral_envio"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(10), nullable=False)  # simular | aplicar
+    referencia = db.Column(db.String(80), nullable=False, index=True)
+    payload = db.Column(db.Text, nullable=False)
+    resposta = db.Column(db.Text)
+    http_status = db.Column(db.Integer)
+    status = db.Column(db.String(30))  # SIMULADO_SEM_GRAVAR | APLICADO | ERRO
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    enviado_por = db.Column(db.String(100))
