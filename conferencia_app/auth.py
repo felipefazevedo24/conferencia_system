@@ -92,6 +92,8 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
     "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
     "PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA": "Logística > Inventário > Análise de Causa Raiz (ver a fila e registrar a análise)",
+    "PAGE_INVENTARIO_GERAL_CONTAGEM": "Logística > Inventário geral > Contar (2ª e 3ª contagem, cega)",
+    "PAGE_INVENTARIO_GERAL_GESTAO": "Logística > Inventário geral > Gestão (abrir, resultado, recontagem e envio ao ERP)",
     "PAGE_LOGISTICA_CARDEX": "Logística > Inventário > Cardex (movimento valorizado, Modelo 7)",
     "PAGE_LOGISTICA_CARDEX_FECHAR": "Logística > Inventário > Cardex > Fechar e reabrir mês",
     "PAGE_LOGISTICA_CONSUMO_CHAPA": "Logística > Intralog > Consumo de Chapa (Nesting)",
@@ -147,6 +149,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_INVENTARIO",
         "PAGE_PRODUCAO",
         "PAGE_CADASTRO_WORKFLOW",
+        "PAGE_INVENTARIO_GERAL_CONTAGEM",
     },
     "Comex": {
         "PAGE_COMEX",

@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Logística | Inventário geral{% endblock %}
+{% block shell_title %}Logística — Inventário geral{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ig-wrap { display: grid; gap: 16px; }
+    .ig-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
+    .ig-tab { border: 0; background: transparent; padding: 10px 14px; font-weight: 700; font-size: 13px; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+    .ig-tab.is-active { color: var(--eui-primary, #2563eb); border-bottom-color: var(--eui-primary, #2563eb); }
+    .ig-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ig-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--eui-muted); padding: 7px 8px; border-bottom: 1px solid var(--eui-border, #e5e7eb); position: sticky; top: 0; background: #fff; }
+    .ig-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .ig-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ig-scroll { max-height: 62vh; overflow: auto; }
+    .ig-cod { font-weight: 800; white-space: nowrap; }
+    .ig-lote { display: inline-block; font-size: 11px; font-weight: 700; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 1px 7px; }
+    .ig-etapa { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .ig-etapa.e2 { background: #e0f2fe; color: #075985; }
+    .ig-etapa.e3 { background: #fef3c7; color: #92400e; }
+    .ig-st { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .ig-st.pendente { background: #f1f5f9; color: #475569; }
+    .ig-st.aguarda { background: #fef3c7; color: #92400e; }
+    .ig-st.confere { background: #dcfce7; color: #166534; }
+    .ig-st.diverg { background: #e0e7ff; color: #3730a3; }
+    .ig-st.sem { background: #fee2e2; color: #991b1b; }
+    .ig-qtd { width: 110px; font-size: 13px; font-family: inherit; border: 1px solid var(--eui-border, #d1d5db); border-radius: 6px; padding: 6px 8px; text-align: right; }
+    .ig-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .ig-toolbar input[type=search] { flex: 1; min-width: 220px; max-width: 420px; }
+    .ig-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; }
+    .ig-toast { position: fixed; top: 20px; right: 20px; z-index: 11010; background: #fff; border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: 10px; box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; max-width: 420px; display: none; }
+    .ig-toast.error { border-left-color: var(--eui-danger, #dc2626); }
+    .ig-toast.success { border-left-color: var(--eui-success, #16a34a); }
+    .ig-retorno { white-space: pre-wrap; font-family: monospace; font-size: 11px; background: #f8fafc; border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; padding: 8px; max-height: 240px; overflow: auto; }
+    .ig-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 11005; display: none; align-items: center; justify-content: center; }
+    .ig-modal.open { display: flex; }
+    .ig-modal-box { background: #fff; border-radius: 12px; padding: 18px; width: min(560px, 94vw); display: grid; gap: 10px; }
+    .ig-sugestoes { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; max-height: 240px; overflow: auto; }
+    .ig-sugestoes button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #f1f5f9; background: #fff; padding: 8px 10px; font-size: 12.5px; cursor: pointer; }
+    .ig-sugestoes button:hover, .ig-sugestoes button.sel { background: #eff6ff; }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ig-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-warehouse"></i> Inventário geral</h1>
+            <p class="eui-page-header__sub" id="ig-sub">1ª contagem = saldo do ERP na abertura · 2ª e 3ª contagens cegas, por pessoas diferentes · duas iguais encerram o item.</p>
+        </div>
+        <div class="eui-page-header__actions" id="ig-acoes-topo"></div>
+    </header>
+
+    <div id="ig-avisos"></div>
+
+    <div class="ig-tabs" id="ig-tabs">
+        <button type="button" class="ig-tab" data-tab="contar">Contar</button>
+        <button type="button" class="ig-tab" data-tab="resultado">Resultado</button>
+    </div>
+
+    <!-- Operador: visao cega -->
+    <section id="ig-contar" class="eui-card hidden"><div class="eui-card__body">
+        <div class="ig-toolbar">
+            <input type="search" class="eui-input" id="ig-busca-contar" placeholder="Buscar por código, descrição ou lote…">
+            <button type="button" class="eui-btn eui-btn--subtle" id="ig-btn-adicionar"><i class="fas fa-plus"></i> Item encontrado sem saldo</button>
+            <span style="margin-left:auto;font-size:12px;color:var(--eui-muted);" id="ig-contar-info"></span>
+        </div>
+        <div class="ig-scroll"><table class="ig-table">
+            <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Un.</th><th>Etapa</th><th style="text-align:right;">Quantidade contada</th></tr></thead>
+            <tbody id="ig-contar-tbody"></tbody>
+        </table></div>
+    </div></section>
+
+    <!-- Gestao: resultado completo -->
+    <section id="ig-resultado" class="hidden">
+        <div class="eui-stats" id="ig-metricas"></div>
+        <div class="eui-card"><div class="eui-card__body">
+            <div class="ig-toolbar">
+                <input type="search" class="eui-input" id="ig-busca-res" placeholder="Buscar por código, descrição ou lote…">
+                <select class="eui-input" id="ig-filtro-status" style="max-width:220px;">
+                    <option value="">Todos os status</option>
+                    <option>Pendente</option><option>Aguardando 3ª</option><option>Confere com o sistema</option>
+                    <option>Divergência confirmada</option><option>Sem correspondência</option>
+                </select>
+                <span style="margin-left:auto;font-size:12px;color:var(--eui-muted);" id="ig-res-info"></span>
+            </div>
+            <div class="ig-scroll"><table class="ig-table">
+                <thead><tr><th>Código</th><th>Descrição</th><th>Lote</th><th>Un.</th><th style="text-align:right;">1ª (sistema)</th><th style="text-align:right;">2ª</th><th style="text-align:right;">3ª</th><th>Status</th><th style="text-align:right;">Final</th><th style="text-align:right;">Diferença</th><th></th></tr></thead>
+                <tbody id="ig-res-tbody"></tbody>
+            </table></div>
+        </div></div>
+        <div class="eui-card" id="ig-envios-card"><div class="eui-card__body" id="ig-envios"></div></div>
+    </section>
+</div>
+
+<div class="ig-modal" id="ig-modal-add"><div class="ig-modal-box">
+    <h3 style="margin:0;font-size:16px;"><i class="fas fa-plus"></i> Item encontrado no físico sem saldo</h3>
+    <p style="margin:0;font-size:12.5px;color:var(--eui-muted);">O item entra no inventário com a 1ª contagem (sistema) = 0 e segue a mesma regra das contagens.</p>
+    <input type="search" class="eui-input" id="ig-add-busca" placeholder="Código ou descrição do produto…" autocomplete="off">
+    <div class="ig-sugestoes" id="ig-add-sugestoes"></div>
+    <input class="eui-input hidden" id="ig-add-lote" placeholder="Lote encontrado (obrigatório para item controlado por lote)">
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="eui-btn eui-btn--ghost" id="ig-add-cancelar">Cancelar</button>
+        <button type="button" class="eui-btn eui-btn--primary" id="ig-add-confirmar" disabled>Adicionar</button>
+    </div>
+</div></div>
+
+<div class="ig-toast" id="ig-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PODE_GESTAO = {{ pode_gestao | tojson }};
+    const PODE_CONTAR = {{ pode_contar | tojson }};
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const num = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 }));
+    const SLUG = { "Pendente": "pendente", "Aguardando 3ª": "aguarda", "Confere com o sistema": "confere", "Divergência confirmada": "diverg", "Sem correspondência": "sem" };
+
+    let estado = null, aba = PODE_CONTAR ? "contar" : "resultado";
+
+    function toast(msg, tipo) {
+        const t = $("ig-toast");
+        t.textContent = msg; t.className = "ig-toast" + (tipo ? " " + tipo : ""); t.style.display = "block";
+        clearTimeout(t._t); t._t = setTimeout(() => { t.style.display = "none"; }, 5500);
+    }
+    async function api(url, opts) {
+        const r = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ("Erro " + r.status));
+        return d;
+    }
+    const casa = (i, termo) => !termo || [i.codigo_interno, i.descricao, i.lote].some((v) => String(v || "").toLowerCase().includes(termo));
+
+    async function carregar() {
+        try { estado = await api("/api/inventario-geral"); desenhar(); }
+        catch (e) { toast(e.message, "error"); }
+    }
+
+    function desenhar() {
+        const inv = estado.inventario;
+        $("ig-avisos").innerHTML = "";
+        $("ig-acoes-topo").innerHTML = "";
+        $("ig-tabs").classList.toggle("hidden", !(PODE_CONTAR && PODE_GESTAO) || !inv);
+        document.querySelectorAll(".ig-tab").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === aba));
+        if (!inv) {
+            $("ig-contar").classList.add("hidden"); $("ig-resultado").classList.add("hidden");
+            let h = '<div class="ig-aviso"><i class="fas fa-circle-info"></i> Nenhum inventário geral em andamento.';
+            if (PODE_GESTAO) h += estado.api_configurada ? " Abra um para carregar os itens com saldo do ERP." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
+            $("ig-avisos").innerHTML = h + "</div>";
+            if (PODE_GESTAO && estado.api_configurada) $("ig-acoes-topo").innerHTML = '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-play"></i> Abrir inventário geral</button>';
+            return;
+        }
+        $("ig-sub").textContent = `#${inv.id}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
+        if (inv.status !== "Em contagem") {
+            $("ig-avisos").innerHTML = `<div class="ig-aviso"><i class="fas fa-lock"></i> Inventário <b>${esc(inv.status)}</b> por ${esc(inv.finalizado_por || "—")} em ${esc(inv.finalizado_em || "—")} — não aceita mais contagem.</div>`;
+        }
+        $("ig-contar").classList.toggle("hidden", aba !== "contar" || !PODE_CONTAR);
+        $("ig-resultado").classList.toggle("hidden", aba !== "resultado" || !PODE_GESTAO);
+        if (aba === "contar" && PODE_CONTAR) desenharContar();
+        if (aba === "resultado" && PODE_GESTAO) desenharResultado();
+    }
+
+    // ── Contar (cego) ───────────────────────────────────────────────────
+    function linhasContar() {
+        // Gestor tambem conta: tira dos itens o que denunciaria o saldo.
+        const termo = ($("ig-busca-contar").value || "").trim().toLowerCase();
+        const itens = estado.gestao
+            ? estado.itens.filter((i) => ["Pendente", "Aguardando 3ª"].includes(i.status)).map((i) => ({
+                id: i.id, codigo_interno: i.codigo_interno, descricao: i.descricao, unidade: i.unidade, lote: i.lote,
+                etapa: i.status === "Pendente" ? "2ª contagem" : "3ª contagem",
+                pode_contar: !(i.status === "Aguardando 3ª" && (i.contagem2_por || "").toUpperCase() === "{{ (user or '')|upper }}") }))
+            : estado.itens;
+        return itens.filter((i) => casa(i, termo));
+    }
+    function desenharContar() {
+        const aberto = estado.inventario.status === "Em contagem";
+        const itens = linhasContar();
+        $("ig-contar-info").textContent = `${itens.length} item(ns) para contar`;
+        $("ig-btn-adicionar").classList.toggle("hidden", !aberto);
+        $("ig-contar-tbody").innerHTML = itens.slice(0, 400).map((i) => `<tr>
+            <td class="ig-cod">${esc(i.codigo_interno)}</td><td>${esc(i.descricao)}</td>
+            <td>${i.lote ? `<span class="ig-lote">${esc(i.lote)}</span>` : "—"}</td><td>${esc(i.unidade)}</td>
+            <td><span class="ig-etapa ${i.etapa.startsWith("2") ? "e2" : "e3"}">${esc(i.etapa)}</span></td>
+            <td class="num">${!aberto ? "" : i.pode_contar
+                ? `<input class="ig-qtd" inputmode="decimal" data-qtd="${i.id}" placeholder="0"> <button class="eui-btn eui-btn--primary eui-btn--sm" data-contar="${i.id}">Registrar</button>`
+                : '<span style="font-size:11.5px;color:var(--eui-muted);">3ª contagem: outra pessoa</span>'}</td></tr>`).join("")
+            || '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--eui-muted);">Nada pendente de contagem.</td></tr>';
+        if (itens.length > 400) $("ig-contar-tbody").insertAdjacentHTML("beforeend", '<tr><td colspan="6" style="padding:10px;text-align:center;color:var(--eui-muted);">Mostrando 400 — use a busca para achar o item.</td></tr>');
+    }
+    async function contar(id) {
+        const inp = document.querySelector(`[data-qtd="${id}"]`);
+        if (!inp || !inp.value.trim()) { toast("Informe a quantidade contada.", "error"); return; }
+        try {
+            const r = await api(`/api/inventario-geral/itens/${id}/contagem`, { method: "POST", body: JSON.stringify({ quantidade: inp.value }) });
+            toast(r.message, "success");
+            await carregar();
+            const busca = $("ig-busca-contar"); if (busca.value) busca.focus();
+        } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ── Resultado (gestao) ──────────────────────────────────────────────
+    function desenharResultado() {
+        const inv = estado.inventario, r = estado.resumo || {};
+        const aberto = inv.status === "Em contagem";
+        const stat = (rot, v, cls) => `<div class="eui-stat"><div class="eui-stat__body"><span class="eui-stat__label">${rot}</span><span class="eui-stat__value ${cls || ""}">${v || 0}</span></div></div>`;
+        $("ig-metricas").innerHTML = stat("Linhas", r.total) + stat("Pendente (2ª)", r["Pendente"]) + stat("Aguardando 3ª", r["Aguardando 3ª"])
+            + stat("Confere c/ sistema", r["Confere com o sistema"]) + stat("Divergência confirmada", r["Divergência confirmada"]) + stat("Sem correspondência", r["Sem correspondência"]);
+        let botoes = `<a class="eui-btn eui-btn--subtle" href="/api/inventario-geral/exportar"><i class="fas fa-file-excel"></i> Excel</a>`;
+        if (aberto) botoes += `<button class="eui-btn eui-btn--success" id="ig-btn-finalizar" ${r.abertos ? "disabled title='Ainda há itens com contagem em aberto'" : ""}><i class="fas fa-flag-checkered"></i> Finalizar</button>`;
+        if (inv.status === "Finalizado") {
+            botoes += `<button class="eui-btn eui-btn--primary" id="ig-btn-simular"><i class="fas fa-vial"></i> Enviar ao ERP — simular</button>`;
+            botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${estado.gravacao_configurada ? "" : "disabled title='Chave de gravação não configurada'"}><i class="fas fa-cloud-arrow-up"></i> Aplicar no ERP</button>`;
+        }
+        $("ig-acoes-topo").innerHTML = botoes;
+
+        const termo = ($("ig-busca-res").value || "").trim().toLowerCase();
+        const st = $("ig-filtro-status").value;
+        const itens = estado.itens.filter((i) => casa(i, termo) && (!st || i.status === st));
+        $("ig-res-info").textContent = `${itens.length} de ${estado.itens.length} linha(s)`;
+        $("ig-res-tbody").innerHTML = itens.slice(0, 600).map((i) => {
+            const dif = i.qtde_final == null ? null : i.qtde_final - i.qtde_sistema;
+            return `<tr>
+                <td class="ig-cod">${esc(i.codigo_interno)}${i.adicionado_manual ? ' <i class="fas fa-plus-circle" title="Encontrado no físico sem saldo"></i>' : ""}</td>
+                <td>${esc(i.descricao)}</td><td>${i.lote ? `<span class="ig-lote">${esc(i.lote)}</span>` : "—"}</td><td>${esc(i.unidade)}</td>
+                <td class="num">${num(i.qtde_sistema)}</td>
+                <td class="num" title="${esc(i.contagem2_por || "")}">${num(i.contagem2)}</td>
+                <td class="num" title="${esc(i.contagem3_por || "")}">${num(i.contagem3)}</td>
+                <td><span class="ig-st ${SLUG[i.status] || ""}">${esc(i.status)}</span>${i.recontagens ? ` <small title="recontagens">↻${i.recontagens}</small>` : ""}</td>
+                <td class="num"><b>${num(i.qtde_final)}</b></td>
+                <td class="num" style="color:${dif ? (dif > 0 ? "#166534" : "#991b1b") : "inherit"};">${dif == null ? "—" : (dif > 0 ? "+" : "") + num(dif)}</td>
+                <td>${aberto && i.status === "Sem correspondência" ? `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-recontar="${i.id}">Limpar e recontar</button>` : ""}</td></tr>`;
+        }).join("") || '<tr><td colspan="11" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhuma linha.</td></tr>';
+
+        const envios = estado.envios || [];
+        $("ig-envios-card").classList.toggle("hidden", !envios.length);
+        $("ig-envios").innerHTML = `<h3 style="margin:0 0 8px;font-size:14px;"><i class="fas fa-right-left"></i> Envio / retorno do ERP</h3>` + envios.slice().reverse().map((e) => `
+            <details style="margin-bottom:6px;"><summary style="cursor:pointer;font-size:12.5px;"><b>${esc(e.tipo === "aplicar" ? "Aplicar" : "Simular")}</b> · ${esc(e.referencia)} · <b>${esc(e.status || "")}</b> (HTTP ${esc(e.http || "—")}) · ${esc(e.enviado_por || "")} em ${esc(e.enviado_em || "")}</summary>
+            <div class="ig-retorno">${esc(e.resposta || "")}</div></details>`).join("");
+    }
+
+    async function acaoTopo(id) {
+        try {
+            if (id === "ig-btn-abrir") {
+                const desc = prompt("Descrição do inventário geral (opcional):", "");
+                if (desc === null) return;
+                toast("Lendo o saldo do ERP… (pode levar alguns segundos)", "");
+                const r = await api("/api/inventario-geral/abrir", { method: "POST", body: JSON.stringify({ descricao: desc }) });
+                toast(r.message, "success");
+            } else if (id === "ig-btn-finalizar") {
+                if (!confirm("Finalizar o inventário? Depois disso não aceita mais contagem.")) return;
+                toast((await api("/api/inventario-geral/finalizar", { method: "POST" })).message, "success");
+            } else if (id === "ig-btn-simular") {
+                toast("Relendo o ERP e simulando… (nada é gravado)", "");
+                const r = await api("/api/inventario-geral/simular", { method: "POST" });
+                const recus = (r.recusados_pelo_sync || []).length;
+                toast(`${r.message}${recus ? ` ${recus} produto(s) não enviados (saldo mudou/inativo) — veja o retorno.` : ""}`, recus ? "error" : "success");
+            } else if (id === "ig-btn-aplicar") {
+                if (!confirm("APLICAR no ERP? Isso grava as contagens no estoque do CPS. Use depois de conferir a simulação.")) return;
+                const r = await api("/api/inventario-geral/aplicar", { method: "POST" });
+                toast(r.message, r.concluido ? "success" : "error");
+            }
+            await carregar();
+        } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ── Item achado no fisico ───────────────────────────────────────────
+    let escolhido = null, buscaTimer = null;
+    function abrirAdicionar() {
+        escolhido = null;
+        $("ig-add-busca").value = ""; $("ig-add-lote").value = ""; $("ig-add-lote").classList.add("hidden");
+        $("ig-add-sugestoes").innerHTML = ""; $("ig-add-confirmar").disabled = true;
+        $("ig-modal-add").classList.add("open"); $("ig-add-busca").focus();
+    }
+    async function buscarProdutos() {
+        const q = $("ig-add-busca").value.trim();
+        if (q.length < 2) { $("ig-add-sugestoes").innerHTML = ""; return; }
+        const d = await api(`/api/inventario-geral/produtos?q=${encodeURIComponent(q)}`);
+        $("ig-add-sugestoes").innerHTML = d.produtos.map((p) => `<button type="button" data-prod='${esc(JSON.stringify(p))}'><b>${esc(p.codigo_interno)}</b> — ${esc(p.descricao)} <small>(${esc(p.unidade)}${p.com_lote ? " · lote" : ""})</small></button>`).join("")
+            || '<div style="padding:8px 10px;font-size:12.5px;color:var(--eui-muted);">Nenhum produto elegível encontrado.</div>';
+    }
+
+    // ── Eventos ─────────────────────────────────────────────────────────
+    document.addEventListener("click", (e) => {
+        const tab = e.target.closest(".ig-tab"); if (tab) { aba = tab.dataset.tab; desenhar(); return; }
+        const b = e.target.closest("[data-contar]"); if (b) { contar(b.dataset.contar); return; }
+        const rec = e.target.closest("[data-recontar]");
+        if (rec) {
+            if (!confirm("Limpar a 2ª e a 3ª contagem deste item e recontar?")) return;
+            api(`/api/inventario-geral/itens/${rec.dataset.recontar}/recontar`, { method: "POST" })
+                .then((r) => { toast(r.message, "success"); carregar(); }).catch((err) => toast(err.message, "error"));
+            return;
+        }
+        const topo = e.target.closest("#ig-acoes-topo button"); if (topo) { acaoTopo(topo.id); return; }
+        const prod = e.target.closest("[data-prod]");
+        if (prod) {
+            escolhido = JSON.parse(prod.dataset.prod);
+            $("ig-add-sugestoes").querySelectorAll("button").forEach((x) => x.classList.toggle("sel", x === prod));
+            $("ig-add-lote").classList.toggle("hidden", !escolhido.com_lote);
+            $("ig-add-confirmar").disabled = false;
+        }
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.matches("[data-qtd]")) contar(e.target.dataset.qtd);
+    });
+    $("ig-busca-contar").addEventListener("input", () => desenharContar());
+    $("ig-busca-res").addEventListener("input", () => desenharResultado());
+    $("ig-filtro-status").addEventListener("change", () => desenharResultado());
+    $("ig-btn-adicionar").addEventListener("click", abrirAdicionar);
+    $("ig-add-cancelar").addEventListener("click", () => $("ig-modal-add").classList.remove("open"));
+    $("ig-add-busca").addEventListener("input", () => { clearTimeout(buscaTimer); buscaTimer = setTimeout(() => buscarProdutos().catch((e) => toast(e.message, "error")), 300); });
+    $("ig-add-confirmar").addEventListener("click", async () => {
+        if (!escolhido) return;
+        try {
+            const r = await api("/api/inventario-geral/itens", { method: "POST", body: JSON.stringify({ cod_produto: escolhido.cod_produto, lote: $("ig-add-lote").value }) });
+            $("ig-modal-add").classList.remove("open"); toast(r.message, "success"); carregar();
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    carregar();
+})();
+</script>
+{% endblock %}
