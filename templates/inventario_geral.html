@@ -61,6 +61,7 @@
     <div class="ig-tabs" id="ig-tabs">
         <button type="button" class="ig-tab" data-tab="contar">Contar</button>
         <button type="button" class="ig-tab" data-tab="resultado">Resultado</button>
+        <button type="button" class="ig-tab" data-tab="gestao">Gestão</button>
     </div>
 
     <!-- Contar: leitura cega por local -->
@@ -110,6 +111,18 @@
         </div></div>
         <div class="eui-card" id="ig-envios-card"><div class="eui-card__body" id="ig-envios"></div></div>
     </section>
+
+    <!-- Gestao: inventarios encerrados e indicadores -->
+    <section id="ig-gestao" class="eui-card hidden"><div class="eui-card__body">
+        <div class="ig-scroll"><table class="ig-table">
+            <thead><tr><th>Número</th><th>Descrição</th><th>Aberto</th><th>Encerrado</th><th>ERP</th>
+                <th style="text-align:right;">Itens contados</th><th style="text-align:right;">Financeiro inicial</th>
+                <th style="text-align:right;">Financeiro final</th><th style="text-align:right;">Diferença</th>
+                <th style="text-align:right;">Acuracidade itens</th><th style="text-align:right;">Acuracidade financeira</th><th></th></tr></thead>
+            <tbody id="ig-gestao-tbody"></tbody>
+        </table></div>
+        <p style="margin:8px 0 0;font-size:11.5px;color:var(--eui-muted);">Base: linhas concluídas (confere ou divergência confirmada). Valor = quantidade × custo médio do ERP no encerramento. Acuracidade financeira = 1 − soma das diferenças em valor absoluto ÷ financeiro inicial (sobra não compensa falta).</p>
+    </div></section>
 </div>
 
 <div class="ig-toast" id="ig-toast"></div>
@@ -125,7 +138,9 @@
     const num = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 }));
     const SLUG = { "Pendente": "pendente", "Aguardando 3ª": "aguarda", "Confere com o sistema": "confere", "Divergência confirmada": "diverg", "Sem correspondência": "sem" };
 
-    let estado = null, contagem = null, aba = PODE_CONTAR ? "contar" : "resultado";
+    let estado = null, contagem = null, historico = null, aba = PODE_CONTAR ? "contar" : "resultado";
+    const brl = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+    const pct = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%");
     let produto = null;  // item lido, conferido no servidor
 
     function toast(msg, tipo) {
@@ -144,6 +159,7 @@
         try {
             estado = await api("/api/inventario-geral");
             if (PODE_CONTAR && estado.inventario) contagem = await api("/api/inventario-geral/contagem");
+            if (PODE_GESTAO) historico = (await api("/api/inventario-geral/historico")).inventarios;
             desenhar();
         } catch (e) { toast(e.message, "error"); }
     }
@@ -152,24 +168,49 @@
         const inv = estado.inventario;
         $("ig-avisos").innerHTML = "";
         $("ig-acoes-topo").innerHTML = "";
-        $("ig-tabs").classList.toggle("hidden", !(PODE_CONTAR && PODE_GESTAO) || !inv);
-        document.querySelectorAll(".ig-tab").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === aba));
+        const abas = { contar: PODE_CONTAR && !!inv, resultado: PODE_GESTAO && !!inv, gestao: PODE_GESTAO };
+        if (!abas[aba]) aba = Object.keys(abas).find((k) => abas[k]) || "contar";
+        document.querySelectorAll(".ig-tab").forEach((b) => {
+            b.classList.toggle("hidden", !abas[b.dataset.tab]);
+            b.classList.toggle("is-active", b.dataset.tab === aba);
+        });
+        $("ig-tabs").classList.toggle("hidden", Object.values(abas).filter(Boolean).length < 2);
+        $("ig-contar").classList.toggle("hidden", aba !== "contar" || !abas.contar);
+        $("ig-resultado").classList.toggle("hidden", aba !== "resultado" || !abas.resultado);
+        $("ig-gestao").classList.toggle("hidden", aba !== "gestao" || !abas.gestao);
         if (!inv) {
-            $("ig-contar").classList.add("hidden"); $("ig-resultado").classList.add("hidden");
             let h = '<div class="ig-aviso"><i class="fas fa-circle-info"></i> Nenhum inventário geral em andamento.';
             if (PODE_GESTAO) h += estado.api_configurada ? " Abra um para carregar os itens com saldo do ERP." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
             $("ig-avisos").innerHTML = h + "</div>";
             if (PODE_GESTAO && estado.api_configurada) $("ig-acoes-topo").innerHTML = '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-play"></i> Abrir inventário geral</button>';
-            return;
+        } else {
+            $("ig-sub").textContent = `${inv.numero}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
+            if (inv.status !== "Em contagem") {
+                $("ig-avisos").innerHTML = `<div class="ig-aviso"><i class="fas fa-lock"></i> Inventário <b>${esc(inv.status)}</b>${inv.finalizado_por ? ` por ${esc(inv.finalizado_por)} em ${esc(inv.finalizado_em || "—")}` : ""} — não aceita mais contagem.${PODE_GESTAO ? " Encerre o inventário para liberar a abertura de outro." : ""}</div>`;
+            }
         }
-        $("ig-sub").textContent = `#${inv.id}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
-        if (inv.status !== "Em contagem") {
-            $("ig-avisos").innerHTML = `<div class="ig-aviso"><i class="fas fa-lock"></i> Inventário <b>${esc(inv.status)}</b> por ${esc(inv.finalizado_por || "—")} em ${esc(inv.finalizado_em || "—")} — não aceita mais contagem.</div>`;
-        }
-        $("ig-contar").classList.toggle("hidden", aba !== "contar" || !PODE_CONTAR);
-        $("ig-resultado").classList.toggle("hidden", aba !== "resultado" || !PODE_GESTAO);
-        if (aba === "contar" && PODE_CONTAR) desenharContar();
-        if (aba === "resultado" && PODE_GESTAO) desenharResultado();
+        if (aba === "contar" && abas.contar) desenharContar();
+        if (aba === "resultado" && abas.resultado) desenharResultado();
+        if (aba === "gestao" && abas.gestao) desenharGestao();
+    }
+
+    // ── Gestao (inventarios encerrados) ─────────────────────────────────
+    function desenharGestao() {
+        $("ig-gestao-tbody").innerHTML = (historico || []).map((h) => {
+            const dif = h.financeiro_final == null ? null : h.financeiro_final - h.financeiro_inicial;
+            return `<tr>
+            <td class="ig-cod">${esc(h.numero)}</td><td>${esc(h.descricao || "—")}</td>
+            <td>${esc(h.aberto_em || "")}<br><small>${esc(h.aberto_por || "")}</small></td>
+            <td>${esc(h.encerrado_em || "—")}<br><small>${esc(h.encerrado_por || "")}</small></td>
+            <td>${h.enviado_ao_erp ? '<span class="ig-st confere">Enviado</span>' : '<span class="ig-st pendente">Não enviado</span>'}</td>
+            <td class="num" title="${h.linhas_total != null ? `${h.linhas_contadas} de ${h.linhas_total} linhas concluídas` : ""}"><b>${num(h.linhas_contadas)}</b>${h.linhas_total != null && h.linhas_total !== h.linhas_contadas ? ` <small>de ${num(h.linhas_total)}</small>` : ""}</td>
+            <td class="num">${brl(h.financeiro_inicial)}</td>
+            <td class="num">${brl(h.financeiro_final)}${h.linhas_sem_custo ? ` <i class="fas fa-triangle-exclamation" style="color:#b45309;" title="${h.linhas_sem_custo} linha(s) sem custo médio no ERP ficaram fora do financeiro"></i>` : ""}</td>
+            <td class="num" style="color:${dif ? (dif > 0 ? "#166534" : "#991b1b") : "inherit"};">${dif == null ? "—" : (dif > 0 ? "+" : "") + brl(dif)}</td>
+            <td class="num"><b>${pct(h.acuracidade_itens)}</b></td>
+            <td class="num"><b>${pct(h.acuracidade_financeira)}</b></td>
+            <td><a class="eui-btn eui-btn--subtle eui-btn--sm" href="/api/inventario-geral/exportar?id=${h.id}" title="Excel"><i class="fas fa-file-excel"></i></a></td></tr>`;
+        }).join("") || '<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhum inventário geral encerrado ainda.</td></tr>';
     }
 
     // ── Contar (cego, por local) ────────────────────────────────────────
@@ -265,6 +306,7 @@
             botoes += `<button class="eui-btn eui-btn--primary" id="ig-btn-simular"><i class="fas fa-vial"></i> Enviar ao ERP — simular</button>`;
             botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${estado.gravacao_configurada ? "" : "disabled title='Chave de gravação não configurada'"}><i class="fas fa-cloud-arrow-up"></i> Aplicar no ERP</button>`;
         }
+        botoes += `<button class="eui-btn eui-btn--ghost" id="ig-btn-encerrar-inv"><i class="fas fa-box-archive"></i> Encerrar inventário</button>`;
         $("ig-acoes-topo").innerHTML = botoes;
 
         const termo = ($("ig-busca-res").value || "").trim().toLowerCase();
@@ -315,6 +357,15 @@
                 const rodada = id.endsWith("2") ? 2 : 3;
                 if (!confirmarEncerrar(rodada)) return;
                 toast((await api(`/api/inventario-geral/encerrar/${rodada}`, { method: "POST" })).message, "success");
+            } else if (id === "ig-btn-encerrar-inv") {
+                const inv = estado.inventario, r = estado.resumo || {};
+                const avisos = [];
+                if (inv.status !== "Enviado ao ERP") avisos.push("O resultado NÃO foi aplicado no ERP — o inventário será encerrado sem enviar.");
+                if (r.abertos) avisos.push(`${r.abertos} linha(s) ainda sem contagem concluída ficam fora dos indicadores.`);
+                if (!confirm(`Encerrar o inventário ${inv.numero}?\n\n${avisos.join("\n")}${avisos.length ? "\n\n" : ""}O custo médio do ERP será lido agora para o financeiro. Depois de encerrar não dá para reabrir.`)) return;
+                toast("Lendo o custo médio no ERP e encerrando…", "");
+                toast((await api("/api/inventario-geral/encerrar-inventario", { method: "POST" })).message, "success");
+                aba = "gestao";
             } else if (id === "ig-btn-finalizar") {
                 if (!confirm("Finalizar o inventário? Depois disso não aceita mais contagem.")) return;
                 toast((await api("/api/inventario-geral/finalizar", { method: "POST" })).message, "success");

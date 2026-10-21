@@ -8,6 +8,7 @@ services/inventario_geral_service.py.
 """
 from __future__ import annotations
 
+import json
 from io import BytesIO
 
 from flask import Blueprint, jsonify, render_template, request, send_file, session
@@ -15,7 +16,7 @@ from openpyxl import Workbook
 
 from ..auth import has_permission, permission_required, permission_required_any
 from ..extensions import db
-from ..models import InventarioGeralItem as Item, InventarioGeralLeitura as Leitura
+from ..models import InventarioGeral, InventarioGeralItem as Item, InventarioGeralLeitura as Leitura
 from ..services import inventario_cps_client as cps
 from ..services import inventario_geral_service as svc
 
@@ -69,7 +70,7 @@ def api_estado():
     if not inv:
         return jsonify({"inventario": None, "api_configurada": cps.configurada(), "gestao": gestao})
     cab = {
-        "id": inv.id, "descricao": inv.descricao, "status": inv.status, "aberto_em": _dt(inv.aberto_em),
+        "id": inv.id, "numero": svc.numero(inv), "descricao": inv.descricao, "status": inv.status, "aberto_em": _dt(inv.aberto_em),
         "aberto_por": inv.aberto_por, "finalizado_em": _dt(inv.finalizado_em), "finalizado_por": inv.finalizado_por,
     }
     if gestao:
@@ -244,22 +245,67 @@ def api_aplicar():
     return jsonify({"message": mensagem, **resultado})
 
 
-@inventario_geral_bp.route("/api/inventario-geral/exportar", methods=["GET"])
+@inventario_geral_bp.route("/api/inventario-geral/encerrar-inventario", methods=["POST"])
 @permission_required(PERM_GESTAO)
-def api_exportar():
+def api_encerrar_inventario():
     inv = svc.inventario_ativo()
     if not inv:
         return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
+    try:
+        svc.encerrar(inv, _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Inventário {svc.numero(inv)} encerrado - veja os indicadores na aba Gestão."})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/historico", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_historico():
+    numeros = svc.numeros()
+    linhas = []
+    for inv in svc.historico():
+        r = inv.resultado
+        linhas.append({
+            "id": inv.id, "numero": numeros.get(inv.id), "descricao": inv.descricao,
+            "aberto_em": _dt(inv.aberto_em), "aberto_por": inv.aberto_por,
+            "encerrado_em": _dt(r.encerrado_em) if r else None, "encerrado_por": r.encerrado_por if r else None,
+            "enviado_ao_erp": bool(r and r.enviado_ao_erp),
+            "linhas_total": r.linhas_total if r else None, "linhas_contadas": r.linhas_contadas if r else None,
+            "linhas_conferem": r.linhas_conferem if r else None, "linhas_sem_custo": r.linhas_sem_custo if r else None,
+            "financeiro_inicial": r.financeiro_inicial if r else None, "financeiro_final": r.financeiro_final if r else None,
+            "diferenca_absoluta": r.diferenca_absoluta if r else None,
+            "acuracidade_itens": r.acuracidade_itens if r else None,
+            "acuracidade_financeira": r.acuracidade_financeira if r else None,
+        })
+    return jsonify({"inventarios": linhas})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/exportar", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_exportar():
+    """Sem ?id: o inventario em andamento. Com ?id: um encerrado (com o
+    financeiro calculado no encerramento)."""
+    inv = db.session.get(InventarioGeral, request.args.get("id", type=int)) if request.args.get("id") else svc.inventario_ativo()
+    if not inv:
+        return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
+    custos = json.loads(inv.resultado.custos or "{}") if inv.resultado else {}
     wb = Workbook()
     ws = wb.active
     ws.title = "Inventario geral"
     ws.append(["Código", "Descrição", "Unidade", "Lote", "1ª (sistema)", "2ª contagem", "2ª por",
-               "3ª contagem", "3ª por", "Status", "Qtde final", "Diferença", "Adicionado no físico", "Recontagens"])
+               "3ª contagem", "3ª por", "Status", "Qtde final", "Diferença", "Adicionado no físico", "Recontagens"]
+              + (["Custo médio", "Valor sistema", "Valor final", "Diferença (R$)"] if inv.resultado else []))
     for i in inv.itens:
         dif = (i.qtde_final - i.qtde_sistema) if i.qtde_final is not None else None
-        ws.append([i.codigo_interno, i.descricao, i.unidade, i.lote or "", i.qtde_sistema, i.contagem2, i.contagem2_por,
-                   i.contagem3, i.contagem3_por, i.status, i.qtde_final, dif, "Sim" if i.adicionado_manual else "",
-                   i.recontagens])
+        linha = [i.codigo_interno, i.descricao, i.unidade, i.lote or "", i.qtde_sistema, i.contagem2, i.contagem2_por,
+                 i.contagem3, i.contagem3_por, i.status, i.qtde_final, dif, "Sim" if i.adicionado_manual else "",
+                 i.recontagens]
+        if inv.resultado:
+            custo = custos.get((i.codigo_interno or "").upper())
+            valores = [None, None, None] if custo is None or i.qtde_final is None else [
+                round(i.qtde_sistema * custo, 2), round(i.qtde_final * custo, 2), round(dif * custo, 2)]
+            linha += [custo] + valores
+        ws.append(linha)
     ws = wb.create_sheet("Leituras por local")
     ws.append(["Código", "Descrição", "Lote", "Contagem", "Local", "Quantidade", "Lido por", "Lido em", "Recontagem"])
     for i in inv.itens:
@@ -269,5 +315,5 @@ def api_exportar():
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name=f"inventario_geral_{inv.id}.xlsx",
+    return send_file(buf, as_attachment=True, download_name=f"inventario_geral_{svc.numero(inv)}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

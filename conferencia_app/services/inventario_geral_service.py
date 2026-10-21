@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from ..extensions import db
 from ..models import (
@@ -30,6 +31,8 @@ from ..models import (
     InventarioGeralProduto as Produto,
 )
 from ..tempo import agora_br
+from ..models import InventarioGeralResultado as Resultado
+from . import erp_estoque_service as erp
 from . import inventario_cps_client as cps
 
 TOLERANCIA = 0.0005  # contagens com casas decimais (kg, m)
@@ -63,10 +66,25 @@ def com_lote(tipo_controle) -> bool:
 
 # ── Abertura ────────────────────────────────────────────────────────────
 def inventario_ativo() -> Inventario | None:
-    """O que ainda nao foi enviado ao ERP (so' um por vez - estoque parado)."""
+    """O que ainda nao foi encerrado (so' um por vez - estoque parado)."""
     return (Inventario.query
-            .filter(Inventario.status != Inventario.STATUS_ENVIADO)
+            .filter(Inventario.status != Inventario.STATUS_ENCERRADO)
             .order_by(Inventario.id.desc()).first())
+
+
+def numeros() -> dict[int, str]:
+    """IG-AAAA-NNNN pela ordem de abertura no ano. Calculado, nao gravado:
+    inventario geral nao se exclui, entao a sequencia nao muda."""
+    resultado, por_ano = {}, {}
+    for inv_id, aberto_em in db.session.query(Inventario.id, Inventario.aberto_em).order_by(Inventario.id):
+        ano = (aberto_em or datetime.now()).year
+        por_ano[ano] = por_ano.get(ano, 0) + 1
+        resultado[inv_id] = f"IG-{ano}-{por_ano[ano]:04d}"
+    return resultado
+
+
+def numero(inv: Inventario) -> str:
+    return numeros().get(inv.id, f"IG-{inv.id}")
 
 
 def abrir(usuario: str, descricao: str = "") -> Inventario:
@@ -380,3 +398,52 @@ def aplicar_envio(inv: Inventario, usuario: str) -> dict:
         inv.status = Inventario.STATUS_ENVIADO
     db.session.commit()
     return {"aplicacoes": resultados, "concluido": tudo_ok}
+
+
+# ── Encerramento e indicadores ─────────────────────────────────────────
+def _custos_erp() -> dict:
+    try:
+        return erp.buscar_estoque_grv(forcar_atualizacao=True)
+    except Exception as exc:  # bridge fora/sem config: nao encerra sem o financeiro
+        raise ValueError(f"Não consegui ler o custo médio no ERP para calcular o financeiro ({exc}). Tente de novo.")
+
+
+def encerrar(inv: Inventario, usuario: str) -> Resultado:
+    """Fecha o inventario em qualquer fase (inclusive sem enviar ao ERP -
+    inventario de teste). Congela custo e indicadores e libera abrir outro."""
+    if inv.status == Inventario.STATUS_ENCERRADO:
+        raise ValueError("Este inventário já está encerrado.")
+    estoque = _custos_erp()
+    concluidas = [i for i in inv.itens if i.status in (Item.STATUS_CONFERE, Item.STATUS_DIVERGENCIA)]
+    custos, inicial, final, dif_abs, sem_custo = {}, 0.0, 0.0, 0.0, 0
+    for item in concluidas:
+        codigo = (item.codigo_interno or "").upper()
+        if codigo not in custos:
+            custos[codigo] = erp.custo_medio_para(codigo, "", estoque)
+        custo = custos[codigo]
+        if custo is None:
+            sem_custo += 1
+            continue
+        inicial += item.qtde_sistema * custo
+        final += (item.qtde_final or 0) * custo
+        dif_abs += abs((item.qtde_final or 0) - item.qtde_sistema) * custo
+    conferem = sum(1 for i in concluidas if i.status == Item.STATUS_CONFERE)
+    resultado = Resultado(
+        inventario_id=inv.id, encerrado_em=agora_br(), encerrado_por=usuario,
+        enviado_ao_erp=inv.status == Inventario.STATUS_ENVIADO,
+        linhas_total=len(inv.itens), linhas_contadas=len(concluidas), linhas_conferem=conferem,
+        linhas_sem_custo=sem_custo, financeiro_inicial=round(inicial, 2), financeiro_final=round(final, 2),
+        diferenca_absoluta=round(dif_abs, 2),
+        acuracidade_itens=round(conferem / len(concluidas) * 100, 2) if concluidas else None,
+        acuracidade_financeira=round(max(0.0, 1 - dif_abs / inicial) * 100, 2) if inicial > TOLERANCIA else None,
+        custos=json.dumps(custos, ensure_ascii=False),
+    )
+    db.session.add(resultado)
+    inv.status = Inventario.STATUS_ENCERRADO
+    db.session.commit()
+    return resultado
+
+
+def historico() -> list[Inventario]:
+    return (Inventario.query.filter(Inventario.status == Inventario.STATUS_ENCERRADO)
+            .order_by(Inventario.id.desc()).all())

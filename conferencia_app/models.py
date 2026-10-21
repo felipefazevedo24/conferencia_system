@@ -4899,6 +4899,7 @@ class InventarioGeral(db.Model):
     STATUS_ABERTO = "Em contagem"
     STATUS_FINALIZADO = "Finalizado"
     STATUS_ENVIADO = "Enviado ao ERP"
+    STATUS_ENCERRADO = "Encerrado"  # ultimo passo - com ou sem envio ao ERP
 
     id = db.Column(db.Integer, primary_key=True)
     descricao = db.Column(db.String(160))
@@ -5010,3 +5011,31 @@ class InventarioGeralLeitura(db.Model):
 
     item = db.relationship("InventarioGeralItem",
                            backref=db.backref("leituras", cascade="all, delete-orphan", order_by="InventarioGeralLeitura.id"))
+
+
+class InventarioGeralResultado(db.Model):
+    """Indicadores congelados no encerramento do inventario geral (tela de
+    gestao). Base: linhas concluidas (confere / divergencia confirmada);
+    valor = quantidade x custo medio do ERP lido no encerramento. Tabela a
+    parte pra nao precisar de migration em inventario_geral."""
+
+    __tablename__ = "inventario_geral_resultado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, unique=True)
+    encerrado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    encerrado_por = db.Column(db.String(100))
+    enviado_ao_erp = db.Column(db.Boolean, nullable=False, default=False)
+    linhas_total = db.Column(db.Integer, nullable=False, default=0)
+    linhas_contadas = db.Column(db.Integer, nullable=False, default=0)  # concluidas
+    linhas_conferem = db.Column(db.Integer, nullable=False, default=0)
+    linhas_sem_custo = db.Column(db.Integer, nullable=False, default=0)
+    financeiro_inicial = db.Column(db.Float, nullable=False, default=0)
+    financeiro_final = db.Column(db.Float, nullable=False, default=0)
+    diferenca_absoluta = db.Column(db.Float, nullable=False, default=0)  # sobra e falta nao se compensam
+    acuracidade_itens = db.Column(db.Float)       # % - None sem linha concluida
+    acuracidade_financeira = db.Column(db.Float)  # % - None sem financeiro inicial
+    custos = db.Column(db.Text)  # JSON {codigo_interno: custo medio} usado no calculo
+
+    inventario = db.relationship("InventarioGeral",
+                                 backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
