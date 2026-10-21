@@ -4988,3 +4988,25 @@ class InventarioGeralEnvio(db.Model):
     status = db.Column(db.String(30))  # SIMULADO_SEM_GRAVAR | APLICADO | ERRO
     enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
+
+
+class InventarioGeralLeitura(db.Model):
+    """Uma leitura do operador: local + item (+ lote) + quantidade. A 2a e a
+    3a contagem do item sao a SOMA das leituras de todos os locais na rodada
+    (o ERP nao tem saldo por local - o local nasce aqui). Leitura de outra
+    recontagem fica guardada so' como historico dos locais."""
+
+    __tablename__ = "inventario_geral_leitura"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("inventario_geral_item.id"), nullable=False, index=True)
+    rodada = db.Column(db.Integer, nullable=False)  # 2 ou 3
+    recontagem = db.Column(db.Integer, nullable=False, default=0)  # item.recontagens na hora da leitura
+    local = db.Column(db.String(80), nullable=False, index=True)
+    quantidade = db.Column(db.Float, nullable=False)
+    lido_por = db.Column(db.String(100), nullable=False)
+    lido_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    item = db.relationship("InventarioGeralItem",
+                           backref=db.backref("leituras", cascade="all, delete-orphan", order_by="InventarioGeralLeitura.id"))
