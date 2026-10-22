@@ -88,6 +88,11 @@ ESTOQUE_VISOES = {
 # Visoes de material comprado e consumido: tem planejamento (minimo/lote) e OC.
 # Produto acabado fica de fora - e' fabricado, nao comprado.
 VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos"}
+# Gases da producao em N-41 (uso e consumo sem estoque): o GRV baixa na propria
+# entrada da NF e a compra e' feita conforme a producao pede. Aparecem nos
+# insumos so pra consulta - sem saldo, cobertura, curva ABC nem minimo
+# (decisao da logistica em 22/10/2026).
+INSUMOS_SEM_CONTROLE_ESTOQUE = {"28-12-00001", "28-12-00003", "28-12-00012"}
 
 
 def _normalizar_busca(texto: str | None) -> str:
@@ -356,12 +361,14 @@ def estoque_materia_prima_api():
     # planejamento e' relativa ao conjunto e nao pode mudar a cada busca.
     familia_itens = {}
     for codigo, item in (estoque.get("por_codigo") or {}).items():
-        if _normalizar_busca(item.get("familia")) != familia_alvo:
+        sem_controle = visao == "insumos" and codigo in INSUMOS_SEM_CONTROLE_ESTOQUE
+        if not sem_controle and _normalizar_busca(item.get("familia")) != familia_alvo:
             continue
-        familia_itens[re.sub(r"[^A-Z0-9]", "", codigo.upper())] = {
-            "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
-            "custo_medio": item.get("custo_medio"),
-        }
+        if not sem_controle:
+            familia_itens[re.sub(r"[^A-Z0-9]", "", codigo.upper())] = {
+                "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
+                "custo_medio": item.get("custo_medio"),
+            }
         saldo_total = float(item.get("qtde_total") or 0)
         saldo_disponivel = float(item.get("qtde_disponivel") or 0)
         saldo_reservado = float(item.get("qtde_reservada") or 0)
@@ -370,7 +377,7 @@ def estoque_materia_prima_api():
         haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
         if termo and termo not in haystack:
             continue
-        if not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
+        if not sem_controle and not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
             continue
         candidatos.append({
             "codigo": codigo,
@@ -384,6 +391,7 @@ def estoque_materia_prima_api():
             "estoque_minimo": estoque_minimo,
             "lote_economico": lote_economico,
             "localizacoes": sorted(set(str(x or "").strip() for x in item.get("localizacoes") or [] if str(x or "").strip())),
+            "sem_controle_estoque": sem_controle,
         })
 
     rows = candidatos
@@ -415,6 +423,9 @@ def estoque_materia_prima_api():
         # (0,1/dia) virava 1/dia e a cobertura ficava 10x menor que a real.
         consumo_diario = float(consumo_item.get("consumo_medio_diario") or 0)
         cobertura_dias, nivel, nivel_label = _nivel_cobertura(row["saldo_disponivel"], consumo_diario)
+        if row["sem_controle_estoque"]:
+            # Saldo sempre zero daria cobertura 0 e "critico" pra sempre.
+            cobertura_dias, nivel, nivel_label = None, "sem_controle", "Não controla estoque"
         reservas = reservas_por_codigo.get(codigo_key, [])
         row["consumo_diario"] = consumo_diario
         # Expostos pra tela mostrar de onde veio a media: 1 saida grande no mes
@@ -491,7 +502,7 @@ def estoque_materia_prima_api():
     if somente_estoque_minimo:
         rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
 
-    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5}
+    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "sem_controle": 6}
     rows.sort(key=lambda row: (
         0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
         prioridade_nivel.get(str(row.get("nivel") or ""), 9),

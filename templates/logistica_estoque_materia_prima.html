@@ -166,6 +166,7 @@
                     <option value="normal">Adequado</option>
                     <option value="esporadico">Demanda esporádica</option>
                     <option value="sem_consumo">Sem consumo</option>
+                    <option value="sem_controle">Não controla estoque</option>
                 </select>
                 <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo no GRV</label>
                 <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
@@ -318,10 +319,20 @@
 
     // ------------------------------------------------------------ lista
 
+    // Item que não controla estoque não tem planejamento: na coluna Consumo/mês
+    // usa a média dos 90 dias, senão mostraria o valor por dia.
+    const DIAS_POR_MES = 30.4;
+    function consumoNumero(item) {
+        if (item.planejamento) return Number(item.planejamento.consumo_mensal);
+        const diario = Number(item.consumo_diario || 0);
+        return item.sem_controle_estoque && planejamentoAtivo ? diario * DIAS_POR_MES : diario;
+    }
+
     function consumoTexto(item) {
         const p = item.planejamento;
         if (p) return p.tipo_demanda === 'sem_giro' ? '—' : fmt(p.consumo_mensal);
-        return item.consumo_diario ? fmt(item.consumo_diario, 3) : '—';
+        if (!item.consumo_diario) return '—';
+        return item.sem_controle_estoque && planejamentoAtivo ? fmt(consumoNumero(item)) : fmt(item.consumo_diario, 3);
     }
 
     function coberturaTexto(item) {
@@ -334,7 +345,7 @@
             const pct = Number(p.cobre_retirada_pct || 0);
             return pct < 100 ? `${fmt(pct, 0)}% ret.` : `${fmt(pct / 100, 1)} ret.`;
         }
-        if (!item.consumo_diario) return '—';
+        if (!item.consumo_diario || item.cobertura_dias == null) return '—';
         return `${item.cobertura_dias} d`;
     }
 
@@ -365,16 +376,19 @@
     // Filtro e ordenação no cabeçalho, como no Excel. `texto` é o valor que
     // aparece na célula e na lista do filtro; `num` é a chave de ordenação
     // (null = sem valor, vai pro fim nas duas direções).
-    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5 };
+    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5, sem_controle: 6 };
     const COLUNAS = {
         codigo: { texto: (i) => i.codigo || '-' },
         descricao: { texto: (i) => i.descricao || '-' },
         unidade: { texto: (i) => i.unidade || '' },
         curva: { texto: (i) => (i.planejamento && i.planejamento.classe_abc) || '—' },
-        disponivel: { texto: (i) => fmt(i.saldo_disponivel), num: (i) => Number(i.saldo_disponivel || 0) },
+        disponivel: {
+            texto: (i) => (i.sem_controle_estoque ? '—' : fmt(i.saldo_disponivel)),
+            num: (i) => (i.sem_controle_estoque ? null : Number(i.saldo_disponivel || 0)),
+        },
         consumo: {
             texto: consumoTexto,
-            num: (i) => (consumoTexto(i) === '—' ? null : Number(i.planejamento ? i.planejamento.consumo_mensal : i.consumo_diario)),
+            num: (i) => (consumoTexto(i) === '—' ? null : consumoNumero(i)),
         },
         cobertura: {
             texto: coberturaTexto,
@@ -519,7 +533,7 @@
             <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
             <td class="c-un">${esc(item.unidade || '')}</td>
             ${planejamentoAtivo ? `<td>${p ? `<span class="mp-curva ${esc(String(p.classe_abc || '').toLowerCase())}">${esc(p.classe_abc || '-')}</span>` : '—'}</td>` : ''}
-            <td class="num c-forte">${fmt(item.saldo_disponivel)}</td>
+            <td class="num c-forte">${COLUNAS.disponivel.texto(item)}</td>
             <td class="num">${consumoTexto(item)}</td>
             <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
             ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td>` : ''}
@@ -609,6 +623,16 @@
         const un = esc(item.unidade || '');
         const q = (v) => `${fmt(v)} ${un}`;
         const grv = (v) => Number(v || 0) > 0 ? q(v) : 'não cadastrado';
+        // No GRV a entrada da NF já baixa o item: o consumo é o que foi comprado.
+        if (item.sem_controle_estoque) {
+            const consumo = kv([
+                ['Status', esc(item.nivel_label || '')],
+                ['Consumo médio/mês', item.consumo_diario ? q(item.consumo_diario * DIAS_POR_MES) : '—'],
+                [`Comprado em ${janelaDias} dias`, `${q(item.saida_total_periodo)}<small>em ${item.dias_com_saida} dia(s)</small>`],
+                [`Maior compra em ${janelaDias} dias`, item.maior_saida ? `${q(item.maior_saida)}${item.maior_saida_data ? '<small>' + dataBr(item.maior_saida_data) + '</small>' : ''}` : '—'],
+            ]);
+            return `<div class="mp-secao"><p class="mp-secao__titulo">Consumo</p>${consumo}</div>${ocHtml(item)}`;
+        }
         const saldo = kv([
             ['Disponível', q(item.saldo_disponivel)],
             ['Reservado', q(item.saldo_reservado)],
