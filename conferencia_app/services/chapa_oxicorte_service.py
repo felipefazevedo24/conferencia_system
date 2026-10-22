@@ -33,6 +33,18 @@ FAMILIA_OXICORTE = "N - 42 - MATERIA-PRIMA - MATERIAL ESPECIFICO"
 # Quem aparece como autor da exclusão do Controle de Chapas.
 USUARIO_EXCLUSAO = "SYNC (oxicorte Aços Radial)"
 
+# Fornecedores que faturam em KG o que a gente confere em peça (21/10/2026).
+# Não é oxicorte, mas o tratamento é o mesmo: o conferente informa só as
+# peças (obrigatório), o KG vem da NF e o item não entra no Controle de
+# Chapas. Vale só para item em KG; None = qualquer CFOP.
+FORNECEDORES_PECA_EM_KG = {
+    "10205087000197": {"5124"},  # METALPAULISTA: só a industrialização
+    "43201912000134": None,  # FRIESE EQUIP. INDUSTRIAIS
+    "27841243000109": None,  # AÇOS NOBRE FERRO E METAIS
+    "60856820002660": None,  # BRASIMET
+}
+USUARIO_EXCLUSAO_PECA_EM_KG = "SYNC (fornecedor fatura em KG)"
+
 
 def _normalizar(texto: str | None) -> str:
     valor = unicodedata.normalize("NFKD", str(texto or "").strip().upper())
@@ -98,8 +110,24 @@ def identificar_oxicorte(itens: list[ItemNota]) -> set[int]:
     return {i.id for i in itens if familias[_codigo(i.codigo_grv)] == FAMILIA_OXICORTE}
 
 
-def excluir_do_controle_de_chapas(item: ItemNota) -> None:
+def identificar_pecas_em_kg(itens: Iterable[ItemNota]) -> set[int]:
+    """IDs dos itens em KG de fornecedor que fatura em KG o que a gente
+    confere em peça (ver FORNECEDORES_PECA_EM_KG)."""
+    ids = set()
+    for item in itens:
+        cnpj = re.sub(r"\D", "", str(item.cnpj_emitente or ""))
+        if cnpj not in FORNECEDORES_PECA_EM_KG:
+            continue
+        cfops = FORNECEDORES_PECA_EM_KG[cnpj]
+        if cfops is not None and re.sub(r"\D", "", str(item.cfop or ""))[:4] not in cfops:
+            continue
+        if str(item.unidade_comercial or "").strip().upper() == "KG":
+            ids.add(item.id)
+    return ids
+
+
+def excluir_do_controle_de_chapas(item: ItemNota, usuario: str = USUARIO_EXCLUSAO) -> None:
     """Oxicorte não entra no Controle de Chapas. Usa a mesma exclusão do
     Admin: o estorno da conferência já a apaga e o /validar a recria."""
     if not ChapaControleExclusao.query.filter_by(item_nota_id=item.id).first():
-        db.session.add(ChapaControleExclusao(item_nota_id=item.id, usuario=USUARIO_EXCLUSAO))
+        db.session.add(ChapaControleExclusao(item_nota_id=item.id, usuario=usuario))

@@ -1239,14 +1239,13 @@
                 <span>Este item é chapa — informar quantidade em UND</span>
             </label>
             <div id="chapa-modal-input-wrap" style="margin-top:16px; display:none;">
-                <label class="form-label" style="display:block; margin-bottom:6px;">Quantidade de chapas (UND)</label>
+                <label class="form-label" id="chapa-modal-input-label" style="display:block; margin-bottom:6px;">Quantidade de chapas (UND)</label>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <input type="number" id="chapa-modal-input" class="chapa-modal-num" min="0" step="1" placeholder="0" inputmode="numeric" oninput="document.getElementById('chapa-modal-msg').textContent=''; atualizarPreviewChapa();">
                     <span style="font-size:14px; font-weight:800; color:#64748b; letter-spacing:.04em;">UND</span>
                 </div>
-                <div style="font-size:11px; color:#64748b; margin-top:8px; line-height:1.5;">Você conta só as chapas: <b>o peso em KG é lido da própria NF</b>, não precisa pesar nem digitar. A quantidade em UND informada aqui é a que vai no e-mail de entrada de chapas.</div>
-                <div id="chapa-modal-oxicorte" class="chapa-calc-preview" style="display:none;">Chapa oxicorte da Aços Radial (identificada pelo pedido de compra): informe só a quantidade de peças. Não tem medidas e não entra no Controle de Chapas.</div>
-                <div id="chapa-modal-medidas-wrap">
+                <div id="chapa-modal-ajuda" style="font-size:11px; color:#64748b; margin-top:8px; line-height:1.5;">Você conta só as chapas: <b>o peso em KG é lido da própria NF</b>, não precisa pesar nem digitar. A quantidade em UND informada aqui é a que vai no e-mail de entrada de chapas.</div>
+                <div id="chapa-modal-oxicorte" class="chapa-calc-preview" style="display:none;">Chapa oxicorte da Aços Radial (identificada pelo pedido de compra): informe só a quantidade de peças. Não tem medidas e não entra no Controle de Chapas.</div>                <div id="chapa-modal-medidas-wrap">
                     <div class="chapa-medidas-grid">
                         <label>Material<select id="chapa-modal-material" onchange="atualizarPreviewChapa()"></select></label>
                         <label>Formato<select id="chapa-modal-formato" onchange="montarMedidasChapa(); atualizarPreviewChapa()"></select></label>
@@ -1374,11 +1373,16 @@
         const desc = row?.querySelector('td:nth-child(3)')?.textContent?.trim() || '';
         document.getElementById('chapa-modal-item').textContent = cod ? `${cod} — ${desc}` : desc;
         // Oxicorte da Aços Radial: sempre chapa, o conferente não desmarca e não informa medidas.
+        // Fornecedor que fatura em KG (data-peca-kg) segue a mesma trava, mas não é chapa.
         const oxicorte = btn?.dataset.oxicorte === '1';
+        const pecaKg = btn?.dataset.pecaKg === '1';
         const ehChapa = oxicorte || btn?.dataset.ativo === '1';
         document.getElementById('chapa-modal-switch').checked = ehChapa;
         document.getElementById('chapa-modal-switch').disabled = oxicorte;
-        document.getElementById('chapa-modal-oxicorte').style.display = oxicorte ? '' : 'none';
+        document.getElementById('chapa-modal-switch').closest('.chapa-switch').style.display = pecaKg ? 'none' : '';
+        document.getElementById('chapa-modal-input-label').textContent = pecaKg ? 'Quantidade de peças (UND)' : 'Quantidade de chapas (UND)';
+        document.getElementById('chapa-modal-ajuda').style.display = pecaKg ? 'none' : '';
+        document.getElementById('chapa-modal-oxicorte').style.display = (oxicorte && !pecaKg) ? '' : 'none';
         document.getElementById('chapa-modal-medidas-wrap').style.display = oxicorte ? 'none' : '';
         document.getElementById('chapa-modal-input').value = ehChapa ? (input?.value || '') : '';
         const material = document.getElementById('chapa-modal-material');
@@ -1492,7 +1496,7 @@
         input.classList.toggle('faltando', !preenchido);
         btn.classList.toggle('preenchido', preenchido);
         btn.classList.toggle('faltando', !preenchido);
-        const rotulo = btn.dataset.oxicorte === '1' ? 'Chapa oxicorte' : 'Chapa';
+        const rotulo = btn.dataset.pecaKg === '1' ? 'Peças' : (btn.dataset.oxicorte === '1' ? 'Chapa oxicorte' : 'Chapa');
         btn.innerHTML = preenchido
             ? `<i class="fas fa-check"></i> ${rotulo}: ${valor} UND`
             : `<i class="fas fa-layer-group"></i> ${rotulo}`;
@@ -1905,9 +1909,11 @@
             const unidadeInicial = somenteLeitura
                 ? (String(i.unidade_ultima || '').trim() || unidadeItem)
                 : unidadeItem;
+            // data-oxicorte = peça obrigatória, sem medidas (oxicorte e fornecedor que fatura em KG).
+            const pecaForcada = !!i.oxicorte || !!i.peca_kg;
             const blocoChapa = (!somenteLeitura && ehChapa) ? `
                     <div class="chapa-wrap" data-id="${i.id}">
-                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="${i.oxicorte ? '1' : '0'}"${i.oxicorte ? ' data-oxicorte="1"' : ''} onclick="abrirModalChapa('${i.id}')">
+                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="${pecaForcada ? '1' : '0'}"${pecaForcada ? ' data-oxicorte="1"' : ''}${i.peca_kg ? ' data-peca-kg="1"' : ''} onclick="abrirModalChapa('${i.id}')">
                             <i class="fas fa-layer-group"></i> Informar chapas (UND)
                         </button>
                         <input type="hidden" class="chapa-input" data-id="${i.id}" value="">
@@ -1946,7 +1952,7 @@
         itens.forEach((i) => {
             const v = Number(i.qtd_chapas_und);
             const temUnd = Number.isFinite(v) && v > 0;
-            if (!temUnd && !i.oxicorte) return;
+            if (!temUnd && !i.oxicorte && !i.peca_kg) return;
             const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
             const btn = document.getElementById(`chapa-btn-${i.id}`);
             if (!input || !btn) return;

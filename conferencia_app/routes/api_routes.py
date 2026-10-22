@@ -5742,6 +5742,8 @@ def buscar_itens(nota):
             _release_lock(nota)
             db.session.commit()
             return jsonify({"error": str(exc), "bloqueio_oxicorte": True}), 409
+    # Fornecedor que fatura em KG o que a gente confere em peça (21/10/2026).
+    peca_kg_ids = chapa_oxicorte_svc.identificar_pecas_em_kg(itens)
     iniciou_conferencia = False
     for item in itens:
         if not item.inicio_conferencia:
@@ -5787,6 +5789,7 @@ def buscar_itens(nota):
                 "pedido_compra": item.pedido_compra or "",
                 "qtd_chapas_und": item.qtd_chapas_und,
                 "oxicorte": item.id in oxicorte_ids,
+                "peca_kg": item.id in peca_kg_ids,
             }
             for item in itens
         ]
@@ -5969,6 +5972,7 @@ def validar():
             oxicorte_ids = chapa_oxicorte_svc.identificar_oxicorte(itens_db)
         except ValueError as exc:
             return jsonify({"sucesso": False, "msg": str(exc)}), 409
+    peca_kg_ids = chapa_oxicorte_svc.identificar_pecas_em_kg(itens_db)
 
     resultado_itens = []
     erros = []
@@ -6004,20 +6008,22 @@ def validar():
         # entrada de chapa. Só grava quando um valor é informado (nunca limpa),
         # para sobreviver às múltiplas chamadas de /validar do fluxo.
         eh_oxicorte = item.id in oxicorte_ids
+        eh_peca_kg = item.id in peca_kg_ids
         if _unidade_eh_chapa(item.unidade_comercial) or eh_oxicorte:
             chapa_dados = chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None
             chapa_und = _parse_chapas_und(chapa_dados)
-            if eh_oxicorte and chapa_und is None and not float(item.qtd_chapas_und or 0) > 0:
+            if (eh_oxicorte or eh_peca_kg) and chapa_und is None and not float(item.qtd_chapas_und or 0) > 0:
+                rotulo = "Chapa oxicorte" if eh_oxicorte else "Fornecedor fatura em KG"
                 return jsonify({
                     "sucesso": False,
-                    "msg": f"Chapa oxicorte ({item.codigo_grv or item.codigo}): informe a quantidade de peças (UND).",
+                    "msg": f"{rotulo} ({item.codigo_grv or item.codigo}): informe a quantidade de peças (UND).",
                     "item_id": item.id,
                 }), 400
             if chapa_und is not None:
                 from ..services.chapa_auditoria_service import alterar_unidades
                 alterar_unidades(item, chapa_und, user)
-                if not eh_oxicorte:
-                    # Oxicorte não tem medida de chapa padrão: só a UND.
+                if not (eh_oxicorte or eh_peca_kg):
+                    # Oxicorte e peça faturada em KG não têm medida de chapa: só a UND.
                     try:
                         from ..services.chapa_calculo_service import salvar_calculo_item
                         salvar_calculo_item(item, chapa_dados, user)
@@ -6025,6 +6031,10 @@ def validar():
                         return jsonify({"sucesso": False, "msg": str(exc), "item_id": item.id}), 400
             if eh_oxicorte:
                 chapa_oxicorte_svc.excluir_do_controle_de_chapas(item)
+            elif eh_peca_kg:
+                chapa_oxicorte_svc.excluir_do_controle_de_chapas(
+                    item, chapa_oxicorte_svc.USUARIO_EXCLUSAO_PECA_EM_KG
+                )
 
             # Item marcado como chapa (agora ou numa chamada anterior de
             # /validar): o conferente conta as chapas em UND e informa as
