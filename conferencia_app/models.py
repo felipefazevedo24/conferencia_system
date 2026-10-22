@@ -4899,6 +4899,7 @@ class InventarioGeral(db.Model):
     STATUS_ABERTO = "Em contagem"
     STATUS_FINALIZADO = "Finalizado"
     STATUS_ENVIADO = "Enviado ao ERP"
+    STATUS_ENCERRADO = "Encerrado"  # ultimo passo - com ou sem envio ao ERP
 
     id = db.Column(db.Integer, primary_key=True)
     descricao = db.Column(db.String(160))
@@ -4988,3 +4989,53 @@ class InventarioGeralEnvio(db.Model):
     status = db.Column(db.String(30))  # SIMULADO_SEM_GRAVAR | APLICADO | ERRO
     enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
+
+
+class InventarioGeralLeitura(db.Model):
+    """Uma leitura do operador: local + item (+ lote) + quantidade. A 2a e a
+    3a contagem do item sao a SOMA das leituras de todos os locais na rodada
+    (o ERP nao tem saldo por local - o local nasce aqui). Leitura de outra
+    recontagem fica guardada so' como historico dos locais."""
+
+    __tablename__ = "inventario_geral_leitura"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("inventario_geral_item.id"), nullable=False, index=True)
+    rodada = db.Column(db.Integer, nullable=False)  # 2 ou 3
+    recontagem = db.Column(db.Integer, nullable=False, default=0)  # item.recontagens na hora da leitura
+    local = db.Column(db.String(80), nullable=False, index=True)
+    quantidade = db.Column(db.Float, nullable=False)
+    lido_por = db.Column(db.String(100), nullable=False)
+    lido_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    item = db.relationship("InventarioGeralItem",
+                           backref=db.backref("leituras", cascade="all, delete-orphan", order_by="InventarioGeralLeitura.id"))
+
+
+class InventarioGeralResultado(db.Model):
+    """Indicadores congelados no encerramento do inventario geral (tela de
+    gestao). Base: linhas concluidas (confere / divergencia confirmada);
+    valor = quantidade x custo medio do ERP lido no encerramento. Tabela a
+    parte pra nao precisar de migration em inventario_geral."""
+
+    __tablename__ = "inventario_geral_resultado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, unique=True)
+    encerrado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    encerrado_por = db.Column(db.String(100))
+    enviado_ao_erp = db.Column(db.Boolean, nullable=False, default=False)
+    linhas_total = db.Column(db.Integer, nullable=False, default=0)
+    linhas_contadas = db.Column(db.Integer, nullable=False, default=0)  # concluidas
+    linhas_conferem = db.Column(db.Integer, nullable=False, default=0)
+    linhas_sem_custo = db.Column(db.Integer, nullable=False, default=0)
+    financeiro_inicial = db.Column(db.Float, nullable=False, default=0)
+    financeiro_final = db.Column(db.Float, nullable=False, default=0)
+    diferenca_absoluta = db.Column(db.Float, nullable=False, default=0)  # sobra e falta nao se compensam
+    acuracidade_itens = db.Column(db.Float)       # % - None sem linha concluida
+    acuracidade_financeira = db.Column(db.Float)  # % - None sem financeiro inicial
+    custos = db.Column(db.Text)  # JSON {codigo_interno: custo medio} usado no calculo
+
+    inventario = db.relationship("InventarioGeral",
+                                 backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
