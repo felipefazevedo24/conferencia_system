@@ -38,6 +38,8 @@
     .mp-grid .c-un { color: var(--eui-muted); font-size: 12px; }
     .mp-grid .c-forte { font-weight: 700; color: var(--eui-text); }
     .mp-grid .c-seta { width: 28px; color: var(--eui-muted); text-align: right; }
+    .mp-grid .c-sel { width: 32px; padding: 0 0 0 12px; cursor: default; }
+    .mp-grid .c-sel input { width: 15px; height: 15px; cursor: pointer; vertical-align: middle; }
     .mp-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--eui-text); }
     .mp-bola { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--eui-muted); }
     .mp-bola.critico { background: var(--eui-danger); }
@@ -172,7 +174,10 @@
                 <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
                 <div class="mp-filters__end">
                     <span class="mp-muted" id="mp-updated"></span>
+                    <span class="mp-erro" id="mp-export-erro" role="alert"></span>
                     <button class="eui-btn eui-btn--ghost" id="mp-limpar-filtros" type="button" style="display:none;"><i class="fas fa-filter-circle-xmark"></i> Limpar filtros das colunas</button>
+                    <button class="eui-btn eui-btn--ghost" id="mp-sel-limpar" type="button" style="display:none;"><i class="fas fa-xmark"></i> Limpar seleção</button>
+                    <button class="eui-btn eui-btn--ghost" id="mp-exportar" type="button" disabled><i class="fas fa-file-excel"></i> Exportar Excel</button>
                     <button class="eui-btn eui-btn--ghost" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>
@@ -260,6 +265,12 @@
     let filtroCol = null;     // coluna com o menu de filtro aberto
     let filtroValores = [];
     let filtroMarcados = new Set();
+    // Itens marcados pra exportar (código -> item como a tela mostrou). Fica
+    // entre buscas e trocas de visão até limpar.
+    const selecao = new Map();
+    const MAX_EXPORTAR = 200;
+    let visaoLabel = '';
+    let exportando = false;
 
     function fmt(valor, casas = 2) {
         return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
@@ -452,12 +463,27 @@
         renderCabecalho();
         $('mp-body').innerHTML = lista.length
             ? lista.map(linha).join('')
-            : `<tr><td colspan="${ativas.length + 1}" class="mp-muted" style="cursor:default;">Nenhum item com os filtros das colunas.</td></tr>`;
+            : `<tr><td colspan="${ativas.length + 2}" class="mp-muted" style="cursor:default;">Nenhum item com os filtros das colunas.</td></tr>`;
         $('mp-k-itens').textContent = lista.length;
         $('mp-k-itens-hint').textContent = filtrando
             ? `de ${itens.length} com os filtros das colunas`
             : (totalEncontrado > itens.length ? `de ${totalEncontrado} encontrados` : '');
         $('mp-limpar-filtros').style.display = filtrando || ordem ? '' : 'none';
+        atualizarSelecao();
+    }
+
+    function atualizarSelecao() {
+        const lista = visiveis();
+        const marcados = lista.filter((i) => selecao.has(i.codigo)).length;
+        const todos = $('mp-sel-todos');
+        if (todos) {
+            todos.checked = lista.length > 0 && marcados === lista.length;
+            todos.indeterminate = marcados > 0 && marcados < lista.length;
+        }
+        const n = selecao.size;
+        $('mp-exportar').disabled = !n || exportando;
+        if (!exportando) $('mp-exportar').innerHTML = `<i class="fas fa-file-excel"></i> Exportar Excel${n ? ` (${n})` : ''}`;
+        $('mp-sel-limpar').style.display = n ? '' : 'none';
     }
 
     function fecharFiltro() {
@@ -516,7 +542,7 @@
             reservas: ['Reservas', ' class="num"'],
             status: ['Status', '', statusAjuda],
         };
-        $('mp-head').innerHTML = '<tr>' + colunasAtivas().map((col) => {
+        $('mp-head').innerHTML = '<tr><th class="c-sel"><input type="checkbox" id="mp-sel-todos" aria-label="Selecionar todos os itens da lista"></th>' + colunasAtivas().map((col) => {
             const [rotulo, atributos, dica] = cabecalhos[col];
             const ordenada = ordem && ordem.col === col;
             const icones = (ordenada ? `<i class="fas fa-arrow-${ordem.dir === 'desc' ? 'down' : 'up'}"></i>` : '')
@@ -529,6 +555,7 @@
         const p = item.planejamento;
         const sel = item.codigo === selecionado ? ' selecionado' : '';
         return `<tr class="mp-item-row${sel}" data-codigo="${esc(item.codigo || '')}">
+            <td class="c-sel"><input type="checkbox" data-sel="${esc(item.codigo || '')}"${selecao.has(item.codigo) ? ' checked' : ''} aria-label="Selecionar ${esc(item.codigo || '')}"></td>
             <td class="c-cod">${esc(item.codigo || '-')}</td>
             <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
             <td class="c-un">${esc(item.unidade || '')}</td>
@@ -563,6 +590,9 @@
         $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
 
         itens = data.items || [];
+        visaoLabel = data.visao_label || visaoLabel;
+        // Item marcado que veio de novo (busca, atualização) leva os números novos pro Excel.
+        itens.forEach((item) => { if (selecao.has(item.codigo)) selecao.set(item.codigo, { ...item, visao: visaoLabel }); });
         if (!itens.length) {
             $('mp-table').style.display = 'none';
             $('mp-state').style.display = 'block';
@@ -570,6 +600,7 @@
             $('mp-k-itens').textContent = 0;
             $('mp-k-itens-hint').textContent = '';
             fecharPainel();
+            atualizarSelecao();
             return;
         }
         $('mp-state').style.display = 'none';
@@ -828,6 +859,16 @@
     }
 
     $('mp-body').addEventListener('click', (event) => {
+        // Clique na célula da caixa marca o item, não abre o painel.
+        const celula = event.target.closest('.c-sel');
+        if (celula) {
+            const caixa = celula.querySelector('input');
+            if (caixa && event.target !== caixa) {
+                caixa.checked = !caixa.checked;
+                caixa.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return;
+        }
         const tr = event.target.closest('tr[data-codigo]');
         if (!tr) return;
         if (tr.dataset.codigo === selecionado) fecharPainel(); else abrirPainel(tr.dataset.codigo);
@@ -840,6 +881,65 @@
         if (item) renderPainel(item);
     });
     $('mp-painel-fechar').addEventListener('click', fecharPainel);
+
+    // ------------------------------------------------------------ seleção e Excel
+
+    $('mp-body').addEventListener('change', (event) => {
+        const codigo = event.target.dataset && event.target.dataset.sel;
+        if (codigo == null) return;
+        const item = itens.find((i) => i.codigo === codigo);
+        if (event.target.checked && item) selecao.set(codigo, { ...item, visao: visaoLabel }); else selecao.delete(codigo);
+        atualizarSelecao();
+    });
+    $('mp-head').addEventListener('change', (event) => {
+        if (event.target.id !== 'mp-sel-todos') return;
+        // Vale para o que está na lista agora (busca e filtros das colunas).
+        visiveis().forEach((item) => {
+            if (event.target.checked) selecao.set(item.codigo, { ...item, visao: visaoLabel }); else selecao.delete(item.codigo);
+        });
+        renderLista();
+    });
+    $('mp-sel-limpar').addEventListener('click', () => {
+        selecao.clear();
+        $('mp-export-erro').textContent = '';
+        renderLista();
+    });
+
+    async function exportar() {
+        $('mp-export-erro').textContent = '';
+        if (selecao.size > MAX_EXPORTAR) {
+            $('mp-export-erro').textContent = `Máximo de ${MAX_EXPORTAR} itens por vez.`;
+            return;
+        }
+        exportando = true;
+        $('mp-exportar').disabled = true;
+        $('mp-exportar').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exportando...';
+        try {
+            const resp = await fetch('/api/logistica/estoque/exportar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itens: [...selecao.values()], janela_dias: janelaDias }),
+            });
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.error || 'Falha ao exportar.');
+            }
+            const nome = (resp.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(await resp.blob());
+            link.download = nome ? nome[1] : 'analise_estoque.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        } catch (err) {
+            $('mp-export-erro').textContent = err.message || 'Falha ao exportar.';
+        } finally {
+            exportando = false;
+            atualizarSelecao();
+        }
+    }
+    $('mp-exportar').addEventListener('click', exportar);
 
     $('mp-head').addEventListener('click', (event) => {
         const botao = event.target.closest('.mp-th-btn');

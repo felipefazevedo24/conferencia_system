@@ -7,6 +7,7 @@ import math
 import os
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -53,6 +54,7 @@ from ..services.erp_estoque_service import (
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
 from ..services import estoque_planejamento_service as planejamento_svc
+from ..services.estoque_analise_export import gerar_excel_analise
 from ..tempo import agora_br
 
 
@@ -93,6 +95,9 @@ VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos"}
 # insumos so pra consulta - sem saldo, cobertura, curva ABC nem minimo
 # (decisao da logistica em 22/10/2026).
 INSUMOS_SEM_CONTROLE_ESTOQUE = {"28-12-00001", "28-12-00003", "28-12-00012"}
+# Exportacao consulta o GRV item a item (fornecimentos): acima disso o
+# request passaria de ~1 min no PythonAnywhere.
+ESTOQUE_EXPORTAR_MAX_ITENS = 200
 
 
 def _normalizar_busca(texto: str | None) -> str:
@@ -566,6 +571,56 @@ def estoque_fornecimentos():
             motivo = "erro"
         return jsonify({"disponivel": False, "motivo": motivo, "fornecedores": [], "fornecimentos": []})
     return jsonify({"disponivel": True, **planejamento_svc.resumir_fornecimentos(linhas)})
+
+
+def _fornecimentos_para_exportar(codigos: list[str]) -> dict[str, dict | None]:
+    """1 consulta ao GRV por item (~1,5 s cada): 4 por vez pra exportacao nao
+    levar minutos sem afogar a bridge. Item que falhar volta None e a planilha
+    avisa - nao derruba o arquivo."""
+    app = current_app._get_current_object()
+
+    def consultar(codigo: str) -> dict | None:
+        with app.app_context():
+            try:
+                return planejamento_svc.resumir_fornecimentos(buscar_fornecimentos_grv(codigo))
+            except Exception:
+                app.logger.warning("Nao foi possivel consultar fornecimentos de %s para exportar.", codigo, exc_info=True)
+                return None
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return dict(zip(codigos, pool.map(consultar, codigos)))
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/exportar", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_exportar_excel():
+    # Os itens vem da tela, ja calculados: o Excel sai igual ao que foi
+    # analisado e pode juntar itens de visoes diferentes.
+    payload = request.get_json(silent=True) or {}
+    itens = [i for i in payload.get("itens") or [] if isinstance(i, dict) and str(i.get("codigo") or "").strip()]
+    if not itens:
+        return jsonify({"error": "Selecione ao menos um item."}), 400
+    if len(itens) > ESTOQUE_EXPORTAR_MAX_ITENS:
+        return jsonify({"error": f"Selecione no máximo {ESTOQUE_EXPORTAR_MAX_ITENS} itens por vez."}), 400
+    try:
+        janela_dias = int(payload.get("janela_dias") or 90)
+    except (TypeError, ValueError):
+        janela_dias = 90
+    codigos = [str(i["codigo"]).strip() for i in itens]
+    try:
+        series = buscar_planejamento_grv(codigos=codigos)
+    except Exception:
+        current_app.logger.warning("Nao foi possivel consultar o consumo mensal para exportar.", exc_info=True)
+        series = None
+    stream = gerar_excel_analise(
+        itens, series, _fornecimentos_para_exportar(codigos), janela_dias=janela_dias, hoje=agora_br().date(),
+    )
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"analise_estoque_{agora_br().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    )
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["GET"])
