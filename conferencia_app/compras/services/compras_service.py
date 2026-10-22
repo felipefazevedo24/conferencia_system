@@ -341,6 +341,25 @@ def ordens_compra_cif_recentes(
     return db.fetch_all(queries.SQL_OC_CIF_RECENTES, params)
 
 
+def buscar_ordens_compra_comex(
+    cod_ordem_compra: Optional[int] = None,
+    fornecedor: Optional[str] = None,
+    cod_empresa: Optional[int] = None,
+    limite: int = 300,
+) -> list[dict]:
+    """Busca de OC do Comex com o filtro aplicado no banco (ver
+    SQL_COMEX_OC_BUSCA). Com numero: a OC em qualquer situacao."""
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    termo = (fornecedor or "").strip()
+    params = {
+        "cod_empresa": empresa,
+        "cod_ordem_compra": cod_ordem_compra,
+        "like": f"%{termo}%" if termo else None,
+        "limite": max(1, min(int(limite or 300), 2000)),
+    }
+    return db.fetch_all(queries.SQL_COMEX_OC_BUSCA, params)
+
+
 def itens_ordem_compra(cod_ordem_compra: int, cod_empresa: Optional[int] = None) -> list[dict]:
     """Itens (material nacional + material estrangeiro) de UMA ordem de
     compra especifica, com o cabecalho completo de cada item e do produto

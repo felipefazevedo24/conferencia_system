@@ -1881,3 +1881,68 @@ SELECT * FROM public.tproduto
 WHERE cod_empresa = %(cod_empresa)s AND codigo = %(cod_produto)s
 LIMIT 1;
 """
+
+
+# Busca de OC do Comex (Modulo 1). Filtra numero/fornecedor DENTRO do banco:
+# a SQL_OC_CIF_RECENTES corta em N linhas pela previsao mais antiga e o
+# filtro vinha depois, em Python - com mais OCs abertas que o corte, a OC
+# recente sumia da busca (OC 12757, 22/10/2026). Numero exato traz a OC em
+# qualquer situacao, com qtd_itens/itens_com_saldo pra tela explicar por que
+# nao da pra importar. Sem exigir previsao de entrega (o CIF precisa dela; o
+# Comex nao). Fornecedor via to_jsonb pra nao depender do nome das colunas.
+SQL_COMEX_OC_BUSCA = """
+WITH itens AS (
+    SELECT cod_ord_compra AS cod_ordem_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0) AS saldo
+    FROM   public.tord_aux
+    WHERE  cod_empresa = %(cod_empresa)s
+    UNION ALL
+    SELECT cod_ordem_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_serv
+    WHERE  cod_empresa = %(cod_empresa)s
+    UNION ALL
+    SELECT cod_ord_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_aux_me
+    WHERE  cod_empresa = %(cod_empresa)s
+),
+resumo AS (
+    SELECT cod_ordem_compra,
+           COUNT(*)                                                AS qtd_itens,
+           COUNT(*) FILTER (WHERE saldo > 0.0001)                  AS itens_com_saldo,
+           MIN(dt_prevista_entrega) FILTER (WHERE saldo > 0.0001)  AS previsao
+    FROM   itens
+    GROUP  BY cod_ordem_compra
+)
+SELECT
+    o.codigo::text                                  AS cod_ordem_compra,
+    r.previsao                                      AS previsao_entrega,
+    COALESCE(r.qtd_itens, 0)                        AS qtd_itens,
+    COALESCE(r.itens_com_saldo, 0)                  AS itens_com_saldo,
+    to_jsonb(o.*)                                   AS oc_json,
+    (SELECT to_jsonb(f.*)
+       FROM public.tfornece f
+      WHERE f.cod_empresa = o.cod_empresa
+        AND f.codigo = o.cod_fornecedor
+      LIMIT 1)                                      AS fornecedor_json
+FROM   public.tord_com o
+LEFT   JOIN resumo r ON r.cod_ordem_compra = o.codigo
+WHERE  o.cod_empresa = %(cod_empresa)s
+  AND  (
+         (%(cod_ordem_compra)s::int IS NOT NULL AND o.codigo = %(cod_ordem_compra)s::int)
+      OR (%(cod_ordem_compra)s::int IS NULL
+          AND COALESCE(o.cancelado, 0) = 0
+          AND COALESCE(r.itens_com_saldo, 0) > 0
+          AND (%(like)s::text IS NULL
+               OR to_jsonb(o.*) ->> 'fornecedor' ILIKE %(like)s
+               OR EXISTS (SELECT 1
+                            FROM public.tfornece f
+                           WHERE f.cod_empresa = o.cod_empresa
+                             AND f.codigo = o.cod_fornecedor
+                             AND (to_jsonb(f.*) ->> 'razao_social' ILIKE %(like)s
+                                  OR to_jsonb(f.*) ->> 'nome' ILIKE %(like)s))))
+       )
+ORDER  BY r.previsao ASC NULLS LAST, o.codigo DESC
+LIMIT  %(limite)s;
+"""
