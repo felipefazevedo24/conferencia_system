@@ -381,6 +381,18 @@
             }
         });
 
+        /* Pra onde ir depois de entrar: a pagina que a pessoa tentou abrir
+           (?next=, ex.: link do Teams) ou, com sessao expirada, a propria
+           pagina em que o login apareceu. So' caminho do proprio Sync -
+           "//site" ou "/\site" levariam pra fora. */
+        function destinoPosLogin(padrao) {
+            const seguro = (p) => /^\/(?![\/\\])/.test(p || "");
+            const next = new URLSearchParams(window.location.search).get("next");
+            if (seguro(next)) return next;
+            if (window.location.pathname !== "/login") return window.location.pathname + window.location.search;
+            return padrao || "/";
+        }
+
         /* ── Login form submit ── */
         loginForm.addEventListener("submit", async (event) => {
             event.preventDefault();
@@ -427,7 +439,7 @@
                     showFeedback("success", "Login realizado com sucesso.", `${role}. ${detail}`);
                     saveRememberedUser();
                     setTimeout(() => {
-                        window.location.href = data.redirect_to || "/";
+                        window.location.href = destinoPosLogin(data.redirect_to);
                     }, 420);
                     return;
                 }

@@ -332,7 +332,10 @@ def login_required(fn):
         if "username" not in session:
             if request.path.startswith("/api") or request.path == "/validar":
                 return jsonify({"error": "Login necessário"}), 401
-            return redirect(url_for("auth.login_page"))
+            # Guarda pra onde ia (ex.: link de aviso do Teams): depois de
+            # entrar, a tela de login devolve pra ca' (ver login.html).
+            destino = request.full_path.rstrip("?") if request.method == "GET" else None
+            return redirect(url_for("auth.login_page", next=destino))
         check_active_session()
         return fn(*args, **kwargs)
 
