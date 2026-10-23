@@ -319,7 +319,8 @@ def montar_hoje() -> list[dict]:
     if _pode(perms, ("PAGE_COMEX",)):
         tentar(lambda: {
             "titulo": "Comex em andamento", "icone": "fa-ship",
-            "valor": ComexProcesso.query.filter(ComexProcesso.processo_concluido_em.is_(None)).count(),
+            "valor": ComexProcesso.query.filter(ComexProcesso.processo_concluido_em.is_(None),
+                                                ComexProcesso.status_modulo != "Cancelado").count(),
             "ontem": None, "href": "/comex",
         })
 

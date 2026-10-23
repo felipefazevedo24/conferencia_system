@@ -287,6 +287,41 @@ def api_apagar_oc(processo_id):
     return jsonify({"message": "OC apagada. A ordem de compra está disponível para importação novamente."})
 
 
+@comex_bp.route("/api/comex/processos/<int:processo_id>/cancelar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_cancelar(processo_id):
+    """Cancela o processo (so' em OC ou PO) com motivo obrigatorio - fica
+    registrado como Cancelado. Ver comex_service.cancelar."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    motivo = (request.get_json(silent=True) or {}).get("motivo") or ""
+    try:
+        liberadas = svc.cancelar(processo, motivo, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    mensagem = f"Processo {processo.id_op} cancelado."
+    if liberadas:
+        mensagem += f" OCs combinadas liberadas: {', '.join(liberadas)}."
+    return jsonify({"message": mensagem, "processo": _processo_payload(processo)})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/reativar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_reativar(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    try:
+        resultado = svc.reativar(processo, session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    mensagem = f"Processo {processo.id_op} reativado em {resultado['destino']}."
+    if resultado["nao_religadas"]:
+        mensagem += f" As OCs {', '.join(resultado['nao_religadas'])} já seguiram outro caminho e não voltaram para a PO - revise a PO."
+    return jsonify({"message": mensagem, **resultado, "processo": _processo_payload(processo)})
+
+
 @comex_bp.route("/api/comex/processos/<int:processo_id>/po", methods=["POST"])
 @permission_required(PERMISSION)
 def api_salvar_po(processo_id):
