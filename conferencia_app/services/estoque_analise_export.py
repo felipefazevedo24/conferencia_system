@@ -19,6 +19,7 @@ from . import estoque_planejamento_service as planejamento_svc
 FMT_QTDE = '#,##0.00'
 FMT_CUSTO = '#,##0.0000'
 FMT_INT = '#,##0'
+FMT_BRL = '"R$" #,##0.00'
 FMT_DATA = 'DD/MM/YYYY'
 AZUL = "1B3B6F"
 SEM_GRV = "Não foi possível consultar o GRV"
@@ -110,9 +111,8 @@ def _colunas_itens(janela: int) -> list[tuple[str, str | None, int, Callable[[di
         ("Curva ABC", None, 8, lambda i, p: _texto(p.get("classe_abc"))),
         ("Nível de serviço (%)", FMT_QTDE, 11, lambda i, p: _num(p.get("nivel_servico_pct"))),
         ("Tipo de demanda", None, 14, lambda i, p: _texto(p.get("tipo_demanda_label"))),
-        ("Meses com saída (24 meses)", FMT_INT, 12, lambda i, p: _num(p.get("meses_com_saida_24m"))),
-        ("Meses analisados", FMT_INT, 11, lambda i, p: _num(p.get("meses_analisados_24m"))),
-        ("Meses com saída desde o início", FMT_INT, 13, lambda i, p: _num(p.get("meses_com_saida_total"))),
+        ("Meses com saída (12 meses)", FMT_INT, 12, lambda i, p: _num(p.get("meses_com_saida_12m"))),
+        ("Meses analisados", FMT_INT, 11, lambda i, p: _num(p.get("meses_analisados_12m"))),
         ("Primeira movimentação", FMT_DATA, 13, lambda i, p: planejamento_svc._data(p.get("primeira_movimentacao"))),
         ("Consumo 12 meses", FMT_QTDE, 12, lambda i, p: _num(p.get("consumo_12m"))),
         ("Desvio mensal", FMT_QTDE, 11, lambda i, p: _num(p.get("desvio_mensal"))),
@@ -123,12 +123,15 @@ def _colunas_itens(janela: int) -> list[tuple[str, str | None, int, Callable[[di
         ("Entregas no lead time", FMT_INT, 11, lambda i, p: _num(p.get("lead_time_amostras"))),
         ("Origem do lead time", None, 12, lead_fonte),
         ("Retirada típica", FMT_QTDE, 12, lambda i, p: _num(p.get("retirada_tipica"))),
-        ("Retiradas (24 meses)", FMT_INT, 11, lambda i, p: _num(p.get("retiradas_24m"))),
+        ("Retiradas (12 meses)", FMT_INT, 11, lambda i, p: _num(p.get("retiradas_12m"))),
         ("Estoque de segurança", FMT_QTDE, 12, lambda i, p: _num(p.get("estoque_seguranca"))),
         ("Mínimo sugerido", FMT_QTDE, 12, lambda i, p: _num(p.get("estoque_minimo_sugerido"))),
         ("Mínimo no GRV", FMT_QTDE, 12, lambda i, p: _num(i.get("estoque_minimo")) or None),
         ("Lote sugerido", FMT_QTDE, 12, lambda i, p: _num(p.get("lote_economico_sugerido"))),
         ("Lote no GRV", FMT_QTDE, 12, lambda i, p: _num(i.get("lote_economico")) or None),
+        ("Estoque permitido", FMT_QTDE, 12, lambda i, p: _num(p.get("estoque_permitido"))),
+        ("Excedente", FMT_QTDE, 12, lambda i, p: _num(p.get("excedente"))),
+        ("Excedente (R$)", FMT_BRL, 14, lambda i, p: _num(p.get("excedente_valor"))),
         ("Custo unitário", FMT_CUSTO, 12, lambda i, p: _num(p.get("custo_unitario"))),
         ("Confiança", None, 10, lambda i, p: CONFIANCA.get(p.get("confianca"), "")),
         ("Motivos da confiança", None, 34, lambda i, p: " · ".join(_texto(m) for m in p.get("confianca_motivos") or [])),
@@ -160,12 +163,12 @@ def gerar_excel_analise(
         [[obter(item, item.get("planejamento") or {}) for _, _, _, obter in colunas] for item in itens],
     )
 
-    # Consumo mês a mês: os 24 meses fechados que o cálculo usa + o mês corrente.
-    meses = planejamento_svc._meses_fechados(hoje, planejamento_svc.MESES_CLASSIFICACAO)
+    # Consumo mês a mês: os 12 meses fechados que o cálculo usa + o mês corrente.
+    meses = planejamento_svc._meses_fechados(hoje, planejamento_svc.MESES_HISTORICO)
     mes_atual = f"{hoje.year:04d}-{hoje.month:02d}"
     colunas_consumo: list[Coluna] = [("Código", None, 14), ("Descrição", None, 46), ("Un", None, 6)]
     colunas_consumo += [(f"{m[5:]}/{m[:4]}", FMT_QTDE, 10) for m in meses]
-    colunas_consumo += [(f"{mes_atual[5:]}/{mes_atual[:4]} (parcial)", FMT_QTDE, 11), ("Total 24 meses", FMT_QTDE, 12)]
+    colunas_consumo += [(f"{mes_atual[5:]}/{mes_atual[:4]} (parcial)", FMT_QTDE, 11), ("Total 12 meses", FMT_QTDE, 12)]
     linhas_consumo = []
     for item in itens:
         base = [_texto(item.get("codigo")), _texto(item.get("descricao")), _texto(item.get("unidade"))]
@@ -181,7 +184,6 @@ def gerar_excel_analise(
     _aba(wb, "Consumo mensal", colunas_consumo, linhas_consumo, congelar="D2")
 
     linhas_forn, linhas_compras = [], []
-    meses_atual = planejamento_svc.MESES_FORNECEDOR_ATUAL
     for item in itens:
         codigo = _texto(item.get("codigo"))
         base = [codigo, _texto(item.get("descricao"))]
@@ -191,14 +193,14 @@ def gerar_excel_analise(
             linhas_compras.append(base + [None, None, SEM_GRV])
             continue
         if not dados.get("fornecimentos"):
-            linhas_forn.append(base + ["Nenhuma OC desde 2019"])
+            linhas_forn.append(base + ["Nenhuma OC nos últimos 12 meses"])
             continue
         for f in dados.get("fornecedores") or []:
             selo = "Mais rápido e menor preço" if f.get("recomendado") else ("Mais rápido" if f.get("mais_rapido") else ("Menor preço" if f.get("menor_preco") else ""))
             linhas_forn.append(base + [
                 _texto(f.get("fornecedor")), _num(f.get("fornecimentos")), _num(f.get("lead_time_medio")),
                 _num(f.get("entregas_com_prazo")), _num(f.get("ultimo_preco")), planejamento_svc._data(f.get("ultimo_preco_data")),
-                planejamento_svc._data(f.get("ultima_compra")), "Sim" if f.get("atual") else "Não", selo,
+                planejamento_svc._data(f.get("ultima_compra")), selo,
             ])
         unidade = _texto(item.get("unidade"))
         for f in dados["fornecimentos"]:
@@ -212,8 +214,7 @@ def gerar_excel_analise(
     _aba(wb, "Fornecedores", [
         ("Código", None, 14), ("Descrição", None, 46), ("Fornecedor", None, 40), ("Compras", FMT_INT, 9),
         ("Prazo médio (dias)", FMT_QTDE, 11), ("Entregas com prazo", FMT_INT, 11), ("Último preço/un", FMT_CUSTO, 13),
-        ("Data do último preço", FMT_DATA, 12), ("Última compra", FMT_DATA, 12),
-        (f"Comprou nos últimos {meses_atual} meses", None, 13), ("Destaque", None, 24),
+        ("Data do último preço", FMT_DATA, 12), ("Última compra", FMT_DATA, 12), ("Destaque", None, 24),
     ], linhas_forn)
     _aba(wb, "Compras", [
         ("Código", None, 14), ("Descrição", None, 46), ("Data da OC", FMT_DATA, 12), ("OC", None, 9),

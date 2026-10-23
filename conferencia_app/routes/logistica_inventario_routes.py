@@ -359,6 +359,7 @@ def estoque_materia_prima_api():
 
     nivel_filtro = str(request.args.get("nivel") or "").strip().lower()
     somente_estoque_minimo = str(request.args.get("estoque_minimo") or "").strip().lower() in {"1", "true", "sim", "yes"}
+    somente_excedente = str(request.args.get("excedente") or "").strip().lower() in {"1", "true", "sim", "yes"}
     estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
     familia_alvo = _normalizar_busca(visao_cfg["familia"])
     candidatos = []
@@ -506,8 +507,10 @@ def estoque_materia_prima_api():
         rows = [row for row in rows if str(row.get("nivel") or "") == nivel_filtro]
     if somente_estoque_minimo:
         rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
+    if somente_excedente:
+        rows = [row for row in rows if float((row.get("planejamento") or {}).get("excedente") or 0) > 0]
 
-    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "sem_controle": 6}
+    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "novo": 6, "sem_controle": 7}
     rows.sort(key=lambda row: (
         0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
         prioridade_nivel.get(str(row.get("nivel") or ""), 9),
@@ -527,6 +530,8 @@ def estoque_materia_prima_api():
         "esporadicos": sum(1 for row in rows if row.get("nivel") == "esporadico"),
         "saldo_disponivel": sum(float(row.get("saldo_disponivel") or 0) for row in rows),
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
+        "com_excedente": sum(1 for row in rows if float((row.get("planejamento") or {}).get("excedente") or 0) > 0),
+        "excedente_valor": round(sum(float((row.get("planejamento") or {}).get("excedente_valor") or 0) for row in rows), 2),
     }
     rows = rows[:limite]
     return jsonify({

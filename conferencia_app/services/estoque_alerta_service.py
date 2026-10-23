@@ -269,7 +269,7 @@ def _pagina(titulo: str, subtitulo: str, miolo: str) -> str:
         f'<div style="font-size:13px;color:#cbd5e1;margin-top:4px;">{escape(subtitulo)} &nbsp;·&nbsp; {agora_br().strftime("%d/%m/%Y às %H:%M")}</div>'
         f'</td></tr><tr><td style="{_FONTE}padding:24px 28px 26px;color:{_TEXTO};">{miolo}{botao}</td></tr>'
         f'<tr><td style="{_FONTE}padding:14px 28px;background:#f8fafc;border-top:1px solid {_BORDA};font-size:11px;color:#9ca3af;">'
-        "Aviso automático do Sync. Saldos do depósito 1 no GRV; mínimo e lote sugeridos pelo histórico do kardex desde 2019."
+        "Aviso automático do Sync. Saldos do depósito 1 no GRV; mínimo e lote sugeridos pelo kardex dos últimos 12 meses."
         "</td></tr></table></td></tr></table></body></html>"
     )
 
@@ -391,7 +391,7 @@ def verificar_reservas(teste_para: str | None = None) -> dict[str, Any]:
             dados = sugestoes.get(item["chave"]) or {}
             sugestao = dados.get("sugestao")
             custo_total += (sugestao or {}).get("custo") or 0
-            curva = f" · curva {dados['plano']['classe_abc']}" if dados.get("plano") else ""
+            curva = f" · curva {dados['plano']['classe_abc']}" if dados.get("plano") and dados["plano"]["classe_abc"] else ""
             pendente = _pendente_oc(ocs, item["chave"])
             falta = f'<b style="color:#b91c1c;">{_fmt(item["falta"])} {un}</b>'
             if pendente > 0:

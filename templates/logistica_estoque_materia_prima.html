@@ -102,7 +102,6 @@
     .mp-tab td b { color: var(--eui-text); font-weight: 600; }
     .mp-tab .num { text-align: right; white-space: nowrap; }
     .mp-tab small { display: block; color: var(--eui-muted); font-size: 11px; }
-    .mp-tab tr.inativo td { opacity: .55; }
     .mp-selo { display: block; margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--eui-success-soft-text); }
     .mp-reserva { border-bottom: 1px solid var(--eui-border); padding: 9px 0; font-size: 12.5px; color: var(--eui-text-soft); display: grid; gap: 2px; }
     .mp-reserva b { color: var(--eui-text); }
@@ -142,6 +141,7 @@
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos</span><span class="eui-stat__value" id="mp-k-criticos">0</span><span class="eui-stat__hint" id="mp-k-criticos-hint"></span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Monitorar</span><span class="eui-stat__value" id="mp-k-atencao">0</span><span class="eui-stat__hint" id="mp-k-atencao-hint"></span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-cart-shopping"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos sem OC</span><span class="eui-stat__value" id="mp-k-sem-oc">0</span><span class="eui-stat__hint">Sem reposição em aberto</span></div></div>
+        <div class="eui-stat" id="mp-k-exc-card" style="display:none;"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-warehouse"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Excedente</span><span class="eui-stat__value" id="mp-k-exc">R$ 0</span><span class="eui-stat__hint" id="mp-k-exc-hint"></span></div></div>
     </div>
 
     <div class="eui-card">
@@ -168,10 +168,12 @@
                     <option value="normal">Adequado</option>
                     <option value="esporadico">Demanda esporádica</option>
                     <option value="sem_consumo">Sem consumo</option>
+                    <option value="novo">Item novo</option>
                     <option value="sem_controle">Não controla estoque</option>
                 </select>
                 <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo no GRV</label>
                 <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
+                <label class="mp-check" id="mp-excedente-wrap"><input type="checkbox" id="mp-excedente"> Só com excedente</label>
                 <div class="mp-filters__end">
                     <span class="mp-muted" id="mp-updated"></span>
                     <span class="mp-erro" id="mp-export-erro" role="alert"></span>
@@ -234,7 +236,7 @@
                 <div><label for="mp-p-c">Nível de serviço curva C (%)</label><input class="eui-input" id="mp-p-c" name="nivel_servico_c_pct" type="number" step="0.1" min="50" max="99.9"></div>
                 <div><label for="mp-p-lt">Lead time padrão (dias)</label><input class="eui-input" id="mp-p-lt" name="lead_time_padrao_dias" type="number" step="1" min="1" max="365"></div>
             </div>
-            <p class="mp-muted" style="margin:0;">Custo do pedido e custo de manter entram no lote econômico. O nível de serviço define a margem de segurança do mínimo de cada curva ABC. O lead time padrão só vale para item sem nenhuma entrega com OC no histórico.</p>
+            <p class="mp-muted" style="margin:0;">Custo do pedido e custo de manter entram no lote econômico. O nível de serviço define a margem de segurança do mínimo de cada curva ABC. O lead time padrão só vale para item sem nenhuma entrega com OC nos últimos 12 meses.</p>
             <p class="mp-muted" id="mp-param-meta" style="margin:0;"></p>
             <p class="mp-erro" id="mp-param-erro" role="alert" style="margin:0;"></p>
         </div>
@@ -295,11 +297,6 @@
         return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : '—';
     }
 
-    function mesAno(iso) {
-        const partes = String(iso || '').split('-');
-        return partes.length >= 2 ? `${partes[1]}/${partes[0]}` : '-';
-    }
-
     // ------------------------------------------------------------ status
 
     function statusCurto(item) {
@@ -341,7 +338,7 @@
 
     function consumoTexto(item) {
         const p = item.planejamento;
-        if (p) return p.tipo_demanda === 'sem_giro' ? '—' : fmt(p.consumo_mensal);
+        if (p) return p.tipo_demanda === 'sem_giro' || !p.meses_analisados_12m ? '—' : fmt(p.consumo_mensal);
         if (!item.consumo_diario) return '—';
         return item.sem_controle_estoque && planejamentoAtivo ? fmt(consumoNumero(item)) : fmt(item.consumo_diario, 3);
     }
@@ -373,7 +370,7 @@
 
     function minimoTexto(item) {
         const p = item.planejamento;
-        if (!p) return '—';
+        if (!p || p.estoque_minimo_sugerido == null) return '—';
         return p.tipo_demanda === 'sem_giro' ? 'não estocar' : fmt(p.estoque_minimo_sugerido);
     }
 
@@ -382,12 +379,21 @@
         return p && p.lote_economico_sugerido != null ? fmt(p.lote_economico_sugerido) : '—';
     }
 
+    function brl(valor, casas = 2) {
+        return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: casas, maximumFractionDigits: casas });
+    }
+
+    function excedenteTexto(item) {
+        const p = item.planejamento;
+        return p && Number(p.excedente) > 0 ? fmt(p.excedente) : '—';
+    }
+
     // ------------------------------------------------- filtro e ordenação
 
     // Filtro e ordenação no cabeçalho, como no Excel. `texto` é o valor que
     // aparece na célula e na lista do filtro; `num` é a chave de ordenação
     // (null = sem valor, vai pro fim nas duas direções).
-    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5, sem_controle: 6 };
+    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5, novo: 6, sem_controle: 7 };
     const COLUNAS = {
         codigo: { texto: (i) => i.codigo || '-' },
         descricao: { texto: (i) => i.descricao || '-' },
@@ -413,12 +419,13 @@
         },
         minimo: {
             texto: minimoTexto,
-            num: (i) => (i.planejamento && i.planejamento.tipo_demanda !== 'sem_giro' ? Number(i.planejamento.estoque_minimo_sugerido || 0) : null),
+            num: (i) => (i.planejamento && i.planejamento.tipo_demanda !== 'sem_giro' && i.planejamento.estoque_minimo_sugerido != null ? Number(i.planejamento.estoque_minimo_sugerido) : null),
         },
         lote: {
             texto: loteTexto,
             num: (i) => (i.planejamento && i.planejamento.lote_economico_sugerido != null ? Number(i.planejamento.lote_economico_sugerido) : null),
         },
+        excedente: { texto: excedenteTexto, num: (i) => (i.planejamento ? Number(i.planejamento.excedente || 0) : null) },
         reservas: { texto: (i) => String((i.reservas || []).length || '—'), num: (i) => (i.reservas || []).length },
         status: { texto: statusCurto, num: (i) => ORDEM_STATUS[i.nivel || 'normal'] ?? 9 },
     };
@@ -427,7 +434,7 @@
         const plano = planejamentoAtivo;
         return [
             'codigo', 'descricao', 'unidade', ...(plano ? ['curva'] : []), 'disponivel', 'consumo', 'cobertura',
-            ...(plano ? ['minimo', 'lote'] : []), ...(visaoAtual === 'produto_acabado' ? ['reservas'] : []), 'status',
+            ...(plano ? ['minimo', 'lote', 'excedente'] : []), ...(visaoAtual === 'produto_acabado' ? ['reservas'] : []), 'status',
         ];
     }
 
@@ -539,6 +546,7 @@
             cobertura: ['Cobertura', ' class="num"', plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`],
             minimo: ['Mín. sugerido', ' class="num" id="mp-th-sugestao"'],
             lote: ['Lote sugerido', ' class="num"'],
+            excedente: ['Excedente', ' class="num"', 'Saldo acima de 1 mês de consumo ou do mínimo sugerido (o maior)'],
             reservas: ['Reservas', ' class="num"'],
             status: ['Status', '', statusAjuda],
         };
@@ -559,11 +567,11 @@
             <td class="c-cod">${esc(item.codigo || '-')}</td>
             <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
             <td class="c-un">${esc(item.unidade || '')}</td>
-            ${planejamentoAtivo ? `<td>${p ? `<span class="mp-curva ${esc(String(p.classe_abc || '').toLowerCase())}">${esc(p.classe_abc || '-')}</span>` : '—'}</td>` : ''}
+            ${planejamentoAtivo ? `<td>${p && p.classe_abc ? `<span class="mp-curva ${esc(String(p.classe_abc || '').toLowerCase())}">${esc(p.classe_abc || '-')}</span>` : '—'}</td>` : ''}
             <td class="num c-forte">${COLUNAS.disponivel.texto(item)}</td>
             <td class="num">${consumoTexto(item)}</td>
             <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
-            ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td>` : ''}
+            ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td><td class="num"${p && p.excedente_valor ? ` title="${esc(brl(p.excedente_valor))}"` : ''}>${excedenteTexto(item)}</td>` : ''}
             ${visaoAtual === 'produto_acabado' ? `<td class="num">${(item.reservas || []).length || '—'}</td>` : ''}
             <td>${statusCell(item)}</td>
             <td class="c-seta"><i class="fas fa-chevron-right"></i></td>
@@ -580,7 +588,7 @@
         $('mp-param-open').style.display = data.pode_editar_parametros ? '' : 'none';
         $('mp-plan-aviso').style.display = data.planejamento_indisponivel ? '' : 'none';
         $('mp-metodo').textContent = planejamentoAtivo
-            ? 'Saldos do depósito 1 no GRV. Mínimo e lote sugeridos pelo histórico do kardex desde 2019.'
+            ? 'Saldos do depósito 1 no GRV. Mínimo e lote sugeridos pelo kardex dos últimos 12 meses.'
             : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
         $('mp-k-criticos-hint').textContent = planejamentoAtivo ? 'Acabam antes da reposição chegar' : `Até ${diasCritico} dias de cobertura`;
         $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'Abaixo do mínimo sugerido' : `Até ${diasAtencao} dias de cobertura`;
@@ -588,6 +596,9 @@
         $('mp-k-criticos').textContent = resumo.criticos || 0;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
         $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
+        $('mp-k-exc-card').style.display = planejamentoAtivo ? '' : 'none';
+        $('mp-k-exc').textContent = brl(resumo.excedente_valor, 0);
+        $('mp-k-exc-hint').textContent = `${resumo.com_excedente || 0} itens acima do permitido`;
 
         itens = data.items || [];
         visaoLabel = data.visao_label || visaoLabel;
@@ -674,13 +685,19 @@
         if (p) {
             situacao = kv([
                 ['Status', esc(item.nivel_label || '')],
-                ['Consumo', p.tipo_demanda === 'sem_giro' ? 'sem saída em 12 meses' : `${fmt(p.consumo_mensal)} ${un}/mês<small>${p.meses_com_saida_24m} de ${p.meses_analisados_24m} meses com saída</small>`],
+                ['Consumo', p.tipo_demanda === 'sem_giro' ? 'sem saída em 12 meses' : (p.meses_analisados_12m ? `${fmt(p.consumo_mensal)} ${un}/mês<small>${p.meses_com_saida_12m} de ${p.meses_analisados_12m} meses com saída</small>` : '—')],
                 ['Cobertura', p.cobertura_dias != null ? `${p.cobertura_dias} dia(s)<small>lead time ${fmt(p.lead_time_dias, 0)} dia(s)</small>` : (p.retirada_tipica ? `${fmt(p.cobre_retirada_pct, 1)}% de 1 retirada<small>retirada típica ${q(p.retirada_tipica)}</small>` : '—')],
                 item.cobertura_projetada_dias != null ? ['Cobertura com OC', `${item.cobertura_projetada_dias} dia(s)`] : null,
             ]);
-            const planejamento = kv([
+            const planejamento = p.tipo_demanda === 'novo' ? kv([
+                ['Item novo', `desde ${dataCompleta(p.primeira_movimentacao)}`],
+                ['Mínimo no GRV', grv(item.estoque_minimo)],
+                ['Lote no GRV', grv(item.lote_economico)],
+            ]) : kv([
                 ['Mínimo sugerido', p.tipo_demanda === 'sem_giro' ? 'não estocar' : `${q(p.estoque_minimo_sugerido)}<small>GRV: ${grv(item.estoque_minimo)}</small>`],
                 ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
+                ['Estoque permitido', `${q(p.estoque_permitido)}<small>1 mês de consumo ou mín. sugerido</small>`],
+                ['Excedente', Number(p.excedente) > 0 ? `${q(p.excedente)}${p.excedente_valor != null ? `<small>${brl(p.excedente_valor)}</small>` : ''}` : '—'],
                 ['Curva ABC', `${esc(p.classe_abc)}<small>nível de serviço ${fmt(p.nivel_servico_pct, 1)}%</small>`],
                 ['Tipo de demanda', esc(p.tipo_demanda_label)],
                 ['Confiança da sugestão', `${CONFIANCA[p.confianca] || '-'}<small>${esc((p.confianca_motivos || []).join(' · '))}</small>`],
@@ -711,14 +728,13 @@
         const un = esc(item.unidade || '');
         const ltMeses = Number(p.lead_time_dias || 0) / 30.4;
         const demanda = kv([
-            ['Meses com saída (24 meses)', `${p.meses_com_saida_24m} de ${p.meses_analisados_24m}`],
-            ['Meses com saída desde o início', `${p.meses_com_saida_total}<small>desde ${mesAno(p.primeira_movimentacao)}</small>`],
+            ['Meses com saída (12 meses)', `${p.meses_com_saida_12m} de ${p.meses_analisados_12m}`],
             ['Consumo 12 meses', `${fmt(p.consumo_12m)} ${un}<small>${fmt(p.consumo_mensal)}/mês</small>`],
             p.adi != null ? ['Intervalo médio · variação (CV²)', `${fmt(p.adi)} mês · ${fmt(p.cv2)}`] : null,
             ['Classificação', esc(p.tipo_demanda_label)],
         ]);
         const lead = kv([
-            ['Lead time médio (OC → entrada)', p.lead_time_fonte === 'historico' ? `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)}</small>` : `${fmt(p.lead_time_dias, 0)} dia(s)<small>padrão: nenhuma entrega com OC</small>`],
+            ['Lead time médio (OC → entrada)', p.lead_time_fonte === 'historico' ? `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)}</small>` : `${fmt(p.lead_time_dias, 0)} dia(s)<small>padrão: nenhuma entrega com OC em 12 meses</small>`],
         ]);
         let minimo;
         if (p.tipo_demanda === 'sem_giro') {
@@ -730,13 +746,18 @@
                 = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>`;
         } else {
             minimo = `<div class="mp-conta">1 retirada típica = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>
-                <p class="mp-nota">80% das ${p.retiradas_24m} retiradas de 24 meses foram até esse tamanho. Média diária não serve para demanda esporádica.</p>`;
+                <p class="mp-nota">80% das ${p.retiradas_12m} retiradas de 12 meses foram até esse tamanho. Média diária não serve para demanda esporádica.</p>`;
         }
         const pr = parametros || {};
         const lote = p.lote_economico_sugerido == null
             ? `<p class="mp-nota">${p.custo_unitario == null ? 'Sem custo no GRV: não dá para calcular.' : '—'}</p>`
             : `<div class="mp-conta">√(2 × ${fmt(p.consumo_mensal * 12)} ${un}/ano × R$ ${fmt(pr.custo_pedido)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))<br>
                 = <b>${fmt(p.lote_economico_sugerido)} ${un}</b>${p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico' ? ' (nunca menor que 1 retirada comum)' : ''}</div>`;
+        const excedente = Number(p.excedente) > 0
+            ? `<div class="mp-conta">Saldo disponível ${fmt(item.saldo_disponivel)} ${un}<br>
+                − permitido <b>${fmt(p.estoque_permitido)} ${un}</b> (maior entre 1 mês de consumo, ${fmt(p.consumo_mensal)}, e o mínimo sugerido, ${fmt(p.estoque_minimo_sugerido)})<br>
+                = <b>${fmt(p.excedente)} ${un}</b>${p.excedente_valor != null ? ` × R$ ${fmt(p.custo_unitario, 4)} = <b>${brl(p.excedente_valor)}</b>` : ''}</div>`
+            : `<p class="mp-nota">Saldo disponível ${fmt(item.saldo_disponivel)} ${un} dentro do permitido (${fmt(p.estoque_permitido)} ${un}).</p>`;
         const os = kv([
             ['Consumo comprado para a própria OS', `${fmt(p.consumo_os_pct_12m, 1)}%`],
             ['OCs em 12 meses', `${p.oc_para_os_12m} para OS · ${p.oc_estoque_12m} para estoque`],
@@ -745,6 +766,7 @@
             <div class="mp-secao"><p class="mp-secao__titulo">Reposição</p>${lead}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Estoque mínimo sugerido</p>${minimo}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Lote econômico sugerido</p>${lote}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Excedente</p>${excedente}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Compra para OS</p>${os}${p.candidato_estoque ? '<p class="mp-nota" style="margin-top:8px"><b>Candidato a item de estoque:</b> comprado para OS com frequência.</p>' : ''}</div>`;
     }
 
@@ -787,7 +809,7 @@
             return;
         }
         if (!data.fornecimentos.length) {
-            corpo.innerHTML = '<p class="mp-nota">Nenhuma OC deste item desde 2019.</p>';
+            corpo.innerHTML = '<p class="mp-nota">Nenhuma OC deste item nos últimos 12 meses.</p>';
             return;
         }
         const unidade = item.unidade || '';
@@ -795,8 +817,8 @@
         const outraUnidade = (u) => u && u.toUpperCase() !== unidade.toUpperCase();
         const preco = (v) => v ? `R$ ${fmt(v, 4)}` : '—';
         const selo = (f) => f.recomendado ? 'Mais rápido e menor preço' : (f.mais_rapido ? 'Mais rápido' : (f.menor_preco ? 'Menor preço' : ''));
-        const fornecedores = data.fornecedores.map((f) => `<tr class="${f.atual ? '' : 'inativo'}">
-            <td><b>${esc(f.fornecedor)}</b>${selo(f) ? `<span class="mp-selo"><i class="fas fa-check"></i> ${selo(f)}</span>` : ''}${f.atual ? '' : `<small>sem compra há ${data.meses_fornecedor_atual}+ meses</small>`}</td>
+        const fornecedores = data.fornecedores.map((f) => `<tr>
+            <td><b>${esc(f.fornecedor)}</b>${selo(f) ? `<span class="mp-selo"><i class="fas fa-check"></i> ${selo(f)}</span>` : ''}</td>
             <td class="num">${f.fornecimentos}</td>
             <td class="num">${f.lead_time_medio != null ? `${fmt(f.lead_time_medio, 1)} d<small>${f.entregas_com_prazo} entrega(s)</small>` : '—'}</td>
             <td class="num">${preco(f.ultimo_preco)}<small>${f.ultimo_preco_data ? dataCompleta(f.ultimo_preco_data) : ''}</small></td>
@@ -811,7 +833,7 @@
         corpo.innerHTML = `
             <div class="mp-secao"><p class="mp-secao__titulo">Fornecedores</p>
                 <table class="mp-tab"><thead><tr><th>Fornecedor</th><th class="num">Compras</th><th class="num">Prazo médio</th><th class="num">Último preço/${un}</th></tr></thead><tbody>${fornecedores}</tbody></table>
-                <p class="mp-nota" style="margin-top:8px">Mais rápido: menor prazo médio (OC → entrada) entre quem entregou ao menos ${data.min_entregas_mais_rapido} vezes nos últimos ${data.meses_fornecedor_atual} meses. Menor preço: só compara compras dos últimos ${data.meses_preco_comparavel} meses. Preço na unidade de estoque; filiais do mesmo CNPJ contam como um fornecedor.</p>
+                <p class="mp-nota" style="margin-top:8px">Mais rápido: menor prazo médio (OC → entrada) entre quem entregou ao menos ${data.min_entregas_mais_rapido} vezes nos últimos ${data.meses_historico} meses. Menor preço: só compara compras dos últimos ${data.meses_preco_comparavel} meses. Preço na unidade de estoque; filiais do mesmo CNPJ contam como um fornecedor.</p>
             </div>
             <div class="mp-secao"><p class="mp-secao__titulo">Todas as compras (${data.fornecimentos.length})</p>
                 <table class="mp-tab"><thead><tr><th>Data</th><th>Fornecedor</th><th class="num">Qtde (${un})</th><th class="num">Preço/${un}</th><th class="num">Prazo</th></tr></thead><tbody>${compras}</tbody></table>
@@ -820,7 +842,7 @@
 
     function abasDoItem(item) {
         const abas = [['resumo', 'Resumo']];
-        if (item.planejamento && item.planejamento.tipo_demanda) abas.push(['calculo', 'Cálculo']);
+        if (item.planejamento && item.planejamento.tipo_demanda && item.planejamento.tipo_demanda !== 'novo') abas.push(['calculo', 'Cálculo']);
         if (VISOES_COMPRA.includes(visaoAtual)) abas.push(['fornecimentos', 'Fornecimentos']);
         if (visaoAtual === 'produto_acabado' || Number(item.saldo_reservado || 0) > 0) abas.push(['reservas', 'Reservas']);
         return abas;
@@ -1018,6 +1040,7 @@
         if (nivel) params.set('nivel', nivel);
         if ($('mp-estoque-minimo').checked) params.set('estoque_minimo', '1');
         if ($('mp-sem-saldo').checked) params.set('incluir_sem_saldo', '1');
+        if ($('mp-excedente').checked) params.set('excedente', '1');
         if (refresh) params.set('refresh', '1');
         // Máximo da API: filtro de coluna só enxerga o que foi carregado.
         params.set('limit', '800');
@@ -1044,12 +1067,17 @@
     $('mp-nivel').addEventListener('change', () => carregar(false));
     $('mp-estoque-minimo').addEventListener('change', () => carregar(false));
     $('mp-sem-saldo').addEventListener('change', () => carregar(false));
+    $('mp-excedente').addEventListener('change', () => carregar(false));
     $('mp-refresh').addEventListener('click', () => carregar(true));
     document.querySelectorAll('.mp-view-btn[data-visao]').forEach((btn) => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.mp-view-btn').forEach((item) => item.classList.remove('active'));
             btn.classList.add('active');
             visaoAtual = btn.dataset.visao || 'materia_prima';
+            // Excedente só existe nas visões com planejamento (produto acabado não tem).
+            const temExcedente = VISOES_COMPRA.includes(visaoAtual);
+            $('mp-excedente-wrap').style.display = temExcedente ? '' : 'none';
+            if (!temExcedente) $('mp-excedente').checked = false;
             filtros = {};
             ordem = null;
             fecharFiltro();

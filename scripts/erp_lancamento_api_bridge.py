@@ -1389,13 +1389,13 @@ SQL_PLANEJAMENTO_MENSAL = _SQL_PLANEJAMENTO_BASE + """
 """
 
 SQL_PLANEJAMENTO_RETIRADAS = _SQL_PLANEJAMENTO_BASE + """
-    -- Tamanho de uma retirada nos ultimos 24 meses: e' o que dimensiona o
+    -- Tamanho de uma retirada nos ultimos 12 meses: e' o que dimensiona o
     -- minimo de item esporadico, onde media diaria nao significa nada.
     select codigo, count(*) as retiradas,
            percentile_cont(0.5) within group (order by -liquido) as p50,
            percentile_cont(0.8) within group (order by -liquido) as p80
     from doc
-    where liquido < 0 and dia >= (current_date - 730)
+    where liquido < 0 and dia >= (current_date - 365)
     group by codigo
 """
 
@@ -1953,7 +1953,7 @@ def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date
     por_codigo: dict[str, dict[str, Any]] = {
         codigo: {
             "serie_mensal": [],
-            "retiradas_24m": {"quantidade": 0, "p50": None, "p80": None},
+            "retiradas_12m": {"quantidade": 0, "p50": None, "p80": None},
             "lead_times": [],
             "preco_custo": None,
             "unidade": "",
@@ -1974,7 +1974,7 @@ def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date
     cur.execute(SQL_PLANEJAMENTO_RETIRADAS, params)
     for codigo, retiradas, p50, p80 in cur.fetchall():
         if codigo in por_codigo:
-            por_codigo[codigo]["retiradas_24m"] = {
+            por_codigo[codigo]["retiradas_12m"] = {
                 "quantidade": int(retiradas or 0),
                 "p50": round(float(p50), 6) if p50 is not None else None,
                 "p80": round(float(p80), 6) if p80 is not None else None,
@@ -3164,8 +3164,10 @@ def create_app() -> Flask:
             if not codigos:
                 return jsonify({"sucesso": True, "itens": {}})
 
-            # Historico inteiro do kardex (comeca em 18/06/2019): item de giro
-            # lento precisa de todo o historico pra aparecer (pedido da logistica).
+            # Historico inteiro do kardex (comeca em 18/06/2019). As contas no
+            # Sync usam so' os ultimos 12 meses (22/10/2026), mas precisam da
+            # primeira movimentacao real: com inicio recente, item antigo
+            # pareceria novo e a media mensal dividiria por menos meses.
             inicio = date(2019, 1, 1)
             with _conectar(cfg, readonly=True) as conn:
                 with conn.cursor() as cur:
