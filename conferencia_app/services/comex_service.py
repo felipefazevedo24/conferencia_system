@@ -982,12 +982,25 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
     processos = query.order_by(ComexProcesso.criado_em.desc()).all()
     if busca:
         termo = busca.strip().lower()
+
+        def _ocs(p: ComexProcesso) -> list[str]:
+            # A OC propria e as combinadas nesta PO (estas somem da lista e
+            # so existem "dentro" do processo principal - buscar pelo numero
+            # delas tem que achar o principal).
+            ocs = [str(p.cod_ordem_compra or ""), p.cod_compra or ""]
+            try:
+                ocs += [str(c) for c in json.loads(p.po_ocs_vinculadas or "[]") or []]
+            except (TypeError, ValueError):
+                pass
+            return ocs
+
         processos = [
             p for p in processos
             if termo in (p.id_op or "").lower()
             or termo in (p.ref_ff or "").lower()
             or termo in (p.fornecedor or "").lower()
             or termo in (p.po_numero or "").lower()
+            or any(termo in oc.lower() for oc in _ocs(p) if oc)
         ]
     return processos
 
