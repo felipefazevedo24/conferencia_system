@@ -417,31 +417,78 @@ def notificar_relatorio_ajuste_inventario(
     tipo_ajuste: str | None = None,
     motivo_ajuste: str | None = None,
     deposito: str | None = None,
+    itens: list[dict] | None = None,
     link: str | None = None,
     env_var: str = "TEAMS_WEBHOOK_INVENTARIO_FINANCE_URL",
     config_key: str = "webhook_inventario_finance",
 ) -> None:
     """Avisa o Finance que um relatorio de ajuste de inventario (FORM-08.52)
-    foi gerado e os itens estao disponiveis pra ajuste no ERP."""
+    foi gerado e os itens estao disponiveis pra ajuste no ERP.
+
+    itens: [{codigo, descricao, local, unidade, diferenca, custo_medio}], com
+    os valores vigentes - os mesmos do PDF do relatorio."""
     app = current_app._get_current_object()
     url = _webhook_url(env_var, config_key)
     if not url:
         app.logger.info("TEAMS: webhook do inventario/finance nao configurado; aviso ignorado (%s).", numero_documento)
         return
 
-    linha = f"Relatório {numero_documento} · {qtd_itens} item(ns)"
-    partes = [f"Gerado por: {gerado_por}"]
-    if tipo_ajuste:
-        partes.append(f"Tipo: {tipo_ajuste}")
-    if motivo_ajuste:
-        partes.append(f"Motivo: {motivo_ajuste}")
+    def _brl(v):
+        return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    # Mesmo visual dos avisos do recebimento: faixa, fatos em FactSet e uma
+    # linha por item.
+    payload = _card_payload("", "", None, mencionar_canal=True)
+    card_content = payload["attachments"][0]["content"]
+    corpo = [card_content["body"][0]]
+    corpo.append({
+        "type": "Container", "style": "accent", "bleed": True,
+        "items": [
+            {"type": "TextBlock", "text": "📋 AJUSTE DE INVENTÁRIO PARA O FINANCE", "weight": "Bolder",
+             "size": "Small", "color": "Accent", "spacing": "None"},
+            {"type": "TextBlock", "text": f"Relatório {numero_documento}", "weight": "Bolder",
+             "size": "ExtraLarge", "spacing": "Small", "wrap": True},
+            {"type": "TextBlock", "text": " · ".join(x for x in (tipo_ajuste, motivo_ajuste) if x) or "Ajuste de inventário",
+             "isSubtle": True, "spacing": "None", "wrap": True},
+        ],
+    })
+
+    impactos = [i["diferenca"] * i["custo_medio"] for i in (itens or []) if i.get("custo_medio") is not None]
+    fatos = [{"title": "Itens", "value": f"{qtd_itens} {'item' if qtd_itens == 1 else 'itens'}"}]
+    if impactos:
+        fatos.append({"title": "Impacto total", "value": _brl(sum(impactos))})
     if deposito:
-        partes.append(f"Depósito: {deposito}")
-    subinfo = " · ".join(partes) + "\n\nDisponível para ajuste no ERP."
-    payload = _card_payload("📋 Ajuste de inventário para o Finance", linha, subinfo, mencionar_canal=True)
+        fatos.append({"title": "Depósito", "value": deposito})
+    fatos.append({"title": "Gerado por", "value": gerado_por})
+    fatos.append({"title": "Situação", "value": "⏳ Aguardando ajuste no ERP"})
+    corpo.append({"type": "FactSet", "facts": fatos, "spacing": "Medium"})
+
+    if itens:
+        corpo.append({"type": "TextBlock", "text": "ITENS DO AJUSTE", "weight": "Bolder", "size": "Small",
+                      "isSubtle": True, "spacing": "Medium", "separator": True})
+        for i in itens:
+            un = f" {i['unidade']}" if i.get("unidade") else ""
+            direita = [{"type": "TextBlock", "text": f"{i['diferenca']:+g}{un}", "weight": "Bolder", "wrap": True,
+                        "horizontalAlignment": "Right", "color": "Good" if i["diferenca"] > 0 else "Attention"}]
+            if i.get("custo_medio") is not None:
+                direita.append({"type": "TextBlock", "text": _brl(i["diferenca"] * i["custo_medio"]), "size": "Small",
+                                "isSubtle": True, "spacing": "None", "horizontalAlignment": "Right", "wrap": True})
+            corpo.append({
+                "type": "ColumnSet", "spacing": "Small",
+                "columns": [
+                    {"type": "Column", "width": "stretch", "items": [
+                        {"type": "TextBlock", "text": f"**{i['codigo']}** · {i.get('descricao') or '—'}", "wrap": True},
+                        {"type": "TextBlock", "text": f"Local {i.get('local') or '—'}", "isSubtle": True, "size": "Small",
+                         "spacing": "None", "wrap": True},
+                    ]},
+                    {"type": "Column", "width": "auto", "verticalContentAlignment": "Center", "items": direita},
+                ],
+            })
+
+    card_content["body"] = corpo
     if link:
-        payload["attachments"][0]["content"]["actions"] = [
-            {"type": "Action.OpenUrl", "title": "Abrir ajustes de inventário", "url": link}
+        card_content["actions"] = [
+            {"type": "Action.OpenUrl", "title": "Abrir ajustes de inventário", "url": link, "style": "positive"}
         ]
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
 

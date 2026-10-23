@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session, send_file
 from openpyxl import Workbook
@@ -1340,7 +1341,19 @@ def api_gerar_relatorio_ajuste():
         tipo_ajuste=relatorio.tipo_ajuste,
         motivo_ajuste=relatorio.motivo_ajuste,
         deposito=" - ".join(x for x in (relatorio.deposito_tipo, relatorio.deposito_local) if x),
-        link=f"{base}/logistica/inventario/ajustes",
+        itens=[
+            {
+                "codigo": a.codigo_produto,
+                "descricao": a.descricao_produto,
+                "local": a.local_codigo,
+                "unidade": a.unidade_medida,
+                "diferenca": a.diferenca_vigente or 0,
+                "custo_medio": a.custo_medio,
+            }
+            for a in relatorio.ajustes
+        ],
+        # Abre a tela ja filtrada nos itens deste relatorio.
+        link=f"{base}/logistica/inventario/ajustes?relatorio={quote(relatorio.numero_documento, safe='')}",
     )
 
     return jsonify({

@@ -188,10 +188,16 @@ def listar_ajustes(status_modulo: str | None = None, busca: str = "") -> list[Lo
     busca = (busca or "").strip()
     if busca:
         termo = f"%{busca}%"
-        query = query.filter(
+        # Numero do relatorio tambem: o link do aviso do Finance abre a tela
+        # ja buscando por ele, e o Excel tem que sair com os mesmos itens.
+        query = query.outerjoin(
+            LogisticaInventarioRelatorioAjuste,
+            LogisticaInventarioAjuste.relatorio_id == LogisticaInventarioRelatorioAjuste.id,
+        ).filter(
             db.or_(
                 LogisticaInventarioAjuste.local_codigo.ilike(termo),
                 LogisticaInventarioAjuste.codigo_produto.ilike(termo),
+                LogisticaInventarioRelatorioAjuste.numero_documento.ilike(termo),
             )
         )
     return query.order_by(LogisticaInventarioAjuste.criado_em.desc()).all()
