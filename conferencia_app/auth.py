@@ -100,10 +100,6 @@ PERMISSION_CATALOG = {
     "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
     "EXECUTE_RPA_GRV": "Produção > Executar apontamento agrupado no GRV",
-    "PAGE_RH_REQUISICAO": "RH > Requisição de vaga (abrir e acompanhar as próprias)",
-    "APROVAR_RH_DIRETORIA": "RH > Aprovar requisição de vaga (Diretoria)",
-    "APROVAR_RH_FINANCEIRO": "RH > Aprovar requisição de vaga (Financeiro)",
-    "PAGE_RH_GESTAO": "RH > Gestão de vagas (aprovação do RH, publicação, candidatos e cadastros)",
 }
 
 
@@ -187,10 +183,6 @@ BASE_ROLE_PERMISSIONS = {
     },
     "Qualidade": {
         "PAGE_QUALIDADE",
-    },
-    "RH": {
-        "PAGE_RH_REQUISICAO",
-        "PAGE_RH_GESTAO",
     },
 }
 
