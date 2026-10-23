@@ -33,6 +33,7 @@ from ..services import expedicao_fat_comparacao_nf_service as comparacao_nf_svc
 from ..services import expedicao_fat_service as svc
 from ..services import expedicao_grv_trilha_service as grv_trilha_svc
 from ..services import expedicao_log_service as log_svc
+from ..services import expedicao_pendentes_pdf as pendentes_pdf
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 from ..tempo import agora_br
 
@@ -376,6 +377,27 @@ def etiqueta_red_molds_pdf(cod_ordem_fat):
 def etiqueta_columbia_pdf(cod_ordem_fat):
     """Mesma etiqueta no modelo Columbia (80 x 120 mm, sem OS)."""
     return _etiqueta_pdf(cod_ordem_fat, etiqueta_pdf.COLUMBIA, "etiqueta_columbia")
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/pendentes.pdf")
+@permission_required(PERMISSION)
+def pendentes_pdf_fat(cod_ordem_fat):
+    """Itens sem contagem na tela (ids em ?itens=) + desenho de cada OS."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    itens = pendentes_pdf.filtrar_itens(ordem.itens, request.args.get("itens"))
+    if not itens:
+        return jsonify({"error": "Nenhum item pendente para imprimir."}), 400
+    cabecalho = [
+        ("Ordem de faturamento", str(ordem.cod_ordem_fat)),
+        ("Código", ordem.codigo_interno),
+        ("Cliente", ordem.cliente),
+    ]
+    pdf = pendentes_pdf.gerar_pdf(cabecalho, itens, len(ordem.itens), session["username"])
+    return current_app.response_class(pdf, mimetype="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="pendentes_{cod_ordem_fat}.pdf"',
+    })
 
 
 # ZPL: impressao direta na Zebra (Zebra Browser Print) com o tamanho da

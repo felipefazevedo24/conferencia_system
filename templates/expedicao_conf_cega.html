@@ -497,6 +497,7 @@
                         <button class="eui-btn eui-btn--danger" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
                     </div>
                 </div>
+                <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-imprimir-pendentes" title="Lista dos itens ainda sem contagem, com o desenho de cada OS"><i class="fas fa-print"></i> Imprimir pendentes</button>
                 <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-salvar-parcial" title="Salva o que já foi contado até agora, sem finalizar - use antes de sair pra procurar itens faltantes"><i class="fas fa-floppy-disk"></i> Salvar progresso</button>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
             </div>
@@ -1760,6 +1761,8 @@
                     : '<i class="fas fa-check-double"></i> Finalizar conferência';
                 const bSalvarParcial = el("btn-salvar-parcial");
                 if (bSalvarParcial) bSalvarParcial.style.display = o.editavel ? "" : "none";
+                const bPendentes = el("btn-imprimir-pendentes");
+                if (bPendentes) bPendentes.style.display = (o.editavel && ["pendente", "faturado_sem_conf"].includes(o.status_slug)) ? "" : "none";
 
                 if (CE_IS_ADMIN) {
                     const podeEstornar = ["conferido", "faturado", "finalizado_sem_conf"].includes(o.status_slug);
@@ -1853,6 +1856,21 @@
             } finally {
                 if (btn) btn.disabled = false;
             }
+        }
+
+        // Pendente = linha sem contagem na tela agora (salva ou nao). O PDF
+        // traz a lista e, em seguida, o desenho de cada OS.
+        function imprimirPendentes() {
+            if (!currentOrdem) return;
+            const ids = [];
+            el("conf-itens").querySelectorAll("input[data-qtd]").forEach((inp) => {
+                if (inp.value.trim() === "") ids.push(inp.dataset.qtd);
+            });
+            if (!ids.length) {
+                toast("Todos os itens já têm contagem.", "info");
+                return;
+            }
+            window.open(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/pendentes.pdf?itens=" + ids.join(","), "_blank", "noopener");
         }
 
         async function finalizarConferencia() {
@@ -2197,6 +2215,7 @@
         el("btn-voltar").addEventListener("click", voltarDashboard);
         el("btn-voltar-2").addEventListener("click", voltarDashboard);
         el("btn-salvar-parcial").addEventListener("click", salvarProgressoParcial);
+        el("btn-imprimir-pendentes").addEventListener("click", imprimirPendentes);
         el("btn-finalizar-conf").addEventListener("click", finalizarConferencia);
         if (cfg.internacional) {
             const toggle = el("op-toggle");

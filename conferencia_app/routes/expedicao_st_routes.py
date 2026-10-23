@@ -27,6 +27,7 @@ from ..models import (
 )
 from ..services import expedicao_st_service as svc
 from ..services import expedicao_log_service as log_svc
+from ..services import expedicao_pendentes_pdf as pendentes_pdf
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 from ..tempo import agora_br
 
@@ -474,6 +475,27 @@ def obter_ordem_conf_st(cod_ordem_compra):
     resumo["editavel"] = editavel
     resumo["historico"] = log_svc.listar_logs("st", ordem.id)
     return jsonify(resumo)
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/pendentes.pdf")
+@permission_required(PERMISSION)
+def pendentes_pdf_st(cod_ordem_compra):
+    """Itens sem contagem na tela (ids em ?itens=) + desenho de cada OS."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    itens = pendentes_pdf.filtrar_itens(ordem.itens, request.args.get("itens"))
+    if not itens:
+        return jsonify({"error": "Nenhum item pendente para imprimir."}), 400
+    cabecalho = [
+        ("Ordem de compra", ordem.cod_ordem_compra),
+        ("Código", ordem.codigo_interno),
+        ("Fornecedor", ordem.fornecedor),
+    ]
+    pdf = pendentes_pdf.gerar_pdf(cabecalho, itens, len(ordem.itens), session["username"])
+    return current_app.response_class(pdf, mimetype="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="pendentes_{secure_filename(cod_ordem_compra) or "st"}.pdf"',
+    })
 
 
 @expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/conferir", methods=["POST"])
