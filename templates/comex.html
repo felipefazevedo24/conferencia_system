@@ -91,6 +91,7 @@
         <div class="eui-stat is-clickable" data-filter="Transporte"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-truck"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Transporte</span><span class="eui-stat__value" id="cx-m-transporte">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="NFCambio"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">NF/Câmbio</span><span class="eui-stat__value" id="cx-m-nf_cambio">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="cx-m-concluido">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Cancelado"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Cancelado</span><span class="eui-stat__value" id="cx-m-cancelado">0</span></div></div>
     </div>
 
     <div class="eui-card">
@@ -673,7 +674,9 @@
     }
 
     function renderMetricas(m) {
-        const total = Object.values(m).reduce((a, b) => a + b, 0);
+        // "Todos" = processos ativos: cancelado tem card proprio e nao entra.
+        const total = Object.entries(m).reduce((a, [slug, n]) => a + (slug === "cancelado" ? 0 : n), 0);
+        $("cx-m-cancelado").textContent = m.cancelado || 0;
         $("cx-m-todos").textContent = total;
         $("cx-m-oc").textContent = m.oc || 0;
         $("cx-m-po").textContent = m.po || 0;
@@ -700,7 +703,7 @@
             oc: "#b45309", po: "#7c3aed", cotacao: "#0369a1", instrucao: "#0369a1",
             coleta: "#b45309", em_transito: "#0369a1", desembarque: "#0369a1",
             desembaraco: "#b45309", transporte: "#b45309", nf_cambio: "#15803d",
-            concluido: "#15803d",
+            concluido: "#15803d", cancelado: "#b91c1c",
         };
         const cor = cores[p.status_slug] || "#475569";
         const label = p.cotacao_substatus ? `${p.status_modulo} · ${p.cotacao_substatus}` : p.status_modulo;
@@ -782,7 +785,7 @@
         if (p.status_modulo === "OC") {
             itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
             itens += it("criar-po", "fa-file-signature", "Criar PO");
-            itens += "<hr>" + btnPularStatus() + it("apagar-oc", "fa-trash", "Apagar OC", true);
+            itens += "<hr>" + btnPularStatus() + it("cancelar", "fa-ban", "Cancelar processo", true) + it("apagar-oc", "fa-trash", "Apagar OC", true);
         } else if (p.status_modulo === "PO") {
             itens += it("editar-po", "fa-pen-to-square", "Ver / Editar PO");
             if (p.po_pdf_disponivel !== false && p.po_numero) {
@@ -791,7 +794,7 @@
             if (p.po_status === "Finalizada") {
                 itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             }
-            itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
+            itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ OC", true) + it("cancelar", "fa-ban", "Cancelar processo", true);
         } else if (p.status_modulo === "Cotacao") {
             itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             if (p.cotacao_vencedora_id) {
@@ -808,6 +811,11 @@
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
+        } else if (p.status_modulo === "Cancelado") {
+            // Sem PO, "ver" abriria o formulario de criar PO: mostra a OC
+            // (com o historico, onde fica o motivo do cancelamento).
+            itens += p.po_numero ? it("ver", "fa-eye", "Detalhes") : it("editar-oc", "fa-eye", "Detalhes da OC");
+            itens += "<hr>" + it("reativar", "fa-rotate-left", "Reativar processo");
         } else if (p.status_modulo === "Concluido") {
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
@@ -885,6 +893,24 @@
             try {
                 await api(`/api/comex/processos/${id}/oc`, { method: "DELETE" });
                 toast("OC apagada.");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        } else if (act === "cancelar") {
+            const combinadas = (p.po_ocs_vinculadas || []).length > 1
+                ? "\n\nAs OCs combinadas nesta PO voltam a ser OCs soltas na lista." : "";
+            const motivo = prompt(`Cancelar o processo ${p.id_op} (OC ${p.cod_ordem_compra || "—"})?${combinadas}\n\nInforme o motivo do cancelamento (obrigatório):`, "");
+            if (motivo === null) return;
+            if (!motivo.trim()) { toast("Informe o motivo do cancelamento.", "error"); return; }
+            try {
+                const resp = await api(`/api/comex/processos/${id}/cancelar`, { method: "POST", body: JSON.stringify({ motivo }) });
+                toast(resp.message, "success");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        } else if (act === "reativar") {
+            if (!confirm(`Reativar o processo ${p.id_op}? Ele volta para ${p.po_numero ? "PO" : "OC"}.`)) return;
+            try {
+                const resp = await api(`/api/comex/processos/${id}/reativar`, { method: "POST" });
+                toast(resp.message, resp.nao_religadas && resp.nao_religadas.length ? "error" : "success");
                 carregar();
             } catch (err) { toast(err.message, "error"); }
         } else if (act === "ver-pdf") {

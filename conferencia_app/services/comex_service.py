@@ -59,6 +59,7 @@ LABELS_MODULO = {
     "Transporte": "Transporte",
     "NFCambio": "NF/Câmbio",
     "Concluido": "Concluído",
+    "Cancelado": "Cancelado",
 }
 
 STATUS_SLUGS = {
@@ -73,7 +74,13 @@ STATUS_SLUGS = {
     "Transporte": "transporte",
     "NFCambio": "nf_cambio",
     "Concluido": "concluido",
+    # Fora de MODULOS_SEQUENCIA de proposito: nao e' etapa do workflow (nao
+    # avanca nem estorna) - so' sai dele por reativar(). Ver cancelar().
+    "Cancelado": "cancelado",
 }
+
+STATUS_CANCELADO = "Cancelado"
+MODULOS_CANCELAVEIS = ("OC", "PO")
 
 TIPOS_OPERACAO = ("IM", "IA", "EM", "EA")  # IM/IA = Importacao Mar./Aer. | EM/EA = Exportacao Mar./Aer.
 DIRECOES_OPERACAO = ("IMPO", "EXPO")
@@ -403,6 +410,8 @@ def importar_oc(oc_header: dict, usuario: str) -> ComexProcesso:
         cod_empresa=cod_empresa, cod_ordem_compra=cod_ordem_compra
     ).first()
     if existente:
+        if existente.status_modulo == STATUS_CANCELADO:
+            raise ValueError(f"Esta OC já foi importada como o processo {existente.id_op}, que está cancelado - reative-o no card Cancelado.")
         raise ValueError(f"Esta OC ja foi importada como o processo {existente.id_op}.")
 
     if oc_header.get("bloqueio"):
@@ -522,6 +531,87 @@ def apagar_oc(processo: ComexProcesso) -> None:
         raise ValueError("Só é possível apagar a OC enquanto o processo está no módulo OC (antes da PO).")
     db.session.delete(processo)
     db.session.commit()
+
+
+def _exigir_nao_cancelado(processo: ComexProcesso) -> None:
+    if processo.status_modulo == STATUS_CANCELADO:
+        raise ValueError("Processo cancelado - reative-o antes de continuar.")
+
+
+def cancelar(processo: ComexProcesso, motivo: str, usuario: str) -> list[str]:
+    """Cancela o processo (so' em OC ou PO): fica registrado como Cancelado,
+    com o motivo no historico de comentarios - diferente de apagar_oc, nao
+    some e a OC nao volta a ficar disponivel pra importar. As OCs combinadas
+    nesta PO voltam a ser OCs soltas (como no estorno da PO);
+    po_ocs_vinculadas fica guardado pra reativar() religar. Devolve as OCs
+    liberadas."""
+    if processo.status_modulo not in MODULOS_CANCELAVEIS:
+        raise ValueError("Só é possível cancelar processos no status OC ou PO.")
+    if processo.po_processo_principal_id:
+        raise ValueError("Esta OC está combinada na PO de outro processo - cancele o processo principal.")
+    motivo = str(motivo or "").strip()
+    if not motivo:
+        raise ValueError("Informe o motivo do cancelamento.")
+    liberadas = ComexProcesso.query.filter_by(po_processo_principal_id=processo.id).all()
+    for vinculada in liberadas:
+        vinculada.po_processo_principal_id = None
+    anterior = processo.status_modulo
+    processo.status_modulo = STATUS_CANCELADO
+    processo.status_slug = status_slug(STATUS_CANCELADO)
+    processo.atualizado_em = agora_br()
+    processo.atualizado_por = usuario
+    ocs_liberadas = [str(v.cod_ordem_compra or v.id_op) for v in liberadas]
+    texto = f"Processo CANCELADO (estava em {LABELS_MODULO.get(anterior, anterior)}). Motivo: {motivo}"
+    if ocs_liberadas:
+        texto += f" | OCs combinadas liberadas: {', '.join(ocs_liberadas)}."
+    db.session.add(ComexComentario(processo_id=processo.id, texto=texto, criado_por=usuario))
+    db.session.commit()
+    return ocs_liberadas
+
+
+def reativar(processo: ComexProcesso, usuario: str) -> dict:
+    """Desfaz o cancelamento: volta pra PO se a PO existia, senao pra OC.
+    Religa as OCs que estavam combinadas na PO, se ainda estiverem soltas
+    no status OC; as que ja seguiram outro caminho ficam de fora (e saem de
+    po_ocs_vinculadas)."""
+    if processo.status_modulo != STATUS_CANCELADO:
+        raise ValueError("Este processo não está cancelado.")
+    destino = "PO" if processo.po_numero else "OC"
+    religadas, nao_religadas = [], []
+    if destino == "PO" and processo.po_ocs_vinculadas:
+        try:
+            codigos = json.loads(processo.po_ocs_vinculadas) or []
+        except (TypeError, ValueError):
+            codigos = []
+        mantidas = []
+        for codigo in codigos:
+            if str(codigo) == str(processo.cod_ordem_compra):
+                mantidas.append(codigo)
+                continue
+            outra = ComexProcesso.query.filter(
+                ComexProcesso.cod_ordem_compra == codigo,
+                ComexProcesso.fornecedor == processo.fornecedor,
+                ComexProcesso.id != processo.id,
+            ).first()
+            if outra and outra.status_modulo == "OC" and outra.po_processo_principal_id is None:
+                outra.po_processo_principal_id = processo.id
+                mantidas.append(codigo)
+                religadas.append(str(codigo))
+            else:
+                nao_religadas.append(str(codigo))
+        processo.po_ocs_vinculadas = json.dumps(mantidas, default=str) if mantidas else None
+    processo.status_modulo = destino
+    processo.status_slug = status_slug(destino)
+    processo.atualizado_em = agora_br()
+    processo.atualizado_por = usuario
+    texto = f"Processo REATIVADO (voltou para {LABELS_MODULO[destino]})."
+    if religadas:
+        texto += f" OCs combinadas de volta: {', '.join(religadas)}."
+    if nao_religadas:
+        texto += f" OCs que não voltaram para a PO (já seguiram outro caminho): {', '.join(nao_religadas)}."
+    db.session.add(ComexComentario(processo_id=processo.id, texto=texto, criado_por=usuario))
+    db.session.commit()
+    return {"destino": destino, "religadas": religadas, "nao_religadas": nao_religadas}
 
 
 def _mesmo_fornecedor(processos: list[ComexProcesso]) -> bool:
@@ -701,6 +791,7 @@ def salvar_po(
     Ref Despachante, BL/AWB, Invoice, ETD, ETA, Previsao Entrega, Entrega
     Real, NF impo, NF recebimento) - todos opcionais e editaveis a qualquer
     momento, inclusive depois da PO Finalizada."""
+    _exigir_nao_cancelado(processo)
     if pagador_frete not in PAGADORES_FRETE:
         raise ValueError("Pagador do frete invalido.")
     if direcao_operacao not in DIRECOES_OPERACAO:
@@ -796,6 +887,7 @@ def salvar_itens_po(processo: ComexProcesso, itens: list[dict]) -> list[ComexPoI
     Substitui a lista inteira a cada chamada (apaga e recria) - mais simples
     e suficiente para o volume tipico de itens de uma PO."""
     agora = agora_br()
+    _exigir_nao_cancelado(processo)
     ComexPoItem.query.filter_by(processo_id=processo.id).delete()
 
     novos = []
@@ -884,6 +976,7 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     em telas de acompanhamento (ex.: Torre de Controle) e um estorno e' um
     retrocesso, nao um avanco/interacao real - contar como interacao
     mascararia processos parados que so foram estornados."""
+    _exigir_nao_cancelado(processo)
     anterior = _modulo_anterior(processo.status_modulo)
     if anterior is None:
         raise ValueError("Este processo já está no primeiro módulo (OC) - não há como estornar mais.")
@@ -914,6 +1007,7 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     que comecaram fora do sistema (ja estao mais adiantados no mundo real
     do que o cadastro reflete) e simples acompanhamento/follow-up de status
     de embarque sem precisar repetir cada acao do fluxo normal."""
+    _exigir_nao_cancelado(processo)
     proximo = _proximo_modulo(processo.status_modulo)
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
@@ -943,6 +1037,7 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     trava nada no meio do caminho. A unica transicao validada e' a ULTIMA
     (NF/Cambio -> Concluido), que exige todos os campos operacionais
     preenchidos (ver CAMPOS_OPERACIONAIS / campos_faltando_para_concluir)."""
+    _exigir_nao_cancelado(processo)
     proximo = _proximo_modulo(processo.status_modulo)
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
@@ -979,6 +1074,9 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
     query = ComexProcesso.query.filter(ComexProcesso.po_processo_principal_id.is_(None))
     if status_modulo:
         query = query.filter_by(status_modulo=status_modulo)
+    else:
+        # Cancelado so' aparece no card proprio (filtro "Cancelado").
+        query = query.filter(ComexProcesso.status_modulo != STATUS_CANCELADO)
     processos = query.order_by(ComexProcesso.criado_em.desc()).all()
     if busca:
         termo = busca.strip().lower()
