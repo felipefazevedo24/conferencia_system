@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}Simulador de custo — Comex{% endblock %}
+{% block shell_title %}Comex — Simulador de custo de importação{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sc-wrap { display: grid; gap: 18px; }
+    .sc-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border); }
+    .sc-tab { border: 0; background: transparent; padding: 10px 14px; font-weight: 700; font-size: 13px; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+    .sc-tab.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .sc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .sc-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--eui-muted); padding: 7px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .sc-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .sc-table td.num, .sc-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sc-table tr.sc-total td { font-weight: 800; border-top: 2px solid var(--eui-border); }
+    .sc-table tr.sc-sub td { font-weight: 700; background: #f8fafc; }
+    .sc-table input { width: 100%; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--eui-border); border-radius: 6px; font-family: inherit; }
+    .sc-table input.num { text-align: right; }
+    .sc-aliq { font-size: 10.5px; color: var(--eui-muted); margin-top: 2px; white-space: nowrap; }
+    .sc-aliq.erro { color: var(--eui-danger); font-weight: 700; }
+    .sc-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .sc-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+    .sc-campo { display: grid; gap: 4px; }
+    .sc-campo label { font-size: 11.5px; font-weight: 700; color: var(--eui-text); }
+    .sc-campo small { font-size: 10.5px; color: var(--eui-muted); }
+    .sc-h3 { margin: 0 0 12px; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+    .sc-cambio { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
+    .sc-cambio .sc-campo { width: 180px; }
+    .sc-resumo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .sc-box { border: 1px solid var(--eui-border); border-radius: 12px; padding: 14px 16px; background: var(--eui-surface); }
+    .sc-box.vencedor { border-color: #16a34a; box-shadow: 0 0 0 2px #16a34a33; }
+    .sc-box__rot { font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--eui-muted); }
+    .sc-box__val { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .sc-box__sub { font-size: 11.5px; color: var(--eui-muted); margin-top: 2px; }
+    .sc-selo { display: inline-block; font-size: 10.5px; font-weight: 800; background: #dcfce7; color: #166534; border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+    .sc-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 9px 12px; font-size: 12.5px; }
+    .sc-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 20px; }
+    .sc-modal.open { display: flex; }
+    .sc-modal__box { background: var(--eui-surface); border-radius: 14px; width: min(620px, 100%); max-height: 90vh; overflow-y: auto; padding: 18px 20px; display: grid; gap: 12px; }
+    .sc-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: 10px; box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; max-width: 420px; display: none; }
+    .sc-toast.error { border-left-color: var(--eui-danger); }
+    .sc-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+    @media (max-width: 900px) { .sc-grid-2, .sc-resumo { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sc-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Comex</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-calculator"></i> Simulador de custo de importação</h1>
+            <p class="eui-page-header__sub">Compara o desembolso da mesma importação via Despachante (DUIMP) e via Courier, com as alíquotas por NCM. Sem crédito de impostos.</p>
+        </div>
+    </header>
+
+    <div class="sc-tabs">
+        <button type="button" class="sc-tab is-active" data-tab="simular">Simular</button>
+        <button type="button" class="sc-tab" data-tab="ncms">NCMs e alíquotas</button>
+    </div>
+
+    <!-- ── Simular ─────────────────────────────────────────────── -->
+    <section id="sc-simular" class="sc-wrap">
+        <div class="eui-card"><div class="eui-card__body">
+            <div class="sc-cambio">
+                <div class="sc-campo"><label for="sc-cambio">Câmbio (R$ por US$)</label><input class="eui-input" id="sc-cambio" inputmode="decimal" placeholder="0,0000"></div>
+                <button type="button" class="eui-btn eui-btn--subtle" id="sc-btn-ptax"><i class="fas fa-building-columns"></i> Buscar PTAX</button>
+                <small id="sc-ptax-info" style="color:var(--eui-muted);font-size:12px;"></small>
+            </div>
+            <h3 class="sc-h3"><i class="fas fa-list"></i> Itens (conforme invoice)</h3>
+            <div style="overflow-x:auto;"><table class="sc-table">
+                <thead><tr><th style="width:12%;">Código</th><th>Descrição</th><th style="width:15%;">NCM</th><th class="num" style="width:8%;">Qtd</th><th class="num" style="width:12%;">Valor total US$</th><th class="num" style="width:10%;">Peso líq. (kg)</th><th></th></tr></thead>
+                <tbody id="sc-itens"></tbody>
+            </table></div>
+            <datalist id="sc-ncm-lista"></datalist>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="sc-btn-add"><i class="fas fa-plus"></i> Adicionar item</button>
+                <small style="color:var(--eui-muted);font-size:11.5px;align-self:center;">O peso só é usado no despachante, para ratear o frete (sem peso, rateia pelo valor).</small>
+            </div>
+        </div></div>
+
+        <div class="sc-grid-2">
+            <div class="eui-card"><div class="eui-card__body">
+                <h3 class="sc-h3"><i class="fas fa-user-tie"></i> Despachante (DUIMP)</h3>
+                <div class="sc-campos" data-modal="despachante">
+                    <div class="sc-campo"><label>Frete (US$)</label><input class="eui-input" data-campo="frete_usd" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Seguro (US$)</label><input class="eui-input" data-campo="seguro_usd" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Outros acréscimos (R$)</label><input class="eui-input" data-campo="acrescimos_brl" inputmode="decimal"><small>Ex.: taxa do CE - entra no CIF</small></div>
+                    <div class="sc-campo"><label>Taxa Siscomex (R$)</label><input class="eui-input" data-campo="taxa_siscomex_brl" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>AFRMM (R$)</label><input class="eui-input" data-campo="afrmm_brl" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Despesas de desembaraço (R$)</label><input class="eui-input" data-campo="despesas_desembaraco_brl" inputmode="decimal"><small>Honorários, armazenagem, SDA, desconsolidação, frete rodoviário…</small></div>
+                </div>
+            </div></div>
+            <div class="eui-card"><div class="eui-card__body">
+                <h3 class="sc-h3"><i class="fas fa-plane"></i> Courier</h3>
+                <div class="sc-campos" data-modal="courier">
+                    <div class="sc-campo"><label>Frete (US$)</label><input class="eui-input" data-campo="frete_usd" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Seguro (US$)</label><input class="eui-input" data-campo="seguro_usd" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Serviço courier (R$)</label><input class="eui-input" data-campo="servico_courier_brl" inputmode="decimal"><small>Fatura do courier - fora da base do ICMS</small></div>
+                    <div class="sc-campo"><label>Tarifa aeroportuária / armazenagem (R$)</label><input class="eui-input" data-campo="tarifa_aeroportuaria_brl" inputmode="decimal"></div>
+                    <div class="sc-campo"><label>Multas (R$)</label><input class="eui-input" data-campo="multas_brl" inputmode="decimal"><small>Entram na base do ICMS</small></div>
+                    <div class="sc-campo"><label>II do courier (%)</label><input class="eui-input" data-campo="ii_courier_pct" inputmode="decimal" value="{{ '%g' % ii_courier_padrao }}"><small>Fixo para todos os itens (não usa o II do NCM)</small></div>
+                    <div class="sc-campo"><label>ICMS do courier (%)</label><input class="eui-input" data-campo="icms_courier_pct" inputmode="decimal" value="{{ '%g' % icms_courier_padrao }}"><small>Por dentro, fixo (regra da planilha)</small></div>
+                </div>
+            </div></div>
+        </div>
+
+        <div><button type="button" class="eui-btn eui-btn--primary" id="sc-btn-simular"><i class="fas fa-scale-balanced"></i> Simular e comparar</button></div>
+
+        <div id="sc-resultado" class="sc-wrap hidden">
+            <div class="sc-resumo" id="sc-resumo"></div>
+            <div id="sc-avisos"></div>
+            <div class="eui-card"><div class="eui-card__body">
+                <h3 class="sc-h3"><i class="fas fa-receipt"></i> Composição do desembolso</h3>
+                <div style="overflow-x:auto;"><table class="sc-table">
+                    <thead><tr><th></th><th class="num">Despachante</th><th class="num">Courier</th><th class="num">Courier − Despachante</th></tr></thead>
+                    <tbody id="sc-composicao"></tbody>
+                </table></div>
+            </div></div>
+            <div class="eui-card"><div class="eui-card__body">
+                <h3 class="sc-h3"><i class="fas fa-boxes-stacked"></i> Custo por item</h3>
+                <div style="overflow-x:auto;"><table class="sc-table">
+                    <thead><tr><th>Código</th><th>Descrição</th><th>NCM</th><th class="num">Qtd</th><th class="num">Unitário despachante</th><th class="num">Unitário courier</th><th class="num">Total despachante</th><th class="num">Total courier</th></tr></thead>
+                    <tbody id="sc-por-item"></tbody>
+                </table></div>
+            </div></div>
+        </div>
+    </section>
+
+    <!-- ── NCMs ────────────────────────────────────────────────── -->
+    <section id="sc-ncms" class="eui-card hidden"><div class="eui-card__body">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+            <input type="search" class="eui-input" id="sc-ncm-busca" placeholder="Buscar NCM ou descrição…" style="max-width:320px;">
+            <button type="button" class="eui-btn eui-btn--primary" id="sc-btn-novo-ncm" style="margin-left:auto;"><i class="fas fa-plus"></i> Novo NCM</button>
+        </div>
+        <div style="overflow-x:auto;"><table class="sc-table">
+            <thead><tr><th>NCM</th><th>Descrição</th><th class="num">II</th><th class="num">IPI</th><th class="num">PIS</th><th class="num">COFINS</th><th class="num">ICMS</th><th class="num">ICMS base red.</th><th class="num">ICMS considerado</th><th>Atualizado</th><th></th></tr></thead>
+            <tbody id="sc-ncm-tbody"></tbody>
+        </table></div>
+    </div></section>
+</div>
+
+<div class="sc-modal" id="sc-modal-ncm"><div class="sc-modal__box">
+    <h3 style="margin:0;font-size:16px;" id="sc-modal-titulo">Novo NCM</h3>
+    <div class="sc-campos">
+        <div class="sc-campo"><label>NCM</label><input class="eui-input" data-ncm="ncm" placeholder="8474.31.00"></div>
+        <div class="sc-campo"><label>Descrição</label><input class="eui-input" data-ncm="descricao"></div>
+        <div class="sc-campo"><label>II (%)</label><input class="eui-input" data-ncm="ii" inputmode="decimal"></div>
+        <div class="sc-campo"><label>IPI (%)</label><input class="eui-input" data-ncm="ipi" inputmode="decimal"></div>
+        <div class="sc-campo"><label>PIS (%)</label><input class="eui-input" data-ncm="pis" inputmode="decimal"></div>
+        <div class="sc-campo"><label>COFINS (%)</label><input class="eui-input" data-ncm="cofins" inputmode="decimal"></div>
+        <div class="sc-campo"><label>ICMS (%)</label><input class="eui-input" data-ncm="icms" inputmode="decimal"></div>
+        <div class="sc-campo"><label>ICMS base reduzida (%)</label><input class="eui-input" data-ncm="icms_reduzido" inputmode="decimal" placeholder="vazio = sem redução"><small>Vale o menor entre ICMS e base reduzida</small></div>
+    </div>
+    <div class="sc-campo"><label>Observação / justificativa</label><textarea class="eui-input" data-ncm="observacao" rows="3"></textarea></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="eui-btn eui-btn--ghost" id="sc-modal-cancelar">Cancelar</button>
+        <button type="button" class="eui-btn eui-btn--primary" id="sc-modal-salvar">Salvar</button>
+    </div>
+</div></div>
+
+<div class="sc-toast" id="sc-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const brl = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+    const pct = (v) => (v == null ? "—" : (Number(v) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 4 }) + "%");
+    const pctEdit = (v) => (v == null ? "" : String(+(Number(v) * 100).toFixed(4)).replace(".", ","));
+    const soDigitos = (s) => String(s || "").replace(/\D/g, "");
+
+    let ncms = [], ncmEditando = null;
+
+    function toast(msg, tipo) {
+        const t = $("sc-toast");
+        t.textContent = msg; t.className = "sc-toast" + (tipo ? " " + tipo : ""); t.style.display = "block";
+        clearTimeout(t._t); t._t = setTimeout(() => { t.style.display = "none"; }, 6000);
+    }
+    async function api(url, opts) {
+        const r = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ("Erro " + r.status));
+        return d;
+    }
+
+    // ── Abas ───────────────────────────────────────────────────────────
+    document.querySelectorAll(".sc-tab").forEach((b) => b.addEventListener("click", () => {
+        document.querySelectorAll(".sc-tab").forEach((x) => x.classList.toggle("is-active", x === b));
+        $("sc-simular").classList.toggle("hidden", b.dataset.tab !== "simular");
+        $("sc-ncms").classList.toggle("hidden", b.dataset.tab !== "ncms");
+    }));
+
+    // ── NCMs ───────────────────────────────────────────────────────────
+    async function carregarNcms() {
+        ncms = (await api("/api/comex/ncms")).ncms;
+        $("sc-ncm-lista").innerHTML = ncms.map((n) => `<option value="${esc(n.ncm_formatado)}">${esc(n.descricao || "")}</option>`).join("");
+        desenharNcms();
+        document.querySelectorAll("#sc-itens tr").forEach(atualizarAliquotaLinha);
+    }
+    function desenharNcms() {
+        const termo = ($("sc-ncm-busca").value || "").toLowerCase();
+        const lista = ncms.filter((n) => !termo || n.ncm.includes(soDigitos(termo) || "§") || (n.descricao || "").toLowerCase().includes(termo) || n.ncm_formatado.includes(termo));
+        $("sc-ncm-tbody").innerHTML = lista.map((n) => `<tr>
+            <td style="font-weight:800;white-space:nowrap;">${esc(n.ncm_formatado)}</td>
+            <td>${esc(n.descricao || "—")}${n.observacao ? ` <i class="fas fa-circle-info" title="${esc(n.observacao)}" style="color:var(--eui-muted);"></i>` : ""}</td>
+            <td class="num">${pct(n.ii)}</td><td class="num">${pct(n.ipi)}</td><td class="num">${pct(n.pis)}</td><td class="num">${pct(n.cofins)}</td>
+            <td class="num">${pct(n.icms)}</td><td class="num">${n.icms_reduzido == null ? "—" : pct(n.icms_reduzido)}</td>
+            <td class="num"><b>${pct(n.icms_considerar)}</b></td>
+            <td style="font-size:11.5px;color:var(--eui-muted);white-space:nowrap;">${esc(n.atualizado_em || "")}<br>${esc(n.atualizado_por || "")}</td>
+            <td style="white-space:nowrap;"><button class="eui-btn eui-btn--subtle eui-btn--sm" data-editar-ncm="${n.id}" title="Editar"><i class="fas fa-pen"></i></button>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" data-excluir-ncm="${n.id}" title="Excluir"><i class="fas fa-trash"></i></button></td></tr>`).join("")
+            || '<tr><td colspan="11" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhum NCM.</td></tr>';
+    }
+    function abrirModalNcm(n) {
+        ncmEditando = n ? n.id : null;
+        $("sc-modal-titulo").textContent = n ? `Editar NCM ${n.ncm_formatado}` : "Novo NCM";
+        document.querySelectorAll("[data-ncm]").forEach((el) => {
+            const k = el.dataset.ncm;
+            el.value = !n ? "" : ["ii", "ipi", "pis", "cofins", "icms", "icms_reduzido"].includes(k) ? pctEdit(n[k]) : (k === "ncm" ? n.ncm_formatado : (n[k] || ""));
+        });
+        $("sc-modal-ncm").classList.add("open");
+        document.querySelector('[data-ncm="ncm"]').focus();
+    }
+    $("sc-btn-novo-ncm").addEventListener("click", () => abrirModalNcm(null));
+    $("sc-modal-cancelar").addEventListener("click", () => $("sc-modal-ncm").classList.remove("open"));
+    $("sc-modal-salvar").addEventListener("click", async () => {
+        const dados = {};
+        document.querySelectorAll("[data-ncm]").forEach((el) => { dados[el.dataset.ncm] = el.value; });
+        try {
+            const r = await api(ncmEditando ? `/api/comex/ncms/${ncmEditando}` : "/api/comex/ncms", { method: ncmEditando ? "PUT" : "POST", body: JSON.stringify(dados) });
+            $("sc-modal-ncm").classList.remove("open");
+            toast(r.message, "success");
+            await carregarNcms();
+        } catch (e) { toast(e.message, "error"); }
+    });
+    $("sc-ncm-busca").addEventListener("input", desenharNcms);
+    $("sc-ncm-tbody").addEventListener("click", async (e) => {
+        const ed = e.target.closest("[data-editar-ncm]");
+        if (ed) { abrirModalNcm(ncms.find((n) => String(n.id) === ed.dataset.editarNcm)); return; }
+        const ex = e.target.closest("[data-excluir-ncm]");
+        if (ex) {
+            const n = ncms.find((x) => String(x.id) === ex.dataset.excluirNcm);
+            if (!confirm(`Excluir o NCM ${n.ncm_formatado}?`)) return;
+            try { toast((await api(`/api/comex/ncms/${n.id}`, { method: "DELETE" })).message, "success"); await carregarNcms(); }
+            catch (err) { toast(err.message, "error"); }
+        }
+    });
+
+    // ── Itens ──────────────────────────────────────────────────────────
+    function adicionarItem(dados) {
+        const d = dados || {};
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><input data-i="codigo" value="${esc(d.codigo || "")}"></td>
+            <td><input data-i="descricao" value="${esc(d.descricao || "")}"></td>
+            <td><input data-i="ncm" list="sc-ncm-lista" value="${esc(d.ncm || "")}" placeholder="0000.00.00"><div class="sc-aliq"></div></td>
+            <td><input class="num" data-i="quantidade" inputmode="decimal" value="${esc(d.quantidade || "1")}"></td>
+            <td><input class="num" data-i="valor_usd" inputmode="decimal" value="${esc(d.valor_usd || "")}"></td>
+            <td><input class="num" data-i="peso" inputmode="decimal" value="${esc(d.peso || "")}"></td>
+            <td><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-remover title="Remover"><i class="fas fa-xmark"></i></button></td>`;
+        $("sc-itens").appendChild(tr);
+        atualizarAliquotaLinha(tr);
+        return tr;
+    }
+    function atualizarAliquotaLinha(tr) {
+        const el = tr.querySelector(".sc-aliq");
+        const ncm = soDigitos(tr.querySelector('[data-i="ncm"]').value);
+        if (!ncm) { el.textContent = ""; el.className = "sc-aliq"; return; }
+        const n = ncms.find((x) => x.ncm === ncm);
+        el.className = "sc-aliq" + (n ? "" : " erro");
+        el.textContent = n ? `II ${pct(n.ii)} · IPI ${pct(n.ipi)} · ICMS ${pct(n.icms_considerar)}` : "NCM sem cadastro";
+    }
+    $("sc-btn-add").addEventListener("click", () => adicionarItem().querySelector('[data-i="codigo"]').focus());
+    $("sc-itens").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-remover]");
+        if (b) { b.closest("tr").remove(); if (!$("sc-itens").children.length) adicionarItem(); }
+    });
+    $("sc-itens").addEventListener("input", (e) => { if (e.target.dataset.i === "ncm") atualizarAliquotaLinha(e.target.closest("tr")); });
+
+    // ── PTAX ───────────────────────────────────────────────────────────
+    async function buscarPtax() {
+        $("sc-ptax-info").textContent = "Buscando PTAX no Banco Central…";
+        try {
+            const r = await api("/api/comex/ptax");
+            if (!r.ptax) { $("sc-ptax-info").textContent = r.message; return; }
+            $("sc-cambio").value = String(r.ptax.cotacao).replace(".", ",");
+            const [a, m, d] = r.ptax.data.split("-");
+            $("sc-ptax-info").textContent = `PTAX venda de ${d}/${m}/${a} - pode editar.`;
+        } catch (e) { $("sc-ptax-info").textContent = e.message; }
+    }
+    $("sc-btn-ptax").addEventListener("click", buscarPtax);
+
+    // ── Simular ────────────────────────────────────────────────────────
+    function coletar() {
+        const itens = [...$("sc-itens").children].map((tr) => {
+            const o = {};
+            tr.querySelectorAll("[data-i]").forEach((el) => { o[el.dataset.i] = el.value.trim(); });
+            return o;
+        }).filter((o) => o.ncm || o.valor_usd || o.codigo || o.descricao);
+        const params = (modal) => {
+            const o = {};
+            document.querySelectorAll(`[data-modal="${modal}"] [data-campo]`).forEach((el) => { o[el.dataset.campo] = el.value.trim(); });
+            return o;
+        };
+        return { cambio: $("sc-cambio").value.trim(), itens, despachante: params("despachante"), courier: params("courier") };
+    }
+    const LINHAS = [
+        ["fob", "Valor FOB"], ["frete", "Frete"], ["seguro", "Seguro"], ["acrescimos", "Outros acréscimos"],
+        ["cif", "Valor CIF (aduaneiro)", "sub"], ["ii", "II"], ["ipi", "IPI"], ["pis", "PIS"], ["cofins", "COFINS"], ["icms", "ICMS"],
+        ["impostos", "Total de impostos", "sub"], ["taxas", "Taxas (Siscomex + AFRMM | multas courier)"],
+        ["despesas", "Despesas (desembaraço | serviço courier + tarifa)"], ["total", "Desembolso total", "total"],
+    ];
+    function desenharResultado(r) {
+        const d = r.despachante.totais, c = r.courier.totais;
+        const caixa = (rotulo, t, chave) => `<div class="sc-box${r.mais_barato === chave ? " vencedor" : ""}">
+            <div class="sc-box__rot">${rotulo}${r.mais_barato === chave ? '<span class="sc-selo">mais barato</span>' : ""}</div>
+            <div class="sc-box__val">${brl(t.total)}</div>
+            <div class="sc-box__sub">Impostos ${brl(t.impostos)} · ${t.cif ? ((t.total / t.cif - 1) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "% sobre o CIF" : ""}</div></div>`;
+        $("sc-resumo").innerHTML = caixa("Despachante (DUIMP)", d, "despachante") + caixa("Courier", c, "courier")
+            + `<div class="sc-box"><div class="sc-box__rot">Diferença</div><div class="sc-box__val">${brl(r.diferenca)}</div>
+               <div class="sc-box__sub">${r.mais_barato ? `${r.mais_barato === "courier" ? "Courier" : "Despachante"} sai mais barato` : "Mesmo custo"} · câmbio ${Number(r.cambio).toLocaleString("pt-BR", { maximumFractionDigits: 4 })}</div></div>`;
+        $("sc-avisos").innerHTML = [...r.despachante.avisos, ...r.courier.avisos].map((a) => `<div class="sc-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</div>`).join("");
+        $("sc-composicao").innerHTML = LINHAS.map(([k, rot, cls]) => {
+            const dif = (c[k] || 0) - (d[k] || 0);
+            return `<tr class="${cls === "sub" ? "sc-sub" : cls === "total" ? "sc-total" : ""}"><td>${rot}</td><td class="num">${brl(d[k])}</td><td class="num">${brl(c[k])}</td>
+                <td class="num" style="color:${dif > 0.004 ? "#991b1b" : dif < -0.004 ? "#166534" : "inherit"};">${Math.abs(dif) < 0.005 ? "—" : (dif > 0 ? "+" : "") + brl(dif)}</td></tr>`;
+        }).join("");
+        $("sc-por-item").innerHTML = r.despachante.itens.map((di, idx) => {
+            const ci = r.courier.itens[idx];
+            const n = ncms.find((x) => x.ncm === soDigitos(di.ncm));
+            return `<tr><td>${esc(di.codigo || "—")}</td><td>${esc(di.descricao || "—")}</td><td style="white-space:nowrap;">${esc(n ? n.ncm_formatado : di.ncm)}</td>
+                <td class="num">${Number(di.quantidade).toLocaleString("pt-BR")}</td>
+                <td class="num">${brl(di.unitario)}</td><td class="num">${brl(ci.unitario)}</td>
+                <td class="num">${brl(di.total)}</td><td class="num">${brl(ci.total)}</td></tr>`;
+        }).join("");
+        $("sc-resultado").classList.remove("hidden");
+        $("sc-resultado").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    $("sc-btn-simular").addEventListener("click", async () => {
+        try { desenharResultado(await api("/api/comex/simulador-custo", { method: "POST", body: JSON.stringify(coletar()) })); }
+        catch (e) { toast(e.message, "error"); }
+    });
+
+    adicionarItem();
+    carregarNcms().catch((e) => toast(e.message, "error"));
+    buscarPtax();
+})();
+</script>
+{% endblock %}
