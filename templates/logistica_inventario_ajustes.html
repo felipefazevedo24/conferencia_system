@@ -28,7 +28,8 @@
        Causa Raiz, selects, etc.) que uma caixa de dialogo nativa nao tem. */
     .ia-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
     .ia-modal-backdrop.open { display: flex; }
-    .ia-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 22px; }
+    /* Modal mais alto que a janela (ex.: FORM-08.52) rola por dentro - centralizado sem limite, cortava o titulo e os botoes. */
+    .ia-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 22px; max-height: calc(100vh - 40px); overflow-y: auto; }
     .ia-modal h3 { margin: 0 0 14px; font-size: 16px; }
     .ia-modal label { display: block; font-size: 12.5px; font-weight: 600; color: var(--eui-text); margin-bottom: 6px; }
     .ia-modal textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; }
