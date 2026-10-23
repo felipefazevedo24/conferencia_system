@@ -188,6 +188,18 @@ def _limpar_oc_json(oc_json: dict) -> dict:
     return {k: v for k, v in (oc_json or {}).items() if k not in _CAMPOS_OC_IRRELEVANTES}
 
 
+def _bloqueio_importacao(linha: dict, oc_json: dict) -> str | None:
+    """Busca por numero traz a OC em qualquer situacao: diz por que nao da
+    pra importar, em vez de "nenhuma OC encontrada"."""
+    if oc_json.get("cancelado"):
+        return "OC cancelada no ERP."
+    if not int(linha.get("qtd_itens") or 0):
+        return "OC sem itens no ERP."
+    if not int(linha.get("itens_com_saldo") or 0):
+        return "OC sem saldo a receber (já recebida por completo)."
+    return None
+
+
 def buscar_ocs_para_importar(termo: str = "", cod_empresa: int | None = None, limite: int = 300) -> list[dict]:
     """Busca OCs em aberto (com saldo a receber) no ERP que combinem com o
     termo digitado - por numero da OC ou nome do fornecedor.
@@ -204,12 +216,27 @@ def buscar_ocs_para_importar(termo: str = "", cod_empresa: int | None = None, li
     com `ja_importada` para o operador saber se aquela OC ja virou um
     processo Comex."""
     termo_norm = (termo or "").strip()
+    termo_digitos = termo_norm.replace(" ", "")
+    numero = int(termo_digitos) if termo_digitos.isdigit() else None
 
-    linhas = compras_service.ordens_compra_cif_recentes(
-        cod_empresa=cod_empresa,
-        janela_dias=3650,  # praticamente sem limite de atraso da previsao
-        limite=max(1, min(int(limite or 300), 2000)),
-    )
+    filtrado_no_banco = True
+    try:
+        linhas = compras_service.buscar_ordens_compra_comex(
+            cod_ordem_compra=numero,
+            fornecedor=None if numero is not None else termo_norm,
+            cod_empresa=cod_empresa,
+            limite=limite,
+        )
+    except Exception:
+        # Consulta nova falhou (ex.: coluna diferente no ERP): volta pra
+        # busca antiga em vez de derrubar a tela. Fica no log pra corrigir.
+        current_app.logger.exception("Comex: busca de OC filtrada no banco falhou - usando a busca antiga")
+        filtrado_no_banco = False
+        linhas = compras_service.ordens_compra_cif_recentes(
+            cod_empresa=cod_empresa,
+            janela_dias=3650,  # praticamente sem limite de atraso da previsao
+            limite=max(1, min(int(limite or 300), 2000)),
+        )
 
     candidatas = []
     for linha in linhas:
@@ -232,13 +259,13 @@ def buscar_ocs_para_importar(termo: str = "", cod_empresa: int | None = None, li
             "data": oc_json.get("data"),
             "previsao_entrega": linha.get("previsao_entrega"),
             "email_fornecedor": fornecedor_json.get("e_mail") or fornecedor_json.get("email_danfe"),
+            "bloqueio": _bloqueio_importacao(linha, oc_json) if filtrado_no_banco else None,
             "_oc_json": oc_json,
             "_fornecedor_json": fornecedor_json,
         })
 
-    if termo_norm:
+    if termo_norm and not filtrado_no_banco:
         termo_lower = termo_norm.lower()
-        termo_digitos = termo_norm.replace(" ", "")
 
         def _combina(c: dict) -> bool:
             if termo_digitos.isdigit() and str(c.get("cod_ordem_compra") or "") == termo_digitos:
@@ -377,6 +404,9 @@ def importar_oc(oc_header: dict, usuario: str) -> ComexProcesso:
     ).first()
     if existente:
         raise ValueError(f"Esta OC ja foi importada como o processo {existente.id_op}.")
+
+    if oc_header.get("bloqueio"):
+        raise ValueError(f"Esta OC não pode ser importada: {oc_header['bloqueio']}")
 
     oc_json = oc_header.get("_oc_json") or {}
 

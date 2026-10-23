@@ -988,7 +988,9 @@
             const data = await api("/api/comex/oc/buscar?termo=" + encodeURIComponent(termo));
             const ocs = data.ocs || [];
             if (!ocs.length) {
-                box.innerHTML = '<p style="color:var(--eui-muted); font-size:13px;">Nenhuma OC aberta encontrada.</p>';
+                box.innerHTML = /^\d+$/.test(termo.replace(/\s/g, ""))
+                    ? `<p style="color:var(--eui-muted); font-size:13px;">A OC ${escapeHtml(termo)} não existe no ERP.</p>`
+                    : '<p style="color:var(--eui-muted); font-size:13px;">Nenhuma OC aberta encontrada.</p>';
                 return;
             }
             box.innerHTML = ocs.map((oc, idx) => `
@@ -999,6 +1001,8 @@
                     </div>
                     ${oc.ja_importada
                         ? '<span class="eui-badge eui-badge--success">Já importada</span>'
+                        : oc.bloqueio
+                        ? `<span class="eui-badge eui-badge--warning">${escapeHtml(oc.bloqueio)}</span>`
                         : `<button class="eui-btn eui-btn--primary eui-btn--sm" data-importar="${idx}"><i class="fas fa-download"></i> Importar</button>`
                     }
                 </div>
