@@ -4936,3 +4936,25 @@ class Comunicado(db.Model):
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
     atualizado_por = db.Column(db.String(100))
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class ComexNcmAliquota(db.Model):
+    """Aliquotas de importacao por NCM (Comex > Simulador de custo). Nasce
+    com a planilha "base imposto impo" da Controladoria (ver
+    comex_custo_service.BASE_INICIAL) e e' mantida pela tela. ICMS com base
+    reduzida: vale o menor entre icms e icms_reduzido (regra da planilha)."""
+
+    __tablename__ = "comex_ncm_aliquota"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ncm = db.Column(db.String(20), nullable=False, unique=True, index=True)  # so' digitos
+    descricao = db.Column(db.String(300))
+    ii = db.Column(db.Float, nullable=False, default=0)
+    ipi = db.Column(db.Float, nullable=False, default=0)
+    pis = db.Column(db.Float, nullable=False, default=0)
+    cofins = db.Column(db.Float, nullable=False, default=0)
+    icms = db.Column(db.Float, nullable=False, default=0)
+    icms_reduzido = db.Column(db.Float)
+    observacao = db.Column(db.Text)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_por = db.Column(db.String(100))
