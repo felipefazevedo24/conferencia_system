@@ -69,6 +69,7 @@ PERMISSION_CATALOG = {
     "PAGE_ADMIN_ATUALIZACOES_CADASTRAIS": "Administração > Atualizações cadastrais recebidas",
     "PAGE_ADMIN_USUARIOS": "Administração > Gestão de acessos",
     "PAGE_ADMIN_EMAILS_NFE": "Administração > E-mails de NF-e",
+    "MANAGE_COMUNICADOS": "Administração > Mural de avisos > Publicar avisos na tela inicial",
     "PAGE_LOGISTICA_AGENDAMENTO": "Logística > Transporte > Gestão de Rotas",
     "PAGE_LOGISTICA_SOLICITACAO": "Logística > Transporte > Solicitar Coleta/Entrega",
     "PAGE_LOGISTICA_MOTORISTA": "Logística > Transporte > Painel do Motorista",  # motorista

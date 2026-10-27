@@ -144,6 +144,19 @@ def consultar_desenho_os(n_os):
     })
 
 
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/os-filhas/<n_os>")
+@permission_required(PERMISSION)
+def consultar_os_filhas(n_os):
+    """OS dependentes da OS do item (abas FAT e ST). Mesmo trato do desenho:
+    ERP fora so' esconde as filhas, a conferencia segue."""
+    try:
+        filhas = desenho_svc.os_filhas(n_os)
+    except Exception:  # noqa: BLE001
+        current_app.logger.warning("OS filhas da OS %s indisponiveis (ERP fora)", n_os, exc_info=True)
+        return jsonify({"filhas": [], "erp_indisponivel": True})
+    return jsonify({"filhas": filhas})
+
+
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/desenho/<n_os>/arquivo")
 @permission_required(PERMISSION)
 def abrir_desenho_os(n_os):

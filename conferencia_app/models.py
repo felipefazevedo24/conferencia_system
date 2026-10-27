@@ -4915,3 +4915,24 @@ class InventarioGeralResultado(db.Model):
 
     inventario = db.relationship("InventarioGeral",
                                  backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
+
+
+class Comunicado(db.Model):
+    """Aviso da Columbia no mural da tela inicial, igual para todo mundo.
+
+    Quem tem MANAGE_COMUNICADOS publica, edita e remove pela própria home.
+    `expira_em` (opcional) tira o aviso do mural sozinho no dia seguinte;
+    remover só desliga `ativo`, o texto fica guardado.
+    """
+
+    __tablename__ = "comunicado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(160), nullable=False)
+    texto = db.Column(db.Text, nullable=False)
+    expira_em = db.Column(db.Date, nullable=True, index=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)

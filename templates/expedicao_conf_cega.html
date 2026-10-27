@@ -79,6 +79,12 @@
     .ce-conf-item input.qtd { min-height: 42px; width: 130px; max-width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
     .ce-os-link { font-weight: 800; text-decoration: underline; color: var(--eui-text); cursor: pointer; }
     .ce-os-link:hover { color: var(--eui-primary); }
+    .ce-os-filhas-btn { display: block; margin: 4px auto 0; padding: 2px 4px; border: 0; background: none; color: var(--eui-primary); font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+    .ce-os-mobile .ce-os-filhas-btn { display: inline-block; margin: 0 0 0 8px; }
+    .ce-itens-table .ce-os-filhas-row td { padding: 8px 15px 12px; background: var(--eui-surface-2); }
+    .ce-os-filhas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; color: var(--eui-text); }
+    .ce-os-filhas-lista li { display: flex; gap: 12px; }
+    .ce-os-filhas-num { min-width: 56px; font-weight: 800; }
     .ce-conf-item.js-faltando input.qtd { border-color: var(--eui-danger); box-shadow: 0 0 0 2px var(--eui-danger-soft); }
     .ce-reveal { font-size: 11px; font-weight: 700; margin-top: 4px; }
     .ce-reveal.bad { color: var(--eui-danger); }
@@ -1411,8 +1417,8 @@
             const linhas = (o.itens || []).map((it) => {
                 const celulas = `<td style="text-align:center"><span class="ce-status-dot"></span></td>
                     <td class="ce-col-cod">${escapeHtml(it.cod_interno || "—")}</td>
-                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS <span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span></span></td>
-                    <td class="ce-col-centro ce-col-os"><span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span></td>`;
+                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS <span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span><span data-os-filhas="${escapeHtml(it.n_os || "")}"></span></span></td>
+                    <td class="ce-col-centro ce-col-os"><span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span><span data-os-filhas="${escapeHtml(it.n_os || "")}"></span></td>`;
                 if (conferido && !editavel) {
                     const cls = it.divergente ? "divergente" : "ok-line";
                     // Conferencia CEGA: nunca exibimos a quantidade esperada.
@@ -1458,6 +1464,69 @@
                 });
             });
             marcarDesenhos(wrap);
+            marcarOsFilhas(wrap);
+        }
+
+        // OS filhas (aba Dependencias do GRV) abrem embaixo do item, so' para
+        // consulta: nao entram na contagem. Mesmo esquema do desenho - consulta
+        // depois da tabela na tela, uma vez por OS; ERP fora so' nao mostra.
+        function marcarOsFilhas(wrap) {
+            const cache = (window.__ceOsFilhas = window.__ceOsFilhas || new Map());
+            const porOs = new Map();
+            wrap.querySelectorAll("[data-os-filhas]").forEach((slot) => {
+                const os = (slot.dataset.osFilhas || "").trim();
+                if (!/^[A-Za-z0-9._-]+$/.test(os)) return;
+                if (!porOs.has(os)) porOs.set(os, []);
+                porOs.get(os).push(slot);
+            });
+            porOs.forEach((slots, os) => {
+                if (!cache.has(os)) {
+                    cache.set(os, fetch("/api/expedicao/conf-cega/os-filhas/" + encodeURIComponent(os), { headers: { "Accept": "application/json" } })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((d) => {
+                            if (!d || d.erp_indisponivel) cache.delete(os);
+                            return d;
+                        })
+                        .catch(() => { cache.delete(os); return null; }));
+                }
+                cache.get(os).then((d) => {
+                    const filhas = (d && d.filhas) || [];
+                    if (!filhas.length) return;
+                    slots.forEach((slot) => {
+                        if (!slot.isConnected) return;
+                        const btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.className = "ce-os-filhas-btn";
+                        btn.innerHTML = rotuloOsFilhas(filhas.length, false);
+                        btn.addEventListener("click", () => alternarOsFilhas(btn, filhas));
+                        slot.replaceWith(btn);
+                    });
+                });
+            });
+        }
+
+        function rotuloOsFilhas(qtd, aberta) {
+            return `<i class="fas fa-chevron-${aberta ? "down" : "right"}"></i> ${qtd} OS filha${qtd > 1 ? "s" : ""}`;
+        }
+
+        // A linha tem dois botoes (coluna OS e versao celular); os dois abrem
+        // a mesma lista e trocam o rotulo juntos.
+        function alternarOsFilhas(btn, filhas) {
+            const row = btn.closest("tr");
+            const prox = row.nextElementSibling;
+            const aberta = !!(prox && prox.classList.contains("ce-os-filhas-row"));
+            if (aberta) {
+                prox.remove();
+            } else {
+                const sub = document.createElement("tr");
+                sub.className = "ce-os-filhas-row";
+                sub.innerHTML = `<td></td><td colspan="4"><ul class="ce-os-filhas-lista">${filhas.map((f) =>
+                    `<li style="padding-left:${(f.nivel - 1) * 18}px"><span class="ce-os-filhas-num"><span data-os="${escapeHtml(f.numero)}">${escapeHtml(f.numero)}</span></span><span>${escapeHtml(f.titulo || "—")}</span></li>`
+                ).join("")}</ul></td>`;
+                row.after(sub);
+                marcarDesenhos(sub);
+            }
+            row.querySelectorAll(".ce-os-filhas-btn").forEach((b) => { b.innerHTML = rotuloOsFilhas(filhas.length, !aberta); });
         }
 
         // Nº OS com desenho no ERP vira link (negrito + sublinhado) que abre o

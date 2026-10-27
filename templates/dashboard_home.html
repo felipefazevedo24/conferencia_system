@@ -1,616 +1,365 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard | Columbia Sync{% endblock %}
+{% block title %}Início | Columbia Sync{% endblock %}
 
 {% block extra_head %}
 <style>
-    .content-body:has(.dash) { padding: 0 !important; }
+    .content-body:has(.mural) { padding: 0 !important; }
     /* O fundo ocupa a área toda; só o conteúdo fica limitado na largura
        padrão. Com o fundo preso em 1560px, dar zoom out deixava uma caixa
        flutuando no meio da tela. */
-    .content-body > .dash { width: 100%; max-width: none; min-width: 0; }
-    .dash-inner { max-width: var(--content-max-width, 1560px); margin: 0 auto; min-width: 0; }
-    /* O canvas do Chart.js mede a largura do pai: sem min-width:0 o gráfico
-       empurrava a grade pra fora da tela. */
-    .dash-card, .dash-chart, .dash-chart-body { min-width: 0; }
-    /* Abaixo do conteúdo a área continua com a cor do painel, sem faixa. */
-    .content-body:has(> .dash) { background: #f1f6fb; }
-    [data-theme="escuro"] .content-body:has(> .dash) { background: #070c14; }
+    .content-body > .mural { width: 100%; max-width: none; min-width: 0; }
+    .content-body:has(> .mural) { background: var(--eui-bg); }
+    .mural-inner { max-width: var(--content-max-width, 1560px); margin: 0 auto; min-width: 0; }
 
-    .dash {
-        --dash-bg: #f1f6fb;
-        --dash-surface: #ffffff;
-        --dash-surface-2: #edf3f8;
-        --dash-border: rgba(15, 50, 77, 0.14);
-        --dash-border-strong: rgba(15, 98, 201, 0.24);
-        --dash-ink: #16324d;
-        --dash-ink-strong: #0f2235;
-        --dash-muted: #60758d;
-        --dash-blue: #1c86f2;
-        --dash-blue-soft: #0f62c9;
-        --dash-refresh-bg: rgba(15, 98, 201, 0.10);
-        --dash-refresh-fg: #0f62c9;
-        --dash-refresh-hover: rgba(15, 98, 201, 0.18);
-        --dash-card-bg: linear-gradient(160deg, #ffffff 0%, #f5f9ff 100%);
-        --dash-card-hover-shadow: 0 14px 30px rgba(15, 34, 53, 0.12);
-        --dash-range-bg: rgba(15, 50, 77, 0.05);
-        --dash-range-pill: rgba(15, 98, 201, 0.16);
-        --dash-empty-ink: #16324d;
-        --dash-empty-bg: rgba(255, 255, 255, 0.74);
+    .mural {
         min-height: 100%;
-        padding: 26px 26px 40px;
-        background:
-            radial-gradient(1100px 460px at 88% -8%, rgba(28, 134, 242, 0.12), transparent 60%),
-            radial-gradient(900px 420px at 6% 4%, rgba(15, 98, 201, 0.10), transparent 55%),
-            var(--dash-bg);
-        color: var(--dash-ink);
+        padding: 30px 32px 48px;
+        background: var(--eui-bg);
+        color: var(--eui-text);
         font-family: 'IBM Plex Sans', sans-serif;
     }
 
-    [data-theme="escuro"] .dash {
-        --dash-bg: #070c14;
-        --dash-surface: #0f1a28;
-        --dash-surface-2: #12203180;
-        --dash-border: rgba(125, 196, 255, 0.14);
-        --dash-border-strong: rgba(125, 196, 255, 0.28);
-        --dash-ink: #eaf3fc;
-        --dash-ink-strong: #ffffff;
-        --dash-muted: rgba(200, 219, 238, 0.62);
-        --dash-blue-soft: #7ec4ff;
-        --dash-refresh-bg: rgba(28, 134, 242, 0.14);
-        --dash-refresh-fg: #e8f3ff;
-        --dash-refresh-hover: rgba(28, 134, 242, 0.26);
-        --dash-card-bg: linear-gradient(160deg, var(--dash-surface) 0%, #0b1521 100%);
-        --dash-card-hover-shadow: 0 18px 40px rgba(3, 12, 24, 0.55);
-        --dash-range-bg: rgba(255, 255, 255, 0.03);
-        --dash-range-pill: rgba(28, 134, 242, 0.28);
-        --dash-empty-ink: #f0f7ff;
-        --dash-empty-bg: var(--dash-surface-2);
-        background:
-            radial-gradient(1100px 460px at 88% -8%, rgba(28, 134, 242, 0.16), transparent 60%),
-            radial-gradient(900px 420px at 6% 4%, rgba(15, 98, 201, 0.12), transparent 55%),
-            var(--dash-bg);
-    }
-
-    /* ---- Cabeçalho ---- */
-    .dash-head {
+    .mural-head {
         display: flex;
         align-items: flex-end;
         justify-content: space-between;
-        gap: 18px;
+        gap: 16px;
         flex-wrap: wrap;
-        margin-bottom: 26px;
+        margin-bottom: 28px;
     }
-    .dash-head h1 {
-        margin: 0;
-        font-family: inherit;
-        font-size: clamp(26px, 3vw, 32px);
+    .mural-empresa {
+        font-size: 12px;
         font-weight: 700;
-        letter-spacing: -0.02em;
-        color: var(--dash-ink-strong);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--eui-primary);
     }
-    .dash-head p {
-        margin: 6px 0 0;
-        font-size: 13.5px;
-        color: var(--dash-muted);
+    .mural-head h1 {
+        margin: 4px 0 0;
+        font-family: inherit;
+        font-size: clamp(24px, 2.6vw, 30px);
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--eui-text);
     }
-    .dash-head-actions {
+    .mural-head p { margin: 4px 0 0; font-size: 14px; color: var(--eui-muted); }
+
+    .mural-titulo {
         display: flex;
         align-items: center;
         gap: 10px;
-        flex-wrap: wrap;
-    }
-    .dash-updated {
-        font-size: 11.5px;
-        color: var(--dash-muted);
-    }
-    .dash-refresh {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        height: 40px;
-        padding: 0 16px;
-        border-radius: 12px;
-        border: 1px solid var(--dash-border-strong);
-        background: rgba(28, 134, 242, 0.14);
-        color: var(--dash-refresh-fg);
-        font-size: 12.5px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: background 0.18s ease, transform 0.18s ease;
-    }
-    .dash-refresh:hover { background: var(--dash-refresh-hover); transform: translateY(-1px); }
-
-    /* ---- Seções ---- */
-    .dash-section { margin-bottom: 30px; }
-    .dash-section-head {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-        margin-bottom: 14px;
-    }
-    .dash-section-ico {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
-        display: grid;
-        place-items: center;
-        background: rgba(28, 134, 242, 0.16);
-        border: 1px solid var(--dash-border);
-        color: var(--dash-blue-soft);
-        font-size: 14px;
-    }
-    .dash-section-head strong {
+        margin: 0 0 14px;
         font-family: inherit;
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 700;
-        letter-spacing: -0.01em;
-        color: var(--dash-ink-strong);
+        color: var(--eui-text);
     }
-    .dash-section-line {
-        flex: 1;
-        height: 1px;
-        background: linear-gradient(90deg, var(--dash-border), transparent);
+    .mural-titulo i { color: var(--eui-primary); }
+
+    .mural-grade {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+        gap: 16px;
+        align-items: start;
     }
 
-    /* ---- Filas que pedem acao ---- */
-    /* Cor com significado: vermelho = tem atraso, ambar = tem fila, verde = em dia. */
-    .dash-filas {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-        gap: 14px;
-    }
-    .fila {
-        --fila-cor: #10b981;
+    .aviso {
         position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 16px 18px 15px;
+        padding: 20px 22px;
         border-radius: 16px;
-        border: 1px solid var(--dash-border);
-        background: var(--dash-card-bg);
-        text-decoration: none;
-        color: inherit;
-        overflow: hidden;
-        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        border: 1px solid var(--eui-border);
+        background: var(--eui-surface);
+        box-shadow: var(--eui-shadow-sm);
+        min-width: 0;
     }
-    .fila::before {
-        content: "";
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 4px;
-        background: var(--fila-cor);
+    /* O aviso mais recente abre o mural ocupando a linha toda. */
+    .aviso--destaque {
+        grid-column: 1 / -1;
+        padding: 26px 28px;
+        border-left: 4px solid var(--eui-primary);
     }
-    .fila:hover {
-        transform: translateY(-3px);
-        border-color: var(--dash-border-strong);
-        box-shadow: var(--dash-card-hover-shadow);
-        color: inherit;
-    }
-    .fila--atrasado { --fila-cor: #dc2626; }
-    .fila--pendente { --fila-cor: #f59e0b; }
-    .fila--ok { --fila-cor: #10b981; }
-    .fila--neutro { --fila-cor: #94a3b8; }
-    .fila-top { display: flex; align-items: center; gap: 10px; }
-    .fila-ico {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
-        display: grid;
-        place-items: center;
-        flex-shrink: 0;
-        font-size: 14px;
-        background: color-mix(in srgb, var(--fila-cor) 14%, transparent);
-        color: var(--fila-cor);
-    }
-    .fila-titulo { flex: 1; font-size: 13px; font-weight: 700; color: var(--dash-ink); }
-    .fila-ir { font-size: 12px; color: var(--dash-muted); opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease; }
-    .fila:hover .fila-ir { opacity: 1; transform: translateX(2px); }
-    .fila-num {
-        margin-top: 4px;
-        font-family: inherit;
-        font-size: 32px;
-        font-weight: 700;
-        line-height: 1;
-        letter-spacing: -0.02em;
-        font-variant-numeric: tabular-nums;
-        color: var(--dash-ink-strong);
-    }
-    .fila--ok .fila-num { color: var(--dash-muted); }
-    .fila-status { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--dash-muted); }
-    .fila-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fila-cor); flex-shrink: 0; }
-    .fila--atrasado .fila-status { color: #dc2626; }
-    [data-theme="escuro"] .fila--atrasado .fila-status { color: #f87171; }
-
-    /* Filas zeradas viram uma linha discreta, sem disputar atencao. */
-    .dash-emdia {
+    .aviso-topo {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
         gap: 8px;
-        margin-top: 14px;
+        min-height: 28px;
         font-size: 12px;
-    }
-    .dash-emdia-label { font-weight: 700; color: #10b981; margin-right: 4px; }
-    .dash-emdia-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 5px 11px;
-        border-radius: 999px;
-        border: 1px solid var(--dash-border);
-        background: var(--dash-surface);
-        color: var(--dash-muted);
         font-weight: 600;
-        text-decoration: none;
+        color: var(--eui-muted);
     }
-    .dash-emdia-item:hover { border-color: var(--dash-border-strong); color: var(--dash-ink); }
-    .dash-emdia-item i { font-size: 11px; }
-
-    /* ---- Movimento de hoje ---- */
-    .dash-hoje {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-        gap: 12px;
-    }
-    .hoje-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 1px solid var(--dash-border);
-        background: var(--dash-surface);
-        text-decoration: none;
-        color: inherit;
-    }
-    a.hoje-item:hover { border-color: var(--dash-border-strong); color: inherit; }
-    .hoje-ico {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        display: grid;
-        place-items: center;
-        flex-shrink: 0;
-        background: rgba(28, 134, 242, 0.12);
-        color: var(--dash-blue-soft);
-        font-size: 14px;
-    }
-    .hoje-valor { font-family: inherit; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--dash-ink-strong); }
-    .hoje-titulo { font-size: 12px; font-weight: 600; color: var(--dash-ink); margin-top: 3px; }
-    .hoje-ontem { font-size: 11px; color: var(--dash-muted); margin-top: 1px; }
-
-    /* ---- Gráficos ---- */
-    .dash-charts {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        max-width: calc(var(--n, 3) * 560px);
-        gap: 14px;
-    }
-    .dash-chart {
-        border-radius: 18px;
-        border: 1px solid var(--dash-border);
-        background: var(--dash-card-bg);
-        padding: 18px 18px 14px;
-        display: flex;
-        flex-direction: column;
-        min-height: 300px;
-    }
-    .dash-chart-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 14px;
-    }
-    .dash-chart-head strong {
-        font-family: inherit;
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--dash-ink-strong);
-    }
-    .dash-chart-head span {
-        font-size: 11.5px;
-        color: var(--dash-muted);
-    }
-    .dash-chart-body {
-        position: relative;
-        flex: 1;
-        min-height: 220px;
-    }
-    .dash-range {
-        display: inline-flex;
-        gap: 4px;
-        padding: 3px;
+    .aviso-novo {
+        padding: 2px 8px;
         border-radius: 999px;
-        border: 1px solid var(--dash-border);
-        background: var(--dash-range-bg);
-    }
-    .dash-range button {
-        border: none;
-        background: transparent;
-        color: var(--dash-muted);
+        background: var(--eui-primary-soft);
+        color: var(--eui-primary);
         font-size: 11px;
         font-weight: 700;
-        padding: 5px 12px;
-        border-radius: 999px;
-        white-space: nowrap;
-        cursor: pointer;
-        transition: background 0.16s ease, color 0.16s ease;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
     }
-    .dash-range button.active {
-        background: var(--dash-range-pill);
-        color: var(--dash-blue-soft);
+    .aviso-acoes { margin-left: auto; display: flex; gap: 4px; }
+    .aviso h2 {
+        margin: 6px 0 8px;
+        font-family: inherit;
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1.35;
+        color: var(--eui-text);
+        overflow-wrap: anywhere;
     }
-    [data-theme="escuro"] .dash-range button.active { color: #eaf3fc; }
+    .aviso--destaque h2 { font-size: 21px; }
+    .aviso-texto {
+        max-width: 75ch;
+        font-size: 14.5px;
+        line-height: 1.6;
+        color: var(--eui-text-soft);
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+    }
+    .aviso-texto a { color: var(--eui-primary); }
+    .aviso-ate { margin-top: 14px; font-size: 12px; color: var(--eui-muted); }
 
-    /* ---- Estado vazio ---- */
-    .dash-empty {
-        border: 1px dashed var(--dash-border-strong);
-        border-radius: 18px;
-        padding: 46px 20px;
+    .mural-vazio {
+        padding: 48px 20px;
+        border: 1px dashed var(--eui-border-strong);
+        border-radius: 16px;
         text-align: center;
-        color: var(--dash-muted);
-        background: var(--dash-empty-bg);
+        color: var(--eui-muted);
     }
-    .dash-empty i { font-size: 30px; color: var(--dash-blue-soft); display: block; margin-bottom: 12px; }
-    .dash-empty strong { display: block; color: var(--dash-empty-ink); font-size: 15px; margin-bottom: 6px; font-family: inherit; }
+    .mural-vazio i { display: block; margin-bottom: 12px; font-size: 28px; color: var(--eui-primary); }
+    .mural-vazio strong { display: block; margin-bottom: 14px; font-size: 15px; color: var(--eui-text); }
 
-    @media (max-width: 900px) {
-        .dash-charts { grid-template-columns: 1fr; }
-        .dash { padding: 20px 16px 32px; }
+    .mural-dialog {
+        position: fixed;
+        inset: 0;
+        margin: auto;
+        width: calc(100% - 32px);
+        max-width: 560px;
+        max-height: calc(100dvh - 32px);
+        overflow: auto;
+        padding: 0;
+        border: 1px solid var(--eui-border);
+        border-radius: 16px;
+        background: var(--eui-surface);
+        color: var(--eui-text);
+        box-shadow: var(--eui-shadow-md);
     }
-    /* Abaixo de 992px aparece o botao fixo do menu no canto; como o
-       dashboard zera o padding da pagina, o titulo precisa descer. */
+    .mural-dialog::backdrop { background: rgba(8, 20, 36, 0.65); backdrop-filter: blur(3px); }
+    [data-theme="escuro"] .mural-dialog { color-scheme: dark; }
+    .mural-dialog-corpo { display: grid; gap: 16px; padding: 24px; }
+    .mural-dialog h3 { margin: 0; font-size: 19px; color: var(--eui-text); }
+    .mural-dialog-msg { margin: 0; line-height: 1.5; color: var(--eui-text-soft); }
+    .mural-dialog-erro { margin: 0; font-size: 13px; font-weight: 600; color: var(--eui-danger); }
+    .mural-dialog .eui-textarea { min-height: 160px; }
+    /* A regra global de label (ui_erp.css) põe tudo em maiúsculas. */
+    .mural-dialog .eui-field__hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .mural-dialog-pe {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 24px;
+        border-top: 1px solid var(--eui-border);
+        background: var(--eui-surface-2);
+    }
+    .mural-dialog [hidden] { display: none !important; }
+
     @media (max-width: 991px) {
-        .dash { padding-top: 72px; }
+        /* Abaixo de 992px aparece o botão fixo do menu no canto; como a
+           tela zera o padding da página, o título precisa descer. */
+        .mural { padding: 72px 16px 32px; }
+    }
+    @media (max-width: 600px) {
+        .aviso, .aviso--destaque { padding: 18px; }
+        .mural-dialog-pe { flex-direction: column-reverse; }
+        .mural-dialog-pe .eui-btn { width: 100%; min-height: 44px; }
+        .mural-dialog .eui-input, .mural-dialog .eui-textarea { font-size: 16px; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-{% set atrasadas = filas|selectattr('estado', 'equalto', 'atrasado')|list %}
-<div class="dash">
-<div class="dash-inner">
-    <header class="dash-head">
+<div class="mural">
+<div class="mural-inner">
+    <header class="mural-head">
         <div>
-            <h1><span id="dashSaudacao">Olá</span>, {{ (current_user_display or user)|title }}</h1>
-            <p>
-                <span id="dashData"></span>
-                {% if filas %} · {% if atrasadas %}{{ atrasadas|length }} {{ 'fila com atraso' if atrasadas|length == 1 else 'filas com atraso' }}{% else %}nenhuma fila atrasada{% endif %}{% endif %}
-            </p>
+            <div class="mural-empresa">Columbia Machine Brasil</div>
+            <h1><span id="muralSaudacao">Olá</span>, {{ (current_user_display or user)|title }}</h1>
+            <p id="muralData"></p>
         </div>
-        <div class="dash-head-actions">
-            <span class="dash-updated" id="dashUpdated"></span>
-            <button type="button" class="dash-refresh" onclick="window.location.reload()">
-                <i class="fas fa-rotate"></i> Atualizar
-            </button>
-        </div>
+        {% if pode_publicar %}
+        <button type="button" class="eui-btn eui-btn--primary" data-mural-novo><i class="fas fa-plus"></i> Publicar aviso</button>
+        {% endif %}
     </header>
 
-    {% if not filas and not hoje and not fluxo_notas and not mostrar_previsao_st %}
-    <div class="dash-empty">
-        <i class="fas fa-compass"></i>
-        <strong>Seu painel está pronto</strong>
-        Use o menu lateral para navegar pelos módulos. Assim que houver indicadores no seu perfil, eles aparecem aqui.
+    <h2 class="mural-titulo"><i class="fas fa-bullhorn"></i> Mural de avisos</h2>
+
+    {% if avisos %}
+    <div class="mural-grade">
+        {% for a in avisos %}
+        <article class="aviso{% if loop.first %} aviso--destaque{% endif %}">
+            <div class="aviso-topo">
+                <span>{{ a.publicado_em }}</span>
+                {% if a.novo %}<span class="aviso-novo">Novo</span>{% endif %}
+                {% if pode_publicar %}
+                <span class="aviso-acoes">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" data-mural-editar="{{ a.id }}" aria-label="Editar aviso" title="Editar"><i class="fas fa-pen"></i></button>
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--icon" data-mural-remover="{{ a.id }}" aria-label="Remover aviso" title="Remover"><i class="fas fa-trash"></i></button>
+                </span>
+                {% endif %}
+            </div>
+            <h2>{{ a.titulo }}</h2>
+            <div class="aviso-texto">{{ a.texto|urlize(target="_blank") }}</div>
+            {% if a.expira_em_fmt %}<div class="aviso-ate"><i class="fas fa-clock"></i> No mural até {{ a.expira_em_fmt }}</div>{% endif %}
+        </article>
+        {% endfor %}
     </div>
     {% else %}
-
-    {% if filas or mostrar_previsao_st %}
-    <section class="dash-section">
-        <div class="dash-section-head">
-            <div class="dash-section-ico"><i class="fas fa-bell"></i></div>
-            <strong>Precisa de ação</strong>
-            <div class="dash-section-line"></div>
-        </div>
-        <div class="dash-filas" id="dashFilas">
-            {% for f in filas if f.estado != 'ok' %}
-            <a href="{{ f.href }}" class="fila fila--{{ f.estado }}" data-estado="{{ f.estado }}">
-                <div class="fila-top">
-                    <span class="fila-ico"><i class="fas {{ f.icone }}"></i></span>
-                    <span class="fila-titulo">{{ f.titulo }}</span>
-                    <i class="fas fa-arrow-right fila-ir"></i>
-                </div>
-                <div class="fila-num">{{ '{:,}'.format(f.total).replace(',', '.') }}</div>
-                <div class="fila-status">{{ f.status }}</div>
-            </a>
-            {% endfor %}
-            {% if mostrar_previsao_st %}
-            <a href="/logistica/previsao-st" class="fila fila--neutro" id="filaST" data-estado="neutro">
-                <div class="fila-top">
-                    <span class="fila-ico"><i class="fas fa-calendar-week"></i></span>
-                    <span class="fila-titulo">ST a enviar</span>
-                    <i class="fas fa-arrow-right fila-ir"></i>
-                </div>
-                <div class="fila-num" id="filaSTNum">—</div>
-                <div class="fila-status" id="filaSTStatus">consultando o ERP…</div>
-            </a>
-            {% endif %}
-        </div>
-        {% set em_dia = filas|selectattr('estado', 'equalto', 'ok')|list %}
-        {% if em_dia %}
-        <div class="dash-emdia">
-            <span class="dash-emdia-label"><i class="fas fa-circle-check"></i> Em dia</span>
-            {% for f in em_dia %}<a href="{{ f.href }}" class="dash-emdia-item"><i class="fas {{ f.icone }}"></i> {{ f.titulo }}</a>{% endfor %}
-        </div>
-        {% endif %}
-    </section>
-    {% endif %}
-
-    {% if hoje %}
-    <section class="dash-section">
-        <div class="dash-section-head">
-            <div class="dash-section-ico"><i class="fas fa-sun"></i></div>
-            <strong>Hoje</strong>
-            <div class="dash-section-line"></div>
-        </div>
-        <div class="dash-hoje">
-            {% for h in hoje %}
-            {% if h.href %}<a href="{{ h.href }}" class="hoje-item">{% else %}<div class="hoje-item">{% endif %}
-                <span class="hoje-ico"><i class="fas {{ h.icone }}"></i></span>
-                <div>
-                    <div class="hoje-valor">{{ h.valor }}</div>
-                    <div class="hoje-titulo">{{ h.titulo }}</div>
-                    <div class="hoje-ontem">{% if h.ontem is not none %}ontem: {{ h.ontem }}{% else %}{{ h.rotulo or 'agora' }}{% endif %}</div>
-                </div>
-            {% if h.href %}</a>{% else %}</div>{% endif %}
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {% if fluxo_notas %}
-    <section class="dash-section">
-        <div class="dash-section-head">
-            <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
-            <strong>Últimos dias</strong>
-            <div class="dash-section-line"></div>
-        </div>
-        <div class="dash-charts" style="--n: 3">
-            <div class="dash-chart">
-                <div class="dash-chart-head">
-                    <strong>Notas: entradas x lançamentos</strong>
-                    <div class="dash-range" id="dashRange">
-                        <button type="button" data-dias="7">7 dias</button>
-                        <button type="button" data-dias="14" class="active">14 dias</button>
-                    </div>
-                </div>
-                <div class="dash-chart-body"><canvas id="chartFluxo"></canvas></div>
-            </div>
-        </div>
-    </section>
-    {% endif %}
-
+    <div class="mural-vazio">
+        <i class="fas fa-bullhorn"></i>
+        <strong>Nenhum aviso no mural agora.</strong>
+        {% if pode_publicar %}<button type="button" class="eui-btn eui-btn--primary" data-mural-novo><i class="fas fa-plus"></i> Publicar o primeiro aviso</button>{% endif %}
+    </div>
     {% endif %}
 </div>
 </div>
+
+{% if pode_publicar %}
+<dialog id="muralDialog" class="mural-dialog" aria-labelledby="muralDialogTitulo">
+    <form id="muralForm">
+        <div class="mural-dialog-corpo">
+            <h3 id="muralDialogTitulo">Publicar aviso</h3>
+            <label class="eui-field">
+                <span class="eui-field__label">Título</span>
+                <input id="muralTitulo" class="eui-input" maxlength="160" required>
+            </label>
+            <label class="eui-field">
+                <span class="eui-field__label">Aviso</span>
+                <textarea id="muralTexto" class="eui-textarea" maxlength="4000" required></textarea>
+            </label>
+            <label class="eui-field">
+                <span class="eui-field__label">Mostrar até</span>
+                <input id="muralAte" class="eui-input" type="date">
+                <span class="eui-field__hint">Em branco, fica no mural até alguém remover.</span>
+            </label>
+            <p class="mural-dialog-erro" id="muralErro" hidden></p>
+        </div>
+        <div class="mural-dialog-pe">
+            <button type="button" class="eui-btn eui-btn--ghost" data-mural-fechar>Cancelar</button>
+            <button type="submit" class="eui-btn eui-btn--primary" id="muralSalvar">Publicar</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="muralRemover" class="mural-dialog" aria-labelledby="muralRemoverTitulo">
+    <form id="muralRemoverForm">
+        <div class="mural-dialog-corpo">
+            <h3 id="muralRemoverTitulo">Remover aviso?</h3>
+            <p class="mural-dialog-msg" id="muralRemoverMsg"></p>
+            <p class="mural-dialog-erro" id="muralRemoverErro" hidden></p>
+        </div>
+        <div class="mural-dialog-pe">
+            <button type="button" class="eui-btn eui-btn--ghost" data-mural-fechar>Cancelar</button>
+            <button type="submit" class="eui-btn eui-btn--danger">Remover</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
     (function () {
-        const FLUXO = {{ fluxo_notas|tojson }};
         const agora = new Date();
-
-        const saud = document.getElementById("dashSaudacao");
-        if (saud) {
-            const h = agora.getHours();
-            saud.textContent = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
-        }
-        const dataEl = document.getElementById("dashData");
-        if (dataEl) {
-            const txt = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
-            dataEl.textContent = txt.charAt(0).toUpperCase() + txt.slice(1);
-        }
-        const upd = document.getElementById("dashUpdated");
-        if (upd) {
-            upd.textContent = "Atualizado às " + agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        }
-
-        // ----- ST a enviar: vem do ERP pela Previsao de ST. Carrega depois
-        // da pagina para a tela inicial nunca esperar (nem cair) pelo ERP.
-        const filaST = document.getElementById("filaST");
-        if (filaST) {
-            const num = document.getElementById("filaSTNum");
-            const status = document.getElementById("filaSTStatus");
-            fetch("/api/viagem/previsao-st")
-                .then((r) => r.json())
-                .then((d) => {
-                    if (!d || d.erp_indisponivel) throw new Error("erp");
-                    const limite = new Date(d.hoje + "T00:00:00");
-                    limite.setDate(limite.getDate() + 7);
-                    const ate = `${limite.getFullYear()}-${String(limite.getMonth() + 1).padStart(2, "0")}-${String(limite.getDate()).padStart(2, "0")}`;
-                    const itens = d.itens || [];
-                    const prontos = itens.filter((i) => i.pronto && !i.faturado).length;
-                    const semana = itens.filter((i) => !i.pronto && i.dt_envio <= ate).length;
-                    num.textContent = prontos;
-                    status.textContent = prontos
-                        ? `prontos agora · +${semana} em 7 dias`
-                        : semana ? `${semana} nos próximos 7 dias` : "nada previsto em 7 dias";
-                    const estado = prontos ? "pendente" : "ok";
-                    filaST.className = "fila fila--" + estado;
-                    filaST.dataset.estado = estado;
-                })
-                .catch(() => {
-                    status.textContent = "ERP indisponível agora";
-                });
-        }
-
-        if (typeof Chart === "undefined") return;
-
-        const dashEl = document.querySelector(".dash");
-        const cssVar = (name, fallback) => {
-            if (!dashEl) return fallback;
-            const value = getComputedStyle(dashEl).getPropertyValue(name).trim();
-            return value || fallback;
-        };
-
-        Chart.defaults.color = cssVar("--dash-muted", "rgba(96, 117, 141, 0.9)");
-        Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
-        const GRID = cssVar("--dash-border", "rgba(15, 50, 77, 0.15)");
-        const VERDE = "#10b981";
-
-        // ----- Fluxo diário de notas (entrada x lançamento) -----
-        let chartFluxo = null;
-        const elFluxo = document.getElementById("chartFluxo");
-        if (elFluxo && FLUXO) {
-            const render = (dias) => {
-                const labels = FLUXO.labels.slice(-dias);
-                const importadas = FLUXO.importadas.slice(-dias);
-                const lancadas = FLUXO.lancadas.slice(-dias);
-                const ctx = elFluxo.getContext("2d");
-                const grad = ctx.createLinearGradient(0, 0, 0, 260);
-                grad.addColorStop(0, "rgba(28, 134, 242, 0.82)");
-                grad.addColorStop(1, "rgba(28, 134, 242, 0.20)");
-                if (chartFluxo) chartFluxo.destroy();
-                chartFluxo = new Chart(ctx, {
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                type: "bar",
-                                label: "Importadas",
-                                data: importadas,
-                                backgroundColor: grad,
-                                borderRadius: 6,
-                                maxBarThickness: 24,
-                            },
-                            {
-                                type: "line",
-                                label: "Lançadas",
-                                data: lancadas,
-                                borderColor: VERDE,
-                                backgroundColor: "rgba(16, 185, 129, 0.2)",
-                                tension: 0.32,
-                                pointRadius: 3,
-                                pointHoverRadius: 4,
-                                pointBackgroundColor: VERDE,
-                            },
-                        ],
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12, padding: 12 } } },
-                        scales: {
-                            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
-                            y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }
-                        }
-                    }
-                });
-            };
-            render(14);
-            const range = document.getElementById("dashRange");
-            if (range) {
-                range.querySelectorAll("button").forEach((b) => {
-                    b.addEventListener("click", () => {
-                        range.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
-                        b.classList.add("active");
-                        render(parseInt(b.dataset.dias, 10));
-                    });
-                });
-            }
-        }
+        const h = agora.getHours();
+        document.getElementById("muralSaudacao").textContent = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+        const data = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+        document.getElementById("muralData").textContent = data.charAt(0).toUpperCase() + data.slice(1);
     })();
 </script>
+{% if pode_publicar %}
+<script>
+    (function () {
+        const AVISOS = Object.fromEntries({{ avisos|tojson }}.map((a) => [String(a.id), a]));
+        const dialog = document.getElementById("muralDialog");
+        const titulo = document.getElementById("muralTitulo");
+        const texto = document.getElementById("muralTexto");
+        const ate = document.getElementById("muralAte");
+        const erro = document.getElementById("muralErro");
+        const salvar = document.getElementById("muralSalvar");
+        const remover = document.getElementById("muralRemover");
+        let editandoId = null;
+        let removendoId = null;
+
+        const hoje = new Date();
+        ate.min = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+
+        const mostrarErro = (el, msg) => { el.textContent = msg; el.hidden = !msg; };
+
+        async function enviar(url, corpo) {
+            const r = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(corpo || {}),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || d.msg || "Não foi possível salvar. Tente de novo.");
+            return d;
+        }
+
+        function abrir(aviso) {
+            editandoId = aviso ? aviso.id : null;
+            document.getElementById("muralDialogTitulo").textContent = aviso ? "Editar aviso" : "Publicar aviso";
+            salvar.textContent = aviso ? "Salvar" : "Publicar";
+            titulo.value = aviso ? aviso.titulo : "";
+            texto.value = aviso ? aviso.texto : "";
+            ate.value = aviso ? aviso.expira_em : "";
+            mostrarErro(erro, "");
+            dialog.showModal();
+            titulo.focus();
+        }
+
+        document.querySelectorAll("[data-mural-novo]").forEach((b) => b.addEventListener("click", () => abrir(null)));
+        document.querySelectorAll("[data-mural-editar]").forEach((b) =>
+            b.addEventListener("click", () => abrir(AVISOS[b.dataset.muralEditar])));
+        document.querySelectorAll("[data-mural-remover]").forEach((b) =>
+            b.addEventListener("click", () => {
+                removendoId = b.dataset.muralRemover;
+                document.getElementById("muralRemoverMsg").textContent =
+                    `"${AVISOS[removendoId].titulo}" sai do mural para todo mundo.`;
+                mostrarErro(document.getElementById("muralRemoverErro"), "");
+                remover.showModal();
+            }));
+        document.querySelectorAll("[data-mural-fechar]").forEach((b) =>
+            b.addEventListener("click", () => b.closest("dialog").close()));
+
+        document.getElementById("muralForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            salvar.disabled = true;
+            try {
+                await enviar(editandoId ? `/api/comunicados/${editandoId}` : "/api/comunicados", {
+                    titulo: titulo.value, texto: texto.value, expira_em: ate.value || null,
+                });
+                window.location.reload();
+            } catch (err) {
+                mostrarErro(erro, err.message);
+                salvar.disabled = false;
+            }
+        });
+
+        document.getElementById("muralRemoverForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const botao = e.submitter;
+            if (botao) botao.disabled = true;
+            try {
+                await enviar(`/api/comunicados/${removendoId}/remover`);
+                window.location.reload();
+            } catch (err) {
+                mostrarErro(document.getElementById("muralRemoverErro"), err.message);
+                if (botao) botao.disabled = false;
+            }
+        });
+    })();
+</script>
+{% endif %}
 {% endblock %}

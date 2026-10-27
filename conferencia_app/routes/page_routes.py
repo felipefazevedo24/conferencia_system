@@ -3,7 +3,14 @@ from datetime import datetime, timedelta
 from flask import Blueprint, redirect, render_template, request, session, url_for
 from sqlalchemy import func
 
-from ..auth import get_effective_permissions, login_required, permission_required, permission_required_any
+from ..auth import (
+    get_effective_permissions,
+    has_permission,
+    is_admin_session,
+    login_required,
+    permission_required,
+    permission_required_any,
+)
 from ..extensions import db
 from ..models import (
     ActiveSession,
@@ -479,10 +486,6 @@ def _build_priority_actions(modules: list[dict], metrics: dict) -> list[dict]:
 # Cada card/gráfico só aparece se o usuário tem acesso à área correspondente.
 # WMS fica de fora de propósito.
 # ---------------------------------------------------------------------------
-_PERM_RECEBIMENTO = ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_FISCAL_LIBERADAS")
-_PERM_COMPRAS = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
-
-
 def _serie_entradas_por_dia(dias: int = 14) -> dict:
     """Série diária de notas que entraram (por data de importação)."""
     today = agora_br().date()
@@ -511,57 +514,6 @@ def _serie_entradas_por_dia(dias: int = 14) -> dict:
     return {"labels": labels, "valores": valores}
 
 
-def _serie_fluxo_notas_por_dia(dias: int = 14) -> dict:
-    """Série diária com entrada de NFs e lançamentos concluídos no ERP."""
-    today = agora_br().date()
-    inicio = today - timedelta(days=dias - 1)
-    importadas: dict[str, int] = {}
-    lancadas: dict[str, int] = {}
-
-    try:
-        rows_import = (
-            db.session.query(
-                func.date(ItemNota.data_importacao),
-                func.count(func.distinct(ItemNota.numero_nota)),
-            )
-            .filter(func.date(ItemNota.data_importacao) >= inicio)
-            .group_by(func.date(ItemNota.data_importacao))
-            .all()
-        )
-        for dia, qtd in rows_import:
-            importadas[str(dia)] = int(qtd or 0)
-
-        rows_lanc = (
-            db.session.query(
-                func.date(ItemNota.data_lancamento),
-                func.count(func.distinct(ItemNota.numero_nota)),
-            )
-            .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) >= inicio)
-            .group_by(func.date(ItemNota.data_lancamento))
-            .all()
-        )
-        for dia, qtd in rows_lanc:
-            lancadas[str(dia)] = int(qtd or 0)
-    except Exception:
-        db.session.rollback()
-
-    labels = []
-    serie_importadas = []
-    serie_lancadas = []
-    for i in range(dias):
-        d = inicio + timedelta(days=i)
-        chave = str(d)
-        labels.append(d.strftime("%d/%m"))
-        serie_importadas.append(importadas.get(chave, 0))
-        serie_lancadas.append(lancadas.get(chave, 0))
-
-    return {
-        "labels": labels,
-        "importadas": serie_importadas,
-        "lancadas": serie_lancadas,
-    }
-
-
 def _dist_expedicao_status() -> dict:
     """Distribuição de expedições por status."""
     dados: dict[str, int] = {}
@@ -581,19 +533,13 @@ def _dist_expedicao_status() -> dict:
 @page_bp.route("/")
 @login_required
 def home():
-    from ..services.dashboard_home_service import montar_filas, montar_hoje
+    from ..services.comunicado_service import listar_mural
 
-    perms = get_effective_permissions()
-    fluxo = None
-    if any(perms.get(k, False) for k in _PERM_RECEBIMENTO + _PERM_COMPRAS):
-        fluxo = _serie_fluxo_notas_por_dia()
     return render_template(
         "dashboard_home.html",
         user=session.get("username", "Usuário"),
-        filas=montar_filas(),
-        hoje=montar_hoje(),
-        fluxo_notas=fluxo,
-        mostrar_previsao_st=bool(perms.get("PAGE_LOGISTICA_VIAGEM", False)),
+        avisos=listar_mural(),
+        pode_publicar=is_admin_session() or has_permission("MANAGE_COMUNICADOS"),
     )
 
 

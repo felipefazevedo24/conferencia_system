@@ -52,6 +52,39 @@ def localizar(n_os) -> dict | None:
     return {**escolhido, "numero_os": numero_os, "ordem": ordem}
 
 
+def os_filhas(n_os) -> list[dict]:
+    """OS que a OS do item precisa (aba Dependencias do GRV), da filha direta
+    ate' a ultima neta, na ordem da arvore. Reaproveita o rastreio da Producao:
+    ele parte do orcamento, entao OS sem orcamento vinculado volta sem filhas.
+    Levanta excecao se o ERP estiver fora."""
+    numero_os = _numero_os(n_os)
+    if not numero_os:
+        return []
+    try:
+        grafo = producao_service.obter_dependencias(numero_os)
+    except LookupError:
+        return []
+    titulos = {no["number"]: no["title"] for no in grafo["nodes"]}
+    filhas_de: dict[str, list[str]] = {}
+    for ligacao in grafo["edges"]:
+        filhas_de.setdefault(ligacao["dependent_order_number"], []).append(ligacao["prerequisite_order_number"])
+    raiz = grafo["selected_order_number"] or numero_os
+    resultado: list[dict] = []
+    # A mesma OS pode atender dois pais; aparece uma vez so', no primeiro.
+    vistas = {raiz}
+
+    def descer(pai: str, nivel: int) -> None:
+        for filha in sorted(filhas_de.get(pai, []), key=lambda n: (len(n), n)):
+            if filha in vistas:
+                continue
+            vistas.add(filha)
+            resultado.append({"numero": filha, "titulo": titulos.get(filha, ""), "nivel": nivel})
+            descer(filha, nivel + 1)
+
+    descer(raiz, 1)
+    return resultado
+
+
 def obter_arquivo(n_os) -> tuple[bytes, str]:
     documento = localizar(n_os)
     if not documento:
