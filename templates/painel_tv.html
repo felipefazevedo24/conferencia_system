@@ -3,502 +3,301 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0f62c9">
+<meta name="theme-color" content="#0a111e">
 <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <title>Torre de Controle Sync — Operações em tempo real</title>
 <style>
+  /* Painel de TV vista de longe: tudo em vh pra escalar igual em TV 720p,
+     1080p ou 4K. Cor so' com significado - vermelho = vencido/sem
+     conferencia, ambar = parado ha mais de 1 dia, verde = feito hoje. */
   :root {
-    --bg: #071a33;              /* azul Columbia profundo */
-    --bg-soft: #0c2547;
-    --card: #0f2c52;
-    --card-2: #143a68;
-    --border: rgba(255,255,255,.10);
-    --text: #eaf2ff;
-    --muted: #9db6d8;
-    --recebimento: #3da5f4;     /* azul Columbia claro */
-    --recebimento-2: #0f62c9;   /* azul Columbia primário */
-    --expedicao: #fbbf24;
-    --expedicao-2: #f59e0b;
-    --ok: #34d399;
-    --warn: #f87171;
-    --frota: #22d3ee;
-    --plan: #a78bfa;
-    --comex: #2dd4bf;
+    --bg: #0a111e;
+    --surface: #111b2d;
+    --surface-2: #18243b;
+    --line: rgba(148,170,210,.12);
+    --text: #e9eef7;
+    --muted: #8b9bb7;
+    --faint: #5d6e8c;
+    --crit: #ff6b6b;
+    --warn: #f5b942;
+    --ok: #3ddc97;
+    --info: #5eb0ff;
+    --crit-bg: rgba(255,107,107,.14);
+    --warn-bg: rgba(245,185,66,.14);
+    --ok-bg: rgba(61,220,151,.13);
+    --info-bg: rgba(94,176,255,.13);
+    --r: 1.2vh;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: radial-gradient(1200px 800px at 15% -10%, #0d3a6e 0%, var(--bg) 58%);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    background: var(--bg);
     color: var(--text);
     height: 100vh;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding: clamp(12px, 1.6vh, 26px);
-    gap: clamp(10px, 1.4vh, 20px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 2vh;
+    padding: 2.2vh 2.2vw;
   }
 
-  /* ---------- Header ---------- */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex: 0 0 auto;
-  }
-  .brand { display: flex; align-items: center; gap: 18px; }
+  /* ---------- Cabecalho ---------- */
+  header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 3vw; }
+  .brand { display: flex; align-items: center; gap: 1.4vw; }
+  .brand img { height: 5vh; display: block; }
   .brand h1 {
-    font-size: clamp(20px, 2.6vh, 34px);
-    font-weight: 500;
-    letter-spacing: .5px;
+    font-size: 2.3vh; font-weight: 600; color: var(--muted); letter-spacing: .02em;
+    padding-left: 1.4vw; border-left: 1px solid var(--line); line-height: 4vh;
   }
-  .brand .sub { color: var(--muted); font-size: clamp(11px, 1.4vh, 15px); font-weight: 500; }
-  .logo-badge {
-    display: grid; place-items: center;
-    filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
+  .slides-nav { display: flex; justify-content: center; align-items: center; gap: 2.4vw; }
+  .sdot {
+    background: none; border: 0; cursor: pointer; font-family: inherit;
+    font-size: 1.75vh; font-weight: 600; color: var(--faint);
+    position: relative; padding: 1vh 0 1.3vh; transition: color .2s;
   }
-  .logo-badge img { height: clamp(36px, 5.4vh, 62px); display: block; }
-  .brand::after {
-    content: "";
-    width: 1px; align-self: stretch; margin: 4px 0;
-    background: linear-gradient(180deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+  .sdot:hover { color: var(--muted); }
+  .sdot.on { color: var(--text); }
+  .sdot .bar { position: absolute; left: 0; right: 0; bottom: 0; height: .35vh; border-radius: 1vh; background: transparent; overflow: hidden; }
+  .sdot.on .bar { background: var(--line); }
+  .sdot.on .bar::after {
+    content: ""; position: absolute; inset: 0; background: var(--text);
+    transform-origin: left; animation: barFill var(--dur, 15s) linear forwards;
   }
-  .live {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(52,211,153,.12); color: var(--ok);
-    padding: 6px 14px; border-radius: 999px; font-weight: 700;
-    font-size: clamp(11px, 1.3vh, 14px);
-    border: 1px solid rgba(52,211,153,.3);
+  .slides-nav.held .sdot.on .bar::after { animation: none; transform: none; background: var(--warn); }
+  @keyframes barFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .slides-play {
+    background: none; border: 1px solid var(--line); color: var(--faint); cursor: pointer;
+    width: 3.4vh; height: 3.4vh; border-radius: 50%; font-size: 1.3vh;
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  .live .dot {
-    width: 10px; height: 10px; border-radius: 50%; background: var(--ok);
-    box-shadow: 0 0 0 0 rgba(52,211,153,.7); animation: pulse 1.8s infinite;
-  }
-  .live.stale { background: rgba(248,113,113,.12); color: var(--warn); border-color: rgba(248,113,113,.35); }
-  .live.stale .dot { background: var(--warn); animation: none; }
+  .slides-play:hover { color: var(--text); }
+  .slides-play.paused { color: var(--warn); border-color: var(--warn); }
+
+  .status { display: flex; align-items: center; gap: 1.6vw; }
+  .live { display: inline-flex; align-items: center; gap: .6vw; font-size: 1.6vh; font-weight: 600; color: var(--ok); }
+  .live .dot { width: 1vh; height: 1vh; border-radius: 50%; background: var(--ok); animation: pulse 2s infinite; }
+  .live.stale { color: var(--crit); }
+  .live.stale .dot { background: var(--crit); animation: none; }
   @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(52,211,153,.6); }
-    70% { box-shadow: 0 0 0 14px rgba(52,211,153,0); }
-    100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+    0% { box-shadow: 0 0 0 0 rgba(61,220,151,.55); }
+    70% { box-shadow: 0 0 0 1.2vh rgba(61,220,151,0); }
+    100% { box-shadow: 0 0 0 0 rgba(61,220,151,0); }
   }
   .audio-indicator {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: clamp(30px, 3.6vh, 40px); height: clamp(30px, 3.6vh, 40px);
-    border-radius: 50%; font-size: clamp(13px, 1.6vh, 17px);
-    background: rgba(52,211,153,.12); color: var(--ok);
-    border: 1px solid rgba(52,211,153,.3); cursor: pointer;
-    transition: all .2s ease;
+    background: none; border: 0; cursor: pointer; color: var(--faint); font-size: 2vh;
+    width: 3.4vh; height: 3.4vh; display: inline-flex; align-items: center; justify-content: center;
   }
-  .audio-indicator.is-muted {
-    background: rgba(248,113,113,.12); color: var(--warn); border-color: rgba(248,113,113,.35);
-    animation: mutedPulse 2s infinite;
-  }
-  @keyframes mutedPulse {
-    0%, 100% { opacity: 1; } 50% { opacity: .55; }
-  }
+  .audio-indicator.is-muted { color: var(--crit); animation: mutedPulse 2s infinite; }
+  @keyframes mutedPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   .clock { text-align: right; }
-  .clock .time { font-size: clamp(22px, 3vh, 40px); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .clock .date { color: var(--muted); font-size: clamp(11px, 1.4vh, 16px); text-transform: capitalize; }
+  .clock .time { font-size: 4.6vh; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+  .clock .date { font-size: 1.6vh; color: var(--muted); margin-top: .5vh; }
 
-  /* ---------- Carrossel de slides ---------- */
-  main {
-    flex: 1 1 auto;
-    position: relative;
-    min-height: 0;
-  }
+  /* ---------- Slides ---------- */
+  main { position: relative; min-height: 0; }
   .slide { position: absolute; inset: 0; display: none; }
-  .slide.is-active { display: flex; flex-direction: column; animation: slideFade .5s ease; }
-  @keyframes slideFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  .op-grid {
-    flex: 1 1 auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: clamp(12px, 1.6vh, 22px);
-    min-height: 0;
-  }
-  /* indicador de slides no cabecalho (clicavel para escolher a visao) */
-  .slides-nav { display: flex; gap: 8px; align-items: center; }
-  .slides-nav .sdot {
-    border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
-    height: 32px; padding: 0 14px; border-radius: 999px; font-size: clamp(11px,1.2vh,14px);
-    font-weight: 800; letter-spacing: .2px; cursor: pointer; transition: all .22s;
-    display: inline-flex; align-items: center; gap: 7px; font-family: inherit; white-space: nowrap;
-  }
-  .slides-nav .sdot:hover { background: rgba(255,255,255,.13); color: var(--text); transform: translateY(-1px); }
-  .slides-nav .sdot.on { background: var(--recebimento); color: #05203c; border-color: transparent; box-shadow: 0 4px 14px rgba(61,165,244,.32); }
-  .slides-nav .sdot.tone-recebimento.on { background: var(--recebimento); color: #05203c; box-shadow: 0 4px 14px rgba(61,165,244,.32); }
-  .slides-nav .sdot.tone-expedicao.on { background: var(--expedicao); color: #3b2400; box-shadow: 0 4px 14px rgba(251,191,36,.35); }
-  .slides-nav .sdot.tone-frota.on { background: var(--frota); color: #05293a; box-shadow: 0 4px 14px rgba(34,211,238,.30); }
-  .slides-nav .sdot.tone-planejamento.on { background: var(--plan); color: #1f1740; box-shadow: 0 4px 14px rgba(167,139,250,.34); }
-  .slides-nav .sdot.tone-comex.on { background: var(--comex); color: #04302b; box-shadow: 0 4px 14px rgba(45,212,191,.34); }
-  .slides-nav .sdot .sdot-ico { font-size: .95em; }
-  .slides-nav .slides-play {
-    border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
-    width: 32px; height: 32px; border-radius: 999px; cursor: pointer; transition: all .22s;
-    display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
-  }
-  .slides-nav .slides-play:hover { background: rgba(255,255,255,.13); color: var(--text); }
-  .slides-nav .slides-play.paused { background: var(--expedicao); color: #05203c; border-color: transparent; }
+  .slide.is-active { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 2.2vh; animation: fade .45s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(.8vh); } to { opacity: 1; transform: none; } }
+  .slide-head { display: flex; align-items: baseline; gap: 1.4vw; }
+  .slide-head h2 { font-size: 4vh; font-weight: 700; letter-spacing: -.015em; }
+  .slide-head .ctx { font-size: 1.8vh; color: var(--faint); }
 
-  /* ---------- Painel de compras (OCs) ---------- */
-  .compras-stack { flex: 1 1 auto; display: flex; flex-direction: column; gap: clamp(12px,1.6vh,22px); min-height: 0; }
-  .panel.compras { flex: 1 1 0; min-height: 0; }
-  .compras-atr .icon { background: rgba(248,113,113,.16); color: #f87171; }
-  .compras-atr .accent { color: #f87171; }
-  .compras-sem .icon { background: rgba(52,211,153,.16); color: #34d399; }
-  .compras-sem .accent { color: #34d399; }
-  .oc-grid {
-    flex: 1 1 auto; min-height: 0; margin-top: clamp(6px,1vh,12px);
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(210px,20vw,300px), 1fr));
-    grid-auto-rows: min-content; gap: 8px; overflow-y: auto; padding-right: 4px; align-content: start;
+  /* ---------- Numeros grandes ---------- */
+  .kpis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 1.2vw; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 1.8vh 1.5vw 2vh; position: relative; overflow: hidden;
   }
-  .oc-item {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-left: 4px solid var(--border); border-radius: 12px;
-    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px);
-  }
-  .oc-item.atraso { border-left-color: #f87171; }
-  .oc-item.semana { border-left-color: #34d399; }
-  .oc-item .oc-main { min-width: 0; }
-  .oc-item .oc-main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; }
-  .oc-item .oc-main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .oc-item .oc-dias { text-align: right; white-space: nowrap; }
-  .oc-item .oc-dias b { font-size: clamp(14px,1.9vh,20px); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .oc-item.atraso .oc-dias b { color: #f87171; }
-  .oc-item.semana .oc-dias b { color: #34d399; }
-  .oc-item .oc-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .kpi .lbl { font-size: 1.85vh; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi .val { font-size: 8.2vh; font-weight: 700; line-height: 1; margin-top: 1vh; letter-spacing: -.03em; }
+  .kpi .sub { font-size: 1.6vh; color: var(--faint); margin-top: .7vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.6vh; }
+  .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .55vh; background: transparent; }
+  .kpi.t-crit::before { background: var(--crit); }
+  .kpi.t-crit .val { color: var(--crit); }
+  .kpi.t-warn::before { background: var(--warn); }
+  .kpi.t-warn .val { color: var(--warn); }
+  .kpi.t-ok .val { color: var(--ok); }
+  .kpi.t-info .val { color: var(--info); }
+  .kpi.is-zero .val { color: var(--faint); }
+  /* Recebimento + Compras: 6 numeros na mesma faixa - rotulo quebra em 2 linhas. */
+  .kpis.k-compacto { gap: 1vw; }
+  .kpis.k-compacto .kpi { padding: 1.6vh 1.2vw 1.8vh; }
+  .kpis.k-compacto .lbl { white-space: normal; line-height: 1.25; min-height: 2.5em; }
+  .kpis.k-compacto .val { font-size: 7.2vh; margin-top: .6vh; }
 
-  /* ---------- Painel de planejamento de tarefas ---------- */
-  .plan .icon { background: rgba(167,139,250,.16); color: var(--plan); }
-  .plan .accent { color: var(--plan); }
-  .plan-board {
-    flex: 1 1 auto; min-height: 0; margin-top: clamp(8px,1.4vh,16px);
-    display: flex; gap: clamp(8px,1vw,14px); overflow-x: auto; padding-bottom: 4px;
+  /* ---------- Paineis e listas ---------- */
+  .content { min-height: 0; display: grid; gap: 1.2vw; }
+  .content.c-fila { grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); }
+  .content.c-tres { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1.12fr) minmax(0, .9fr); }
+  .content.c-tres .pill { min-width: 6.8vw; }
+  .content.c-board { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .content.c-map { grid-template-columns: minmax(0, 1fr); }
+  .pane {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
   }
-  .plan-kcol {
-    flex: 1 1 0; min-width: clamp(200px,18vw,300px); display: flex; flex-direction: column;
-    background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-top: 4px solid var(--plan); border-radius: 14px; min-height: 0;
+  .pane-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 1vw;
+    padding: 1.6vh 1.4vw; border-bottom: 1px solid var(--line); flex: 0 0 auto;
   }
-  .plan-kcol.is-done { border-top-color: var(--ok); }
-  .plan-khead {
-    display: flex; align-items: center; gap: 8px; padding: clamp(9px,1.2vh,14px) clamp(11px,1.4vh,16px);
-    border-bottom: 1px solid var(--border);
-  }
-  .plan-khead .kc-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-  .plan-khead .kc-title { font-size: clamp(12px,1.5vh,17px); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
-  .plan-khead .kc-count { font-size: clamp(11px,1.3vh,15px); font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .plan-klist { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: clamp(7px,1vh,11px); display: flex; flex-direction: column; gap: 7px; }
-  .plan-task {
-    background: rgba(255,255,255,.04); border: 1px solid var(--border);
-    border-left: 4px solid var(--plan); border-radius: 10px;
-    padding: clamp(7px,1vh,11px) clamp(9px,1.2vh,13px);
-  }
-  .plan-task.atrasada { border-left-color: #f87171; }
-  .plan-task .pt-title { font-size: clamp(12px,1.5vh,17px); font-weight: 800; line-height: 1.25; }
-  .plan-task .pt-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 5px; }
-  .plan-task .pt-chip {
-    display: inline-flex; align-items: center; gap: 4px; font-size: clamp(9px,1.1vh,12px);
-    font-weight: 700; color: var(--muted); background: rgba(255,255,255,.05);
-    border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
-  }
-  .plan-task .pt-chip.prazo.atrasada { color: #f87171; border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.12); }
-  .plan-task .pt-chip.prio-Alta, .plan-task .pt-chip.prio-Critica { color: #fbbf24; border-color: rgba(251,191,36,.5); }
-  .plan-klist .empty, .plan-board .empty { color: var(--muted); font-size: clamp(11px,1.3vh,14px); padding: 10px; text-align: center; }
+  .pane-head h3 { font-size: 2.2vh; font-weight: 600; }
+  .pane-head .count { font-size: 2.2vh; font-weight: 700; color: var(--muted); }
+  .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; }
+  .scroll::-webkit-scrollbar { display: none; }
 
-  /* ---------- Painel Comex (mesmo modelo do Planejamento acima, mesmas
-     classes .plan-board/.plan-kcol/.plan-klist/.plan-task - so a cor muda) --- */
-  .comex .icon { background: rgba(45,212,191,.16); color: var(--comex); }
-  .comex .accent { color: var(--comex); }
-  .cx-task { cursor: pointer; transition: transform .15s, background .15s; }
-  .cx-task:hover { background: rgba(255,255,255,.08); transform: translateY(-1px); }
-  /* Ultima interacao ha mais de 3 dias - so a data fica vermelha, resto do
-     card continua normal (nao exagera o alerta). */
-  .cx-chip-atrasada { color: #f87171 !important; border-color: rgba(248,113,113,.5) !important; background: rgba(248,113,113,.12) !important; }
+  .row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1.2vw;
+    padding: 1.5vh 1.4vw; border-bottom: 1px solid var(--line); position: relative; flex: 0 0 auto;
+  }
+  .row.no-pill { grid-template-columns: minmax(0, 1fr) auto; }
+  .row::before { content: ""; position: absolute; left: 0; top: .9vh; bottom: .9vh; width: .45vh; border-radius: 0 .4vh .4vh 0; background: transparent; }
+  .row.r-crit::before { background: var(--crit); }
+  .row.r-warn::before { background: var(--warn); }
+  .row .t { font-size: 2.6vh; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { font-size: 1.9vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .3vh; }
+  .row .m { text-align: right; white-space: nowrap; }
+  .row .m b { display: block; font-size: 2.4vh; font-weight: 700; }
+  .row .m span { display: block; font-size: 1.5vh; color: var(--faint); margin-top: .2vh; }
+  .row .m.crit b { color: var(--crit); }
+  .row .m.warn b { color: var(--warn); }
+  .row .m.ok b { color: var(--ok); }
+  .pill {
+    font-size: 1.45vh; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: .6vh .7vw; border-radius: .6vh; white-space: nowrap;
+    background: rgba(255,255,255,.06); color: var(--muted); min-width: 9.5vw; text-align: center;
+  }
+  .pill.p-crit { background: var(--crit-bg); color: var(--crit); }
+  .pill.p-warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.p-info { background: var(--info-bg); color: var(--info); }
+  .pill.p-ok { background: var(--ok-bg); color: var(--ok); }
 
-  /* ---------- Popup de itens da PO (Comex) ---------- */
-  .cx-itens-overlay {
-    display: none; position: fixed; inset: 0; z-index: 500;
-    background: rgba(3,10,20,.72); backdrop-filter: blur(2px);
-    align-items: center; justify-content: center; padding: 24px;
+  /* Historico do dia: discreto, so' pra ver que a operacao andou. */
+  .frow {
+    display: grid; grid-template-columns: 6.4vh minmax(0, 1fr); gap: 1vw; align-items: baseline;
+    padding: 1.25vh 1.4vw; border-bottom: 1px solid var(--line); flex: 0 0 auto;
   }
-  .cx-itens-overlay.show { display: flex; }
-  .cx-itens-box {
-    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-    width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column;
-    box-shadow: 0 24px 60px rgba(0,0,0,.5);
-  }
-  .cx-itens-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 16px 20px; border-bottom: 1px solid var(--border);
-  }
-  .cx-itens-head strong { font-size: clamp(15px, 1.9vh, 20px); }
-  .cx-itens-head button {
-    border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
-    width: 32px; height: 32px; border-radius: 999px; cursor: pointer; font-size: 14px;
-  }
-  .cx-itens-head button:hover { background: rgba(255,255,255,.13); color: var(--text); }
-  .cx-itens-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 20px 20px; }
-  .cx-itens-body .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 14px; }
-  .cx-itens-table { width: 100%; border-collapse: collapse; font-size: clamp(12px, 1.5vh, 15px); }
-  .cx-itens-table th {
-    text-align: left; color: var(--muted); font-weight: 800; text-transform: uppercase;
-    font-size: clamp(10px, 1.1vh, 12px); letter-spacing: .04em; padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  .cx-itens-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
-  .cx-itens-table tr:last-child td { border-bottom: none; }
+  .frow time { font-size: 1.8vh; font-weight: 600; color: var(--faint); }
+  .frow .t { font-size: 2.1vh; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow .t em { font-style: normal; color: var(--ok); font-weight: 600; }
+  .frow .s { font-size: 1.7vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .2vh; }
 
-  /* ---------- Painel operacional (Recebimento + Compras) ---------- */
-  .flow::before { color: var(--recebimento); }
-  .flow .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
-  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; }
-  .tv-kb-wrap.cols-2 { grid-template-rows: 1fr 1fr; }
-  .tv-kb-wrap.cols-1 { grid-template-rows: 1fr; }
-  .tv-kb-group { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-  .tv-kb-title { font-size: clamp(12px, 1.4vh, 16px); font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
-  .tv-kb-board { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
-  .tv-kb-col {
-    min-width: clamp(220px, 17vw, 280px);
-    flex: 1 1 0;
-    background: rgba(255,255,255,.035);
-    border: 1px solid var(--border);
-    border-top: 4px solid var(--recebimento);
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  .empty {
+    flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.2vh; padding: 4vh 2vw; text-align: center; color: var(--muted);
   }
-  .tv-kb-col.is-alert { border-top-color: #f87171; }
-  .tv-kb-col.is-neutral { border-top-color: #eaf2ff; }
-  .tv-kb-col.is-info { border-top-color: #3da5f4; }
-  .tv-kb-col.is-warn { border-top-color: #fbbf24; }
-  .tv-kb-col.is-ok { border-top-color: #34d399; }
-  .tv-kb-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 9px 11px;
-    border-bottom: 1px solid var(--border);
-  }
-  .tv-kb-head strong { font-size: clamp(11px, 1.25vh, 14px); font-weight: 800; color: var(--text); }
-  .tv-kb-count { font-size: clamp(12px, 1.5vh, 18px); font-weight: 900; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .tv-kb-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
-  .tv-kb-card {
-    background: rgba(255,255,255,.04);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--recebimento);
-    border-radius: 10px;
-    padding: 7px 9px;
-  }
-  .tv-kb-card.is-alert { border-left-color: #f87171; }
-  .tv-kb-card.is-neutral { border-left-color: #eaf2ff; }
-  .tv-kb-card.is-info { border-left-color: #3da5f4; }
-  .tv-kb-card.is-warn { border-left-color: #fbbf24; }
-  .tv-kb-card.is-ok { border-left-color: #34d399; }
-  .tv-kb-card b { display: block; font-size: clamp(12px, 1.45vh, 16px); font-weight: 800; }
-  .tv-kb-card span { display: block; color: var(--muted); font-size: clamp(10px, 1.15vh, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tv-kb-card .meta { margin-top: 4px; display: flex; justify-content: space-between; gap: 8px; }
-  .tv-kb-card .meta .ago { color: var(--muted); font-size: clamp(9px, 1vh, 11px); }
+  .empty i { font-size: 5vh; color: var(--ok); opacity: .85; }
+  .empty b { font-size: 2.4vh; font-weight: 600; color: var(--text); }
+  .empty span { font-size: 1.8vh; }
+  .empty.small { flex: 0 0 auto; padding: 3vh 1vw; }
+  .empty.small b { font-size: 1.9vh; color: var(--faint); font-weight: 500; }
 
-  .panel {
-    background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    padding: clamp(14px, 2vh, 26px);
-    display: flex;
-    flex-direction: column;
-    gap: clamp(10px, 1.4vh, 18px);
-    min-height: 0;
-    overflow: hidden;
-    position: relative;
-    box-shadow: 0 24px 48px -22px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+  /* ---------- Quadros (Planejamento / Comex) ---------- */
+  .card {
+    margin: 1vh 1vh 0; padding: 1.4vh 1.1vw; background: var(--surface-2);
+    border-radius: .9vh; position: relative; flex: 0 0 auto;
   }
-  .panel::before {
-    content: ""; position: absolute; top: 0; left: 10%; right: 10%; height: 3px;
-    border-radius: 0 0 8px 8px;
-    background: linear-gradient(90deg, transparent, currentColor, transparent);
-    opacity: .8;
+  .card:last-child { margin-bottom: 1vh; }
+  .card::before { content: ""; position: absolute; left: 0; top: .9vh; bottom: .9vh; width: .45vh; border-radius: 0 .4vh .4vh 0; background: transparent; }
+  .card.c-crit::before { background: var(--crit); }
+  .card .t { font-size: 2.2vh; font-weight: 600; line-height: 1.25; }
+  .chips { display: flex; flex-wrap: wrap; gap: .5vw; margin-top: 1vh; }
+  .chip {
+    display: inline-flex; align-items: center; gap: .4vw; font-size: 1.55vh; font-weight: 600;
+    color: var(--muted); background: rgba(255,255,255,.05); padding: .45vh .6vw; border-radius: .5vh;
   }
-  .rec::before { color: var(--recebimento); }
-  .exp::before { color: var(--expedicao); }
-  .compras-atr::before { color: #f87171; }
-  .compras-sem::before { color: #34d399; }
-  .frota::before { color: var(--frota); }
-  .frota .icon { background: rgba(34,211,238,.16); color: var(--frota); }
-  .frota .accent { color: var(--frota); }
-  .panel-head { display: flex; align-items: center; gap: 14px; }
-  .panel-head .icon {
-    width: clamp(38px, 5vh, 56px); height: clamp(38px, 5vh, 56px);
-    border-radius: 16px; display: grid; place-items: center;
-    font-size: clamp(18px, 2.5vh, 26px);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
-  }
-  .panel-head h2 { font-size: clamp(17px, 2.3vh, 28px); font-weight: 800; letter-spacing:.3px; }
-  .panel-head .tag { margin-left: auto; color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight:600; }
-  .mode-switch { display: flex; gap: 8px; margin-left: 14px; }
-  .mode-pill {
-    font: inherit; font-size: clamp(10px,1.3vh,14px); font-weight: 700;
-    padding: 5px 12px; border-radius: 999px;
-    color: var(--muted); background: rgba(255,255,255,.05);
-    border: 1px solid var(--border); transition: all .2s ease;
-    cursor: pointer; -webkit-tap-highlight-color: transparent;
-  }
-  .mode-pill:hover { color: var(--text); background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.24); transform: translateY(-1px); }
-  .mode-pill:focus-visible { outline: 2px solid var(--recebimento); outline-offset: 2px; }
-  .mode-pill.active {
-    color: #08243f; background: var(--expedicao);
-    border-color: var(--expedicao); box-shadow: 0 0 0 3px rgba(251,191,36,.2);
-  }
-  .mode-pill.active:hover { transform: none; background: var(--expedicao); color: #08243f; }
-  .exp .hero, .exp .grid2, .exp .feed .list,
-  .rec .hero, .rec .grid2, .rec .feed .list { transition: opacity .3s ease; }
-  .exp.switching .hero, .exp.switching .grid2, .exp.switching .feed .list,
-  .rec.switching .hero, .rec.switching .grid2, .rec.switching .feed .list { opacity: .25; }
-  .rec .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
-  .rec .accent { color: var(--recebimento); }
-  .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
-  .exp .accent { color: var(--expedicao); }
+  .chip.crit { color: var(--crit); background: var(--crit-bg); }
+  .chip.warn { color: var(--warn); background: var(--warn-bg); }
+  .cx-task { cursor: pointer; transition: background .15s; }
+  .cx-task:hover { background: #1e2c47; }
 
-  /* hero metric — grid fixo (nao flex) para a coluna do numero nunca variar
-     de tamanho conforme o texto do label ao lado (era a causa do numero de
-     um card aparentar maior/menor que o do outro). */
-  .hero {
-    border-radius: 18px;
-    padding: clamp(12px, 2vh, 22px) clamp(16px, 2.4vh, 30px);
-    display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 16px;
-    border: 1px solid var(--border);
-    background: var(--card-2);
-    position: relative; overflow: hidden; min-height: 0;
+  /* ---------- Frota ---------- */
+  .map-pane { position: relative; }
+  #frota-map { flex: 1 1 auto; min-height: 0; background: #dfe5ec; }
+  /* Mapa com as cores normais do OpenStreetMap: numa TV ninguem clica pra
+     abrir popup, entao o nome do veiculo fica escrito ao lado do carrinho,
+     como rotulo de mapa (contorno branco, sem caixa). */
+  .veh { display: flex; align-items: center; gap: .6vw; white-space: nowrap; }
+  .veh-ico {
+    width: 4.6vh; height: 4.6vh; border-radius: 50%; flex: none; position: relative;
+    display: grid; place-items: center; font-size: 2.1vh;
+    background: var(--ok); color: #05261a; border: .35vh solid #fff;
+    box-shadow: 0 .4vh 1.2vh rgba(0,0,0,.35);
   }
-  .rec .hero { background: linear-gradient(120deg, rgba(61,165,244,.20), rgba(15,98,201,.05)); }
-  .exp .hero { background: linear-gradient(120deg, rgba(251,191,36,.18), rgba(251,191,36,.04)); }
-  .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; }
-  .hero .num {
-    font-size: clamp(38px, 5.4vh, 76px); font-weight: 900; line-height: 1;
-    font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
-    text-align: right; min-width: 1.2em;
+  .veh.idle .veh-ico { background: #94a3b8; color: #1e293b; }
+  .veh.em-viagem .veh-ico::after {
+    content: ""; position: absolute; inset: -.35vh; border-radius: 50%;
+    border: .3vh solid var(--ok); animation: vehPulse 2s ease-out infinite;
   }
-
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.3vh,16px); }
-  .stat {
-    background: var(--card-2); border: 1px solid var(--border);
-    border-radius: 16px; padding: clamp(10px,1.6vh,18px);
-    display: flex; flex-direction: column; gap: 6px;
+  @keyframes vehPulse { from { transform: scale(1); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+  .veh-txt b, .veh-txt span {
+    display: block;
+    text-shadow: 0 0 .25vh #fff, 0 0 .25vh #fff, 0 0 .5vh #fff, 0 0 .8vh #fff;
   }
-  .stat .n { font-size: clamp(26px, 4.6vh, 58px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-  .stat .t { font-size: clamp(11px, 1.4vh, 16px); color: var(--muted); font-weight: 600; }
-  .stat.ok .n { color: var(--ok); }
-  /* Tiles consolidados da expedicao (4 categorias) */
-  .exp-stats { grid-template-columns: 1fr 1fr; }
-  .exp-stats .stat { border-left: 4px solid var(--border); }
-  .stat.s-conf { border-left-color: var(--expedicao); }
-  .stat.s-conf .n { color: var(--expedicao); }
-  .stat.s-fsc { border-left-color: #f87171; }
-  .stat.s-fsc .n { color: #f87171; }
-  .stat.s-fat { border-left-color: #b9adff; }
-  .stat.s-fat .n { color: #b9adff; }
-  /* Tiles consolidados do recebimento (3 categorias) */
-  .rec-stats { grid-template-columns: repeat(3, 1fr); }
-  .rec-stats .stat { border-left: 4px solid var(--border); }
-  .stat.r-conf { border-left-color: var(--recebimento); }
-  .stat.r-conf .n { color: var(--recebimento); }
-  .stat.r-lanc { border-left-color: var(--expedicao); }
-  .stat.r-lanc .n { color: var(--expedicao); }
-  .exp-pills { flex-wrap: wrap; margin: 2px 0 6px; }
+  .veh-txt b { font-size: 2vh; font-weight: 800; color: #0a111e; }
+  .veh-txt span { font-size: 1.5vh; font-weight: 600; color: #334155; }
+  #frota-map .leaflet-control-attribution { background: rgba(255,255,255,.75); color: #475569; font-size: 1vh; }
 
-  .updated-flash { animation: flash 1s ease; }
-  @keyframes flash { 0% { background: rgba(255,255,255,.16);} 100% { background: var(--card-2);} }
-
-  /* ---------- Toasts ---------- */
+  /* ---------- Avisos ---------- */
   #toasts {
-    position: fixed; top: clamp(14px, 2vh, 28px); right: clamp(14px, 2vh, 28px);
-    display: flex; flex-direction: column; gap: 12px; z-index: 50; width: min(30vw, 430px);
+    position: fixed; top: 2.2vh; right: 2.2vw; z-index: 50;
+    display: flex; flex-direction: column; gap: 1.2vh; width: min(32vw, 620px);
   }
   .toast {
-    background: var(--card); border: 1px solid var(--border);
-    border-left: 6px solid var(--recebimento);
-    border-radius: 14px; padding: 14px 18px;
-    box-shadow: 0 18px 40px rgba(0,0,0,.45);
-    display: flex; gap: 14px; align-items: flex-start;
-    animation: slidein .4s cubic-bezier(.2,.9,.3,1);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 1.6vh 1.2vw; display: flex; gap: 1vw; align-items: flex-start;
+    box-shadow: 0 2vh 4vh rgba(0,0,0,.45); animation: slidein .4s cubic-bezier(.2,.9,.3,1);
   }
   .toast.out { animation: slideout .5s forwards; }
-  .toast .tico { font-size: 22px; line-height: 1; color: var(--muted); width: 1.2em; text-align: center; }
-  .toast.chegada .tico { color: var(--recebimento); }
-  .toast.conferencia .tico { color: var(--recebimento-2); }
+  .toast .tico { font-size: 2.6vh; line-height: 1; width: 1.3em; text-align: center; color: var(--info); }
   .toast.lancamento .tico { color: var(--ok); }
-  .toast.expedicao .tico { color: var(--expedicao); }
-  .toast .ttl { font-weight: 800; font-size: clamp(13px,1.7vh,18px); }
-  .toast .dtl { color: var(--muted); font-size: clamp(11px,1.4vh,15px); margin-top: 2px; }
-  .toast.chegada { border-left-color: var(--recebimento); }
-  .toast.conferencia { border-left-color: var(--recebimento-2); }
-  .toast.lancamento { border-left-color: var(--ok); }
-  .toast.expedicao { border-left-color: var(--expedicao); }
+  .toast.expedicao .tico { color: var(--warn); }
+  .toast .ttl { font-size: 2.1vh; font-weight: 700; }
+  .toast .dtl { font-size: 1.7vh; color: var(--muted); margin-top: .3vh; }
   @keyframes slidein { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes slideout { to { transform: translateX(120%); opacity: 0; } }
 
-  /* ---------- Feed / lista de pendentes ---------- */
-  .feed { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-  .feed .feed-title { color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display:flex; justify-content:space-between; }
-  .feed .list { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
-  .feed .list::-webkit-scrollbar { width: 8px; }
-  .feed .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 8px; }
-
-  .item {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-left: 4px solid transparent; border-radius: 12px;
-    padding: clamp(7px,1.1vh,12px) clamp(10px,1.4vh,16px); flex: 0 0 auto;
+  /* ---------- Itens da PO (Comex) ---------- */
+  .cx-itens-overlay {
+    display: none; position: fixed; inset: 0; z-index: 500;
+    background: rgba(3,8,16,.72); align-items: center; justify-content: center; padding: 3vh;
   }
-  .item.atraso { background: rgba(250,204,21,.08); border-color: rgba(250,204,21,.35); border-left-color: #facc15; }
-  .item .main { min-width: 0; flex: 1 1 auto; }
-  .item .main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; }
-  .item .main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .meta { display:flex; align-items:center; gap: 8px; white-space: nowrap; }
-  .item .ago { color: var(--muted); font-size: clamp(10px,1.3vh,13px); }
-  .badge { font-size: clamp(9px,1.2vh,12px); font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; background: rgba(255,255,255,.06); color: var(--muted); border: 1px solid var(--border); }
-  .badge.atraso { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
-  .badge.perto { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
-  .badge.vencido { background: rgba(248,113,113,.16); color: #f87171; border: 1px solid rgba(248,113,113,.45); }
-  .badge.tipo-fat { background: rgba(251,191,36,.16); color: var(--expedicao); border: 1px solid rgba(251,191,36,.42); }
-  .badge.tipo-oc { background: rgba(139,124,246,.18); color: #b9adff; border: 1px solid rgba(139,124,246,.42); }
-  .empty { color: var(--muted); text-align: center; padding: 18px; font-size: clamp(12px,1.5vh,16px); }
-
-  /* ---------- Frota ao vivo (mapa) ---------- */
-  .frota-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(10px,1.3vh,16px); flex: 0 0 auto; }
-  .frota-map { flex: 1 1 auto; min-height: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
-  /* Mapa fica com as cores normais do OpenStreetMap (sem filtro escuro) -
-     numa TV ninguem clica/toca pra abrir popup, entao o nome do veiculo e a
-     localizacao ficam escritos direto no proprio marcador, sempre visiveis. */
-  .frota-pill {
-    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
-    background: var(--frota); color: #06283a;
-    padding: 5px 10px; border-radius: 14px;
-    font-size: 11px; font-weight: 800; white-space: nowrap;
-    border: 2px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.35);
+  .cx-itens-overlay.show { display: flex; }
+  .cx-itens-box {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    width: min(820px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 3vh 6vh rgba(0,0,0,.5);
   }
-  .frota-pill.idle { background: var(--muted); color: #0c2547; }
-  .frota-pill__row { display: flex; align-items: center; gap: 6px; }
-  .frota-pill .loc { font-size: 9px; font-weight: 600; opacity: .8; }
-  .frota-map .leaflet-control-attribution { background: rgba(255,255,255,.75); color: #475569; font-size: 9px; }
+  .cx-itens-head { display: flex; align-items: center; justify-content: space-between; gap: 1vw; padding: 2vh 1.4vw; border-bottom: 1px solid var(--line); }
+  .cx-itens-head strong { font-size: 2.2vh; }
+  .cx-itens-head button {
+    background: none; border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+    width: 3.6vh; height: 3.6vh; border-radius: 50%; font-size: 1.6vh;
+  }
+  .cx-itens-head button:hover { color: var(--text); }
+  .cx-itens-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 1vh 1.4vw 2vh; }
+  .cx-itens-table { width: 100%; border-collapse: collapse; font-size: 1.8vh; }
+  .cx-itens-table th { text-align: left; color: var(--faint); font-weight: 600; font-size: 1.4vh; text-transform: uppercase; letter-spacing: .05em; padding: 1vh .6vw; border-bottom: 1px solid var(--line); }
+  .cx-itens-table td { padding: 1.1vh .6vw; border-bottom: 1px solid var(--line); }
+  .cx-itens-table tr:last-child td { border-bottom: 0; }
 </style>
 </head>
 <body>
   <header>
     <div class="brand">
-      <div class="logo-badge"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
-      <div>
-        <h1>Torre de Controle</h1>
-      </div>
+      <img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync">
+      <h1>Torre de Controle</h1>
     </div>
-    <div style="display:flex;align-items:center;gap:20px">
-      <div class="slides-nav" id="slides-nav"></div>
+    <nav class="slides-nav" id="slides-nav"></nav>
+    <div class="status">
       <div id="live" class="live"><span class="dot"></span><span id="live-text">Ao vivo</span></div>
       <button type="button" id="audio-indicator" class="audio-indicator" title="Som"><i class="fas fa-volume-high"></i></button>
       <div class="clock">
@@ -509,90 +308,66 @@
   </header>
 
   <main>
-    <!-- SLIDE 1: RECEBIMENTO -->
-    <section class="slide slide-rec is-active" data-slide="recebimento">
-      <section class="panel flow" style="flex:1 1 auto;">
-        <div class="panel-head">
-          <div class="icon"><i class="fas fa-table-columns"></i></div>
-          <h2>Recebimento</h2>
-          <div class="tag" id="rec-tag">—</div>
+    {% set com_compras = show_compras|default(true) %}
+    <section class="slide is-active" data-slide="recebimento">
+      <div class="slide-head"><h2>{{ "Recebimento e compras" if com_compras else "Recebimento" }}</h2><span class="ctx" id="rec-ctx"></span></div>
+      <div class="kpis{{ ' k-compacto' if com_compras }}" id="rec-kpis"></div>
+      <div class="content {{ 'c-tres' if com_compras else 'c-fila' }}">
+        <div class="pane">
+          <div class="pane-head"><h3>Notas aguardando</h3><span class="count" id="rec-fila-count">0</span></div>
+          <div class="scroll" id="rec-fila"><div class="empty small"><b>Carregando…</b></div></div>
         </div>
-        <div class="tv-kb-wrap {{ 'cols-2' if show_compras|default(true) else 'cols-1' }}">
-          <div class="tv-kb-group">
-            <div class="tv-kb-title">Recebimento</div>
-            <div class="tv-kb-board" id="rec-kb-board"><div class="empty">Carregando…</div></div>
-          </div>
-          {% if show_compras|default(true) %}
-          <div class="tv-kb-group">
-            <div class="tv-kb-title">Compras</div>
-            <div class="tv-kb-board" id="compras-kb-board"><div class="empty">Carregando…</div></div>
-          </div>
-          {% endif %}
+        {% if com_compras %}
+        <div class="pane">
+          <div class="pane-head"><h3>Compras</h3><span class="count" id="compras-count">0</span></div>
+          <div class="scroll" id="compras-fila"><div class="empty small"><b>Carregando…</b></div></div>
         </div>
-      </section>
+        {% endif %}
+        <div class="pane">
+          <div class="pane-head"><h3>Feito hoje</h3><span class="count" id="rec-feito-count">0</span></div>
+          <div class="scroll" id="rec-feito" data-historico></div>
+        </div>
+      </div>
     </section>
 
-    <!-- SLIDE 2: EXPEDIÇÃO -->
-    <section class="slide slide-exp" data-slide="expedicao">
-      <section class="panel flow" style="flex:1 1 auto;">
-        <div class="panel-head">
-          <div class="icon"><i class="fas fa-truck-fast"></i></div>
-          <h2>Expedição</h2>
-          <div class="tag" id="exp-tag">—</div>
+    <section class="slide" data-slide="expedicao">
+      <div class="slide-head"><h2>Expedição</h2><span class="ctx" id="exp-ctx"></span></div>
+      <div class="kpis" id="exp-kpis"></div>
+      <div class="content c-fila">
+        <div class="pane">
+          <div class="pane-head"><h3>Na fila</h3><span class="count" id="exp-fila-count">0</span></div>
+          <div class="scroll" id="exp-fila"><div class="empty small"><b>Carregando…</b></div></div>
         </div>
-        <div class="tv-kb-wrap cols-1">
-          <div class="tv-kb-group">
-            <div class="tv-kb-title">Expedição</div>
-            <div class="tv-kb-board" id="exp-kb-board"><div class="empty">Carregando…</div></div>
-          </div>
+        <div class="pane">
+          <div class="pane-head"><h3>Expedidos hoje</h3><span class="count" id="exp-feito-count">0</span></div>
+          <div class="scroll" id="exp-feito" data-historico></div>
         </div>
-      </section>
+      </div>
     </section>
 
-    <!-- SLIDE 3: FROTA (mapa ao vivo, GPS do motorista em viagem) -->
     {% if show_frota|default(true) %}
-    <section class="slide slide-frota" data-slide="frota">
-      <section class="panel frota" style="flex:1 1 auto;">
-        <div class="panel-head">
-          <div class="icon"><i class="fas fa-car"></i></div>
-          <h2>Frota em tempo real</h2>
-          <div class="tag" id="frota-tag">—</div>
-        </div>
-        <div class="frota-kpis">
-          <div class="stat"><div class="n" id="frota-mapa">0</div><div class="t">No mapa</div></div>
-          <div class="stat ok"><div class="n" id="frota-viagem">0</div><div class="t">Em viagem</div></div>
-          <div class="stat"><div class="n" id="frota-sem">0</div><div class="t">Sem posição</div></div>
-        </div>
-        <div class="frota-map" id="frota-map"></div>
-      </section>
+    <section class="slide" data-slide="frota">
+      <div class="slide-head"><h2>Frota</h2><span class="ctx" id="frota-ctx"></span></div>
+      <div class="kpis" id="frota-kpis"></div>
+      <div class="content c-map">
+        <div class="pane map-pane"><div id="frota-map"></div></div>
+      </div>
     </section>
     {% endif %}
 
-    <!-- SLIDE 4: PLANEJAMENTO DE TAREFAS -->
     {% if show_planejamento|default(true) %}
-    <section class="slide slide-plan" data-slide="planejamento">
-      <section class="panel plan" style="flex:1 1 auto;">
-        <div class="panel-head">
-          <div class="icon"><i class="fas fa-table-columns"></i></div>
-          <h2>Planejamento de Tarefas</h2>
-          <div class="tag" id="plan-tag">—</div>
-        </div>
-        <div class="plan-board" id="plan-board"><div class="empty">Carregando…</div></div>
-      </section>
+    <section class="slide" data-slide="planejamento">
+      <div class="slide-head"><h2>Planejamento de tarefas</h2><span class="ctx" id="plan-ctx"></span></div>
+      <div class="kpis" id="plan-kpis"></div>
+      <div class="content c-board" id="plan-board"><div class="empty small"><b>Carregando…</b></div></div>
     </section>
     {% endif %}
 
-    <!-- SLIDE 5: COMEX (Importação/Exportação) -->
     {% if show_comex|default(true) %}
-    <section class="slide slide-comex" data-slide="comex">
-      <section class="panel comex" style="flex:1 1 auto;">
-        <div class="panel-head">
-          <div class="icon"><i class="fas fa-ship"></i></div>
-          <h2>Comex — Importação/Exportação</h2>
-          <div class="tag" id="comex-tag">—</div>
-        </div>
-        <div class="plan-board" id="comex-board"><div class="empty">Carregando…</div></div>
-      </section>
+    <section class="slide" data-slide="comex">
+      <div class="slide-head"><h2>Comex</h2><span class="ctx" id="comex-ctx">Importação e exportação</span></div>
+      <div class="kpis" id="comex-kpis"></div>
+      <div class="content c-board" id="comex-board"><div class="empty small"><b>Carregando…</b></div></div>
     </section>
     {% endif %}
   </main>
@@ -616,9 +391,8 @@
   const SHOW_PLANEJAMENTO = {{ (show_planejamento|default(true))|tojson }};
   const SHOW_COMEX = {{ (show_comex|default(true))|tojson }};
   // Quando setado (ex.: /painel/comex), o carrossel fica travado nesse
-  // unico slide - as outras secoes continuam existindo no DOM (poll() e
-  // afins seguem funcionando normalmente, so nunca ficam visiveis/ativas),
-  // evita duplicar toda a pagina so pra mostrar 1 slide.
+  // unico slide - as outras secoes continuam no DOM (o poll segue
+  // funcionando), so nunca ficam visiveis.
   const ONLY_SLIDE = {{ (only_slide or "")|tojson }};
 
   const POLL_MS = 5000;
@@ -630,6 +404,7 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // ----- Audio dos avisos -----
   function ensureAudioCtx() {
     if (!audioCtx) {
       try {
@@ -649,13 +424,10 @@
     btn.innerHTML = '<i class="fas ' + (audioUnlocked ? "fa-volume-high" : "fa-volume-xmark") + '"></i>';
   }
 
-  // O painel roda numa TV sem ninguem interagindo, e a maioria dos
-  // navegadores so libera audio apos algum gesto do usuario (autoplay
-  // policy). Tenta desbloquear no carregamento, em qualquer interacao que
-  // porventura aconteca e quando a aba volta a ficar visivel. Se o
-  // navegador/kiosk estiver configurado com autoplay liberado (ex.: Chrome
-  // com --autoplay-policy=no-user-gesture-required), resume() já libera
-  // sozinho, sem precisar de nenhum toque.
+  // A TV roda sem ninguem interagindo e o navegador so libera audio apos
+  // algum gesto (autoplay policy). Tenta no carregamento, em qualquer
+  // interacao e quando a aba volta a ficar visivel; com o kiosk liberando
+  // autoplay, resume() ja resolve sozinho.
   function tryUnlockAudio() {
     const ctx = ensureAudioCtx();
     if (!ctx) return;
@@ -686,28 +458,6 @@
     } catch (e) { /* falha pontual do audio; ignora */ }
   }
 
-  function setNum(id, val) {
-    const el = $(id);
-    if (!el) return;
-    const prev = el.textContent;
-    const next = String(val);
-    if (prev !== next) {
-      el.textContent = next;
-      const stat = el.closest(".stat");
-      if (stat) { stat.classList.remove("updated-flash"); void stat.offsetWidth; stat.classList.add("updated-flash"); }
-    }
-  }
-
-  function relTime(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const s = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (s < 60) return "agora";
-    if (s < 3600) return Math.floor(s / 60) + " min";
-    if (s < 86400) return Math.floor(s / 3600) + "h";
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-  }
-
   function toast(ev) {
     const box = $("toasts");
     const el = document.createElement("div");
@@ -720,137 +470,97 @@
     box.prepend(el);
     beep();
     setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 550); }, 9000);
-    // limita a 5 toasts na tela
     while (box.children.length > 5) box.lastChild.remove();
   }
 
+  // ----- Formatacao -----
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
+  // "2026-10-16" sozinho o navegador le como meia-noite UTC - em Brasilia
+  // vira 15/10 21h e a data saia um dia antes (previsao das OCs de Compras).
+  function data(iso) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? new Date(iso + "T00:00:00") : new Date(iso);
+  }
   function fmtDia(iso) {
     if (!iso) return "";
-    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    return data(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
   }
-
-  function buildRecItem(it) {
-    const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
-    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
-      '<div class="main"><b>NF ' + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + "</span></div>" +
-      '<div class="meta"><span class="ago">' + relTime(it.desde) + "</span>" + atraso + "</div>" +
-      "</div>";
+  function fmtHora(iso) {
+    if (!iso) return "";
+    return data(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
-
-  function buildExpItem(prefix) {
-    return function (it) {
-      const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
-      let prev = "";
-      if (it.previsao) {
-        const cls = it.previsao_status || "";
-        const txt = (it.previsao_status === "vencido" ? "Em atraso " : "Entrega ") + fmtDia(it.previsao);
-        prev = '<span class="badge ' + cls + '">' + txt + "</span>";
-      }
-      return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
-        '<div class="main"><b>' + prefix + " " + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + "</span></div>" +
-        '<div class="meta">' + prev + atraso + '<span class="ago">' + relTime(it.desde) + "</span></div>" +
-        "</div>";
-    };
+  // Ha quanto tempo o item esta parado ("8 min", "6h", "3 dias").
+  function espera(iso) {
+    if (!iso) return "—";
+    const s = Math.floor((Date.now() - data(iso).getTime()) / 1000);
+    if (s < 60) return "agora";
+    if (s < 3600) return Math.floor(s / 60) + " min";
+    if (s < 86400) return Math.floor(s / 3600) + "h";
+    const d = Math.floor(s / 86400);
+    return d + (d === 1 ? " dia" : " dias");
   }
-
-  function buildHojeItem(it) {
-    const nf = it.numero_nf ? " · NF " + esc(it.numero_nf) : "";
-    return '<div class="item">' +
-      '<div class="main"><b>' + (it.tipo === "ST" ? "OC " : "Ordem ") + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + nf + "</span></div>" +
-      '<div class="meta"><span class="badge">' + esc(it.tipo) + '</span><span class="ago">' + relTime(it.ts) + "</span></div>" +
-      "</div>";
+  function diasDesde(iso) {
+    if (!iso) return 0;
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const d = data(iso); d.setHours(0, 0, 0, 0);
+    return Math.round((hoje - d) / 86400000);
   }
+  function plural(n, um, varios) { return n + " " + (n === 1 ? um : varios); }
+  function atualizado(iso) { return iso ? "Atualizado às " + fmtHora(iso) : ""; }
+  function setText(id, txt) { const el = $(id); if (el) el.textContent = txt; }
 
-  // Item consolidado (FAT + ST) do painel de expedicao — serve para todas as
-  // categorias (pendente, conferido, faturado sem conf, faturado, expedido).
-  function buildConsItem(it) {
-    const tipoCls = it.tipo === "OC" ? "tipo-oc" : "tipo-fat";
-    const tipoBadge = '<span class="badge ' + tipoCls + '">' + esc(it.tipo) + "</span>";
-    const nf = it.numero_nf ? " · NF " + esc(it.numero_nf) : "";
-    let prev = "";
-    if (it.previsao) {
-      const cls = it.previsao_status || "";
-      const txt = (it.previsao_status === "vencido" ? "Em atraso " : "Entrega ") + fmtDia(it.previsao);
-      prev = '<span class="badge ' + cls + '">' + txt + "</span>";
-    }
-    const atraso = (it.atrasado && !it.previsao) ? '<span class="badge atraso">Em atraso</span>' : "";
-    const prefix = it.tipo === "OC" ? "OC" : "Ordem";
-    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
-      '<div class="main"><b>' + prefix + " " + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + nf + "</span></div>" +
-      '<div class="meta">' + tipoBadge + prev + atraso + '<span class="ago">' + relTime(it.ts || it.desde) + "</span></div>" +
-      "</div>";
-  }
-
-  // Item consolidado do recebimento (por nota) — mostra quem importou/conferiu.
-  function buildRecCons(it) {
-    const who = it.quem ? " · " + esc(it.quem_label) + " " + esc(it.quem) : "";
-    const extra = it.extra ? " · " + esc(it.extra) : "";
-    const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
-    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
-      '<div class="main"><b>NF ' + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + who + extra + "</span></div>" +
-      '<div class="meta">' + atraso + '<span class="ago">' + relTime(it.ts || it.desde) + "</span></div>" +
-      "</div>";
-  }
-
-  function buildOcItem(mode) {
-    return function (it) {
-      const diasTxt = mode === "atraso"
-        ? it.dias + (it.dias === 1 ? " dia" : " dias")
-        : (it.dias === 0 ? "hoje" : (it.dias === 1 ? "amanhã" : "em " + it.dias + " dias"));
-      return '<div class="oc-item ' + mode + '">' +
-        '<div class="oc-main"><b>OC ' + esc(it.oc) + "</b><span>" + esc(it.fornecedor || "—") + "</span></div>" +
-        '<div class="oc-dias"><b>' + fmtDia(it.previsao) + "</b><span>" + diasTxt + "</span></div>" +
-        "</div>";
-    };
-  }
-
-  function buildKbCard(title, subtitle, meta, tone) {
-    const toneClass = tone ? " " + tone : "";
-    return '<div class="tv-kb-card' + toneClass + '">' +
-      '<b>' + esc(title) + '</b>' +
-      '<span>' + esc(subtitle || "—") + '</span>' +
-      '<div class="meta"><span></span><span class="ago">' + esc(meta || "") + '</span></div>' +
-      '</div>';
-  }
-
-  function renderKbBoard(boardId, columns) {
-    const board = $(boardId);
-    if (!board) return;
-    const sig = JSON.stringify(columns);
-    if (board._sig === sig) return;
-    board._sig = sig;
-    board.innerHTML = columns.map((col) => {
-      const cards = (col.items || []).length
-        ? col.items.map((it) => buildKbCard(it.title, it.subtitle, it.meta, it.tone)).join("")
-        : '<div class="empty">Sem itens</div>';
-      return '<div class="tv-kb-col ' + (col.colClass || "") + '">' +
-        '<div class="tv-kb-head"><strong>' + esc(col.label) + '</strong><span class="tv-kb-count">' + (col.total || 0) + '</span></div>' +
-        '<div class="tv-kb-list">' + cards + '</div>' +
-        '</div>';
+  // ----- Blocos de tela -----
+  // tiles: [{label, value, sub, tone}] - tom so' aparece com valor > 0.
+  function renderKpis(id, tiles) {
+    const box = $(id);
+    if (!box) return;
+    const sig = JSON.stringify(tiles);
+    if (box._sig === sig) return;
+    box._sig = sig;
+    box.innerHTML = tiles.map((k) => {
+      const zero = typeof k.value === "number" ? k.value === 0 : !k.value;
+      const cls = "kpi" + (zero ? " is-zero" : (k.tone ? " t-" + k.tone : ""));
+      return '<div class="' + cls + '"><div class="lbl">' + esc(k.label) + '</div>' +
+        '<div class="val">' + esc(k.value) + '</div><div class="sub">' + esc(k.sub || "") + "</div></div>";
     }).join("");
   }
 
-  // Renderiza a lista somente se o conteudo mudou (preserva o auto-scroll)
-  function renderList(containerId, items, buildRow, emptyMsg) {
-    const box = $(containerId);
-    const sig = JSON.stringify(items);
+  // So' re-renderiza se o conteudo mudou: preserva a rolagem automatica.
+  function renderList(id, html, vazio) {
+    const box = $(id);
+    if (!box) return;
+    const sig = html || ("vazio:" + vazio);
     if (box._sig === sig) return;
     box._sig = sig;
     box.scrollTop = 0;
     box._phase = "";
     box._doneScroll = false;
     box._pausedAt = Date.now() + 2000;
-    if (!items.length) { box.innerHTML = '<div class="empty">' + (emptyMsg || "Nada pendente") + "</div>"; return; }
-    box.innerHTML = items.map(buildRow).join("");
+    box.innerHTML = html || vazio;
   }
 
-  // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV).
-  // Marca _doneScroll quando a lista chega ao fim (ou nao precisa rolar).
+  function vazioOk(titulo, detalhe) {
+    return '<div class="empty"><i class="fas fa-circle-check"></i><b>' + esc(titulo) + "</b>" +
+      (detalhe ? "<span>" + esc(detalhe) + "</span>" : "") + "</div>";
+  }
+  function vazioSimples(titulo) { return '<div class="empty small"><b>' + esc(titulo) + "</b></div>"; }
+
+  function row(o) {
+    const pill = o.pill ? '<span class="pill p-' + o.pill[1] + '">' + esc(o.pill[0]) + "</span>" : "";
+    return '<div class="row' + (o.pill ? "" : " no-pill") + (o.tone ? " r-" + o.tone : "") + '">' + pill +
+      '<div class="main"><div class="t">' + esc(o.t) + '</div><div class="s">' + esc(o.s || "—") + "</div></div>" +
+      '<div class="m' + (o.mtone ? " " + o.mtone : "") + '"><b>' + esc(o.mb) + "</b><span>" + esc(o.ms || "") + "</span></div></div>";
+  }
+  function feedRow(o) {
+    return '<div class="frow"><time>' + esc(o.hora) + '</time><div><div class="t">' + o.t + '</div>' +
+      '<div class="s">' + esc(o.s || "—") + "</div></div></div>";
+  }
+
+  // Auto-scroll das listas que nao cabem na tela (rola sozinho na TV).
+  // Marca _doneScroll quando chega ao fim (ou nao precisa rolar).
   function autoScroll() {
-    document.querySelectorAll(".feed .list, .oc-grid, .tv-kb-list, .plan-klist").forEach((el) => {
+    document.querySelectorAll(".slide.is-active .scroll").forEach((el) => {
       const max = el.scrollHeight - el.clientHeight;
       if (max <= 4) { el._doneScroll = true; return; }
       const now = Date.now();
@@ -860,222 +570,206 @@
         if (el._phase !== "bottom") { el._phase = "bottom"; el._pausedAt = now + 3000; return; }
         el.scrollTop = 0; el._phase = "top"; el._pausedAt = now + 1500;
       } else {
-        el.scrollTop += 1;
+        el.scrollTop += 2;
       }
     });
   }
 
   function setLive(online) {
-    const el = $("live");
     $("live-text").textContent = online ? "Ao vivo" : "Sem conexão";
-    el.classList.toggle("stale", !online);
+    $("live").classList.toggle("stale", !online);
   }
 
   function updateClock() {
     const now = new Date();
     $("clock-time").textContent = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    const dia = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    $("clock-date").textContent = dia.charAt(0).toUpperCase() + dia.slice(1);
   }
 
   let lastData = null;
   let lastCompras = null;
 
-  function renderRecebimentoKanban() {
+  // ----- Recebimento -----
+  function renderRecebimento() {
     if (!lastData) return;
     const rec = lastData.recebimento || {};
-    const exp = lastData.expedicao || {};
-    const expCats = exp.categorias || {};
-    const ge = (k) => expCats[k] || { total: 0, lista: [] };
     const cats = rec.categorias || {};
     const g = (k) => cats[k] || { total: 0, lista: [] };
-    const pend = g("pendente_conf").total;
-    const lanc = g("pendente_lanc").total;
-    const expPend = ge("pendente").total;
-    const recTag = $("rec-tag");
-    const expTag = $("exp-tag");
-    if (recTag) recTag.textContent = pend + " pend. conf. · " + lanc + " pend. lançamento";
-    if (expTag) expTag.textContent = expPend + " pend. conferência";
+    const conf = g("pendente_conf"), lanc = g("pendente_lanc"), conferidas = g("conferidas"), lancadas = g("lancadas");
+    const paradas = (lista) => (lista || []).filter((it) => it.atrasado).length;
+    const confParadas = paradas(conf.lista), lancParadas = paradas(lanc.lista);
 
-    const cols = [
-      {
-        label: "Pend. conferência",
-        total: g("pendente_conf").total,
-        colClass: "is-alert",
-        items: (g("pendente_conf").lista || []).slice(0, 24).map((it) => ({
-          title: "NF " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: it.atrasado ? "is-alert" : "",
-        })),
-      },
-      {
-        label: "Conferidas hoje",
-        total: g("conferidas").total,
-        colClass: "is-info",
-        items: (g("conferidas").lista || []).slice(0, 24).map((it) => ({
-          title: "NF " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: "is-info",
-        })),
-      },
-      {
-        label: "Pend. lançamento",
-        total: g("pendente_lanc").total,
-        colClass: "is-warn",
-        items: (g("pendente_lanc").lista || []).slice(0, 24).map((it) => ({
-          title: "NF " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: it.atrasado ? "is-alert" : "is-warn",
-        })),
-      },
-      {
-        label: "Lançadas hoje",
-        total: g("lancadas").total,
-        colClass: "is-ok",
-        items: (g("lancadas").lista || []).slice(0, 24).map((it) => ({
-          title: "NF " + (it.codigo || "—"),
-          subtitle: (it.parceiro || "—") + (it.extra ? " · " + it.extra : ""),
-          meta: relTime(it.ts || it.desde),
-          tone: "is-ok",
-        })),
-      },
+    setText("rec-ctx", atualizado(lastData.gerado_em));
+    const kpis = [
+      { label: "Aguardando conferência", value: conf.total, tone: confParadas ? "crit" : "warn",
+        sub: confParadas ? plural(confParadas, "parada há +1 dia", "paradas há +1 dia") : "" },
+      { label: "Aguardando entrada de estoque", value: lanc.total, tone: lancParadas ? "crit" : "warn",
+        sub: lancParadas ? plural(lancParadas, "parada há +1 dia", "paradas há +1 dia") : "" },
+      { label: "Conferidas hoje", value: conferidas.total, tone: "ok" },
+      { label: "Entrou no estoque hoje", value: lancadas.total, tone: "ok" },
     ];
-    renderKbBoard("rec-kb-board", cols);
+    if (SHOW_COMPRAS) {
+      const c = lastCompras || {};
+      kpis.push(
+        { label: "OCs atrasadas", value: (c.atrasadas || {}).total || 0, tone: "crit" },
+        { label: "Chegam hoje e amanhã", value: (c.semana || {}).total || 0, tone: "info" },
+      );
+    }
+    renderKpis("rec-kpis", kpis);
 
-    const expCols = [
-      {
-        label: "Fat. sem conferência",
-        total: ge("faturado_sem_conf").total,
-        colClass: "is-alert",
-        items: (ge("faturado_sem_conf").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: "is-alert",
-        })),
-      },
-      {
-        label: "Pend. conferência",
-        total: ge("pendente").total,
-        colClass: "is-warn",
-        items: (ge("pendente").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
-          meta: relTime(it.ts || it.desde),
-          tone: "is-warn",
-        })),
-      },
-      {
-        label: "Conferido/Ag. Fat",
-        total: ge("conferido").total,
-        colClass: "is-neutral",
-        items: (ge("conferido").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: "is-neutral",
-        })),
-      },
-      {
-        label: "Faturado a expedir",
-        total: ge("faturado").total,
-        colClass: "is-info",
-        items: (ge("faturado").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: "is-info",
-        })),
-      },
-      {
-        label: "Expedidos hoje",
-        total: ge("expedido").total,
-        colClass: "is-ok",
-        items: (ge("expedido").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
-          meta: relTime(it.ts || it.desde),
-          tone: "is-ok",
-        })),
-      },
-    ];
-    renderKbBoard("exp-kb-board", expCols);
+    // Parada ha mais tempo primeiro.
+    const fila = []
+      .concat((conf.lista || []).map((it) => ({ it, etapa: "conf" })))
+      .concat((lanc.lista || []).map((it) => ({ it, etapa: "lanc" })))
+      .sort((a, b) => (b.it.atrasado - a.it.atrasado) || String(a.it.desde || "").localeCompare(String(b.it.desde || "")));
+    setText("rec-fila-count", conf.total + lanc.total);
+    renderList("rec-fila", fila.map(({ it, etapa }) => row({
+      pill: etapa === "conf" ? ["Conferir", "warn"] : ["Dar entrada", "info"],
+      tone: it.atrasado ? "warn" : "",
+      t: "NF " + (it.codigo || "—"),
+      s: (it.parceiro || "—") + (etapa === "lanc" && it.quem ? " · conferida por " + it.quem : ""),
+      mb: espera(it.desde), ms: "aguardando", mtone: it.atrasado ? "warn" : "",
+    })).join(""), vazioOk("Nada aguardando", "Todas as notas do dia foram conferidas e deram entrada no estoque"));
+
+    // Verde so' no que aconteceu ("conferida por", "entrou no estoque");
+    // quem conferiu e o numero do lancamento ficam no texto normal.
+    const feito = []
+      .concat((conferidas.lista || []).map((it) => ({ it, acao: it.quem ? "conferida por" : "conferida", resto: it.quem || "" })))
+      .concat((lancadas.lista || []).map((it) => ({ it, acao: "entrou no estoque", resto: it.extra ? "· " + it.extra : "" })))
+      .sort((a, b) => String(b.it.ts || "").localeCompare(String(a.it.ts || "")));
+    setText("rec-feito-count", feito.length);
+    renderList("rec-feito", feito.map(({ it, acao, resto }) => feedRow({
+      hora: fmtHora(it.ts), t: "NF " + esc(it.codigo) + " <em>" + esc(acao) + "</em> " + esc(resto), s: it.parceiro,
+    })).join(""), vazioSimples("Nada conferido ou com entrada no estoque ainda hoje"));
+
+    if (SHOW_COMPRAS) renderCompras();
   }
 
-  function renderComprasKanban() {
+  // ----- Compras (no mesmo slide do Recebimento) -----
+  // Uma fila so': atrasadas primeiro (mais atrasada no topo), depois o que
+  // chega hoje e amanha.
+  function renderCompras() {
+    if (!$("compras-fila")) return;
     if (!lastCompras) return;
-    const atr = lastCompras.atrasadas || { total: 0, lista: [] };
-    const sem = lastCompras.semana || { total: 0, lista: [] };
-    const cols = [
-      {
-        label: "OCs atrasadas",
-        total: atr.total || 0,
-        colClass: "is-alert",
-        items: (atr.lista || []).slice(0, 24).map((it) => ({
-          title: "OC " + (it.oc || "—"),
-          subtitle: it.fornecedor || "—",
-          meta: "Entrega " + fmtDia(it.previsao),
-          tone: "is-alert",
-        })),
-      },
-      {
-        label: "A chegar (hoje/amanhã)",
-        total: sem.total || 0,
-        colClass: "is-warn",
-        items: (sem.lista || []).slice(0, 24).map((it) => ({
-          title: "OC " + (it.oc || "—"),
-          subtitle: it.fornecedor || "—",
-          meta: "Entrega " + fmtDia(it.previsao),
-          tone: "is-warn",
-        })),
-      },
-    ];
-    renderKbBoard("compras-kb-board", cols);
+    const atr = (lastCompras.atrasadas || {}).lista || [];
+    const sem = (lastCompras.semana || {}).lista || [];
+    const linhas = atr.slice().sort((a, b) => (b.dias || 0) - (a.dias || 0)).map((it) => row({
+      pill: ["Atrasada", "crit"], tone: "crit", t: "OC " + it.oc, s: it.fornecedor,
+      mb: plural(it.dias || 0, "dia", "dias"), ms: "previsão " + fmtDia(it.previsao), mtone: "crit",
+    })).concat(sem.map((it) => row({
+      pill: [it.dias === 0 ? "Chega hoje" : (it.dias === 1 ? "Chega amanhã" : "A caminho"), "info"],
+      t: "OC " + it.oc, s: it.fornecedor, mb: fmtDia(it.previsao), ms: "previsão",
+    })));
+    setText("compras-count", ((lastCompras.atrasadas || {}).total || 0) + ((lastCompras.semana || {}).total || 0));
+    renderList("compras-fila", linhas.join(""), vazioOk("Compras em dia", "Nenhuma OC atrasada nem chegando hoje ou amanhã"));
   }
 
-  // ----- Carrossel de slides + rotacao das visoes de expedicao -----
+  // ----- Expedicao -----
+  const EXP_ETAPAS = {
+    faturado_sem_conf: { pill: ["Sem conferência", "crit"], ordem: 0 },
+    pendente: { pill: ["Conferir", "warn"], ordem: 1 },
+    conferido: { pill: ["Faturar", "info"], ordem: 2 },
+    faturado: { pill: ["Expedir", "info"], ordem: 3 },
+  };
+
+  function renderExpedicao() {
+    if (!lastData) return;
+    const cats = (lastData.expedicao || {}).categorias || {};
+    const g = (k) => cats[k] || { total: 0, lista: [] };
+    const vencidas = ["pendente", "conferido", "faturado"]
+      .reduce((n, k) => n + (g(k).lista || []).filter((it) => it.previsao_status === "vencido").length, 0);
+
+    setText("exp-ctx", atualizado(lastData.gerado_em));
+    renderKpis("exp-kpis", [
+      { label: "Faturado sem conferência", value: g("faturado_sem_conf").total, tone: "crit" },
+      { label: "Aguardando conferência", value: g("pendente").total, tone: "warn" },
+      { label: "Aguardando faturamento", value: g("conferido").total, tone: "info" },
+      { label: "Faturado a expedir", value: g("faturado").total, tone: "info" },
+      { label: "Expedidos hoje", value: g("expedido").total, tone: "ok" },
+    ]);
+
+    // Sem conferencia primeiro; depois entrega vencida; depois a entrega
+    // mais proxima; sem previsao no fim.
+    const fila = [];
+    Object.keys(EXP_ETAPAS).forEach((k) => (g(k).lista || []).forEach((it) => fila.push({ it, k })));
+    fila.sort((a, b) => {
+      const ea = EXP_ETAPAS[a.k].ordem === 0 ? 0 : 1, eb = EXP_ETAPAS[b.k].ordem === 0 ? 0 : 1;
+      if (ea !== eb) return ea - eb;
+      const va = a.it.previsao_status === "vencido" ? 0 : 1, vb = b.it.previsao_status === "vencido" ? 0 : 1;
+      if (va !== vb) return va - vb;
+      return String(a.it.previsao || "9999").localeCompare(String(b.it.previsao || "9999")) ||
+        EXP_ETAPAS[a.k].ordem - EXP_ETAPAS[b.k].ordem;
+    });
+    setText("exp-fila-count", fila.length);
+    renderList("exp-fila", fila.map(({ it, k }) => {
+      const semConf = k === "faturado_sem_conf";
+      let mb, ms, mtone = "", tone = "";
+      if (it.previsao) {
+        const dias = diasDesde(it.previsao);
+        mb = fmtDia(it.previsao);
+        if (it.previsao_status === "vencido") {
+          ms = "entrega vencida há " + plural(dias, "dia", "dias"); mtone = "crit"; tone = "crit";
+        } else if (it.previsao_status === "perto") {
+          ms = dias === 0 ? "entrega hoje" : "entrega amanhã"; mtone = "warn";
+        } else {
+          ms = "entrega";
+        }
+      } else {
+        mb = espera(it.desde); ms = "aguardando";
+      }
+      if (semConf) tone = "crit";
+      else if (!tone && it.atrasado) tone = "warn";
+      return row({
+        pill: EXP_ETAPAS[k].pill, tone,
+        t: (it.tipo === "OC" ? "OC " : "FAT ") + (it.codigo || "—"),
+        s: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
+        mb, ms, mtone,
+      });
+    }).join(""), vazioOk("Expedição em dia", "Nada aguardando conferência, faturamento ou saída"));
+
+    const expedidos = (g("expedido").lista || []).slice()
+      .sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
+    setText("exp-feito-count", g("expedido").total);
+    renderList("exp-feito", expedidos.map((it) => feedRow({
+      hora: fmtHora(it.ts),
+      t: esc((it.tipo === "OC" ? "OC " : "FAT ") + it.codigo) + " <em>expedida</em>" + (it.numero_nf ? " · NF " + esc(it.numero_nf) : ""),
+      s: it.parceiro,
+    })).join(""), vazioSimples("Nenhuma saída ainda hoje"));
+  }
+
+  // ----- Carrossel -----
   const TODOS_SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
   const SLIDES = ONLY_SLIDE && TODOS_SLIDES.includes(ONLY_SLIDE) ? [ONLY_SLIDE] : TODOS_SLIDES;
-  const SLIDE_META = {
-    recebimento: { label: "Recebimento", icon: "fa-box-open" },
-    expedicao: { label: "Expedição", icon: "fa-truck-fast" },
-    frota: { label: "Frota", icon: "fa-truck-fast" },
-    planejamento: { label: "Planejamento", icon: "fa-list-check" },
-    comex: { label: "Comex", icon: "fa-ship" },
+  const SLIDE_LABEL = {
+    recebimento: SHOW_COMPRAS ? "Recebimento e compras" : "Recebimento", expedicao: "Expedição",
+    frota: "Frota", planejamento: "Planejamento", comex: "Comex",
   };
   let slideIdx = 0;
-  let manualHold = false;         // quando true, pausa a rotacao automatica
+  let manualHold = false;         // true = rotacao automatica pausada
   let slideShownAt = Date.now();
   const SLIDE_MIN_MS = 15000;    // tempo minimo em cada slide
   const SLIDE_MAX_MS = 150000;   // teto de seguranca
 
-  const EXP_VIEW_MS = 12000;
-  let expLastRot = Date.now();
-  let recLastRot = Date.now();
-  let expCycles = 0;
-
   function activeScrollers() {
-    return Array.from(document.querySelectorAll(".slide.is-active .feed .list, .slide.is-active .oc-grid, .slide.is-active .tv-kb-list, .slide.is-active .plan-klist"));
+    return Array.from(document.querySelectorAll(".slide.is-active .scroll"));
   }
 
   function renderSlideDots() {
-    const dots = SLIDES.map((s, i) => {
-      const meta = SLIDE_META[s] || { label: s, icon: "fa-circle" };
-      return '<button type="button" class="sdot tone-' + esc(s) + (i === slideIdx ? " on" : "") +
-        '" data-idx="' + i + '"><i class="fas ' + meta.icon + ' sdot-ico"></i>' + esc(meta.label) + "</button>";
-    }).join("");
-    const playBtn = '<button type="button" class="slides-play' + (manualHold ? " paused" : "") +
-      '" id="slides-play" title="' + (manualHold ? "Retomar rotação automática" : "Pausar rotação") +
-      '"><i class="fas fa-' + (manualHold ? "play" : "pause") + '"></i></button>';
-    $("slides-nav").innerHTML = dots + playBtn;
+    const nav = $("slides-nav");
+    nav.classList.toggle("held", manualHold);
+    nav.style.setProperty("--dur", (SLIDE_MIN_MS / 1000) + "s");
+    nav.innerHTML = SLIDES.map((s, i) =>
+      '<button type="button" class="sdot' + (i === slideIdx ? " on" : "") + '" data-idx="' + i + '">' +
+      esc(SLIDE_LABEL[s] || s) + '<span class="bar"></span></button>'
+    ).join("") +
+      '<button type="button" class="slides-play' + (manualHold ? " paused" : "") + '" id="slides-play" title="' +
+      (manualHold ? "Retomar rotação automática" : "Pausar rotação") + '"><i class="fas fa-' +
+      (manualHold ? "play" : "pause") + '"></i></button>';
   }
 
   function resetSlideTiming() {
     slideShownAt = Date.now();
-    expLastRot = Date.now();
-    expCycles = 0;
     activeScrollers().forEach((el) => {
       el.scrollTop = 0; el._phase = ""; el._doneScroll = false; el._pausedAt = Date.now() + 2500;
     });
@@ -1083,73 +777,55 @@
 
   function showSlide(i) {
     slideIdx = (i + SLIDES.length) % SLIDES.length;
-    document.querySelectorAll(".slide").forEach((el) => {
-      el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
-    });
+    const atual = SLIDES[slideIdx];
+    document.querySelectorAll(".slide").forEach((el) => el.classList.toggle("is-active", el.dataset.slide === atual));
     renderSlideDots();
-    if (SLIDES[slideIdx] === "recebimento") {
-      renderRecebimentoKanban();
-      if (SHOW_COMPRAS) { renderComprasKanban(); pollCompras(); }
-    }
-    if (SLIDES[slideIdx] === "expedicao") { renderRecebimentoKanban(); }
-    if (SHOW_FROTA && SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
-    if (SHOW_PLANEJAMENTO && SLIDES[slideIdx] === "planejamento") pollPlanejamento();
-    if (SHOW_COMEX && SLIDES[slideIdx] === "comex") pollComex();
+    if (atual === "recebimento") { renderRecebimento(); pollCompras(); }
+    if (atual === "expedicao") renderExpedicao();
+    if (SHOW_FROTA && atual === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
+    if (SHOW_PLANEJAMENTO && atual === "planejamento") pollPlanejamento();
+    if (SHOW_COMEX && atual === "comex") pollComex();
     resetSlideTiming();
   }
 
-  function nextSlide() { showSlide(slideIdx + 1); }
-
-  function rotateExp(now) {
-    return;
-  }
-
-  function rotateRec(now) {
-    return;
-  }
-
-  // So avanca de slide respeitando o tempo minimo E depois de terminar de rolar tudo.
+  // So' avanca respeitando o tempo minimo E depois de rolar as listas de
+  // acao. O historico do dia rola junto mas nao segura o slide: com 20+
+  // itens feitos ele deixava o Recebimento parado mais de 1 minuto.
   function slideReady(now) {
     const elapsed = now - slideShownAt;
     if (elapsed >= SLIDE_MAX_MS) return true;
     if (elapsed < SLIDE_MIN_MS) return false;
-    const lists = activeScrollers();
+    const lists = activeScrollers().filter((el) => !el.hasAttribute("data-historico"));
     return lists.length === 0 || lists.every((el) => el._doneScroll || (el.scrollHeight - el.clientHeight) <= 4);
   }
 
   function carouselTick() {
-    const now = Date.now();
-    rotateExp(now);
-    rotateRec(now);
-    if (!manualHold && slideReady(now)) nextSlide();
+    if (!manualHold && slideReady(Date.now())) showSlide(slideIdx + 1);
   }
 
-  // Escolha manual do slide pelos indicadores do cabecalho.
+  // Escolha manual pelo cabecalho (quando alguem usa o painel no computador).
   $("slides-nav").addEventListener("click", (e) => {
-    const play = e.target.closest(".slides-play");
-    if (play) { manualHold = !manualHold; resetSlideTiming(); renderSlideDots(); return; }
+    if (e.target.closest(".slides-play")) { manualHold = !manualHold; resetSlideTiming(); renderSlideDots(); return; }
     const dot = e.target.closest(".sdot");
     if (!dot) return;
-    manualHold = true;            // ao escolher, fixa o slide (pausa a rotacao)
+    manualHold = true;
     showSlide(Number(dot.dataset.idx));
   });
 
+  // ----- Coleta -----
   async function poll() {
     try {
       const r = await fetch("/api/painel/indicadores", { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const d = await r.json();
       lastData = d;
+      renderRecebimento();
+      renderExpedicao();
 
-      renderRecebimentoKanban();
-
-      // Notificações (avisos rápidos) para eventos novos
       const eventos = d.eventos || [];
       const novos = eventos.filter((e) => e.key && !seenKeys.has(e.key));
       novos.forEach((e) => seenKeys.add(e.key));
-      if (!firstLoad) {
-        novos.slice().reverse().forEach(toast);
-      }
+      if (!firstLoad) novos.slice().reverse().forEach(toast);
       firstLoad = false;
       setLive(true);
     } catch (e) {
@@ -1159,41 +835,38 @@
 
   let comprasAt = 0;
   async function pollCompras() {
-    if (!SHOW_COMPRAS) return;
-    const comprasBoard = $("compras-kb-board");
-    if (!comprasBoard) return;
-    if (Date.now() - comprasAt < 60000 && comprasBoard && comprasBoard._sig) return;
+    if (!SHOW_COMPRAS || !$("compras-fila")) return;
+    if (Date.now() - comprasAt < 60000 && lastCompras) return;
     comprasAt = Date.now();
     try {
       const r = await fetch("/api/painel/compras", { cache: "no-store" });
-      const d = await r.json();
-      lastCompras = d;
-      renderComprasKanban();
+      lastCompras = await r.json();
     } catch (e) {
       lastCompras = { atrasadas: { total: 0, lista: [] }, semana: { total: 0, lista: [] } };
-      renderComprasKanban();
     }
+    renderRecebimento();
   }
 
   // ----- Frota: mapa ao vivo (GPS do motorista em viagem) -----
-  // Mesmo endpoint usado no Mapa da Frota / Rastreamento de Veiculos
-  // autenticados, so que aqui exposto sem login (ver painel_tv_routes.py).
   // Nao participa de poll()/toast() de proposito: posicao de veiculo nao
-  // deve tocar som, so os eventos de recebimento/expedicao tocam.
+  // toca som, so' os eventos de recebimento/expedicao.
   let frotaMap = null;
   let frotaLayer = null;
 
-  // Numa TV ninguem clica/toca pra abrir popup, entao o nome do veiculo (e
-  // o destino da viagem, quando houver) ficam escritos direto no marcador,
-  // sempre visiveis - sem depender de interacao.
+  // Carrinho no ponto exato do GPS; nome do veiculo e destino/motorista ao
+  // lado, sempre visiveis (na TV ninguem clica pra abrir popup).
   function frotaMarkerIcon(v) {
     const viagem = v.viagem;
-    const loc = viagem && viagem.destino_label
-      ? '<span class="loc">→ ' + esc(viagem.destino_label) + "</span>"
-      : (viagem && viagem.motorista_nome ? '<span class="loc">' + esc(viagem.motorista_nome) + "</span>" : "");
-    const html = '<div class="frota-pill' + (v.em_viagem ? "" : " idle") + '">' +
-      '<div class="frota-pill__row"><i class="fas fa-car"></i><span>' + esc(v.veiculo_label || v.placa || "Veículo") + "</span></div>" + loc + "</div>";
-    return L.divIcon({ className: "", html, iconSize: null, iconAnchor: [16, 14] });
+    const detalhe = viagem && viagem.destino_label
+      ? "→ " + viagem.destino_label
+      : (viagem && viagem.motorista_nome ? viagem.motorista_nome : "");
+    const html = '<div class="veh ' + (v.em_viagem ? "em-viagem" : "idle") + '">' +
+      '<div class="veh-ico"><i class="fas fa-car-side"></i></div>' +
+      '<div class="veh-txt"><b>' + esc(v.veiculo_label || v.placa || "Veículo") + "</b>" +
+      (detalhe ? "<span>" + esc(detalhe) + "</span>" : "") + "</div></div>";
+    // Ancora no centro do circulo (4,6vh de diametro).
+    const meio = Math.round(window.innerHeight * 0.046 / 2);
+    return L.divIcon({ className: "", html, iconSize: null, iconAnchor: [meio, meio] });
   }
 
   function initFrotaMap(base) {
@@ -1231,136 +904,147 @@
       if (bounds.length > 1) frotaMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
       else if (bounds.length === 1) frotaMap.setView(bounds[0], 13);
       setTimeout(() => frotaMap && frotaMap.invalidateSize(), 60);
-      const emViagem = veiculos.filter((v) => v.em_viagem).length;
-      setNum("frota-mapa", veiculos.length);
-      setNum("frota-viagem", emViagem);
-      setNum("frota-sem", d.sem_posicao || 0);
-      $("frota-tag").textContent = veiculos.length + " veículo(s)";
-    } catch (e) { /* silencioso - nao afeta o indicador "Ao vivo" do painel principal */ }
+      setText("frota-ctx", atualizado(d.gerado_em));
+      renderKpis("frota-kpis", [
+        { label: "Veículos no mapa", value: bounds.length, tone: "info" },
+        { label: "Em viagem", value: veiculos.filter((v) => v.em_viagem).length, tone: "ok" },
+        { label: "Sem posição", value: d.sem_posicao || 0, tone: "warn", sub: d.sem_posicao ? "GPS sem sinal recente" : "" },
+      ]);
+    } catch (e) { /* silencioso - nao afeta o indicador "Ao vivo" */ }
   }
 
+  // ----- Planejamento de tarefas -----
   let planAt = 0;
   async function pollPlanejamento() {
     if (!SHOW_PLANEJAMENTO) return;
-    const planBoard = $("plan-board");
-    if (!planBoard) return;
-    if (Date.now() - planAt < 30000 && planBoard._sig) return;
+    const board = $("plan-board");
+    if (!board) return;
+    if (Date.now() - planAt < 30000 && board._sig) return;
     planAt = Date.now();
     try {
       const r = await fetch("/api/painel/planejamento", { cache: "no-store" });
       const d = await r.json();
       const k = d.kpis || {};
-      const atrTag = k.atrasadas ? " · " + k.atrasadas + " atrasada(s)" : "";
-      $("plan-tag").textContent = (k.total || 0) + " tarefas" + atrTag;
-      const cols = d.colunas || [];
-      const sig = JSON.stringify(cols);
-      if (planBoard._sig !== sig) {
-        planBoard._sig = sig;
-        planBoard.innerHTML = cols.length
-          ? cols.map(buildPlanCol).join("")
-          : '<div class="empty">Sem colunas.</div>';
+      const colunas = d.colunas || [];
+      renderKpis("plan-kpis", [
+        { label: "Em aberto", value: k.andamento || 0, tone: "info" },
+        { label: "Atrasadas", value: k.atrasadas || 0, tone: "crit",
+          sub: (d.atrasadas || []).length ? "mais antiga: " + d.atrasadas[0].titulo : "" },
+        { label: "Concluídas", value: k.concluidas || 0, tone: "ok" },
+      ]);
+      // Concluido vira so' o numero acima: a tela fica pro que esta em aberto.
+      const abertas = colunas.filter((c) => !c.is_done);
+      const sig = JSON.stringify(abertas);
+      if (board._sig !== sig) {
+        board._sig = sig;
+        board.innerHTML = abertas.length ? abertas.map(buildPlanCol).join("") : vazioOk("Nenhuma tarefa em aberto");
       }
     } catch (e) {
-      planBoard._sig = "";
-      planBoard.innerHTML = '<div class="empty">Indisponível</div>';
+      board._sig = "";
+      board.innerHTML = vazioSimples("Planejamento indisponível");
     }
   }
 
   function buildPlanCol(c) {
-    const color = esc(c.color || "#a78bfa");
-    const cards = (c.cards || []).map((t) => buildPlanTask(t, color)).join("") ||
-      '<div class="empty">Sem tarefas</div>';
-    return '<div class="plan-kcol' + (c.is_done ? " is-done" : "") + '">' +
-      '<div class="plan-khead"><span class="kc-dot" style="background:' + color + '"></span>' +
-      '<span class="kc-title">' + esc(c.titulo) + "</span>" +
-      '<span class="kc-count">' + (c.total || 0) + "</span></div>" +
-      '<div class="plan-klist">' + cards + "</div></div>";
+    const cards = (c.cards || []).slice()
+      .sort((a, b) => (b.atrasada - a.atrasada) || ((b.dias_atraso || 0) - (a.dias_atraso || 0)))
+      .map(buildPlanTask).join("") || vazioSimples("Nada aqui");
+    return '<div class="pane"><div class="pane-head"><h3>' + esc(c.titulo) + '</h3><span class="count">' + (c.total || 0) +
+      '</span></div><div class="scroll">' + cards + "</div></div>";
   }
 
-  function buildPlanTask(t, color) {
-    const atr = t.atrasada ? " atrasada" : "";
+  function buildPlanTask(t) {
     const chips = [];
-    if (t.responsavel) chips.push('<span class="pt-chip"><i class="fas fa-user"></i>' + esc(t.responsavel) + "</span>");
-    if (t.prioridade) chips.push('<span class="pt-chip prio-' + esc(t.prioridade) + '"><i class="fas fa-flag"></i>' + esc(t.prioridade) + "</span>");
-    if (t.prazo) {
-      const dias = t.dias_atraso ? " (+" + t.dias_atraso + "d)" : "";
-      chips.push('<span class="pt-chip prazo' + atr + '"><i class="fas fa-calendar"></i>' + esc(t.prazo) + dias + "</span>");
+    if (t.responsavel) chips.push('<span class="chip"><i class="fas fa-user"></i>' + esc(t.responsavel) + "</span>");
+    if (t.prioridade) {
+      const alta = t.prioridade === "Alta" || t.prioridade === "Critica";
+      chips.push('<span class="chip' + (alta ? " warn" : "") + '"><i class="fas fa-flag"></i>' + esc(t.prioridade) + "</span>");
     }
-    const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
-    return '<div class="plan-task' + atr + '" style="border-left-color:' + (t.atrasada ? "#f87171" : color) + '">' +
-      '<div class="pt-title">' + esc(t.titulo) + "</div>" + meta + "</div>";
+    if (t.prazo) {
+      chips.push(t.atrasada
+        ? '<span class="chip crit"><i class="fas fa-calendar"></i>' + esc(t.prazo) + " · " + plural(t.dias_atraso, "dia", "dias") + " de atraso</span>"
+        : '<span class="chip"><i class="fas fa-calendar"></i>prazo ' + esc(t.prazo) + "</span>");
+    }
+    return '<div class="card' + (t.atrasada ? " c-crit" : "") + '"><div class="t">' + esc(t.titulo) + "</div>" +
+      (chips.length ? '<div class="chips">' + chips.join("") + "</div>" : "") + "</div>";
   }
 
+  // ----- Comex -----
   let comexAt = 0;
   async function pollComex() {
     if (!SHOW_COMEX) return;
-    const comexBoard = $("comex-board");
-    if (!comexBoard) return;
-    if (Date.now() - comexAt < 30000 && comexBoard._sig) return;
+    const board = $("comex-board");
+    if (!board) return;
+    if (Date.now() - comexAt < 30000 && board._sig) return;
     comexAt = Date.now();
     try {
       const r = await fetch("/api/painel/comex", { cache: "no-store" });
       const d = await r.json();
-      const k = d.kpis || {};
-      $("comex-tag").textContent = (k.total || 0) + " processo(s)";
-      const cols = d.colunas || [];
-      const sig = JSON.stringify(cols);
-      if (comexBoard._sig !== sig) {
-        comexBoard._sig = sig;
-        comexBoard.innerHTML = cols.length
-          ? cols.map(buildComexCol).join("")
-          : '<div class="empty">Sem processos.</div>';
+      const colunas = d.colunas || [];
+      // A cesta "Entregue" junta processo concluido com os que ainda estao
+      // em transporte nacional / NF de cambio: so' estes ultimos sao acao.
+      const concluido = (p) => String(p.status_detalhado || "").toLowerCase().startsWith("conclu");
+      const ativas = colunas.map((c) => {
+        const ultima = /^entreg/i.test(String(c.titulo || ""));
+        const cards = ultima ? (c.cards || []).filter((p) => !concluido(p)) : (c.cards || []);
+        return { titulo: ultima ? "Finalizando" : c.titulo, cards, total: ultima ? cards.length : (c.total || 0) };
+      });
+      const concluidos = colunas.reduce((n, c) => n + (c.cards || []).filter(concluido).length, 0);
+      const parados = ativas.reduce((n, c) => n + c.cards.filter((p) => p.ultima_interacao_atrasada).length, 0);
+      const porTitulo = (t) => (ativas.find((c) => c.titulo === t) || { total: 0 }).total;
+      renderKpis("comex-kpis", [
+        { label: "Em preparação", value: porTitulo("Preparação"), tone: "info" },
+        { label: "Em trânsito", value: porTitulo("Trânsito"), tone: "info" },
+        { label: "Finalizando", value: porTitulo("Finalizando"), tone: "info", sub: "transporte nacional / NF câmbio" },
+        { label: "Parados há +3 dias úteis", value: parados, tone: "crit", sub: parados ? "sem interação no processo" : "" },
+        { label: "Concluídos", value: concluidos, tone: "ok" },
+      ]);
+      const sig = JSON.stringify(ativas);
+      if (board._sig !== sig) {
+        board._sig = sig;
+        board.innerHTML = ativas.length ? ativas.map(buildComexCol).join("") : vazioOk("Nenhum processo em aberto");
       }
     } catch (e) {
-      comexBoard._sig = "";
-      comexBoard.innerHTML = '<div class="empty">Indisponível</div>';
+      board._sig = "";
+      board.innerHTML = vazioSimples("Comex indisponível");
     }
   }
 
   function buildComexCol(c) {
-    const color = esc(c.color || "#2dd4bf");
-    const cards = (c.cards || []).map((p) => buildComexCard(p, color)).join("") ||
-      '<div class="empty">Sem processos</div>';
-    return '<div class="plan-kcol">' +
-      '<div class="plan-khead"><span class="kc-dot" style="background:' + color + '"></span>' +
-      '<span class="kc-title">' + esc(c.titulo) + "</span>" +
-      '<span class="kc-count">' + (c.total || 0) + "</span></div>" +
-      '<div class="plan-klist">' + cards + "</div></div>";
+    const cards = c.cards.slice()
+      .sort((a, b) => (b.ultima_interacao_atrasada - a.ultima_interacao_atrasada))
+      .map(buildComexCard).join("") || vazioSimples("Nada aqui");
+    return '<div class="pane"><div class="pane-head"><h3>' + esc(c.titulo) + '</h3><span class="count">' + c.total +
+      '</span></div><div class="scroll">' + cards + "</div></div>";
   }
 
-  function buildComexCard(p, color) {
+  function buildComexCard(p) {
     const chips = [];
-    if (p.pagador_frete) chips.push('<span class="pt-chip"><i class="fas fa-money-bill-wave"></i>' + esc(p.pagador_frete) + "</span>");
-    if (p.status_detalhado) chips.push('<span class="pt-chip"><i class="fas fa-signal"></i>' + esc(p.status_detalhado) + "</span>");
+    if (p.status_detalhado) chips.push('<span class="chip">' + esc(p.status_detalhado) + "</span>");
+    if (p.pagador_frete) chips.push('<span class="chip"><i class="fas fa-money-bill-wave"></i>' + esc(p.pagador_frete) + "</span>");
     if (p.ultima_interacao) {
-      // Mais de 3 dias sem interacao (ultima_interacao_atrasada, calculado
-      // no backend) - destaca so essa data em vermelho, resto do card
-      // normal, pra chamar atencao pro processo parado sem exagerar.
-      chips.push('<span class="pt-chip' + (p.ultima_interacao_atrasada ? " cx-chip-atrasada" : "") + '"><i class="fas fa-clock"></i>' + esc(p.ultima_interacao) + "</span>");
+      // Mais de 3 dias uteis sem interacao (calculado no backend): processo parado.
+      chips.push('<span class="chip' + (p.ultima_interacao_atrasada ? " crit" : "") + '"><i class="fas fa-clock"></i>' + esc(p.ultima_interacao) + "</span>");
     }
-    const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
-    // OC na frente do nome do cliente/fornecedor, mesmo tamanho de fonte
-    // (mesma div .pt-title) - "12345 - Fornecedor X".
-    const titulo = esc(p.oc) + (p.fornecedor ? " - " + esc(p.fornecedor) : "");
-    return '<div class="plan-task cx-task" style="border-left-color:' + color + '" data-processo-id="' + p.processo_id + '" data-oc="' + esc(p.oc) + '">' +
-      '<div class="pt-title">' + titulo + "</div>" + meta + "</div>";
+    const titulo = esc(p.oc) + (p.fornecedor ? " · " + esc(p.fornecedor) : "");
+    return '<div class="card cx-task' + (p.ultima_interacao_atrasada ? " c-crit" : "") + '" data-processo-id="' + p.processo_id +
+      '" data-oc="' + esc(p.oc) + '"><div class="t">' + titulo + "</div>" +
+      (chips.length ? '<div class="chips">' + chips.join("") + "</div>" : "") + "</div>";
   }
 
-  // ── Popup de itens da PO ao clicar num card do Comex ───────────────
-  // Painel sem a secao do Comex (ex.: /painel/expedicao) nao tem esses
-  // elementos no DOM - sem a guarda, o script inteiro morria aqui e a TV
-  // ficava sem rodizio e sem atualizar.
+  // Itens da PO ao clicar num card do Comex. Painel sem a secao do Comex
+  // (ex.: /painel/expedicao) nao tem esses elementos - sem a guarda, o
+  // script inteiro morria aqui e a TV ficava parada.
   if ($("comex-board")) {
     $("comex-board").addEventListener("click", (e) => {
       const card = e.target.closest(".cx-task");
-      if (!card) return;
-      abrirItensComex(card.dataset.processoId, card.dataset.oc);
+      if (card) abrirItensComex(card.dataset.processoId, card.dataset.oc);
     });
   }
 
   async function abrirItensComex(processoId, oc) {
     $("cx-itens-titulo").textContent = "Itens da PO — OC " + oc;
-    $("cx-itens-body").innerHTML = '<div class="empty">Carregando…</div>';
+    $("cx-itens-body").innerHTML = vazioSimples("Carregando…");
     $("cx-itens-overlay").classList.add("show");
     try {
       const r = await fetch("/api/painel/comex/" + encodeURIComponent(processoId) + "/itens", { cache: "no-store" });
@@ -1368,26 +1052,21 @@
       const itens = d.itens || [];
       $("cx-itens-body").innerHTML = itens.length
         ? '<table class="cx-itens-table"><thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th></tr></thead><tbody>' +
-          itens.map((it) => '<tr><td>' + esc(it.codigo || "—") + '</td><td>' + esc(it.descricao || "—") + '</td><td>' + esc(it.quantidade != null ? it.quantidade : "—") + '</td></tr>').join("") +
-          '</tbody></table>'
-        : '<div class="empty">Sem itens cadastrados nessa PO.</div>';
+          itens.map((it) => "<tr><td>" + esc(it.codigo || "—") + "</td><td>" + esc(it.descricao || "—") + "</td><td>" + esc(it.quantidade != null ? it.quantidade : "—") + "</td></tr>").join("") +
+          "</tbody></table>"
+        : vazioSimples("Sem itens cadastrados nessa PO.");
     } catch (e) {
-      $("cx-itens-body").innerHTML = '<div class="empty">Falha ao carregar os itens.</div>';
+      $("cx-itens-body").innerHTML = vazioSimples("Falha ao carregar os itens.");
     }
   }
   function fecharItensComex() { $("cx-itens-overlay").classList.remove("show"); }
-  if ($("cx-itens-overlay")) {
-    $("cx-itens-fechar").addEventListener("click", fecharItensComex);
-    $("cx-itens-overlay").addEventListener("click", (e) => {
-      if (e.target === $("cx-itens-overlay")) fecharItensComex();
-    });
-  }
+  $("cx-itens-fechar").addEventListener("click", fecharItensComex);
+  $("cx-itens-overlay").addEventListener("click", (e) => { if (e.target === $("cx-itens-overlay")) fecharItensComex(); });
+
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });
   });
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) tryUnlockAudio();
-  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tryUnlockAudio(); });
   $("audio-indicator").addEventListener("click", tryUnlockAudio);
   updateAudioIndicator();
   tryUnlockAudio();
@@ -1396,10 +1075,9 @@
   updateClock();
   setInterval(updateClock, 1000 * 15);
   if (ONLY_SLIDE) {
-    // Ativa o slide unico manualmente - por padrao so o HTML estatico
-    // marca "recebimento" como is-active, entao sem isso a pagina abriria
-    // em branco quando o carrossel esta travado em outro slide.
-    $("slides-nav").style.display = "none";
+    // Slide unico: o HTML so' marca "recebimento" como ativo, entao ativa
+    // o certo na mao e esconde o indicador de slides.
+    $("slides-nav").style.visibility = "hidden";
     showSlide(0);
   } else {
     renderSlideDots();
