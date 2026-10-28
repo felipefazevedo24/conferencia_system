@@ -1946,3 +1946,75 @@ WHERE  o.cod_empresa = %(cod_empresa)s
 ORDER  BY r.previsao ASC NULLS LAST, o.codigo DESC
 LIMIT  %(limite)s;
 """
+
+
+# -------------------------------------------------------------------
+# Ordens de compra do relatorio do Documento de Entrada: as OCs com data
+# (tord_com.data) no periodo, mais as OCs citadas pelas notas do periodo
+# (pra trazer o comprador delas mesmo quando a OC e' mais antiga).
+# Comprador = Solicitante da OC, o mesmo campo que o Comex usa. Texto sai
+# por to_jsonb: nao quebra se a coluna for de outro tipo. Situacao pelos
+# itens (material, servico e material estrangeiro): saldo zero = recebido.
+# -------------------------------------------------------------------
+SQL_OC_RELATORIO_PERIODO = """
+WITH ocs AS (
+    SELECT o.*
+    FROM   public.tord_com o
+    WHERE  o.cod_empresa = %(cod_empresa)s
+      AND  (o.data::date BETWEEN %(data_de)s::date AND %(data_ate)s::date
+            OR o.codigo = ANY(%(codigos)s::int[]))
+),
+itens AS (
+    SELECT a.cod_ord_compra AS cod_ordem_compra,
+           COALESCE(a.qtde, 0) - COALESCE(a.qtde_entregue, 0) AS saldo
+    FROM   public.tord_aux a
+    JOIN   ocs ON ocs.codigo = a.cod_ord_compra
+    WHERE  a.cod_empresa = %(cod_empresa)s
+    UNION ALL
+    SELECT s.cod_ordem_compra,
+           COALESCE(s.qtde, 0) - COALESCE(s.qtde_entregue, 0)
+    FROM   public.tord_serv s
+    JOIN   ocs ON ocs.codigo = s.cod_ordem_compra
+    WHERE  s.cod_empresa = %(cod_empresa)s
+    UNION ALL
+    SELECT m.cod_ord_compra,
+           COALESCE(m.qtde, 0) - COALESCE(m.qtde_entregue, 0)
+    FROM   public.tord_aux_me m
+    JOIN   ocs ON ocs.codigo = m.cod_ord_compra
+    WHERE  m.cod_empresa = %(cod_empresa)s
+),
+resumo AS (
+    SELECT cod_ordem_compra,
+           COUNT(*)                                AS qtd_itens,
+           COUNT(*) FILTER (WHERE saldo > 0.0001)  AS itens_com_saldo
+    FROM   itens
+    GROUP  BY cod_ordem_compra
+)
+SELECT
+    o.codigo::text                                          AS cod_ordem_compra,
+    o.data                                                  AS data_oc,
+    COALESCE(f.nome_fornecedor,
+             NULLIF(TRIM(to_jsonb(o.*) ->> 'fornecedor'), ''),
+             '')                                            AS fornecedor,
+    COALESCE(f.cnpj, '')                                    AS cnpj,
+    NULLIF(TRIM(to_jsonb(o.*) ->> 'solicitante'), '')       AS comprador,
+    NULLIF(TRIM(to_jsonb(o.*) ->> 'status'), '')            AS status_oc,
+    COALESCE(o.cancelado, 0) <> 0                           AS cancelada,
+    COALESCE(o.totalgeral, 0)                               AS total,
+    NULLIF(TRIM(to_jsonb(o.*) ->> 'cond_pagamento'), '')    AS cond_pagamento,
+    NULLIF(TRIM(to_jsonb(o.*) ->> 'forma_pgto'), '')        AS forma_pgto,
+    COALESCE(r.qtd_itens, 0)                                AS qtd_itens,
+    COALESCE(r.itens_com_saldo, 0)                          AS itens_com_saldo
+FROM   ocs o
+LEFT   JOIN LATERAL (
+    SELECT COALESCE(NULLIF(TRIM(fo.razao_social), ''), NULLIF(TRIM(fo.nome), '')) AS nome_fornecedor,
+           regexp_replace(COALESCE(fo.cgc, ''), '[^0-9]', '', 'g')                   AS cnpj
+    FROM   public.tfornece fo
+    WHERE  fo.cod_empresa = o.cod_empresa
+      AND  fo.codigo = o.cod_fornecedor
+    LIMIT  1
+) f ON true
+LEFT   JOIN resumo r ON r.cod_ordem_compra = o.codigo
+ORDER  BY o.data, o.codigo
+LIMIT  %(limite)s;
+"""

@@ -360,6 +360,26 @@ def buscar_ordens_compra_comex(
     return db.fetch_all(queries.SQL_COMEX_OC_BUSCA, params)
 
 
+def ordens_compra_periodo(
+    data_de: str,
+    data_ate: str,
+    codigos: list[int] | None = None,
+    cod_empresa: Optional[int] = None,
+    limite: int = 5000,
+) -> list[dict]:
+    """OCs do relatorio do Documento de Entrada (ver SQL_OC_RELATORIO_PERIODO):
+    as geradas entre data_de e data_ate (ISO) mais as de `codigos`."""
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    params = {
+        "cod_empresa": empresa,
+        "data_de": data_de,
+        "data_ate": data_ate,
+        "codigos": sorted({int(c) for c in (codigos or [])}),
+        "limite": max(1, min(int(limite or 5000), 20000)),
+    }
+    return db.fetch_all(queries.SQL_OC_RELATORIO_PERIODO, params)
+
+
 def itens_ordem_compra(cod_ordem_compra: int, cod_empresa: Optional[int] = None) -> list[dict]:
     """Itens (material nacional + material estrangeiro) de UMA ordem de
     compra especifica, com o cabecalho completo de cada item e do produto

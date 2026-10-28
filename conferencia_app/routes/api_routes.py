@@ -86,6 +86,7 @@ from ..services import chapa_oxicorte_service as chapa_oxicorte_svc
 from ..services import mascara_imposto_service as mascara_imposto_svc
 from ..services import teams_service
 from ..services import processo_recebimento_log_service as processo_log_svc
+from ..services import documento_entrada_relatorio_service as doc_entrada_relatorio_svc
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
 from ..services.classificacao_contabil_service import classificar_nota
 from ..services.email_service import enviar_email_convite_acesso
@@ -2578,6 +2579,21 @@ def documento_entrada_lista():
         notas.append(linha)
 
     return jsonify({"total": total, "page": page, "page_size": page_size, "notas": notas})
+
+
+@api_bp.route("/api/documento_entrada/relatorio.xlsx", methods=["GET"])
+@permission_required("PAGE_DOCUMENTO_ENTRADA_RELATORIO")
+def documento_entrada_relatorio():
+    try:
+        stream, nome = doc_entrada_relatorio_svc.gerar_excel(request.args, session.get("username") or "desconhecido")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome,
+    )
 
 
 # ---------------------------------------------------------------------------

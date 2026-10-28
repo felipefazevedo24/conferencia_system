@@ -52,6 +52,7 @@ PERMISSION_CATALOG = {
     "PAGE_UPLOAD": "Compras > Pré-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
+    "PAGE_DOCUMENTO_ENTRADA_RELATORIO": "Compras > Documento de entrada > Baixar relatório (notas e ordens de compra do GRV)",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
     "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO": "Compras > Homologação de fornecedores > Validação financeira (parecer do Financeiro)",

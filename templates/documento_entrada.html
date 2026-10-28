@@ -258,6 +258,8 @@
     .doc-modal-body { padding: 20px 22px; display: grid; gap: 16px; overflow-y: auto; }
     .doc-modal-foot { background: var(--eui-surface-2); border-top: 1px solid var(--eui-border); justify-content: flex-end; }
     .doc-form-block { display: grid; gap: 8px; }
+    .de-rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 560px) { .de-rel-grid { grid-template-columns: 1fr; } }
     .doc-form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; color: var(--doc-muted); }
     .doc-inline-check { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: var(--eui-radius); background: var(--doc-primary-soft); border: 1px solid #cfe0fb; color: var(--doc-primary); font-size: 12px; font-weight: 700; }
     .doc-item-code-list { display: grid; gap: 10px; max-height: 260px; overflow-y: auto; }
@@ -598,6 +600,9 @@
                 <p class="eui-page-header__sub">Importação, auditoria fiscal e lançamento ERP num único fluxo.</p>
             </div>
             <div class="de-inline">
+                {% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') %}
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="abrirModalRelatorio()"><i class="fas fa-file-excel"></i> Baixar relatório</button>
+                {% endif %}
                 <button class="eui-btn eui-btn--ghost" type="button" id="de-btn-sync-erp"><i class="fas fa-cloud-arrow-down"></i> Sincronizar ERP</button>
                 <button class="eui-btn eui-btn--primary" type="button" id="de-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
             </div>
@@ -1104,6 +1109,51 @@
         </div>
     </div>
 </div>
+
+{% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') %}
+<div id="modal-relatorio" class="doc-modal-overlay" onclick="if(event.target===this)fecharModalRelatorio()">
+    <div class="doc-modal small">
+        <div class="doc-modal-head">
+            <div>
+                <h3><i class="fas fa-file-excel"></i> Relatório do documento de entrada</h3>
+                <p class="doc-modal-sub">Notas do Sync e ordens de compra do GRV no período.</p>
+            </div>
+            <button class="doc-modal-close" type="button" onclick="fecharModalRelatorio()">&times;</button>
+        </div>
+        <div class="doc-modal-body">
+            <div class="de-rel-grid">
+                <div class="doc-form-block"><label class="doc-form-label" for="rel-inicio">De</label><input id="rel-inicio" type="date" class="doc-input"></div>
+                <div class="doc-form-block"><label class="doc-form-label" for="rel-fim">Até</label><input id="rel-fim" type="date" class="doc-input"></div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label" for="rel-tipo">Tipo de documento</label>
+                    <select id="rel-tipo" class="doc-select">
+                        <option value="">Todos</option>
+                        <option value="nfe">NF-e</option>
+                        <option value="nfse">NFS-e</option>
+                        <option value="nao_fiscal">Não fiscal</option>
+                    </select>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label" for="rel-etapa">Etapa atual</label>
+                    <select id="rel-etapa" class="doc-select">
+                        <option value="">Todas</option>
+                        <option value="auditoria">Auditoria</option>
+                        <option value="lancamento">Lançamento</option>
+                        <option value="finalizado">Finalizado</option>
+                    </select>
+                </div>
+                <div class="doc-form-block"><label class="doc-form-label" for="rel-fornecedor">Fornecedor</label><input id="rel-fornecedor" class="doc-input" placeholder="Todos" autocomplete="off"></div>
+                <div class="doc-form-block"><label class="doc-form-label" for="rel-comprador">Comprador</label><input id="rel-comprador" class="doc-input" placeholder="Todos" autocomplete="off"></div>
+            </div>
+            <div id="rel-erro" class="doc-estorno-feedback"></div>
+        </div>
+        <div class="doc-modal-foot">
+            <button class="doc-btn doc-btn-secondary" type="button" onclick="fecharModalRelatorio()">Cancelar</button>
+            <button id="rel-baixar" class="doc-btn doc-btn-primary" type="button" onclick="baixarRelatorio()"><i class="fas fa-download"></i> Baixar Excel</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -1119,7 +1169,7 @@
     // sidebar), borrando so a area do conteudo. Mover os overlays pra serem
     // filhos diretos do <body> garante que o blur cubra a tela inteira.
     ['modalOverlay', 'diagOverlay', 'vinculacaoOverlay', 'vincAvisoOverlay', 'pendenciaOverlay',
-     'modal-lancamento', 'modal-estorno', 'modal-excluir-pendencia'].forEach((id) => {
+     'modal-lancamento', 'modal-estorno', 'modal-excluir-pendencia', 'modal-relatorio'].forEach((id) => {
         const el = document.getElementById(id);
         if (el && el.parentElement !== document.body) document.body.appendChild(el);
     });
@@ -2857,6 +2907,61 @@
     }
 
     function fecharModalLancamento() { document.getElementById('modal-lancamento').style.display = 'none'; }
+    // Relatório em Excel (notas do Sync + OCs do GRV). O GRV pode demorar:
+    // o botão fica travado até a resposta.
+    function abrirModalRelatorio() {
+        const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const hoje = new Date();
+        const ini = document.getElementById('rel-inicio');
+        const fim = document.getElementById('rel-fim');
+        if (!ini.value) ini.value = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+        if (!fim.value) fim.value = iso(hoje);
+        document.getElementById('rel-erro').textContent = '';
+        document.getElementById('modal-relatorio').classList.add('active');
+    }
+
+    function fecharModalRelatorio() { document.getElementById('modal-relatorio').classList.remove('active'); }
+
+    async function baixarRelatorio() {
+        const erro = document.getElementById('rel-erro');
+        const btn = document.getElementById('rel-baixar');
+        const p = new URLSearchParams({
+            inicio: document.getElementById('rel-inicio').value,
+            fim: document.getElementById('rel-fim').value,
+            tipo: document.getElementById('rel-tipo').value,
+            etapa: document.getElementById('rel-etapa').value,
+            fornecedor: document.getElementById('rel-fornecedor').value.trim(),
+            comprador: document.getElementById('rel-comprador').value.trim(),
+        });
+        erro.textContent = '';
+        btn.disabled = true;
+        const rotulo = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando...';
+        try {
+            const r = await fetch(`/api/documento_entrada/relatorio.xlsx?${p.toString()}`, { credentials: 'same-origin' });
+            if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                erro.textContent = d.error || d.msg || 'Não foi possível gerar o relatório.';
+                return;
+            }
+            const nome = (/filename="?([^";]+)"?/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'relatorio_documento_entrada.xlsx';
+            const url = URL.createObjectURL(await r.blob());
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nome;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            fecharModalRelatorio();
+        } catch (_) {
+            erro.textContent = 'Não foi possível gerar o relatório.';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = rotulo;
+        }
+    }
+
     function fecharModalEstorno() { document.getElementById('modal-estorno').style.display = 'none'; document.getElementById('estorno-feedback').innerText = ''; }
 
     function renderizarCamposCodigoPorItem(itens) {
