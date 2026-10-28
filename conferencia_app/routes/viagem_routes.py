@@ -32,6 +32,7 @@ from ..services.agendamento_service import _geocode_endereco, montar_endereco_ro
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
 from ..services.solicitacao_coleta_service import validar_liberacao_coleta
+from ..services import viagem_relatorio_service as relatorio_svc
 from ..tempo import agora_br
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
@@ -2317,6 +2318,29 @@ def cadastros_salvar_motorista():
         db.session.rollback()
         return jsonify({"sucesso": False, "msg": str(exc)}), 400
     return jsonify({"sucesso": True, "motorista": serializar_motorista(row)})
+
+
+# --------------------------------------------------------------------------- RELATÓRIO (Excel)
+# Mesmo acesso da tela da Central (page_routes.viagens_page).
+@viagem_bp.route("/relatorio/opcoes", methods=["GET"])
+@permission_required_any(PERM, "PAGE_LOGISTICA_AGENDAMENTO")
+def relatorio_opcoes():
+    return jsonify({"sucesso": True, **relatorio_svc.opcoes()})
+
+
+@viagem_bp.route("/relatorio.xlsx", methods=["GET"])
+@permission_required_any(PERM, "PAGE_LOGISTICA_AGENDAMENTO")
+def relatorio_excel():
+    try:
+        stream, nome = relatorio_svc.gerar_excel(request.args, _user())
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome,
+    )
 
 
 # --------------------------------------------------------------------------- LINK DO PAINEL DO MOTORISTA (gestor)

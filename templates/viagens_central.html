@@ -121,6 +121,7 @@
             <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
         </div>
         <div class="vt-header-actions">
+          <button class="eui-btn eui-btn--ghost" onclick="abrirRelatorio()"><i class="fas fa-file-excel"></i> Baixar relatório</button>
           <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--ghost"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
             {% if can_access('MANAGE_LOGISTICA_VIAGEM_CADASTROS') %}
             <button id="btnCadastrosFrota" class="eui-btn eui-btn--ghost" onclick="abrirCadastros()"><i class="fas fa-id-card"></i> Veículos e motoristas</button>
@@ -362,6 +363,48 @@
     <div class="vt-modal__foot">
       <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAlocar')">Cancelar</button>
       <button class="eui-btn eui-btn--primary" onclick="confirmarAlocacao()">Salvar alocação</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalRelatorio" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:560px;">
+    <div class="vt-modal__head">
+      <strong>Relatório de viagens</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRelatorio')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <div class="vt-grid-2">
+        <div class="eui-field">
+          <label class="eui-field__label">De</label>
+          <input id="rel-inicio" type="date" class="eui-input">
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Até</label>
+          <input id="rel-fim" type="date" class="eui-input">
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Veículo</label>
+          <select id="rel-veiculo" class="eui-select"><option value="">Todos</option></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Motorista</label>
+          <select id="rel-motorista" class="eui-select"><option value="">Todos</option></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Departamento</label>
+          <select id="rel-departamento" class="eui-select"><option value="">Todos</option></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Tipo</label>
+          <select id="rel-tipo" class="eui-select"><option value="">Todos</option></select>
+        </div>
+      </div>
+      <div id="rel-erro" class="vt-mini" style="color:var(--eui-danger); min-height:16px;"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRelatorio')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" id="rel-baixar" onclick="baixarRelatorio()"><i class="fas fa-download"></i> Baixar Excel</button>
     </div>
   </div>
 </div>
@@ -2562,6 +2605,75 @@ async function copiarLinkMotorista() {
   try { await navigator.clipboard.writeText(input.value); }
   catch (_) { input.select(); document.execCommand('copy'); }
   showToast('Link copiado.', 'success');
+}
+
+// Relatório em Excel. As listas vêm do servidor (inclui veículo/motorista
+// inativo, que pode ter viagem antiga) e são carregadas uma vez só.
+let relOpcoesCarregadas = false;
+
+async function abrirRelatorio() {
+  const hoje = new Date();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const ini = document.getElementById('rel-inicio');
+  const fim = document.getElementById('rel-fim');
+  if (!ini.value) ini.value = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+  if (!fim.value) fim.value = iso(hoje);
+  document.getElementById('rel-erro').textContent = '';
+  openModal('modalRelatorio');
+  if (relOpcoesCarregadas) return;
+  const r = await fetch('/api/viagem/relatorio/opcoes', { credentials: 'same-origin' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    document.getElementById('rel-erro').textContent = d.msg || d.error || 'Falha ao carregar veículos e motoristas.';
+    return;
+  }
+  const opcoes = (id, itens) => {
+    document.getElementById(id).insertAdjacentHTML('beforeend', itens.map((i) =>
+      `<option value="${cadEsc(i.valor)}">${cadEsc(i.nome)}</option>`).join(''));
+  };
+  const inativo = (i) => ({ valor: i.id, nome: i.ativo ? i.nome : `${i.nome} (inativo)` });
+  opcoes('rel-veiculo', (d.veiculos || []).map(inativo));
+  opcoes('rel-motorista', (d.motoristas || []).map(inativo));
+  opcoes('rel-departamento', (d.departamentos || []).map((x) => ({ valor: x, nome: x })));
+  opcoes('rel-tipo', d.tipos || []);
+  relOpcoesCarregadas = true;
+}
+
+async function baixarRelatorio() {
+  const erro = document.getElementById('rel-erro');
+  const btn = document.getElementById('rel-baixar');
+  const p = new URLSearchParams({
+    inicio: document.getElementById('rel-inicio').value,
+    fim: document.getElementById('rel-fim').value,
+    veiculo_id: document.getElementById('rel-veiculo').value,
+    motorista_id: document.getElementById('rel-motorista').value,
+    departamento: document.getElementById('rel-departamento').value,
+    tipo: document.getElementById('rel-tipo').value,
+  });
+  erro.textContent = '';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/viagem/relatorio.xlsx?${p.toString()}`, { credentials: 'same-origin' });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      erro.textContent = d.msg || d.error || 'Não foi possível gerar o relatório.';
+      return;
+    }
+    const nome = (/filename="?([^";]+)"?/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'relatorio_viagens.xlsx';
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    closeModal('modalRelatorio');
+  } catch (_) {
+    erro.textContent = 'Não foi possível gerar o relatório.';
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
 {% endblock %}
