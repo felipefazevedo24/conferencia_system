@@ -14,12 +14,12 @@ impostos).
 Regras das planilhas (iguais nas duas, salvo onde indicado):
   CIF   = FOB + frete + seguro (+ outros acrescimos no despachante)
   II    = CIF x II            IPI    = (CIF + II) x IPI
-          (courier: II fixo de 60% pra todos os itens, em `ii_courier`;
-          IPI/PIS/COFINS seguem o NCM)
+          (courier: II fixo de 60% pra todos os itens, em `ii_courier`,
+          e SEM IPI/PIS/COFINS - Controladoria, 28/10/2026)
   PIS   = CIF x PIS           COFINS = CIF x COFINS
   ICMS  "por dentro":
     despachante: (CIF + Siscomex + AFRMM + II + IPI + PIS + COFINS) / (1 - ICMS) x ICMS
-    courier:     (CIF + multas + II + IPI + PIS + COFINS) / (1 - 17%) x 17% - a
+    courier:     (CIF + multas + II) / (1 - 17%) x 17% - a
                  planilha usa 17% fixo; a aliquota do item so' liga/desliga
                  (0 = sem ICMS). Mantido assim a pedido (23/10/2026) e
                  parametrizavel em `icms_courier`.
@@ -165,7 +165,7 @@ def calcular_courier(itens: list[dict], cambio, frete_usd=0, seguro_usd=0, servi
                      tarifa_aeroportuaria_brl=0, multas_brl=0, icms_courier=ICMS_COURIER_PADRAO,
                      ii_courier=II_COURIER_PADRAO) -> dict:
     """Modelo courier. Mesmos `itens` do despachante (peso nao e' usado; o
-    II do NCM e' ignorado - vale `ii_courier`)."""
+    II do NCM e' ignorado - vale `ii_courier` - e nao ha' IPI/PIS/COFINS)."""
     prontos, cambio = _preparar(itens, cambio)
     frete, seguro = _num(frete_usd) * cambio, _num(seguro_usd) * cambio
     servico, tarifa, multas = _num(servico_courier_brl), _num(tarifa_aeroportuaria_brl), _num(multas_brl)
@@ -181,7 +181,7 @@ def calcular_courier(itens: list[dict], cambio, frete_usd=0, seguro_usd=0, servi
              "seguro": _rateio(seguro, i["fob"], fob_total), "acrescimos": 0.0}
         l["cif"] = l["fob"] + l["frete"] + l["seguro"]
         multa_i = _rateio(multas, i["fob"], fob_total)
-        imp = _impostos(l["cif"], {**i["aliq"], "ii": ii_fixo})
+        imp = _impostos(l["cif"], {**i["aliq"], "ii": ii_fixo, "ipi": 0.0, "pis": 0.0, "cofins": 0.0})
         icms = 0.0
         if i["aliq"]["icms"]:
             icms = (l["cif"] + imp["ii"] + imp["ipi"] + imp["pis"] + imp["cofins"] + multa_i) / (1 - icms_fixo) * icms_fixo

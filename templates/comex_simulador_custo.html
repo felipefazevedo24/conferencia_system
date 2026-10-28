@@ -101,7 +101,7 @@
                     <div class="sc-campo"><label>Serviço courier (R$)</label><input class="eui-input" data-campo="servico_courier_brl" inputmode="decimal"><small>Fatura do courier - fora da base do ICMS</small></div>
                     <div class="sc-campo"><label>Tarifa aeroportuária / armazenagem (R$)</label><input class="eui-input" data-campo="tarifa_aeroportuaria_brl" inputmode="decimal"></div>
                     <div class="sc-campo"><label>Multas (R$)</label><input class="eui-input" data-campo="multas_brl" inputmode="decimal"><small>Entram na base do ICMS</small></div>
-                    <div class="sc-campo"><label>II do courier (%)</label><input class="eui-input" data-campo="ii_courier_pct" inputmode="decimal" value="{{ '%g' % ii_courier_padrao }}"><small>Fixo para todos os itens (não usa o II do NCM)</small></div>
+                    <div class="sc-campo"><label>II do courier (%)</label><input class="eui-input" data-campo="ii_courier_pct" inputmode="decimal" value="{{ '%g' % ii_courier_padrao }}"><small>Fixo para todos os itens (não usa o II do NCM). Courier sem IPI, PIS e COFINS.</small></div>
                     <div class="sc-campo"><label>ICMS do courier (%)</label><input class="eui-input" data-campo="icms_courier_pct" inputmode="decimal" value="{{ '%g' % icms_courier_padrao }}"><small>Por dentro, fixo (regra da planilha)</small></div>
                 </div>
             </div></div>
