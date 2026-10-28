@@ -2018,3 +2018,110 @@ LEFT   JOIN resumo r ON r.cod_ordem_compra = o.codigo
 ORDER  BY o.data, o.codigo
 LIMIT  %(limite)s;
 """
+
+
+# -------------------------------------------------------------------
+# Itens das OCs geradas no periodo, pro mesmo relatorio. Conferido no GRV
+# real em 28/10/2026:
+# - material (tord_aux): total = qtde_compra * preco_unitario, na unidade de
+#   compra (a.unidade). Saldo em qtde - qtde_entregue, como nas outras queries.
+# - a linha da OC chega na solicitacao pelo guid (tcom_aux_os.guid_ordem_compra
+#   = tord_aux.guid_linha); por cod_produto mistura linhas repetidas do mesmo
+#   produto. Uma linha pode juntar varias solicitacoes (compra consolidada).
+# - quem pediu = tsol_max.solicitante; vazio na maioria das solicitacoes
+#   digitadas, e ai vale tsol_max.usuario (quem criou).
+# - servico (tord_serv) nao tem produto nem numero de item: grupo/subgrupo de
+#   servico fazem papel de familia/grupo, e a solicitacao e' a tsol_aux_serv.
+# - item sem tcom_aux_os foi digitado direto na OC, sem solicitacao.
+# - tord_aux_me (material estrangeiro) esta vazia e fica de fora.
+# -------------------------------------------------------------------
+SQL_OC_ITENS_RELATORIO_PERIODO = """
+WITH ocs AS (
+    SELECT o.codigo
+    FROM   public.tord_com o
+    WHERE  o.cod_empresa = %(cod_empresa)s
+      AND  o.data::date BETWEEN %(data_de)s::date AND %(data_ate)s::date
+),
+solicitacoes AS (
+    SELECT x.cod_ord_compra,
+           x.guid_ordem_compra,
+           STRING_AGG(DISTINCT x.cod_solicitacao::text, ', ' ORDER BY x.cod_solicitacao::text) AS solicitacoes,
+           STRING_AGG(DISTINCT COALESCE(NULLIF(TRIM(s.solicitante), ''), NULLIF(TRIM(s.usuario), '')), ', '
+                      ORDER BY COALESCE(NULLIF(TRIM(s.solicitante), ''), NULLIF(TRIM(s.usuario), '')))  AS solicitante,
+           MIN(s.dt_solicitacao)                                                     AS dt_solicitacao,
+           STRING_AGG(DISTINCT NULLIF(TRIM(os.n_os), ''), ', ' ORDER BY NULLIF(TRIM(os.n_os), '')) AS os
+    FROM   public.tcom_aux_os x
+    JOIN   ocs ON ocs.codigo = x.cod_ord_compra
+    LEFT   JOIN public.tsol_max s
+           ON s.cod_empresa     = x.cod_empresa
+          AND s.cod_solicitacao = x.cod_solicitacao
+          AND s.guid_linha      = x.guid_solicitacao
+    LEFT   JOIN public.tos os
+           ON os.cod_empresa = x.cod_empresa
+          AND os.codigo      = x.cod_os
+    WHERE  x.cod_empresa = %(cod_empresa)s
+      AND  COALESCE(x.cancelado, 0) = 0
+      AND  COALESCE(x.cod_solicitacao, 0) <> 0
+    GROUP  BY x.cod_ord_compra, x.guid_ordem_compra
+)
+SELECT a.cod_ord_compra::text                                      AS cod_ordem_compra,
+       'Material'::text                                            AS tipo,
+       a.numero_item::int                                          AS item,
+       NULLIF(TRIM(a.cod_interno), '')::text                       AS codigo,
+       NULLIF(TRIM(a.descricao), '')::text                         AS descricao,
+       COALESCE(NULLIF(TRIM(f.nome), ''), NULLIF(TRIM(p.familia), ''))::text AS familia,
+       NULLIF(TRIM(p.grupo), '')::text                             AS grupo,
+       NULLIF(TRIM(a.unidade), '')::text                           AS unidade,
+       COALESCE(a.qtde_compra, a.qtde, 0)::double precision        AS qtde,
+       COALESCE(a.preco_unitario, 0)::double precision             AS valor_unitario,
+       COALESCE(a.total, 0)::double precision                      AS total,
+       COALESCE(a.vl_ipi, 0)::double precision                     AS ipi,
+       sc.solicitacoes::text                                       AS solicitacao,
+       sc.solicitante::text                                        AS solicitante,
+       sc.dt_solicitacao::timestamp                                AS dt_solicitacao,
+       sc.os::text                                                 AS os,
+       false                                                       AS cancelado,
+       (COALESCE(a.qtde, 0) - COALESCE(a.qtde_entregue, 0))::double precision AS saldo,
+       COALESCE(a.qtde_entregue, 0)::double precision              AS entregue
+FROM   public.tord_aux a
+JOIN   ocs ON ocs.codigo = a.cod_ord_compra
+LEFT   JOIN public.tproduto p
+       ON p.cod_empresa = a.cod_empresa
+      AND p.codigo      = a.cod_produto
+LEFT   JOIN public.tfamilia f
+       ON f.cod_empresa = p.cod_empresa
+      AND f.codigo      = p.cod_familia
+LEFT   JOIN solicitacoes sc
+       ON sc.cod_ord_compra    = a.cod_ord_compra
+      AND sc.guid_ordem_compra = a.guid_linha
+WHERE  a.cod_empresa = %(cod_empresa)s
+UNION ALL
+SELECT s.cod_ordem_compra::text,
+       'Serviço'::text,
+       (ROW_NUMBER() OVER (PARTITION BY s.cod_ordem_compra ORDER BY s.aut_))::int,
+       NULL::text,
+       NULLIF(TRIM(s.titulo_servico), '')::text,
+       NULLIF(TRIM(s.grupo_serv_ter), '')::text,
+       NULLIF(TRIM(s.sub_grupo_serv_ter), '')::text,
+       NULLIF(TRIM(s.unidade), '')::text,
+       COALESCE(s.qtde, 0)::double precision,
+       COALESCE(s.vl_unitario, 0)::double precision,
+       COALESCE(s.vl_total, 0)::double precision,
+       COALESCE(s.vl_ipi, 0)::double precision,
+       NULLIF(s.cod_solicitacao, 0)::text,
+       NULLIF(TRIM(t.usuario), '')::text,
+       NULL::timestamp,
+       NULLIF(TRIM(s.cod_os_completo), '')::text,
+       COALESCE(s.cancelado, 0) <> 0,
+       (COALESCE(s.qtde, 0) - COALESCE(s.qtde_entregue, 0))::double precision,
+       COALESCE(s.qtde_entregue, 0)::double precision
+FROM   public.tord_serv s
+JOIN   ocs ON ocs.codigo = s.cod_ordem_compra
+LEFT   JOIN public.tsol_aux_serv t
+       ON t.cod_empresa     = s.cod_empresa
+      AND t.cod_solicitacao = s.cod_solicitacao
+      AND t.codigo          = s.cod_sol_serv_codigo
+WHERE  s.cod_empresa = %(cod_empresa)s
+ORDER  BY 1, 2, 3
+LIMIT  %(limite)s;
+"""

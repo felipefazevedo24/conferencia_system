@@ -380,6 +380,24 @@ def ordens_compra_periodo(
     return db.fetch_all(queries.SQL_OC_RELATORIO_PERIODO, params)
 
 
+def itens_ordens_compra_periodo(
+    data_de: str,
+    data_ate: str,
+    cod_empresa: Optional[int] = None,
+    limite: int = 20000,
+) -> list[dict]:
+    """Itens (material e servico) das OCs geradas entre data_de e data_ate,
+    com custo, familia/grupo e quem pediu (ver SQL_OC_ITENS_RELATORIO_PERIODO)."""
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    params = {
+        "cod_empresa": empresa,
+        "data_de": data_de,
+        "data_ate": data_ate,
+        "limite": max(1, min(int(limite or 20000), 50000)),
+    }
+    return db.fetch_all(queries.SQL_OC_ITENS_RELATORIO_PERIODO, params)
+
+
 def itens_ordem_compra(cod_ordem_compra: int, cod_empresa: Optional[int] = None) -> list[dict]:
     """Itens (material nacional + material estrangeiro) de UMA ordem de
     compra especifica, com o cabecalho completo de cada item e do produto

@@ -8,6 +8,10 @@ Compras: OC pela data dela no GRV (tord_com.data). Comprador = Solicitante da
 OC, o mesmo campo que o Comex usa. GRV fora não derruba o relatório: as notas
 saem e a planilha avisa que as compras ficaram de fora - a não ser com filtro
 de comprador, que sem o GRV não tem como aplicar.
+
+Itens: os das OCs da aba de OCs (mesmos filtros), com custo, família/grupo e
+quem pediu na solicitação de compra. Custo somado sem item cancelado e sem OC
+cancelada.
 """
 from __future__ import annotations
 
@@ -33,7 +37,11 @@ ETAPAS = {"auditoria": "Auditoria", "lancamento": "Lançamento", "finalizado": "
 _LANCADO = {"Lançado", "Lancado", "LanÃ§ado"}
 _RECUSADO = {"xml recusado", "recusado"}
 _SEM_OC = "Sem OC"
+_SEM_SOLICITACAO = "Sem solicitação (direto na OC)"
 _FMT_DIAS = "#,##0.0"
+# Preço unitário tem item de R$ 0,0855: duas casas arredondariam o custo.
+_FMT_UNITARIO = '"R$" #,##0.00##'
+_FMT_DIA = "dd/mm/yyyy"
 
 
 def montar_filtros(args) -> dict:
@@ -63,8 +71,8 @@ def gerar_excel(args, usuario: str) -> tuple[BytesIO, str]:
     wb = Workbook()
     _aba_resumo(wb.active, filtros, dados, usuario)
     _aba_notas(wb.create_sheet("Notas"), dados["notas"])
-    _aba_itens(wb.create_sheet("Itens das notas"), dados["notas"])
     _aba_ocs(wb.create_sheet("Ordens de compra"), dados)
+    _aba_itens_oc(wb.create_sheet("Itens das OCs"), dados)
     stream = BytesIO()
     wb.save(stream)
     stream.seek(0)
@@ -123,7 +131,8 @@ def coletar(f: dict) -> dict:
         geradas.append(o)
     geradas.sort(key=lambda o: (o["data_oc"], _num(o["codigo"])))
     _notas_das_ocs(geradas)
-    return {"notas": resultado, "ocs": geradas, "grv_ok": grv_ok}
+    itens, itens_ok = _itens_grv(f, geradas) if grv_ok else ([], False)
+    return {"notas": resultado, "ocs": geradas, "grv_ok": grv_ok, "itens": itens, "itens_ok": itens_ok}
 
 
 def _notas(ini: datetime, fim: datetime) -> list[dict]:
@@ -249,6 +258,60 @@ def _ocs_grv(f: dict, codigos: list[int]) -> tuple[dict, bool]:
     return ocs, True
 
 
+def _itens_grv(f: dict, ocs: list[dict]) -> tuple[list[dict], bool]:
+    """Itens das OCs da aba de OCs: a consulta traz o período inteiro e aqui
+    ficam só os das OCs que passaram nos filtros."""
+    if not ocs:
+        return [], True
+    try:
+        linhas = compras_service.itens_ordens_compra_periodo(f["inicio"].isoformat(), f["fim"].isoformat())
+    except Exception:  # noqa: BLE001 - GRV fora não derruba o relatório
+        current_app.logger.warning("Relatorio do Documento de Entrada: itens das OCs indisponiveis", exc_info=True)
+        return [], False
+    por_codigo = {o["codigo"]: o for o in ocs}
+    itens = []
+    for linha in linhas:
+        oc = por_codigo.get(str(linha.get("cod_ordem_compra") or "").strip())
+        if not oc:
+            continue
+        cancelado = linha.get("cancelado") in (True, "true", "t", 1)
+        if cancelado:
+            situacao = "Cancelado"
+        elif oc["cancelada"]:
+            situacao = "OC cancelada"
+        elif _float(linha.get("saldo")) <= 0.0001:
+            situacao = "Recebido"
+        elif _float(linha.get("entregue")) > 0.0001:
+            situacao = "Recebido em parte"
+        else:
+            situacao = "Em aberto"
+        itens.append({
+            "oc": oc["codigo"],
+            "data_oc": oc["data_oc"],
+            "fornecedor": oc["fornecedor"],
+            "comprador": oc["comprador"],
+            "tipo": str(linha.get("tipo") or "").strip(),
+            "item": linha.get("item"),
+            "codigo": str(linha.get("codigo") or "").strip(),
+            "descricao": str(linha.get("descricao") or "").strip(),
+            "familia": str(linha.get("familia") or "").strip(),
+            "grupo": str(linha.get("grupo") or "").strip(),
+            "unidade": str(linha.get("unidade") or "").strip(),
+            "qtde": _float(linha.get("qtde")),
+            "valor_unitario": _float(linha.get("valor_unitario")),
+            "total": _float(linha.get("total")),
+            "ipi": _float(linha.get("ipi")),
+            "solicitacao": str(linha.get("solicitacao") or "").strip(),
+            "solicitante": str(linha.get("solicitante") or "").strip(),
+            "solicitada_em": _dt(linha.get("dt_solicitacao")),
+            "os": str(linha.get("os") or "").strip(),
+            "situacao": situacao,
+            "conta": not cancelado and not oc["cancelada"],
+        })
+    itens.sort(key=lambda i: (i["data_oc"] or datetime.min, _num(i["oc"]), i["tipo"] != "Material", i["item"] or 0))
+    return itens, True
+
+
 def _notas_das_ocs(ocs: list[dict]) -> None:
     """Notas do Sync que citam cada OC, de qualquer data: mostra se a OC
     gerada no período já teve nota."""
@@ -325,6 +388,9 @@ def _aba_resumo(ws, f, dados, usuario):
     if not grv_ok:
         ws.append(["Atenção: o GRV não respondeu. As ordens de compra e o comprador ficaram de fora."])
         ws.cell(row=ws.max_row, column=1).font = Font(bold=True, color="C00000")
+    elif not dados["itens_ok"]:
+        ws.append(["Atenção: o GRV não devolveu os itens das OCs. Tente gerar o relatório de novo."])
+        ws.cell(row=ws.max_row, column=1).font = Font(bold=True, color="C00000")
     ws.append([])
 
     _secao(ws, "Notas", ["", "Total"])
@@ -366,6 +432,11 @@ def _aba_resumo(ws, f, dados, usuario):
     if grv_ok:
         _tabela(ws, "Por comprador", ["", "OCs geradas", "Canceladas", "Valor das OCs", "Notas que entraram", "Notas lançadas"],
                 _quebra_comprador(notas, ocs), {4: _FMT_MOEDA})
+    if grv_ok and dados["itens_ok"]:
+        _tabela(ws, "Custo dos itens por família e grupo", ["Família", "Grupo", "Itens", "Valor"],
+                _quebra_familia(dados["itens"]), {4: _FMT_MOEDA})
+        _tabela(ws, "Custo dos itens por quem solicitou", ["", "Itens", "OCs", "Valor"],
+                _quebra_solicitante(dados["itens"]), {4: _FMT_MOEDA})
     _tabela(ws, "Por fornecedor", ["", "Notas que entraram", "Valor das notas", "Notas lançadas", "OCs geradas", "Valor das OCs"],
             _quebra_fornecedor(notas, ocs), {3: _FMT_MOEDA, 6: _FMT_MOEDA})
     _tabela(ws, "Por pessoa (quem fez)", ["", "Importou", "Auditou", "Conferiu", "Lançou"], _quebra_pessoa(notas))
@@ -402,6 +473,31 @@ def _quebra_comprador(notas, ocs) -> list[list]:
     linhas = [[k, int(g["ocs"]), int(g["canceladas"]), g["valor"], int(g["entraram"]), int(g["lancadas"])]
               for k, g in grupos.items() if g["ocs"] or g["entraram"] or g["lancadas"]]
     return sorted(linhas, key=lambda r: (-r[1], -r[4], r[0]))
+
+
+def _quebra_familia(itens) -> list[list]:
+    grupos = defaultdict(lambda: [0, 0.0])
+    for i in itens:
+        if i["conta"]:
+            g = grupos[(i["familia"] or _SEM_INFO, i["grupo"] or _SEM_INFO)]
+            g[0] += 1
+            g[1] += i["total"]
+    linhas = [[familia, grupo, g[0], g[1]] for (familia, grupo), g in grupos.items()]
+    return sorted(linhas, key=lambda r: (-r[3], r[0], r[1]))
+
+
+def _quebra_solicitante(itens) -> list[list]:
+    # Item de várias solicitações sai com os nomes juntos ("A, B"): dividir
+    # contaria o mesmo custo duas vezes.
+    grupos = defaultdict(lambda: {"itens": 0, "ocs": set(), "valor": 0.0})
+    for i in itens:
+        if i["conta"]:
+            g = grupos[i["solicitante"] or (_SEM_INFO if i["solicitacao"] else _SEM_SOLICITACAO)]
+            g["itens"] += 1
+            g["ocs"].add(i["oc"])
+            g["valor"] += i["total"]
+    linhas = [[k, g["itens"], len(g["ocs"]), g["valor"]] for k, g in grupos.items()]
+    return sorted(linhas, key=lambda r: (-r[3], r[0]))
 
 
 def _quebra_fornecedor(notas, ocs) -> list[list]:
@@ -491,24 +587,6 @@ def _aba_notas(ws, notas):
     ])
 
 
-def _aba_itens(ws, notas):
-    colunas = [
-        ("Nota", "numero", None), ("Fornecedor", "fornecedor", None), ("Código do fornecedor", "codigo", None),
-        ("Código GRV", "codigo_grv", None), ("Descrição", "descricao", None), ("NCM", "ncm", None), ("CFOP", "cfop", None),
-        ("Qtd", "qtd", None), ("Unidade", "unidade", None), ("Valor do item", "valor", _FMT_MOEDA), ("OC", "oc", None),
-        ("Status", "status", None),
-    ]
-    linhas = []
-    for n in notas:
-        for i in n["itens"]:
-            linhas.append({
-                "numero": n["numero"], "fornecedor": n["fornecedor"], "codigo": i.codigo or "", "codigo_grv": i.codigo_grv or "",
-                "descricao": i.descricao or "", "ncm": i.ncm or "", "cfop": i.cfop or "", "qtd": i.qtd_real,
-                "unidade": i.unidade_comercial or "", "valor": i.valor_produto, "oc": i.pedido_compra or "", "status": i.status or "",
-            })
-    _lista(ws, colunas, linhas)
-
-
 def _aba_ocs(ws, dados):
     if not dados["grv_ok"]:
         ws.append(["O GRV não respondeu. Tente gerar o relatório de novo em instantes."])
@@ -522,6 +600,26 @@ def _aba_ocs(ws, dados):
         ("Notas no Sync", "notas", None),
     ]
     _lista(ws, colunas, dados["ocs"])
+
+
+def _aba_itens_oc(ws, dados):
+    if not dados["grv_ok"] or not dados["itens_ok"]:
+        ws.append(["O GRV não respondeu. Tente gerar o relatório de novo em instantes."])
+        ws.column_dimensions["A"].width = 70
+        return
+    colunas = [
+        ("OC", "oc", None), ("Data da OC", "data_oc", _FMT_DATA), ("Fornecedor", "fornecedor", None),
+        ("Comprador", "comprador", None), ("Tipo", "tipo", None), ("Item", "item", None), ("Código", "codigo", None),
+        ("Descrição", "descricao", None), ("Família", "familia", None), ("Grupo", "grupo", None),
+        ("Unidade", "unidade", None), ("Qtd", "qtde", None), ("Valor unitário", "valor_unitario", _FMT_UNITARIO),
+        ("Total", "total", _FMT_MOEDA), ("IPI", "ipi", _FMT_MOEDA), ("Solicitado por", "solicitante", None),
+        ("Solicitação", "solicitacao", None), ("Solicitada em", "solicitada_em", _FMT_DIA), ("OS", "os", None),
+        ("Situação", "situacao", None),
+    ]
+    _lista(ws, colunas, [
+        {**i, "solicitante": i["solicitante"] or ("" if i["solicitacao"] else _SEM_SOLICITACAO)}
+        for i in dados["itens"]
+    ])
 
 
 # --------------------------------------------------------------------------- apoio
