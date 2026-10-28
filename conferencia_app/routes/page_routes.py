@@ -767,6 +767,7 @@ def frota_page():
 @login_required
 def viagens_page():
     from conferencia_app.auth import has_permission
+    from conferencia_app.services import viagem_relatorio_service
     if not (has_permission("PAGE_LOGISTICA_VIAGEM") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
         return render_template("acesso_negado.html", user=session.get("username")), 403
     return render_template(
@@ -774,6 +775,7 @@ def viagens_page():
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
+        relatorio_opcoes=viagem_relatorio_service.opcoes(),
     )
 
 

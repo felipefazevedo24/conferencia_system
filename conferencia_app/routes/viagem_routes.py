@@ -2322,12 +2322,6 @@ def cadastros_salvar_motorista():
 
 # --------------------------------------------------------------------------- RELATÓRIO (Excel)
 # Mesmo acesso da tela da Central (page_routes.viagens_page).
-@viagem_bp.route("/relatorio/opcoes", methods=["GET"])
-@permission_required_any(PERM, "PAGE_LOGISTICA_AGENDAMENTO")
-def relatorio_opcoes():
-    return jsonify({"sucesso": True, **relatorio_svc.opcoes()})
-
-
 @viagem_bp.route("/relatorio.xlsx", methods=["GET"])
 @permission_required_any(PERM, "PAGE_LOGISTICA_AGENDAMENTO")
 def relatorio_excel():

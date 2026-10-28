@@ -58,7 +58,10 @@
     .vt-actions-menu button { border: none; background: transparent; text-align: left; width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
     .vt-actions-menu button:hover { background: var(--eui-surface-2); }
     .vt-actions-menu .danger { color: var(--eui-danger); }
-    .vt-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); z-index: 10020; padding: 18px; }
+    /* width/margin: o modal e' filho direto do .content-body, e a regra global
+       ".content-body > *" (ui_erp.css) limitava a largura - em tela larga o
+       fundo escuro nao cobria a tela toda. */
+    .vt-modal { position: fixed; inset: 0; width: auto; margin: 0; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); z-index: 10020; padding: 18px; }
     .vt-modal.open { display: flex; }
     .vt-modal__box { width: min(860px, 100%); max-height: 88vh; overflow: auto; border-radius: 14px; border: 1px solid var(--eui-border); background: var(--eui-surface); }
     .vt-modal__head { padding: 14px 16px; border-bottom: 1px solid var(--eui-border); display: flex; justify-content: space-between; align-items: center; }
@@ -383,21 +386,34 @@
           <label class="eui-field__label">Até</label>
           <input id="rel-fim" type="date" class="eui-input">
         </div>
+        {# Inclui veículo/motorista inativo: viagem antiga pode ter usado um. #}
         <div class="eui-field">
           <label class="eui-field__label">Veículo</label>
-          <select id="rel-veiculo" class="eui-select"><option value="">Todos</option></select>
+          <select id="rel-veiculo" class="eui-select">
+            <option value="">Todos</option>
+            {% for v in relatorio_opcoes.veiculos %}<option value="{{ v.id }}">{{ v.nome }}{% if not v.ativo %} (inativo){% endif %}</option>{% endfor %}
+          </select>
         </div>
         <div class="eui-field">
           <label class="eui-field__label">Motorista</label>
-          <select id="rel-motorista" class="eui-select"><option value="">Todos</option></select>
+          <select id="rel-motorista" class="eui-select">
+            <option value="">Todos</option>
+            {% for m in relatorio_opcoes.motoristas %}<option value="{{ m.id }}">{{ m.nome }}{% if not m.ativo %} (inativo){% endif %}</option>{% endfor %}
+          </select>
         </div>
         <div class="eui-field">
           <label class="eui-field__label">Departamento</label>
-          <select id="rel-departamento" class="eui-select"><option value="">Todos</option></select>
+          <select id="rel-departamento" class="eui-select">
+            <option value="">Todos</option>
+            {% for d in relatorio_opcoes.departamentos %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+          </select>
         </div>
         <div class="eui-field">
           <label class="eui-field__label">Tipo</label>
-          <select id="rel-tipo" class="eui-select"><option value="">Todos</option></select>
+          <select id="rel-tipo" class="eui-select">
+            <option value="">Todos</option>
+            {% for t in relatorio_opcoes.tipos %}<option value="{{ t.valor }}">{{ t.nome }}</option>{% endfor %}
+          </select>
         </div>
       </div>
       <div id="rel-erro" class="vt-mini" style="color:var(--eui-danger); min-height:16px;"></div>
@@ -2607,11 +2623,8 @@ async function copiarLinkMotorista() {
   showToast('Link copiado.', 'success');
 }
 
-// Relatório em Excel. As listas vêm do servidor (inclui veículo/motorista
-// inativo, que pode ter viagem antiga) e são carregadas uma vez só.
-let relOpcoesCarregadas = false;
-
-async function abrirRelatorio() {
+// Relatório em Excel. As opções dos filtros já vêm no HTML da página.
+function abrirRelatorio() {
   const hoje = new Date();
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const ini = document.getElementById('rel-inicio');
@@ -2620,23 +2633,6 @@ async function abrirRelatorio() {
   if (!fim.value) fim.value = iso(hoje);
   document.getElementById('rel-erro').textContent = '';
   openModal('modalRelatorio');
-  if (relOpcoesCarregadas) return;
-  const r = await fetch('/api/viagem/relatorio/opcoes', { credentials: 'same-origin' });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    document.getElementById('rel-erro').textContent = d.msg || d.error || 'Falha ao carregar veículos e motoristas.';
-    return;
-  }
-  const opcoes = (id, itens) => {
-    document.getElementById(id).insertAdjacentHTML('beforeend', itens.map((i) =>
-      `<option value="${cadEsc(i.valor)}">${cadEsc(i.nome)}</option>`).join(''));
-  };
-  const inativo = (i) => ({ valor: i.id, nome: i.ativo ? i.nome : `${i.nome} (inativo)` });
-  opcoes('rel-veiculo', (d.veiculos || []).map(inativo));
-  opcoes('rel-motorista', (d.motoristas || []).map(inativo));
-  opcoes('rel-departamento', (d.departamentos || []).map((x) => ({ valor: x, nome: x })));
-  opcoes('rel-tipo', d.tipos || []);
-  relOpcoesCarregadas = true;
 }
 
 async function baixarRelatorio() {
