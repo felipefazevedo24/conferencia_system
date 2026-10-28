@@ -124,7 +124,9 @@
             <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
         </div>
         <div class="vt-header-actions">
+          {% if can_access('PAGE_LOGISTICA_VIAGEM_RELATORIO') %}
           <button class="eui-btn eui-btn--ghost" onclick="abrirRelatorio()"><i class="fas fa-file-excel"></i> Baixar relatório</button>
+          {% endif %}
           <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--ghost"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
             {% if can_access('MANAGE_LOGISTICA_VIAGEM_CADASTROS') %}
             <button id="btnCadastrosFrota" class="eui-btn eui-btn--ghost" onclick="abrirCadastros()"><i class="fas fa-id-card"></i> Veículos e motoristas</button>
@@ -370,6 +372,7 @@
   </div>
 </div>
 
+{% if can_access('PAGE_LOGISTICA_VIAGEM_RELATORIO') %}
 <div id="modalRelatorio" class="vt-modal">
   <div class="vt-modal__box" style="max-width:560px;">
     <div class="vt-modal__head">
@@ -424,6 +427,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <div id="modalConfirmacao" class="vt-modal">
   <div class="vt-modal__box" style="max-width:520px;">

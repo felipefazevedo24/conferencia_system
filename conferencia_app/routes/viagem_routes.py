@@ -2321,9 +2321,9 @@ def cadastros_salvar_motorista():
 
 
 # --------------------------------------------------------------------------- RELATÓRIO (Excel)
-# Mesmo acesso da tela da Central (page_routes.viagens_page).
+# Permissão própria: só Admin, ou quem ganhar na Gestão de acessos.
 @viagem_bp.route("/relatorio.xlsx", methods=["GET"])
-@permission_required_any(PERM, "PAGE_LOGISTICA_AGENDAMENTO")
+@permission_required("PAGE_LOGISTICA_VIAGEM_RELATORIO")
 def relatorio_excel():
     try:
         stream, nome = relatorio_svc.gerar_excel(request.args, _user())

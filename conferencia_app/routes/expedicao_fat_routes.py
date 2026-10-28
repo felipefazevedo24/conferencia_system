@@ -16,7 +16,7 @@ from flask import (
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
-from ..auth import permission_required, roles_required
+from ..auth import has_permission, permission_required, roles_required
 from ..extensions import db
 from ..models import (
     ExpedicaoRomaneio,
@@ -42,6 +42,9 @@ from ..tempo import agora_br
 expedicao_fat_bp = Blueprint("expedicao_fat", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
+# O relatório mostra quanto cada conferente conferiu: só Admin, ou quem
+# ganhar a permissão na Gestão de acessos.
+PERMISSION_RELATORIO = "PAGE_EXPEDICAO_CONF_CEGA_RELATORIO"
 ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 
 # "Faturado sem conferência": exibe apenas a partir desta solicitação de
@@ -122,12 +125,12 @@ def conferencia_expedicao_page():
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
-        relatorio_opcoes=relatorio_svc.opcoes(),
+        relatorio_opcoes=relatorio_svc.opcoes() if has_permission(PERMISSION_RELATORIO) else None,
     )
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/relatorio.xlsx")
-@permission_required(PERMISSION)
+@permission_required(PERMISSION_RELATORIO)
 def relatorio_conf_cega():
     try:
         stream, nome = relatorio_svc.gerar_excel(request.args, session.get("username") or "desconhecido")

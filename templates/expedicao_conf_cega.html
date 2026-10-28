@@ -618,6 +618,7 @@
             </div>
         </div>
 
+        {% if can_access('PAGE_EXPEDICAO_CONF_CEGA_RELATORIO') %}
         <div id="ce-relatorio-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-relatorio-title">
             <div class="ce-modal__box" style="width: min(560px, 100%);">
                 <div class="ce-modal__head">
@@ -670,6 +671,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <header class="eui-page-header">
             <div>
@@ -677,7 +679,9 @@
                 <h1 class="eui-page-header__title"><i class="fas fa-boxes-packing"></i> Conferência de Expedição</h1>
                 <p class="eui-page-header__sub">Confronto físico do material a expedir. Conferência cega — a quantidade esperada não é exibida.</p>
             </div>
+            {% if can_access('PAGE_EXPEDICAO_CONF_CEGA_RELATORIO') %}
             <button class="eui-btn eui-btn--ghost" type="button" id="ce-btn-relatorio"><i class="fas fa-file-excel"></i> Baixar relatório</button>
+            {% endif %}
         </header>
 
         <div class="ce-tabs" role="tablist">
@@ -2680,6 +2684,7 @@
         }
     });
 
+    {% if can_access('PAGE_EXPEDICAO_CONF_CEGA_RELATORIO') %}
     // Relatório em Excel (FAT e ST juntos).
     const relModal = $("ce-relatorio-modal");
     const fecharRelatorio = () => relModal.classList.remove("open");
@@ -2733,6 +2738,7 @@
             botao.disabled = false;
         }
     });
+    {% endif %}
 
     ctrlFat.carregarDashboard();
     // Carrega a contagem da aba ST em segundo plano (para o badge), sem trocar de aba.

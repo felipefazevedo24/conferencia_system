@@ -775,7 +775,7 @@ def viagens_page():
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
-        relatorio_opcoes=viagem_relatorio_service.opcoes(),
+        relatorio_opcoes=viagem_relatorio_service.opcoes() if has_permission("PAGE_LOGISTICA_VIAGEM_RELATORIO") else None,
     )
 
 
