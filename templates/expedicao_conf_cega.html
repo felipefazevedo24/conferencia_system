@@ -135,6 +135,10 @@
     .ce-modal__body textarea:focus { outline: none; border-color: var(--eui-primary); box-shadow: 0 0 0 3px rgba(15,98,201,.15); }
     .ce-modal__err { color: var(--eui-danger); font-size: 12px; font-weight: 700; margin-top: 8px; min-height: 16px; }
     .ce-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--eui-border); background: var(--eui-surface-3, rgba(0,0,0,.02)); }
+    .ce-rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .ce-rel-grid .eui-input, .ce-rel-grid .eui-select { width: 100%; }
+    .ce-modal__body .ce-rel-check { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; cursor: pointer; }
+    @media (max-width: 560px) { .ce-rel-grid { grid-template-columns: 1fr; } }
     @keyframes ceFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes cePop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
 
@@ -614,12 +618,66 @@
             </div>
         </div>
 
+        <div id="ce-relatorio-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-relatorio-title">
+            <div class="ce-modal__box" style="width: min(560px, 100%);">
+                <div class="ce-modal__head">
+                    <div class="ce-modal__ico" style="background: rgba(15,98,201,.12); color: var(--eui-primary);"><i class="fas fa-file-excel"></i></div>
+                    <div>
+                        <h3 class="ce-modal__title" id="ce-relatorio-title">Relatório da conferência</h3>
+                        <p class="ce-modal__sub">Conferidas, faturadas e expedidas no período.</p>
+                    </div>
+                </div>
+                <div class="ce-modal__body">
+                    <div class="ce-rel-grid">
+                        <div><label for="ce-rel-inicio">De</label><input id="ce-rel-inicio" type="date" class="eui-input"></div>
+                        <div><label for="ce-rel-fim">Até</label><input id="ce-rel-fim" type="date" class="eui-input"></div>
+                        <div>
+                            <label for="ce-rel-tipo">Tipo</label>
+                            <select id="ce-rel-tipo" class="eui-select">
+                                <option value="">FAT e ST</option>
+                                <option value="fat">Só FAT</option>
+                                <option value="st">Só ST</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="ce-rel-status">Status atual</label>
+                            <select id="ce-rel-status" class="eui-select">
+                                <option value="">Todos</option>
+                                {% for st in relatorio_opcoes.status %}<option value="{{ st.valor }}">{{ st.nome }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="ce-rel-conferente">Conferente</label>
+                            <select id="ce-rel-conferente" class="eui-select">
+                                <option value="">Todos</option>
+                                {% for c in relatorio_opcoes.conferentes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="ce-rel-parceiro">Cliente / fornecedor</label>
+                            <input id="ce-rel-parceiro" class="eui-input" list="ce-rel-parceiros" placeholder="Todos" autocomplete="off">
+                            <datalist id="ce-rel-parceiros">
+                                {% for nome in relatorio_opcoes.parceiros %}<option value="{{ nome }}">{% endfor %}
+                            </datalist>
+                        </div>
+                    </div>
+                    <label class="ce-rel-check"><input type="checkbox" id="ce-rel-divergentes"> Só ordens com divergência</label>
+                    <div class="ce-modal__err" id="ce-relatorio-err"></div>
+                </div>
+                <div class="ce-modal__foot">
+                    <button class="eui-btn eui-btn--subtle" id="ce-relatorio-cancelar">Cancelar</button>
+                    <button class="eui-btn eui-btn--primary" id="ce-relatorio-baixar"><i class="fas fa-download"></i> Baixar Excel</button>
+                </div>
+            </div>
+        </div>
+
         <header class="eui-page-header">
             <div>
                 <div class="eui-page-header__eyebrow">Logística · Expedição</div>
                 <h1 class="eui-page-header__title"><i class="fas fa-boxes-packing"></i> Conferência de Expedição</h1>
                 <p class="eui-page-header__sub">Confronto físico do material a expedir. Conferência cega — a quantidade esperada não é exibida.</p>
             </div>
+            <button class="eui-btn eui-btn--ghost" type="button" id="ce-btn-relatorio"><i class="fas fa-file-excel"></i> Baixar relatório</button>
         </header>
 
         <div class="ce-tabs" role="tablist">
@@ -2619,6 +2677,60 @@
     $("ce-romaneio-modal").addEventListener("click", (e) => {
         if (e.target.id === "ce-romaneio-modal") {
             $("ce-romaneio-modal").classList.remove("open");
+        }
+    });
+
+    // Relatório em Excel (FAT e ST juntos).
+    const relModal = $("ce-relatorio-modal");
+    const fecharRelatorio = () => relModal.classList.remove("open");
+    $("ce-btn-relatorio").addEventListener("click", () => {
+        const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const hoje = new Date();
+        if (!$("ce-rel-inicio").value) $("ce-rel-inicio").value = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+        if (!$("ce-rel-fim").value) $("ce-rel-fim").value = iso(hoje);
+        $("ce-relatorio-err").textContent = "";
+        relModal.classList.add("open");
+    });
+    $("ce-relatorio-cancelar").addEventListener("click", fecharRelatorio);
+    relModal.addEventListener("click", (e) => { if (e.target === relModal) fecharRelatorio(); });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && relModal.classList.contains("open")) fecharRelatorio();
+    });
+    $("ce-relatorio-baixar").addEventListener("click", async () => {
+        const botao = $("ce-relatorio-baixar");
+        const err = $("ce-relatorio-err");
+        const p = new URLSearchParams({
+            inicio: $("ce-rel-inicio").value,
+            fim: $("ce-rel-fim").value,
+            tipo: $("ce-rel-tipo").value,
+            status: $("ce-rel-status").value,
+            conferente: $("ce-rel-conferente").value,
+            parceiro: $("ce-rel-parceiro").value.trim(),
+            divergentes: $("ce-rel-divergentes").checked ? "1" : "",
+        });
+        err.textContent = "";
+        botao.disabled = true;
+        try {
+            const r = await fetch(`/api/expedicao/conf-cega/relatorio.xlsx?${p}`, { credentials: "same-origin" });
+            if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                err.textContent = d.error || "Não foi possível gerar o relatório.";
+                return;
+            }
+            const nome = (/filename="?([^";]+)"?/.exec(r.headers.get("Content-Disposition") || "") || [])[1] || "relatorio_conferencia_expedicao.xlsx";
+            const url = URL.createObjectURL(await r.blob());
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = nome;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            fecharRelatorio();
+        } catch (_) {
+            err.textContent = "Não foi possível gerar o relatório.";
+        } finally {
+            botao.disabled = false;
         }
     });
 

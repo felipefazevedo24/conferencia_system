@@ -34,6 +34,7 @@ from ..services import expedicao_fat_service as svc
 from ..services import expedicao_grv_trilha_service as grv_trilha_svc
 from ..services import expedicao_log_service as log_svc
 from ..services import expedicao_pendentes_pdf as pendentes_pdf
+from ..services import expedicao_relatorio_service as relatorio_svc
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 from ..tempo import agora_br
 
@@ -121,6 +122,22 @@ def conferencia_expedicao_page():
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
+        relatorio_opcoes=relatorio_svc.opcoes(),
+    )
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/relatorio.xlsx")
+@permission_required(PERMISSION)
+def relatorio_conf_cega():
+    try:
+        stream, nome = relatorio_svc.gerar_excel(request.args, session.get("username") or "desconhecido")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome,
     )
 
 
