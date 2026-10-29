@@ -26,11 +26,18 @@
     .ig-st.diverg { background: #e0e7ff; color: #3730a3; }
     .ig-st.sem { background: #fee2e2; color: #991b1b; }
     .ig-parcial { color: var(--eui-muted); font-style: italic; }
-    .ig-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.4fr) minmax(130px, 1fr) minmax(110px, .8fr) auto; gap: 10px; align-items: end; }
-    .ig-form label { display: grid; gap: 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--eui-muted); }
-    .ig-form input { font-size: 16px; padding: 10px 12px; }
-    .ig-form .ig-qtd-in { text-align: right; }
-    .ig-prod-info { font-size: 12.5px; min-height: 18px; margin-top: 8px; }
+    /* Nova contagem: janela no molde da contagem do inventario rotativo, grade 2x2 simetrica. */
+    .ig-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .55); z-index: 10990; align-items: flex-start; justify-content: center; padding: 6vh 14px 14px; overflow: auto; }
+    .ig-modal.open { display: flex; }
+    .ig-modal .eui-card { width: min(760px, 100%); margin: 0; }
+    .ig-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .ig-field { display: grid; gap: 6px; align-content: start; }
+    .ig-field label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--eui-muted); }
+    .ig-field input { font-size: 16px; padding: 10px 12px; }
+    .ig-scan { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .ig-qtd-in { text-align: right; }
+    .ig-form-acoes { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
+    .ig-prod-info { grid-column: 1 / -1; font-size: 12.5px; min-height: 18px; }
     .ig-prod-info.erro { color: var(--eui-danger, #dc2626); font-weight: 700; }
     .ig-h3 { margin: 18px 0 8px; font-size: 14px; }
     .ig-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
@@ -41,7 +48,15 @@
     .ig-toast.success { border-left-color: var(--eui-success, #16a34a); }
     .ig-retorno { white-space: pre-wrap; font-family: monospace; font-size: 11px; background: #f8fafc; border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; padding: 8px; max-height: 240px; overflow: auto; }
     .hidden { display: none !important; }
-    @media (max-width: 800px) { .ig-form { grid-template-columns: 1fr 1fr; } }
+    .ig-scan-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .72); z-index: 11000; align-items: center; justify-content: center; padding: 14px; }
+    .ig-scan-modal.open { display: flex; }
+    .ig-scan-box { width: min(680px, 100%); background: var(--eui-surface, #fff); border-radius: 14px; border: 1px solid var(--eui-border); padding: 14px; }
+    .ig-scan-box video { width: 100%; display: block; max-height: 62vh; object-fit: cover; background: #0b1320; border-radius: 10px; }
+    @media (max-width: 760px) {
+        .ig-form { grid-template-columns: 1fr; }
+        .ig-form-acoes { flex-direction: column; }
+        .ig-form-acoes .eui-btn { width: 100%; }
+    }
 </style>
 {% endblock %}
 
@@ -66,14 +81,9 @@
 
     <!-- Contar: leitura cega por local -->
     <section id="ig-contar" class="eui-card hidden"><div class="eui-card__body">
-        <form class="ig-form" id="ig-form" autocomplete="off">
-            <label>Local<input class="eui-input" id="ig-local" placeholder="Leia o local"></label>
-            <label>Item<input class="eui-input" id="ig-codigo" placeholder="Leia o código do item"></label>
-            <label id="ig-lote-wrap" class="hidden">Lote<input class="eui-input" id="ig-lote" placeholder="Lote"></label>
-            <label>Quantidade<input class="eui-input ig-qtd-in" id="ig-qtd" inputmode="decimal" placeholder="0"></label>
-            <button type="submit" class="eui-btn eui-btn--primary" id="ig-registrar"><i class="fas fa-check"></i> Registrar</button>
-        </form>
-        <div class="ig-prod-info" id="ig-prod-info"></div>
+        <div class="ig-toolbar" style="justify-content:flex-end;">
+            <button type="button" class="eui-btn eui-btn--primary" id="ig-btn-nova"><i class="fas fa-plus-circle"></i> Nova contagem</button>
+        </div>
 
         <div id="ig-dirigidos-box" class="hidden">
             <h3 class="ig-h3"><i class="fas fa-rotate"></i> Itens para contar de novo</h3>
@@ -89,6 +99,59 @@
             <tbody id="ig-minhas-tbody"></tbody>
         </table></div>
     </div></section>
+
+    <!-- Nova contagem: janela que fica aberta entre leituras (o local continua preenchido) -->
+    <div class="ig-modal" id="ig-modal-contagem">
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-plus-circle"></i> Nova contagem</h2>
+                    <p class="eui-card__sub">Registre local, item e quantidade. Leitura por câmera disponível no tablet.</p>
+                </div>
+            </div>
+            <div class="eui-card__body">
+                <form class="ig-form" id="ig-form" autocomplete="off">
+                    <div class="ig-field">
+                        <label for="ig-local">Local</label>
+                        <div class="ig-scan">
+                            <input class="eui-input" id="ig-local" placeholder="Bipe ou digite o local">
+                            <button type="button" class="eui-btn eui-btn--subtle" data-scan="ig-local"><i class="fas fa-camera"></i> Ler</button>
+                        </div>
+                    </div>
+                    <div class="ig-field">
+                        <label for="ig-codigo">Cód. produto</label>
+                        <div class="ig-scan">
+                            <input class="eui-input" id="ig-codigo" placeholder="Bipe ou digite o código">
+                            <button type="button" class="eui-btn eui-btn--subtle" data-scan="ig-codigo"><i class="fas fa-camera"></i> Ler</button>
+                        </div>
+                    </div>
+                    <div class="ig-prod-info" id="ig-prod-info"></div>
+                    <div class="ig-field">
+                        <label for="ig-lote">Lote</label>
+                        <input class="eui-input" id="ig-lote" placeholder="Leia o item primeiro" disabled>
+                    </div>
+                    <div class="ig-field">
+                        <label for="ig-qtd">Quantidade <span id="ig-qtd-un" style="text-transform:none;"></span></label>
+                        <input class="eui-input ig-qtd-in" id="ig-qtd" inputmode="decimal" placeholder="0">
+                    </div>
+                    <div class="ig-form-acoes">
+                        <button type="button" class="eui-btn eui-btn--subtle" id="ig-fechar-modal"><i class="fas fa-xmark"></i> Fechar</button>
+                        <button type="button" class="eui-btn eui-btn--subtle" id="ig-limpar"><i class="fas fa-eraser"></i> Limpar</button>
+                        <button type="submit" class="eui-btn eui-btn--primary" id="ig-registrar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="ig-scan-modal" id="ig-scan-modal">
+        <div class="ig-scan-box">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:16px;"><i class="fas fa-camera"></i> Leitura de código de barras</h3>
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ig-scan-fechar"><i class="fas fa-xmark"></i> Fechar</button>
+            </div>
+            <video id="ig-scan-video" autoplay playsinline muted></video>
+        </div>
+    </div>
 
     <!-- Gestao: resultado completo -->
     <section id="ig-resultado" class="hidden">
@@ -216,7 +279,8 @@
     // ── Contar (cego, por local) ────────────────────────────────────────
     function desenharContar() {
         const aberto = estado.inventario.status === "Em contagem";
-        $("ig-form").classList.toggle("hidden", !aberto);
+        $("ig-btn-nova").classList.toggle("hidden", !aberto);
+        if (!aberto) fecharContagem();
         const dirigidos = (contagem && contagem.dirigidos) || [];
         $("ig-dirigidos-box").classList.toggle("hidden", !dirigidos.length);
         $("ig-dirigidos-tbody").innerHTML = dirigidos.map((d) => `<tr>
@@ -239,8 +303,8 @@
 
     function limparItem() {
         produto = null;
-        $("ig-codigo").value = ""; $("ig-lote").value = ""; $("ig-qtd").value = "";
-        $("ig-lote-wrap").classList.add("hidden");
+        $("ig-codigo").value = ""; $("ig-qtd").value = "";
+        travarLote(null);
         $("ig-prod-info").textContent = ""; $("ig-prod-info").className = "ig-prod-info";
     }
     async function conferirItem() {
@@ -252,14 +316,72 @@
             produto.lido = codigo;
             $("ig-prod-info").className = "ig-prod-info";
             $("ig-prod-info").innerHTML = `<b>${esc(produto.codigo_interno)}</b> — ${esc(produto.descricao)} <small>(${esc(produto.unidade)}${produto.com_lote ? " · controlado por lote" : ""})</small>`;
-            $("ig-lote-wrap").classList.toggle("hidden", !produto.com_lote);
+            travarLote(produto);
             return true;
         } catch (e) {
             $("ig-prod-info").className = "ig-prod-info erro"; $("ig-prod-info").textContent = e.message;
-            $("ig-lote-wrap").classList.add("hidden");
+            travarLote(null);
             return false;
         }
     }
+    // Lote fica sempre na tela (grade simetrica), mas so' abre pra item controlado por lote.
+    function travarLote(p) {
+        const lote = $("ig-lote");
+        lote.disabled = !(p && p.com_lote);
+        if (lote.disabled) lote.value = "";
+        lote.placeholder = !p ? "Leia o item primeiro" : p.com_lote ? "Informe o lote" : "Item sem controle de lote";
+        $("ig-qtd-un").textContent = p && p.unidade ? `(${p.unidade})` : "";
+    }
+    function abrirContagem() {
+        $("ig-modal-contagem").classList.add("open");
+        $("ig-local").focus(); $("ig-local").select();
+    }
+    function fecharContagem() {
+        pararScanner();
+        $("ig-modal-contagem").classList.remove("open");
+    }
+
+    // Camera do tablet (mesma leitura da contagem do inventario rotativo).
+    let scanAlvo = null, scanStream = null, scanRaf = null, detector = null;
+    async function abrirScanner(alvo) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast("Leitura por câmera indisponível neste navegador.", "error"); return; }
+        if (!("BarcodeDetector" in window)) { toast("Seu navegador não suporta leitura pela câmera. Use o leitor ou digite.", "error"); return; }
+        try {
+            detector = new window.BarcodeDetector({ formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "qr_code"] });
+            scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        } catch (e) { toast(`Não foi possível abrir a câmera: ${e.message}`, "error"); return; }
+        scanAlvo = alvo;
+        $("ig-scan-video").srcObject = scanStream;
+        $("ig-scan-modal").classList.add("open");
+        const loop = async () => {
+            const video = $("ig-scan-video");
+            if (video.readyState >= 2) {
+                try {
+                    const codes = await detector.detect(video);
+                    const code = codes && codes.length ? (codes[0].rawValue || "").trim() : "";
+                    if (code) {
+                        const alvoLido = scanAlvo;
+                        pararScanner();
+                        $(alvoLido).value = code;
+                        if (alvoLido === "ig-local") { $("ig-codigo").focus(); $("ig-codigo").select(); }
+                        else if (await conferirItem()) (produto.com_lote ? $("ig-lote") : $("ig-qtd")).focus();
+                        return;
+                    }
+                } catch (_) { /* segue tentando */ }
+            }
+            scanRaf = requestAnimationFrame(loop);
+        };
+        scanRaf = requestAnimationFrame(loop);
+    }
+    function pararScanner() {
+        if (scanRaf) cancelAnimationFrame(scanRaf);
+        scanRaf = null;
+        if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
+        scanStream = null; scanAlvo = null;
+        $("ig-scan-video").srcObject = null;
+        $("ig-scan-modal").classList.remove("open");
+    }
+
     async function registrar() {
         if (!$("ig-local").value.trim()) { toast("Leia ou digite o local.", "error"); $("ig-local").focus(); return; }
         if (!produto || produto.lido !== $("ig-codigo").value.trim()) {
@@ -405,9 +527,16 @@
             const d = JSON.parse(pre.dataset.preencher);
             limparItem();
             $("ig-codigo").value = d.codigo;
+            abrirContagem();
             conferirItem().then(() => { $("ig-lote").value = d.lote; $("ig-local").focus(); $("ig-local").select(); });
             return;
         }
+        if (e.target.closest("#ig-btn-nova")) { abrirContagem(); return; }
+        if (e.target.closest("#ig-fechar-modal")) { fecharContagem(); return; }
+        if (e.target.closest("#ig-limpar")) { limparItem(); $("ig-local").value = ""; $("ig-local").focus(); return; }
+        if (e.target.closest("#ig-scan-fechar") || e.target.id === "ig-scan-modal") { pararScanner(); return; }
+        const scan = e.target.closest("[data-scan]");
+        if (scan) { abrirScanner(scan.dataset.scan); return; }
         const topo = e.target.closest("#ig-acoes-topo button"); if (topo) { acaoTopo(topo.id); return; }
     });
     // Leitor de codigo de barras manda Enter: local -> item -> (lote) -> quantidade -> registra.
@@ -428,7 +557,12 @@
     $("ig-busca-res").addEventListener("input", () => desenharResultado());
     $("ig-filtro-status").addEventListener("change", () => desenharResultado());
 
-    carregar().then(() => { if (aba === "contar" && PODE_CONTAR) $("ig-local").focus(); });
+    document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if ($("ig-scan-modal").classList.contains("open")) pararScanner(); else fecharContagem();
+    });
+
+    carregar();
 })();
 </script>
 {% endblock %}
