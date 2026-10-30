@@ -38,6 +38,16 @@
     .ig-qtd-in { text-align: right; }
     .ig-form-acoes { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
     .ig-prod-info { grid-column: 1 / -1; font-size: 12.5px; min-height: 18px; }
+    .ig-full { grid-column: 1 / -1; }
+    .ig-req { color: var(--eui-danger, #dc2626); }
+    .ig-hint { font-size: 12px; color: var(--eui-muted); min-height: 16px; }
+    .ig-hint.warn { color: #b45309; }
+    /* Varios lotes: linhas extras abaixo do 1o lote (molde do inventario rotativo). */
+    .ig-lotes { display: grid; gap: 8px; }
+    .ig-lote-row { display: grid; grid-template-columns: 28px 1fr 1fr auto; gap: 8px; align-items: center; }
+    .ig-lote-num { font-size: 12px; font-weight: 700; color: var(--eui-muted); text-align: center; }
+    .ig-lotes-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .ig-lotes-total { font-size: 13px; font-weight: 700; }
     .ig-prod-info.erro { color: var(--eui-danger, #dc2626); font-weight: 700; }
     .ig-h3 { margin: 18px 0 8px; font-size: 14px; }
     .ig-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
@@ -127,12 +137,25 @@
                     </div>
                     <div class="ig-prod-info" id="ig-prod-info"></div>
                     <div class="ig-field">
-                        <label for="ig-lote">Lote</label>
-                        <input class="eui-input" id="ig-lote" placeholder="Leia o item primeiro" disabled>
+                        <label for="ig-unidade">Unidade de medida</label>
+                        <select class="eui-input" id="ig-unidade" disabled><option value="">—</option></select>
+                        <div class="ig-hint" id="ig-unidade-hint"></div>
                     </div>
                     <div class="ig-field">
-                        <label for="ig-qtd">Quantidade <span id="ig-qtd-un" style="text-transform:none;"></span></label>
+                        <label for="ig-qtd" id="ig-qtd-label">Quantidade</label>
                         <input class="eui-input ig-qtd-in" id="ig-qtd" inputmode="decimal" placeholder="0">
+                    </div>
+                    <div class="ig-field">
+                        <label for="ig-lote"><span id="ig-lote-label">Lote</span> <span class="ig-req" id="ig-lote-req" hidden>*</span></label>
+                        <input class="eui-input" id="ig-lote" placeholder="Leia o item primeiro" disabled>
+                        <div class="ig-hint" id="ig-lote-hint"></div>
+                    </div>
+                    <div class="ig-full" id="ig-lotes-box" hidden>
+                        <div class="ig-lotes" id="ig-lotes-extra"></div>
+                        <div class="ig-lotes-foot" style="margin-top:8px;">
+                            <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="ig-add-lote"><i class="fas fa-plus"></i> Adicionar lote</button>
+                            <span class="ig-lotes-total" id="ig-lotes-total"></span>
+                        </div>
                     </div>
                     <div class="ig-form-acoes">
                         <button type="button" class="eui-btn eui-btn--subtle" id="ig-fechar-modal"><i class="fas fa-xmark"></i> Fechar</button>
@@ -304,6 +327,7 @@
     function limparItem() {
         produto = null;
         $("ig-codigo").value = ""; $("ig-qtd").value = "";
+        $("ig-lotes-extra").innerHTML = "";
         travarLote(null);
         $("ig-prod-info").textContent = ""; $("ig-prod-info").className = "ig-prod-info";
     }
@@ -324,13 +348,47 @@
             return false;
         }
     }
-    // Lote fica sempre na tela (grade simetrica), mas so' abre pra item controlado por lote.
+    // Unidade e lote seguem o cadastro do ERP (como no inventario rotativo):
+    // unidade travada na do item; lote obrigatorio so' pra item controlado
+    // por lote. Item sem lote nao aceita lote - o ERP guarda o saldo dele sem
+    // lote, e um lote digitado viraria uma linha que nao existe no sistema.
     function travarLote(p) {
-        const lote = $("ig-lote");
-        lote.disabled = !(p && p.com_lote);
-        if (lote.disabled) lote.value = "";
-        lote.placeholder = !p ? "Leia o item primeiro" : p.com_lote ? "Informe o lote" : "Item sem controle de lote";
-        $("ig-qtd-un").textContent = p && p.unidade ? `(${p.unidade})` : "";
+        const lote = $("ig-lote"), obrig = !!(p && p.com_lote);
+        lote.disabled = !obrig;
+        if (!obrig) { lote.value = ""; $("ig-lotes-extra").innerHTML = ""; }
+        lote.placeholder = !p ? "Leia o item primeiro" : obrig ? "Obrigatório: item controlado por lote" : "Item sem controle de lote";
+        $("ig-lote-req").hidden = !obrig;
+        $("ig-lote-hint").textContent = obrig ? "Item controlado por lote no ERP." : "";
+        $("ig-lote-hint").className = `ig-hint${obrig ? " warn" : ""}`;
+        $("ig-lotes-box").hidden = !obrig;
+        $("ig-unidade").innerHTML = `<option>${esc(p && p.unidade ? p.unidade : "—")}</option>`;
+        $("ig-unidade-hint").textContent = p && p.unidade ? "Unidade do ERP" : "";
+        atualizarLotes();
+    }
+
+    // ── Varios lotes na mesma leitura ──────────────────────────────────
+    // Lote/Quantidade de cima sao o 1o lote; cada "Adicionar lote" cria mais
+    // uma linha. Cada lote vira uma leitura propria no mesmo local.
+    const linhasLote = () => [...$("ig-lotes-extra").querySelectorAll(".ig-lote-row")];
+    const numLido = (t) => { const n = Number(String(t || "").trim().replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+    function atualizarLotes() {
+        const extras = linhasLote();
+        extras.forEach((row, i) => { row.querySelector(".ig-lote-num").textContent = i + 2; });
+        const multi = extras.length > 0;
+        $("ig-qtd-label").textContent = multi ? "Quantidade (1º lote)" : "Quantidade";
+        $("ig-lote-label").textContent = multi ? "Lote (1º)" : "Lote";
+        if (!multi) { $("ig-lotes-total").textContent = ""; return; }
+        const total = extras.reduce((s, row) => s + numLido(row.querySelector("[data-lote-qtd]").value), numLido($("ig-qtd").value));
+        $("ig-lotes-total").textContent = `Total contado (${extras.length + 1} lotes): ${total.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${produto && produto.unidade ? produto.unidade : ""}`;
+    }
+    function adicionarLote() {
+        $("ig-lotes-extra").insertAdjacentHTML("beforeend", `<div class="ig-lote-row">
+            <span class="ig-lote-num"></span>
+            <input class="eui-input" data-lote-nome autocomplete="off" placeholder="Lote" aria-label="Lote">
+            <input class="eui-input ig-qtd-in" data-lote-qtd inputmode="decimal" placeholder="Quantidade" aria-label="Quantidade do lote">
+            <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-remover-lote title="Remover lote"><i class="fas fa-trash"></i></button></div>`);
+        atualizarLotes();
+        const rows = linhasLote(); rows[rows.length - 1].querySelector("[data-lote-nome]").focus();
     }
     function abrirContagem() {
         $("ig-modal-contagem").classList.add("open");
@@ -389,10 +447,23 @@
         }
         if (produto.com_lote && !$("ig-lote").value.trim()) { toast("Informe o lote.", "error"); $("ig-lote").focus(); return; }
         if (!$("ig-qtd").value.trim()) { toast("Informe a quantidade.", "error"); $("ig-qtd").focus(); return; }
+        let lotes = null;
+        const extras = linhasLote();
+        if (extras.length) {
+            lotes = [{ lote: $("ig-lote").value.trim(), quantidade: $("ig-qtd").value.trim() }];
+            for (const [i, row] of extras.entries()) {
+                const nome = row.querySelector("[data-lote-nome]"), qtd = row.querySelector("[data-lote-qtd]");
+                if (!nome.value.trim()) { toast(`Informe o lote da linha ${i + 2}.`, "error"); nome.focus(); return; }
+                if (numLido(qtd.value) <= 0) { toast(`Quantidade do lote ${nome.value.trim()} deve ser maior que zero.`, "error"); qtd.focus(); return; }
+                lotes.push({ lote: nome.value.trim(), quantidade: qtd.value.trim() });
+            }
+        }
         try {
             const r = await api("/api/inventario-geral/leituras", { method: "POST", body: JSON.stringify({
-                local: $("ig-local").value, codigo: $("ig-codigo").value, lote: $("ig-lote").value, quantidade: $("ig-qtd").value }) });
-            toast(`${r.message} ${r.leitura.local} · ${produto.codigo_interno} · ${num(r.leitura.quantidade)}`, "success");
+                local: $("ig-local").value, codigo: $("ig-codigo").value, lote: $("ig-lote").value, quantidade: $("ig-qtd").value,
+                ...(lotes ? { lotes } : {}) }) });
+            const qtdTotal = r.leituras.reduce((s, l) => s + l.quantidade, 0);
+            toast(`${r.message} ${r.leitura.local} · ${produto.codigo_interno} · ${num(qtdTotal)}`, "success");
             limparItem();
             $("ig-codigo").focus();  // o local fica: o operador le varios itens no mesmo lugar
             await carregar();
@@ -551,7 +622,16 @@
         }
         else if (campo === "ig-lote") $("ig-qtd").focus();
         else if (campo === "ig-qtd") registrar();
+        else if (e.target.matches("[data-lote-nome]")) e.target.closest(".ig-lote-row").querySelector("[data-lote-qtd]").focus();
+        else if (e.target.matches("[data-lote-qtd]")) registrar();
     });
+    $("ig-add-lote").addEventListener("click", adicionarLote);
+    $("ig-lotes-extra").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-remover-lote]");
+        if (btn) { btn.closest(".ig-lote-row").remove(); atualizarLotes(); }
+    });
+    $("ig-lotes-extra").addEventListener("input", atualizarLotes);
+    $("ig-qtd").addEventListener("input", atualizarLotes);
     $("ig-form").addEventListener("submit", (e) => { e.preventDefault(); registrar(); });
     $("ig-codigo").addEventListener("change", () => { conferirItem(); });
     $("ig-busca-res").addEventListener("input", () => desenharResultado());

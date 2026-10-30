@@ -156,12 +156,17 @@ def api_registrar_leitura():
         return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
     payload = request.get_json(silent=True) or {}
     try:
-        leitura = svc.registrar_leitura(inv, payload.get("local"), payload.get("codigo"), payload.get("lote"),
-                                        payload.get("quantidade"), _usuario())
+        if payload.get("lotes"):
+            leituras = svc.registrar_leituras(inv, payload.get("local"), payload.get("codigo"), payload.get("lotes"),
+                                              _usuario())
+        else:
+            leituras = [svc.registrar_leitura(inv, payload.get("local"), payload.get("codigo"), payload.get("lote"),
+                                              payload.get("quantidade"), _usuario())]
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     # Operador nao fica sabendo se bateu (contagem cega).
-    return jsonify({"message": "Leitura registrada.", "leitura": _leitura(leitura)})
+    return jsonify({"message": "Leitura registrada." if len(leituras) == 1 else f"{len(leituras)} leituras registradas.",
+                    "leitura": _leitura(leituras[0]), "leituras": [_leitura(l) for l in leituras]})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/leituras/<int:leitura_id>", methods=["DELETE"])

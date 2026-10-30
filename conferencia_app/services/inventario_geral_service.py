@@ -157,6 +157,31 @@ def registrar_leitura(inv: Inventario, local, codigo, lote, quantidade, usuario:
     """Operador leu local + item (+ lote) + quantidade. Vale pra rodada em
     que o item esta' (2a se pendente, 3a se aguardando). Item/lote sem saldo
     no sistema entra na hora com 1a contagem = 0."""
+    leitura = _nova_leitura(inv, local, codigo, lote, quantidade, usuario)
+    db.session.commit()
+    return leitura
+
+
+def registrar_leituras(inv: Inventario, local, codigo, lotes, usuario: str) -> list[Leitura]:
+    """Varios lotes do mesmo item no mesmo local, numa leitura so' (como no
+    inventario rotativo). Cada lote vira uma leitura propria; tudo ou nada."""
+    lotes = [l for l in (lotes or []) if isinstance(l, dict)]
+    if not lotes:
+        raise ValueError("Informe ao menos um lote.")
+    nomes = [_txt(l.get("lote")).upper() for l in lotes]
+    repetido = next((n for n in nomes if n and nomes.count(n) > 1), None)
+    if repetido:
+        raise ValueError(f"O lote {repetido} foi informado mais de uma vez - some as quantidades numa linha só.")
+    try:
+        leituras = [_nova_leitura(inv, local, codigo, l.get("lote"), l.get("quantidade"), usuario) for l in lotes]
+    except ValueError:
+        db.session.rollback()
+        raise
+    db.session.commit()
+    return leituras
+
+
+def _nova_leitura(inv: Inventario, local, codigo, lote, quantidade, usuario: str) -> Leitura:
     _exigir_aberto(inv)
     local = _txt(local).upper()[:80]
     if not local:
@@ -190,7 +215,6 @@ def registrar_leitura(inv: Inventario, local, codigo, lote, quantidade, usuario:
     leitura = Leitura(inventario_id=inv.id, item=item, rodada=rodada, recontagem=item.recontagens or 0,
                       local=local, quantidade=qtde, lido_por=usuario, lido_em=agora_br())
     db.session.add(leitura)
-    db.session.commit()
     return leitura
 
 
