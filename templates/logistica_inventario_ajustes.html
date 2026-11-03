@@ -1,126 +1,167 @@
 <style>
-    .ia-wrap { display: grid; gap: 18px; }
-    .ia-table-wrap { overflow-x: auto; }
+    /* Layout de sistema (padrao ERP): pastas de etapa com contador, painel
+       com barra de titulo e barra de ferramentas, grade densa. */
+    .ia-wrap { display: grid; gap: 0; }
+    .ia-panel { border: 1px solid var(--eui-border-strong); border-radius: 4px; background: var(--eui-surface); overflow: hidden; }
+    .ia-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; background: var(--eui-surface-3); border-bottom: 1px solid var(--eui-border-strong); }
+    .ia-titlebar h2 { margin: 0; font-size: 14px; font-weight: 700; color: var(--eui-text); display: flex; align-items: center; gap: 8px; }
+    .ia-titlebar span { font-size: 11.5px; color: var(--eui-muted); }
+
+    /* Pastas de etapa (substituem os cards): clicar filtra a grade. */
+    .ia-etapas { display: flex; gap: 0; padding: 0 10px; background: var(--eui-surface-2); border-bottom: 1px solid var(--eui-border-strong); overflow-x: auto; }
+    .ia-etapa { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--eui-muted); cursor: pointer; white-space: nowrap; }
+    .ia-etapa:hover { color: var(--eui-text); }
+    .ia-etapa.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); background: var(--eui-surface); }
+    .ia-etapa .ia-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+    .ia-etapa .ia-count { min-width: 22px; padding: 1px 6px; border-radius: 3px; background: var(--eui-surface-3); color: var(--eui-text-soft); font-size: 11px; font-weight: 700; text-align: center; }
+    .ia-etapa.is-active .ia-count { background: var(--eui-primary); color: var(--eui-primary-contrast); }
+
+    .ia-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--eui-border); background: var(--eui-surface); }
+    .ia-toolbar .eui-btn { border-radius: 3px; }
+    .ia-toolbar .ia-sep { width: 1px; align-self: stretch; background: var(--eui-border); margin: 0 4px; }
+    .ia-search { position: relative; flex: 1; min-width: 220px; max-width: 380px; margin-left: auto; }
+    .ia-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); font-size: 12px; pointer-events: none; }
+    .ia-search input { width: 100%; padding-left: 30px; min-height: 34px; border-radius: 3px; font-size: 12.5px; }
+
+    /* Acoes em lote: aparecem na barra quando ha itens marcados. */
+    .ia-bulkbar { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 12px; background: var(--eui-primary-soft); border-bottom: 1px solid var(--eui-border); font-size: 12.5px; }
+    .ia-bulkbar.show { display: flex; }
+    .ia-bulkbar strong { margin-right: auto; color: var(--eui-primary-soft-text); }
+    .ia-bulkbar .eui-btn { border-radius: 3px; }
+
+    .ia-table-wrap { overflow: auto; max-height: calc(100vh - 330px); min-height: 220px; }
+    .ia-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ia-grid thead th { position: sticky; top: 0; z-index: 1; background: var(--eui-surface-2); color: var(--eui-text-soft); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--eui-border-strong); border-right: 1px solid var(--eui-border); white-space: nowrap; }
+    .ia-grid tbody td { padding: 6px 8px; border-bottom: 1px solid var(--eui-border); border-right: 1px solid var(--eui-border); vertical-align: top; color: var(--eui-text); }
+    .ia-grid tbody tr:nth-child(even) td { background: var(--eui-surface-2); }
+    .ia-grid tbody tr:hover td { background: var(--eui-primary-soft); }
+    .ia-grid td.num, .ia-grid th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .ia-grid td.nowrap { white-space: nowrap; }
+    .ia-desc { max-width: 280px; color: var(--eui-text-soft); }
+    .ia-select-col { width: 30px; text-align: center !important; }
     .ia-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
-    .eui-stat.is-clickable { cursor: pointer; }
-    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .ia-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+    .ia-status .ia-dot { width: 8px; height: 8px; border-radius: 2px; }
+    .ia-foot { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; font-size: 11.5px; color: var(--eui-muted); background: var(--eui-surface-2); border-top: 1px solid var(--eui-border); }
 
     /* Menu de ações (kebab) - mesmo padrão do Comex/Conferência de Expedição. */
-    .ia-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .ia-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 3px; width: 28px; height: 28px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
     .ia-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
-    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: var(--eui-surface, #fff); border: 1px solid var(--eui-border-strong, #e5e7eb); border-radius: 4px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 4px; display: none; flex-direction: column; }
     .ia-actions-menu.open { display: flex; }
-    .ia-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
-    .ia-actions-menu button:hover { background: #f3f4f6; }
+    .ia-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 8px 10px; border-radius: 3px; font-size: 12.5px; font-weight: 600; color: var(--eui-text, #1f2937); cursor: pointer; width: 100%; }
+    .ia-actions-menu button:hover { background: var(--eui-surface-2, #f3f4f6); }
     .ia-actions-menu button.is-danger { color: #dc2626; }
+    .ia-actions-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--eui-border); }
     .ia-actions-menu .ia-empty-mini { display: block; padding: 9px 10px; font-size: 12.5px; color: var(--eui-muted); }
 
     .ia-dif-pos { color: var(--eui-success, #15803d); font-weight: 700; }
     .ia-dif-neg { color: var(--eui-danger, #b91c1c); font-weight: 700; }
-    .ia-hist { font-size: 11px; color: var(--eui-muted); margin-top: 4px; line-height: 1.5; }
-    .ia-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .ia-hist { font-size: 11px; color: var(--eui-muted); margin-top: 3px; line-height: 1.45; }
+    .ia-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: 4px; box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .ia-toast.error { border-left-color: var(--eui-danger); }
     .ia-toast.success { border-left-color: var(--eui-success); }
 
-    /* Modais "Confirmar divergência" (Validacao) e "Relatório FORM-08.52"
-       (Relatorio) - substituem prompt()/confirm() do navegador nessas
-       acoes, porque precisam de campos de verdade (checkbox de Analise de
-       Causa Raiz, selects, etc.) que uma caixa de dialogo nativa nao tem. */
+    /* Modais da aba (recontagem/confirmacao, FORM-08.52, Financeiro e o
+       dialogo generico) - nada de prompt()/confirm() do navegador. */
     .ia-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
     .ia-modal-backdrop.open { display: flex; }
     /* Modal mais alto que a janela (ex.: FORM-08.52) rola por dentro - centralizado sem limite, cortava o titulo e os botoes. */
-    .ia-modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 22px; max-height: calc(100vh - 40px); overflow-y: auto; }
-    .ia-modal h3 { margin: 0 0 14px; font-size: 16px; }
-    .ia-modal label { display: block; font-size: 12.5px; font-weight: 600; color: var(--eui-text); margin-bottom: 6px; }
-    .ia-modal textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; }
-    .ia-modal-check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 12px; background: var(--eui-surface-2, #f8fafc); border-radius: 8px; border: 1px solid var(--eui-border, #e5e7eb); }
+    .ia-modal { background: var(--eui-surface, #fff); color: var(--eui-text); border: 1px solid var(--eui-border-strong); border-radius: 4px; box-shadow: 0 20px 50px rgba(0,0,0,.25); width: 100%; max-width: 480px; padding: 0 18px 18px; max-height: calc(100vh - 40px); overflow-y: auto; }
+    .ia-modal h3 { margin: 0 -18px 14px; padding: 10px 18px; font-size: 14px; background: var(--eui-surface-3); border-bottom: 1px solid var(--eui-border-strong); position: sticky; top: 0; z-index: 1; }
+    .ia-modal label { display: block; font-size: 12px; font-weight: 600; color: var(--eui-text-soft); margin-bottom: 5px; }
+    .ia-modal textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 3px; padding: 8px 10px; font-size: 13px; font-family: inherit; background: var(--eui-surface); color: var(--eui-text); }
+    .ia-modal-check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 10px 12px; background: var(--eui-surface-2, #f8fafc); border-radius: 3px; border: 1px solid var(--eui-border, #e5e7eb); }
     .ia-modal-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .ia-modal-check div strong { display: block; font-size: 13px; }
     .ia-modal-check div small { color: var(--eui-muted); font-size: 12px; }
-    .ia-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .ia-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--eui-border); }
+    .ia-modal-foot .eui-btn { border-radius: 3px; }
 
-    /* Selecao em lote + relatorio FORM-08.52 */
-    .ia-select-col { width: 34px; text-align: center; }
-    .ia-bulkbar { display: none; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--eui-primary-soft, #eef2ff); border: 1px solid var(--eui-primary, #4f46e5); border-radius: 10px; padding: 10px 16px; margin: -4px 0 12px; }
-    .ia-bulkbar.show { display: flex; }
-    .ia-bulkbar strong { font-size: 13px; }
-    .ia-modal.is-wide { max-width: 720px; }
-    .ia-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    /* Relatorio FORM-08.52 */
+    .ia-modal.is-wide { max-width: 760px; }
+    .ia-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
     .ia-form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
-    .ia-field label { display: block; font-size: 12px; font-weight: 600; color: var(--eui-text); margin-bottom: 4px; }
-    .ia-field select, .ia-field input[type="text"] { width: 100%; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
-    .ia-field textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+    .ia-field label { display: block; font-size: 12px; font-weight: 600; color: var(--eui-text-soft); margin-bottom: 4px; }
+    .ia-field select, .ia-field input[type="text"] { width: 100%; border: 1px solid var(--eui-border, #d1d5db); border-radius: 3px; padding: 8px 10px; font-size: 13px; font-family: inherit; background: var(--eui-surface); color: var(--eui-text); }
+    .ia-field textarea { width: 100%; min-height: 60px; resize: vertical; border: 1px solid var(--eui-border, #d1d5db); border-radius: 3px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
     .ia-field.span-2 { grid-column: span 2; }
-    .ia-modal-section-title { font-size: 12.5px; font-weight: 700; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .03em; margin: 16px 0 8px; }
-    .ia-relatorio-itens { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 8px; max-height: 260px; overflow-y: auto; font-size: 12.5px; }
+    .ia-modal-section-title { font-size: 11px; font-weight: 700; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; padding: 5px 8px; background: var(--eui-surface-2); border: 1px solid var(--eui-border); border-radius: 3px; }
+    .ia-relatorio-itens { border: 1px solid var(--eui-border, #e5e7eb); border-radius: 3px; max-height: 260px; overflow-y: auto; font-size: 12.5px; }
     .ia-relatorio-itens table { width: 100%; border-collapse: collapse; }
+    .ia-relatorio-itens th { position: sticky; top: 0; background: var(--eui-surface-2); font-size: 11px; text-transform: uppercase; color: var(--eui-text-soft); }
     .ia-relatorio-itens th, .ia-relatorio-itens td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--eui-border, #f1f5f9); vertical-align: top; }
     .ia-rel-item-imagem-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-    .ia-rel-item-imagem-cell img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--eui-border, #d1d5db); cursor: pointer; }
+    .ia-rel-item-imagem-cell img { width: 64px; height: 64px; object-fit: cover; border-radius: 3px; border: 1px solid var(--eui-border, #d1d5db); cursor: pointer; }
     .ia-rel-item-imagem-cell .ia-rel-img-btns { display: flex; gap: 6px; }
-    .ia-rel-item-imagem-cell button { border: 1px solid var(--eui-border, #d1d5db); background: #fff; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 11px; color: var(--eui-text, #374151); }
+    .ia-rel-item-imagem-cell button { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 3px; width: 26px; height: 26px; cursor: pointer; font-size: 11px; color: var(--eui-text, #374151); }
     .ia-rel-item-imagem-cell button:hover { background: var(--eui-surface-2, #f3f4f6); }
     .ia-rel-item-imagem-cell button.is-danger { color: #dc2626; }
     .ia-rel-item-imagem-cell input[type="file"] { display: none; }
+
+    @media (max-width: 760px) {
+        .ia-form-grid, .ia-form-grid.cols-3 { grid-template-columns: 1fr; }
+        .ia-field.span-2 { grid-column: auto; }
+        .ia-search { max-width: none; margin-left: 0; }
+    }
 </style>
 <div class="ia-wrap">
-    <div class="eui-stats" id="ia-metrics">
-        <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ia-m-todos">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Validacao"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-user-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando gestor</span><span class="eui-stat__value" id="ia-m-validacao">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Relatorio"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando relatório</span><span class="eui-stat__value" id="ia-m-relatorio">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Finance</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Fiscal</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="ia-m-concluido">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Dif. Improcedente</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
-    </div>
+    <div class="ia-panel">
+        <div class="ia-titlebar">
+            <h2><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</h2>
+            <span>Divergências contra o GRV, da validação à NF de ajuste</span>
+        </div>
 
-    <div class="eui-card">
-        <div class="eui-card__head">
-            <div>
-                <h2 class="eui-card__title"><i class="fas fa-scale-balanced"></i> Divergências contra o GRV</h2>
-                <p class="eui-card__sub">Do registro na contagem até a conclusão com Finance e Fiscal.</p>
-            </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ia-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
-                <a class="eui-btn eui-btn--subtle" id="ia-btn-exportar" href="/api/logistica/inventario-ajustes/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
-                <button class="eui-btn eui-btn--primary" id="ia-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        <nav class="ia-etapas" id="ia-metrics" aria-label="Etapas">
+            <button type="button" class="ia-etapa is-active" data-filter="">Todas <span class="ia-count" id="ia-m-todos">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Validacao"><span class="ia-dot" style="background:#b45309"></span>Validação de Suprimentos <span class="ia-count" id="ia-m-validacao">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Relatorio"><span class="ia-dot" style="background:#7c3aed"></span>Emissão do Formulário <span class="ia-count" id="ia-m-relatorio">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Finance"><span class="ia-dot" style="background:#0369a1"></span>Ajuste do Financeiro <span class="ia-count" id="ia-m-finance">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Fiscal"><span class="ia-dot" style="background:#be185d"></span>Emissão Fiscal (NF) <span class="ia-count" id="ia-m-fiscal">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Concluido"><span class="ia-dot" style="background:#15803d"></span>Concluído <span class="ia-count" id="ia-m-concluido">0</span></button>
+            <button type="button" class="ia-etapa" data-filter="Descartado"><span class="ia-dot" style="background:#64748b"></span>Improcedente <span class="ia-count" id="ia-m-descartado">0</span></button>
+        </nav>
+
+        <div class="ia-toolbar">
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-btn-atualizar" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
+            <a class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-btn-exportar" href="/api/logistica/inventario-ajustes/exportar"><i class="fas fa-file-excel"></i> Exportar</a>
+            <div class="ia-search">
+                <i class="fas fa-magnifying-glass"></i>
+                <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Local, código, descrição ou nº do formulário">
             </div>
         </div>
-        <div class="eui-card__body eui-card__body--tight">
-            <div class="eui-toolbar" style="padding: 12px 16px; flex-direction:column; align-items:stretch; gap:10px;">
-                <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
-                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
-                    <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local, código do produto ou nº do relatório…" style="width:100%; padding-left:34px;">
-                </div>
-                <div class="ia-bulkbar" id="ia-bulkbar">
-                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">aguardando relatório</span></strong>
-                    <div style="display:flex; gap:8px;">
-                        <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
-                        <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar pro Finance</button>
-                        <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>
-                    </div>
-                </div>
-            </div>
-            <div class="ia-table-wrap">
-                <table class="erp-table">
-                    <thead>
-                        <tr>
-                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens aguardando relatório"></th>
-                            <th>Detectado em</th>
-                            <th>Local</th>
-                            <th>Cód. Produto</th>
-                            <th>Qtd Contada</th>
-                            <th>Qtd Estoque</th>
-                            <th>Diferença</th>
-                            <th>Custo Médio</th>
-                            <th>Diferença R$</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody id="ia-tbody"><tr><td colspan="11" class="ia-empty">Carregando…</td></tr></tbody>
-                </table>
-            </div>
+
+        <div class="ia-bulkbar" id="ia-bulkbar">
+            <strong><span id="ia-bulk-count">0</span> marcado(s) em <span id="ia-bulk-etapa">Emissão do Formulário</span></strong>
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar" type="button">Desmarcar</button>
+            <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar" type="button"><i class="fas fa-file-invoice"></i> Emitir FORM-08.52</button>
+            <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance" type="button"><i class="fas fa-coins"></i> Confirmar ajuste no GRV</button>
+        </div>
+
+        <div class="ia-table-wrap">
+            <table class="ia-grid">
+                <thead>
+                    <tr>
+                        <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Marcar todos da mesma etapa"></th>
+                        <th>Detectado em</th>
+                        <th>Local</th>
+                        <th>Código</th>
+                        <th>Descrição</th>
+                        <th class="num">Qtd Contada</th>
+                        <th class="num">Qtd GRV</th>
+                        <th class="num">Diferença</th>
+                        <th class="num">Custo Médio</th>
+                        <th class="num">Diferença R$</th>
+                        <th>Etapa</th>
+                        <th style="text-align:right;"></th>
+                    </tr>
+                </thead>
+                <tbody id="ia-tbody"><tr><td colspan="12" class="ia-empty">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+        <div class="ia-foot">
+            <span id="ia-foot-qtd">0 registro(s)</span>
+            <span id="ia-foot-valor"></span>
         </div>
     </div>
 </div>
@@ -128,12 +169,29 @@
 <div class="ia-actions-menu" id="ia-acoes-menu"></div>
 <div class="ia-toast" id="ia-toast"></div>
 
+<!-- Dialogo generico da tela: substitui prompt()/confirm() do navegador
+     (descartar, NF do Fiscal, pular etapa, estornar, atualizar GRV). -->
+<div class="ia-modal-backdrop" id="ia-dialogo-modal">
+    <div class="ia-modal">
+        <h3 id="ia-dialogo-titulo"></h3>
+        <p id="ia-dialogo-texto" style="font-size:12.5px; color:var(--eui-text-soft); margin:0 0 12px;"></p>
+        <div id="ia-dialogo-campo-wrap">
+            <label for="ia-dialogo-campo" id="ia-dialogo-label"></label>
+            <input type="text" id="ia-dialogo-campo" class="eui-input" maxlength="300" style="width:100%; border-radius:3px;">
+        </div>
+        <div class="ia-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="ia-dialogo-cancelar" type="button">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-dialogo-ok" type="button">Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Modal "Confirmar divergência" (Validacao -> Relatorio) - so' confirma
      que a diferenca e' de verdade; NAO gera o FORM-08.52 ainda (isso
      acontece depois, em lote, no modal de Relatorio abaixo). -->
 <div class="ia-modal-backdrop" id="ia-finance-modal">
     <div class="ia-modal">
-        <h3><i class="fas fa-coins"></i> Confirmar ajuste executado</h3>
+        <h3><i class="fas fa-coins"></i> Confirmar ajuste no GRV</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;" id="ia-finance-sub"></p>
         <label for="ia-finance-documento">Nº do documento do GRV *</label>
         <input type="text" id="ia-finance-documento" class="eui-input" maxlength="60"
@@ -153,8 +211,8 @@
     <div class="ia-modal">
         <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
-            Confirma que essa diferença é real. O item vai pra fila de "Aguardando relatório" —
-            depois você seleciona vários de uma vez (checkbox) pra gerar o FORM-08.52 e mandar pro Finance.
+            Confirma que a diferença é real. O item segue para "Emissão do Formulário", onde
+            você marca vários de uma vez para emitir o FORM-08.52.
         </p>
         <!-- Recontagem do dia da validacao: a diferenca so' se confirma se
              o sistemico e o fisico tiverem andado juntos desde a contagem. -->
@@ -206,12 +264,10 @@
      pro lote selecionado e ja manda todos pro Finance juntos. -->
 <div class="ia-modal-backdrop" id="ia-relatorio-modal">
     <div class="ia-modal is-wide">
-        <h3><i class="fas fa-file-invoice"></i> Gerar Relatório de Ajuste (FORM-08.52)</h3>
+        <h3><i class="fas fa-file-invoice"></i> Emitir FORM-08.52 (Ajuste para Faturamento)</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
-            Preenche o formulário uma vez pro lote inteiro — os <strong id="ia-relatorio-qtd">0</strong> itens
-            selecionados vão juntos, com o mesmo número de documento, direto pro Finance. A justificativa
-            (motivo) é <strong>por item</strong>, não genérica — vem pré-carregada da confirmação da divergência,
-            mas pode editar aqui antes de gerar.
+            Um formulário para os <strong id="ia-relatorio-qtd">0</strong> itens marcados, com o mesmo número
+            de documento. A justificativa é <strong>por item</strong> e vem da validação; dá para editar aqui.
         </p>
 
         <div class="ia-relatorio-itens">
@@ -262,13 +318,13 @@
             <input type="checkbox" id="ia-rel-causa-raiz">
             <div>
                 <label for="ia-rel-causa-raiz" style="margin:0; cursor:pointer;"><strong>Todos esses itens precisam de Análise de Causa Raiz</strong></label>
-                <small>Envia todo o lote pra fila separada de Análise de Causa Raiz. Não bloqueia o fluxo — Finance/Fiscal seguem normalmente.</small>
+                <small>Envia todo o lote pra fila separada de Análise de Causa Raiz. Não bloqueia o fluxo — Financeiro e Fiscal seguem normalmente.</small>
             </div>
         </div>
 
         <div class="ia-modal-foot">
             <button class="eui-btn eui-btn--ghost" id="ia-relatorio-cancelar">Cancelar</button>
-            <button class="eui-btn eui-btn--primary" id="ia-relatorio-salvar"><i class="fas fa-file-invoice"></i> Gerar Relatório e Enviar pro Finance</button>
+            <button class="eui-btn eui-btn--primary" id="ia-relatorio-salvar"><i class="fas fa-file-invoice"></i> Emitir e enviar ao Financeiro</button>
         </div>
     </div>
 </div>
@@ -351,6 +407,7 @@
         return lista.filter((a) =>
             (a.local_codigo || "").toLowerCase().includes(termo) ||
             (a.codigo_produto || "").toLowerCase().includes(termo) ||
+            (a.descricao_produto || "").toLowerCase().includes(termo) ||
             (a.relatorio_numero_documento || "").toLowerCase().includes(termo)
         );
     }
@@ -368,12 +425,12 @@
     }
 
     const CORES_STATUS = {
-        Validacao: "#b45309", Relatorio: "#7c3aed", Finance: "#0369a1", Fiscal: "#7c3aed",
+        Validacao: "#b45309", Relatorio: "#7c3aed", Finance: "#0369a1", Fiscal: "#be185d",
         Concluido: "#15803d", Descartado: "#64748b",
     };
     const LABEL_STATUS = {
-        Validacao: "Aguardando gestor", Relatorio: "Aguardando relatório", Finance: "Aguardando Finance",
-        Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Dif. Improcedente",
+        Validacao: "Validação de Suprimentos", Relatorio: "Emissão do Formulário", Finance: "Ajuste do Financeiro",
+        Fiscal: "Emissão Fiscal (NF)", Concluido: "Concluído", Descartado: "Improcedente",
     };
     // Estorno volta sempre UMA etapa (ver estornar_etapa no service).
     const ETAPA_ANTERIOR = {
@@ -381,13 +438,13 @@
     };
     function badgeStatus(a) {
         const cor = CORES_STATUS[a.status_modulo] || "#475569";
-        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
+        return `<span class="ia-status"><span class="ia-dot" style="background:${cor}"></span>${escapeHtml(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
     }
 
     function historicoHtml(a) {
         const linhas = [];
-        if (a.gestor_confirmado_em) linhas.push(`Gestor: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
-        if (a.finance_concluido_em) linhas.push(`Finance: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
+        if (a.gestor_confirmado_em) linhas.push(`Suprimentos: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
+        if (a.finance_concluido_em) linhas.push(`Financeiro: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
         if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${escapeHtml(a.fiscal_concluido_por)} em ${escapeHtml(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? " — NF " + escapeHtml(a.fiscal_nf_numero) : ""}`);
         return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
     }
@@ -408,7 +465,8 @@
         selecionados.forEach((id) => { if (!idsVisiveis.has(id)) selecionados.delete(id); });
 
         if (!lista.length) {
-            tb.innerHTML = '<tr><td colspan="11" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="12" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
+            atualizarRodape(lista);
             atualizarBulkbar();
             return;
         }
@@ -427,20 +485,29 @@
             return `
             <tr>
                 <td class="ia-select-col">${checkboxHtml}</td>
-                <td>${escapeHtml(a.criado_em)}</td>
-                <td>${escapeHtml(a.local_codigo)}</td>
-                <td>${escapeHtml(a.codigo_produto)}${a.motivo_inventario ? `<div class="ia-hist">Motivo: ${escapeHtml(a.motivo_inventario)}</div>` : ""}</td>
-                <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
-                <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
-                <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
-                <td>${temCusto ? fmtMoeda(a.custo_medio) : "—"}</td>
-                <td class="${valorClasse}">${valorTexto}</td>
-                <td>${badgeStatus(a)}${a.relatorio_numero_documento ? `<div class="ia-hist">Relatório: ${escapeHtml(a.relatorio_numero_documento)}</div>` : ""}${a.analise_causa_status ? "<br>" + analiseCausaBadgeHtml(a) : ""}${historicoHtml(a)}</td>
+                <td class="nowrap">${escapeHtml(a.criado_em)}</td>
+                <td class="nowrap">${escapeHtml(a.local_codigo || "—")}</td>
+                <td class="nowrap">${escapeHtml(a.codigo_produto)}</td>
+                <td class="ia-desc">${escapeHtml(a.descricao_produto || "—")}</td>
+                <td class="num">${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
+                <td class="num">${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
+                <td class="num ${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+                <td class="num">${temCusto ? fmtMoeda(a.custo_medio) : "—"}</td>
+                <td class="num ${valorClasse}">${valorTexto}</td>
+                <td>${badgeStatus(a)}${a.relatorio_numero_documento ? `<div class="ia-hist">FORM-08.52: ${escapeHtml(a.relatorio_numero_documento)}</div>` : ""}${a.analise_causa_status ? "<br>" + analiseCausaBadgeHtml(a) : ""}${historicoHtml(a)}</td>
                 <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
         `;
         }).join("");
+        atualizarRodape(lista);
         atualizarBulkbar();
+    }
+
+    function atualizarRodape(lista) {
+        $("ia-foot-qtd").textContent = `${lista.length} registro(s)`;
+        const comCusto = lista.filter((a) => a.diferenca_valor !== null && a.diferenca_valor !== undefined);
+        const total = comCusto.reduce((soma, a) => soma + Number(a.diferenca_valor || 0), 0);
+        $("ia-foot-valor").textContent = comCusto.length ? `Diferença total: ${total >= 0 ? "+" : ""}${fmtMoeda(total)}` : "";
     }
 
     // ── Selecao em lote: FORM-08.52 (Relatorio) e ajuste executado (Finance) ──
@@ -461,7 +528,7 @@
         const etapa = statusDaSelecao();
         const ehFinance = etapa === "Finance";
         $("ia-bulk-count").textContent = selecionados.size;
-        $("ia-bulk-etapa").textContent = ehFinance ? "aguardando Finance" : "aguardando relatório";
+        $("ia-bulk-etapa").textContent = ehFinance ? LABEL_STATUS.Finance : LABEL_STATUS.Relatorio;
         $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
         $("ia-bulk-gerar").classList.toggle("hidden", ehFinance);
         $("ia-bulk-finance").classList.toggle("hidden", !ehFinance);
@@ -505,7 +572,7 @@
         const checkboxes = todos.filter((cb) => statusDoItem(cb.dataset.id) === etapa);
         if (marcar && etapa === "Relatorio" && checkboxes.length > RELATORIO_MAX_ITENS) {
             e.target.checked = false;
-            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando relatório - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
+            toast(`Há mais de ${RELATORIO_MAX_ITENS} itens em Emissão do Formulário - marque até ${RELATORIO_MAX_ITENS} por vez.`, "error");
             return;
         }
         checkboxes.forEach((cb) => {
@@ -525,8 +592,8 @@
         financeAlvo = alvo;
         const qtd = alvo === "lote" ? selecionados.size : 1;
         $("ia-finance-sub").textContent = qtd > 1
-            ? `${qtd} itens selecionados serão confirmados com o mesmo documento do GRV e liberados pro Fiscal.`
-            : "Confirma que o ajuste foi lançado no ERP. O item segue pro Fiscal.";
+            ? `${qtd} itens marcados serão confirmados com o mesmo documento do GRV e seguem para a Emissão Fiscal.`
+            : "Confirma que o ajuste foi lançado no GRV. O item segue para a Emissão Fiscal.";
         $("ia-finance-documento").value = "";
         $("ia-finance-observacao").value = "";
         $("ia-finance-modal").classList.add("open");
@@ -580,6 +647,38 @@
         renderTabela(filtrarPorBusca(ajustesCache));
     });
 
+    // Dialogo da propria tela. Resolve com o texto digitado (ou "" quando nao
+    // tem campo) ou null se cancelar.
+    function dialogo({ titulo, texto, campo, obrigatorio, botao, perigo }) {
+        return new Promise((resolve) => {
+            const modal = $("ia-dialogo-modal");
+            const input = $("ia-dialogo-campo");
+            $("ia-dialogo-titulo").textContent = titulo;
+            $("ia-dialogo-texto").textContent = texto || "";
+            $("ia-dialogo-campo-wrap").style.display = campo ? "" : "none";
+            $("ia-dialogo-label").textContent = campo ? campo + (obrigatorio ? " *" : "") : "";
+            input.value = "";
+            const ok = $("ia-dialogo-ok");
+            ok.textContent = botao || "Confirmar";
+            ok.className = "eui-btn " + (perigo ? "eui-btn--danger" : "eui-btn--primary");
+            const fechar = (valor) => {
+                modal.classList.remove("open");
+                ok.onclick = null; $("ia-dialogo-cancelar").onclick = null; modal.onclick = null; input.onkeydown = null;
+                resolve(valor);
+            };
+            ok.onclick = () => {
+                const valor = input.value.trim();
+                if (campo && obrigatorio && !valor) { toast(`Preencha: ${campo}.`, "error"); input.focus(); return; }
+                fechar(campo ? valor : "");
+            };
+            $("ia-dialogo-cancelar").onclick = () => fechar(null);
+            modal.onclick = (e) => { if (e.target === modal) fechar(null); };
+            input.onkeydown = (e) => { if (e.key === "Enter") ok.click(); };
+            modal.classList.add("open");
+            if (campo) input.focus();
+        });
+    }
+
     function ajustePorId(id) {
         return ajustesCache.find((a) => String(a.id) === String(id));
     }
@@ -597,9 +696,9 @@
         const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Dif. Improcedente", true);
+            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Marcar improcedente", true);
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
-            itens += it("finance", "fa-coins", "Confirmar ajuste executado");
+            itens += it("finance", "fa-coins", "Confirmar ajuste no GRV");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
             itens += it("fiscal", "fa-file-invoice-dollar", "Confirmar NF emitida");
         }
@@ -696,7 +795,7 @@
         const texto = bate
             ? `Confere — a diferença de <b>${fmtQtd(a.diferenca)}</b> se manteve. A contagem original está validada.`
             : `Não confere — apurada <b>${fmtQtd(a.diferenca)}</b>, recontada <b>${fmtQtd(a.recontagem_diferenca)}</b>. ` +
-              `Justifique abaixo para adotar a diferença nova, ou feche e use "Dif. Improcedente".`;
+              `Justifique abaixo para adotar a diferença nova, ou feche e use "Marcar improcedente".`;
         $("ia-recontagem-resultado").innerHTML =
             `<div style="background:${fundo}; border:1px solid ${borda}; color:${cor}; border-radius:6px; padding:9px 11px; font-size:12.5px;">
                 <i class="fas ${bate ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
@@ -772,24 +871,30 @@
                 window.open(`/api/logistica/inventario-ajustes/relatorio/${a.relatorio_id}.pdf`, "_blank");
                 return;
             } else if (act === "descartar") {
-                const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
-                if (!motivo.trim()) return;
+                const motivo = await dialogo({
+                    titulo: "Marcar improcedente", texto: "A diferença não precisa de ajuste (ex.: erro de contagem).",
+                    campo: "Motivo", obrigatorio: true, botao: "Marcar improcedente", perigo: true,
+                });
+                if (motivo === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
             } else if (act === "finance") {
                 abrirModalFinance(id);
                 return;
             } else if (act === "fiscal") {
-                const nf_numero = prompt("Número da NF de ajuste emitida (opcional):") || "";
+                const nf_numero = await dialogo({
+                    titulo: "Confirmar NF emitida", texto: "Conclui o ajuste.", campo: "Número da NF de ajuste (opcional)",
+                });
+                if (nf_numero === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: "POST", body: JSON.stringify({ nf_numero }) });
             } else if (act === "pular-etapa") {
-                if (!confirm("Pular direto para a próxima etapa? Isso ignora as validações normais da etapa atual - use só pra casos excepcionais.")) return;
+                if (await dialogo({ titulo: "Pular etapa", texto: "Avança para a próxima etapa sem as validações da etapa atual. Use só em caso excepcional.", botao: "Pular etapa", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/pular-etapa`, { method: "POST" });
             } else if (act === "atualizar-grv") {
-                if (!confirm("Consultar agora a quantidade atual deste item no PostgreSQL/GRV? Apenas este ajuste será atualizado.")) return;
+                if (await dialogo({ titulo: "Atualizar quantidade GRV", texto: "Consulta agora o saldo deste item no GRV. Só este ajuste é atualizado.", botao: "Atualizar" }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/atualizar-grv`, { method: "POST" });
             } else if (act === "estornar") {
                 const anterior = ETAPA_ANTERIOR[statusDoItem(id)];
-                if (!confirm(`Estornar este ajuste uma etapa, para "${LABEL_STATUS[anterior] || anterior}"? Só os dados da etapa atual serão limpos.`)) return;
+                if (await dialogo({ titulo: "Estornar etapa", texto: `Volta para "${LABEL_STATUS[anterior] || anterior}". Só os dados da etapa atual são limpos.`, botao: "Estornar", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
             } else {
                 return;
@@ -865,9 +970,9 @@
         const removerBtn = e.target.closest("[data-remover-img]");
         if (removerBtn) {
             const ajusteId = removerBtn.dataset.removerImg;
-            if (!confirm("Remover a imagem anexada a essa justificativa?")) return;
-            api(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "DELETE" })
-                .then((data) => atualizarLinhaImagem(ajusteId, data.ajuste))
+            dialogo({ titulo: "Remover imagem", texto: "Remove a imagem anexada a esta justificativa.", botao: "Remover", perigo: true })
+                .then((r) => r === null ? null : api(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "DELETE" }))
+                .then((data) => { if (data) atualizarLinhaImagem(ajusteId, data.ajuste); })
                 .catch((err) => toast(err.message, "error"));
         }
     });
@@ -891,6 +996,7 @@
         if (opcoesRelatorio) return opcoesRelatorio;
         opcoesRelatorio = await api("/api/logistica/inventario-ajustes/relatorio/opcoes");
         preencherSelect($("ia-rel-tipo-ajuste"), opcoesRelatorio.tipos_ajuste);
+        $("ia-rel-tipo-ajuste").insertAdjacentHTML("afterbegin", '<option value="">Selecione…</option>');
         preencherSelect($("ia-rel-motivo"), opcoesRelatorio.motivos_ajuste);
         preencherSelect($("ia-rel-deposito-tipo"), opcoesRelatorio.deposito_tipos);
         return opcoesRelatorio;
@@ -909,14 +1015,6 @@
             return;
         }
         const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
-        // O Tipo de Ajuste e' um so' pro lote e nasce do motivo da contagem:
-        // motivos diferentes vao em relatorios separados. Motivo fora da
-        // lista atual (contagem antiga) nao entra na comparacao.
-        const motivosLote = [...new Set(itens.map((a) => a.motivo_inventario).filter((m) => opcoesRelatorio.tipos_ajuste.includes(m)))];
-        if (motivosLote.length > 1) {
-            toast(`Os itens selecionados têm motivos de inventário diferentes (${motivosLote.join(", ")}). Gere um relatório por motivo.`, "error");
-            return;
-        }
         $("ia-relatorio-qtd").textContent = itens.length;
         // Justificativa vem pre-carregada da confirmacao da divergencia
         // (gestor_justificativa) - atrelada a esse item, nao um texto
@@ -931,8 +1029,8 @@
                 <td>${imagemJustificativaCellHtml(a)}</td>
             </tr>
         `).join("");
-        // Ja' vem com o motivo escolhido na contagem; o gestor ainda pode trocar.
-        $("ia-rel-tipo-ajuste").value = motivosLote[0] || opcoesRelatorio.tipos_ajuste[0] || "";
+        // Tipo de Ajuste e' do gestor, no formulario (a contagem nao tem mais motivo).
+        $("ia-rel-tipo-ajuste").value = "";
         $("ia-rel-tipo-detalhe").value = "";
         $("ia-rel-tipo-detalhe-wrap").style.display = $("ia-rel-tipo-ajuste").value === "Outros" ? "" : "none";
         $("ia-rel-motivo").value = opcoesRelatorio.motivos_ajuste[0] || "";
@@ -969,6 +1067,7 @@
             toast(`Preencha a justificativa de cada item antes de gerar o relatório - faltando: ${faltando.join(", ")}.`, "error");
             return;
         }
+        if (!$("ia-rel-tipo-ajuste").value) { toast("Selecione o Tipo de Ajuste.", "error"); $("ia-rel-tipo-ajuste").focus(); return; }
         const payload = {
             ajuste_ids: Array.from(selecionados),
             tipo_ajuste: $("ia-rel-tipo-ajuste").value,
@@ -1002,19 +1101,10 @@
 
     // ── Filtro pelos cards de status ───────────────────────────────────
     $("ia-metrics").addEventListener("click", (e) => {
-        const card = e.target.closest(".eui-stat[data-filter]");
-        if (!card) return;
-        filtroAtual = card.dataset.filter;
-        $("ia-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
-        card.classList.add("is-active");
-        $("ia-btn-limpar-filtro").classList.toggle("hidden", !filtroAtual);
-        carregar();
-    });
-    $("ia-btn-limpar-filtro").addEventListener("click", () => {
-        filtroAtual = "";
-        $("ia-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
-        $("ia-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
-        $("ia-btn-limpar-filtro").classList.add("hidden");
+        const pasta = e.target.closest(".ia-etapa[data-filter]");
+        if (!pasta) return;
+        filtroAtual = pasta.dataset.filter;
+        $("ia-metrics").querySelectorAll(".ia-etapa").forEach((el) => el.classList.toggle("is-active", el === pasta));
         carregar();
     });
     $("ia-btn-atualizar").addEventListener("click", carregar);
