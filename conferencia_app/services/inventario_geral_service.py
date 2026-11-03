@@ -33,6 +33,7 @@ from ..models import (
 from ..tempo import agora_br
 from ..models import InventarioGeralResultado as Resultado
 from ..models import InventarioGeralCancelamento as Cancelamento
+from ..models import InventarioGeralTesteApi as TesteApi
 from . import erp_estoque_service as erp
 from . import inventario_cps_client as cps
 
@@ -89,6 +90,18 @@ def numeros() -> dict[int, str]:
 
 def numero(inv: Inventario) -> str:
     return numeros().get(inv.id, f"IG-{inv.id}")
+
+
+def numero_confere(inv: Inventario, digitado) -> bool:
+    """O operador informa o numero do inventario aberto na Gestao: vale o
+    numero inteiro (IG-2026-0003) ou so' a sequencia (0003 / 3)."""
+    digitado = _txt(digitado).upper().replace(" ", "")
+    if not digitado:
+        return False
+    certo = numero(inv)
+    if digitado == certo.upper():
+        return True
+    return digitado.isdigit() and int(digitado) == int(certo.rsplit("-", 1)[-1])
 
 
 def abrir(usuario: str, descricao: str = "") -> Inventario:
@@ -473,8 +486,8 @@ def encerrar(inv: Inventario, usuario: str) -> Resultado:
 
 
 def historico() -> list[Inventario]:
-    return (Inventario.query.filter(Inventario.status.in_(FECHADOS))
-            .order_by(Inventario.id.desc()).all())
+    """Tela de Gestao: todos, o em andamento no topo junto com os fechados."""
+    return Inventario.query.order_by(Inventario.id.desc()).all()
 
 
 def aplicado_no_erp(inv: Inventario) -> bool:
@@ -500,3 +513,133 @@ def cancelar(inv: Inventario, motivo, usuario: str) -> Cancelamento:
     inv.status = Inventario.STATUS_CANCELADO
     db.session.commit()
     return cancelamento
+
+
+# ── Teste da API (1 a 5 itens, fora de inventario) ─────────────────────
+MAX_ITENS_TESTE = 5
+
+
+def _produto_teste(estado: dict) -> dict:
+    return {
+        "cod_produto": int(estado["cod_produto"]), "codigo_interno": estado.get("codigo_interno"),
+        "descricao": estado.get("produto"), "unidade": estado.get("unidade"),
+        "com_lote": com_lote(estado.get("tipo_controle")), "qtde_total": estado.get("qtde_total"),
+        "estoque_produto": estado.get("estoque_produto"), "versao": estado.get("versao"),
+        "lotes": [{"nome": l.get("nome"), "qtde": l.get("qtde")} for l in (estado.get("lotes") or [])],
+        # Mesmo filtro do envio real: o CPS recusa (409) quando o geral difere dos depositos.
+        "inconsistente": estado.get("estoque_produto") is not None
+                         and not _igual(estado.get("estoque_produto"), estado.get("qtde_total")),
+    }
+
+
+def _achar_no_erp(produtos: list[dict], codigo) -> dict | None:
+    codigo = _txt(codigo).upper()
+    for p in produtos:
+        if _txt(p.get("codigo_interno")).upper() == codigo or (codigo.isdigit() and int(p["cod_produto"]) == int(codigo)):
+            return p
+    return None
+
+
+def _codigos_teste(codigos) -> list[str]:
+    if isinstance(codigos, str):
+        codigos = codigos.replace(";", ",").replace("\n", ",").split(",")
+    lista = []
+    for c in codigos or []:
+        c = _txt(c)
+        if c and c.upper() not in (x.upper() for x in lista):
+            lista.append(c)
+    if not lista:
+        raise ValueError("Informe ao menos um código de item.")
+    if len(lista) > MAX_ITENS_TESTE:
+        raise ValueError(f"O teste aceita no máximo {MAX_ITENS_TESTE} itens.")
+    return lista
+
+
+def consultar_teste(codigos) -> list[dict]:
+    """Saldo, versao e lotes ATUAIS do ERP dos itens do teste."""
+    codigos = _codigos_teste(codigos)
+    produtos = cps.listar_deposito()
+    achados, faltando = [], []
+    for c in codigos:
+        p = _achar_no_erp(produtos, c)
+        (achados.append(_produto_teste(p)) if p else faltando.append(c))
+    if faltando:
+        raise ValueError(f"Não encontrado no depósito do ERP: {', '.join(faltando)}.")
+    return achados
+
+
+def simular_teste(itens, usuario: str) -> TesteApi:
+    """Rele o ERP (estoque_esperado/versao atuais, regra da API), monta o
+    mesmo formato do envio real e chama /simular - nada e' gravado."""
+    itens = [i for i in (itens or []) if isinstance(i, dict)]
+    codigos = _codigos_teste([i.get("codigo") for i in itens])
+    if len(codigos) != len(itens):
+        raise ValueError("Item repetido ou sem código no teste.")
+    produtos = cps.listar_deposito()
+    linhas = []
+    for item, codigo in zip(itens, codigos):
+        p = _achar_no_erp(produtos, codigo)
+        if not p:
+            raise ValueError(f"Não encontrado no depósito do ERP: {codigo}.")
+        linha = {"cod_produto": int(p["cod_produto"]), "estoque_esperado": p.get("qtde_total"), "versao": p.get("versao")}
+        if com_lote(p.get("tipo_controle")):
+            lotes = []
+            for l in item.get("lotes") or []:
+                nome = _txt(l.get("nome"))[:120]
+                if not nome:
+                    continue
+                lotes.append({"nome": nome, "qtde": _qtde(l.get("qtde"))})
+            nomes = [l["nome"].upper() for l in lotes]
+            if len(set(nomes)) != len(nomes):
+                raise ValueError(f"{codigo}: lote repetido.")
+            linha["qtde_inventariada"] = round(sum(l["qtde"] for l in lotes), 6)
+            linha["lotes"] = [l for l in lotes if l["qtde"] > TOLERANCIA]
+        else:
+            linha["qtde_inventariada"] = _qtde(item.get("qtde_inventariada"))
+        linhas.append(linha)
+    teste = TesteApi(tipo="simular", referencia="-", payload="{}", enviado_por=usuario, enviado_em=agora_br())
+    db.session.add(teste)
+    db.session.flush()  # o id entra na referencia
+    payload = {"referencia": f"SYNC-TESTE-{teste.id}", "cod_empresa": cps.EMPRESA, "cod_deposito": cps.DEPOSITO,
+               "operador": (usuario or "")[:60], "itens": linhas}
+    try:
+        status_http, resposta = cps.simular(payload)
+        status = (resposta or {}).get("status") if isinstance(resposta, dict) else None
+    except cps.ErroApiInventario as exc:
+        status_http, resposta, status = exc.status, exc.corpo or str(exc), "ERRO"
+    teste.referencia = payload["referencia"]
+    _gravar_teste(teste, payload, status_http, resposta, status)
+    db.session.commit()
+    return teste
+
+
+def aplicar_teste(simulacao: TesteApi, usuario: str) -> TesteApi:
+    """Grava no CPS reenviando EXATAMENTE o payload de uma simulacao OK."""
+    if simulacao.tipo != "simular" or simulacao.status != "SIMULADO_SEM_GRAVAR":
+        raise ValueError("Só dá para aplicar uma simulação que passou (SIMULADO_SEM_GRAVAR).")
+    ja = TesteApi.query.filter_by(simulacao_id=simulacao.id, status="APLICADO").first()
+    if ja:
+        raise ValueError(f"Esta simulação já foi aplicada no ERP ({ja.referencia}).")
+    payload = json.loads(simulacao.payload)
+    try:
+        status_http, resposta = cps.aplicar(payload)
+        status = (resposta or {}).get("status") if isinstance(resposta, dict) else None
+    except cps.ErroApiInventario as exc:
+        status_http, resposta, status = exc.status, exc.corpo or str(exc), "ERRO"
+    teste = TesteApi(tipo="aplicar", referencia=simulacao.referencia, simulacao_id=simulacao.id,
+                     enviado_por=usuario, enviado_em=agora_br())
+    _gravar_teste(teste, payload, status_http, resposta, status)
+    db.session.add(teste)
+    db.session.commit()
+    return teste
+
+
+def _gravar_teste(teste: TesteApi, payload, status_http, resposta, status) -> None:
+    teste.payload = json.dumps(payload, ensure_ascii=False)
+    teste.http_status = status_http
+    teste.status = status or "ERRO"
+    teste.resposta = json.dumps(resposta, ensure_ascii=False) if not isinstance(resposta, str) else resposta
+
+
+def historico_teste(limite: int = 50) -> list[TesteApi]:
+    return TesteApi.query.order_by(TesteApi.id.desc()).limit(limite).all()

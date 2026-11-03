@@ -119,6 +119,17 @@ def api_contagem():
     return jsonify({"inventario": {"id": inv.id, "status": inv.status}, "dirigidos": dirigidos, "minhas": minhas})
 
 
+@inventario_geral_bp.route("/api/inventario-geral/conferir-numero", methods=["GET"])
+@permission_required(PERM_CONTAGEM)
+def api_conferir_numero():
+    inv = svc.inventario_ativo()
+    digitado = request.args.get("numero")
+    if not inv or inv.status != InventarioGeral.STATUS_ABERTO or not svc.numero_confere(inv, digitado):
+        return jsonify({"error": f"O inventário {digitado or '(vazio)'} não está aberto para contagem. "
+                                 "Confira o número com a gestão do inventário."}), 404
+    return jsonify({"id": inv.id, "numero": svc.numero(inv)})
+
+
 @inventario_geral_bp.route("/api/inventario-geral/abrir", methods=["POST"])
 @permission_required(PERM_GESTAO)
 def api_abrir():
@@ -127,7 +138,8 @@ def api_abrir():
         inv = svc.abrir(_usuario(), payload.get("descricao") or "")
     except (ValueError, cps.ErroApiInventario) as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"message": f"Inventário geral aberto com {len(inv.itens)} linha(s) para contar.", "id": inv.id})
+    return jsonify({"message": f"Inventário {svc.numero(inv)} criado com {len(inv.itens)} linha(s) para contar.",
+                    "id": inv.id, "numero": svc.numero(inv)})
 
 
 def _item_ou_404(item_id):
@@ -156,11 +168,15 @@ def api_registrar_leitura():
     if not inv:
         return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
     payload = request.get_json(silent=True) or {}
-    # A janela de contagem manda o inventario que estava na tela: se ele foi
-    # encerrado/cancelado e outro aberto no meio, a leitura nao cai no novo.
+    # A contagem e' amarrada ao numero que o operador informou (o aberto na
+    # Gestao): se ele foi encerrado/cancelado e outro aberto no meio, a
+    # leitura nao cai no novo.
     if payload.get("inventario_id") and str(payload["inventario_id"]) != str(inv.id):
         return jsonify({"error": f"O inventário desta tela não está mais em andamento (o atual é o {svc.numero(inv)}). "
                                  "Recarregue a página."}), 409
+    if "inventario_numero" in payload and not svc.numero_confere(inv, payload.get("inventario_numero")):
+        return jsonify({"error": f"O inventário {payload.get('inventario_numero') or '(vazio)'} não está em andamento. "
+                                 "Confira o número com a gestão do inventário."}), 409
     try:
         if payload.get("lotes"):
             leituras = svc.registrar_leituras(inv, payload.get("local"), payload.get("codigo"), payload.get("lotes"),
@@ -280,6 +296,56 @@ def api_cancelar_inventario():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": f"Inventário {svc.numero(inv)} cancelado."})
+
+
+# ── Teste da API (gestao) ─────────────────────────────────────────────
+def _teste_dict(t) -> dict:
+    try:
+        payload = json.loads(t.payload or "{}")
+    except ValueError:
+        payload = {}
+    return {"id": t.id, "tipo": t.tipo, "referencia": t.referencia, "simulacao_id": t.simulacao_id,
+            "status": t.status, "http": t.http_status, "enviado_em": _dt(t.enviado_em), "enviado_por": t.enviado_por,
+            "itens": len(payload.get("itens") or []), "payload": t.payload, "resposta": t.resposta}
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/produtos", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_teste_produtos():
+    try:
+        produtos = svc.consultar_teste(request.args.get("codigos") or "")
+    except (ValueError, cps.ErroApiInventario) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"produtos": produtos, "gravacao_configurada": cps.configurada(gravacao=True)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/simular", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_teste_simular():
+    try:
+        teste = svc.simular_teste((request.get_json(silent=True) or {}).get("itens"), _usuario())
+    except (ValueError, cps.ErroApiInventario) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"teste": _teste_dict(teste)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/<int:teste_id>/aplicar", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_teste_aplicar(teste_id):
+    simulacao = db.session.get(svc.TesteApi, teste_id)
+    if not simulacao:
+        return jsonify({"error": "Simulação não encontrada."}), 404
+    try:
+        teste = svc.aplicar_teste(simulacao, _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"teste": _teste_dict(teste)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/historico", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_teste_historico():
+    return jsonify({"testes": [_teste_dict(t) for t in svc.historico_teste()]})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/historico", methods=["GET"])
