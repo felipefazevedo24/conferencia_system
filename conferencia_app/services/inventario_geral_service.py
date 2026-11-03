@@ -91,6 +91,18 @@ def numero(inv: Inventario) -> str:
     return numeros().get(inv.id, f"IG-{inv.id}")
 
 
+def numero_confere(inv: Inventario, digitado) -> bool:
+    """O operador informa o numero do inventario aberto na Gestao: vale o
+    numero inteiro (IG-2026-0003) ou so' a sequencia (0003 / 3)."""
+    digitado = _txt(digitado).upper().replace(" ", "")
+    if not digitado:
+        return False
+    certo = numero(inv)
+    if digitado == certo.upper():
+        return True
+    return digitado.isdigit() and int(digitado) == int(certo.rsplit("-", 1)[-1])
+
+
 def abrir(usuario: str, descricao: str = "") -> Inventario:
     if inventario_ativo():
         raise ValueError("Já existe um inventário geral em andamento - encerre ou cancele antes de abrir outro.")
@@ -473,8 +485,8 @@ def encerrar(inv: Inventario, usuario: str) -> Resultado:
 
 
 def historico() -> list[Inventario]:
-    return (Inventario.query.filter(Inventario.status.in_(FECHADOS))
-            .order_by(Inventario.id.desc()).all())
+    """Tela de Gestao: todos, o em andamento no topo junto com os fechados."""
+    return Inventario.query.order_by(Inventario.id.desc()).all()
 
 
 def aplicado_no_erp(inv: Inventario) -> bool:

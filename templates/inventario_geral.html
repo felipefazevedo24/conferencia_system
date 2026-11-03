@@ -86,15 +86,25 @@
     <div id="ig-avisos"></div>
 
     <div class="ig-tabs" id="ig-tabs">
-        <button type="button" class="ig-tab" data-tab="contar">Contar</button>
-        <button type="button" class="ig-tab" data-tab="resultado">Resultado</button>
         <button type="button" class="ig-tab" data-tab="gestao">Gestão</button>
+        <button type="button" class="ig-tab" data-tab="resultado">Resultado</button>
+        <button type="button" class="ig-tab" data-tab="contar">Contar</button>
     </div>
 
     <!-- Contar: leitura cega por local -->
     <section id="ig-contar" class="eui-card hidden"><div class="eui-card__body">
+        <form class="ig-toolbar" id="ig-chave" autocomplete="off" style="align-items:flex-end;">
+            <label class="ig-field" style="min-width:260px;">
+                <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--eui-muted);">Nº do inventário</span>
+                <input class="eui-input" id="ig-num-input" placeholder="Ex.: IG-2026-0003" style="font-size:16px;padding:10px 12px;">
+            </label>
+            <button type="submit" class="eui-btn eui-btn--primary" style="padding:12px 16px;"><i class="fas fa-door-open"></i> Abrir contagem</button>
+            <span style="font-size:12px;color:var(--eui-muted);padding-bottom:12px;">Número do inventário aberto pela gestão.</span>
+        </form>
+        <div id="ig-contar-corpo" class="hidden">
         <div class="ig-toolbar">
             <div class="ig-num-inv" id="ig-contar-num"></div>
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="ig-trocar-num" title="Informar outro número"><i class="fas fa-right-left"></i> Trocar</button>
             <button type="button" class="eui-btn eui-btn--primary" id="ig-btn-nova" style="margin-left:auto;"><i class="fas fa-plus-circle"></i> Nova contagem</button>
         </div>
 
@@ -111,6 +121,7 @@
             <thead><tr><th>Local</th><th>Código</th><th>Descrição</th><th>Lote</th><th style="text-align:right;">Qtd</th><th>Contagem</th><th>Hora</th><th></th></tr></thead>
             <tbody id="ig-minhas-tbody"></tbody>
         </table></div>
+        </div>
     </div></section>
 
     <!-- Nova contagem: janela que fica aberta entre leituras (o local continua preenchido) -->
@@ -203,8 +214,12 @@
 
     <!-- Gestao: inventarios encerrados e indicadores -->
     <section id="ig-gestao" class="eui-card hidden"><div class="eui-card__body">
+        <div class="ig-toolbar">
+            <div id="ig-gestao-atual" style="font-size:13px;"></div>
+            <div id="ig-gestao-acao" style="margin-left:auto;"></div>
+        </div>
         <div class="ig-scroll"><table class="ig-table">
-            <thead><tr><th>Número</th><th>Descrição</th><th>Aberto</th><th>Encerrado</th><th>ERP</th>
+            <thead><tr><th>Número</th><th>Descrição</th><th>Aberto</th><th>Encerrado</th><th>Situação</th>
                 <th style="text-align:right;">Itens contados</th><th style="text-align:right;">Financeiro inicial</th>
                 <th style="text-align:right;">Financeiro final</th><th style="text-align:right;">Diferença</th>
                 <th style="text-align:right;">Acuracidade itens</th><th style="text-align:right;">Acuracidade financeira</th><th></th></tr></thead>
@@ -227,7 +242,14 @@
     const num = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 }));
     const SLUG = { "Pendente": "pendente", "Aguardando 3ª": "aguarda", "Confere com o sistema": "confere", "Divergência confirmada": "diverg", "Sem correspondência": "sem" };
 
-    let estado = null, contagem = null, historico = null, aba = PODE_CONTAR ? "contar" : "resultado";
+    let estado = null, contagem = null, historico = null, aba = PODE_GESTAO ? "gestao" : "contar";
+    // Numero do inventario que o operador informou na aba Contar (fica na aba do navegador).
+    let numeroContagem = "";
+    try { numeroContagem = sessionStorage.getItem("ig-numero-contagem") || ""; } catch (_) { /* sem storage */ }
+    function guardarNumero(n) {
+        numeroContagem = n || "";
+        try { if (numeroContagem) sessionStorage.setItem("ig-numero-contagem", numeroContagem); else sessionStorage.removeItem("ig-numero-contagem"); } catch (_) { /* sem storage */ }
+    }
     const brl = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
     const pct = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%");
     let produto = null;  // item lido, conferido no servidor
@@ -269,11 +291,11 @@
         $("ig-gestao").classList.toggle("hidden", aba !== "gestao" || !abas.gestao);
         if (!inv) {
             let h = '<div class="ig-aviso"><i class="fas fa-circle-info"></i> Nenhum inventário geral em andamento.';
-            if (PODE_GESTAO) h += estado.api_configurada ? " Crie um novo para ler o saldo do ERP e congelar a 1ª contagem." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
+            if (PODE_GESTAO) h += estado.api_configurada ? " Crie um novo na aba Gestão: ele lê o saldo do ERP e congela a 1ª contagem." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
+            else h += " Aguarde a gestão do inventário abrir um.";
             $("ig-avisos").innerHTML = h + "</div>";
-            if (PODE_GESTAO && estado.api_configurada) $("ig-acoes-topo").innerHTML = '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-plus"></i> Novo inventário geral</button>';
         } else {
-            $("ig-sub").textContent = `${inv.numero}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
+            if (PODE_GESTAO) $("ig-sub").textContent = `${inv.numero}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
             if (inv.status !== "Em contagem") {
                 $("ig-avisos").innerHTML = `<div class="ig-aviso"><i class="fas fa-lock"></i> Inventário <b>${esc(inv.status)}</b>${inv.finalizado_por ? ` por ${esc(inv.finalizado_por)} em ${esc(inv.finalizado_em || "—")}` : ""} — não aceita mais contagem.${PODE_GESTAO ? " Encerre o inventário para liberar a abertura de outro." : ""}</div>`;
             }
@@ -285,27 +307,39 @@
 
     // ── Gestao (inventarios encerrados) ─────────────────────────────────
     function desenharGestao() {
+        const inv = estado.inventario;
+        $("ig-gestao-atual").innerHTML = inv
+            ? `<i class="fas fa-circle-play" style="color:var(--eui-primary,#2563eb);"></i> Em andamento: <b>${esc(inv.numero)}</b> · ${esc(inv.status)} — informe este número na aba Contar.`
+            : '<span style="color:var(--eui-muted);">Nenhum inventário em andamento.</span>';
+        $("ig-gestao-acao").innerHTML = inv
+            ? '<button class="eui-btn eui-btn--subtle" data-acompanhar><i class="fas fa-chart-column"></i> Acompanhar no Resultado</button>'
+            : estado.api_configurada ? '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-plus"></i> Novo inventário geral</button>' : "";
         $("ig-gestao-tbody").innerHTML = (historico || []).map((h) => {
-            const cancelado = h.status === "Cancelado";
+            const cancelado = h.status === "Cancelado", fechado = cancelado || h.status === "Encerrado";
             const dif = h.financeiro_final == null ? null : h.financeiro_final - h.financeiro_inicial;
             return `<tr>
             <td class="ig-cod">${esc(h.numero)}</td><td>${esc(h.descricao || "—")}${cancelado ? `<br><small style="color:#991b1b;">Motivo: ${esc(h.motivo_cancelamento)}</small>` : ""}</td>
             <td>${esc(h.aberto_em || "")}<br><small>${esc(h.aberto_por || "")}</small></td>
             <td>${esc((cancelado ? h.cancelado_em : h.encerrado_em) || "—")}<br><small>${esc((cancelado ? h.cancelado_por : h.encerrado_por) || "")}</small></td>
-            <td>${cancelado ? '<span class="ig-st sem">Cancelado</span>' : h.enviado_ao_erp ? '<span class="ig-st confere">Enviado</span>' : '<span class="ig-st pendente">Não enviado</span>'}</td>
+            <td>${!fechado ? `<span class="ig-st aguarda">${esc(h.status)}</span>` : cancelado ? '<span class="ig-st sem">Cancelado</span>' : h.enviado_ao_erp ? '<span class="ig-st confere">Enviado</span>' : '<span class="ig-st pendente">Não enviado</span>'}</td>
             <td class="num" title="${h.linhas_total != null ? `${h.linhas_contadas} de ${h.linhas_total} linhas concluídas` : ""}"><b>${num(h.linhas_contadas)}</b>${h.linhas_total != null && h.linhas_total !== h.linhas_contadas ? ` <small>de ${num(h.linhas_total)}</small>` : ""}</td>
             <td class="num">${brl(h.financeiro_inicial)}</td>
             <td class="num">${brl(h.financeiro_final)}${h.linhas_sem_custo ? ` <i class="fas fa-triangle-exclamation" style="color:#b45309;" title="${h.linhas_sem_custo} linha(s) sem custo médio no ERP ficaram fora do financeiro"></i>` : ""}</td>
             <td class="num" style="color:${dif ? (dif > 0 ? "#166534" : "#991b1b") : "inherit"};">${dif == null ? "—" : (dif > 0 ? "+" : "") + brl(dif)}</td>
             <td class="num"><b>${pct(h.acuracidade_itens)}</b></td>
             <td class="num"><b>${pct(h.acuracidade_financeira)}</b></td>
-            <td><a class="eui-btn eui-btn--subtle eui-btn--sm" href="/api/inventario-geral/exportar?id=${h.id}" title="Excel"><i class="fas fa-file-excel"></i></a></td></tr>`;
-        }).join("") || '<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhum inventário geral encerrado ainda.</td></tr>';
+            <td style="white-space:nowrap;">${!fechado ? '<button class="eui-btn eui-btn--subtle eui-btn--sm" data-acompanhar title="Acompanhar no Resultado"><i class="fas fa-chart-column"></i></button> ' : ""}<a class="eui-btn eui-btn--subtle eui-btn--sm" href="/api/inventario-geral/exportar?id=${h.id}" title="Excel"><i class="fas fa-file-excel"></i></a></td></tr>`;
+        }).join("") || '<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhum inventário geral criado ainda.</td></tr>';
     }
 
     // ── Contar (cego, por local) ────────────────────────────────────────
     function desenharContar() {
         const aberto = estado.inventario.status === "Em contagem";
+        // Numero informado nao e' mais o aberto (encerrado/cancelado/outro): pede de novo.
+        if (numeroContagem && numeroContagem !== estado.inventario.numero) guardarNumero("");
+        $("ig-chave").classList.toggle("hidden", !!numeroContagem);
+        $("ig-contar-corpo").classList.toggle("hidden", !numeroContagem);
+        if (!numeroContagem) { fecharContagem(); return; }
         $("ig-contar-num").innerHTML = `Inventário ${esc(estado.inventario.numero)} <small>· ${esc(estado.inventario.status)}</small>`;
         $("ig-modal-num").textContent = `Inventário ${estado.inventario.numero}`;
         $("ig-btn-nova").classList.toggle("hidden", !aberto);
@@ -466,7 +500,7 @@
         }
         try {
             const r = await api("/api/inventario-geral/leituras", { method: "POST", body: JSON.stringify({
-                inventario_id: estado.inventario.id,
+                inventario_id: estado.inventario.id, inventario_numero: numeroContagem,
                 local: $("ig-local").value, codigo: $("ig-codigo").value, lote: $("ig-lote").value, quantidade: $("ig-qtd").value,
                 ...(lotes ? { lotes } : {}) }) });
             const qtdTotal = r.leituras.reduce((s, l) => s + l.quantidade, 0);
@@ -559,6 +593,7 @@
                 toast("Lendo o saldo do ERP… (pode levar alguns segundos)", "");
                 const r = await api("/api/inventario-geral/abrir", { method: "POST", body: JSON.stringify({ descricao: desc }) });
                 toast(r.message, "success");
+                aba = "resultado";  // acompanha os itens carregados
             } else if (id === "ig-btn-encerrar-2" || id === "ig-btn-encerrar-3") {
                 const rodada = id.endsWith("2") ? 2 : 3;
                 if (!confirmarEncerrar(rodada)) return;
@@ -628,7 +663,9 @@
         if (e.target.closest("#ig-scan-fechar") || e.target.id === "ig-scan-modal") { pararScanner(); return; }
         const scan = e.target.closest("[data-scan]");
         if (scan) { abrirScanner(scan.dataset.scan); return; }
-        const topo = e.target.closest("#ig-acoes-topo button"); if (topo) { acaoTopo(topo.id); return; }
+        const topo = e.target.closest("#ig-acoes-topo button, #ig-btn-abrir"); if (topo) { acaoTopo(topo.id); return; }
+        if (e.target.closest("[data-acompanhar]")) { aba = "resultado"; desenhar(); return; }
+        if (e.target.closest("#ig-trocar-num")) { guardarNumero(""); $("ig-num-input").value = ""; desenhar(); $("ig-num-input").focus(); return; }
     });
     // Leitor de codigo de barras manda Enter: local -> item -> (lote) -> quantidade -> registra.
     $("ig-form").addEventListener("keydown", async (e) => {
@@ -654,6 +691,15 @@
     $("ig-qtd").addEventListener("input", atualizarLotes);
     $("ig-form").addEventListener("submit", (e) => { e.preventDefault(); registrar(); });
     $("ig-codigo").addEventListener("change", () => { conferirItem(); });
+    $("ig-chave").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        try {
+            const r = await api(`/api/inventario-geral/conferir-numero?numero=${encodeURIComponent($("ig-num-input").value.trim())}`);
+            guardarNumero(r.numero);
+            toast(`Contagem do inventário ${r.numero} aberta.`, "success");
+            desenhar();
+        } catch (err) { toast(err.message, "error"); $("ig-num-input").select(); }
+    });
     $("ig-busca-res").addEventListener("input", () => desenharResultado());
     $("ig-filtro-status").addEventListener("change", () => desenharResultado());
 
