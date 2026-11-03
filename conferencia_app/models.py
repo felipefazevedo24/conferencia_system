@@ -4918,6 +4918,26 @@ class InventarioGeralResultado(db.Model):
                                  backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
 
 
+class InventarioGeralTesteApi(db.Model):
+    """Teste da API de inventario do CPS com 1 a 5 itens, fora de qualquer
+    inventario (o envio real so' sai no fim, em lotes de 500). Cada chamada
+    vira uma linha: o /aplicar reenvia o payload de um /simular OK com a
+    mesma referencia, e o que foi gravado no ERP fica rastreado aqui."""
+
+    __tablename__ = "inventario_geral_teste_api"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(10), nullable=False)  # simular | aplicar
+    referencia = db.Column(db.String(80), nullable=False, index=True)
+    simulacao_id = db.Column(db.Integer, db.ForeignKey("inventario_geral_teste_api.id"))  # aplicar -> simular de origem
+    payload = db.Column(db.Text, nullable=False)
+    resposta = db.Column(db.Text)
+    http_status = db.Column(db.Integer)
+    status = db.Column(db.String(30))  # SIMULADO_SEM_GRAVAR | APLICADO | ERRO
+    enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    enviado_por = db.Column(db.String(100))
+
+
 class InventarioGeralCancelamento(db.Model):
     """Quem cancelou o inventario geral, quando e por que. O inventario fica
     no historico com status Cancelado (numero, linhas e leituras mantidos),

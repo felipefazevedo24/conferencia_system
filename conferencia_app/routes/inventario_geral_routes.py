@@ -298,6 +298,56 @@ def api_cancelar_inventario():
     return jsonify({"message": f"Inventário {svc.numero(inv)} cancelado."})
 
 
+# ── Teste da API (gestao) ─────────────────────────────────────────────
+def _teste_dict(t) -> dict:
+    try:
+        payload = json.loads(t.payload or "{}")
+    except ValueError:
+        payload = {}
+    return {"id": t.id, "tipo": t.tipo, "referencia": t.referencia, "simulacao_id": t.simulacao_id,
+            "status": t.status, "http": t.http_status, "enviado_em": _dt(t.enviado_em), "enviado_por": t.enviado_por,
+            "itens": len(payload.get("itens") or []), "payload": t.payload, "resposta": t.resposta}
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/produtos", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_teste_produtos():
+    try:
+        produtos = svc.consultar_teste(request.args.get("codigos") or "")
+    except (ValueError, cps.ErroApiInventario) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"produtos": produtos, "gravacao_configurada": cps.configurada(gravacao=True)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/simular", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_teste_simular():
+    try:
+        teste = svc.simular_teste((request.get_json(silent=True) or {}).get("itens"), _usuario())
+    except (ValueError, cps.ErroApiInventario) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"teste": _teste_dict(teste)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/<int:teste_id>/aplicar", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_teste_aplicar(teste_id):
+    simulacao = db.session.get(svc.TesteApi, teste_id)
+    if not simulacao:
+        return jsonify({"error": "Simulação não encontrada."}), 404
+    try:
+        teste = svc.aplicar_teste(simulacao, _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"teste": _teste_dict(teste)})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/teste-api/historico", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_teste_historico():
+    return jsonify({"testes": [_teste_dict(t) for t in svc.historico_teste()]})
+
+
 @inventario_geral_bp.route("/api/inventario-geral/historico", methods=["GET"])
 @permission_required(PERM_GESTAO)
 def api_historico():

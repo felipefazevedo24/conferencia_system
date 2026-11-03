@@ -89,6 +89,7 @@
         <button type="button" class="ig-tab" data-tab="gestao">Gestão</button>
         <button type="button" class="ig-tab" data-tab="resultado">Resultado</button>
         <button type="button" class="ig-tab" data-tab="contar">Contar</button>
+        <button type="button" class="ig-tab" data-tab="teste">Teste da API</button>
     </div>
 
     <!-- Contar: leitura cega por local -->
@@ -212,6 +213,30 @@
         <div class="eui-card" id="ig-envios-card"><div class="eui-card__body" id="ig-envios"></div></div>
     </section>
 
+    <!-- Teste da API: 1 a 5 itens fora de qualquer inventario -->
+    <section id="ig-teste" class="hidden" style="display:grid;gap:16px;">
+        <div class="eui-card"><div class="eui-card__body">
+            <h3 style="margin:0 0 4px;font-size:15px;"><i class="fas fa-flask"></i> Teste da API de inventário do ERP</h3>
+            <p style="margin:0 0 12px;font-size:12.5px;color:var(--eui-muted);">Envia de 1 a 5 itens para o CPS, fora de qualquer inventário (o envio real sai no fim, em lotes de 500). <b>Simular</b> não grava nada. <b>Aplicar</b> grava de verdade no estoque do ERP — para não alterar o saldo, aplique a mesma quantidade do sistema.</p>
+            <form class="ig-toolbar" id="ig-teste-form" autocomplete="off" style="align-items:flex-end;">
+                <label class="ig-field" style="flex:1;min-width:260px;max-width:520px;">
+                    <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--eui-muted);">Códigos dos itens (até 5, separados por vírgula)</span>
+                    <input class="eui-input" id="ig-teste-codigos" placeholder="Ex.: 2-01-00025, 19-01-00576" style="font-size:15px;padding:10px 12px;">
+                </label>
+                <button type="submit" class="eui-btn eui-btn--subtle" style="padding:12px 16px;"><i class="fas fa-magnifying-glass"></i> Buscar no ERP</button>
+            </form>
+            <div id="ig-teste-itens"></div>
+            <div id="ig-teste-retorno"></div>
+        </div></div>
+        <div class="eui-card"><div class="eui-card__body">
+            <h3 class="ig-h3" style="margin-top:0;"><i class="fas fa-clock-rotate-left"></i> Histórico de testes</h3>
+            <div class="ig-scroll" style="max-height:50vh;"><table class="ig-table">
+                <thead><tr><th>Quando</th><th>Quem</th><th>Tipo</th><th>Referência</th><th style="text-align:right;">Itens</th><th>Status</th><th>HTTP</th><th></th></tr></thead>
+                <tbody id="ig-teste-hist"></tbody>
+            </table></div>
+        </div></div>
+    </section>
+
     <!-- Gestao: inventarios encerrados e indicadores -->
     <section id="ig-gestao" class="eui-card hidden"><div class="eui-card__body">
         <div class="ig-toolbar">
@@ -279,7 +304,7 @@
         const inv = estado.inventario;
         $("ig-avisos").innerHTML = "";
         $("ig-acoes-topo").innerHTML = "";
-        const abas = { contar: PODE_CONTAR && !!inv, resultado: PODE_GESTAO && !!inv, gestao: PODE_GESTAO };
+        const abas = { contar: PODE_CONTAR && !!inv, resultado: PODE_GESTAO && !!inv, gestao: PODE_GESTAO, teste: PODE_GESTAO };
         if (!abas[aba]) aba = Object.keys(abas).find((k) => abas[k]) || "contar";
         document.querySelectorAll(".ig-tab").forEach((b) => {
             b.classList.toggle("hidden", !abas[b.dataset.tab]);
@@ -289,6 +314,7 @@
         $("ig-contar").classList.toggle("hidden", aba !== "contar" || !abas.contar);
         $("ig-resultado").classList.toggle("hidden", aba !== "resultado" || !abas.resultado);
         $("ig-gestao").classList.toggle("hidden", aba !== "gestao" || !abas.gestao);
+        $("ig-teste").classList.toggle("hidden", aba !== "teste" || !abas.teste);
         if (!inv) {
             let h = '<div class="ig-aviso"><i class="fas fa-circle-info"></i> Nenhum inventário geral em andamento.';
             if (PODE_GESTAO) h += estado.api_configurada ? " Crie um novo na aba Gestão: ele lê o saldo do ERP e congela a 1ª contagem." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
@@ -303,6 +329,63 @@
         if (aba === "contar" && abas.contar) desenharContar();
         if (aba === "resultado" && abas.resultado) desenharResultado();
         if (aba === "gestao" && abas.gestao) desenharGestao();
+        if (aba === "teste" && abas.teste) carregarHistoricoTeste();
+    }
+
+    // ── Teste da API (1 a 5 itens) ──────────────────────────────────────
+    let testeProdutos = [], testeGravacao = false;
+    const statusCls = (st) => (st === "APLICADO" ? "confere" : st === "SIMULADO_SEM_GRAVAR" ? "diverg" : "sem");
+    const jsonBonito = (t) => { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (_) { return t || ""; } };
+    function desenharItensTeste() {
+        $("ig-teste-itens").innerHTML = !testeProdutos.length ? "" : `
+            <div class="ig-scroll" style="margin-top:12px;"><table class="ig-table">
+                <thead><tr><th>Código</th><th>Descrição</th><th style="text-align:right;">Saldo ERP</th><th>Versão</th><th>Quantidade inventariada</th></tr></thead>
+                <tbody>${testeProdutos.map((p, n) => `<tr>
+                    <td class="ig-cod">${esc(p.codigo_interno)}${p.inconsistente ? ' <i class="fas fa-triangle-exclamation" style="color:#b45309;" title="Estoque geral do ERP difere da soma dos depósitos - o CPS deve recusar (409)"></i>' : ""}</td>
+                    <td>${esc(p.descricao)}<br><small>${esc(p.unidade || "")}${p.com_lote ? " · controlado por lote" : ""}</small></td>
+                    <td class="num">${num(p.qtde_total)}</td><td><small>${esc(p.versao || "")}</small></td>
+                    <td>${p.com_lote ? `<div style="display:grid;gap:6px;" data-teste-lotes="${n}">
+                        ${(p.lotes.length ? p.lotes : [{ nome: "", qtde: "" }]).map((l) => linhaLoteTeste(l.nome, l.qtde)).join("")}
+                        <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-teste-add-lote="${n}" style="justify-self:start;"><i class="fas fa-plus"></i> Lote</button></div>`
+                        : `<input class="eui-input ig-qtd-in" data-teste-qtd="${n}" inputmode="decimal" value="${esc(p.qtde_total ?? "")}" style="max-width:160px;">`}</td></tr>`).join("")}
+                </tbody></table></div>
+            <div class="ig-form-acoes" style="margin-top:12px;">
+                <button type="button" class="eui-btn eui-btn--primary" id="ig-teste-simular"><i class="fas fa-vial"></i> Simular (não grava)</button>
+            </div>`;
+    }
+    const linhaLoteTeste = (nome, qtde) => `<div style="display:grid;grid-template-columns:1fr 120px auto;gap:6px;">
+        <input class="eui-input" data-teste-lote-nome placeholder="Lote" value="${esc(nome || "")}">
+        <input class="eui-input ig-qtd-in" data-teste-lote-qtde inputmode="decimal" placeholder="Qtd" value="${esc(qtde ?? "")}">
+        <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-teste-rem-lote title="Remover lote"><i class="fas fa-trash"></i></button></div>`;
+    function desenharRetornoTeste(t) {
+        const podeAplicar = t.tipo === "simular" && t.status === "SIMULADO_SEM_GRAVAR";
+        $("ig-teste-retorno").innerHTML = `<div style="margin-top:14px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                <b>${t.tipo === "aplicar" ? "Aplicar" : "Simular"} · ${esc(t.referencia)}</b>
+                <span class="ig-st ${statusCls(t.status)}">${esc(t.status)}</span><small>HTTP ${esc(t.http ?? "—")}</small>
+                ${podeAplicar ? `<button type="button" class="eui-btn eui-btn--danger" data-teste-aplicar="${t.id}" style="margin-left:auto;" ${testeGravacao ? "" : "disabled title='Chave de gravação não configurada no servidor'"}><i class="fas fa-cloud-arrow-up"></i> Aplicar no ERP</button>` : ""}
+            </div>
+            <details><summary style="cursor:pointer;font-size:12.5px;">Enviado</summary><div class="ig-retorno">${esc(jsonBonito(t.payload))}</div></details>
+            <div style="font-size:12.5px;margin:8px 0 4px;font-weight:700;">Resposta da API</div><div class="ig-retorno">${esc(jsonBonito(t.resposta))}</div></div>`;
+    }
+    async function carregarHistoricoTeste() {
+        try {
+            const r = await api("/api/inventario-geral/teste-api/historico");
+            $("ig-teste-hist").innerHTML = r.testes.map((t) => `<tr>
+                <td>${esc(t.enviado_em || "")}</td><td>${esc(t.enviado_por || "")}</td><td>${t.tipo === "aplicar" ? "<b>Aplicar</b>" : "Simular"}</td>
+                <td>${esc(t.referencia)}</td><td class="num">${num(t.itens)}</td>
+                <td><span class="ig-st ${statusCls(t.status)}">${esc(t.status || "")}</span></td><td>${esc(t.http ?? "—")}</td>
+                <td><button class="eui-btn eui-btn--subtle eui-btn--sm" data-teste-ver='${esc(JSON.stringify(t))}'>Ver</button></td></tr>`).join("")
+                || '<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--eui-muted);">Nenhum teste ainda.</td></tr>';
+        } catch (e) { toast(e.message, "error"); }
+    }
+    function coletarTeste() {
+        return testeProdutos.map((p, n) => {
+            if (!p.com_lote) return { codigo: p.codigo_interno, qtde_inventariada: document.querySelector(`[data-teste-qtd="${n}"]`).value.trim() };
+            const lotes = [...document.querySelectorAll(`[data-teste-lotes="${n}"] [data-teste-lote-nome]`)].map((el) => ({
+                nome: el.value.trim(), qtde: el.parentElement.querySelector("[data-teste-lote-qtde]").value.trim() }));
+            return { codigo: p.codigo_interno, lotes };
+        });
     }
 
     // ── Gestao (inventarios encerrados) ─────────────────────────────────
@@ -633,7 +716,8 @@
 
     // ── Eventos ─────────────────────────────────────────────────────────
     document.addEventListener("click", (e) => {
-        const tab = e.target.closest(".ig-tab"); if (tab) { aba = tab.dataset.tab; desenhar(); return; }
+        // Clique antes do 1o carregamento: guarda a aba e desenha quando os dados chegarem.
+        const tab = e.target.closest(".ig-tab"); if (tab) { aba = tab.dataset.tab; if (estado) desenhar(); return; }
         const rec = e.target.closest("[data-recontar]");
         if (rec) {
             if (!confirm("Limpar a 2ª e a 3ª contagem deste item e recontar?")) return;
@@ -665,6 +749,26 @@
         if (scan) { abrirScanner(scan.dataset.scan); return; }
         const topo = e.target.closest("#ig-acoes-topo button, #ig-btn-abrir"); if (topo) { acaoTopo(topo.id); return; }
         if (e.target.closest("[data-acompanhar]")) { aba = "resultado"; desenhar(); return; }
+        const addLote = e.target.closest("[data-teste-add-lote]");
+        if (addLote) { addLote.insertAdjacentHTML("beforebegin", linhaLoteTeste("", "")); return; }
+        const remLote = e.target.closest("[data-teste-rem-lote]"); if (remLote) { remLote.parentElement.remove(); return; }
+        if (e.target.closest("#ig-teste-simular")) {
+            toast("Relendo o ERP e simulando… (nada é gravado)", "");
+            api("/api/inventario-geral/teste-api/simular", { method: "POST", body: JSON.stringify({ itens: coletarTeste() }) })
+                .then((r) => { desenharRetornoTeste(r.teste); toast(`Simulação: ${r.teste.status}`, r.teste.status === "SIMULADO_SEM_GRAVAR" ? "success" : "error"); carregarHistoricoTeste(); })
+                .catch((err) => toast(err.message, "error"));
+            return;
+        }
+        const aplicarTeste = e.target.closest("[data-teste-aplicar]");
+        if (aplicarTeste) {
+            if (!confirm("APLICAR no ERP? Isso GRAVA estas quantidades no estoque do CPS (o mesmo pacote que foi simulado).")) return;
+            api(`/api/inventario-geral/teste-api/${aplicarTeste.dataset.testeAplicar}/aplicar`, { method: "POST" })
+                .then((r) => { desenharRetornoTeste(r.teste); toast(`Aplicar: ${r.teste.status}`, r.teste.status === "APLICADO" ? "success" : "error"); carregarHistoricoTeste(); })
+                .catch((err) => toast(err.message, "error"));
+            return;
+        }
+        const ver = e.target.closest("[data-teste-ver]");
+        if (ver) { desenharRetornoTeste(JSON.parse(ver.dataset.testeVer)); $("ig-teste-retorno").scrollIntoView({ behavior: "smooth" }); return; }
         if (e.target.closest("#ig-trocar-num")) { guardarNumero(""); $("ig-num-input").value = ""; desenhar(); $("ig-num-input").focus(); return; }
     });
     // Leitor de codigo de barras manda Enter: local -> item -> (lote) -> quantidade -> registra.
@@ -691,6 +795,17 @@
     $("ig-qtd").addEventListener("input", atualizarLotes);
     $("ig-form").addEventListener("submit", (e) => { e.preventDefault(); registrar(); });
     $("ig-codigo").addEventListener("change", () => { conferirItem(); });
+    $("ig-teste-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        try {
+            toast("Lendo o ERP…", "");
+            const r = await api(`/api/inventario-geral/teste-api/produtos?codigos=${encodeURIComponent($("ig-teste-codigos").value)}`);
+            testeProdutos = r.produtos; testeGravacao = r.gravacao_configurada;
+            $("ig-teste-retorno").innerHTML = "";
+            desenharItensTeste();
+            toast(`${testeProdutos.length} item(ns) lido(s) do ERP.`, "success");
+        } catch (err) { toast(err.message, "error"); }
+    });
     $("ig-chave").addEventListener("submit", async (e) => {
         e.preventDefault();
         try {
