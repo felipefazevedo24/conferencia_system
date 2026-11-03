@@ -483,6 +483,7 @@
         i.leituras.forEach((l) => { const k = `${l.local}|${l.rodada}`; por[k] = (por[k] || 0) + l.quantidade; });
         return Object.entries(por).map(([k, q]) => { const [local, rod] = k.split("|"); return `<span class="ig-local" title="${rod}ª contagem">${esc(local)} · ${rod}ª: ${num(q)}</span>`; }).join("") || "—";
     }
+    const LIMITE_RES = 600;
     function desenharResultado() {
         const inv = estado.inventario, r = estado.resumo || {};
         const aberto = inv.status === "Em contagem";
@@ -505,9 +506,13 @@
         const termo = ($("ig-busca-res").value || "").trim().toLowerCase();
         const st = $("ig-filtro-status").value;
         const casa = (i) => !termo || [i.codigo_interno, i.descricao, i.lote, ...i.leituras.map((l) => l.local)].some((v) => String(v || "").toLowerCase().includes(termo));
-        const itens = estado.itens.filter((i) => casa(i) && (!st || i.status === st));
-        $("ig-res-info").textContent = `${itens.length} de ${estado.itens.length} linha(s)`;
-        $("ig-res-tbody").innerHTML = itens.slice(0, 600).map((i) => {
+        // Linhas ja' lidas primeiro: com milhares de linhas, o que foi contado
+        // sumia depois do corte de 600 (sort estavel mantem a ordem do ERP).
+        const itens = estado.itens.filter((i) => casa(i) && (!st || i.status === st))
+            .sort((a, b) => (b.leituras.length ? 1 : 0) - (a.leituras.length ? 1 : 0));
+        $("ig-res-info").textContent = `${itens.length} de ${estado.itens.length} linha(s)`
+            + (itens.length > LIMITE_RES ? ` · mostrando ${LIMITE_RES} — use a busca para achar as demais` : "");
+        $("ig-res-tbody").innerHTML = itens.slice(0, LIMITE_RES).map((i) => {
             const dif = i.qtde_final == null ? null : i.qtde_final - i.qtde_sistema;
             return `<tr>
                 <td class="ig-cod">${esc(i.codigo_interno)}${i.adicionado_manual ? ` <i class="fas fa-plus-circle" title="Lido no físico sem saldo no sistema (${esc(i.adicionado_por || "")})"></i>` : ""}</td>
