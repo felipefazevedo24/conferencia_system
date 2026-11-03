@@ -4776,6 +4776,7 @@ class InventarioGeral(db.Model):
     STATUS_FINALIZADO = "Finalizado"
     STATUS_ENVIADO = "Enviado ao ERP"
     STATUS_ENCERRADO = "Encerrado"  # ultimo passo - com ou sem envio ao ERP
+    STATUS_CANCELADO = "Cancelado"  # desistiu antes de aplicar no ERP (motivo em InventarioGeralCancelamento)
 
     id = db.Column(db.Integer, primary_key=True)
     descricao = db.Column(db.String(160))
@@ -4915,6 +4916,23 @@ class InventarioGeralResultado(db.Model):
 
     inventario = db.relationship("InventarioGeral",
                                  backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
+
+
+class InventarioGeralCancelamento(db.Model):
+    """Quem cancelou o inventario geral, quando e por que. O inventario fica
+    no historico com status Cancelado (numero, linhas e leituras mantidos),
+    fora dos indicadores. Tabela a parte pra nao precisar de migration."""
+
+    __tablename__ = "inventario_geral_cancelamento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, unique=True)
+    motivo = db.Column(db.Text, nullable=False)
+    cancelado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    cancelado_por = db.Column(db.String(100))
+
+    inventario = db.relationship("InventarioGeral",
+                                 backref=db.backref("cancelamento", uselist=False, cascade="all, delete-orphan"))
 
 
 class Comunicado(db.Model):

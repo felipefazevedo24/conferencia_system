@@ -32,6 +32,7 @@ from ..models import (
 )
 from ..tempo import agora_br
 from ..models import InventarioGeralResultado as Resultado
+from ..models import InventarioGeralCancelamento as Cancelamento
 from . import erp_estoque_service as erp
 from . import inventario_cps_client as cps
 
@@ -65,10 +66,13 @@ def com_lote(tipo_controle) -> bool:
 
 
 # ── Abertura ────────────────────────────────────────────────────────────
+FECHADOS = (Inventario.STATUS_ENCERRADO, Inventario.STATUS_CANCELADO)
+
+
 def inventario_ativo() -> Inventario | None:
-    """O que ainda nao foi encerrado (so' um por vez - estoque parado)."""
+    """O que ainda nao foi encerrado nem cancelado (so' um por vez - estoque parado)."""
     return (Inventario.query
-            .filter(Inventario.status != Inventario.STATUS_ENCERRADO)
+            .filter(Inventario.status.notin_(FECHADOS))
             .order_by(Inventario.id.desc()).first())
 
 
@@ -89,7 +93,7 @@ def numero(inv: Inventario) -> str:
 
 def abrir(usuario: str, descricao: str = "") -> Inventario:
     if inventario_ativo():
-        raise ValueError("Já existe um inventário geral em andamento - finalize e envie antes de abrir outro.")
+        raise ValueError("Já existe um inventário geral em andamento - encerre ou cancele antes de abrir outro.")
     produtos = cps.listar_deposito()
     inv = Inventario(descricao=_txt(descricao)[:160] or None, aberto_por=usuario, aberto_em=agora_br())
     db.session.add(inv)
@@ -435,8 +439,8 @@ def _custos_erp() -> dict:
 def encerrar(inv: Inventario, usuario: str) -> Resultado:
     """Fecha o inventario em qualquer fase (inclusive sem enviar ao ERP -
     inventario de teste). Congela custo e indicadores e libera abrir outro."""
-    if inv.status == Inventario.STATUS_ENCERRADO:
-        raise ValueError("Este inventário já está encerrado.")
+    if inv.status in FECHADOS:
+        raise ValueError(f"Este inventário já está {inv.status.lower()}.")
     estoque = _custos_erp()
     concluidas = [i for i in inv.itens if i.status in (Item.STATUS_CONFERE, Item.STATUS_DIVERGENCIA)]
     custos, inicial, final, dif_abs, sem_custo = {}, 0.0, 0.0, 0.0, 0
@@ -469,5 +473,30 @@ def encerrar(inv: Inventario, usuario: str) -> Resultado:
 
 
 def historico() -> list[Inventario]:
-    return (Inventario.query.filter(Inventario.status == Inventario.STATUS_ENCERRADO)
+    return (Inventario.query.filter(Inventario.status.in_(FECHADOS))
             .order_by(Inventario.id.desc()).all())
+
+
+def aplicado_no_erp(inv: Inventario) -> bool:
+    """Algum lote de envio ja' foi gravado no CPS (mesmo que outro tenha
+    falhado e o inventario continue Finalizado)."""
+    return inv.status == Inventario.STATUS_ENVIADO or any(
+        e.tipo == "aplicar" and e.status == "APLICADO" for e in inv.envios)
+
+
+def cancelar(inv: Inventario, motivo, usuario: str) -> Cancelamento:
+    """Desiste do inventario antes de aplicar no ERP. Fica no historico como
+    Cancelado (numero, linhas e leituras mantidos) e libera abrir outro."""
+    if inv.status in FECHADOS:
+        raise ValueError(f"Este inventário já está {inv.status.lower()}.")
+    if aplicado_no_erp(inv):
+        raise ValueError("O resultado já foi aplicado no ERP - não dá mais para cancelar. Encerre o inventário.")
+    motivo = _txt(motivo)
+    if not motivo:
+        raise ValueError("Informe o motivo do cancelamento.")
+    cancelamento = Cancelamento(inventario_id=inv.id, motivo=motivo[:2000], cancelado_por=usuario,
+                                cancelado_em=agora_br())
+    db.session.add(cancelamento)
+    inv.status = Inventario.STATUS_CANCELADO
+    db.session.commit()
+    return cancelamento

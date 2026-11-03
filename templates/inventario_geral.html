@@ -39,6 +39,8 @@
     .ig-form-acoes { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
     .ig-prod-info { grid-column: 1 / -1; font-size: 12.5px; min-height: 18px; }
     .ig-full { grid-column: 1 / -1; }
+    .ig-num-inv { font-size: 15px; font-weight: 800; }
+    .ig-num-inv small { font-weight: 600; color: var(--eui-muted); font-size: 12px; }
     .ig-req { color: var(--eui-danger, #dc2626); }
     .ig-hint { font-size: 12px; color: var(--eui-muted); min-height: 16px; }
     .ig-hint.warn { color: #b45309; }
@@ -91,8 +93,9 @@
 
     <!-- Contar: leitura cega por local -->
     <section id="ig-contar" class="eui-card hidden"><div class="eui-card__body">
-        <div class="ig-toolbar" style="justify-content:flex-end;">
-            <button type="button" class="eui-btn eui-btn--primary" id="ig-btn-nova"><i class="fas fa-plus-circle"></i> Nova contagem</button>
+        <div class="ig-toolbar">
+            <div class="ig-num-inv" id="ig-contar-num"></div>
+            <button type="button" class="eui-btn eui-btn--primary" id="ig-btn-nova" style="margin-left:auto;"><i class="fas fa-plus-circle"></i> Nova contagem</button>
         </div>
 
         <div id="ig-dirigidos-box" class="hidden">
@@ -116,7 +119,7 @@
             <div class="eui-card__head">
                 <div>
                     <h2 class="eui-card__title"><i class="fas fa-plus-circle"></i> Nova contagem</h2>
-                    <p class="eui-card__sub">Registre local, item e quantidade. Leitura por câmera disponível no tablet.</p>
+                    <p class="eui-card__sub"><b id="ig-modal-num"></b> · Registre local, item e quantidade. Leitura por câmera disponível no tablet.</p>
                 </div>
             </div>
             <div class="eui-card__body">
@@ -266,9 +269,9 @@
         $("ig-gestao").classList.toggle("hidden", aba !== "gestao" || !abas.gestao);
         if (!inv) {
             let h = '<div class="ig-aviso"><i class="fas fa-circle-info"></i> Nenhum inventário geral em andamento.';
-            if (PODE_GESTAO) h += estado.api_configurada ? " Abra um para carregar os itens com saldo do ERP." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
+            if (PODE_GESTAO) h += estado.api_configurada ? " Crie um novo para ler o saldo do ERP e congelar a 1ª contagem." : " <b>A chave da API de inventário não está configurada no servidor.</b>";
             $("ig-avisos").innerHTML = h + "</div>";
-            if (PODE_GESTAO && estado.api_configurada) $("ig-acoes-topo").innerHTML = '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-play"></i> Abrir inventário geral</button>';
+            if (PODE_GESTAO && estado.api_configurada) $("ig-acoes-topo").innerHTML = '<button class="eui-btn eui-btn--primary" id="ig-btn-abrir"><i class="fas fa-plus"></i> Novo inventário geral</button>';
         } else {
             $("ig-sub").textContent = `${inv.numero}${inv.descricao ? " · " + inv.descricao : ""} · ${inv.status} · aberto por ${inv.aberto_por || "—"} em ${inv.aberto_em || "—"}`;
             if (inv.status !== "Em contagem") {
@@ -283,12 +286,13 @@
     // ── Gestao (inventarios encerrados) ─────────────────────────────────
     function desenharGestao() {
         $("ig-gestao-tbody").innerHTML = (historico || []).map((h) => {
+            const cancelado = h.status === "Cancelado";
             const dif = h.financeiro_final == null ? null : h.financeiro_final - h.financeiro_inicial;
             return `<tr>
-            <td class="ig-cod">${esc(h.numero)}</td><td>${esc(h.descricao || "—")}</td>
+            <td class="ig-cod">${esc(h.numero)}</td><td>${esc(h.descricao || "—")}${cancelado ? `<br><small style="color:#991b1b;">Motivo: ${esc(h.motivo_cancelamento)}</small>` : ""}</td>
             <td>${esc(h.aberto_em || "")}<br><small>${esc(h.aberto_por || "")}</small></td>
-            <td>${esc(h.encerrado_em || "—")}<br><small>${esc(h.encerrado_por || "")}</small></td>
-            <td>${h.enviado_ao_erp ? '<span class="ig-st confere">Enviado</span>' : '<span class="ig-st pendente">Não enviado</span>'}</td>
+            <td>${esc((cancelado ? h.cancelado_em : h.encerrado_em) || "—")}<br><small>${esc((cancelado ? h.cancelado_por : h.encerrado_por) || "")}</small></td>
+            <td>${cancelado ? '<span class="ig-st sem">Cancelado</span>' : h.enviado_ao_erp ? '<span class="ig-st confere">Enviado</span>' : '<span class="ig-st pendente">Não enviado</span>'}</td>
             <td class="num" title="${h.linhas_total != null ? `${h.linhas_contadas} de ${h.linhas_total} linhas concluídas` : ""}"><b>${num(h.linhas_contadas)}</b>${h.linhas_total != null && h.linhas_total !== h.linhas_contadas ? ` <small>de ${num(h.linhas_total)}</small>` : ""}</td>
             <td class="num">${brl(h.financeiro_inicial)}</td>
             <td class="num">${brl(h.financeiro_final)}${h.linhas_sem_custo ? ` <i class="fas fa-triangle-exclamation" style="color:#b45309;" title="${h.linhas_sem_custo} linha(s) sem custo médio no ERP ficaram fora do financeiro"></i>` : ""}</td>
@@ -302,6 +306,8 @@
     // ── Contar (cego, por local) ────────────────────────────────────────
     function desenharContar() {
         const aberto = estado.inventario.status === "Em contagem";
+        $("ig-contar-num").innerHTML = `Inventário ${esc(estado.inventario.numero)} <small>· ${esc(estado.inventario.status)}</small>`;
+        $("ig-modal-num").textContent = `Inventário ${estado.inventario.numero}`;
         $("ig-btn-nova").classList.toggle("hidden", !aberto);
         if (!aberto) fecharContagem();
         const dirigidos = (contagem && contagem.dirigidos) || [];
@@ -460,6 +466,7 @@
         }
         try {
             const r = await api("/api/inventario-geral/leituras", { method: "POST", body: JSON.stringify({
+                inventario_id: estado.inventario.id,
                 local: $("ig-local").value, codigo: $("ig-codigo").value, lote: $("ig-lote").value, quantidade: $("ig-qtd").value,
                 ...(lotes ? { lotes } : {}) }) });
             const qtdTotal = r.leituras.reduce((s, l) => s + l.quantidade, 0);
@@ -500,6 +507,7 @@
             botoes += `<button class="eui-btn eui-btn--primary" id="ig-btn-simular"><i class="fas fa-vial"></i> Enviar ao ERP — simular</button>`;
             botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${estado.gravacao_configurada ? "" : "disabled title='Chave de gravação não configurada'"}><i class="fas fa-cloud-arrow-up"></i> Aplicar no ERP</button>`;
         }
+        if (!estado.aplicado_no_erp) botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-cancelar-inv"><i class="fas fa-ban"></i> Cancelar inventário</button>`;
         botoes += `<button class="eui-btn eui-btn--ghost" id="ig-btn-encerrar-inv"><i class="fas fa-box-archive"></i> Encerrar inventário</button>`;
         $("ig-acoes-topo").innerHTML = botoes;
 
@@ -563,6 +571,13 @@
                 if (!confirm(`Encerrar o inventário ${inv.numero}?\n\n${avisos.join("\n")}${avisos.length ? "\n\n" : ""}O custo médio do ERP será lido agora para o financeiro. Depois de encerrar não dá para reabrir.`)) return;
                 toast("Lendo o custo médio no ERP e encerrando…", "");
                 toast((await api("/api/inventario-geral/encerrar-inventario", { method: "POST" })).message, "success");
+                aba = "gestao";
+            } else if (id === "ig-btn-cancelar-inv") {
+                const inv = estado.inventario;
+                const motivo = prompt(`Cancelar o inventário ${inv.numero}?\n\nEle fica no histórico como Cancelado (com as leituras), fora dos indicadores, e libera criar outro. Não dá para desfazer.\n\nMotivo do cancelamento (obrigatório):`, "");
+                if (motivo === null) return;
+                if (!motivo.trim()) { toast("Informe o motivo do cancelamento.", "error"); return; }
+                toast((await api("/api/inventario-geral/cancelar", { method: "POST", body: JSON.stringify({ motivo }) })).message, "success");
                 aba = "gestao";
             } else if (id === "ig-btn-finalizar") {
                 if (!confirm("Finalizar o inventário? Depois disso não aceita mais contagem.")) return;

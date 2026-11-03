@@ -79,6 +79,7 @@ def api_estado():
                   for e in inv.envios]
         return jsonify({"inventario": cab, "resumo": svc.resumo(inv), "gestao": True,
                         "api_configurada": cps.configurada(), "gravacao_configurada": cps.configurada(gravacao=True),
+                        "aplicado_no_erp": svc.aplicado_no_erp(inv),
                         "itens": [_item_gestao(i) for i in inv.itens], "envios": envios})
     return jsonify({"inventario": cab, "gestao": False})
 
@@ -155,6 +156,11 @@ def api_registrar_leitura():
     if not inv:
         return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
     payload = request.get_json(silent=True) or {}
+    # A janela de contagem manda o inventario que estava na tela: se ele foi
+    # encerrado/cancelado e outro aberto no meio, a leitura nao cai no novo.
+    if payload.get("inventario_id") and str(payload["inventario_id"]) != str(inv.id):
+        return jsonify({"error": f"O inventário desta tela não está mais em andamento (o atual é o {svc.numero(inv)}). "
+                                 "Recarregue a página."}), 409
     try:
         if payload.get("lotes"):
             leituras = svc.registrar_leituras(inv, payload.get("local"), payload.get("codigo"), payload.get("lotes"),
@@ -263,15 +269,30 @@ def api_encerrar_inventario():
     return jsonify({"message": f"Inventário {svc.numero(inv)} encerrado - veja os indicadores na aba Gestão."})
 
 
+@inventario_geral_bp.route("/api/inventario-geral/cancelar", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_cancelar_inventario():
+    inv = svc.inventario_ativo()
+    if not inv:
+        return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
+    try:
+        svc.cancelar(inv, (request.get_json(silent=True) or {}).get("motivo"), _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Inventário {svc.numero(inv)} cancelado."})
+
+
 @inventario_geral_bp.route("/api/inventario-geral/historico", methods=["GET"])
 @permission_required(PERM_GESTAO)
 def api_historico():
     numeros = svc.numeros()
     linhas = []
     for inv in svc.historico():
-        r = inv.resultado
+        r, c = inv.resultado, inv.cancelamento
         linhas.append({
-            "id": inv.id, "numero": numeros.get(inv.id), "descricao": inv.descricao,
+            "id": inv.id, "numero": numeros.get(inv.id), "descricao": inv.descricao, "status": inv.status,
+            "motivo_cancelamento": c.motivo if c else None,
+            "cancelado_em": _dt(c.cancelado_em) if c else None, "cancelado_por": c.cancelado_por if c else None,
             "aberto_em": _dt(inv.aberto_em), "aberto_por": inv.aberto_por,
             "encerrado_em": _dt(r.encerrado_em) if r else None, "encerrado_por": r.encerrado_por if r else None,
             "enviado_ao_erp": bool(r and r.enviado_ao_erp),
