@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, redirect, request, session
 from ..auth import get_base_role_permissions, is_admin_role, permission_required, permission_required_any
 from ..extensions import db
 from ..models import InventarioCiclicoDistribuicao as Distribuicao, InventarioCiclicoItem as Item, PermissaoAcesso, Usuario
-from ..services import erp_estoque_service as erp
+from ..services import estoque_espelho_service as espelho
 from ..services import inventario_ciclico_service as svc
 
 inventario_ciclico_bp = Blueprint("inventario_ciclico", __name__)
@@ -48,11 +48,17 @@ def _item_gestao(i: Item) -> dict:
     }
 
 
-def _distribuicao(d: Distribuicao) -> dict:
+def _distribuicao(d: Distribuicao, nomes_grupos: dict | None = None) -> dict:
     if d.criterio == "codigo":
         filtro = ", ".join((d.codigos or "").split())
     else:
-        filtro = " / ".join(x for x in (d.familia, d.grupo) if x)
+        grupo = d.grupo
+        if grupo and nomes_grupos:
+            # Criterio so' "grupo" nao tem familia: pega o nome de qualquer uma com esse codigo.
+            nome = nomes_grupos.get((d.familia or "", grupo)) or (
+                None if d.familia else next((n for (f, g), n in nomes_grupos.items() if g == grupo), None))
+            grupo = f"{grupo} - {nome}" if nome else grupo
+        filtro = " / ".join(x for x in (d.familia, grupo) if x)
     return {
         "id": d.id, "numero": svc.numero(d), "criterio": svc.CRITERIOS.get(d.criterio, d.criterio), "filtro": filtro,
         "conferente": d.conferente, "criado_por": d.criado_por, "criado_em": _dt(d.criado_em),
@@ -114,12 +120,28 @@ def api_contar(item_id: int):
 @inventario_ciclico_bp.route("/api/inventario-ciclico/opcoes", methods=["GET"])
 @permission_required(PERM_GESTAO)
 def api_opcoes():
+    # Le o espelho: abre na hora, mesmo com o GRV fora.
+    return jsonify({
+        "familias": svc.opcoes_familias(espelho.carregar()),
+        "espelho": espelho.status(),
+        "conferentes": _conferentes(),
+    })
+
+
+@inventario_ciclico_bp.route("/api/inventario-ciclico/espelho", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_espelho_status():
+    return jsonify(espelho.status())
+
+
+@inventario_ciclico_bp.route("/api/inventario-ciclico/espelho/atualizar", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_espelho_atualizar():
     try:
-        familias = svc.opcoes_familias(erp.buscar_estoque_grv())
-        grv_ok = True
-    except Exception:  # noqa: BLE001 - GRV fora nao derruba a tela
-        familias, grv_ok = {}, False
-    return jsonify({"familias": familias, "grv_ok": grv_ok, "conferentes": _conferentes()})
+        res = espelho.atualizar(_usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "espelho": espelho.status()}), 400
+    return jsonify({**res, "espelho": espelho.status()})
 
 
 @inventario_ciclico_bp.route("/api/inventario-ciclico/distribuicoes", methods=["GET"])
@@ -133,8 +155,9 @@ def api_distribuicoes():
         .order_by(Item.id)
         .all()
     )
+    nomes = espelho.nomes_grupos()
     return jsonify({
-        "distribuicoes": [_distribuicao(d) for d in dists],
+        "distribuicoes": [_distribuicao(d, nomes) for d in dists],
         "pendencias": [_item_gestao(i) for i in pendencias],
     })
 
@@ -161,7 +184,7 @@ def api_distribuir():
                              conferente, _usuario(), p.get("itens"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    res["distribuicao"] = _distribuicao(res["distribuicao"])
+    res["distribuicao"] = _distribuicao(res["distribuicao"], espelho.nomes_grupos())
     return jsonify(res)
 
 
@@ -171,7 +194,7 @@ def api_distribuicao(dist_id: int):
     dist = db.session.get(Distribuicao, dist_id)
     if not dist:
         return jsonify({"error": "Distribuição não encontrada."}), 404
-    return jsonify({"distribuicao": _distribuicao(dist), "itens": [_item_gestao(i) for i in dist.itens]})
+    return jsonify({"distribuicao": _distribuicao(dist, espelho.nomes_grupos()), "itens": [_item_gestao(i) for i in dist.itens]})
 
 
 @inventario_ciclico_bp.route("/api/inventario-ciclico/distribuicoes/<int:dist_id>/cancelar", methods=["POST"])

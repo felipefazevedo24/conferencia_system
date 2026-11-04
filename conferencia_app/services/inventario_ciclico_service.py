@@ -2,8 +2,9 @@
 
   - O gestor distribui por codigo, familia, grupo ou familia + grupo do GRV
     para um conferente. A lista e' congelada na hora: uma linha por codigo +
-    endereco com saldo (por codigo, entra mesmo sem saldo). Linha que ja
-    esta em outra distribuicao em aberto nao entra de novo.
+    endereco, com ou sem saldo (item zerado no sistema pode estar no fisico -
+    pedido da Logistica em 04/11/2026). Linha que ja esta em outra
+    distribuicao em aberto nao entra de novo.
   - 1a contagem (conferente, cega): bateu com o GRV -> Confere; nao bateu ->
     Divergente na 1a, e o gestor libera a 2a.
   - 2a contagem (mesmo conferente, cega): bateu -> Confere; nao bateu ->
@@ -26,6 +27,7 @@ from ..models import (
 )
 from ..tempo import agora_br
 from . import erp_estoque_service as erp
+from . import estoque_espelho_service as espelho
 from . import logistica_inventario_ajuste_service as ajuste_svc
 
 CRITERIOS = {
@@ -47,18 +49,26 @@ def _norm(valor) -> str:
     return re.sub(r"\s+", " ", str(valor or "")).strip().upper()
 
 
-def opcoes_familias(estoque: dict) -> dict[str, list[str]]:
-    """{familia: [grupos]} de tudo que existe no GRV, para os filtros da tela."""
-    mapa: dict[str, set[str]] = {}
+def _ordem_grupo(codigo: str):
+    return (0, int(codigo)) if codigo.isdigit() else (1, codigo)
+
+
+def opcoes_familias(estoque: dict) -> dict[str, list[dict]]:
+    """{familia: [{codigo, nome}]} de tudo que existe no GRV, para os filtros.
+    O filtro e' pelo codigo do grupo (o nome se repete entre familias)."""
+    mapa: dict[str, dict[str, str]] = {}
     for item in (estoque.get("por_codigo") or {}).values():
         familia = str(item.get("familia") or "").strip()
         if not familia:
             continue
-        grupos = mapa.setdefault(familia, set())
+        grupos = mapa.setdefault(familia, {})
         grupo = str(item.get("grupo") or "").strip()
         if grupo:
-            grupos.add(grupo)
-    return {f: sorted(g) for f, g in sorted(mapa.items())}
+            grupos[grupo] = str(item.get("grupo_nome") or "").strip() or grupos.get(grupo, "")
+    return {
+        f: [{"codigo": g, "nome": grupos[g]} for g in sorted(grupos, key=_ordem_grupo)]
+        for f, grupos in sorted(mapa.items())
+    }
 
 
 def _codigos_do_texto(texto: str) -> list[str]:
@@ -71,7 +81,7 @@ def _codigos_do_texto(texto: str) -> list[str]:
     return codigos
 
 
-def _linhas_do_codigo(codigo: str, agregado: dict, estoque: dict, *, so_com_saldo: bool) -> list[dict]:
+def _linhas_do_codigo(codigo: str, agregado: dict, estoque: dict) -> list[dict]:
     base = {
         "codigo": codigo,
         "descricao": str(agregado.get("item") or "").strip(),
@@ -80,14 +90,10 @@ def _linhas_do_codigo(codigo: str, agregado: dict, estoque: dict, *, so_com_sald
     linhas = []
     for local in sorted(set(agregado.get("localizacoes") or [])):
         bruto = (estoque.get("por_local") or {}).get(f"{codigo}|{local}") or {}
-        saldo = float(bruto.get("qtde_total") or 0)
-        if so_com_saldo and saldo <= 0:
-            continue
-        linhas.append({**base, "endereco": local, "saldo": saldo})
+        linhas.append({**base, "endereco": local, "saldo": float(bruto.get("qtde_total") or 0)})
     # Codigo sem localizacao no GRV: conta o total, sem endereco.
-    saldo_total = float(agregado.get("qtde_total") or 0)
-    if not agregado.get("localizacoes") and (not so_com_saldo or saldo_total > 0):
-        linhas.append({**base, "endereco": "", "saldo": saldo_total})
+    if not agregado.get("localizacoes"):
+        linhas.append({**base, "endereco": "", "saldo": float(agregado.get("qtde_total") or 0)})
     return linhas
 
 
@@ -101,7 +107,7 @@ def montar_linhas(estoque: dict, criterio: str, familia: str, grupo: str, codigo
             if agregado is None:
                 nao_encontrados.append(codigo)
                 continue
-            linhas.extend(_linhas_do_codigo(codigo, agregado, estoque, so_com_saldo=False))
+            linhas.extend(_linhas_do_codigo(codigo, agregado, estoque))
         return linhas, nao_encontrados
 
     familia_n, grupo_n = _norm(familia), _norm(grupo)
@@ -111,7 +117,7 @@ def montar_linhas(estoque: dict, criterio: str, familia: str, grupo: str, codigo
             continue
         if criterio in {"grupo", "familia_grupo"} and _norm(agregado.get("grupo")) != grupo_n:
             continue
-        linhas.extend(_linhas_do_codigo(codigo, agregado, estoque, so_com_saldo=True))
+        linhas.extend(_linhas_do_codigo(codigo, agregado, estoque))
     return linhas, nao_encontrados
 
 
@@ -141,10 +147,11 @@ def _validar_filtro(criterio: str, familia: str, grupo: str, codigos_texto: str)
 
 
 def _estoque() -> dict:
-    try:
-        return erp.buscar_estoque_grv()
-    except Exception as exc:  # noqa: BLE001
-        raise ValueError("Não deu para consultar o GRV agora. Tente de novo em instantes.") from exc
+    """Listas saem do espelho (abre na hora); o saldo da contagem, nao."""
+    estoque = espelho.carregar()
+    if not estoque.get("por_codigo"):
+        raise ValueError("O estoque do GRV ainda não foi carregado. Clique em \"Atualizar agora\" e aguarde.")
+    return estoque
 
 
 def previa(criterio: str, familia: str, grupo: str, codigos_texto: str) -> dict:
@@ -221,8 +228,13 @@ def _quantidade(valor) -> float:
 
 
 def _saldo_grv(item: Item) -> tuple[float, float | None, dict]:
+    """Saldo do momento, so' daquele codigo. Bridge ainda sem o endpoint:
+    cai no estoque inteiro (cache de 5 min, igual a contagem avulsa)."""
     try:
-        estoque = erp.buscar_estoque_grv()  # cache de 5 min, igual a contagem avulsa
+        try:
+            estoque = erp.buscar_estoque_produtos_grv([item.codigo])
+        except LookupError:
+            estoque = erp.buscar_estoque_grv()
     except Exception as exc:  # noqa: BLE001
         raise ValueError("Não deu para consultar o saldo no GRV agora. Tente de novo em instantes.") from exc
     # Codigo que saiu do GRV conta como saldo zero: o contado e' a divergencia.

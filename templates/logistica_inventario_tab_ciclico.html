@@ -31,6 +31,10 @@
     .ic-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
     .ic-toolbar input[type=search] { flex: 1; min-width: 220px; max-width: 420px; }
     .ic-vazio { padding: 28px 10px; text-align: center; color: var(--eui-muted); }
+    .ic-espelho { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--eui-muted); margin-bottom: 10px; }
+    .ic-espelho.erro { color: #b45309; }
+    .ic-link { border: 0; background: transparent; padding: 0; font-size: 12.5px; font-weight: 700; color: var(--eui-primary, #2563eb); cursor: pointer; }
+    .ic-link:disabled { color: var(--eui-muted); cursor: default; }
     .ic-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; }
     .ic-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .55); z-index: 10990; align-items: flex-start; justify-content: center; padding: 6vh 14px 14px; overflow: auto; }
     .ic-modal.open { display: flex; }
@@ -69,7 +73,10 @@
     <section id="ic-gestao" class="ic-hidden" style="display:grid;gap:16px;">
         <div class="eui-card"><div class="eui-card__body">
             <h3 class="ic-h3"><i class="fas fa-share-nodes"></i> Distribuir contagem</h3>
-            <div id="ic-grv-aviso" class="ic-aviso ic-hidden" style="margin-bottom:10px;">GRV indisponível agora: as famílias e grupos não carregaram. Distribuição por código ainda funciona se o GRV voltar na hora de distribuir.</div>
+            <div class="ic-espelho" id="ic-espelho">
+                <span id="ic-espelho-texto">Carregando...</span>
+                <button type="button" class="ic-link" id="ic-espelho-atualizar"><i class="fas fa-rotate"></i> Atualizar agora</button>
+            </div>
             <div class="ic-form">
                 <div class="ic-field">
                     <label for="ic-criterio">Distribuir por</label>
@@ -278,14 +285,30 @@
 
     // ── Gestão ──
     let familias = {};
+    // valores: texto simples ou {valor, rotulo}.
     function opcoesSelect(el, valores, vazio) {
-        el.innerHTML = `<option value="">${esc(vazio)}</option>` + valores.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+        el.innerHTML = `<option value="">${esc(vazio)}</option>` + valores.map((v) => {
+            const valor = typeof v === 'object' ? v.valor : v;
+            const rotulo = typeof v === 'object' ? v.rotulo : v;
+            return `<option value="${esc(valor)}">${esc(rotulo)}</option>`;
+        }).join('');
     }
+    const rotuloGrupo = (codigo, nome) => nome ? `${codigo} - ${nome}` : codigo;
     function gruposDisponiveis() {
         const criterio = $('ic-criterio').value;
         const familia = $('ic-familia').value;
-        if (criterio === 'familia_grupo') return familia ? (familias[familia] || []) : [];
-        return Array.from(new Set(Object.values(familias).flat())).sort();
+        if (criterio === 'familia_grupo') {
+            return familia ? (familias[familia] || []).map((g) => ({ valor: g.codigo, rotulo: rotuloGrupo(g.codigo, g.nome) })) : [];
+        }
+        // So' "grupo": o codigo e' por familia, entao junta os nomes que ele tem em cada uma.
+        const porCodigo = new Map();
+        Object.values(familias).flat().forEach((g) => {
+            if (!porCodigo.has(g.codigo)) porCodigo.set(g.codigo, new Set());
+            if (g.nome) porCodigo.get(g.codigo).add(g.nome);
+        });
+        return Array.from(porCodigo.keys())
+            .sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b))
+            .map((c) => ({ valor: c, rotulo: rotuloGrupo(c, Array.from(porCodigo.get(c)).join(', ')) }));
     }
     function atualizarCampos() {
         const criterio = $('ic-criterio').value;
@@ -295,7 +318,7 @@
         const atual = $('ic-grupo').value;
         const grupos = gruposDisponiveis();
         opcoesSelect($('ic-grupo'), grupos, criterio === 'familia_grupo' && !$('ic-familia').value ? 'Escolha a família primeiro' : 'Escolha o grupo');
-        if (grupos.includes(atual)) $('ic-grupo').value = atual;
+        if (grupos.some((g) => g.valor === atual)) $('ic-grupo').value = atual;
     }
 
     function filtro() {
@@ -440,14 +463,65 @@
         } catch (e) { toast(e.message, 'error'); }
     }
 
-    async function carregarOpcoes() {
+    // Espelho do estoque do GRV: a tela abre com o que esta gravado e, se
+    // estiver velho, pede a atualizacao por tras sem travar nada.
+    function mostrarEspelho(st, atualizando) {
+        const box = $('ic-espelho');
+        const txt = $('ic-espelho-texto');
+        const btn = $('ic-espelho-atualizar');
+        box.classList.toggle('erro', !!(st && st.erro) && !atualizando);
+        btn.disabled = !!atualizando;
+        if (atualizando) {
+            txt.innerHTML = st && st.vazio
+                ? '<i class="fas fa-spinner fa-spin"></i> Carregando o estoque do GRV pela primeira vez (pode levar alguns minutos)...'
+                : `<i class="fas fa-spinner fa-spin"></i> Atualizando o estoque do GRV... (mostrando o de ${esc(st && st.atualizado_em)})`;
+        } else if (st && st.erro && st.vazio) {
+            txt.textContent = 'Não deu para carregar o estoque do GRV. Tente atualizar de novo.';
+        } else if (st && st.vazio) {
+            txt.textContent = 'Estoque do GRV ainda não carregado.';
+        } else {
+            txt.textContent = `Estoque do GRV de ${st.atualizado_em}` + (st.erro ? ' · a última atualização falhou' : '');
+        }
+    }
+
+    let atualizandoEspelho = false;
+    async function atualizarEspelho(st) {
+        if (atualizandoEspelho) return;
+        atualizandoEspelho = true;
+        mostrarEspelho(st, true);
+        try {
+            const d = await api('/api/inventario-ciclico/espelho/atualizar', { method: 'POST', body: '{}' });
+            if (d.ja_em_andamento) {
+                // Outra pessoa/aba ja esta atualizando: espera ela terminar.
+                let estado = d.espelho;
+                while (estado && estado.em_andamento) {
+                    await new Promise((r) => setTimeout(r, 8000));
+                    estado = await api('/api/inventario-ciclico/espelho');
+                }
+            }
+            atualizandoEspelho = false;
+            await carregarOpcoes(false);
+        } catch (e) {
+            atualizandoEspelho = false;
+            toast(e.message, 'error');
+            try { mostrarEspelho(await api('/api/inventario-ciclico/espelho'), false); } catch (_) { /* mantem o texto */ }
+        }
+    }
+
+    async function carregarOpcoes(atualizarSeVelho = true) {
+        const familiaAtual = $('ic-familia').value;
+        if (!Object.keys(familias).length) opcoesSelect($('ic-familia'), [], 'Carregando...');
         try {
             const d = await api('/api/inventario-ciclico/opcoes');
             familias = d.familias || {};
-            $('ic-grv-aviso').classList.toggle('ic-hidden', !!d.grv_ok);
-            opcoesSelect($('ic-familia'), Object.keys(familias), 'Escolha a família');
+            opcoesSelect($('ic-familia'), Object.keys(familias), Object.keys(familias).length ? 'Escolha a família' : 'Aguardando o estoque do GRV');
+            if (familias[familiaAtual]) $('ic-familia').value = familiaAtual;
+            const conferenteAtual = $('ic-conferente').value;
             opcoesSelect($('ic-conferente'), d.conferentes || [], 'Escolha o conferente');
+            if ((d.conferentes || []).includes(conferenteAtual)) $('ic-conferente').value = conferenteAtual;
             atualizarCampos();
+            mostrarEspelho(d.espelho, false);
+            if (atualizarSeVelho && (d.espelho.desatualizado || d.espelho.em_andamento)) atualizarEspelho(d.espelho);
         } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -510,6 +584,9 @@
         $('ic-criterio').addEventListener('change', atualizarCampos);
         $('ic-familia').addEventListener('change', atualizarCampos);
         $('ic-btn-buscar').addEventListener('click', buscarItens);
+        $('ic-espelho-atualizar').addEventListener('click', async () => {
+            try { atualizarEspelho(await api('/api/inventario-ciclico/espelho')); } catch (e) { toast(e.message, 'error'); }
+        });
         $('ic-btn-distribuir').addEventListener('click', distribuir);
         $('ic-sel-busca').addEventListener('input', renderSelecao);
         $('ic-sel-tbody').addEventListener('change', (ev) => {

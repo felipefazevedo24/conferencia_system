@@ -827,7 +827,7 @@ ENTRADAS_CHAPA_DESDE_SQL = """
 """
 
 
-ESTOQUE_SQL = """
+ESTOQUE_SQL_BASE = """
     with estoque_deposito as (
         select
             cod_empresa,
@@ -865,6 +865,9 @@ ESTOQUE_SQL = """
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
         coalesce(p.cod_grupo::text, '') as grupo,
+        -- Nome do grupo (tfamgrp e' por familia). "grupo" segue sendo o
+        -- codigo: Enderecamento e Facilities comparam pelo numero.
+        coalesce(g.nome, '') as grupo_nome,
         -- Inventario exige o lote na contagem quando o item e' controlado
         -- por lote no GRV.
         coalesce(p.tipo_controle::text, '') as tipo_controle,
@@ -878,11 +881,20 @@ ESTOQUE_SQL = """
     left join public.tfamilia f
       on f.cod_empresa = p.cod_empresa
      and f.codigo = p.cod_familia
+    left join public.tfamgrp g
+      on g.cod_empresa = p.cod_empresa
+     and g.cod_familia = p.cod_familia
+     and g.codigo = p.cod_grupo
     where p.cod_empresa = %s
       and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
       and coalesce(p.inativo, 0) = 0
+      {filtro}
         order by coalesce(p.localizacao_estoque, ''), p.codigo_interno
 """
+ESTOQUE_SQL = ESTOQUE_SQL_BASE.format(filtro="")
+# Mesmas colunas, so' dos codigos pedidos: a contagem do inventario ciclico
+# compara com o saldo do momento sem baixar o estoque inteiro.
+ESTOQUE_PRODUTOS_SQL = ESTOQUE_SQL_BASE.format(filtro="and upper(trim(p.codigo_interno)) = any(%s)")
 
 
 ESTOQUE_CODIGOS_ATIVOS_SQL = """
@@ -2810,6 +2822,37 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "empresa": empresa, "itens": itens, "codigos_ativos": codigos_ativos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar estoque no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/produtos")
+    def consultar_estoque_produtos():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            codigos = sorted({str(c or "").strip().upper() for c in (payload.get("codigos") or []) if str(c or "").strip()})
+            if not codigos:
+                return jsonify({"sucesso": False, "erro": "informe_codigos"}), 400
+            if len(codigos) > 500:
+                return jsonify({"sucesso": False, "erro": "maximo_500_codigos"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(ESTOQUE_PRODUTOS_SQL, (empresa, codigos))
+                    cols = [desc[0] for desc in cur.description]
+                    itens = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            return jsonify({"sucesso": True, "empresa": empresa, "itens": itens})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar estoque de produtos no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/estoque/reservas-produto-acabado")

@@ -5041,6 +5041,54 @@ class InventarioCiclicoItem(db.Model):
     ajuste_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_ajuste.id"))
 
 
+class EstoqueGrvEspelho(db.Model):
+    """Copia do estoque do GRV (/api/erp/estoque) no banco do Sync, uma linha
+    por codigo + localizacao. Baixar o estoque inteiro pela bridge demora; a
+    tela le daqui e a atualizacao (services/estoque_espelho_service) so'
+    grava o que mudou. Por enquanto so' o inventario ciclico usa."""
+
+    __tablename__ = "estoque_grv_espelho"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(60), nullable=False, index=True)
+    localizacao = db.Column(db.String(120), nullable=False, default="")
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    familia = db.Column(db.String(160), index=True)
+    grupo = db.Column(db.String(20))  # codigo do grupo (tproduto.cod_grupo)
+    grupo_nome = db.Column(db.String(160))  # tfamgrp.nome
+    qtde_total = db.Column(db.Float, nullable=False, default=0)
+    qtde_disponivel = db.Column(db.Float, nullable=False, default=0)
+    qtde_reservada = db.Column(db.Float, nullable=False, default=0)
+    custo_medio = db.Column(db.Float)
+    tipo_controle = db.Column(db.String(40))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("codigo", "localizacao", name="uq_estoque_grv_espelho"),)
+
+
+class EstoqueGrvEspelhoSync(db.Model):
+    """Cada atualizacao do espelho: quando, quanto mudou e se deu erro. A
+    ultima com status OK diz de quando e' o estoque que a tela mostra."""
+
+    __tablename__ = "estoque_grv_espelho_sync"
+
+    STATUS_ANDAMENTO = "Em andamento"
+    STATUS_OK = "OK"
+    STATUS_ERRO = "Erro"
+
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ANDAMENTO, index=True)
+    iniciado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime)
+    iniciado_por = db.Column(db.String(100))
+    linhas = db.Column(db.Integer)
+    inseridas = db.Column(db.Integer)
+    alteradas = db.Column(db.Integer)
+    removidas = db.Column(db.Integer)
+    erro = db.Column(db.String(500))
+
+
 class Comunicado(db.Model):
     """Aviso da Columbia no mural da tela inicial, igual para todo mundo.
 
