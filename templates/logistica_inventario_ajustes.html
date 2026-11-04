@@ -8,8 +8,8 @@
     /* Menu de ações (kebab) - mesmo padrão do Comex/Conferência de Expedição. */
     .ia-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
     .ia-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
-    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
-    .ia-actions-menu.open { display: flex; }
+    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 11005; padding: 6px; display: none; flex-direction: column; }
+    .ia-actions-menu.open { display: flex; overflow-y: auto; }
     .ia-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
     .ia-actions-menu button:hover { background: #f3f4f6; }
     .ia-actions-menu button.is-danger { color: #dc2626; }
@@ -817,12 +817,29 @@
         menu.innerHTML = montarAcoes(a);
         menu.dataset.id = String(id);
         const rect = btnEl.getBoundingClientRect();
-        menu.style.top = (rect.bottom + 4) + "px";
         menu.style.left = "auto";
         menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.style.maxHeight = "";
         menu.classList.add("open");
+        // Linha perto do fim da tela: abria pra baixo e a metade do menu
+        // sumia fora da janela. Abre pra cima quando nao cabe embaixo e, se
+        // nao couber nem assim, rola dentro do menu.
+        const margem = 8;
+        const altura = menu.offsetHeight;
+        const abaixo = window.innerHeight - rect.bottom - margem - 4;
+        const acima = rect.top - margem - 4;
+        const praCima = altura > abaixo && acima > abaixo;
+        const espaco = praCima ? acima : abaixo;
+        if (altura > espaco) menu.style.maxHeight = espaco + "px";
+        menu.style.top = (praCima ? rect.top - 4 - Math.min(altura, espaco) : rect.bottom + 4) + "px";
     }
     function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+    // O menu e' fixo na tela: rolando a pagina ele ficava solto do botao.
+    // Rolar dentro do proprio menu (quando ele e' maior que a tela) nao fecha.
+    window.addEventListener("scroll", (e) => {
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    }, true);
 
     document.addEventListener("click", (e) => {
         const kebabBtn = e.target.closest("[data-kebab]");
