@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 
 from ..extensions import db
@@ -34,6 +35,7 @@ from ..tempo import agora_br
 from ..models import InventarioGeralResultado as Resultado
 from ..models import InventarioGeralCancelamento as Cancelamento
 from ..models import InventarioGeralTesteApi as TesteApi
+from ..models import InventarioGeralRecusa as Recusa
 from . import erp_estoque_service as erp
 from . import inventario_cps_client as cps
 
@@ -334,13 +336,16 @@ def finalizar(inv: Inventario, usuario: str) -> Inventario:
 
 
 # ── Envio ao ERP (CPS) ─────────────────────────────────────────────────
-def _payloads(inv: Inventario, atual: dict[int, dict], operador: str) -> tuple[list[dict], list[dict]]:
+def _payloads(inv: Inventario, atual: dict[int, dict], operador: str, rodada: int = 1,
+              ja_aplicados: set[int] | None = None) -> tuple[list[dict], list[dict]]:
     """Agrupa as linhas por produto (lote: todos os lotes contados, total =
     soma). estoque_esperado/versao vem da leitura ATUAL (regra da API).
+    Produto ja' gravado no ERP (rodada anterior) nao vai de novo.
     Devolve (payloads, recusados_pelo_sync)."""
     por_produto: dict[int, list[Item]] = {}
     for item in inv.itens:
-        por_produto.setdefault(item.cod_produto, []).append(item)
+        if item.cod_produto not in (ja_aplicados or set()):
+            por_produto.setdefault(item.cod_produto, []).append(item)
     linhas, recusados = [], []
     retrato = {p.cod_produto: p for p in Produto.query.filter_by(inventario_id=inv.id).all()}
     for cod, itens in sorted(por_produto.items()):
@@ -373,7 +378,7 @@ def _payloads(inv: Inventario, atual: dict[int, dict], operador: str) -> tuple[l
     payloads = []
     for n, inicio in enumerate(range(0, len(linhas), MAX_PRODUTOS_POR_ENVIO), start=1):
         payloads.append({
-            "referencia": f"SYNC-INVGERAL-{inv.id}-{n:02d}",
+            "referencia": _referencia(inv, rodada, n),
             "cod_empresa": cps.EMPRESA, "cod_deposito": cps.DEPOSITO, "operador": operador[:60],
             "itens": linhas[inicio:inicio + MAX_PRODUTOS_POR_ENVIO],
         })
@@ -389,12 +394,83 @@ def _registrar(inv, tipo, payload, usuario, status_http, resposta, status) -> En
     return envio
 
 
+# Cada "Simular" e' uma rodada; o Aplicar usa so' a rodada mais recente (uma
+# simulacao refeita com menos lotes nao pode reaplicar um lote antigo). A 1a
+# rodada mantem a referencia original; as seguintes levam -R<n>, pra nao
+# reusar no CPS uma referencia ja' gravada.
+_RE_RODADA = re.compile(r"-R(\d+)-\d+$")
+
+
+def _referencia(inv: Inventario, rodada: int, lote: int) -> str:
+    return f"SYNC-INVGERAL-{inv.id}-{lote:02d}" if rodada <= 1 else f"SYNC-INVGERAL-{inv.id}-R{rodada}-{lote:02d}"
+
+
+def _rodada(referencia: str) -> int:
+    m = _RE_RODADA.search(referencia or "")
+    return int(m.group(1)) if m else 1
+
+
+def rodada_atual(inv: Inventario) -> int | None:
+    rodadas = [_rodada(e.referencia) for e in inv.envios if e.tipo == "simular"]
+    return max(rodadas) if rodadas else None
+
+
+def envios_da_rodada(inv: Inventario) -> dict[str, dict]:
+    """{referencia: {"simulacao": Envio, "aplicacoes": [Envio...]}} da rodada atual."""
+    rodada = rodada_atual(inv)
+    lotes: dict[str, dict] = {}
+    if rodada is None:
+        return lotes
+    for e in inv.envios:
+        if _rodada(e.referencia) != rodada:
+            continue
+        lote = lotes.setdefault(e.referencia, {"simulacao": None, "aplicacoes": []})
+        if e.tipo == "simular":
+            lote["simulacao"] = e
+        else:
+            lote["aplicacoes"].append(e)
+    return dict(sorted(lotes.items()))
+
+
+def _lote_aplicado(lote: dict) -> bool:
+    return any(a.status == "APLICADO" for a in lote["aplicacoes"])
+
+
+def produtos_aplicados(inv: Inventario) -> set[int]:
+    """cod_produto ja' gravados no CPS, em qualquer rodada."""
+    feitos: set[int] = set()
+    for e in inv.envios:
+        if e.tipo == "aplicar" and e.status == "APLICADO":
+            try:
+                feitos.update(int(i["cod_produto"]) for i in json.loads(e.payload).get("itens") or [])
+            except (ValueError, KeyError, TypeError):
+                continue
+    return feitos
+
+
 def simular_envio(inv: Inventario, usuario: str) -> dict:
     """Le o ERP de novo, monta os lotes de 500 e chama /simular (nao grava)."""
     if inv.status != Inventario.STATUS_FINALIZADO:
         raise ValueError("Finalize o inventário (todas as contagens encerradas) antes de enviar ao ERP.")
     atual = {int(p["cod_produto"]): p for p in cps.listar_deposito()}
-    payloads, recusados = _payloads(inv, atual, usuario)
+    rodada = (rodada_atual(inv) or 0) + 1
+    # Depois de uma aplicacao parcial, a rodada nova leva so' o que falta
+    # gravar (com a versao atual - reaplicar o pacote velho daria 409 de novo).
+    payloads, recusados = _payloads(inv, atual, usuario, rodada, produtos_aplicados(inv))
+    # Retrato do que o Sync deixou de fora nesta rodada (aparece no painel de envio).
+    Recusa.query.filter_by(inventario_id=inv.id).delete()
+    retrato = {p.cod_produto: p for p in Produto.query.filter_by(inventario_id=inv.id).all()}
+    for r in recusados:
+        prod = retrato.get(r["cod_produto"])
+        r["codigo_interno"] = prod.codigo_interno if prod else None
+        db.session.add(Recusa(inventario_id=inv.id, cod_produto=r["cod_produto"], motivo=r["motivo"][:300],
+                              codigo_interno=r["codigo_interno"], descricao=prod.descricao if prod else None,
+                              simulado_em=agora_br()))
+    if not payloads:
+        # Marca a rodada mesmo sem lote: o Aplicar nao pode cair numa rodada antiga.
+        vazio = {"referencia": _referencia(inv, rodada, 1), "itens": []}
+        _registrar(inv, "simular", vazio, usuario, None, "Nenhum produto para enviar - todos ficaram fora (ver lista).",
+                   "SEM_ITENS")
     resultados = []
     for payload in payloads:
         try:
@@ -414,18 +490,19 @@ def aplicar_envio(inv: Inventario, usuario: str) -> dict:
     (mesma referencia e versao - se cair no meio, repetir nao duplica)."""
     if inv.status != Inventario.STATUS_FINALIZADO:
         raise ValueError("Só dá pra aplicar um inventário finalizado e ainda não enviado.")
-    simulados: dict[str, Envio] = {}
-    for envio in inv.envios:
-        if envio.tipo == "simular":
-            simulados[envio.referencia] = envio
-    if not simulados:
+    lotes = envios_da_rodada(inv)
+    if not lotes:
         raise ValueError("Simule o envio antes de aplicar no ERP.")
-    falhas = [r for r, e in simulados.items() if e.status != "SIMULADO_SEM_GRAVAR"]
+    if all(l["simulacao"].status == "SEM_ITENS" for l in lotes.values()):
+        raise ValueError("A última simulação não teve nenhum produto para enviar - veja os itens que ficaram de fora.")
+    falhas = [r for r, l in lotes.items() if l["simulacao"].status != "SIMULADO_SEM_GRAVAR"]
     if falhas:
         raise ValueError(f"A simulação não passou em {len(falhas)} lote(s) de envio - revise o retorno antes de aplicar.")
     resultados, tudo_ok = [], True
-    for referencia, envio in sorted(simulados.items()):
-        payload = json.loads(envio.payload)
+    for referencia, lote in lotes.items():
+        if _lote_aplicado(lote):  # reenvio depois de falha parcial: so' os pendentes
+            continue
+        payload = json.loads(lote["simulacao"].payload)
         try:
             status_http, resposta = cps.aplicar(payload)
             status = (resposta or {}).get("status") if isinstance(resposta, dict) else None

@@ -39,6 +39,15 @@
     .ig-form-acoes { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
     .ig-prod-info { grid-column: 1 / -1; font-size: 12.5px; min-height: 18px; }
     .ig-full { grid-column: 1 / -1; }
+    .ig-passos { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .ig-passo { display: flex; align-items: center; gap: 8px; border: 1px solid var(--eui-border, #e5e7eb); border-radius: 10px; padding: 8px 12px; font-size: 12.5px; background: #fff; }
+    .ig-passo b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 12px; }
+    .ig-passo.feito b { background: #16a34a; color: #fff; }
+    .ig-passo.atual { border-color: var(--eui-primary, #2563eb); }
+    .ig-passo.atual b { background: var(--eui-primary, #2563eb); color: #fff; }
+    .ig-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+    .ig-chip { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: #f1f5f9; color: #334155; }
+    .ig-chip.ok { background: #dcfce7; color: #166534; } .ig-chip.erro { background: #fee2e2; color: #991b1b; } .ig-chip.aviso { background: #fef3c7; color: #92400e; }
     .ig-num-inv { font-size: 15px; font-weight: 800; }
     .ig-num-inv small { font-weight: 600; color: var(--eui-muted); font-size: 12px; }
     .ig-req { color: var(--eui-danger, #dc2626); }
@@ -194,6 +203,7 @@
     <!-- Gestao: resultado completo -->
     <section id="ig-resultado" class="hidden">
         <div class="eui-stats" id="ig-metricas"></div>
+        <div class="eui-card" id="ig-envios-card"><div class="eui-card__body" id="ig-envios"></div></div>
         <div class="eui-card"><div class="eui-card__body">
             <div class="ig-toolbar">
                 <input type="search" class="eui-input" id="ig-busca-res" placeholder="Buscar por código, descrição, lote ou local…">
@@ -210,7 +220,6 @@
             </table></div>
             <p style="margin:8px 0 0;font-size:11.5px;color:var(--eui-muted);">Em itálico: soma parcial das leituras de uma contagem ainda não encerrada.</p>
         </div></div>
-        <div class="eui-card" id="ig-envios-card"><div class="eui-card__body" id="ig-envios"></div></div>
     </section>
 
     <!-- Teste da API: 1 a 5 itens fora de qualquer inventario -->
@@ -620,10 +629,6 @@
             if (r["Aguardando 3ª"]) botoes += `<button class="eui-btn eui-btn--primary" id="ig-btn-encerrar-3"><i class="fas fa-lock"></i> Encerrar 3ª contagem</button>`;
             botoes += `<button class="eui-btn eui-btn--success" id="ig-btn-finalizar" ${r.abertos ? "disabled title='Ainda há itens com contagem em aberto'" : ""}><i class="fas fa-flag-checkered"></i> Finalizar</button>`;
         }
-        if (inv.status === "Finalizado") {
-            botoes += `<button class="eui-btn eui-btn--primary" id="ig-btn-simular"><i class="fas fa-vial"></i> Enviar ao ERP — simular</button>`;
-            botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${estado.gravacao_configurada ? "" : "disabled title='Chave de gravação não configurada'"}><i class="fas fa-cloud-arrow-up"></i> Aplicar no ERP</button>`;
-        }
         if (!estado.aplicado_no_erp) botoes += `<button class="eui-btn eui-btn--danger" id="ig-btn-cancelar-inv"><i class="fas fa-ban"></i> Cancelar inventário</button>`;
         botoes += `<button class="eui-btn eui-btn--ghost" id="ig-btn-encerrar-inv"><i class="fas fa-box-archive"></i> Encerrar inventário</button>`;
         $("ig-acoes-topo").innerHTML = botoes;
@@ -652,11 +657,65 @@
                 <td>${aberto && i.status === "Sem correspondência" ? `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-recontar="${i.id}">Limpar e recontar</button>` : ""}</td></tr>`;
         }).join("") || '<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--eui-muted);">Nenhuma linha.</td></tr>';
 
-        const envios = estado.envios || [];
-        $("ig-envios-card").classList.toggle("hidden", !envios.length);
-        $("ig-envios").innerHTML = `<h3 style="margin:0 0 8px;font-size:14px;"><i class="fas fa-right-left"></i> Envio / retorno do ERP</h3>` + envios.slice().reverse().map((e) => `
-            <details style="margin-bottom:6px;"><summary style="cursor:pointer;font-size:12.5px;"><b>${esc(e.tipo === "aplicar" ? "Aplicar" : "Simular")}</b> · ${esc(e.referencia)} · <b>${esc(e.status || "")}</b> (HTTP ${esc(e.http || "—")}) · ${esc(e.enviado_por || "")} em ${esc(e.enviado_em || "")}</summary>
-            <div class="ig-retorno">${esc(e.resposta || "")}</div></details>`).join("");
+        desenharPainelEnvio(inv);
+    }
+
+    // ── Envio ao ERP (painel da aba Resultado) ─────────────────────────
+    const stEnvio = (e) => !e ? '<span style="color:var(--eui-muted);">—</span>'
+        : `<span class="ig-st ${e.status === "APLICADO" ? "confere" : e.status === "SIMULADO_SEM_GRAVAR" ? "diverg" : e.status === "SEM_ITENS" ? "pendente" : "sem"}">${esc(e.status)}</span>`
+          + ` <small>HTTP ${esc(e.http ?? "—")} · ${esc(e.por || "")} ${esc(e.em || "")}</small>`;
+    const logBloco = (rotulo, texto) => !texto ? "" : `<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:12px;">${rotulo}</summary><div class="ig-retorno">${esc(jsonBonito(texto))}</div></details>`;
+    function desenharPainelEnvio(inv) {
+        const pe = estado.painel_envio || { lotes: [], recusados: [], historico: [] };
+        const lotes = pe.lotes.filter((l) => l.produtos);
+        const finalizado = inv.status !== "Em contagem";
+        const simOk = lotes.length && lotes.every((l) => l.simulacao && l.simulacao.status === "SIMULADO_SEM_GRAVAR");
+        const algumAplicado = lotes.some((l) => l.aplicacao && l.aplicacao.status === "APLICADO");
+        const pendentes = lotes.filter((l) => !(l.aplicacao && l.aplicacao.status === "APLICADO")).length;
+        const enviado = inv.status === "Enviado ao ERP";
+        const passo = (n, rotulo, feito, atual) => `<div class="ig-passo${feito ? " feito" : atual ? " atual" : ""}"><b>${feito ? "✓" : n}</b>${rotulo}</div>`;
+        const podeSimular = inv.status === "Finalizado";
+        const parcial = (pe.produtos_aplicados || 0) > 0;
+        const podeAplicar = inv.status === "Finalizado" && simOk && pendentes > 0;
+        const lotesPrev = Math.max(1, Math.ceil((pe.produtos_enviados || 0) / pe.limite_lote));
+        $("ig-envios").innerHTML = `
+            <h3 style="margin:0;font-size:15px;"><i class="fas fa-cloud-arrow-up"></i> Envio ao ERP</h3>
+            <div class="ig-passos">
+                ${passo(1, "Finalizar as contagens", finalizado, !finalizado)}
+                ${passo(2, "Simular (valida no ERP, não grava)", simOk || enviado, finalizado && !simOk && !enviado)}
+                ${passo(3, "Aplicar (grava no estoque do ERP)", enviado, simOk && !enviado)}
+            </div>
+            <p style="margin:0 0 8px;font-size:12.5px;color:var(--eui-muted);">O Sync divide o envio <b>automaticamente em lotes de ${pe.limite_lote} produtos</b> (limite da API) — não precisa selecionar. Simular e Aplicar enviam todos os lotes em sequência. Se algum lote falhar ao aplicar: <b>Aplicar pendentes</b> reenvia o mesmo pacote (falha passageira, ex.: timeout); <b>Simular de novo</b> relê o ERP e monta uma rodada nova só com o que ainda não foi gravado (ex.: erro de versão). O que já foi gravado nunca é reenviado.</p>
+            <div class="ig-toolbar" style="margin:0;">
+                ${inv.status === "Finalizado" ? `<button class="eui-btn eui-btn--primary" id="ig-btn-simular" ${podeSimular ? "" : "disabled"}><i class="fas fa-vial"></i> ${!pe.rodada ? "Simular envio" : parcial ? "Simular de novo (só o que falta gravar)" : "Simular de novo"}</button>
+                <button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${podeAplicar && estado.gravacao_configurada ? "" : `disabled title="${!estado.gravacao_configurada ? "Chave de gravação não configurada no servidor" : "Simule e confira antes de aplicar"}"`}><i class="fas fa-cloud-arrow-up"></i> ${algumAplicado ? `Aplicar pendentes (${pendentes})` : "Aplicar no ERP"}</button>` : ""}
+                ${!finalizado ? '<span style="font-size:12.5px;color:var(--eui-muted);">Disponível depois de <b>Finalizar</b> (todas as contagens encerradas).</span>' : ""}
+            </div>
+            ${!pe.rodada ? "" : `
+            <div class="ig-chips">
+                <span class="ig-chip">Rodada ${pe.rodada} · ${lotes.length} lote(s)</span>
+                <span class="ig-chip">${num(pe.produtos_enviados)} produto(s) nesta rodada</span>
+                <span class="ig-chip ${pe.produtos_aplicados ? "ok" : ""}">${num(pe.produtos_aplicados)} produto(s) gravado(s) no ERP</span>
+                <span class="ig-chip ${pe.lotes_com_erro ? "erro" : ""}">${num(pe.lotes_com_erro)} lote(s) com erro</span>
+                <span class="ig-chip ${pe.recusados.length ? "aviso" : ""}">${num(pe.recusados.length)} produto(s) fora do envio</span>
+            </div>
+            <div class="ig-scroll" style="max-height:40vh;"><table class="ig-table">
+                <thead><tr><th>Lote</th><th style="text-align:right;">Produtos</th><th>Simulação</th><th>Aplicação</th><th>Erro / log</th></tr></thead>
+                <tbody>${pe.lotes.map((l) => `<tr>
+                    <td class="ig-cod">${esc(l.referencia)}</td><td class="num">${num(l.produtos)}</td>
+                    <td>${stEnvio(l.simulacao)}</td>
+                    <td>${stEnvio(l.aplicacao)}${l.tentativas > 1 ? ` <small title="tentativas de aplicar">↻${l.tentativas}</small>` : ""}</td>
+                    <td style="max-width:420px;">${[l.simulacao, l.aplicacao].filter((e) => e && e.erro).map((e) => `<div style="color:#991b1b;font-size:12px;">${esc(e.erro)}</div>`).join("")}
+                        ${logBloco("Enviado", l.payload)}${logBloco("Retorno da simulação", l.simulacao && l.simulacao.resposta)}${logBloco("Retorno da aplicação", l.aplicacao && l.aplicacao.resposta)}</td></tr>`).join("")}</tbody>
+            </table></div>`}
+            ${!pe.recusados.length ? "" : `
+            <h3 class="ig-h3"><i class="fas fa-triangle-exclamation" style="color:#b45309;"></i> Fora do envio (o Sync não mandou ao ERP) — ${pe.recusados.length}</h3>
+            <div class="ig-scroll" style="max-height:30vh;"><table class="ig-table">
+                <thead><tr><th>Código</th><th>Descrição</th><th>Motivo</th></tr></thead>
+                <tbody>${pe.recusados.map((r) => `<tr><td class="ig-cod">${esc(r.codigo_interno || r.cod_produto)}</td><td>${esc(r.descricao || "")}</td><td>${esc(r.motivo)}</td></tr>`).join("")}</tbody>
+            </table></div>`}
+            ${!pe.historico.length ? "" : `<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12.5px;">Histórico completo de chamadas à API (${pe.historico.length})</summary>
+                ${pe.historico.map((e) => `<details style="margin:6px 0 0 12px;"><summary style="cursor:pointer;font-size:12px;"><b>${e.tipo === "aplicar" ? "Aplicar" : "Simular"}</b> · ${esc(e.referencia)} · ${stEnvio(e)}</summary><div class="ig-retorno">${esc(jsonBonito(e.resposta))}</div></details>`).join("")}</details>`}`;
     }
 
     function confirmarEncerrar(rodada) {
@@ -703,10 +762,10 @@
             } else if (id === "ig-btn-simular") {
                 toast("Relendo o ERP e simulando… (nada é gravado)", "");
                 const r = await api("/api/inventario-geral/simular", { method: "POST" });
-                const recus = (r.recusados_pelo_sync || []).length;
-                toast(`${r.message}${recus ? ` ${recus} produto(s) não enviados (saldo mudou/inativo) — veja o retorno.` : ""}`, recus ? "error" : "success");
+                const recus = (r.recusados_pelo_sync || []).length, falhas = (r.simulacoes || []).filter((x) => x.status !== "SIMULADO_SEM_GRAVAR").length;
+                toast(`${r.message} ${(r.simulacoes || []).length} lote(s)${falhas ? `, ${falhas} com erro` : ""}${recus ? ` · ${recus} produto(s) fora do envio` : ""} — veja o painel Envio ao ERP.`, falhas || recus ? "error" : "success");
             } else if (id === "ig-btn-aplicar") {
-                if (!confirm("APLICAR no ERP? Isso grava as contagens no estoque do CPS. Use depois de conferir a simulação.")) return;
+                if (!confirm("APLICAR no ERP? Isso grava as contagens no estoque do CPS (todos os lotes pendentes da última simulação). Use depois de conferir a simulação.")) return;
                 const r = await api("/api/inventario-geral/aplicar", { method: "POST" });
                 toast(r.message, r.concluido ? "success" : "error");
             }
@@ -747,7 +806,7 @@
         if (e.target.closest("#ig-scan-fechar") || e.target.id === "ig-scan-modal") { pararScanner(); return; }
         const scan = e.target.closest("[data-scan]");
         if (scan) { abrirScanner(scan.dataset.scan); return; }
-        const topo = e.target.closest("#ig-acoes-topo button, #ig-btn-abrir"); if (topo) { acaoTopo(topo.id); return; }
+        const topo = e.target.closest("#ig-acoes-topo button, #ig-btn-abrir, #ig-btn-simular, #ig-btn-aplicar"); if (topo) { acaoTopo(topo.id); return; }
         if (e.target.closest("[data-acompanhar]")) { aba = "resultado"; desenhar(); return; }
         const addLote = e.target.closest("[data-teste-add-lote]");
         if (addLote) { addLote.insertAdjacentHTML("beforebegin", linhaLoteTeste("", "")); return; }

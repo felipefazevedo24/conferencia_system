@@ -79,9 +79,64 @@ def api_estado():
                   for e in inv.envios]
         return jsonify({"inventario": cab, "resumo": svc.resumo(inv), "gestao": True,
                         "api_configurada": cps.configurada(), "gravacao_configurada": cps.configurada(gravacao=True),
-                        "aplicado_no_erp": svc.aplicado_no_erp(inv),
+                        "aplicado_no_erp": svc.aplicado_no_erp(inv), "painel_envio": _painel_envio(inv),
                         "itens": [_item_gestao(i) for i in inv.itens], "envios": envios})
     return jsonify({"inventario": cab, "gestao": False})
+
+
+def _erro_resumo(resposta) -> str | None:
+    """Mensagem curta do retorno do CPS pra tabela (o log inteiro vai junto)."""
+    if not resposta:
+        return None
+    try:
+        dados = json.loads(resposta)
+    except ValueError:
+        return str(resposta)[:300]
+    if isinstance(dados, dict):
+        for chave in ("erro", "error", "mensagem", "message", "detail", "detalhe", "erros", "errors"):
+            if dados.get(chave):
+                valor = dados[chave]
+                return (valor if isinstance(valor, str) else json.dumps(valor, ensure_ascii=False))[:300]
+        return None
+    return str(dados)[:300]
+
+
+def _envio_dict(e) -> dict | None:
+    if e is None:
+        return None
+    ok = e.status in ("SIMULADO_SEM_GRAVAR", "APLICADO")
+    return {"id": e.id, "status": e.status, "http": e.http_status, "em": _dt(e.enviado_em), "por": e.enviado_por,
+            "erro": None if ok else (_erro_resumo(e.resposta) or e.status), "resposta": e.resposta}
+
+
+def _painel_envio(inv) -> dict:
+    """Envio ao ERP da rodada atual, por lote de 500: o que foi simulado,
+    aplicado, o que falhou (com log) e o que o Sync deixou de fora."""
+    lotes = []
+    for referencia, lote in svc.envios_da_rodada(inv).items():
+        sim = lote["simulacao"]
+        try:
+            produtos = len(json.loads(sim.payload).get("itens") or []) if sim else 0
+        except ValueError:
+            produtos = 0
+        ultima = lote["aplicacoes"][-1] if lote["aplicacoes"] else None
+        aplicado = next((a for a in lote["aplicacoes"] if a.status == "APLICADO"), None)
+        lotes.append({"referencia": referencia, "produtos": produtos, "payload": sim.payload if sim else None,
+                      "simulacao": _envio_dict(sim), "aplicacao": _envio_dict(aplicado or ultima),
+                      "tentativas": len(lote["aplicacoes"])})
+    lotes = [l for l in lotes if l["simulacao"] and l["simulacao"]["status"] != "SEM_ITENS"] or lotes
+    reais = [l for l in lotes if l["produtos"]]
+    recusas = svc.Recusa.query.filter_by(inventario_id=inv.id).order_by(svc.Recusa.cod_produto).all()
+    return {
+        "rodada": svc.rodada_atual(inv), "limite_lote": svc.MAX_PRODUTOS_POR_ENVIO, "lotes": lotes,
+        "produtos_enviados": sum(l["produtos"] for l in reais),
+        "produtos_aplicados": len(svc.produtos_aplicados(inv)),  # todas as rodadas
+        "lotes_com_erro": sum(1 for l in reais if (l["simulacao"]["erro"] or (l["aplicacao"] and l["aplicacao"]["erro"]
+                                                                              and l["aplicacao"]["status"] != "APLICADO"))),
+        "recusados": [{"cod_produto": r.cod_produto, "codigo_interno": r.codigo_interno, "descricao": r.descricao,
+                       "motivo": r.motivo, "em": _dt(r.simulado_em)} for r in recusas],
+        "historico": [{"tipo": e.tipo, "referencia": e.referencia, **_envio_dict(e)} for e in reversed(inv.envios)],
+    }
 
 
 @inventario_geral_bp.route("/api/inventario-geral/contagem", methods=["GET"])
