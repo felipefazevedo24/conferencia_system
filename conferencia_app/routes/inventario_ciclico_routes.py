@@ -1,4 +1,4 @@
-"""Logistica > Inventario > Inventario ciclico (dirigido).
+"""Logistica > Inventario > aba Inventario ciclico (dirigido).
 
 Duas permissoes: CONTAGEM (conferente ve so' os itens distribuidos para ele -
 codigo, descricao, endereco e unidade; o servidor nao manda saldo nem diz se
@@ -7,11 +7,11 @@ services/inventario_ciclico_service.py.
 """
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, redirect, request, session
 
-from ..auth import has_permission, permission_required, permission_required_any
+from ..auth import get_base_role_permissions, is_admin_role, permission_required, permission_required_any
 from ..extensions import db
-from ..models import InventarioCiclicoDistribuicao as Distribuicao, InventarioCiclicoItem as Item, Usuario
+from ..models import InventarioCiclicoDistribuicao as Distribuicao, InventarioCiclicoItem as Item, PermissaoAcesso, Usuario
 from ..services import erp_estoque_service as erp
 from ..services import inventario_ciclico_service as svc
 
@@ -61,19 +61,33 @@ def _distribuicao(d: Distribuicao) -> dict:
 
 
 def _conferentes() -> list[str]:
-    usuarios = Usuario.query.filter_by(ativo=True).order_by(Usuario.username).all()
-    return [u.username for u in usuarios if has_permission(PERM_CONTAGEM, username=u.username, role=u.role)]
+    """Usuarios ativos com a permissao de contar. Mesma regra do
+    auth._resolve_permissions (admin > usuario > cargo > base), mas com as
+    excecoes lidas uma vez so': has_permission por usuario fazia ate' 3
+    consultas para cada um e deixava a tela lenta."""
+    excecoes = {
+        (r.scope_type, r.scope_id): bool(r.allow)
+        for r in PermissaoAcesso.query.filter_by(permission_key=PERM_CONTAGEM).all()
+    }
+    nomes = []
+    for u in Usuario.query.filter_by(ativo=True).order_by(Usuario.username).all():
+        role = str(u.role or "").strip()
+        if is_admin_role(role):
+            pode = True
+        else:
+            pode = get_base_role_permissions(role).get(PERM_CONTAGEM, False)
+            pode = excecoes.get(("ROLE", role), pode)
+            pode = excecoes.get(("USER", u.username), pode)
+        if pode:
+            nomes.append(u.username)
+    return nomes
 
 
+# A tela e' a aba "Inventario ciclico" do Inventario; a URL antiga so' redireciona.
 @inventario_ciclico_bp.route("/logistica/inventario-ciclico")
 @permission_required_any(PERM_CONTAGEM, PERM_GESTAO)
 def page_inventario_ciclico():
-    return render_template(
-        "inventario_ciclico.html",
-        user=session.get("username"),
-        pode_gestao=has_permission(PERM_GESTAO),
-        pode_contar=has_permission(PERM_CONTAGEM),
-    )
+    return redirect("/logistica/inventario?aba=ciclico")
 
 
 # ── Conferente ──
@@ -125,22 +139,29 @@ def api_distribuicoes():
     })
 
 
+@inventario_ciclico_bp.route("/api/inventario-ciclico/previa", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_previa():
+    p = request.get_json(silent=True) or {}
+    try:
+        return jsonify(svc.previa(p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @inventario_ciclico_bp.route("/api/inventario-ciclico/distribuicoes", methods=["POST"])
 @permission_required(PERM_GESTAO)
 def api_distribuir():
     p = request.get_json(silent=True) or {}
-    simular = bool(p.get("simular"))
     conferente = str(p.get("conferente") or "").strip()
-    if not simular and conferente not in _conferentes():
+    if conferente not in _conferentes():
         return jsonify({"error": "Escolha um conferente com acesso ao inventário cíclico."}), 400
     try:
         res = svc.distribuir(p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos"),
-                             conferente, _usuario(), simular=simular)
+                             conferente, _usuario(), p.get("itens"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    dist = res.pop("distribuicao", None)
-    if dist:
-        res["distribuicao"] = _distribuicao(dist)
+    res["distribuicao"] = _distribuicao(res["distribuicao"])
     return jsonify(res)
 
 

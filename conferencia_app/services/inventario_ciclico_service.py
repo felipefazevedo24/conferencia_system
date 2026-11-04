@@ -80,12 +80,14 @@ def _linhas_do_codigo(codigo: str, agregado: dict, estoque: dict, *, so_com_sald
     linhas = []
     for local in sorted(set(agregado.get("localizacoes") or [])):
         bruto = (estoque.get("por_local") or {}).get(f"{codigo}|{local}") or {}
-        if so_com_saldo and float(bruto.get("qtde_total") or 0) <= 0:
+        saldo = float(bruto.get("qtde_total") or 0)
+        if so_com_saldo and saldo <= 0:
             continue
-        linhas.append({**base, "endereco": local})
+        linhas.append({**base, "endereco": local, "saldo": saldo})
     # Codigo sem localizacao no GRV: conta o total, sem endereco.
-    if not agregado.get("localizacoes") and (not so_com_saldo or float(agregado.get("qtde_total") or 0) > 0):
-        linhas.append({**base, "endereco": ""})
+    saldo_total = float(agregado.get("qtde_total") or 0)
+    if not agregado.get("localizacoes") and (not so_com_saldo or saldo_total > 0):
+        linhas.append({**base, "endereco": "", "saldo": saldo_total})
     return linhas
 
 
@@ -123,8 +125,7 @@ def _chaves_em_aberto() -> set[tuple[str, str]]:
     return {(c, e or "") for c, e in rows}
 
 
-def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conferente: str,
-               usuario: str, *, simular: bool = False) -> dict:
+def _validar_filtro(criterio: str, familia: str, grupo: str, codigos_texto: str) -> tuple[str, str, str, list[str]]:
     criterio = str(criterio or "").strip()
     if criterio not in CRITERIOS:
         raise ValueError("Escolha como distribuir: código, família, grupo ou família + grupo.")
@@ -136,30 +137,48 @@ def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conf
         raise ValueError("Escolha a família.")
     if criterio in {"grupo", "familia_grupo"} and not grupo:
         raise ValueError("Escolha o grupo.")
-    conferente = str(conferente or "").strip()
-    if not simular and not conferente:
-        raise ValueError("Escolha o conferente.")
+    return criterio, familia, grupo, codigos
 
+
+def _estoque() -> dict:
     try:
-        estoque = erp.buscar_estoque_grv()
+        return erp.buscar_estoque_grv()
     except Exception as exc:  # noqa: BLE001
         raise ValueError("Não deu para consultar o GRV agora. Tente de novo em instantes.") from exc
 
-    linhas, nao_encontrados = montar_linhas(estoque, criterio, familia, grupo, codigos)
+
+def previa(criterio: str, familia: str, grupo: str, codigos_texto: str) -> dict:
+    """Linhas do filtro para o gestor escolher; as que ja estao em outra
+    distribuicao aberta vem marcadas e nao podem ser escolhidas."""
+    criterio, familia, grupo, codigos = _validar_filtro(criterio, familia, grupo, codigos_texto)
+    linhas, nao_encontrados = montar_linhas(_estoque(), criterio, familia, grupo, codigos)
     em_aberto = _chaves_em_aberto()
-    novas = [l for l in linhas if (l["codigo"], l["endereco"]) not in em_aberto]
-    resultado = {
-        "total": len(novas),
-        "ja_em_aberto": len(linhas) - len(novas),
-        "nao_encontrados": nao_encontrados,
-        "codigos": len({l["codigo"] for l in novas}),
+    for l in linhas:
+        l["em_aberto"] = (l["codigo"], l["endereco"]) in em_aberto
+    return {"linhas": linhas, "nao_encontrados": nao_encontrados}
+
+
+def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conferente: str,
+               usuario: str, selecionados: list) -> dict:
+    """Distribui so' as linhas escolhidas na previa. A lista e' refeita aqui
+    contra o GRV: linha que saiu do filtro ou entrou em outra distribuicao
+    no meio do caminho fica de fora."""
+    criterio, familia, grupo, codigos = _validar_filtro(criterio, familia, grupo, codigos_texto)
+    conferente = str(conferente or "").strip()
+    if not conferente:
+        raise ValueError("Escolha o conferente.")
+    escolhidas = {
+        (str(x.get("codigo") or "").strip().upper(), str(x.get("endereco") or "").strip().upper())
+        for x in (selecionados or []) if isinstance(x, dict)
     }
-    if simular:
-        return resultado
+    if not escolhidas:
+        raise ValueError("Selecione ao menos um item.")
+
+    linhas, _ = montar_linhas(_estoque(), criterio, familia, grupo, codigos)
+    em_aberto = _chaves_em_aberto()
+    novas = [l for l in linhas if (l["codigo"], l["endereco"]) in escolhidas and (l["codigo"], l["endereco"]) not in em_aberto]
     if not novas:
-        if linhas:
-            raise ValueError("Todos os itens desse filtro já estão em outra distribuição aberta.")
-        raise ValueError("Nenhum item para distribuir com esse filtro.")
+        raise ValueError("Os itens selecionados não estão mais disponíveis: já entraram em outra distribuição ou saíram do filtro.")
 
     dist = Distribuicao(
         criterio=criterio,
@@ -175,8 +194,7 @@ def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conf
                                endereco=l["endereco"][:120], status=Item.STATUS_AGUARDA_1A))
     db.session.add(dist)
     db.session.commit()
-    resultado["distribuicao"] = dist
-    return resultado
+    return {"distribuicao": dist, "total": len(novas), "fora": len(escolhidas) - len(novas)}
 
 
 def itens_do_conferente(username: str) -> list[Item]:
