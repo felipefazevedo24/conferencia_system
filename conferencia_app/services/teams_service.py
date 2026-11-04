@@ -505,6 +505,7 @@ def notificar_divergencia_inventario_gestor(
     custo_medio: float | None = None,
     contado_por: str | None = None,
     link: str | None = None,
+    aguardando: str = "Validação de Suprimentos",
     env_var: str = "TEAMS_WEBHOOK_INVENTARIO_GESTOR_URL",
     config_key: str = "webhook_inventario_gestor",
 ) -> None:
@@ -530,7 +531,7 @@ def notificar_divergencia_inventario_gestor(
         partes.append(f"Impacto estimado: R$ {impacto}")
     if contado_por:
         partes.append(f"Contado por: {contado_por}")
-    subinfo = "\n".join(partes) + "\n\nAguardando Validação de Suprimentos."
+    subinfo = "\n".join(partes) + f"\n\nAguardando {aguardando}."
     payload = _card_payload("⚠️ Divergência de inventário para validar", linha, subinfo, mencionar_canal=True)
     if link:
         payload["attachments"][0]["content"]["actions"] = [
@@ -544,6 +545,7 @@ def notificar_divergencias_inventario_lote(
     *,
     origem: str = "",
     link: str | None = None,
+    aguardando: str = "Validação de Suprimentos",
     env_var: str = "TEAMS_WEBHOOK_INVENTARIO_GESTOR_URL",
     config_key: str = "webhook_inventario_gestor",
 ) -> None:
@@ -576,7 +578,7 @@ def notificar_divergencias_inventario_lote(
         partes.append(origem)
     partes.append("\n".join(mostrar))
     partes.append(f"Impacto estimado: R$ {_brl(impacto)}" + (f" ({sem_custo} sem custo)" if sem_custo else ""))
-    subinfo = "\n\n".join(partes) + "\n\nAguardando Validação de Suprimentos."
+    subinfo = "\n\n".join(partes) + f"\n\nAguardando {aguardando}."
     payload = _card_payload("⚠️ Divergências de inventário para validar", f"{len(ajustes)} itens", subinfo, mencionar_canal=True)
     if link:
         payload["attachments"][0]["content"]["actions"] = [

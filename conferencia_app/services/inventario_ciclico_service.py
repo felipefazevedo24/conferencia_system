@@ -13,6 +13,9 @@
     confirmada e abre o ajuste normal (Ajuste de Estoque).
   - Divergente na 1a ou aguardando a 3a, o gestor pode pular a recontagem e
     mandar direto pro ajuste com a ultima contagem do conferente.
+  - Ajuste aberto pelo ciclico ja foi validado pelo gestor: se ele tem a
+    permissao de Validacao de Suprimentos, o ajuste pula essa etapa e entra
+    em Emissao do Formulario (pedido da Logistica em 04/11/2026).
   - Cada rodada compara com o saldo do GRV no momento dela. Linha fechada
     vira uma LogisticaInventarioInicial, igual a contagem avulsa.
 """
@@ -27,6 +30,7 @@ from ..models import (
     InventarioCiclicoItem as Item,
     LogisticaInventarioInicial,
 )
+from ..auth import has_permission
 from ..tempo import agora_br
 from flask import current_app, has_request_context, request
 
@@ -44,6 +48,7 @@ CRITERIOS = {
 STATUS_FECHADOS = {Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_CANCELADO}
 STATUS_CONFERENTE = {Item.STATUS_AGUARDA_1A: 1, Item.STATUS_AGUARDA_2A: 2}
 MOTIVO = "Inventário Cíclico"
+PERM_VALIDACAO_SUPRIMENTOS = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
 
 
 def numero(dist: Distribuicao) -> str:
@@ -262,6 +267,10 @@ def _link_ajustes() -> str:
 def _avisar_teams(ajustes: list, origem: str) -> None:
     """Mesmo aviso da contagem avulsa (grupo do gestor). Um ajuste: card
     normal; varios: um card com a lista. Falha no Teams nunca desfaz nada."""
+    # Ajuste que ja saiu confirmado do ciclico espera o formulario, nao a validacao.
+    def _etapa(a):
+        return "Emissão do Formulário" if a.status_modulo == "Relatorio" else "Validação de Suprimentos"
+
     try:
         if len(ajustes) == 1:
             a, contado_por = ajustes[0]
@@ -270,20 +279,24 @@ def _avisar_teams(ajustes: list, origem: str) -> None:
                 descricao=a.descricao_produto, unidade=a.unidade_medida,
                 qtde_contada=a.qtde_contada, qtde_sistema=a.qtde_estoque_no_momento,
                 custo_medio=a.custo_medio, contado_por=contado_por, link=_link_ajustes(),
+                aguardando=_etapa(a),
             )
         elif ajustes:
             teams_service.notificar_divergencias_inventario_lote(
                 [{"codigo": a.codigo_produto, "local": a.local_codigo, "diferenca": a.diferenca,
                   "unidade": a.unidade_medida, "custo_medio": a.custo_medio} for a, _ in ajustes],
                 origem=origem, link=_link_ajustes(),
+                aguardando=" / ".join(sorted({_etapa(a) for a, _ in ajustes})),
             )
     except Exception as exc:  # noqa: BLE001
         current_app.logger.warning("Falha ao avisar o Teams do inventario ciclico: %s", exc)
 
 
 def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: str, rodada: int, bateu: bool,
-            obs_extra: str = ""):
-    """Fecha a linha; devolve o ajuste aberto (ou None)."""
+            obs_extra: str = "", validado_por: str = "", validacao: str = ""):
+    """Fecha a linha; devolve o ajuste aberto (ou None). `validado_por` e'
+    o gestor que decidiu no ciclico; com a permissao de Validacao, o ajuste
+    ja sai confirmado (ver confirmar_pelo_inventario_ciclico)."""
     agora = agora_br()
     contagem = LogisticaInventarioInicial(
         local_codigo=item.endereco or "",
@@ -309,6 +322,9 @@ def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: st
         if ajuste:
             item.ajuste_id = ajuste.id
             db.session.commit()
+            if validado_por and has_permission(PERM_VALIDACAO_SUPRIMENTOS, username=validado_por):
+                ajuste_svc.confirmar_pelo_inventario_ciclico(
+                    ajuste, validado_por, f"Validado no inventário cíclico {numero(item.distribuicao)}: {validacao}")
         return ajuste
     return None
 
@@ -356,7 +372,8 @@ def seguir_para_ajuste(item: Item, usuario: str, custo: float | None = None, *, 
     else:
         rodada, qtd, grv, contou = 2, item.contagem2, item.grv2, item.contagem2_por
     ajuste = _fechar(item, float(qtd or 0), float(grv or 0), custo, contou or usuario, rodada, False,
-                     obs_extra=f" (recontagem dispensada por {usuario})")
+                     obs_extra=f" (recontagem dispensada por {usuario})", validado_por=usuario,
+                     validacao=f"{rodada}ª contagem divergente, recontagem dispensada")
     if ajuste and avisar:
         _avisar_teams([(ajuste, contou)], f"Inventário cíclico {numero(item.distribuicao)}")
     return ajuste
@@ -407,7 +424,8 @@ def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:
     grv, custo, _ = _saldo_grv(item)
     bateu = _bate(qtd, grv)
     item.contagem3, item.contagem3_por, item.contagem3_em, item.grv3 = qtd, usuario, agora_br(), grv
-    ajuste = _fechar(item, qtd, grv, custo, usuario, 3, bateu)
+    ajuste = _fechar(item, qtd, grv, custo, usuario, 3, bateu, validado_por=usuario,
+                     validacao="3ª contagem confirmou a diferença")
     if ajuste:
         _avisar_teams([(ajuste, usuario)], f"Inventário cíclico {numero(item.distribuicao)}")
     return bateu

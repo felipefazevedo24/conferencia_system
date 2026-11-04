@@ -331,6 +331,21 @@ def confirmar_divergencia(
     return ajuste
 
 
+def confirmar_pelo_inventario_ciclico(ajuste: LogisticaInventarioAjuste, usuario: str, justificativa: str) -> None:
+    """Ajuste que veio do inventario ciclico ja foi validado pelo gestor la
+    (3a contagem ou recontagem dispensada): pula a Validacao de Suprimentos
+    e entra direto em Emissao do Formulario. Sem recontagem aqui - ela ja
+    aconteceu (ou foi dispensada) no ciclico."""
+    if ajuste.status_modulo != "Validacao":
+        return
+    ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
+    ajuste.gestor_confirmado_em = agora_br()
+    ajuste.gestor_confirmado_por = usuario
+    ajuste.status_modulo = "Relatorio"
+    ajuste.status_slug = status_slug("Relatorio")
+    db.session.commit()
+
+
 # ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
 # Guardada direto no banco (coluna `justificativa_imagem`), mesmo padrao do
 # ComexDocumento - sem Google Drive nem disco do servidor. Uma so' por
