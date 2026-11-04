@@ -1427,6 +1427,8 @@ def _serializar_solicitacao(
         "status_liberacao": str((detalhes_coleta or {}).get("status_liberacao") or "").strip(),
         "aguardando_liberacao": coleta_aguardando_liberacao(detalhes_coleta),
         "correios": bool(payload_origem.get("correios")),
+        "correios_codigo_retirada": str(payload_origem.get("correios_codigo_retirada") or "").strip(),
+        "coleta_parcial": bool(payload_origem.get("coleta_parcial")),
         "observacoes_logistica": str(registro.observacoes_logistica or "").strip(),
         "motivo_cancelamento": str(registro.motivo_cancelamento or "").strip(),
         "data_desejada": registro.data_desejada.isoformat(timespec="minutes") if registro.data_desejada else "",
@@ -1782,10 +1784,30 @@ def central_viagens_criar_coleta_por_oc():
     observacao_coleta = str((form.get("observacao") if form else None) or payload.get("observacao") or "").strip()
     correios_raw = (form.get("correios") if form else None) or payload.get("correios")
     correios = str(correios_raw or "").strip().lower() in {"1", "true", "on", "sim"}
+    parcial_raw = (form.get("coleta_parcial") if form else None) or payload.get("coleta_parcial")
+    coleta_parcial = str(parcial_raw or "").strip().lower() in {"1", "true", "on", "sim"}
+
+    def _campo(nome: str) -> str:
+        return str((form.get(nome) if form else None) or payload.get(nome) or "").strip()
+
+    endereco_correios = {
+        "logradouro": _campo("correios_logradouro"),
+        "numero": _campo("correios_numero"),
+        "bairro": _campo("correios_bairro"),
+        "cidade": _campo("correios_cidade"),
+        "uf": _campo("correios_uf")[:2].upper(),
+        "cep": _campo("correios_cep"),
+    }
+    codigo_retirada = _campo("correios_codigo_retirada")
     if prioridade not in PRIORIDADES_SOLICITACAO:
         prioridade = "Media"
     if not numero_oc:
         return jsonify({"error": "Informe o número da OC."}), 400
+    if correios:
+        if not all(endereco_correios[c] for c in ("logradouro", "numero", "bairro", "cidade", "uf")):
+            return jsonify({"error": "Informe o endereço completo da agência dos Correios."}), 400
+        if not codigo_retirada:
+            return jsonify({"error": "Informe o código para retirada do pacote nos Correios."}), 400
     try:
         data_liberacao = _parse_datetime(data_liberacao_raw, "a data de liberação")
     except ValueError as exc:
@@ -1793,17 +1815,20 @@ def central_viagens_criar_coleta_por_oc():
     if not data_liberacao:
         return jsonify({"error": "Informe a data/hora em que a coleta estará liberada."}), 400
 
-    existente = (
-        _query_solicitacoes_visiveis()
-        .filter(
-            AgendamentoSolicitacao.tipo == "COLETA",
-            AgendamentoSolicitacao.numero_oc == numero_oc,
-            AgendamentoSolicitacao.status != "Cancelada",
+    # Coleta parcial: o resto da OC ainda vai ser coletado depois, então a mesma
+    # OC precisa poder entrar na Central quantas vezes for preciso.
+    if not coleta_parcial:
+        existente = (
+            _query_solicitacoes_visiveis()
+            .filter(
+                AgendamentoSolicitacao.tipo == "COLETA",
+                AgendamentoSolicitacao.numero_oc == numero_oc,
+                AgendamentoSolicitacao.status != "Cancelada",
+            )
+            .first()
         )
-        .first()
-    )
-    if existente:
-        return jsonify({"error": f"A OC {numero_oc} já possui coleta aberta na Central."}), 409
+        if existente:
+            return jsonify({"error": f"A OC {numero_oc} já possui coleta na Central. Se for coleta parcial, marque \"Coleta parcial\"."}), 409
 
     consulta = consultar_oc_agendamento(numero_oc)
     if not consulta.get("encontrada"):
@@ -1827,6 +1852,12 @@ def central_viagens_criar_coleta_por_oc():
         "cep": str(parceiro.get("cep") or "").strip(),
         "observacoes": str(consulta.get("warning") or "").strip(),
     }
+    if correios:
+        # O motorista vai até a agência, não ao fornecedor: o endereço da coleta
+        # (mapa, rota, ordem de coleta) passa a ser o dos Correios.
+        parceiro_payload.update(endereco_correios)
+        parceiro_payload["complemento"] = "Agência dos Correios"
+        parceiro_payload["observacoes"] = f"Retirada nos Correios. Código: {codigo_retirada}"
 
     usuario = session.get("username", "sistema")
     agora = agora_br()
@@ -1855,6 +1886,8 @@ def central_viagens_criar_coleta_por_oc():
                 # Fica no payload (e não numa coluna) só para a Central pintar a linha;
                 # evita migration numa tabela de produção por um sinalizador visual.
                 "correios": correios,
+                "correios_codigo_retirada": codigo_retirada if correios else "",
+                "coleta_parcial": coleta_parcial,
             }
         ),
     )
@@ -1891,8 +1924,8 @@ def central_viagens_criar_coleta_por_oc():
         evento="CRIADA_OC_BRIDGE",
         usuario=usuario,
         status_novo="Pendente",
-        detalhe=f"Solicitação criada a partir da OC {numero_oc} via bridge.",
-        payload={"numero_oc": numero_oc, "fonte": fonte},
+        detalhe=f"Solicitação {'de coleta parcial ' if coleta_parcial else ''}criada a partir da OC {numero_oc} via bridge.",
+        payload={"numero_oc": numero_oc, "fonte": fonte, "coleta_parcial": coleta_parcial},
     )
     detalhes_salvos = criar_ou_atualizar_detalhes_coleta(
         solicitacao_id=sol.id,

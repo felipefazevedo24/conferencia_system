@@ -324,13 +324,15 @@
                             or can_access('PAGE_LOGISTICA_INVENTARIO_FINANCE') or can_access('PAGE_LOGISTICA_INVENTARIO_FISCAL')
                             or can_access('PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA')
                             or can_access('PAGE_LOGISTICA_ESTOQUE') or can_access('PAGE_LOGISTICA_CARDEX')
-                            or can_access('PAGE_INVENTARIO_GERAL_CONTAGEM') or can_access('PAGE_INVENTARIO_GERAL_GESTAO') %}
+                            or can_access('PAGE_INVENTARIO_GERAL_CONTAGEM') or can_access('PAGE_INVENTARIO_GERAL_GESTAO')
+                            or can_access('PAGE_INVENTARIO_CICLICO_CONTAGEM') or can_access('PAGE_INVENTARIO_CICLICO_GESTAO') %}
                         <div class="submenu-subgroup" data-subgroup="inventario">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-clipboard-list submenu-icon"></i> Inventário <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_LOGISTICA_INVENTARIO') or can_access('PAGE_LOGISTICA_INVENTARIO_VALIDACAO')
                                     or can_access('PAGE_LOGISTICA_INVENTARIO_FINANCE') or can_access('PAGE_LOGISTICA_INVENTARIO_FISCAL')
-                                    or can_access('PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA') %}
+                                    or can_access('PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA')
+                                    or can_access('PAGE_INVENTARIO_CICLICO_CONTAGEM') or can_access('PAGE_INVENTARIO_CICLICO_GESTAO') %}
                                 <a href="/logistica/inventario" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Inventário</a>
                                 {% endif %}
                                 {% if can_access('PAGE_INVENTARIO_GERAL_CONTAGEM') or can_access('PAGE_INVENTARIO_GERAL_GESTAO') %}

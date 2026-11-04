@@ -139,9 +139,39 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
     if not isinstance(data, dict) or not data.get("sucesso"):
         raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de estoque."))
 
+    resultado = _agregar_itens(data.get("itens") or [])
+    _CACHE["dados"] = resultado
+    _CACHE["expira_em"] = agora + _CACHE_TTL_SEGUNDOS
+    return resultado
+
+
+def buscar_estoque_produtos_grv(codigos: list[str], empresa: int = 1) -> dict[str, Any]:
+    """Mesmo formato do buscar_estoque_grv, so' dos codigos pedidos e sempre
+    na hora (sem cache): a contagem compara com o saldo do momento sem baixar
+    o estoque inteiro. Bridge sem o endpoint levanta LookupError - quem chama
+    cai no buscar_estoque_grv."""
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar estoque no GRV.")
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/produtos",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigos": [str(c or "").strip().upper() for c in codigos]},
+        timeout=cfg["timeout"],
+    )
+    if resp.status_code == 404:
+        raise LookupError("Bridge sem /api/erp/estoque/produtos.")
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de estoque."))
+    return _agregar_itens(data.get("itens") or [])
+
+
+def _agregar_itens(itens: list[dict[str, Any]]) -> dict[str, Any]:
     por_local: dict[str, Any] = {}
     por_codigo: dict[str, Any] = {}
-    for item in data.get("itens") or []:
+    for item in itens:
         codigo = str(item.get("codigo_interno") or "").strip().upper()
         if not codigo:
             continue
@@ -157,6 +187,8 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
             "unidade": item.get("unidade") or "",
             "familia": item.get("familia") or "",
             "grupo": item.get("grupo") or "",
+            # Bridge antiga nao manda: fica vazio e a tela mostra so' o codigo.
+            "grupo_nome": item.get("grupo_nome") or "",
             "estoque_minimo": float(item.get("estoque_minimo") or 0),
             "lote_economico": float(item.get("lote_economico") or 0),
             # None = bridge antiga, que ainda nao manda o campo (nao da pra
@@ -183,10 +215,7 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
         qtde = agregado["qtde_total"]
         agregado["custo_medio"] = (custo_total / qtde) if qtde else None
 
-    resultado = {"por_local": por_local, "por_codigo": por_codigo}
-    _CACHE["dados"] = resultado
-    _CACHE["expira_em"] = agora + _CACHE_TTL_SEGUNDOS
-    return resultado
+    return {"por_local": por_local, "por_codigo": por_codigo}
 
 
 def estoque_grv_em_cache() -> dict[str, Any] | None:

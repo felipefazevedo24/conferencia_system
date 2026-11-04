@@ -47,6 +47,9 @@
     .vt-oc-busca .eui-input { flex: 1; min-width: 0; }
     .vt-oc-correios { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--eui-text); }
     .vt-oc-correios:has(input:checked) { border-color: var(--eui-primary); }
+    .vt-oc-correios-campos { display: grid; gap: 10px; padding: 12px; border: 1px solid #bae6fd; border-radius: 8px; background: #f0f9ff; }
+    .vt-oc-correios-campos[hidden] { display: none; }
+    .vt-type.parcial { background: #fef3c7; color: #92400e; margin-left: 4px; }
     /* Subgrid: rótulos e campos lado a lado dividem a mesma linha, então a caixa
        dos Correios fica exatamente da altura do campo de data nativo. */
     .vt-oc-linha { grid-template-rows: auto auto; row-gap: 6px; }
@@ -301,9 +304,52 @@
                     <div class="eui-field">
                         <label class="eui-field__label" for="oc-correios">Local da coleta</label>
                         <label class="eui-input vt-oc-correios" for="oc-correios">
-                            <input type="checkbox" id="oc-correios"> Coleta nos Correios
+                            <input type="checkbox" id="oc-correios" onchange="toggleCamposCorreios()"> Coleta nos Correios
                         </label>
                     </div>
+                </div>
+                <div id="oc-correios-campos" class="vt-oc-correios-campos" hidden>
+                    <div class="vt-grid-2">
+                        <div class="eui-field">
+                            <label class="eui-field__label" for="oc-correios-codigo">Código de retirada <b>*</b></label>
+                            <input type="text" id="oc-correios-codigo" class="eui-input" maxlength="60">
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label" for="oc-correios-cep">CEP</label>
+                            <input type="text" id="oc-correios-cep" class="eui-input" maxlength="10">
+                        </div>
+                    </div>
+                    <div class="vt-grid-2">
+                        <div class="eui-field">
+                            <label class="eui-field__label" for="oc-correios-logradouro">Endereço da agência <b>*</b></label>
+                            <input type="text" id="oc-correios-logradouro" class="eui-input" maxlength="180">
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label" for="oc-correios-numero">Número <b>*</b></label>
+                            <input type="text" id="oc-correios-numero" class="eui-input" maxlength="30">
+                        </div>
+                    </div>
+                    <div class="vt-grid-2">
+                        <div class="eui-field">
+                            <label class="eui-field__label" for="oc-correios-bairro">Bairro <b>*</b></label>
+                            <input type="text" id="oc-correios-bairro" class="eui-input" maxlength="80">
+                        </div>
+                        <div class="vt-grid-2">
+                            <div class="eui-field">
+                                <label class="eui-field__label" for="oc-correios-cidade">Cidade <b>*</b></label>
+                                <input type="text" id="oc-correios-cidade" class="eui-input" maxlength="80">
+                            </div>
+                            <div class="eui-field">
+                                <label class="eui-field__label" for="oc-correios-uf">UF <b>*</b></label>
+                                <input type="text" id="oc-correios-uf" class="eui-input" maxlength="2">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="eui-field">
+                    <label class="eui-input vt-oc-correios" for="oc-parcial">
+                        <input type="checkbox" id="oc-parcial"> Coleta parcial <span class="vt-mini">(o restante da OC sai em outra coleta)</span>
+                    </label>
                 </div>
                 <div class="eui-field">
                     <label class="eui-field__label" for="oc-observacao">Observação da coleta</label>
@@ -665,7 +711,8 @@ function tipoBadge(row, typeClass, label) {
   const badge = row && row.correios
     ? '<span class="vt-type correios" title="Coleta nos Correios">CORREIOS</span>'
     : `<span class="vt-type ${typeClass}">${label || '-'}</span>`;
-  return badge + alertaEstoqueHtml(row);
+  const parcial = row && row.coleta_parcial ? '<span class="vt-type parcial" title="Coleta parcial da OC">PARCIAL</span>' : '';
+  return badge + parcial + alertaEstoqueHtml(row);
 }
 
 // Hora de Brasília no mesmo formato de data_liberacao ("AAAA-MM-DDTHH:MM"),
@@ -745,7 +792,8 @@ function renderSolicitacaoDetalhe(row) {
       <div class="vt-detail-item"><strong>Solicitação</strong>${row.codigo || '-'}</div>
       <div class="vt-detail-item"><strong>Documento</strong>${row.documento_tipo || '-'} ${row.documento_numero || '-'}</div>
       <div class="vt-detail-item"><strong>Parceiro</strong>${row.parceiro_nome || '-'}</div>
-      <div class="vt-detail-item"><strong>Local</strong>${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}</div>
+      <div class="vt-detail-item"><strong>Local</strong>${row.correios ? (row.endereco_formatado || '-') : `${row.endereco?.cidade || '-'} / ${row.endereco?.uf || '-'}`}</div>
+      ${row.correios ? `<div class="vt-detail-item"><strong>Código de retirada (Correios)</strong>${row.correios_codigo_retirada || '-'}</div>` : ''}
       <div class="vt-detail-item"><strong>${row.responsavel_origem_label || 'Responsável pela origem'}</strong>${row.responsavel_origem || '-'}</div>
       <div class="vt-detail-item"><strong>Prioridade</strong>${row.prioridade_label || row.prioridade || '-'}</div>
       <div class="vt-detail-item"><strong>Solicitada em</strong>${row.criado_em || '-'}</div>
@@ -2322,11 +2370,30 @@ async function confirmarImportacaoOc() {
   }
   const observacao = (document.getElementById('oc-observacao').value || '').trim();
   const anexo = document.getElementById('oc-anexo').files?.[0] || null;
+  const correios = document.getElementById('oc-correios').checked;
+  const camposCorreios = {};
+  if (correios) {
+    for (const [campo, rotulo] of CAMPOS_CORREIOS) {
+      const el = document.getElementById(`oc-correios-${campo}`);
+      camposCorreios[campo] = (el.value || '').trim();
+      if (rotulo && !camposCorreios[campo]) {
+        showToast(`Informe ${rotulo}.`, 'error');
+        el.focus();
+        return;
+      }
+    }
+  }
   const body = new FormData();
   body.append('numero_oc', numeroOc);
   body.append('data_liberacao', dataLiberacao);
   body.append('observacao', observacao);
-  if (document.getElementById('oc-correios').checked) body.append('correios', '1');
+  if (correios) {
+    body.append('correios', '1');
+    for (const [campo] of CAMPOS_CORREIOS) {
+      body.append(campo === 'codigo' ? 'correios_codigo_retirada' : `correios_${campo}`, camposCorreios[campo]);
+    }
+  }
+  if (document.getElementById('oc-parcial').checked) body.append('coleta_parcial', '1');
   if (anexo) body.append('anexo', anexo);
   const r = await fetch('/api/logistica/central-viagens/oc/criar', {
     method: 'POST',
@@ -2345,8 +2412,26 @@ async function confirmarImportacaoOc() {
   document.getElementById('oc-data-liberacao').value = '';
   document.getElementById('oc-observacao').value = '';
   document.getElementById('oc-correios').checked = false;
+  document.getElementById('oc-parcial').checked = false;
+  for (const [campo] of CAMPOS_CORREIOS) document.getElementById(`oc-correios-${campo}`).value = '';
+  toggleCamposCorreios();
   closeModal('modalImportar');
   loadDashboard();
+}
+
+// [campo, rótulo da mensagem quando obrigatório]; CEP é opcional.
+const CAMPOS_CORREIOS = [
+  ['codigo', 'o código de retirada'],
+  ['logradouro', 'o endereço da agência'],
+  ['numero', 'o número da agência'],
+  ['bairro', 'o bairro da agência'],
+  ['cidade', 'a cidade da agência'],
+  ['uf', 'a UF da agência'],
+  ['cep', ''],
+];
+
+function toggleCamposCorreios() {
+  document.getElementById('oc-correios-campos').hidden = !document.getElementById('oc-correios').checked;
 }
 
 const buscaInput = document.getElementById('vt-busca');

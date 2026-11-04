@@ -74,7 +74,9 @@ PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCA
 # gestor. Quem ja tem PERMISSOES_ANALISE continua vendo a fila.
 PERMISSION_ANALISE_CAUSA = "PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA"
 PERMISSOES_ANALISE_CAUSA = PERMISSOES_ANALISE + (PERMISSION_ANALISE_CAUSA,)
-ABAS_INVENTARIO = ("inventariar", "realizados", "ajustes", "analise")
+ABAS_INVENTARIO = ("inventariar", "realizados", "ajustes", "analise", "ciclico")
+# Inventario ciclico dirigido: aba desta tela, regras em inventario_ciclico_routes/service.
+PERMISSOES_CICLICO = ("PAGE_INVENTARIO_CICLICO_CONTAGEM", "PAGE_INVENTARIO_CICLICO_GESTAO")
 INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
@@ -300,18 +302,24 @@ def _render_inventario(aba: str):
         pode_finance=has_permission(PERMISSION_FINANCE),
         pode_fiscal=has_permission(PERMISSION_FISCAL),
         pode_pular_etapa=has_permission(PERMISSION_PULAR_ETAPA),
+        pode_ciclico_contar=has_permission(PERMISSOES_CICLICO[0]),
+        pode_ciclico_gestao=has_permission(PERMISSOES_CICLICO[1]),
     )
 
 
 @logistica_inventario_bp.route("/logistica/inventario")
-@permission_required_any(PERMISSION, *PERMISSOES_ANALISE_CAUSA)
+@permission_required_any(PERMISSION, *PERMISSOES_ANALISE_CAUSA, *PERMISSOES_CICLICO)
 def inventario_home_page():
     aba = str(request.args.get("aba") or "")
     if aba not in ABAS_INVENTARIO:
         if has_permission(PERMISSION):
             aba = "inventariar"
+        elif _pode_analisar():
+            aba = "ajustes"
+        elif any(has_permission(p) for p in PERMISSOES_ANALISE_CAUSA):
+            aba = "analise"
         else:
-            aba = "ajustes" if _pode_analisar() else "analise"
+            aba = "ciclico"
     return _render_inventario(aba)
 
 

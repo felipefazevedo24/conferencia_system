@@ -4972,6 +4972,123 @@ class InventarioGeralCancelamento(db.Model):
                                  backref=db.backref("cancelamento", uselist=False, cascade="all, delete-orphan"))
 
 
+class InventarioCiclicoDistribuicao(db.Model):
+    """Inventario ciclico dirigido: o gestor separa codigo, familia, grupo ou
+    familia + grupo do GRV e entrega para um conferente contar.
+
+    A lista de itens e' congelada na distribuicao (InventarioCiclicoItem). A
+    1a e a 2a contagem sao do conferente, cegas; a 3a e' do gestor. Linha
+    fechada vira uma LogisticaInventarioInicial normal (aparece em
+    Realizados) e so' abre ajuste se a 3a ainda divergir do GRV. Regras em
+    services/inventario_ciclico_service.py."""
+
+    __tablename__ = "inventario_ciclico_distribuicao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    criterio = db.Column(db.String(20), nullable=False)  # codigo | familia | grupo | familia_grupo
+    familia = db.Column(db.String(160))
+    grupo = db.Column(db.String(160))
+    codigos = db.Column(db.Text)  # criterio "codigo": um por linha
+    conferente = db.Column(db.String(80), nullable=False, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    cancelado_por = db.Column(db.String(100))
+    cancelado_em = db.Column(db.DateTime)
+
+    itens = db.relationship("InventarioCiclicoItem", backref="distribuicao", cascade="all, delete-orphan",
+                            order_by="InventarioCiclicoItem.id")
+
+
+class InventarioCiclicoItem(db.Model):
+    """Uma linha a contar: codigo + endereco do GRV (endereco vazio = codigo
+    sem localizacao; compara com o total). Cada rodada guarda a contagem e o
+    saldo do GRV no momento dela."""
+
+    __tablename__ = "inventario_ciclico_item"
+
+    STATUS_AGUARDA_1A = "Aguardando 1ª"
+    STATUS_DIVERGENTE_1A = "Divergente na 1ª"   # gestor libera a 2a
+    STATUS_AGUARDA_2A = "Aguardando 2ª"
+    STATUS_AGUARDA_3A = "Aguardando 3ª"         # 2a divergiu: conta o gestor
+    STATUS_CONFERE = "Confere"
+    STATUS_AJUSTE = "Divergência confirmada"    # 3a divergiu: foi pro Ajuste de Estoque
+    STATUS_CANCELADO = "Cancelado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    distribuicao_id = db.Column(db.Integer, db.ForeignKey("inventario_ciclico_distribuicao.id"), nullable=False, index=True)
+    codigo = db.Column(db.String(60), nullable=False, index=True)
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    endereco = db.Column(db.String(120), nullable=False, default="", index=True)
+    status = db.Column(db.String(30), nullable=False, default=STATUS_AGUARDA_1A, index=True)
+
+    contagem1 = db.Column(db.Float)
+    contagem1_por = db.Column(db.String(100))
+    contagem1_em = db.Column(db.DateTime)
+    grv1 = db.Column(db.Float)
+    recontagem_liberada_por = db.Column(db.String(100))
+    recontagem_liberada_em = db.Column(db.DateTime)
+    contagem2 = db.Column(db.Float)
+    contagem2_por = db.Column(db.String(100))
+    contagem2_em = db.Column(db.DateTime)
+    grv2 = db.Column(db.Float)
+    contagem3 = db.Column(db.Float)
+    contagem3_por = db.Column(db.String(100))
+    contagem3_em = db.Column(db.DateTime)
+    grv3 = db.Column(db.Float)
+
+    contagem_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_inicial.id"))  # registro em Realizados
+    ajuste_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_ajuste.id"))
+
+
+class EstoqueGrvEspelho(db.Model):
+    """Copia do estoque do GRV (/api/erp/estoque) no banco do Sync, uma linha
+    por codigo + localizacao. Baixar o estoque inteiro pela bridge demora; a
+    tela le daqui e a atualizacao (services/estoque_espelho_service) so'
+    grava o que mudou. Por enquanto so' o inventario ciclico usa."""
+
+    __tablename__ = "estoque_grv_espelho"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(60), nullable=False, index=True)
+    localizacao = db.Column(db.String(120), nullable=False, default="")
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    familia = db.Column(db.String(160), index=True)
+    grupo = db.Column(db.String(20))  # codigo do grupo (tproduto.cod_grupo)
+    grupo_nome = db.Column(db.String(160))  # tfamgrp.nome
+    qtde_total = db.Column(db.Float, nullable=False, default=0)
+    qtde_disponivel = db.Column(db.Float, nullable=False, default=0)
+    qtde_reservada = db.Column(db.Float, nullable=False, default=0)
+    custo_medio = db.Column(db.Float)
+    tipo_controle = db.Column(db.String(40))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("codigo", "localizacao", name="uq_estoque_grv_espelho"),)
+
+
+class EstoqueGrvEspelhoSync(db.Model):
+    """Cada atualizacao do espelho: quando, quanto mudou e se deu erro. A
+    ultima com status OK diz de quando e' o estoque que a tela mostra."""
+
+    __tablename__ = "estoque_grv_espelho_sync"
+
+    STATUS_ANDAMENTO = "Em andamento"
+    STATUS_OK = "OK"
+    STATUS_ERRO = "Erro"
+
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ANDAMENTO, index=True)
+    iniciado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime)
+    iniciado_por = db.Column(db.String(100))
+    linhas = db.Column(db.Integer)
+    inseridas = db.Column(db.Integer)
+    alteradas = db.Column(db.Integer)
+    removidas = db.Column(db.Integer)
+    erro = db.Column(db.String(500))
+
+
 class Comunicado(db.Model):
     """Aviso da Columbia no mural da tela inicial, igual para todo mundo.
 
