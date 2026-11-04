@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from pathlib import Path
 
@@ -119,18 +120,25 @@ def gerar_ordem_coleta_pdf(solicitacao, itens: list) -> bytes:
     el.append(barra)
     el.append(Spacer(1, 10))
 
-    dados = Table(
-        [
-            [_p("Código", bold=True), _p(getattr(solicitacao, "codigo", "-") or "-")],
-            [_p("OC", bold=True), _p(getattr(solicitacao, "numero_oc", "-") or getattr(solicitacao, "documento_numero", "-") or "-")],
-            [_p("Fornecedor", bold=True), _p(getattr(solicitacao, "parceiro_nome", "-") or "-")],
-            [_p("Razão Social", bold=True), _p(getattr(solicitacao, "parceiro_razao_social", "-") or "-")],
-            [_p("CNPJ", bold=True), _p(getattr(solicitacao, "parceiro_documento", "-") or "-")],
-            [_p("Endereço de Coleta", bold=True), _p(_endereco(solicitacao))],
-            [_p("Contato", bold=True), _p((getattr(solicitacao, "contato", "") or "-") + "  |  " + (getattr(solicitacao, "telefone", "") or "-"))],
-        ],
-        colWidths=[40 * mm, largura - 40 * mm],
-    )
+    try:
+        origem = json.loads(getattr(solicitacao, "payload_origem", "") or "{}") or {}
+    except Exception:
+        origem = {}
+    oc_label = getattr(solicitacao, "numero_oc", "-") or getattr(solicitacao, "documento_numero", "-") or "-"
+    if origem.get("coleta_parcial"):
+        oc_label = f"{oc_label}  (COLETA PARCIAL)"
+    linhas_dados = [
+        [_p("Código", bold=True), _p(getattr(solicitacao, "codigo", "-") or "-")],
+        [_p("OC", bold=True), _p(oc_label)],
+        [_p("Fornecedor", bold=True), _p(getattr(solicitacao, "parceiro_nome", "-") or "-")],
+        [_p("Razão Social", bold=True), _p(getattr(solicitacao, "parceiro_razao_social", "-") or "-")],
+        [_p("CNPJ", bold=True), _p(getattr(solicitacao, "parceiro_documento", "-") or "-")],
+        [_p("Endereço de Coleta", bold=True), _p(_endereco(solicitacao))],
+        [_p("Contato", bold=True), _p((getattr(solicitacao, "contato", "") or "-") + "  |  " + (getattr(solicitacao, "telefone", "") or "-"))],
+    ]
+    if origem.get("correios"):
+        linhas_dados.insert(6, [_p("Código de retirada", bold=True), _p(f"Correios: {origem.get('correios_codigo_retirada') or '-'}", bold=True)])
+    dados = Table(linhas_dados, colWidths=[40 * mm, largura - 40 * mm])
     dados.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.4, COR_LINHA),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
