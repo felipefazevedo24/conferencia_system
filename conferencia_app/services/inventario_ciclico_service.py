@@ -28,7 +28,10 @@ from ..models import (
     LogisticaInventarioInicial,
 )
 from ..tempo import agora_br
+from flask import current_app, has_request_context, request
+
 from . import erp_estoque_service as erp
+from . import teams_service
 from . import estoque_espelho_service as espelho
 from . import logistica_inventario_ajuste_service as ajuste_svc
 
@@ -249,8 +252,38 @@ def _bate(qtd: float, grv: float) -> bool:
     return abs(qtd - grv) <= ajuste_svc.TOLERANCIA_DIVERGENCIA
 
 
+def _link_ajustes() -> str:
+    base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if not base and has_request_context():
+        base = request.url_root.rstrip("/")
+    return f"{base}/logistica/inventario?aba=ajustes"
+
+
+def _avisar_teams(ajustes: list, origem: str) -> None:
+    """Mesmo aviso da contagem avulsa (grupo do gestor). Um ajuste: card
+    normal; varios: um card com a lista. Falha no Teams nunca desfaz nada."""
+    try:
+        if len(ajustes) == 1:
+            a, contado_por = ajustes[0]
+            teams_service.notificar_divergencia_inventario_gestor(
+                a.codigo_produto, a.local_codigo, a.diferenca,
+                descricao=a.descricao_produto, unidade=a.unidade_medida,
+                qtde_contada=a.qtde_contada, qtde_sistema=a.qtde_estoque_no_momento,
+                custo_medio=a.custo_medio, contado_por=contado_por, link=_link_ajustes(),
+            )
+        elif ajustes:
+            teams_service.notificar_divergencias_inventario_lote(
+                [{"codigo": a.codigo_produto, "local": a.local_codigo, "diferenca": a.diferenca,
+                  "unidade": a.unidade_medida, "custo_medio": a.custo_medio} for a, _ in ajustes],
+                origem=origem, link=_link_ajustes(),
+            )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.warning("Falha ao avisar o Teams do inventario ciclico: %s", exc)
+
+
 def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: str, rodada: int, bateu: bool,
-            obs_extra: str = "") -> None:
+            obs_extra: str = ""):
+    """Fecha a linha; devolve o ajuste aberto (ou None)."""
     agora = agora_br()
     contagem = LogisticaInventarioInicial(
         local_codigo=item.endereco or "",
@@ -276,6 +309,8 @@ def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: st
         if ajuste:
             item.ajuste_id = ajuste.id
             db.session.commit()
+        return ajuste
+    return None
 
 
 def registrar_contagem_conferente(item: Item, quantidade, usuario: str) -> None:
@@ -309,22 +344,59 @@ def liberar_recontagem(item: Item, usuario: str) -> None:
     db.session.commit()
 
 
-def seguir_para_ajuste(item: Item, usuario: str) -> None:
+def seguir_para_ajuste(item: Item, usuario: str, custo: float | None = None, *, avisar: bool = True):
     """Gestor dispensa a recontagem: fecha com a ultima contagem do conferente
     e abre o ajuste. A diferenca usa o saldo do GRV gravado naquela contagem
-    (o que o conferente confrontou); do GRV de agora so' sai o custo medio."""
+    (o que o conferente confrontou). O custo medio vem do espelho - ir no GRV
+    so' por ele deixava o botao lento (ver acao_em_lote)."""
     if item.distribuicao.cancelado_em or item.status not in {Item.STATUS_DIVERGENTE_1A, Item.STATUS_AGUARDA_3A}:
         raise ValueError("Só dá para seguir para o ajuste com item divergente aguardando recontagem.")
     if item.status == Item.STATUS_DIVERGENTE_1A:
         rodada, qtd, grv, contou = 1, item.contagem1, item.grv1, item.contagem1_por
     else:
         rodada, qtd, grv, contou = 2, item.contagem2, item.grv2, item.contagem2_por
+    ajuste = _fechar(item, float(qtd or 0), float(grv or 0), custo, contou or usuario, rodada, False,
+                     obs_extra=f" (recontagem dispensada por {usuario})")
+    if ajuste and avisar:
+        _avisar_teams([(ajuste, contou)], f"Inventário cíclico {numero(item.distribuicao)}")
+    return ajuste
+
+
+ACOES_LOTE = {"liberar": "Liberar 2ª contagem", "ajuste": "Seguir para ajuste"}
+
+
+def acao_em_lote(acao: str, ids: list, usuario: str) -> dict:
+    """Liberar a 2a ou seguir para ajuste varios itens de uma vez. Item que
+    nao pode (status mudou, outra aba ja tratou) entra em "erros" e o resto
+    segue - um nao trava os outros."""
+    if acao not in ACOES_LOTE:
+        raise ValueError("Ação inválida.")
     try:
-        _, custo, _ = _saldo_grv(item)
-    except ValueError:
-        custo = None  # GRV fora: o ajuste sai sem o R$, mas nao trava a decisao
-    _fechar(item, float(qtd or 0), float(grv or 0), custo, contou or usuario, rodada, False,
-            obs_extra=f" (recontagem dispensada por {usuario})")
+        ids = sorted({int(i) for i in (ids or [])})
+    except (TypeError, ValueError):
+        raise ValueError("Seleção inválida.") from None
+    if not ids:
+        raise ValueError("Selecione ao menos um item.")
+    itens = Item.query.filter(Item.id.in_(ids)).order_by(Item.id).all()
+    custos = espelho.custos([i.codigo for i in itens]) if acao == "ajuste" else {}
+    feitos, abertos, erros = 0, [], []
+    for item in itens:
+        try:
+            if acao == "liberar":
+                liberar_recontagem(item, usuario)
+            else:
+                contou = item.contagem1_por if item.status == Item.STATUS_DIVERGENTE_1A else item.contagem2_por
+                ajuste = seguir_para_ajuste(item, usuario, custos.get((item.codigo, item.endereco or "")), avisar=False)
+                if ajuste:
+                    abertos.append((ajuste, contou))
+            feitos += 1
+        except ValueError as exc:
+            db.session.rollback()
+            erros.append({"codigo": item.codigo, "endereco": item.endereco, "erro": str(exc)})
+    if abertos:
+        numeros = sorted({numero(i.distribuicao) for i in itens})
+        _avisar_teams(abertos, f"Inventário cíclico {', '.join(numeros)} · enviado ao ajuste por {usuario} sem recontagem")
+    return {"feitos": feitos, "ajustes": len(abertos), "erros": erros}
 
 
 def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:
@@ -335,7 +407,9 @@ def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:
     grv, custo, _ = _saldo_grv(item)
     bateu = _bate(qtd, grv)
     item.contagem3, item.contagem3_por, item.contagem3_em, item.grv3 = qtd, usuario, agora_br(), grv
-    _fechar(item, qtd, grv, custo, usuario, 3, bateu)
+    ajuste = _fechar(item, qtd, grv, custo, usuario, 3, bateu)
+    if ajuste:
+        _avisar_teams([(ajuste, usuario)], f"Inventário cíclico {numero(item.distribuicao)}")
     return bateu
 
 

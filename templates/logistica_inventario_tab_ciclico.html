@@ -107,8 +107,13 @@
 
         <div class="eui-card"><div class="eui-card__body">
             <h3 class="ic-h3"><i class="fas fa-triangle-exclamation"></i> Precisa de você</h3>
+            <div class="ic-toolbar" id="ic-pend-lote">
+                <strong id="ic-pend-contador" style="font-size:13px;">Nenhum selecionado</strong>
+                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="ic-lote-liberar" disabled><i class="fas fa-rotate"></i> Liberar 2ª contagem</button>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="ic-lote-ajuste" disabled><i class="fas fa-scale-balanced"></i> Seguir para ajuste</button>
+            </div>
             <div class="ic-scroll" style="max-height:48vh;"><table class="ic-table">
-                <thead><tr><th>Nº</th><th>Conferente</th><th>Endereço</th><th>Código</th><th>Descrição</th><th style="text-align:right;">GRV</th><th style="text-align:right;">1ª</th><th style="text-align:right;">2ª</th><th>Situação</th><th></th></tr></thead>
+                <thead><tr><th style="width:34px;"><input type="checkbox" id="ic-pend-todos" title="Selecionar todos"></th><th>Nº</th><th>Conferente</th><th>Endereço</th><th>Código</th><th>Descrição</th><th style="text-align:right;">GRV</th><th style="text-align:right;">1ª</th><th style="text-align:right;">2ª</th><th>Situação</th><th></th></tr></thead>
                 <tbody id="ic-pend-tbody"></tbody>
             </table></div>
         </div></div>
@@ -414,25 +419,62 @@
     const st = (s) => `<span class="ic-st ${CLASSE_STATUS[s] || 'pendente'}">${esc(s)}</span>`;
     const end = (e) => e ? `<span class="ic-end">${esc(e)}</span>` : '<span class="ic-hint">sem endereço</span>';
 
+    // Fila "Precisa de voce": selecao para agir em varios de uma vez.
+    let pendencias = [];
+    const pendMarcados = new Set();
+    function atualizarLote() {
+        const sel = pendencias.filter((i) => pendMarcados.has(i.id));
+        const liberaveis = sel.filter((i) => i.status === 'Divergente na 1ª').length;
+        $('ic-pend-contador').textContent = sel.length ? `${sel.length} selecionado(s)` : 'Nenhum selecionado';
+        $('ic-lote-liberar').disabled = !liberaveis;
+        $('ic-lote-liberar').innerHTML = `<i class="fas fa-rotate"></i> Liberar 2ª contagem${liberaveis ? ` (${liberaveis})` : ''}`;
+        $('ic-lote-ajuste').disabled = !sel.length;
+        $('ic-lote-ajuste').innerHTML = `<i class="fas fa-scale-balanced"></i> Seguir para ajuste${sel.length ? ` (${sel.length})` : ''}`;
+        const todos = $('ic-pend-todos');
+        todos.checked = pendencias.length > 0 && sel.length === pendencias.length;
+        todos.indeterminate = sel.length > 0 && sel.length < pendencias.length;
+        todos.disabled = !pendencias.length;
+    }
+
     function renderPendencias(lista) {
+        pendencias = lista;
+        // Mantem a selecao do que continua na fila.
+        Array.from(pendMarcados).forEach((id) => { if (!lista.some((i) => i.id === id)) pendMarcados.delete(id); });
         badge('ic-badge-pend', lista.length);
         const tbody = $('ic-pend-tbody');
-        if (!lista.length) { tbody.innerHTML = '<tr><td colspan="10" class="ic-vazio">Nada pendente.</td></tr>'; return; }
-        tbody.innerHTML = lista.map((i) => {
-            const grv = i.status === 'Aguardando 3ª' ? i.grv2 : i.grv1;
-            const ajuste = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-ajuste="${i.id}" data-codigo="${esc(i.codigo)}" data-rodada="${i.status === 'Aguardando 3ª' ? 2 : 1}"><i class="fas fa-scale-balanced"></i> Seguir para ajuste</button>`;
-            const acao = i.status === 'Divergente na 1ª'
-                ? `<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-liberar="${i.id}"><i class="fas fa-rotate"></i> Liberar 2ª</button>${ajuste}</div>`
-                : `<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;"><input type="text" inputmode="decimal" class="eui-input ic-qtd" placeholder="3ª" aria-label="3ª contagem"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-terceira="${i.id}">Lançar 3ª</button>${ajuste}</div>`;
-            return `<tr>
-                <td>${esc(i.numero)}</td><td>${esc(i.conferente)}</td><td>${end(i.endereco)}</td>
-                <td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
-                <td class="num">${num(grv)} ${esc(i.unidade)}</td>
-                <td class="num" title="${esc(i.contagem1_por)} ${esc(i.contagem1_em)}">${num(i.contagem1)}</td>
-                <td class="num" title="${esc(i.contagem2_por || '')} ${esc(i.contagem2_em || '')}">${num(i.contagem2)}</td>
-                <td>${st(i.status)}</td><td>${acao}</td>
-            </tr>`;
-        }).join('');
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="ic-vazio">Nada pendente.</td></tr>';
+        } else {
+            tbody.innerHTML = lista.map((i) => {
+                const grv = i.status === 'Aguardando 3ª' ? i.grv2 : i.grv1;
+                const acao = i.status === 'Aguardando 3ª'
+                    ? `<div style="display:flex;gap:6px;justify-content:flex-end;"><input type="text" inputmode="decimal" class="eui-input ic-qtd" placeholder="3ª" aria-label="3ª contagem"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-terceira="${i.id}">Lançar 3ª</button></div>`
+                    : '';
+                return `<tr>
+                    <td><input type="checkbox" data-pend="${i.id}" ${pendMarcados.has(i.id) ? 'checked' : ''}></td>
+                    <td>${esc(i.numero)}</td><td>${esc(i.conferente)}</td><td>${end(i.endereco)}</td>
+                    <td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
+                    <td class="num">${num(grv)} ${esc(i.unidade)}</td>
+                    <td class="num" title="${esc(i.contagem1_por)} ${esc(i.contagem1_em)}">${num(i.contagem1)}</td>
+                    <td class="num" title="${esc(i.contagem2_por || '')} ${esc(i.contagem2_em || '')}">${num(i.contagem2)}</td>
+                    <td>${st(i.status)}</td><td>${acao}</td>
+                </tr>`;
+            }).join('');
+        }
+        atualizarLote();
+    }
+
+    async function executarLote(acao, ids, btn) {
+        btn.disabled = true;
+        try {
+            const d = await api('/api/inventario-ciclico/pendencias/lote', { method: 'POST', body: JSON.stringify({ acao, ids }) });
+            toast(d.message, d.erros && d.erros.length ? 'error' : 'success');
+            ids.forEach((id) => pendMarcados.delete(id));
+            $('ic-modal-confirmar').classList.remove('open');
+            carregarGestao();
+            if (PODE_CONTAR) carregarMinhas();
+        } catch (e) { toast(e.message, 'error'); }
+        btn.disabled = false;
     }
 
     function renderDistribuicoes(lista) {
@@ -544,15 +586,18 @@
     }
 
     let urlConfirmada = null;
-    function pedirConfirmacao(titulo, texto, botao, url) {
+    let acaoConfirmada = null;  // quando a confirmacao e' de uma acao em lote
+    function pedirConfirmacao(titulo, texto, botao, url, acao) {
         $('ic-confirmar-titulo').textContent = titulo;
         $('ic-confirmar-texto').textContent = texto;
         $('ic-confirmar-ok').textContent = botao;
         urlConfirmada = url;
+        acaoConfirmada = acao || null;
         abrirModal('ic-modal-confirmar');
     }
     async function executarConfirmado() {
         const btn = $('ic-confirmar-ok');
+        if (acaoConfirmada) { await acaoConfirmada(btn); return; }
         btn.disabled = true;
         try {
             const d = await api(urlConfirmada, { method: 'POST', body: '{}' });
@@ -564,35 +609,19 @@
         btn.disabled = false;
     }
 
-    async function acaoPendencia(ev) {
-        const seguir = ev.target.closest('[data-ajuste]');
-        if (seguir) {
-            pedirConfirmacao('Seguir para ajuste',
-                `Mandar ${seguir.dataset.codigo} para o Ajuste de Estoque com a ${seguir.dataset.rodada}ª contagem, sem recontar?`,
-                'Seguir para ajuste', `/api/inventario-ciclico/itens/${seguir.dataset.ajuste}/seguir-ajuste`);
-            return;
-        }
-        const liberar = ev.target.closest('[data-liberar]');
+    async function lancarTerceira(ev) {
         const terceira = ev.target.closest('[data-terceira]');
-        if (!liberar && !terceira) return;
-        const btn = liberar || terceira;
-        let url, body = '{}';
-        if (liberar) {
-            url = `/api/inventario-ciclico/itens/${liberar.dataset.liberar}/liberar-recontagem`;
-        } else {
-            const input = btn.closest('tr').querySelector('.ic-qtd');
-            const valor = (input.value || '').trim();
-            if (!valor) { toast('Informe a 3ª contagem.', 'error'); input.focus(); return; }
-            url = `/api/inventario-ciclico/itens/${terceira.dataset.terceira}/terceira`;
-            body = JSON.stringify({ quantidade: valor });
-        }
-        btn.disabled = true;
+        if (!terceira) return;
+        const input = terceira.closest('tr').querySelector('.ic-qtd');
+        const valor = (input.value || '').trim();
+        if (!valor) { toast('Informe a 3ª contagem.', 'error'); input.focus(); return; }
+        terceira.disabled = true;
         try {
-            const d = await api(url, { method: 'POST', body });
+            const d = await api(`/api/inventario-ciclico/itens/${terceira.dataset.terceira}/terceira`, { method: 'POST', body: JSON.stringify({ quantidade: valor }) });
             toast(d.message, 'success');
             carregarGestao();
             if (PODE_CONTAR) carregarMinhas();
-        } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+        } catch (e) { toast(e.message, 'error'); terceira.disabled = false; }
     }
 
     if (PODE_GESTAO) {
@@ -616,7 +645,29 @@
             });
             renderSelecao();
         });
-        $('ic-pend-tbody').addEventListener('click', acaoPendencia);
+        $('ic-pend-tbody').addEventListener('click', lancarTerceira);
+        $('ic-pend-tbody').addEventListener('change', (ev) => {
+            const id = Number(ev.target.dataset && ev.target.dataset.pend);
+            if (!id) return;
+            if (ev.target.checked) pendMarcados.add(id); else pendMarcados.delete(id);
+            atualizarLote();
+        });
+        $('ic-pend-todos').addEventListener('change', (ev) => {
+            pendencias.forEach((i) => { if (ev.target.checked) pendMarcados.add(i.id); else pendMarcados.delete(i.id); });
+            renderPendencias(pendencias);
+        });
+        $('ic-lote-liberar').addEventListener('click', (ev) => {
+            const ids = pendencias.filter((i) => pendMarcados.has(i.id) && i.status === 'Divergente na 1ª').map((i) => i.id);
+            executarLote('liberar', ids, ev.currentTarget);
+        });
+        $('ic-lote-ajuste').addEventListener('click', () => {
+            const sel = pendencias.filter((i) => pendMarcados.has(i.id));
+            const texto = sel.length === 1
+                ? `Mandar ${sel[0].codigo} para o Ajuste de Estoque com a ${sel[0].status === 'Aguardando 3ª' ? 2 : 1}ª contagem, sem recontar?`
+                : `Mandar ${sel.length} itens para o Ajuste de Estoque sem recontar? Cada um vai com a última contagem do conferente.`;
+            pedirConfirmacao('Seguir para ajuste', texto, `Seguir para ajuste (${sel.length})`, null,
+                (btn) => executarLote('ajuste', sel.map((i) => i.id), btn));
+        });
         $('ic-dist-tbody').addEventListener('click', (ev) => {
             const ver = ev.target.closest('[data-ver]');
             const cancelar = ev.target.closest('[data-cancelar]');

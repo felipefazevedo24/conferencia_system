@@ -16,7 +16,7 @@ from flask import (
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
-from ..auth import has_permission, permission_required, roles_required
+from ..auth import has_permission, permission_required, permission_required_any, roles_required
 from ..extensions import db
 from ..models import (
     ExpedicaoRomaneio,
@@ -42,9 +42,10 @@ from ..tempo import agora_br
 expedicao_fat_bp = Blueprint("expedicao_fat", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
-# O relatório mostra quanto cada conferente conferiu: só Admin, ou quem
-# ganhar a permissão na Gestão de acessos.
+# Relatório simples: dados sem nomes. O gerencial mostra quanto cada conferente
+# conferiu. Os dois só para Admin, ou quem ganhar a permissão na Gestão de acessos.
 PERMISSION_RELATORIO = "PAGE_EXPEDICAO_CONF_CEGA_RELATORIO"
+PERMISSION_RELATORIO_GERENCIAL = "PAGE_EXPEDICAO_CONF_CEGA_RELATORIO_GERENCIAL"
 ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 
 # "Faturado sem conferência": exibe apenas a partir desta solicitação de
@@ -120,20 +121,23 @@ def _ordem_resumo(ordem: ExpedicaoOrdemFat, total_itens: int | None = None) -> d
 @expedicao_fat_bp.route("/expedicao/conferencia-cega")
 @permission_required(PERMISSION)
 def conferencia_expedicao_page():
+    gerencial = has_permission(PERMISSION_RELATORIO_GERENCIAL)
     return render_template(
         "expedicao_conf_cega.html",
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
-        relatorio_opcoes=relatorio_svc.opcoes() if has_permission(PERMISSION_RELATORIO) else None,
+        relatorio_opcoes=relatorio_svc.opcoes(gerencial) if gerencial or has_permission(PERMISSION_RELATORIO) else None,
     )
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/relatorio.xlsx")
-@permission_required(PERMISSION_RELATORIO)
+@permission_required_any(PERMISSION_RELATORIO, PERMISSION_RELATORIO_GERENCIAL)
 def relatorio_conf_cega():
     try:
-        stream, nome = relatorio_svc.gerar_excel(request.args, session.get("username") or "desconhecido")
+        stream, nome = relatorio_svc.gerar_excel(
+            request.args, session.get("username") or "desconhecido", com_nomes=has_permission(PERMISSION_RELATORIO_GERENCIAL)
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return send_file(
