@@ -223,6 +223,21 @@ def api_liberar(item_id: int):
     return jsonify({"message": f"2ª contagem liberada para {item.distribuicao.conferente}."})
 
 
+@inventario_ciclico_bp.route("/api/inventario-ciclico/itens/<int:item_id>/seguir-ajuste", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_seguir_ajuste(item_id: int):
+    item = db.session.get(Item, item_id)
+    if not item:
+        return jsonify({"error": "Item não encontrado."}), 404
+    try:
+        svc.seguir_para_ajuste(item, _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if item.ajuste_id:
+        return jsonify({"message": "Enviado para o Ajuste de Estoque."})
+    return jsonify({"message": "Item fechado. Já havia ajuste aberto para este código e endereço."})
+
+
 @inventario_ciclico_bp.route("/api/inventario-ciclico/itens/<int:item_id>/terceira", methods=["POST"])
 @permission_required(PERM_GESTAO)
 def api_terceira(item_id: int):

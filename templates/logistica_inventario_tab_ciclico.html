@@ -171,12 +171,12 @@
 
     <div class="ic-modal small" id="ic-modal-confirmar">
         <div class="eui-card">
-            <div class="eui-card__head"><strong>Cancelar distribuição</strong></div>
+            <div class="eui-card__head"><strong id="ic-confirmar-titulo"></strong></div>
             <div class="eui-card__body" style="display:grid;gap:14px;">
                 <div id="ic-confirmar-texto"></div>
                 <div class="ic-acoes">
                     <button type="button" class="eui-btn eui-btn--ghost" data-fechar>Voltar</button>
-                    <button type="button" class="eui-btn eui-btn--danger" id="ic-confirmar-ok">Cancelar distribuição</button>
+                    <button type="button" class="eui-btn eui-btn--danger" id="ic-confirmar-ok"></button>
                 </div>
             </div>
         </div>
@@ -420,9 +420,10 @@
         if (!lista.length) { tbody.innerHTML = '<tr><td colspan="10" class="ic-vazio">Nada pendente.</td></tr>'; return; }
         tbody.innerHTML = lista.map((i) => {
             const grv = i.status === 'Aguardando 3ª' ? i.grv2 : i.grv1;
+            const ajuste = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-ajuste="${i.id}" data-codigo="${esc(i.codigo)}" data-rodada="${i.status === 'Aguardando 3ª' ? 2 : 1}"><i class="fas fa-scale-balanced"></i> Seguir para ajuste</button>`;
             const acao = i.status === 'Divergente na 1ª'
-                ? `<button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-liberar="${i.id}"><i class="fas fa-rotate"></i> Liberar 2ª</button>`
-                : `<div style="display:flex;gap:6px;justify-content:flex-end;"><input type="text" inputmode="decimal" class="eui-input ic-qtd" placeholder="3ª" aria-label="3ª contagem"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-terceira="${i.id}">Lançar 3ª</button></div>`;
+                ? `<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-liberar="${i.id}"><i class="fas fa-rotate"></i> Liberar 2ª</button>${ajuste}</div>`
+                : `<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;"><input type="text" inputmode="decimal" class="eui-input ic-qtd" placeholder="3ª" aria-label="3ª contagem"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-terceira="${i.id}">Lançar 3ª</button>${ajuste}</div>`;
             return `<tr>
                 <td>${esc(i.numero)}</td><td>${esc(i.conferente)}</td><td>${end(i.endereco)}</td>
                 <td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
@@ -542,12 +543,19 @@
         } catch (e) { toast(e.message, 'error'); }
     }
 
-    let cancelarId = null;
-    async function confirmarCancelamento() {
+    let urlConfirmada = null;
+    function pedirConfirmacao(titulo, texto, botao, url) {
+        $('ic-confirmar-titulo').textContent = titulo;
+        $('ic-confirmar-texto').textContent = texto;
+        $('ic-confirmar-ok').textContent = botao;
+        urlConfirmada = url;
+        abrirModal('ic-modal-confirmar');
+    }
+    async function executarConfirmado() {
         const btn = $('ic-confirmar-ok');
         btn.disabled = true;
         try {
-            const d = await api(`/api/inventario-ciclico/distribuicoes/${cancelarId}/cancelar`, { method: 'POST', body: '{}' });
+            const d = await api(urlConfirmada, { method: 'POST', body: '{}' });
             toast(d.message, 'success');
             $('ic-modal-confirmar').classList.remove('open');
             carregarGestao();
@@ -557,6 +565,13 @@
     }
 
     async function acaoPendencia(ev) {
+        const seguir = ev.target.closest('[data-ajuste]');
+        if (seguir) {
+            pedirConfirmacao('Seguir para ajuste',
+                `Mandar ${seguir.dataset.codigo} para o Ajuste de Estoque com a ${seguir.dataset.rodada}ª contagem, sem recontar?`,
+                'Seguir para ajuste', `/api/inventario-ciclico/itens/${seguir.dataset.ajuste}/seguir-ajuste`);
+            return;
+        }
         const liberar = ev.target.closest('[data-liberar]');
         const terceira = ev.target.closest('[data-terceira]');
         if (!liberar && !terceira) return;
@@ -607,12 +622,12 @@
             const cancelar = ev.target.closest('[data-cancelar]');
             if (ver) verDistribuicao(ver.dataset.ver);
             if (cancelar) {
-                cancelarId = cancelar.dataset.cancelar;
-                $('ic-confirmar-texto').textContent = `Cancelar ${cancelar.dataset.numero}? Os itens ainda não fechados saem da lista do conferente. O que já foi contado fica como está.`;
-                abrirModal('ic-modal-confirmar');
+                pedirConfirmacao('Cancelar distribuição',
+                    `Cancelar ${cancelar.dataset.numero}? Os itens ainda não fechados saem da lista do conferente. O que já foi contado fica como está.`,
+                    'Cancelar distribuição', `/api/inventario-ciclico/distribuicoes/${cancelar.dataset.cancelar}/cancelar`);
             }
         });
-        $('ic-confirmar-ok').addEventListener('click', confirmarCancelamento);
+        $('ic-confirmar-ok').addEventListener('click', executarConfirmado);
         document.querySelectorAll('.ic-modal [data-fechar]').forEach((b) => b.addEventListener('click', () => fecharModal(b)));
         document.querySelectorAll('.ic-modal').forEach((m) => m.addEventListener('click', (ev) => { if (ev.target === m) m.classList.remove('open'); }));
         carregarOpcoes();

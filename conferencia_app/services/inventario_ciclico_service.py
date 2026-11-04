@@ -11,6 +11,8 @@
     Aguardando 3a.
   - 3a contagem (gestor): bateu -> Confere; nao bateu -> Divergencia
     confirmada e abre o ajuste normal (Ajuste de Estoque).
+  - Divergente na 1a ou aguardando a 3a, o gestor pode pular a recontagem e
+    mandar direto pro ajuste com a ultima contagem do conferente.
   - Cada rodada compara com o saldo do GRV no momento dela. Linha fechada
     vira uma LogisticaInventarioInicial, igual a contagem avulsa.
 """
@@ -247,7 +249,8 @@ def _bate(qtd: float, grv: float) -> bool:
     return abs(qtd - grv) <= ajuste_svc.TOLERANCIA_DIVERGENCIA
 
 
-def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: str, rodada: int, bateu: bool) -> None:
+def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: str, rodada: int, bateu: bool,
+            obs_extra: str = "") -> None:
     agora = agora_br()
     contagem = LogisticaInventarioInicial(
         local_codigo=item.endereco or "",
@@ -255,7 +258,7 @@ def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: st
         unidade_medida=(item.unidade or "UN")[:20],
         quantidade=qtd,
         motivo=MOTIVO,
-        observacao=f"Inventário cíclico {numero(item.distribuicao)} - {rodada}ª contagem",
+        observacao=f"Inventário cíclico {numero(item.distribuicao)} - {rodada}ª contagem{obs_extra}",
         criado_por=usuario,
         atualizado_em=agora,
         qtde_grv_no_momento=grv,
@@ -304,6 +307,24 @@ def liberar_recontagem(item: Item, usuario: str) -> None:
     item.recontagem_liberada_por = usuario
     item.recontagem_liberada_em = agora_br()
     db.session.commit()
+
+
+def seguir_para_ajuste(item: Item, usuario: str) -> None:
+    """Gestor dispensa a recontagem: fecha com a ultima contagem do conferente
+    e abre o ajuste. A diferenca usa o saldo do GRV gravado naquela contagem
+    (o que o conferente confrontou); do GRV de agora so' sai o custo medio."""
+    if item.distribuicao.cancelado_em or item.status not in {Item.STATUS_DIVERGENTE_1A, Item.STATUS_AGUARDA_3A}:
+        raise ValueError("Só dá para seguir para o ajuste com item divergente aguardando recontagem.")
+    if item.status == Item.STATUS_DIVERGENTE_1A:
+        rodada, qtd, grv, contou = 1, item.contagem1, item.grv1, item.contagem1_por
+    else:
+        rodada, qtd, grv, contou = 2, item.contagem2, item.grv2, item.contagem2_por
+    try:
+        _, custo, _ = _saldo_grv(item)
+    except ValueError:
+        custo = None  # GRV fora: o ajuste sai sem o R$, mas nao trava a decisao
+    _fechar(item, float(qtd or 0), float(grv or 0), custo, contou or usuario, rodada, False,
+            obs_extra=f" (recontagem dispensada por {usuario})")
 
 
 def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:
