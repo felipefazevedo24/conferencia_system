@@ -32,7 +32,6 @@ from ..models import (
     LogisticaInventarioLote,
     LogisticaInventarioRelatorioAjuste,
     RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-    RELATORIO_AJUSTE_MAX_ITENS,
     RELATORIO_AJUSTE_MOTIVOS,
     RELATORIO_AJUSTE_TIPOS,
 )
@@ -1288,7 +1287,6 @@ def api_relatorio_ajuste_opcoes():
         "tipos_ajuste": RELATORIO_AJUSTE_TIPOS,
         "motivos_ajuste": RELATORIO_AJUSTE_MOTIVOS,
         "deposito_tipos": RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-        "max_itens": RELATORIO_AJUSTE_MAX_ITENS,
     })
 
 

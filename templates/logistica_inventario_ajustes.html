@@ -352,7 +352,6 @@
     let filtroAtual = "";
     let selecionados = new Set();
     let opcoesRelatorio = null;
-    const RELATORIO_MAX_ITENS = 13;
 
     function atualizarLinkExportar() {
         const params = new URLSearchParams();
@@ -645,13 +644,6 @@
                 toast("Dá pra agir em lote só com itens da mesma etapa - limpe a seleção antes.", "error");
                 return;
             }
-            // O limite de 13 e do formulario FORM-08.52; confirmar ajuste
-            // executado no Finance nao tem limite.
-            if (etapaDoItem === "Relatorio" && selecionados.size >= RELATORIO_MAX_ITENS) {
-                cb.checked = false;
-                toast(`O formulário FORM-08.52 comporta no máximo ${RELATORIO_MAX_ITENS} itens por documento.`, "error");
-                return;
-            }
             selecionados.add(id);
         } else {
             selecionados.delete(id);
@@ -665,11 +657,6 @@
         // Sem nada selecionado, "todos" segue a etapa do primeiro elegivel.
         const etapa = statusDaSelecao() || (todos.length ? statusDoItem(todos[0].dataset.id) : null);
         const checkboxes = todos.filter((cb) => statusDoItem(cb.dataset.id) === etapa);
-        if (marcar && etapa === "Relatorio" && checkboxes.length > RELATORIO_MAX_ITENS) {
-            e.target.checked = false;
-            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens em Emissão do Formulário - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
-            return;
-        }
         checkboxes.forEach((cb) => {
             cb.checked = marcar;
             const id = Number(cb.dataset.id);

@@ -29,7 +29,6 @@ from ..models import (
     LogisticaInventarioInicial,
     LogisticaInventarioRelatorioAjuste,
     RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-    RELATORIO_AJUSTE_MAX_ITENS,
     RELATORIO_AJUSTE_MOTIVOS,
     RELATORIO_AJUSTE_TIPOS,
 )
@@ -453,13 +452,10 @@ def gerar_relatorio_ajuste(
     ideia de confirmar_divergencia, so que em lote - util quando o gestor
     so' percebe que precisa de investigacao mais profunda na hora de
     agrupar o relatorio, nao antes)."""
+    # Sem limite de itens: o modelo em papel tinha 13 linhas, mas o PDF quebra
+    # a tabela em quantas paginas precisar (pedido da Logistica em 04/11/2026).
     if not ajuste_ids:
         raise ValueError("Selecione ao menos um item pra gerar o relatório.")
-    if len(ajuste_ids) > RELATORIO_AJUSTE_MAX_ITENS:
-        raise ValueError(
-            f"O formulário FORM-08.52 comporta no máximo {RELATORIO_AJUSTE_MAX_ITENS} itens por "
-            f"documento - selecione até {RELATORIO_AJUSTE_MAX_ITENS} itens por vez."
-        )
 
     ajustes = (
         LogisticaInventarioAjuste.query
