@@ -90,9 +90,9 @@ def detectar_divergencia(
     None (codigo nao encontrado no GRV, ou API do GRV fora do ar), nao ha
     base de comparacao - nao cria ajuste. Se ja existir um ajuste aberto
     pro mesmo item+local, nao duplica (so o primeiro fica em fila pro
-    gestor). `custo_medio` (tproduto_deposito.custo_medio) e' opcional -
-    fica None se o GRV nao tiver custo pro codigo - e vira snapshot no
-    ajuste pra calcular o impacto financeiro (R$) da divergencia.
+    gestor). O custo do ajuste e' o custo medio do Cardex no mes; `custo_medio`
+    (o que veio do GRV) so' vale quando o Cardex nao tem custo pro item. Vira
+    snapshot no ajuste pra calcular o impacto financeiro (R$) da divergencia.
 
     So' abre ajuste quando a quantidade difere do GRV, qualquer que seja o
     motivo da contagem: sem diferenca nao ha o que o gestor validar (decisao
@@ -105,6 +105,14 @@ def detectar_divergencia(
         return None
     if ajuste_aberto_para(contagem.codigo_produto, contagem.local_codigo):
         return None
+
+    # Custo de inventario e' o custo medio do Cardex, nao o preco_custo do
+    # cadastro (custo fiscal, zerado em muitos itens - pedido da Logistica em
+    # 04/11/2026). Sem custo no Cardex, fica o que veio do GRV.
+    from . import logistica_cardex_service as cardex
+    custo_cardex = cardex.custo_medio_inventario(contagem.codigo_produto)
+    if custo_cardex is not None:
+        custo_medio = custo_cardex
 
     ajuste = LogisticaInventarioAjuste(
         contagem_id=contagem.id,

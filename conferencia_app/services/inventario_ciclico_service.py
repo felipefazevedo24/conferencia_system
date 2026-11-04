@@ -395,7 +395,14 @@ def acao_em_lote(acao: str, ids: list, usuario: str) -> dict:
     if not ids:
         raise ValueError("Selecione ao menos um item.")
     itens = Item.query.filter(Item.id.in_(ids)).order_by(Item.id).all()
-    custos = espelho.custos([i.codigo for i in itens]) if acao == "ajuste" else {}
+    custos = {}
+    if acao == "ajuste":
+        # Reserva quando o Cardex nao tem custo (ver detectar_divergencia).
+        custos = espelho.custos([i.codigo for i in itens])
+        # O custo do ajuste sai do Cardex, um codigo por consulta: busca todos
+        # em paralelo antes, senao o lote espera um por um.
+        from . import logistica_cardex_service as cardex
+        cardex.precarregar_custos_inventario([i.codigo for i in itens])
     feitos, abertos, erros = 0, [], []
     for item in itens:
         try:
