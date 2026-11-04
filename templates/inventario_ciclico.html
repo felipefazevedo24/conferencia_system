@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% block title %}Logística | Inventário cíclico{% endblock %}
+{% block shell_title %}Logística — Inventário cíclico{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ic-wrap { display: grid; gap: 16px; }
+    .ic-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
+    .ic-tab { border: 0; background: transparent; padding: 10px 14px; font-weight: 700; font-size: 13px; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+    .ic-tab.is-active { color: var(--eui-primary, #2563eb); border-bottom-color: var(--eui-primary, #2563eb); }
+    .ic-tab .ic-badge { margin-left: 6px; }
+    .ic-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ic-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--eui-muted); padding: 7px 8px; border-bottom: 1px solid var(--eui-border, #e5e7eb); position: sticky; top: 0; background: #fff; }
+    .ic-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .ic-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ic-scroll { max-height: 62vh; overflow: auto; }
+    .ic-cod { font-weight: 800; white-space: nowrap; }
+    .ic-end { display: inline-block; font-size: 11px; font-weight: 700; background: #f1f5f9; color: #334155; border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+    .ic-st { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .ic-st.pendente { background: #f1f5f9; color: #475569; }
+    .ic-st.aguarda { background: #fef3c7; color: #92400e; }
+    .ic-st.confere { background: #dcfce7; color: #166534; }
+    .ic-st.diverg { background: #fee2e2; color: #991b1b; }
+    .ic-badge { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 1px 8px; background: #fee2e2; color: #991b1b; }
+    .ic-badge.r2 { background: #e0f2fe; color: #075985; }
+    .ic-qtd { width: 110px; text-align: right; font-size: 15px; padding: 7px 9px; }
+    .ic-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+    .ic-field { display: grid; gap: 6px; }
+    .ic-field label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--eui-muted); }
+    .ic-full { grid-column: 1 / -1; }
+    .ic-acoes { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .ic-hint { font-size: 12.5px; color: var(--eui-muted); min-height: 18px; }
+    .ic-hint.warn { color: #b45309; }
+    .ic-h3 { margin: 0 0 10px; font-size: 14px; }
+    .ic-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .ic-toolbar input[type=search] { flex: 1; min-width: 220px; max-width: 420px; }
+    .ic-vazio { padding: 28px 10px; text-align: center; color: var(--eui-muted); }
+    .ic-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 10px 13px; font-size: 12.5px; }
+    .ic-modal { display: none; position: fixed; inset: 0; background: rgba(3, 12, 24, .55); z-index: 10990; align-items: flex-start; justify-content: center; padding: 6vh 14px 14px; overflow: auto; }
+    .ic-modal.open { display: flex; }
+    .ic-modal .eui-card { width: min(1000px, 100%); margin: 0; }
+    .ic-modal.small .eui-card { width: min(460px, 100%); }
+    .ic-toast { position: fixed; top: 20px; right: 20px; z-index: 11010; background: #fff; border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: 10px; box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; max-width: 420px; display: none; }
+    .ic-toast.error { border-left-color: var(--eui-danger, #dc2626); }
+    .ic-toast.success { border-left-color: var(--eui-success, #16a34a); }
+    .hidden { display: none !important; }
+    @media (max-width: 760px) {
+        .ic-form { grid-template-columns: 1fr; }
+        .ic-qtd { width: 90px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ic-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Inventário</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-rotate"></i> Inventário cíclico</h1>
+            <p class="eui-page-header__sub">1ª e 2ª contagem do conferente, cegas · 3ª da gestão · divergência na 3ª vai para o Ajuste de Estoque.</p>
+        </div>
+    </header>
+
+    <div class="ic-tabs" id="ic-tabs">
+        {% if pode_contar %}<button type="button" class="ic-tab" data-tab="contar">Minhas contagens <span class="ic-badge r2 hidden" id="ic-badge-minhas"></span></button>{% endif %}
+        {% if pode_gestao %}<button type="button" class="ic-tab" data-tab="gestao">Gestão <span class="ic-badge hidden" id="ic-badge-pend"></span></button>{% endif %}
+    </div>
+
+    {% if pode_contar %}
+    <section id="ic-contar" class="eui-card hidden"><div class="eui-card__body">
+        <div class="ic-toolbar">
+            <input type="search" class="eui-input" id="ic-busca-minhas" placeholder="Buscar código, descrição ou endereço">
+            <span class="ic-hint" id="ic-total-minhas"></span>
+        </div>
+        <div class="ic-scroll"><table class="ic-table">
+            <thead><tr><th>Endereço</th><th>Código</th><th>Descrição</th><th>Un.</th><th style="text-align:right;">Quantidade</th><th></th></tr></thead>
+            <tbody id="ic-minhas-tbody"></tbody>
+        </table></div>
+    </div></section>
+    {% endif %}
+
+    {% if pode_gestao %}
+    <section id="ic-gestao" class="hidden" style="display:grid;gap:16px;">
+        <div class="eui-card"><div class="eui-card__body">
+            <h3 class="ic-h3"><i class="fas fa-share-nodes"></i> Distribuir contagem</h3>
+            <div id="ic-grv-aviso" class="ic-aviso hidden" style="margin-bottom:10px;">GRV indisponível agora: as famílias e grupos não carregaram. Distribuição por código ainda funciona se o GRV voltar na hora de distribuir.</div>
+            <div class="ic-form">
+                <div class="ic-field">
+                    <label for="ic-criterio">Distribuir por</label>
+                    <select class="eui-input" id="ic-criterio">
+                        <option value="familia_grupo">Família + grupo</option>
+                        <option value="familia">Família</option>
+                        <option value="grupo">Grupo</option>
+                        <option value="codigo">Código</option>
+                    </select>
+                </div>
+                <div class="ic-field" id="ic-campo-familia">
+                    <label for="ic-familia">Família</label>
+                    <select class="eui-input" id="ic-familia"></select>
+                </div>
+                <div class="ic-field" id="ic-campo-grupo">
+                    <label for="ic-grupo">Grupo</label>
+                    <select class="eui-input" id="ic-grupo"></select>
+                </div>
+                <div class="ic-field">
+                    <label for="ic-conferente">Conferente</label>
+                    <select class="eui-input" id="ic-conferente"></select>
+                </div>
+                <div class="ic-field ic-full hidden" id="ic-campo-codigos">
+                    <label for="ic-codigos">Códigos <span style="text-transform:none;font-weight:400;">(um por linha, ou separados por vírgula)</span></label>
+                    <textarea class="eui-input" id="ic-codigos" rows="3"></textarea>
+                </div>
+                <div class="ic-full" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+                    <div class="ic-hint" id="ic-sim-hint"></div>
+                    <div class="ic-acoes">
+                        <button type="button" class="eui-btn eui-btn--ghost" id="ic-btn-simular"><i class="fas fa-calculator"></i> Ver quantos itens</button>
+                        <button type="button" class="eui-btn eui-btn--primary" id="ic-btn-distribuir"><i class="fas fa-paper-plane"></i> Distribuir</button>
+                    </div>
+                </div>
+            </div>
+        </div></div>
+
+        <div class="eui-card"><div class="eui-card__body">
+            <h3 class="ic-h3"><i class="fas fa-triangle-exclamation"></i> Precisa de você</h3>
+            <div class="ic-scroll" style="max-height:48vh;"><table class="ic-table">
+                <thead><tr><th>Nº</th><th>Conferente</th><th>Endereço</th><th>Código</th><th>Descrição</th><th style="text-align:right;">GRV</th><th style="text-align:right;">1ª</th><th style="text-align:right;">2ª</th><th>Situação</th><th></th></tr></thead>
+                <tbody id="ic-pend-tbody"></tbody>
+            </table></div>
+        </div></div>
+
+        <div class="eui-card"><div class="eui-card__body">
+            <h3 class="ic-h3"><i class="fas fa-list"></i> Distribuições</h3>
+            <div class="ic-scroll" style="max-height:48vh;"><table class="ic-table">
+                <thead><tr><th>Nº</th><th>Por</th><th>Filtro</th><th>Conferente</th><th>Criada</th><th>Andamento</th><th></th></tr></thead>
+                <tbody id="ic-dist-tbody"></tbody>
+            </table></div>
+        </div></div>
+    </section>
+
+    <div class="ic-modal" id="ic-modal-itens">
+        <div class="eui-card">
+            <div class="eui-card__head" style="display:flex;justify-content:space-between;align-items:center;">
+                <strong id="ic-modal-titulo"></strong>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-fechar><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="eui-card__body">
+                <div class="ic-scroll"><table class="ic-table">
+                    <thead><tr><th>Endereço</th><th>Código</th><th>Descrição</th><th style="text-align:right;">1ª</th><th style="text-align:right;">2ª</th><th style="text-align:right;">3ª</th><th style="text-align:right;">GRV</th><th>Situação</th></tr></thead>
+                    <tbody id="ic-modal-tbody"></tbody>
+                </table></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ic-modal small" id="ic-modal-confirmar">
+        <div class="eui-card">
+            <div class="eui-card__head"><strong>Cancelar distribuição</strong></div>
+            <div class="eui-card__body" style="display:grid;gap:14px;">
+                <div id="ic-confirmar-texto"></div>
+                <div class="ic-acoes">
+                    <button type="button" class="eui-btn eui-btn--ghost" data-fechar>Voltar</button>
+                    <button type="button" class="eui-btn eui-btn--danger" id="ic-confirmar-ok">Cancelar distribuição</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="ic-toast" id="ic-toast"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PODE_CONTAR = {{ pode_contar | tojson }};
+    const PODE_GESTAO = {{ pode_gestao | tojson }};
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = (v) => (v === null || v === undefined) ? '-' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+    let timerToast = null;
+    function toast(msg, tipo) {
+        const el = $('ic-toast');
+        el.textContent = msg;
+        el.className = 'ic-toast ' + (tipo || '');
+        el.style.display = 'block';
+        clearTimeout(timerToast);
+        timerToast = setTimeout(() => { el.style.display = 'none'; }, 4200);
+    }
+
+    async function api(url, opts) {
+        const r = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Falha na operação.');
+        return d;
+    }
+
+    // ── Abas ──
+    const abas = Array.from(document.querySelectorAll('#ic-tabs [data-tab]'));
+    function mostrarAba(nome) {
+        abas.forEach((b) => b.classList.toggle('is-active', b.dataset.tab === nome));
+        const contar = $('ic-contar'), gestao = $('ic-gestao');
+        if (contar) contar.classList.toggle('hidden', nome !== 'contar');
+        if (gestao) gestao.classList.toggle('hidden', nome !== 'gestao');
+    }
+    abas.forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.tab)));
+    if (abas.length) mostrarAba(abas[0].dataset.tab);
+
+    function badge(id, n) {
+        const el = $(id);
+        if (!el) return;
+        el.textContent = n;
+        el.classList.toggle('hidden', !n);
+    }
+
+    // ── Minhas contagens ──
+    let minhas = [];
+    function renderMinhas() {
+        const tbody = $('ic-minhas-tbody');
+        const termo = ($('ic-busca-minhas').value || '').trim().toUpperCase();
+        const lista = minhas.filter((i) => !termo || [i.codigo, i.descricao, i.endereco].join(' ').toUpperCase().includes(termo));
+        $('ic-total-minhas').textContent = minhas.length ? `${minhas.length} item(ns) para contar` : '';
+        badge('ic-badge-minhas', minhas.length);
+        if (!lista.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="ic-vazio">${minhas.length ? 'Nada com essa busca.' : 'Nenhum item para você contar agora.'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = lista.map((i) => `
+            <tr data-id="${i.id}">
+                <td>${i.endereco ? `<span class="ic-end">${esc(i.endereco)}</span>` : '<span class="ic-hint">sem endereço</span>'}</td>
+                <td class="ic-cod">${esc(i.codigo)} ${i.rodada === 2 ? '<span class="ic-badge r2">Recontagem</span>' : ''}</td>
+                <td>${esc(i.descricao)}</td>
+                <td>${esc(i.unidade)}</td>
+                <td class="num"><input type="text" inputmode="decimal" class="eui-input ic-qtd" aria-label="Quantidade contada"></td>
+                <td><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-registrar>Registrar</button></td>
+            </tr>`).join('');
+    }
+
+    async function carregarMinhas() {
+        try {
+            minhas = (await api('/api/inventario-ciclico/minhas')).itens || [];
+        } catch (e) { toast(e.message, 'error'); minhas = []; }
+        renderMinhas();
+    }
+
+    async function registrar(tr) {
+        const input = tr.querySelector('.ic-qtd');
+        const valor = (input.value || '').trim();
+        if (!valor) { toast('Informe a quantidade contada.', 'error'); input.focus(); return; }
+        const btn = tr.querySelector('[data-registrar]');
+        btn.disabled = true;
+        try {
+            const d = await api(`/api/inventario-ciclico/itens/${tr.dataset.id}/contagem`, { method: 'POST', body: JSON.stringify({ quantidade: valor }) });
+            toast(d.message, 'success');
+            minhas = minhas.filter((i) => String(i.id) !== tr.dataset.id);
+            renderMinhas();
+        } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+    }
+
+    if (PODE_CONTAR) {
+        $('ic-busca-minhas').addEventListener('input', renderMinhas);
+        $('ic-minhas-tbody').addEventListener('click', (ev) => {
+            if (ev.target.closest('[data-registrar]')) registrar(ev.target.closest('tr'));
+        });
+        $('ic-minhas-tbody').addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && ev.target.classList.contains('ic-qtd')) { ev.preventDefault(); registrar(ev.target.closest('tr')); }
+        });
+        carregarMinhas();
+    }
+
+    // ── Gestão ──
+    let familias = {};
+    function opcoesSelect(el, valores, vazio) {
+        el.innerHTML = `<option value="">${esc(vazio)}</option>` + valores.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    }
+    function gruposDisponiveis() {
+        const criterio = $('ic-criterio').value;
+        const familia = $('ic-familia').value;
+        if (criterio === 'familia_grupo') return familia ? (familias[familia] || []) : [];
+        return Array.from(new Set(Object.values(familias).flat())).sort();
+    }
+    function atualizarCampos() {
+        const criterio = $('ic-criterio').value;
+        $('ic-campo-familia').classList.toggle('hidden', !['familia', 'familia_grupo'].includes(criterio));
+        $('ic-campo-grupo').classList.toggle('hidden', !['grupo', 'familia_grupo'].includes(criterio));
+        $('ic-campo-codigos').classList.toggle('hidden', criterio !== 'codigo');
+        const atual = $('ic-grupo').value;
+        const grupos = gruposDisponiveis();
+        opcoesSelect($('ic-grupo'), grupos, criterio === 'familia_grupo' && !$('ic-familia').value ? 'Escolha a família primeiro' : 'Escolha o grupo');
+        if (grupos.includes(atual)) $('ic-grupo').value = atual;
+        $('ic-sim-hint').textContent = '';
+    }
+
+    function payloadDistribuicao(simular) {
+        return {
+            criterio: $('ic-criterio').value,
+            familia: $('ic-familia').value,
+            grupo: $('ic-grupo').value,
+            codigos: $('ic-codigos').value,
+            conferente: $('ic-conferente').value,
+            simular,
+        };
+    }
+    function textoSimulacao(d) {
+        const partes = [`${d.total} linha(s) de ${d.codigos} código(s)`];
+        if (d.ja_em_aberto) partes.push(`${d.ja_em_aberto} já estão em outra distribuição aberta e ficam de fora`);
+        if ((d.nao_encontrados || []).length) partes.push(`não achados no GRV: ${d.nao_encontrados.join(', ')}`);
+        return partes.join(' · ');
+    }
+
+    async function simular() {
+        const hint = $('ic-sim-hint');
+        hint.className = 'ic-hint';
+        hint.textContent = 'Consultando o GRV...';
+        try {
+            const d = await api('/api/inventario-ciclico/distribuicoes', { method: 'POST', body: JSON.stringify(payloadDistribuicao(true)) });
+            hint.textContent = textoSimulacao(d);
+            hint.classList.toggle('warn', !d.total || d.ja_em_aberto > 0 || (d.nao_encontrados || []).length > 0);
+        } catch (e) { hint.textContent = ''; toast(e.message, 'error'); }
+    }
+
+    async function distribuir() {
+        const btn = $('ic-btn-distribuir');
+        btn.disabled = true;
+        try {
+            const d = await api('/api/inventario-ciclico/distribuicoes', { method: 'POST', body: JSON.stringify(payloadDistribuicao(false)) });
+            toast(`${d.distribuicao.numero}: ${d.total} linha(s) para ${d.distribuicao.conferente}.`, 'success');
+            $('ic-sim-hint').textContent = textoSimulacao(d);
+            $('ic-codigos').value = '';
+            carregarGestao();
+            if (PODE_CONTAR) carregarMinhas();
+        } catch (e) { toast(e.message, 'error'); }
+        btn.disabled = false;
+    }
+
+    const CLASSE_STATUS = {
+        'Aguardando 1ª': 'pendente', 'Aguardando 2ª': 'pendente', 'Divergente na 1ª': 'aguarda',
+        'Aguardando 3ª': 'aguarda', 'Confere': 'confere', 'Divergência confirmada': 'diverg', 'Cancelado': 'pendente',
+    };
+    const st = (s) => `<span class="ic-st ${CLASSE_STATUS[s] || 'pendente'}">${esc(s)}</span>`;
+    const end = (e) => e ? `<span class="ic-end">${esc(e)}</span>` : '<span class="ic-hint">sem endereço</span>';
+
+    function renderPendencias(lista) {
+        badge('ic-badge-pend', lista.length);
+        const tbody = $('ic-pend-tbody');
+        if (!lista.length) { tbody.innerHTML = '<tr><td colspan="10" class="ic-vazio">Nada pendente.</td></tr>'; return; }
+        tbody.innerHTML = lista.map((i) => {
+            const grv = i.status === 'Aguardando 3ª' ? i.grv2 : i.grv1;
+            const acao = i.status === 'Divergente na 1ª'
+                ? `<button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-liberar="${i.id}"><i class="fas fa-rotate"></i> Liberar 2ª</button>`
+                : `<div style="display:flex;gap:6px;justify-content:flex-end;"><input type="text" inputmode="decimal" class="eui-input ic-qtd" placeholder="3ª" aria-label="3ª contagem"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" data-terceira="${i.id}">Lançar 3ª</button></div>`;
+            return `<tr>
+                <td>${esc(i.numero)}</td><td>${esc(i.conferente)}</td><td>${end(i.endereco)}</td>
+                <td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
+                <td class="num">${num(grv)} ${esc(i.unidade)}</td>
+                <td class="num" title="${esc(i.contagem1_por)} ${esc(i.contagem1_em)}">${num(i.contagem1)}</td>
+                <td class="num" title="${esc(i.contagem2_por || '')} ${esc(i.contagem2_em || '')}">${num(i.contagem2)}</td>
+                <td>${st(i.status)}</td><td>${acao}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderDistribuicoes(lista) {
+        const tbody = $('ic-dist-tbody');
+        if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="ic-vazio">Nenhuma distribuição ainda.</td></tr>'; return; }
+        tbody.innerHTML = lista.map((d) => {
+            const r = d.resumo;
+            const andamento = d.cancelado_em
+                ? `<span class="ic-st pendente">Cancelada</span> <span class="ic-hint">${esc(d.cancelado_por)} · ${esc(d.cancelado_em)}</span>`
+                : `${r.fechados}/${r.total} fechadas`;
+            const aberta = !d.cancelado_em && r.fechados < r.total;
+            return `<tr>
+                <td class="ic-cod">${esc(d.numero)}</td><td>${esc(d.criterio)}</td><td>${esc(d.filtro)}</td>
+                <td>${esc(d.conferente)}</td><td>${esc(d.criado_em)}<br><span class="ic-hint">${esc(d.criado_por)}</span></td>
+                <td>${andamento}</td>
+                <td style="white-space:nowrap;text-align:right;">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${d.id}"><i class="fas fa-eye"></i> Ver</button>
+                    ${aberta ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-cancelar="${d.id}" data-numero="${esc(d.numero)}"><i class="fas fa-ban"></i> Cancelar</button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function carregarGestao() {
+        try {
+            const d = await api('/api/inventario-ciclico/distribuicoes');
+            renderPendencias(d.pendencias || []);
+            renderDistribuicoes(d.distribuicoes || []);
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function carregarOpcoes() {
+        try {
+            const d = await api('/api/inventario-ciclico/opcoes');
+            familias = d.familias || {};
+            $('ic-grv-aviso').classList.toggle('hidden', !!d.grv_ok);
+            opcoesSelect($('ic-familia'), Object.keys(familias), 'Escolha a família');
+            opcoesSelect($('ic-conferente'), d.conferentes || [], 'Escolha o conferente');
+            atualizarCampos();
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function abrirModal(id) { $(id).classList.add('open'); }
+    function fecharModal(el) { el.closest('.ic-modal').classList.remove('open'); }
+
+    async function verDistribuicao(id) {
+        try {
+            const d = await api(`/api/inventario-ciclico/distribuicoes/${id}`);
+            $('ic-modal-titulo').textContent = `${d.distribuicao.numero} · ${d.distribuicao.filtro} · ${d.distribuicao.conferente}`;
+            $('ic-modal-tbody').innerHTML = d.itens.map((i) => {
+                const grv = i.grv3 ?? i.grv2 ?? i.grv1;
+                return `<tr><td>${end(i.endereco)}</td><td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
+                    <td class="num">${num(i.contagem1)}</td><td class="num">${num(i.contagem2)}</td><td class="num">${num(i.contagem3)}</td>
+                    <td class="num">${num(grv)}</td><td>${st(i.status)}</td></tr>`;
+            }).join('') || '<tr><td colspan="8" class="ic-vazio">Sem itens.</td></tr>';
+            abrirModal('ic-modal-itens');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    let cancelarId = null;
+    async function confirmarCancelamento() {
+        const btn = $('ic-confirmar-ok');
+        btn.disabled = true;
+        try {
+            const d = await api(`/api/inventario-ciclico/distribuicoes/${cancelarId}/cancelar`, { method: 'POST', body: '{}' });
+            toast(d.message, 'success');
+            $('ic-modal-confirmar').classList.remove('open');
+            carregarGestao();
+            if (PODE_CONTAR) carregarMinhas();
+        } catch (e) { toast(e.message, 'error'); }
+        btn.disabled = false;
+    }
+
+    async function acaoPendencia(ev) {
+        const liberar = ev.target.closest('[data-liberar]');
+        const terceira = ev.target.closest('[data-terceira]');
+        if (!liberar && !terceira) return;
+        const btn = liberar || terceira;
+        let url, body = '{}';
+        if (liberar) {
+            url = `/api/inventario-ciclico/itens/${liberar.dataset.liberar}/liberar-recontagem`;
+        } else {
+            const input = btn.closest('tr').querySelector('.ic-qtd');
+            const valor = (input.value || '').trim();
+            if (!valor) { toast('Informe a 3ª contagem.', 'error'); input.focus(); return; }
+            url = `/api/inventario-ciclico/itens/${terceira.dataset.terceira}/terceira`;
+            body = JSON.stringify({ quantidade: valor });
+        }
+        btn.disabled = true;
+        try {
+            const d = await api(url, { method: 'POST', body });
+            toast(d.message, 'success');
+            carregarGestao();
+            if (PODE_CONTAR) carregarMinhas();
+        } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+    }
+
+    if (PODE_GESTAO) {
+        $('ic-criterio').addEventListener('change', atualizarCampos);
+        $('ic-familia').addEventListener('change', atualizarCampos);
+        $('ic-grupo').addEventListener('change', () => { $('ic-sim-hint').textContent = ''; });
+        $('ic-btn-simular').addEventListener('click', simular);
+        $('ic-btn-distribuir').addEventListener('click', distribuir);
+        $('ic-pend-tbody').addEventListener('click', acaoPendencia);
+        $('ic-dist-tbody').addEventListener('click', (ev) => {
+            const ver = ev.target.closest('[data-ver]');
+            const cancelar = ev.target.closest('[data-cancelar]');
+            if (ver) verDistribuicao(ver.dataset.ver);
+            if (cancelar) {
+                cancelarId = cancelar.dataset.cancelar;
+                $('ic-confirmar-texto').textContent = `Cancelar ${cancelar.dataset.numero}? Os itens ainda não fechados saem da lista do conferente. O que já foi contado fica como está.`;
+                abrirModal('ic-modal-confirmar');
+            }
+        });
+        $('ic-confirmar-ok').addEventListener('click', confirmarCancelamento);
+        document.querySelectorAll('.ic-modal [data-fechar]').forEach((b) => b.addEventListener('click', () => fecharModal(b)));
+        document.querySelectorAll('.ic-modal').forEach((m) => m.addEventListener('click', (ev) => { if (ev.target === m) m.classList.remove('open'); }));
+        carregarOpcoes();
+        carregarGestao();
+    }
+})();
+</script>
+{% endblock %}
