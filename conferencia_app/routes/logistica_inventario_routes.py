@@ -25,7 +25,6 @@ from ..models import (
     ChapaControleExclusao,
     ChapaAuditoria,
     ChapaLoteCorrecao,
-    INVENTARIO_MOTIVOS,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -41,8 +40,6 @@ from ..services.logistica_inventario_relatorio_pdf import gerar_relatorio_ajuste
 from ..services import teams_service
 from ..services.erp_estoque_service import (
     descricao_para,
-    LocalizacaoEstoqueNaoEncontrada,
-    atualizar_localizacao_estoque,
     buscar_consumo_kardex_grv,
     buscar_fornecimentos_grv,
     buscar_estoque_grv,
@@ -296,7 +293,6 @@ def _render_inventario(aba: str):
         user=session["username"],
         user_role=session.get("role", ""),
         aba_inicial=aba,
-        motivos_inventario=INVENTARIO_MOTIVOS,
         pode_inventariar=has_permission(PERMISSION),
         pode_analisar=_pode_analisar(),
         pode_analise_causa=any(has_permission(p) for p in PERMISSOES_ANALISE_CAUSA),
@@ -788,10 +784,9 @@ def criar_inventario_inicial():
     unidade_medida = str(payload.get("unidade_medida") or "UN").strip().upper() or "UN"
     lote = str(payload.get("lote") or "").strip()
     observacao = str(payload.get("observacao") or "").strip()
-    motivo = str(payload.get("motivo") or "").strip()
 
-    if motivo not in INVENTARIO_MOTIVOS:
-        return jsonify({"error": "Selecione o motivo do inventario."}), 400
+    # Motivo saiu da contagem (decisao da logistica em 03/11/2026): quem
+    # define o Tipo de Ajuste e' o gestor, ao gerar o FORM-08.52.
     # Local e' opcional (decisao da logistica em 08/10/2026): sem ele a
     # contagem compara com o saldo total do codigo no GRV.
     if not codigo_produto:
@@ -851,7 +846,6 @@ def criar_inventario_inicial():
         quantidade=quantidade,
         lote=lote[:120] if lote else None,
         observacao=observacao[:800] if observacao else None,
-        motivo=motivo,
         criado_por=session.get("username", "sistema"),
         atualizado_em=agora_br(),
     )
@@ -860,23 +854,9 @@ def criar_inventario_inicial():
     db.session.add(row)
     db.session.commit()
 
-    # Sincroniza a localizacao no ERP (tproduto) - nao falha a contagem se
-    # o ERP estiver fora do ar, so avisa: o registro do inventario ja foi
-    # salvo com sucesso independente disso.
-    localizacao_erp = {"sincronizado": False}
-    try:
-        # Contagem sem local nao mexe na localizacao que o ERP ja' tem.
-        if local_codigo:
-            localizacao_erp["resposta"] = atualizar_localizacao_estoque(codigo_produto, local_codigo)
-            localizacao_erp["sincronizado"] = True
-    except LocalizacaoEstoqueNaoEncontrada as exc:
-        localizacao_erp["erro"] = str(exc)
-    except Exception as exc:  # noqa: BLE001
-        current_app.logger.warning(
-            "Falha ao sincronizar localização de estoque no ERP (código=%s, local=%s): %s",
-            codigo_produto, local_codigo, exc,
-        )
-        localizacao_erp["erro"] = str(exc)
+    # A contagem nao grava mais a localizacao no GRV (decisao da logistica em
+    # 03/11/2026): endereco so' muda pela tela de Movimentacao. O local aqui
+    # serve apenas pra comparar com o saldo do GRV.
 
     # Consulta o saldo e o custo medio do GRV UMA VEZ, no exato momento da
     # contagem, e grava esse snapshot no proprio registro
@@ -926,7 +906,6 @@ def criar_inventario_inicial():
     return jsonify({
         "sucesso": True,
         "registro": _fmt_registro(row),
-        "localizacao_erp": localizacao_erp,
         "ajuste_aberto": ajuste_aberto,
     }), 201
 
@@ -969,12 +948,12 @@ def sincronizar_inventario_grv():
 # logistica_inventario_ajustes.html) - usado na exportacao Excel pra nao
 # mostrar o nome interno do status_modulo pro usuario final.
 LABEL_STATUS_AJUSTE = {
-    "Validacao": "Aguardando gestor",
-    "Relatorio": "Aguardando relatório",
-    "Finance": "Aguardando Finance",
-    "Fiscal": "Aguardando Fiscal",
+    "Validacao": "Validação de Suprimentos",
+    "Relatorio": "Emissão do Formulário",
+    "Finance": "Ajuste do Financeiro",
+    "Fiscal": "Emissão Fiscal (NF)",
     "Concluido": "Concluído",
-    "Descartado": "Dif. Improcedente",
+    "Descartado": "Improcedente",
 }
 
 
@@ -988,6 +967,7 @@ def _fmt_ajuste(a) -> dict:
     return {
         "id": a.id,
         "codigo_produto": a.codigo_produto,
+        "descricao_produto": a.descricao_produto or "",
         "local_codigo": a.local_codigo,
         "motivo_inventario": a.motivo_inventario or "",
         "unidade_medida": a.unidade_medida,
@@ -1095,12 +1075,12 @@ def exportar_inventario_ajustes_excel():
         "Custo Médio",
         "Diferença R$",
         "Status",
-        "Gestor - Justificativa",
-        "Gestor - Confirmado em",
-        "Gestor - Confirmado por",
-        "Finance - Observação",
-        "Finance - Concluído em",
-        "Finance - Concluído por",
+        "Suprimentos - Justificativa",
+        "Suprimentos - Confirmado em",
+        "Suprimentos - Confirmado por",
+        "Financeiro - Observação",
+        "Financeiro - Concluído em",
+        "Financeiro - Concluído por",
         "Fiscal - NF",
         "Fiscal - Concluído em",
         "Fiscal - Concluído por",
@@ -1184,7 +1164,7 @@ def api_confirmar_ajuste(ajuste_id):
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    mensagem = "Divergência confirmada - aguardando entrar no relatório (FORM-08.52) pro Finance."
+    mensagem = "Divergência confirmada - segue para Emissão do Formulário (FORM-08.52)."
     if payload.get("solicitar_analise_causa"):
         mensagem += " Análise de causa raiz solicitada."
     return jsonify({"message": mensagem, "ajuste": _fmt_ajuste(ajuste)})
@@ -1357,7 +1337,7 @@ def api_gerar_relatorio_ajuste():
     )
 
     return jsonify({
-        "message": f"Relatório {relatorio.numero_documento} gerado - {len(ajuste_ids)} item(ns) enviado(s) pro Finance.",
+        "message": f"FORM-08.52 {relatorio.numero_documento} emitido - {len(ajuste_ids)} item(ns) enviado(s) ao Financeiro.",
         "relatorio_id": relatorio.id,
         "numero_documento": relatorio.numero_documento,
         "pdf_url": f"/api/logistica/inventario-ajustes/relatorio/{relatorio.id}.pdf",

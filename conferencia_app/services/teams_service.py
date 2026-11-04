@@ -509,7 +509,7 @@ def notificar_divergencia_inventario_gestor(
     config_key: str = "webhook_inventario_gestor",
 ) -> None:
     """Avisa o gestor que uma contagem de inventario divergiu do GRV e o
-    ajuste esta em "Aguardando gestor" pra ser validado."""
+    ajuste esta em "Validacao de Suprimentos" pra ser validado."""
     app = current_app._get_current_object()
     url = _webhook_url(env_var, config_key)
     if not url:
@@ -530,7 +530,7 @@ def notificar_divergencia_inventario_gestor(
         partes.append(f"Impacto estimado: R$ {impacto}")
     if contado_por:
         partes.append(f"Contado por: {contado_por}")
-    subinfo = "\n".join(partes) + "\n\nAguardando validação do gestor."
+    subinfo = "\n".join(partes) + "\n\nAguardando Validação de Suprimentos."
     payload = _card_payload("⚠️ Divergência de inventário para validar", linha, subinfo, mencionar_canal=True)
     if link:
         payload["attachments"][0]["content"]["actions"] = [

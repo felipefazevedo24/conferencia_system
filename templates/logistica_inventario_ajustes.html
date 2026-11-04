@@ -66,19 +66,19 @@
 <div class="ia-wrap">
     <div class="eui-stats" id="ia-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ia-m-todos">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Validacao"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-user-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando gestor</span><span class="eui-stat__value" id="ia-m-validacao">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Relatorio"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando relatório</span><span class="eui-stat__value" id="ia-m-relatorio">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Finance</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Fiscal</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Validacao"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-user-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Validação de Suprimentos</span><span class="eui-stat__value" id="ia-m-validacao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Relatorio"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Emissão do Formulário</span><span class="eui-stat__value" id="ia-m-relatorio">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Ajuste do Financeiro</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Emissão Fiscal (NF)</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="ia-m-concluido">0</span></div></div>
-        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Dif. Improcedente</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Improcedente</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
     </div>
 
     <div class="eui-card">
         <div class="eui-card__head">
             <div>
                 <h2 class="eui-card__title"><i class="fas fa-scale-balanced"></i> Divergências contra o GRV</h2>
-                <p class="eui-card__sub">Do registro na contagem até a conclusão com Finance e Fiscal.</p>
+                <p class="eui-card__sub">Do registro na contagem até a conclusão com Financeiro e Fiscal.</p>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ia-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
@@ -93,10 +93,10 @@
                     <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local, código do produto ou nº do relatório…" style="width:100%; padding-left:34px;">
                 </div>
                 <div class="ia-bulkbar" id="ia-bulkbar">
-                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">aguardando relatório</span></strong>
+                    <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">Emissão do Formulário</span></strong>
                     <div style="display:flex; gap:8px;">
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
-                        <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar pro Finance</button>
+                        <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar ao Financeiro</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>
                     </div>
                 </div>
@@ -105,7 +105,7 @@
                 <table class="erp-table">
                     <thead>
                         <tr>
-                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens aguardando relatório"></th>
+                            <th class="ia-select-col"><input type="checkbox" id="ia-select-all" title="Selecionar todos os itens da mesma etapa"></th>
                             <th>Detectado em</th>
                             <th>Local</th>
                             <th>Cód. Produto</th>
@@ -153,8 +153,8 @@
     <div class="ia-modal">
         <h3><i class="fas fa-check"></i> Confirmar divergência</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
-            Confirma que essa diferença é real. O item vai pra fila de "Aguardando relatório" —
-            depois você seleciona vários de uma vez (checkbox) pra gerar o FORM-08.52 e mandar pro Finance.
+            Confirma que essa diferença é real. O item vai para "Emissão do Formulário" —
+            depois você seleciona vários de uma vez (checkbox) pra gerar o FORM-08.52 e mandar ao Financeiro.
         </p>
         <!-- Recontagem do dia da validacao: a diferenca so' se confirma se
              o sistemico e o fisico tiverem andado juntos desde a contagem. -->
@@ -209,7 +209,7 @@
         <h3><i class="fas fa-file-invoice"></i> Gerar Relatório de Ajuste (FORM-08.52)</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
             Preenche o formulário uma vez pro lote inteiro — os <strong id="ia-relatorio-qtd">0</strong> itens
-            selecionados vão juntos, com o mesmo número de documento, direto pro Finance. A justificativa
+            selecionados vão juntos, com o mesmo número de documento, direto ao Financeiro. A justificativa
             (motivo) é <strong>por item</strong>, não genérica — vem pré-carregada da confirmação da divergência,
             mas pode editar aqui antes de gerar.
         </p>
@@ -262,13 +262,29 @@
             <input type="checkbox" id="ia-rel-causa-raiz">
             <div>
                 <label for="ia-rel-causa-raiz" style="margin:0; cursor:pointer;"><strong>Todos esses itens precisam de Análise de Causa Raiz</strong></label>
-                <small>Envia todo o lote pra fila separada de Análise de Causa Raiz. Não bloqueia o fluxo — Finance/Fiscal seguem normalmente.</small>
+                <small>Envia todo o lote pra fila separada de Análise de Causa Raiz. Não bloqueia o fluxo — Financeiro e Fiscal seguem normalmente.</small>
             </div>
         </div>
 
         <div class="ia-modal-foot">
             <button class="eui-btn eui-btn--ghost" id="ia-relatorio-cancelar">Cancelar</button>
-            <button class="eui-btn eui-btn--primary" id="ia-relatorio-salvar"><i class="fas fa-file-invoice"></i> Gerar Relatório e Enviar pro Finance</button>
+            <button class="eui-btn eui-btn--primary" id="ia-relatorio-salvar"><i class="fas fa-file-invoice"></i> Gerar Relatório e Enviar ao Financeiro</button>
+        </div>
+    </div>
+</div>
+<!-- Dialogo da tela: substitui prompt()/confirm() do navegador
+     (descartar, NF do Fiscal, pular etapa, estornar, atualizar GRV, imagem). -->
+<div class="ia-modal-backdrop" id="ia-dialogo-modal">
+    <div class="ia-modal">
+        <h3 id="ia-dialogo-titulo"></h3>
+        <p id="ia-dialogo-texto" style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;"></p>
+        <div id="ia-dialogo-campo-wrap">
+            <label for="ia-dialogo-campo" id="ia-dialogo-label"></label>
+            <input type="text" id="ia-dialogo-campo" class="eui-input" maxlength="300" style="width:100%;">
+        </div>
+        <div class="ia-modal-foot">
+            <button class="eui-btn eui-btn--ghost" id="ia-dialogo-cancelar" type="button">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="ia-dialogo-ok" type="button">Confirmar</button>
         </div>
     </div>
 </div>
@@ -351,6 +367,7 @@
         return lista.filter((a) =>
             (a.local_codigo || "").toLowerCase().includes(termo) ||
             (a.codigo_produto || "").toLowerCase().includes(termo) ||
+            (a.descricao_produto || "").toLowerCase().includes(termo) ||
             (a.relatorio_numero_documento || "").toLowerCase().includes(termo)
         );
     }
@@ -372,8 +389,8 @@
         Concluido: "#15803d", Descartado: "#64748b",
     };
     const LABEL_STATUS = {
-        Validacao: "Aguardando gestor", Relatorio: "Aguardando relatório", Finance: "Aguardando Finance",
-        Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Dif. Improcedente",
+        Validacao: "Validação de Suprimentos", Relatorio: "Emissão do Formulário", Finance: "Ajuste do Financeiro",
+        Fiscal: "Emissão Fiscal (NF)", Concluido: "Concluído", Descartado: "Improcedente",
     };
     // Estorno volta sempre UMA etapa (ver estornar_etapa no service).
     const ETAPA_ANTERIOR = {
@@ -386,8 +403,8 @@
 
     function historicoHtml(a) {
         const linhas = [];
-        if (a.gestor_confirmado_em) linhas.push(`Gestor: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
-        if (a.finance_concluido_em) linhas.push(`Finance: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
+        if (a.gestor_confirmado_em) linhas.push(`Suprimentos: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
+        if (a.finance_concluido_em) linhas.push(`Financeiro: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
         if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${escapeHtml(a.fiscal_concluido_por)} em ${escapeHtml(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? " — NF " + escapeHtml(a.fiscal_nf_numero) : ""}`);
         return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
     }
@@ -461,7 +478,7 @@
         const etapa = statusDaSelecao();
         const ehFinance = etapa === "Finance";
         $("ia-bulk-count").textContent = selecionados.size;
-        $("ia-bulk-etapa").textContent = ehFinance ? "aguardando Finance" : "aguardando relatório";
+        $("ia-bulk-etapa").textContent = ehFinance ? LABEL_STATUS.Finance : LABEL_STATUS.Relatorio;
         $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
         $("ia-bulk-gerar").classList.toggle("hidden", ehFinance);
         $("ia-bulk-finance").classList.toggle("hidden", !ehFinance);
@@ -505,7 +522,7 @@
         const checkboxes = todos.filter((cb) => statusDoItem(cb.dataset.id) === etapa);
         if (marcar && etapa === "Relatorio" && checkboxes.length > RELATORIO_MAX_ITENS) {
             e.target.checked = false;
-            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens aguardando relatório - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
+            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens em Emissão do Formulário - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
             return;
         }
         checkboxes.forEach((cb) => {
@@ -525,8 +542,8 @@
         financeAlvo = alvo;
         const qtd = alvo === "lote" ? selecionados.size : 1;
         $("ia-finance-sub").textContent = qtd > 1
-            ? `${qtd} itens selecionados serão confirmados com o mesmo documento do GRV e liberados pro Fiscal.`
-            : "Confirma que o ajuste foi lançado no ERP. O item segue pro Fiscal.";
+            ? `${qtd} itens selecionados serão confirmados com o mesmo documento do GRV e seguem para a Emissão Fiscal.`
+            : "Confirma que o ajuste foi lançado no ERP. O item segue para a Emissão Fiscal.";
         $("ia-finance-documento").value = "";
         $("ia-finance-observacao").value = "";
         $("ia-finance-modal").classList.add("open");
@@ -580,6 +597,38 @@
         renderTabela(filtrarPorBusca(ajustesCache));
     });
 
+    // Dialogo da propria tela. Resolve com o texto digitado (ou "" quando nao
+    // tem campo) ou null se cancelar.
+    function dialogo({ titulo, texto, campo, obrigatorio, botao, perigo }) {
+        return new Promise((resolve) => {
+            const modal = $("ia-dialogo-modal");
+            const input = $("ia-dialogo-campo");
+            $("ia-dialogo-titulo").textContent = titulo;
+            $("ia-dialogo-texto").textContent = texto || "";
+            $("ia-dialogo-campo-wrap").style.display = campo ? "" : "none";
+            $("ia-dialogo-label").textContent = campo ? campo + (obrigatorio ? " *" : "") : "";
+            input.value = "";
+            const ok = $("ia-dialogo-ok");
+            ok.textContent = botao || "Confirmar";
+            ok.className = "eui-btn " + (perigo ? "eui-btn--danger" : "eui-btn--primary");
+            const fechar = (valor) => {
+                modal.classList.remove("open");
+                ok.onclick = null; $("ia-dialogo-cancelar").onclick = null; modal.onclick = null; input.onkeydown = null;
+                resolve(valor);
+            };
+            ok.onclick = () => {
+                const valor = input.value.trim();
+                if (campo && obrigatorio && !valor) { toast(`Preencha: ${campo}.`, "error"); input.focus(); return; }
+                fechar(campo ? valor : "");
+            };
+            $("ia-dialogo-cancelar").onclick = () => fechar(null);
+            modal.onclick = (e) => { if (e.target === modal) fechar(null); };
+            input.onkeydown = (e) => { if (e.key === "Enter") ok.click(); };
+            modal.classList.add("open");
+            if (campo) input.focus();
+        });
+    }
+
     function ajustePorId(id) {
         return ajustesCache.find((a) => String(a.id) === String(id));
     }
@@ -597,7 +646,7 @@
         const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Dif. Improcedente", true);
+            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Marcar improcedente", true);
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
             itens += it("finance", "fa-coins", "Confirmar ajuste executado");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
@@ -696,7 +745,7 @@
         const texto = bate
             ? `Confere — a diferença de <b>${fmtQtd(a.diferenca)}</b> se manteve. A contagem original está validada.`
             : `Não confere — apurada <b>${fmtQtd(a.diferenca)}</b>, recontada <b>${fmtQtd(a.recontagem_diferenca)}</b>. ` +
-              `Justifique abaixo para adotar a diferença nova, ou feche e use "Dif. Improcedente".`;
+              `Justifique abaixo para adotar a diferença nova, ou feche e use "Marcar improcedente".`;
         $("ia-recontagem-resultado").innerHTML =
             `<div style="background:${fundo}; border:1px solid ${borda}; color:${cor}; border-radius:6px; padding:9px 11px; font-size:12.5px;">
                 <i class="fas ${bate ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${texto}
@@ -772,24 +821,30 @@
                 window.open(`/api/logistica/inventario-ajustes/relatorio/${a.relatorio_id}.pdf`, "_blank");
                 return;
             } else if (act === "descartar") {
-                const motivo = prompt("Motivo (obrigatório) pra marcar essa diferença como improcedente - ex.: erro de contagem, não precisa de ajuste:") || "";
-                if (!motivo.trim()) return;
+                const motivo = await dialogo({
+                    titulo: "Marcar improcedente", texto: "A diferença não precisa de ajuste (ex.: erro de contagem).",
+                    campo: "Motivo", obrigatorio: true, botao: "Marcar improcedente", perigo: true,
+                });
+                if (motivo === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
             } else if (act === "finance") {
                 abrirModalFinance(id);
                 return;
             } else if (act === "fiscal") {
-                const nf_numero = prompt("Número da NF de ajuste emitida (opcional):") || "";
+                const nf_numero = await dialogo({
+                    titulo: "Confirmar NF emitida", texto: "Conclui o ajuste.", campo: "Número da NF de ajuste (opcional)",
+                });
+                if (nf_numero === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: "POST", body: JSON.stringify({ nf_numero }) });
             } else if (act === "pular-etapa") {
-                if (!confirm("Pular direto para a próxima etapa? Isso ignora as validações normais da etapa atual - use só pra casos excepcionais.")) return;
+                if (await dialogo({ titulo: "Pular etapa", texto: "Avança para a próxima etapa sem as validações da etapa atual. Use só em caso excepcional.", botao: "Pular etapa", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/pular-etapa`, { method: "POST" });
             } else if (act === "atualizar-grv") {
-                if (!confirm("Consultar agora a quantidade atual deste item no PostgreSQL/GRV? Apenas este ajuste será atualizado.")) return;
+                if (await dialogo({ titulo: "Atualizar quantidade GRV", texto: "Consulta agora o saldo deste item no GRV. Só este ajuste é atualizado.", botao: "Atualizar" }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/atualizar-grv`, { method: "POST" });
             } else if (act === "estornar") {
                 const anterior = ETAPA_ANTERIOR[statusDoItem(id)];
-                if (!confirm(`Estornar este ajuste uma etapa, para "${LABEL_STATUS[anterior] || anterior}"? Só os dados da etapa atual serão limpos.`)) return;
+                if (await dialogo({ titulo: "Estornar etapa", texto: `Volta para "${LABEL_STATUS[anterior] || anterior}". Só os dados da etapa atual são limpos.`, botao: "Estornar", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
             } else {
                 return;
@@ -865,9 +920,9 @@
         const removerBtn = e.target.closest("[data-remover-img]");
         if (removerBtn) {
             const ajusteId = removerBtn.dataset.removerImg;
-            if (!confirm("Remover a imagem anexada a essa justificativa?")) return;
-            api(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "DELETE" })
-                .then((data) => atualizarLinhaImagem(ajusteId, data.ajuste))
+            dialogo({ titulo: "Remover imagem", texto: "Remove a imagem anexada a esta justificativa.", botao: "Remover", perigo: true })
+                .then((r) => r === null ? null : api(`/api/logistica/inventario-ajustes/${ajusteId}/justificativa-imagem`, { method: "DELETE" }))
+                .then((data) => { if (data) atualizarLinhaImagem(ajusteId, data.ajuste); })
                 .catch((err) => toast(err.message, "error"));
         }
     });
@@ -891,6 +946,7 @@
         if (opcoesRelatorio) return opcoesRelatorio;
         opcoesRelatorio = await api("/api/logistica/inventario-ajustes/relatorio/opcoes");
         preencherSelect($("ia-rel-tipo-ajuste"), opcoesRelatorio.tipos_ajuste);
+        $("ia-rel-tipo-ajuste").insertAdjacentHTML("afterbegin", '<option value="">Selecione…</option>');
         preencherSelect($("ia-rel-motivo"), opcoesRelatorio.motivos_ajuste);
         preencherSelect($("ia-rel-deposito-tipo"), opcoesRelatorio.deposito_tipos);
         return opcoesRelatorio;
@@ -909,14 +965,6 @@
             return;
         }
         const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
-        // O Tipo de Ajuste e' um so' pro lote e nasce do motivo da contagem:
-        // motivos diferentes vao em relatorios separados. Motivo fora da
-        // lista atual (contagem antiga) nao entra na comparacao.
-        const motivosLote = [...new Set(itens.map((a) => a.motivo_inventario).filter((m) => opcoesRelatorio.tipos_ajuste.includes(m)))];
-        if (motivosLote.length > 1) {
-            toast(`Os itens selecionados têm motivos de inventário diferentes (${motivosLote.join(", ")}). Gere um relatório por motivo.`, "error");
-            return;
-        }
         $("ia-relatorio-qtd").textContent = itens.length;
         // Justificativa vem pre-carregada da confirmacao da divergencia
         // (gestor_justificativa) - atrelada a esse item, nao um texto
@@ -931,8 +979,8 @@
                 <td>${imagemJustificativaCellHtml(a)}</td>
             </tr>
         `).join("");
-        // Ja' vem com o motivo escolhido na contagem; o gestor ainda pode trocar.
-        $("ia-rel-tipo-ajuste").value = motivosLote[0] || opcoesRelatorio.tipos_ajuste[0] || "";
+        // Tipo de Ajuste e' do gestor, no formulario (a contagem nao tem mais motivo).
+        $("ia-rel-tipo-ajuste").value = "";
         $("ia-rel-tipo-detalhe").value = "";
         $("ia-rel-tipo-detalhe-wrap").style.display = $("ia-rel-tipo-ajuste").value === "Outros" ? "" : "none";
         $("ia-rel-motivo").value = opcoesRelatorio.motivos_ajuste[0] || "";
@@ -969,6 +1017,7 @@
             toast(`Preencha a justificativa de cada item antes de gerar o relatório - faltando: ${faltando.join(", ")}.`, "error");
             return;
         }
+        if (!$("ia-rel-tipo-ajuste").value) { toast("Selecione o Tipo de Ajuste.", "error"); $("ia-rel-tipo-ajuste").focus(); return; }
         const payload = {
             ajuste_ids: Array.from(selecionados),
             tipo_ajuste: $("ia-rel-tipo-ajuste").value,

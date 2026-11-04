@@ -239,7 +239,7 @@ def registrar_recontagem(
     `qtde_estoque_atual` vem do GRV quando disponível; se vier None, tenta
     buscar sozinho - e o gestor pode sobrescrever informando o valor."""
     if ajuste.status_modulo != "Validacao":
-        raise ValueError("Só dá pra recontar enquanto o item está aguardando validação do gestor.")
+        raise ValueError("Só dá pra recontar enquanto o item está em Validação de Suprimentos.")
 
     try:
         recontada = float(qtde_recontada)
@@ -289,7 +289,7 @@ def confirmar_divergencia(
     pro operador/gestor preencherem a analise detalhada depois, na propria
     tela, no ritmo deles, sem competir com Relatorio/Finance/Fiscal."""
     if ajuste.status_modulo != "Validacao":
-        raise ValueError("Este ajuste não está aguardando validação do gestor.")
+        raise ValueError("Este ajuste não está em Validação de Suprimentos.")
 
     # Sem recontar, nao da' pra afirmar que a diferenca se manteve - e e'
     # isso que valida a contagem original (ver registrar_recontagem).
@@ -348,7 +348,7 @@ def anexar_imagem_justificativa(
     ou Relatorio, antes de ir pro Finance)."""
     if ajuste.status_modulo not in _ETAPAS_PERMITEM_IMAGEM_JUSTIFICATIVA:
         raise ValueError(
-            "Só dá pra anexar imagem enquanto o item está aguardando gestor ou aguardando relatório."
+            "Só dá pra anexar imagem enquanto o item está em Validação de Suprimentos ou Emissão do Formulário."
         )
     if not dados:
         raise ValueError("Arquivo vazio.")
@@ -448,20 +448,13 @@ def gerar_relatorio_ajuste(
     fora_do_relatorio = [a for a in ajustes if a.status_modulo != "Relatorio"]
     if fora_do_relatorio:
         raise ValueError(
-            "Um ou mais itens selecionados não estão mais aguardando o relatório "
-            "(ainda não foram confirmados pelo gestor, já entraram em outro relatório, "
+            "Um ou mais itens selecionados não estão mais em Emissão do Formulário "
+            "(ainda não foram validados, já entraram em outro formulário, "
             "ou estão em outra etapa)."
         )
 
-    # O Tipo de Ajuste do formulario e' um so' pro lote e nasce do motivo da
-    # contagem: itens de motivos diferentes vao em relatorios separados.
-    # Motivo fora da lista atual (contagem antiga) nao entra na comparacao.
-    motivos_lote = sorted({a.motivo_inventario for a in ajustes if a.motivo_inventario in RELATORIO_AJUSTE_TIPOS})
-    if len(motivos_lote) > 1:
-        raise ValueError(
-            "Os itens selecionados têm motivos de inventário diferentes ("
-            + ", ".join(motivos_lote) + "). Gere um relatório por motivo."
-        )
+    # O Tipo de Ajuste e' um so' pro lote e quem escolhe e' o gestor, aqui no
+    # formulario (o motivo saiu da contagem em 03/11/2026).
 
     # Justificativa por item: usa a que o gestor mandar agora (edicao no
     # relatorio) ou, se nao mandar, a que ja tinha sido dada na aprovacao
@@ -555,7 +548,7 @@ def descartar_divergencia(ajuste: LogisticaInventarioAjuste, usuario: str, motiv
     erro de contagem) e nao precisa de ajuste nenhum - encerra sem passar
     por Finance/Fiscal."""
     if ajuste.status_modulo != "Validacao":
-        raise ValueError("Este ajuste não está aguardando validação do gestor.")
+        raise ValueError("Este ajuste não está em Validação de Suprimentos.")
     motivo = (motivo or "").strip()
     if not motivo:
         raise ValueError("Informe o motivo pra marcar como improcedente.")
@@ -574,7 +567,7 @@ def _aplicar_conclusao_finance(
     """Grava a conclusao do Finance num ajuste (sem commit - quem chama
     decide se e' um item so' ou o lote inteiro)."""
     if ajuste.status_modulo != "Finance":
-        raise ValueError(f"O item {ajuste.codigo_produto} não está com o Finance.")
+        raise ValueError(f"O item {ajuste.codigo_produto} não está em Ajuste do Financeiro.")
     ajuste.finance_documento_grv = documento_grv
     ajuste.finance_observacao = (observacao or "").strip()[:500] or None
     ajuste.finance_concluido_em = agora_br()
@@ -637,7 +630,7 @@ def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: 
     """Modulo 04 -> Concluido. So tracking: confirma que a NF de ajuste foi
     emitida fora do sync."""
     if ajuste.status_modulo != "Fiscal":
-        raise ValueError("Este ajuste não está com o Fiscal.")
+        raise ValueError("Este ajuste não está em Emissão Fiscal (NF).")
     ajuste.fiscal_nf_numero = (nf_numero or "").strip()[:60] or None
     ajuste.fiscal_concluido_em = agora_br()
     ajuste.fiscal_concluido_por = usuario
@@ -667,7 +660,7 @@ def estornar_etapa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjus
     relatorio novo."""
     anterior = etapa_anterior(ajuste.status_modulo)
     if anterior is None:
-        raise ValueError("Este ajuste já está na primeira etapa (Validação) - não há como estornar.")
+        raise ValueError("Este ajuste já está na primeira etapa (Validação de Suprimentos) - não há como estornar.")
 
     atual = ajuste.status_modulo
     if atual == "Concluido":
