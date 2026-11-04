@@ -1066,6 +1066,7 @@
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
                     else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
                     else if (act === "imprimir-etiqueta-columbia") imprimirEtiquetaColumbia(cod);
+                    else if (act === "imprimir-etiqueta-produto") imprimirEtiquetaProduto(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
                     else if (act === "expedir-sem-conf") expedirSemConferencia(cod);
                     else if (act === "excluir") excluirOrdem(cod);
@@ -1125,6 +1126,10 @@
             } else {
                 itens += it("ver", "fa-eye", "Detalhes");
             }
+            // Servico de Terceiro: uma etiqueta por peca conferida (OS + descricao).
+            if (cfg.codKey === "cod_ordem_compra" && !["pendente", "faturado_sem_conf", "finalizado_sem_conf"].includes(s)) {
+                itens += it("imprimir-etiqueta-produto", "fa-tags", "Imprimir etiquetas de identificação");
+            }
             // So' a quantidade de volumes, sem reabrir a conferencia.
             if (cfg.podeAlterarVolumes && s !== "expedido" && s !== "finalizado_sem_conf") {
                 itens += "<hr>" + it("alterar-volumes", "fa-boxes-stacked", "Alterar qtde. de volumes");
@@ -1179,6 +1184,25 @@
         }
         function imprimirEtiquetaRedMolds(cod) { imprimirEtiqueta(cod, "red-molds"); }
         function imprimirEtiquetaColumbia(cod) { imprimirEtiqueta(cod, "columbia"); }
+
+        // Identificacao do produto (ST): uma etiqueta 70 x 50 por peca conferida.
+        async function imprimirEtiquetaProduto(cod) {
+            const base = `/api/expedicao/conf-cega-st/ordens/${encodeURIComponent(cod)}`;
+            try {
+                const resp = await fetch(base);
+                const ordem = await resp.json();
+                if (!resp.ok) throw new Error(ordem.error || "Falha ao carregar a ordem.");
+                const itens = (ordem.itens || []).filter((i) => (i.qtde_conferida || 0) > 0);
+                const total = itens.reduce((t, i) => t + i.qtde_conferida, 0);
+                if (!total) { toast("Nenhuma peça conferida nessa ordem - nada para imprimir.", "error"); return; }
+                if (!confirm(`Imprimir ${total} etiqueta(s) de identificação (uma por peça conferida, ${itens.length} item(ns))?`)) return;
+                const r = await ZebraPrint.imprimir({ zplUrl: `${base}/etiqueta-produto.zpl`, pdfUrl: `${base}/etiqueta-produto.pdf`, papel: "70 x 50 mm" });
+                if (r.via === "zebra") toast(`${total} etiqueta(s) enviada(s) para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
+                else toast(`${r.motivo} Abrindo o PDF.`, "info");
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
 
         // ── Anexar comprovante de entrega direto da fila de Expedição ────────
         // FOB: uma unica foto finaliza todas as NFs do romaneio (mesmo endpoint

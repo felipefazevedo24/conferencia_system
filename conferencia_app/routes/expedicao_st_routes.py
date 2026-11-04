@@ -28,6 +28,7 @@ from ..models import (
 from ..services import expedicao_st_service as svc
 from ..services import expedicao_log_service as log_svc
 from ..services import expedicao_pendentes_pdf as pendentes_pdf
+from ..services import expedicao_etiqueta_produto as etiqueta_produto
 from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 from ..tempo import agora_br
 
@@ -495,6 +496,51 @@ def pendentes_pdf_st(cod_ordem_compra):
     pdf = pendentes_pdf.gerar_pdf(cabecalho, itens, len(ordem.itens), session["username"])
     return current_app.response_class(pdf, mimetype="application/pdf", headers={
         "Content-Disposition": f'inline; filename="pendentes_{secure_filename(cod_ordem_compra) or "st"}.pdf"',
+    })
+
+
+def _etiquetas_produto(cod_ordem_compra):
+    """(etiquetas, None) ou (None, resposta de erro). Uma etiqueta por peca
+    conferida de cada item - a quantidade e' a contada pelo operador."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra, excluido=False).first()
+    if not ordem:
+        return None, (jsonify({"error": "Ordem de compra nao encontrada."}), 404)
+    if ordem.status == svc.STATUS_PENDENTE:
+        return None, (jsonify({"error": "Conclua a conferencia antes de imprimir as etiquetas."}), 400)
+    etiquetas = [
+        etiqueta_produto.Etiqueta(
+            os=str(it.n_os or "").strip(), descricao=it.item or "", codigo=it.cod_interno or "",
+            ordem_compra=ordem.cod_ordem_compra, fornecedor=ordem.fornecedor or "", peca=peca, total=it.qtde_conferida,
+        )
+        for it in ordem.itens if (it.qtde_conferida or 0) > 0
+        for peca in range(1, it.qtde_conferida + 1)
+    ]
+    if not etiquetas:
+        return None, (jsonify({"error": "Nenhuma peca conferida nessa ordem - nada para imprimir."}), 400)
+    return etiquetas, None
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/etiqueta-produto.zpl")
+@permission_required(PERMISSION)
+def etiqueta_produto_zpl(cod_ordem_compra):
+    etiquetas, erro = _etiquetas_produto(cod_ordem_compra)
+    if erro:
+        return erro
+    try:
+        dpi = int(request.args.get("dpi") or etiqueta_produto.DPI_PADRAO)
+    except (TypeError, ValueError):
+        dpi = etiqueta_produto.DPI_PADRAO
+    return current_app.response_class(etiqueta_produto.gerar_zpl(etiquetas, dpi), mimetype="text/plain; charset=utf-8")
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/etiqueta-produto.pdf")
+@permission_required(PERMISSION)
+def etiqueta_produto_pdf(cod_ordem_compra):
+    etiquetas, erro = _etiquetas_produto(cod_ordem_compra)
+    if erro:
+        return erro
+    return current_app.response_class(etiqueta_produto.gerar_pdf(etiquetas), mimetype="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="etiqueta_produto_{secure_filename(cod_ordem_compra) or "st"}.pdf"',
     })
 
 
