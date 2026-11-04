@@ -4918,6 +4918,23 @@ class InventarioGeralResultado(db.Model):
                                  backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
 
 
+class InventarioGeralRecusa(db.Model):
+    """Produto que o proprio Sync deixou fora do envio ao ERP na ultima
+    simulacao (saldo mudou, geral != depositos, sumiu do ERP). Retrato da
+    ultima rodada: cada simulacao apaga e regrava. Tabela a parte pra nao
+    precisar de migration."""
+
+    __tablename__ = "inventario_geral_recusa"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    cod_produto = db.Column(db.Integer, nullable=False)
+    codigo_interno = db.Column(db.String(60))
+    descricao = db.Column(db.String(300))
+    motivo = db.Column(db.String(300), nullable=False)
+    simulado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class InventarioGeralTesteApi(db.Model):
     """Teste da API de inventario do CPS com 1 a 5 itens, fora de qualquer
     inventario (o envio real so' sai no fim, em lotes de 500). Cada chamada
