@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from datetime import datetime
 from io import BytesIO
 from email.mime.application import MIMEApplication
@@ -36,11 +37,19 @@ PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
 def _remetente_comex() -> tuple[str, dict]:
     """(cabecalho From, argumentos do enviar_mensagem_smtp). Com
     COMEX_MAIL_SENDER + COMEX_MAIL_PASSWORD configurados o Comex sai pela
-    caixa propria (login com ela mesma); sem isso, pelo remetente geral."""
+    caixa propria (login com ela mesma); sem isso, pelo remetente geral.
+
+    Rele o ambiente na hora do envio: o Config le os.environ so' no import,
+    e no WSGI as linhas do Comex podem ter ficado depois do import do app
+    (aconteceu no 1o teste - o e-mail saiu pelo nfe@)."""
     cfg = current_app.config
-    email, senha = cfg.get("COMEX_MAIL_SENDER"), cfg.get("COMEX_MAIL_PASSWORD")
+
+    def _valor(nome):
+        return str(os.environ.get(nome) or cfg.get(nome) or "").strip()
+
+    email, senha = _valor("COMEX_MAIL_SENDER"), _valor("COMEX_MAIL_PASSWORD")
     if email and senha:
-        return f"{cfg.get('COMEX_MAIL_SENDER_NAME') or 'Comex | Columbia Machine Brasil'} <{email}>", {
+        return f"{_valor('COMEX_MAIL_SENDER_NAME') or 'Comex | Columbia Machine Brasil'} <{email}>", {
             "sender": email, "password": senha, "smtp_user": email}
     return f"{cfg.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{cfg.get('MAIL_SENDER', '')}>", {}
 
