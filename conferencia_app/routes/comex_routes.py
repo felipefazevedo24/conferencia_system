@@ -33,6 +33,18 @@ PERMISSION = "PAGE_COMEX"
 PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
 
 
+def _remetente_comex() -> tuple[str, dict]:
+    """(cabecalho From, argumentos do enviar_mensagem_smtp). Com
+    COMEX_MAIL_SENDER + COMEX_MAIL_PASSWORD configurados o Comex sai pela
+    caixa propria (login com ela mesma); sem isso, pelo remetente geral."""
+    cfg = current_app.config
+    email, senha = cfg.get("COMEX_MAIL_SENDER"), cfg.get("COMEX_MAIL_PASSWORD")
+    if email and senha:
+        return f"{cfg.get('COMEX_MAIL_SENDER_NAME') or 'Comex | Columbia Machine Brasil'} <{email}>", {
+            "sender": email, "password": senha, "smtp_user": email}
+    return f"{cfg.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{cfg.get('MAIL_SENDER', '')}>", {}
+
+
 def _cotacao_vencedora(p: ComexProcesso) -> ComexCotacao | None:
     if not p.cotacao_vencedora_id:
         return None
@@ -448,7 +460,8 @@ def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list
     nome_fornecedor = (cotacao_vencedora.fornecedor_frete if cotacao_vencedora else None) or processo.fornecedor or ""
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"Resultado da Cotação de Frete – Processo {processo.id_op}"
-    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    remetente, smtp_kwargs = _remetente_comex()
+    msg["From"] = remetente
     msg["To"] = ", ".join(destinatarios)
     corpo = (
         f"<p>Prezados,</p>"
@@ -459,7 +472,7 @@ def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list
         f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
-    enviar_mensagem_smtp(current_app, msg)
+    enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
 
 
 @comex_bp.route("/api/comex/processos/<int:processo_id>/instrucao/notificar", methods=["POST"])
@@ -708,7 +721,8 @@ def api_enviar_email_po(processo_id):
 
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"PO {processo.po_numero} — {processo.id_op} — Columbia Machine Brasil"
-    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    remetente, smtp_kwargs = _remetente_comex()
+    msg["From"] = remetente
     msg["To"] = ", ".join(destinatarios)
     msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
 
@@ -736,7 +750,7 @@ def api_enviar_email_po(processo_id):
 
     todos_destinatarios = destinatarios + PO_EMAIL_CC_FIXO
     try:
-        enviar_mensagem_smtp(current_app, msg)
+        enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
     except Exception as exc:
         current_app.logger.exception("Falha ao enviar e-mail da PO %s", processo.po_numero)
         return jsonify({"error": f"Falha ao enviar e-mail: {exc}"}), 502
@@ -939,7 +953,8 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
 def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, link: str, destinatario: str) -> None:
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"Solicitação de Cotação de Frete – {processo.id_op} – Columbia Machine Brasil"
-    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    remetente, smtp_kwargs = _remetente_comex()
+    msg["From"] = remetente
     msg["To"] = destinatario
     corpo = (
         f"<p>Prezados,</p>"
@@ -951,7 +966,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
         f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
-    enviar_mensagem_smtp(current_app, msg)
+    enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
 
 
 @comex_bp.route("/api/comex/processos/<int:processo_id>/cotacoes", methods=["GET"])
