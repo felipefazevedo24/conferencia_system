@@ -4006,6 +4006,45 @@ class ComexProcesso(db.Model):
     )
 
 
+class ComexProcessoOrdemFat(db.Model):
+    """Origem de um processo de EXPORTACAO: a ordem de faturamento ja'
+    conferida na Conferencia de Expedicao, puxada no Comex pelo numero da
+    ordem ou do orcamento. Uma ordem gera no maximo um processo. Tabela a
+    parte (em vez de coluna em comex_processo) pra nao precisar de migration;
+    a direcao em si fica em ComexProcesso.direcao_operacao = "EXPO"."""
+
+    __tablename__ = "comex_processo_ordem_fat"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    cod_ordem_fat = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    orcamento = db.Column(db.String(80), index=True)
+    pedido = db.Column(db.String(80))
+    cliente = db.Column(db.String(160))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("ordem_fat", uselist=False))
+
+
+class ComexExportacaoAntecipada(db.Model):
+    """Exportacao aberta pelo ORCAMENTO, antes de existir ordem de
+    faturamento conferida - pra antecipar a cotacao do frete. Fica presa na
+    Cotacao ate' o operador vincular a ordem de faturamento (conferida) do
+    orcamento, que entra em ComexProcessoOrdemFat. Esta linha fica como
+    registro de que o processo nasceu antecipado. Tabela a parte pra nao
+    precisar de migration."""
+
+    __tablename__ = "comex_exportacao_antecipada"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    orcamento = db.Column(db.String(80), nullable=False, index=True)
+    cliente = db.Column(db.String(160))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("exportacao_antecipada", uselist=False))
+
+
 class ComexPoItem(db.Model):
     """Item de linha da PO (Modulo 2) - codigo, NCM/HS code, part number,
     descricao, quantidade e valores, no formato do modelo de PO usado hoje
@@ -4124,6 +4163,37 @@ class ComexCotacao(db.Model):
         cascade="all, delete-orphan",
         order_by="ComexCotacaoVolume.numero",
     )
+
+
+class ComexCotacaoDestinatarios(db.Model):
+    """Lista completa de e-mails do prestador quando ela nao cabe em
+    ComexCotacao.email_instrucao_embarque (255). O cadastro de fornecedor
+    aceita 300 e o MySQL recusava a cotacao inteira (aconteceu com a Proway:
+    o link nem era criado). Tabela a parte pra nao precisar de migration."""
+
+    __tablename__ = "comex_cotacao_destinatarios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    emails = db.Column(db.Text, nullable=False)
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("destinatarios_completos", uselist=False))
+
+
+class ComexCotacaoModal(db.Model):
+    """Modal que o prestador cotou num link LCL/Aereo: "LCL" (maritimo) ou
+    "AEREO". Quando ele cota os dois no mesmo link, a cotacao do link fica
+    LCL e a de Aereo nasce como outra ComexCotacao Recebida do mesmo
+    processo - cada uma com seus custos, pra comparar e escolher. Tabela a
+    parte pra nao precisar de migration em comex_cotacao."""
+
+    __tablename__ = "comex_cotacao_modal"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    modal = db.Column(db.String(10), nullable=False)  # LCL | AEREO
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("modal_cotado", uselist=False))
 
 
 class ComexCotacaoVolume(db.Model):

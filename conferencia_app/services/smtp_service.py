@@ -25,12 +25,13 @@ def enviar_mensagem_smtp(
     sender: str | None = None,
     password: str | None = None,
     timeout: int | float | None = None,
+    smtp_user: str | None = None,
 ) -> None:
     server_host = smtp_server or app.config.get("MAIL_SMTP_SERVER")
     server_port = int(smtp_port or app.config.get("MAIL_SMTP_PORT", 587))
     remetente = sender or app.config.get("MAIL_SENDER") or ""
     senha = password or app.config.get("MAIL_PASSWORD") or ""
-    usuario = app.config.get("MAIL_SMTP_USER") or remetente
+    usuario = smtp_user or app.config.get("MAIL_SMTP_USER") or remetente
     use_ssl = _as_bool(app.config.get("MAIL_SMTP_USE_SSL"), False) or server_port == 465
     use_starttls = _as_bool(app.config.get("MAIL_SMTP_STARTTLS"), True) and not use_ssl
     timeout_s = timeout if timeout is not None else app.config.get("MAIL_SMTP_TIMEOUT", 90)

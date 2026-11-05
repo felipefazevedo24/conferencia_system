@@ -367,6 +367,12 @@ class Config:
     MAIL_SENDER = os.environ.get("MAIL_SENDER", "nfe@columbiamachine.com.br")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
     MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "NF-e | Columbia Machine Brasil")
+    # Remetente proprio do Comex (PO, cotacao de frete, instrucao de embarque),
+    # no mesmo servidor SMTP. So' vale com e-mail E senha preenchidos; sem
+    # isso o Comex segue no remetente geral acima.
+    COMEX_MAIL_SENDER = os.environ.get("COMEX_MAIL_SENDER", "")
+    COMEX_MAIL_PASSWORD = os.environ.get("COMEX_MAIL_PASSWORD", "")
+    COMEX_MAIL_SENDER_NAME = os.environ.get("COMEX_MAIL_SENDER_NAME", "Comex | Columbia Machine Brasil")
 
     # Envio automatico de NF-e emitida para cliente/destinatario
     # Em modo teste, todos os envios sao redirecionados para NFE_EMAIL_TESTE_DESTINO.
