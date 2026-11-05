@@ -1835,7 +1835,7 @@
             return `
                 <tr>
                     <td>${escapeHtml(c.fornecedor_frete || "—")}</td>
-                    <td>${c.tipo_frete === "FCL" ? "FCL" : "LCL/Aéreo"}</td>
+                    <td>${c.tipo_frete === "FCL" ? "FCL" : c.modal_cotado === "AEREO" ? "Aéreo" : c.modal_cotado === "LCL" ? "LCL" : "LCL/Aéreo"}</td>
                     <td>${badge}</td>
                     <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
                     <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>

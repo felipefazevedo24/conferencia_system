@@ -935,6 +935,8 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
     return {
         "id": c.id,
         "tipo_frete": c.tipo_frete,
+        # LCL | AEREO quando o prestador informou (link LCL/Aereo).
+        "modal_cotado": c.modal_cotado.modal if c.modal_cotado else None,
         "status": c.status,
         "fornecedor_frete": c.fornecedor_frete,
         "origem": c.origem,

@@ -28,6 +28,7 @@ from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
+from ..models import ComexCotacaoModal
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -1628,6 +1629,53 @@ _CAMPOS_COTACAO_TEXTO = {
 }
 _CAMPOS_COTACAO_CUSTO = tuple(f"{prefixo}_{moeda}" for prefixo, _ in ETAPAS_CUSTO_COTACAO for moeda in ("usd", "brl"))
 
+# Link LCL/Aereo: o prestador diz o que cotou - um modal ou os dois.
+MODAIS_COTADOS = {"LCL": "LCL", "AEREO": "Aéreo", "AMBOS": "LCL e Aéreo"}
+
+
+def _preencher_logistica_e_custos(cotacao: ComexCotacao, dados: dict) -> None:
+    """Parte da cotacao LCL/Aereo que muda por modal: logistica e custos."""
+    cotacao.transit_time = str(dados.get("transit_time") or "").strip()[:60] or None
+    cotacao.rota = str(dados.get("rota") or "").strip()[:200] or None
+    cotacao.validade = _parse_date(dados.get("validade"))
+    cotacao.ptax = _to_float(dados.get("ptax"))
+    _preencher_custos(cotacao, dados)
+
+
+def _preencher_custos(cotacao: ComexCotacao, dados: dict) -> None:
+    total_usd = 0.0
+    total_brl = 0.0
+    for campo in _CAMPOS_COTACAO_CUSTO:
+        valor = _to_float(dados.get(campo))
+        setattr(cotacao, campo, valor)
+        if valor:
+            if campo.endswith("_usd"):
+                total_usd += valor
+            else:
+                total_brl += valor
+    cotacao.custo_total_usd = round(total_usd, 2)
+    cotacao.custo_total_brl = round(total_brl, 2)
+
+
+def _cotacao_aereo_irma(cotacao: ComexCotacao, dados_aereo: dict, volumes: list | None) -> ComexCotacao:
+    """Segunda cotacao (Aereo) do mesmo prestador, quando ele cota os dois
+    modais num link so'. Copia o que e' comum (prestador, origem/destino,
+    carga, volumes, saidas) e fica com logistica/custos proprios. Nao tem
+    link proprio (token vazio) - ja' nasce Recebida."""
+    irma = ComexCotacao(
+        processo_id=cotacao.processo_id, tipo_frete=cotacao.tipo_frete, status="Recebida",
+        fornecedor_frete=cotacao.fornecedor_frete, origem=cotacao.origem, destino=cotacao.destino,
+        incoterm=cotacao.incoterm, imo_classe=cotacao.imo_classe, un_numero=cotacao.un_numero,
+        valor_mercadoria_usd=cotacao.valor_mercadoria_usd, proximas_saidas=cotacao.proximas_saidas,
+        email_instrucao_embarque=cotacao.email_instrucao_embarque, criado_por=cotacao.criado_por,
+        termos_aceitos=True, termos_aceitos_em=cotacao.termos_aceitos_em, recebida_em=cotacao.recebida_em,
+    )
+    db.session.add(irma)
+    _preencher_logistica_e_custos(irma, dados_aereo)
+    _adicionar_volumes(irma, volumes)
+    db.session.add(ComexCotacaoModal(cotacao=irma, modal="AEREO"))
+    return irma
+
 
 def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao:
     """Recebe o formulario publico preenchido pelo prestador de frete e
@@ -1639,6 +1687,11 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         raise ValueError("É necessário aceitar os termos de consentimento para enviar a cotação.")
     if not str(dados.get("fornecedor_frete") or "").strip():
         raise ValueError("Informe o nome do prestador de frete.")
+    modal_cotado = None
+    if cotacao.tipo_frete != "FCL":
+        modal_cotado = str(dados.get("modal_cotado") or "").strip().upper()
+        if modal_cotado not in MODAIS_COTADOS:
+            raise ValueError("Informe o frete cotado: LCL, Aéreo ou os dois.")
 
     for campo, tamanho in _CAMPOS_COTACAO_TEXTO.items():
         if campo in dados:
@@ -1656,31 +1709,21 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
     if cotacao.tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))
         cotacao.qtd_20dry = _to_int(dados.get("qtd_20dry"))
+        _preencher_custos(cotacao, dados)
     else:
-        cotacao.transit_time = str(dados.get("transit_time") or "").strip()[:60] or None
-        cotacao.validade = _parse_date(dados.get("validade"))
-        cotacao.ptax = _to_float(dados.get("ptax"))
+        _preencher_logistica_e_custos(cotacao, dados)
         ComexCotacaoVolume.query.filter_by(cotacao_id=cotacao.id).delete()
         _adicionar_volumes(cotacao, dados.get("volumes"))
-
-    total_usd = 0.0
-    total_brl = 0.0
-    for campo in _CAMPOS_COTACAO_CUSTO:
-        valor = _to_float(dados.get(campo))
-        setattr(cotacao, campo, valor)
-        if valor:
-            if campo.endswith("_usd"):
-                total_usd += valor
-            else:
-                total_brl += valor
-    cotacao.custo_total_usd = round(total_usd, 2)
-    cotacao.custo_total_brl = round(total_brl, 2)
+        # "Os dois": a cotacao do link fica LCL e o Aereo vira outra cotacao.
+        db.session.add(ComexCotacaoModal(cotacao=cotacao, modal="LCL" if modal_cotado == "AMBOS" else modal_cotado))
 
     agora = agora_br()
     cotacao.termos_aceitos = True
     cotacao.termos_aceitos_em = agora
     cotacao.status = "Recebida"
     cotacao.recebida_em = agora
+    if modal_cotado == "AMBOS":
+        _cotacao_aereo_irma(cotacao, dados.get("aereo") or {}, dados.get("volumes"))
     db.session.commit()
 
     _recalcular_sugerida(cotacao.processo_id)

@@ -4165,6 +4165,22 @@ class ComexCotacao(db.Model):
     )
 
 
+class ComexCotacaoModal(db.Model):
+    """Modal que o prestador cotou num link LCL/Aereo: "LCL" (maritimo) ou
+    "AEREO". Quando ele cota os dois no mesmo link, a cotacao do link fica
+    LCL e a de Aereo nasce como outra ComexCotacao Recebida do mesmo
+    processo - cada uma com seus custos, pra comparar e escolher. Tabela a
+    parte pra nao precisar de migration em comex_cotacao."""
+
+    __tablename__ = "comex_cotacao_modal"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    modal = db.Column(db.String(10), nullable=False)  # LCL | AEREO
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("modal_cotado", uselist=False))
+
+
 class ComexCotacaoVolume(db.Model):
     """Dimensoes/peso de um volume da cotacao LCL/Aereo (ate 5 no modelo
     original, mas sem limite fixo aqui)."""

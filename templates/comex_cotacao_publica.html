@@ -41,6 +41,8 @@
     input, select, textarea { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; }
     input:focus, select:focus, textarea:focus { outline: none; border-color: #4b9bff; }
     textarea { resize: vertical; min-height: 110px; line-height: 1.5; white-space: pre; }
+    textarea.auto { min-height: 0; resize: none; overflow: hidden; white-space: pre-wrap; line-height: 1.4; }
+    .hidden-bloco { display: none; }
     .field { margin-bottom: 12px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -123,14 +125,45 @@
       `;
     }
 
-    function linhaCusto(campo, label) {
+    // attr: data-custo (cotacao principal) ou data-custo-aereo (2a cotacao,
+    // quando o prestador cota LCL e Aereo no mesmo link).
+    function linhaCusto(campo, label, attr = 'data-custo') {
       return `
         <tr>
           <td>${esc(label)}</td>
-          <td><input type="number" step="0.01" min="0" data-custo="${campo}_usd" placeholder="0,00"></td>
-          <td><input type="number" step="0.01" min="0" data-custo="${campo}_brl" placeholder="0,00"></td>
+          <td><input type="number" step="0.01" min="0" ${attr}="${campo}_usd" placeholder="0,00"></td>
+          <td><input type="number" step="0.01" min="0" ${attr}="${campo}_brl" placeholder="0,00"></td>
         </tr>
       `;
+    }
+
+    function blocoLogisticaCustos(prefixo, titulo, custosHtml) {
+      return `
+          <div class="section">
+            <h2><i class="fas fa-route"></i> Logística <span data-titulo-modal="${prefixo}">${titulo}</span></h2>
+            <div class="grid2">
+              <div class="field"><label>Transit Time</label><input type="text" id="${prefixo}transit_time" placeholder="Ex.: 25 dias"></div>
+              <div class="field"><label>Rota</label><input type="text" id="${prefixo}rota"></div>
+              <div class="field"><label>Validade da cotação</label><input type="date" id="${prefixo}validade"></div>
+              <div class="field"><label>Ptax</label><input type="number" step="0.0001" min="0" id="${prefixo}ptax"></div>
+            </div>
+          </div>
+          <div class="section">
+            <h2><i class="fas fa-dollar-sign"></i> Custos <span data-titulo-modal="${prefixo}">${titulo}</span></h2>
+            <table class="custos">
+              <thead><tr><th>Etapa</th><th>USD</th><th>BRL</th></tr></thead>
+              <tbody>${custosHtml}</tbody>
+              <tfoot>
+                <tr class="total-row"><td>Total</td><td id="${prefixo}totalUsd">US$ 0,00</td><td id="${prefixo}totalBrl">R$ 0,00</td></tr>
+              </tfoot>
+            </table>
+          </div>`;
+    }
+
+    // Origem/destino: a caixa cresce ate' caber o texto inteiro.
+    function ajustarAltura(el) {
+      el.style.height = 'auto';
+      el.style.height = (el.scrollHeight + 2) + 'px';
     }
 
     function linhaVolume(n, vol) {
@@ -150,6 +183,7 @@
     function montarFormulario(data) {
       const isFcl = data.tipo_frete === 'FCL';
       const custosHtml = (data.etapas_custo || []).map((e) => linhaCusto(e.campo, e.label)).join('');
+      const custosAereoHtml = (data.etapas_custo || []).map((e) => linhaCusto(e.campo, e.label, 'data-custo-aereo')).join('');
       const pre = data.pre_preenchido || {};
       const preVolumes = pre.volumes || [];
       numeroVolumes = preVolumes.length || 2;
@@ -165,10 +199,21 @@
             <p class="muted" style="font-size:12px; margin:-4px 0 12px;">Os campos abaixo já vêm preenchidos pela Columbia com os dados do embarque — confira e ajuste se precisar.</p>
             <div class="field"><label>Empresa / Prestador de frete *</label><input type="text" id="fornecedor_frete" required></div>
             <div class="grid2">
-              <div class="field"><label>Origem</label><input type="text" id="origem" value="${v(pre.origem)}"></div>
-              <div class="field"><label>Destino</label><input type="text" id="destino" value="${v(pre.destino)}"></div>
+              <div class="field"><label>Origem</label><textarea class="auto" rows="1" id="origem">${v(pre.origem)}</textarea></div>
+              <div class="field"><label>Destino</label><textarea class="auto" rows="1" id="destino">${v(pre.destino)}</textarea></div>
             </div>
-            ${isFcl ? '' : `<div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..." value="${v(pre.incoterm)}"></div>`}
+            ${isFcl ? '' : `
+            <div class="grid2">
+              <div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..." value="${v(pre.incoterm)}"></div>
+              <div class="field"><label>Frete cotado *</label>
+                <select id="modal_cotado" required>
+                  <option value="">Selecione…</option>
+                  <option value="LCL">LCL (marítimo)</option>
+                  <option value="AEREO">Aéreo</option>
+                  <option value="AMBOS">LCL e Aéreo (cotar os dois)</option>
+                </select>
+              </div>
+            </div>`}
             <div class="field">
               <label>Valor da mercadoria (USD)</label>
               <input type="text" inputmode="decimal" id="valor_mercadoria_usd" value="${v(pre.valor_mercadoria_usd)}">
@@ -190,15 +235,6 @@
               <tbody id="volumesBody">${volumesIniciais}</tbody>
             </table>
             <button type="button" class="btn-ghost" id="btnAddVolume"><i class="fas fa-plus"></i> Adicionar volume</button>
-          </div>
-          <div class="section">
-            <h2><i class="fas fa-route"></i> Logística</h2>
-            <div class="grid2">
-              <div class="field"><label>Transit Time</label><input type="text" id="transit_time" placeholder="Ex.: 25 dias"></div>
-              <div class="field"><label>Rota</label><input type="text" id="rota"></div>
-              <div class="field"><label>Validade da cotação</label><input type="date" id="validade"></div>
-              <div class="field"><label>Ptax</label><input type="number" step="0.0001" min="0" id="ptax"></div>
-            </div>
           </div>`}
 
           <div class="section">
@@ -209,6 +245,7 @@
             </div>
           </div>
 
+          ${isFcl ? `
           <div class="section">
             <h2><i class="fas fa-dollar-sign"></i> Custos</h2>
             <table class="custos">
@@ -218,7 +255,9 @@
                 <tr class="total-row"><td>Total</td><td id="totalUsd">US$ 0,00</td><td id="totalBrl">R$ 0,00</td></tr>
               </tfoot>
             </table>
-          </div>
+          </div>` : `
+          ${blocoLogisticaCustos('', '', custosHtml)}
+          <div id="blocoAereo" class="hidden-bloco">${blocoLogisticaCustos('aereo_', '— Aéreo', custosAereoHtml)}</div>`}
 
           <div class="section">
             <h2><i class="fas fa-calendar-days"></i> Próximas saídas</h2>
@@ -246,13 +285,26 @@
     let numeroVolumes = 2;
 
     function calcularTotais() {
-      let totalUsd = 0, totalBrl = 0;
-      document.querySelectorAll('[data-custo]').forEach((inp) => {
-        const v = parseFloat(inp.value) || 0;
-        if (inp.dataset.custo.endsWith('_usd')) totalUsd += v; else totalBrl += v;
+      [['data-custo', ''], ['data-custo-aereo', 'aereo_']].forEach(([attr, prefixo]) => {
+        let totalUsd = 0, totalBrl = 0;
+        document.querySelectorAll(`[${attr}]`).forEach((inp) => {
+          const v = parseFloat(inp.value) || 0;
+          if (inp.getAttribute(attr).endsWith('_usd')) totalUsd += v; else totalBrl += v;
+        });
+        const usd = document.getElementById(prefixo + 'totalUsd'), brl = document.getElementById(prefixo + 'totalBrl');
+        if (usd) usd.textContent = 'US$ ' + totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (brl) brl.textContent = 'R$ ' + totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       });
-      document.getElementById('totalUsd').textContent = 'US$ ' + totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('totalBrl').textContent = 'R$ ' + totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Titulos do 1o bloco conforme o frete cotado; o bloco de Aereo so'
+    // aparece em "os dois".
+    function atualizarModalCotado() {
+      const sel = document.getElementById('modal_cotado');
+      if (!sel) return;
+      const titulo = { LCL: '— LCL', AEREO: '— Aéreo', AMBOS: '— LCL' }[sel.value] || '';
+      document.querySelectorAll('[data-titulo-modal=""]').forEach((el) => { el.textContent = titulo; });
+      document.getElementById('blocoAereo').classList.toggle('hidden-bloco', sel.value !== 'AMBOS');
     }
 
     function coletarPayload(data) {
@@ -272,10 +324,18 @@
         payload.qtd_40hc = g('qtd_40hc') || null;
         payload.qtd_20dry = g('qtd_20dry') || null;
       } else {
+        payload.modal_cotado = g('modal_cotado');
         payload.transit_time = g('transit_time');
         payload.rota = g('rota');
         payload.validade = g('validade') || null;
         payload.ptax = g('ptax') || null;
+        if (payload.modal_cotado === 'AMBOS') {
+          payload.aereo = {
+            transit_time: g('aereo_transit_time'), rota: g('aereo_rota'),
+            validade: g('aereo_validade') || null, ptax: g('aereo_ptax') || null,
+          };
+          document.querySelectorAll('[data-custo-aereo]').forEach((inp) => { payload.aereo[inp.dataset.custoAereo] = inp.value || null; });
+        }
         payload.volumes = Array.from(document.querySelectorAll('[data-volume-row]')).map((row) => ({
           comprimento: row.querySelector('[data-vol="comprimento"]').value || null,
           largura: row.querySelector('[data-vol="largura"]').value || null,
@@ -293,7 +353,7 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Link inválido.');
 
-        document.getElementById('subtitulo').textContent = `Processo ${data.id_op} — ${data.tipo_frete === 'FCL' ? 'Container fechado (FCL)' : 'Volumes soltos / Aéreo'}`;
+        document.getElementById('subtitulo').textContent = `Processo ${data.id_op} — ${data.tipo_frete === 'FCL' ? 'Container fechado (FCL)' : 'LCL / Aéreo'}`;
         const conteudo = document.getElementById('conteudo');
 
         if (data.status === 'Recebida') {
@@ -302,7 +362,10 @@
           conteudo.innerHTML = estadoVazio('fa-triangle-exclamation', 'Link expirado', 'Este link de cotação não está mais válido. Entre em contato com a Columbia Machine Brasil para receber um novo link.', 'is-error');
         } else {
           conteudo.innerHTML = montarFormulario(data);
-          document.querySelectorAll('[data-custo]').forEach((inp) => inp.addEventListener('input', calcularTotais));
+          document.querySelectorAll('[data-custo], [data-custo-aereo]').forEach((inp) => inp.addEventListener('input', calcularTotais));
+          document.querySelectorAll('textarea.auto').forEach((el) => el.addEventListener('input', () => ajustarAltura(el)));
+          const selModal = document.getElementById('modal_cotado');
+          if (selModal) selModal.addEventListener('change', atualizarModalCotado);
           const btnAdd = document.getElementById('btnAddVolume');
           if (btnAdd) {
             btnAdd.addEventListener('click', () => {
@@ -337,6 +400,8 @@
       } finally {
         document.getElementById('carregando').classList.add('hidden');
         document.getElementById('conteudo').classList.remove('hidden');
+        // So' depois de aparecer: escondido, o scrollHeight e' 0.
+        document.querySelectorAll('textarea.auto').forEach(ajustarAltura);
       }
     }
     carregar();
