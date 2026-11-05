@@ -632,32 +632,42 @@ def _codigos_teste(codigos) -> list[str]:
     return lista
 
 
-def consultar_teste(codigos) -> list[dict]:
-    """Saldo, versao e lotes ATUAIS do ERP dos itens do teste."""
+def consultar_teste(codigos, usuario: str = "") -> tuple[TesteApi, list[dict]]:
+    """Saldo, versao e lotes ATUAIS do ERP dos itens do teste. A leitura do
+    deposito inteiro e' cara (todas as paginas de 500): ela e' feita uma vez
+    aqui e o retrato fica gravado (tipo "consulta") pro Simular usar."""
     codigos = _codigos_teste(codigos)
     produtos = cps.listar_deposito()
     achados, faltando = [], []
     for c in codigos:
         p = _achar_no_erp(produtos, c)
-        (achados.append(_produto_teste(p)) if p else faltando.append(c))
+        (achados.append(p) if p else faltando.append(c))
     if faltando:
         raise ValueError(f"Não encontrado no depósito do ERP: {', '.join(faltando)}.")
-    return achados
+    consulta = TesteApi(tipo="consulta", referencia="-", payload=json.dumps(achados, ensure_ascii=False),
+                        status="CONSULTA", enviado_por=usuario, enviado_em=agora_br())
+    db.session.add(consulta)
+    db.session.commit()
+    return consulta, [_produto_teste(p) for p in achados]
 
 
-def simular_teste(itens, usuario: str) -> TesteApi:
-    """Rele o ERP (estoque_esperado/versao atuais, regra da API), monta o
-    mesmo formato do envio real e chama /simular - nada e' gravado."""
+def simular_teste(itens, usuario: str, consulta_id=None) -> TesteApi:
+    """Monta o mesmo formato do envio real com o retrato do Buscar
+    (estoque_esperado/versao lidos ali, regra da API) e chama /simular -
+    nada e' gravado. Nao rele o deposito."""
     itens = [i for i in (itens or []) if isinstance(i, dict)]
     codigos = _codigos_teste([i.get("codigo") for i in itens])
     if len(codigos) != len(itens):
         raise ValueError("Item repetido ou sem código no teste.")
-    produtos = cps.listar_deposito()
+    consulta = db.session.get(TesteApi, consulta_id) if str(consulta_id or "").isdigit() else None
+    if not consulta or consulta.tipo != "consulta":
+        raise ValueError("Busque os itens no ERP antes de simular.")
+    produtos = json.loads(consulta.payload)
     linhas = []
     for item, codigo in zip(itens, codigos):
         p = _achar_no_erp(produtos, codigo)
         if not p:
-            raise ValueError(f"Não encontrado no depósito do ERP: {codigo}.")
+            raise ValueError(f"{codigo} não está na última busca - busque os itens de novo.")
         linha = {"cod_produto": int(p["cod_produto"]), "estoque_esperado": p.get("qtde_total"), "versao": p.get("versao")}
         if com_lote(p.get("tipo_controle")):
             lotes = []
@@ -719,4 +729,5 @@ def _gravar_teste(teste: TesteApi, payload, status_http, resposta, status) -> No
 
 
 def historico_teste(limite: int = 50) -> list[TesteApi]:
-    return TesteApi.query.order_by(TesteApi.id.desc()).limit(limite).all()
+    # O retrato do Buscar nao e' chamada de simular/aplicar - fica fora do historico.
+    return TesteApi.query.filter(TesteApi.tipo != "consulta").order_by(TesteApi.id.desc()).limit(limite).all()

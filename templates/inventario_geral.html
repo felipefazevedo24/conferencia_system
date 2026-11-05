@@ -342,7 +342,7 @@
     }
 
     // ── Teste da API (1 a 5 itens) ──────────────────────────────────────
-    let testeProdutos = [], testeGravacao = false;
+    let testeProdutos = [], testeGravacao = false, testeConsulta = null;
     const statusCls = (st) => (st === "APLICADO" ? "confere" : st === "SIMULADO_SEM_GRAVAR" ? "diverg" : "sem");
     const jsonBonito = (t) => { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (_) { return t || ""; } };
     function desenharItensTeste() {
@@ -358,7 +358,8 @@
                         <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" data-teste-add-lote="${n}" style="justify-self:start;"><i class="fas fa-plus"></i> Lote</button></div>`
                         : `<input class="eui-input ig-qtd-in" data-teste-qtd="${n}" inputmode="decimal" value="${esc(p.qtde_total ?? "")}" style="max-width:160px;">`}</td></tr>`).join("")}
                 </tbody></table></div>
-            <div class="ig-form-acoes" style="margin-top:12px;">
+            <div class="ig-form-acoes" style="margin-top:12px;align-items:center;">
+                <small style="color:var(--eui-muted);">Retrato do ERP lido em ${esc(testeConsulta.em || "")} - o Simular usa estes dados (saldo e versão), sem consultar de novo. Mexeu no estoque? Busque de novo.</small>
                 <button type="button" class="eui-btn eui-btn--primary" id="ig-teste-simular"><i class="fas fa-vial"></i> Simular (não grava)</button>
             </div>`;
     }
@@ -813,7 +814,7 @@
         const remLote = e.target.closest("[data-teste-rem-lote]"); if (remLote) { remLote.parentElement.remove(); return; }
         if (e.target.closest("#ig-teste-simular")) {
             toast("Relendo o ERP e simulando… (nada é gravado)", "");
-            api("/api/inventario-geral/teste-api/simular", { method: "POST", body: JSON.stringify({ itens: coletarTeste() }) })
+            api("/api/inventario-geral/teste-api/simular", { method: "POST", body: JSON.stringify({ itens: coletarTeste(), consulta_id: testeConsulta && testeConsulta.id }) })
                 .then((r) => { desenharRetornoTeste(r.teste); toast(`Simulação: ${r.teste.status}`, r.teste.status === "SIMULADO_SEM_GRAVAR" ? "success" : "error"); carregarHistoricoTeste(); })
                 .catch((err) => toast(err.message, "error"));
             return;
@@ -860,6 +861,7 @@
             toast("Lendo o ERP…", "");
             const r = await api(`/api/inventario-geral/teste-api/produtos?codigos=${encodeURIComponent($("ig-teste-codigos").value)}`);
             testeProdutos = r.produtos; testeGravacao = r.gravacao_configurada;
+            testeConsulta = { id: r.consulta_id, em: r.consultado_em };
             $("ig-teste-retorno").innerHTML = "";
             desenharItensTeste();
             toast(`${testeProdutos.length} item(ns) lido(s) do ERP.`, "success");
