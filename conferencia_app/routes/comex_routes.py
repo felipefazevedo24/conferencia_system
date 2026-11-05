@@ -30,7 +30,8 @@ comex_bp = Blueprint("comex", __name__)
 
 PERMISSION = "PAGE_COMEX"
 
-# E-mails sempre em copia no envio da PO (requisito do Modulo 2).
+# E-mails sempre em copia em todo e-mail do Comex (PO, cotacao de frete e
+# instrucao de embarque).
 PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
 
 
@@ -472,6 +473,7 @@ def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(destinatarios)
+    msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Agradecemos o envio da cotação referente ao processo <strong>{processo.id_op}</strong>.</p>"
@@ -965,6 +967,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = destinatario
+    msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Solicitamos, por gentileza, a cotação de frete referente ao processo <strong>{processo.id_op}</strong>.</p>"
