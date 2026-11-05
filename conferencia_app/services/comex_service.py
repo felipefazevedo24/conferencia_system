@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 from datetime import datetime, timedelta
 
@@ -28,7 +29,7 @@ from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
-from ..models import ComexCotacaoModal
+from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -1492,6 +1493,32 @@ def _adicionar_volumes(cotacao: ComexCotacao, volumes_dados: list[dict] | None) 
         ))
 
 
+_TAMANHO_EMAIL_COTACAO = 255  # ComexCotacao.email_instrucao_embarque
+
+
+def _gravar_emails_cotacao(cotacao: ComexCotacao, emails) -> None:
+    """A coluna fica com os enderecos inteiros que cabem em 255; a lista
+    completa, se passar disso, vai pra ComexCotacaoDestinatarios."""
+    partes = [e.strip() for e in re.split(r"[;,]", str(emails or "")) if e.strip()]
+    completo = "; ".join(partes)
+    cabe = []
+    for e in partes:
+        if len("; ".join(cabe + [e])) > _TAMANHO_EMAIL_COTACAO:
+            break
+        cabe.append(e)
+    cotacao.email_instrucao_embarque = "; ".join(cabe) or None
+    if len(completo) > _TAMANHO_EMAIL_COTACAO:
+        db.session.add(ComexCotacaoDestinatarios(cotacao=cotacao, emails=completo))
+
+
+def emails_da_cotacao(cotacao: ComexCotacao | None) -> str | None:
+    if not cotacao:
+        return None
+    if cotacao.destinatarios_completos:
+        return cotacao.destinatarios_completos.emails
+    return cotacao.email_instrucao_embarque
+
+
 def criar_link_cotacao(
     processo: ComexProcesso,
     *,
@@ -1529,10 +1556,10 @@ def criar_link_cotacao(
         fornecedor_frete="",
         token_publico_hash=_hash_token_cotacao(token),
         token_publico_expira_em=agora + timedelta(days=max(1, validade_dias)),
-        email_instrucao_embarque=(email_instrucao_embarque or "").strip() or None,
         link_gerado_em=agora,
         criado_por=usuario,
     )
+    _gravar_emails_cotacao(cotacao, email_instrucao_embarque)
     pre_preenchido = pre_preenchido or {}
     for campo, tamanho in _CAMPOS_COTACAO_PRE_PREENCHIDO.items():
         valor = str(pre_preenchido.get(campo) or "").strip()
@@ -1667,10 +1694,11 @@ def _cotacao_aereo_irma(cotacao: ComexCotacao, dados_aereo: dict, volumes: list 
         fornecedor_frete=cotacao.fornecedor_frete, origem=cotacao.origem, destino=cotacao.destino,
         incoterm=cotacao.incoterm, imo_classe=cotacao.imo_classe, un_numero=cotacao.un_numero,
         valor_mercadoria_usd=cotacao.valor_mercadoria_usd, proximas_saidas=cotacao.proximas_saidas,
-        email_instrucao_embarque=cotacao.email_instrucao_embarque, criado_por=cotacao.criado_por,
+        criado_por=cotacao.criado_por,
         termos_aceitos=True, termos_aceitos_em=cotacao.termos_aceitos_em, recebida_em=cotacao.recebida_em,
     )
     db.session.add(irma)
+    _gravar_emails_cotacao(irma, emails_da_cotacao(cotacao))
     _preencher_logistica_e_custos(irma, dados_aereo)
     _adicionar_volumes(irma, volumes)
     db.session.add(ComexCotacaoModal(cotacao=irma, modal="AEREO"))

@@ -73,7 +73,7 @@ def _cotacao_vencedora(p: ComexProcesso) -> ComexCotacao | None:
 
 def _cotacao_vencedora_email(p: ComexProcesso) -> str | None:
     c = _cotacao_vencedora(p)
-    return c.email_instrucao_embarque if c else None
+    return svc.emails_da_cotacao(c)
 
 
 def _cotacao_vencedora_fornecedor(p: ComexProcesso) -> str | None:
@@ -959,7 +959,7 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         "is_escolhida": bool(c.is_escolhida),
         "proximas_saidas": c.proximas_saidas,
         "saida_escolhida": c.saida_escolhida,
-        "email_instrucao_embarque": c.email_instrucao_embarque,
+        "email_instrucao_embarque": svc.emails_da_cotacao(c),
         "link_gerado_em": c.link_gerado_em.strftime("%d/%m/%Y %H:%M") if c.link_gerado_em else None,
         "recebida_em": c.recebida_em.strftime("%d/%m/%Y %H:%M") if c.recebida_em else None,
         "expirado": bool(c.token_publico_expira_em and c.token_publico_expira_em < agora_br() and c.status == "Pendente"),

@@ -4165,6 +4165,21 @@ class ComexCotacao(db.Model):
     )
 
 
+class ComexCotacaoDestinatarios(db.Model):
+    """Lista completa de e-mails do prestador quando ela nao cabe em
+    ComexCotacao.email_instrucao_embarque (255). O cadastro de fornecedor
+    aceita 300 e o MySQL recusava a cotacao inteira (aconteceu com a Proway:
+    o link nem era criado). Tabela a parte pra nao precisar de migration."""
+
+    __tablename__ = "comex_cotacao_destinatarios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    emails = db.Column(db.Text, nullable=False)
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("destinatarios_completos", uselist=False))
+
+
 class ComexCotacaoModal(db.Model):
     """Modal que o prestador cotou num link LCL/Aereo: "LCL" (maritimo) ou
     "AEREO". Quando ele cota os dois no mesmo link, a cotacao do link fica
