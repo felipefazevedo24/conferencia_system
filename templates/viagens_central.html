@@ -347,11 +347,6 @@
                     </div>
                 </div>
                 <div class="eui-field">
-                    <label class="eui-input vt-oc-correios" for="oc-parcial">
-                        <input type="checkbox" id="oc-parcial"> Coleta parcial <span class="vt-mini">(o restante da OC sai em outra coleta)</span>
-                    </label>
-                </div>
-                <div class="eui-field">
                     <label class="eui-field__label" for="oc-observacao">Observação da coleta</label>
                     <textarea id="oc-observacao" class="eui-input" rows="2" placeholder="Ex.: aguardar separação, doca ou condição especial."></textarea>
                 </div>
@@ -2393,7 +2388,6 @@ async function confirmarImportacaoOc() {
       body.append(campo === 'codigo' ? 'correios_codigo_retirada' : `correios_${campo}`, camposCorreios[campo]);
     }
   }
-  if (document.getElementById('oc-parcial').checked) body.append('coleta_parcial', '1');
   if (anexo) body.append('anexo', anexo);
   const r = await fetch('/api/logistica/central-viagens/oc/criar', {
     method: 'POST',
@@ -2412,7 +2406,6 @@ async function confirmarImportacaoOc() {
   document.getElementById('oc-data-liberacao').value = '';
   document.getElementById('oc-observacao').value = '';
   document.getElementById('oc-correios').checked = false;
-  document.getElementById('oc-parcial').checked = false;
   for (const [campo] of CAMPOS_CORREIOS) document.getElementById(`oc-correios-${campo}`).value = '';
   toggleCamposCorreios();
   closeModal('modalImportar');

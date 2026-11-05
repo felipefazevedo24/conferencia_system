@@ -1784,8 +1784,6 @@ def central_viagens_criar_coleta_por_oc():
     observacao_coleta = str((form.get("observacao") if form else None) or payload.get("observacao") or "").strip()
     correios_raw = (form.get("correios") if form else None) or payload.get("correios")
     correios = str(correios_raw or "").strip().lower() in {"1", "true", "on", "sim"}
-    parcial_raw = (form.get("coleta_parcial") if form else None) or payload.get("coleta_parcial")
-    coleta_parcial = str(parcial_raw or "").strip().lower() in {"1", "true", "on", "sim"}
 
     def _campo(nome: str) -> str:
         return str((form.get(nome) if form else None) or payload.get(nome) or "").strip()
@@ -1815,24 +1813,29 @@ def central_viagens_criar_coleta_por_oc():
     if not data_liberacao:
         return jsonify({"error": "Informe a data/hora em que a coleta estará liberada."}), 400
 
-    # Coleta parcial: o resto da OC ainda vai ser coletado depois, então a mesma
-    # OC precisa poder entrar na Central quantas vezes for preciso.
-    if not coleta_parcial:
-        existente = (
-            _query_solicitacoes_visiveis()
-            .filter(
-                AgendamentoSolicitacao.tipo == "COLETA",
-                AgendamentoSolicitacao.numero_oc == numero_oc,
-                AgendamentoSolicitacao.status != "Cancelada",
-            )
-            .first()
+    existente = (
+        _query_solicitacoes_visiveis()
+        .filter(
+            AgendamentoSolicitacao.tipo == "COLETA",
+            AgendamentoSolicitacao.numero_oc == numero_oc,
+            AgendamentoSolicitacao.status != "Cancelada",
         )
-        if existente:
-            return jsonify({"error": f"A OC {numero_oc} já possui coleta na Central. Se for coleta parcial, marque \"Coleta parcial\"."}), 409
+        .first()
+    )
 
     consulta = consultar_oc_agendamento(numero_oc)
     if not consulta.get("encontrada"):
         return jsonify({"error": consulta.get("error") or "OC não encontrada na bridge."}), 404
+
+    # Nem Compras sabe de antemão se a coleta é parcial. Quem decide é o saldo
+    # da OC no ERP: a quantidade dos itens que vem da bridge já é o pendente
+    # (comprado - entregue). Sobrou saldo, pode entrar outra coleta da mesma OC.
+    coleta_parcial = existente is not None
+    if coleta_parcial:
+        itens_oc = consulta.get("itens") if isinstance(consulta.get("itens"), list) else []
+        saldo_oc = sum(float(item.get("quantidade") or 0) for item in itens_oc if isinstance(item, dict))
+        if saldo_oc <= 0:
+            return jsonify({"error": f"A OC {numero_oc} já possui coleta na Central e não tem saldo no ERP."}), 409
 
     parceiro = consulta.get("fornecedor") if isinstance(consulta.get("fornecedor"), dict) else {}
     parceiro_payload = {
