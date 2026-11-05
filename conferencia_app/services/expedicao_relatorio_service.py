@@ -14,6 +14,10 @@ a pessoa reconta), então ordem.divergente fica sempre falso. O que sobra é a
 tentativa bloqueada (trilha) e o conferido x NF (só FAT).
 
 Conferência cega: a quantidade esperada nunca sai daqui.
+
+Nomes de quem fez são dado de gerência: sem com_nomes, saem as colunas, a quebra
+por conferente e o filtro de conferente (filtrar por nome também revelaria quem
+fez cada ordem).
 """
 from __future__ import annotations
 
@@ -55,10 +59,11 @@ _ACOES = (
 )
 _SEM_CONTAGEM = "Sem contagem (Admin)"
 _FMT_DIAS = "#,##0.0"
+_COLUNAS_NOMES = {"conferente", "expedida_por", "quem"}
 
 
-def opcoes() -> dict:
-    """Listas do painel: quem já conferiu e os clientes/fornecedores."""
+def opcoes(com_nomes: bool = False) -> dict:
+    """Listas do painel: quem já conferiu (só com_nomes) e os clientes/fornecedores."""
     conferentes, parceiros = set(), set()
     for modelo, parceiro in ((ExpedicaoOrdemFat, ExpedicaoOrdemFat.cliente), (ExpedicaoOrdemST, ExpedicaoOrdemST.fornecedor)):
         for conferente, nome in db.session.query(modelo.conferente, parceiro).filter(modelo.excluido.is_(False)).distinct():
@@ -71,7 +76,7 @@ def opcoes() -> dict:
     conferentes.discard("")
     parceiros.discard("")
     return {
-        "conferentes": sorted(conferentes, key=str.casefold),
+        "conferentes": sorted(conferentes, key=str.casefold) if com_nomes else [],
         "parceiros": sorted(parceiros, key=str.casefold),
         "status": [{"valor": k, "nome": v} for k, v in STATUS.items()],
     }
@@ -99,14 +104,16 @@ def montar_filtros(args) -> dict:
     }
 
 
-def gerar_excel(args, usuario: str) -> tuple[BytesIO, str]:
+def gerar_excel(args, usuario: str, com_nomes: bool = False) -> tuple[BytesIO, str]:
     filtros = montar_filtros(args)
+    if not com_nomes:
+        filtros["conferente"] = ""
     dados = coletar(filtros)
     wb = Workbook()
-    _aba_resumo(wb.active, filtros, dados, usuario)
-    _aba_ordens(wb.create_sheet("Ordens"), dados["ordens"])
-    _aba_divergencias(wb.create_sheet("Divergências"), dados["divergencias"])
-    _aba_sem_conferencia(wb.create_sheet("Sem conferência"), dados["sem_conferencia"])
+    _aba_resumo(wb.active, filtros, dados, usuario, com_nomes)
+    _aba_ordens(wb.create_sheet("Ordens"), dados["ordens"], com_nomes)
+    _aba_divergencias(wb.create_sheet("Divergências"), dados["divergencias"], com_nomes)
+    _aba_sem_conferencia(wb.create_sheet("Sem conferência"), dados["sem_conferencia"], com_nomes)
     stream = BytesIO()
     wb.save(stream)
     stream.seek(0)
@@ -348,7 +355,7 @@ def _json(texto):
 
 # --------------------------------------------------------------------------- planilha
 
-def _aba_resumo(ws, f, dados, usuario):
+def _aba_resumo(ws, f, dados, usuario, com_nomes):
     ws.title = "Resumo"
     ordens = dados["ordens"]
     conferidas = [o for o in ordens if o["conferida_no_periodo"]]
@@ -392,8 +399,9 @@ def _aba_resumo(ws, f, dados, usuario):
             ws.cell(row=ws.max_row, column=2).number_format = formato
     ws.append([])
 
-    conf_cab = ["", "Conferidas", "Sem contagem", "Linhas de item", "Peças contadas", "Tentativas bloqueadas"]
-    _tabela(ws, "Por conferente", conf_cab, _quebra_conferente(ordens))
+    if com_nomes:
+        conf_cab = ["", "Conferidas", "Sem contagem", "Linhas de item", "Peças contadas", "Tentativas bloqueadas"]
+        _tabela(ws, "Por conferente", conf_cab, _quebra_conferente(ordens))
     fluxo_cab = ["", "Conferidas", "Faturadas", "Expedidas", "Com divergência"]
     _tabela(ws, "Por tipo", fluxo_cab, _quebra_fluxo(ordens, lambda o: o["tipo"]))
     _tabela(ws, "Por cliente / fornecedor", fluxo_cab, _quebra_fluxo(ordens, lambda o: o["parceiro"]))
@@ -437,7 +445,11 @@ def _quebra_fluxo(ordens, chave) -> list[list]:
     return sorted(linhas, key=lambda r: (-(r[1] + r[2] + r[3]), r[0]))
 
 
-def _aba_ordens(ws, ordens):
+def _colunas(colunas, com_nomes):
+    return colunas if com_nomes else [c for c in colunas if c[1] not in _COLUNAS_NOMES]
+
+
+def _aba_ordens(ws, ordens, com_nomes):
     colunas = [
         ("Tipo", "tipo", None), ("ID interno", "codigo_interno", None), ("Ordem", "ordem", None),
         ("Cliente / fornecedor", "parceiro", None), ("Orçamento", "orcamento", None), ("Pedido", "pedido", None),
@@ -451,29 +463,29 @@ def _aba_ordens(ws, ordens):
         ("Linhas de item", "linhas_item", None), ("Peças contadas", "pecas", None), ("Volumes", "volumes", None),
         ("Espécie", "especie", None), ("Peso bruto", "peso_bruto", None), ("Peso líquido", "peso_liquido", None),
     ]
-    _lista(ws, colunas, [
+    _lista(ws, _colunas(colunas, com_nomes), [
         {**o, "qtd_tentativas": len(o["tentativas"]), "nf_div": "Sim" if o["nf_divergente"] else "",
          "sem_conf": "Sim" if o["expedida_sem_conf"] else ""}
         for o in ordens
     ])
 
 
-def _aba_divergencias(ws, linhas):
+def _aba_divergencias(ws, linhas, com_nomes):
     colunas = [
         ("Data", "data", _FMT_DATA), ("Tipo", "tipo", None), ("Ordem", "ordem", None),
         ("Cliente / fornecedor", "parceiro", None), ("Divergência", "divergencia", None), ("Quem", "quem", None),
         ("Código", "codigo", None), ("Item", "item", None), ("OS", "os", None),
         ("Qtd informada / conferida", "qtd", None), ("Qtd na NF", "qtd_nf", None),
     ]
-    _lista(ws, colunas, linhas)
+    _lista(ws, _colunas(colunas, com_nomes), linhas)
 
 
-def _aba_sem_conferencia(ws, linhas):
+def _aba_sem_conferencia(ws, linhas, com_nomes):
     colunas = [
         ("Data", "data", _FMT_DATA), ("Situação", "situacao", None), ("Tipo", "tipo", None), ("Ordem", "ordem", None),
         ("Cliente / fornecedor", "parceiro", None), ("NF", "nf", None), ("Quem", "quem", None), ("Motivo", "motivo", None),
     ]
-    _lista(ws, colunas, linhas)
+    _lista(ws, _colunas(colunas, com_nomes), linhas)
 
 
 def _descrever_filtros(f) -> str:

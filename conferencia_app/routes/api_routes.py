@@ -26,6 +26,7 @@ from ..auth import (
     get_base_role_permissions,
     get_effective_permissions,
     get_permission_catalog,
+    has_permission,
     is_admin_role,
     listar_cargos,
     login_required,
@@ -2582,10 +2583,13 @@ def documento_entrada_lista():
 
 
 @api_bp.route("/api/documento_entrada/relatorio.xlsx", methods=["GET"])
-@permission_required("PAGE_DOCUMENTO_ENTRADA_RELATORIO")
+@permission_required_any("PAGE_DOCUMENTO_ENTRADA_RELATORIO", "PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL")
 def documento_entrada_relatorio():
     try:
-        stream, nome = doc_entrada_relatorio_svc.gerar_excel(request.args, session.get("username") or "desconhecido")
+        stream, nome = doc_entrada_relatorio_svc.gerar_excel(
+            request.args, session.get("username") or "desconhecido",
+            com_nomes=has_permission("PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL"),
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return send_file(

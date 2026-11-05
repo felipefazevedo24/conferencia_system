@@ -600,7 +600,7 @@
                 <p class="eui-page-header__sub">Importação, auditoria fiscal e lançamento ERP num único fluxo.</p>
             </div>
             <div class="de-inline">
-                {% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') %}
+                {% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') or can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL') %}
                 <button class="eui-btn eui-btn--ghost" type="button" onclick="abrirModalRelatorio()"><i class="fas fa-file-excel"></i> Baixar relatório</button>
                 {% endif %}
                 <button class="eui-btn eui-btn--ghost" type="button" id="de-btn-sync-erp"><i class="fas fa-cloud-arrow-down"></i> Sincronizar ERP</button>
@@ -1110,7 +1110,7 @@
     </div>
 </div>
 
-{% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') %}
+{% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO') or can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL') %}
 <div id="modal-relatorio" class="doc-modal-overlay" onclick="if(event.target===this)fecharModalRelatorio()">
     <div class="doc-modal small">
         <div class="doc-modal-head">
@@ -1143,7 +1143,9 @@
                     </select>
                 </div>
                 <div class="doc-form-block"><label class="doc-form-label" for="rel-fornecedor">Fornecedor</label><input id="rel-fornecedor" class="doc-input" placeholder="Todos" autocomplete="off"></div>
+                {% if can_access('PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL') %}
                 <div class="doc-form-block"><label class="doc-form-label" for="rel-comprador">Comprador</label><input id="rel-comprador" class="doc-input" placeholder="Todos" autocomplete="off"></div>
+                {% endif %}
             </div>
             <div id="rel-erro" class="doc-estorno-feedback"></div>
         </div>
@@ -2931,7 +2933,7 @@
             tipo: document.getElementById('rel-tipo').value,
             etapa: document.getElementById('rel-etapa').value,
             fornecedor: document.getElementById('rel-fornecedor').value.trim(),
-            comprador: document.getElementById('rel-comprador').value.trim(),
+            comprador: (document.getElementById('rel-comprador')?.value || '').trim(),
         });
         erro.textContent = '';
         btn.disabled = true;

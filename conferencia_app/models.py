@@ -2079,7 +2079,6 @@ RELATORIO_AJUSTE_DEPOSITO_TIPOS = [
     "Depósito - Em Produção (Mão de Obra)",
     "Depósito - De Terceiros em Meu Poder (Cliente)",
 ]
-RELATORIO_AJUSTE_MAX_ITENS = 13  # tabela do formulario tem 13 linhas fixas
 
 
 class LogisticaInventarioRelatorioAjuste(db.Model):

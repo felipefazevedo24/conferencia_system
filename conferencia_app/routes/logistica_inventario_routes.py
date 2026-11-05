@@ -32,7 +32,6 @@ from ..models import (
     LogisticaInventarioLote,
     LogisticaInventarioRelatorioAjuste,
     RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-    RELATORIO_AJUSTE_MAX_ITENS,
     RELATORIO_AJUSTE_MOTIVOS,
     RELATORIO_AJUSTE_TIPOS,
 )
@@ -1015,6 +1014,11 @@ def _fmt_ajuste(a) -> dict:
         "analise_causa_status": a.analise_causa.status if a.analise_causa else None,
         "relatorio_id": a.relatorio_id,
         "relatorio_numero_documento": a.relatorio.numero_documento if a.relatorio else None,
+        # Cabecalho do FORM-08.52 - a etapa do Financeiro lista por formulario.
+        "relatorio_criado_em": a.relatorio.criado_em.strftime("%d/%m/%Y %H:%M") if a.relatorio and a.relatorio.criado_em else None,
+        "relatorio_criado_por": a.relatorio.criado_por if a.relatorio else None,
+        "relatorio_tipo_ajuste": a.relatorio.tipo_ajuste if a.relatorio else None,
+        "relatorio_motivo_ajuste": a.relatorio.motivo_ajuste if a.relatorio else None,
         "justificativa_imagem_nome": a.justificativa_imagem_nome,
         "justificativa_imagem_url": f"/api/logistica/inventario-ajustes/{a.id}/justificativa-imagem" if a.justificativa_imagem else None,
     }
@@ -1283,7 +1287,6 @@ def api_relatorio_ajuste_opcoes():
         "tipos_ajuste": RELATORIO_AJUSTE_TIPOS,
         "motivos_ajuste": RELATORIO_AJUSTE_MOTIVOS,
         "deposito_tipos": RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-        "max_itens": RELATORIO_AJUSTE_MAX_ITENS,
     })
 
 

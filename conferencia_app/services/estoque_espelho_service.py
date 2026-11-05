@@ -161,6 +161,16 @@ def carregar() -> dict:
     return erp._agregar_itens(itens)
 
 
+def custos(codigos: list[str]) -> dict[tuple[str, str], float | None]:
+    """{(codigo, localizacao): custo medio} do espelho, sem ir no GRV."""
+    codigos = sorted({c for c in codigos if c})
+    resultado = {}
+    for i in range(0, len(codigos), 500):
+        for r in Linha.query.filter(Linha.codigo.in_(codigos[i:i + 500])).all():
+            resultado[(r.codigo, r.localizacao or "")] = r.custo_medio
+    return resultado
+
+
 def nomes_grupos() -> dict[tuple[str, str], str]:
     """{(familia, codigo do grupo): nome} para mostrar o grupo pelo nome."""
     rows = db.session.query(Linha.familia, Linha.grupo, Linha.grupo_nome).distinct().all()

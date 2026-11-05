@@ -12,6 +12,10 @@ de comprador, que sem o GRV não tem como aplicar.
 Itens: os das OCs da aba de OCs (mesmos filtros), com custo, família/grupo e
 quem pediu na solicitação de compra. Custo somado sem item cancelado e sem OC
 cancelada.
+
+Nomes de quem fez e de quem pediu são dado de gerência: sem com_nomes, saem as
+colunas, as quebras por pessoa e o filtro de comprador (filtrar por nome também
+revelaria de quem é cada OC).
 """
 from __future__ import annotations
 
@@ -42,6 +46,7 @@ _FMT_DIAS = "#,##0.0"
 # Preço unitário tem item de R$ 0,0855: duas casas arredondariam o custo.
 _FMT_UNITARIO = '"R$" #,##0.00##'
 _FMT_DIA = "dd/mm/yyyy"
+_COLUNAS_NOMES = {"importada_por", "auditada_por", "conferida_por", "lancada_por", "comprador", "solicitante"}
 
 
 def montar_filtros(args) -> dict:
@@ -65,14 +70,16 @@ def montar_filtros(args) -> dict:
     }
 
 
-def gerar_excel(args, usuario: str) -> tuple[BytesIO, str]:
+def gerar_excel(args, usuario: str, com_nomes: bool = False) -> tuple[BytesIO, str]:
     filtros = montar_filtros(args)
+    if not com_nomes:
+        filtros["comprador"] = ""
     dados = coletar(filtros)
     wb = Workbook()
-    _aba_resumo(wb.active, filtros, dados, usuario)
-    _aba_notas(wb.create_sheet("Notas"), dados["notas"])
-    _aba_ocs(wb.create_sheet("Ordens de compra"), dados)
-    _aba_itens_oc(wb.create_sheet("Itens das OCs"), dados)
+    _aba_resumo(wb.active, filtros, dados, usuario, com_nomes)
+    _aba_notas(wb.create_sheet("Notas"), dados["notas"], com_nomes)
+    _aba_ocs(wb.create_sheet("Ordens de compra"), dados, com_nomes)
+    _aba_itens_oc(wb.create_sheet("Itens das OCs"), dados, com_nomes)
     stream = BytesIO()
     wb.save(stream)
     stream.seek(0)
@@ -373,7 +380,7 @@ def _ref(item) -> str:
 
 # --------------------------------------------------------------------------- planilha
 
-def _aba_resumo(ws, f, dados, usuario):
+def _aba_resumo(ws, f, dados, usuario, com_nomes):
     ws.title = "Resumo"
     notas, ocs, grv_ok = dados["notas"], dados["ocs"], dados["grv_ok"]
     entraram = [n for n in notas if n["entrou_no_periodo"]]
@@ -422,24 +429,26 @@ def _aba_resumo(ws, f, dados, usuario):
             ("   já recebidas", sum(1 for o in validas if o["situacao"] == "Recebida"), None),
             ("   recebidas em parte", sum(1 for o in validas if o["situacao"] == "Recebida em parte"), None),
             ("   em aberto", sum(1 for o in validas if o["situacao"] == "Em aberto"), None),
-            ("Compradores com OC no período", len({o["comprador"] for o in ocs if o["comprador"]}), None),
+            *([("Compradores com OC no período", len({o["comprador"] for o in ocs if o["comprador"]}), None)] if com_nomes else []),
             ("Dias da OC até a nota entrar no Sync (média)", _media_dias((n["data_oc"], n["entrou_em"]) for n in entraram), _FMT_DIAS),
         ])
     else:
         ws.append(["GRV indisponível"])
         ws.append([])
 
-    if grv_ok:
-        _tabela(ws, "Por comprador", ["", "OCs geradas", "Canceladas", "Valor das OCs", "Notas que entraram", "Notas lançadas"],
+    if grv_ok and com_nomes:
+        _tabela(ws, "Por comprador",["", "OCs geradas", "Canceladas", "Valor das OCs", "Notas que entraram", "Notas lançadas"],
                 _quebra_comprador(notas, ocs), {4: _FMT_MOEDA})
     if grv_ok and dados["itens_ok"]:
         _tabela(ws, "Custo dos itens por família e grupo", ["Família", "Grupo", "Itens", "Valor"],
                 _quebra_familia(dados["itens"]), {4: _FMT_MOEDA})
-        _tabela(ws, "Custo dos itens por quem solicitou", ["", "Itens", "OCs", "Valor"],
-                _quebra_solicitante(dados["itens"]), {4: _FMT_MOEDA})
+        if com_nomes:
+            _tabela(ws, "Custo dos itens por quem solicitou", ["", "Itens", "OCs", "Valor"],
+                    _quebra_solicitante(dados["itens"]), {4: _FMT_MOEDA})
     _tabela(ws, "Por fornecedor", ["", "Notas que entraram", "Valor das notas", "Notas lançadas", "OCs geradas", "Valor das OCs"],
             _quebra_fornecedor(notas, ocs), {3: _FMT_MOEDA, 6: _FMT_MOEDA})
-    _tabela(ws, "Por pessoa (quem fez)", ["", "Importou", "Auditou", "Conferiu", "Lançou"], _quebra_pessoa(notas))
+    if com_nomes:
+        _tabela(ws, "Por pessoa (quem fez)", ["", "Importou", "Auditou", "Conferiu", "Lançou"], _quebra_pessoa(notas))
     _tabela(ws, "Por tipo de documento", ["", "Entraram", "Valor que entrou", "Lançadas"],
             _quebra_tipo(notas), {3: _FMT_MOEDA})
 
@@ -558,7 +567,11 @@ def _quebra_tipo(notas) -> list[list]:
     return sorted(linhas, key=lambda r: (-r[1], r[0]))
 
 
-def _aba_notas(ws, notas):
+def _colunas(colunas, com_nomes):
+    return colunas if com_nomes else [c for c in colunas if c[1] not in _COLUNAS_NOMES]
+
+
+def _aba_notas(ws, notas, com_nomes):
     colunas = [
         ("Tipo", "tipo_doc", None), ("Número", "numero", None), ("Fornecedor", "fornecedor", None),
         ("CNPJ", "cnpj", None), ("Emissão", "emissao", _FMT_DATA), ("Entrou no Sync em", "entrou_em", _FMT_DATA),
@@ -578,7 +591,7 @@ def _aba_notas(ws, notas):
     def sim(valor):
         return "Sim" if valor else ""
 
-    _lista(ws, colunas, [
+    _lista(ws, _colunas(colunas, com_nomes), [
         {**n, "etapa_nome": ETAPAS.get(n["etapa"], ""), "sem_conf": sim(n["sem_conferencia"]), "div": sim(n["divergencia"]),
          "qtd_estornos": len(n["estornos"]), "qtd_itens": len(n["itens"]), "oc": ", ".join(n["ocs"]),
          "mat_cliente": sim(n["material_cliente"]), "rem": sim(n["remessa"]), "ml": sim(n["mercado_livre"]),
@@ -587,7 +600,7 @@ def _aba_notas(ws, notas):
     ])
 
 
-def _aba_ocs(ws, dados):
+def _aba_ocs(ws, dados, com_nomes):
     if not dados["grv_ok"]:
         ws.append(["O GRV não respondeu. Tente gerar o relatório de novo em instantes."])
         ws.column_dimensions["A"].width = 70
@@ -599,10 +612,10 @@ def _aba_ocs(ws, dados):
         ("Condição de pagamento", "cond_pagamento", None), ("Forma de pagamento", "forma_pgto", None),
         ("Notas no Sync", "notas", None),
     ]
-    _lista(ws, colunas, dados["ocs"])
+    _lista(ws, _colunas(colunas, com_nomes), dados["ocs"])
 
 
-def _aba_itens_oc(ws, dados):
+def _aba_itens_oc(ws, dados, com_nomes):
     if not dados["grv_ok"] or not dados["itens_ok"]:
         ws.append(["O GRV não respondeu. Tente gerar o relatório de novo em instantes."])
         ws.column_dimensions["A"].width = 70
@@ -616,7 +629,7 @@ def _aba_itens_oc(ws, dados):
         ("Solicitação", "solicitacao", None), ("Solicitada em", "solicitada_em", _FMT_DIA), ("OS", "os", None),
         ("Situação", "situacao", None),
     ]
-    _lista(ws, colunas, [
+    _lista(ws, _colunas(colunas, com_nomes), [
         {**i, "solicitante": i["solicitante"] or ("" if i["solicitacao"] else _SEM_SOLICITACAO)}
         for i in dados["itens"]
     ])

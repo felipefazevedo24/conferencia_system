@@ -8,8 +8,8 @@
     /* Menu de ações (kebab) - mesmo padrão do Comex/Conferência de Expedição. */
     .ia-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
     .ia-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
-    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
-    .ia-actions-menu.open { display: flex; }
+    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 11005; padding: 6px; display: none; flex-direction: column; }
+    .ia-actions-menu.open { display: flex; overflow-y: auto; }
     .ia-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
     .ia-actions-menu button:hover { background: #f3f4f6; }
     .ia-actions-menu button.is-danger { color: #dc2626; }
@@ -43,6 +43,13 @@
     .ia-select-col { width: 34px; text-align: center; }
     .ia-bulkbar { display: none; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--eui-primary-soft, #eef2ff); border: 1px solid var(--eui-primary, #4f46e5); border-radius: 10px; padding: 10px 16px; margin: -4px 0 12px; }
     .ia-bulkbar.show { display: flex; }
+    .ia-form-row { cursor: pointer; }
+    .ia-form-row:hover td { background: var(--eui-surface-2, #f8fafc); }
+    .ia-form-row .ia-form-num { font-weight: 800; white-space: nowrap; }
+    .ia-form-row .ia-form-num i { width: 14px; color: var(--eui-muted); }
+    .ia-form-acoes { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    .ia-form-itens > td { background: var(--eui-surface-2, #f8fafc); padding: 6px 12px 14px 46px; }
+    .ia-form-itens table { width: 100%; font-size: 12.5px; }
     .ia-bulkbar strong { font-size: 13px; }
     .ia-modal.is-wide { max-width: 720px; }
     .ia-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
@@ -101,7 +108,25 @@
                     </div>
                 </div>
             </div>
-            <div class="ia-table-wrap">
+            <!-- Etapa do Financeiro: uma linha por FORM-08.52; clicar abre os itens. -->
+            <div class="ia-table-wrap hidden" id="ia-forms-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th class="ia-select-col"></th>
+                            <th>Formulário</th>
+                            <th>Gerado em</th>
+                            <th>Gerado por</th>
+                            <th>Tipo / Motivo</th>
+                            <th>Itens</th>
+                            <th>Diferença R$</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ia-forms-tbody"></tbody>
+                </table>
+            </div>
+            <div class="ia-table-wrap" id="ia-itens-wrap">
                 <table class="erp-table">
                     <thead>
                         <tr>
@@ -327,7 +352,6 @@
     let filtroAtual = "";
     let selecionados = new Set();
     let opcoesRelatorio = null;
-    const RELATORIO_MAX_ITENS = 13;
 
     function atualizarLinkExportar() {
         const params = new URLSearchParams();
@@ -423,6 +447,11 @@
         // manter marcado um item que sumiu do filtro/recarregou mudado).
         const idsVisiveis = new Set(lista.map((a) => a.id));
         selecionados.forEach((id) => { if (!idsVisiveis.has(id)) selecionados.delete(id); });
+        // Na etapa do Financeiro o que se trata e' o formulario inteiro.
+        const porFormulario = filtroAtual === "Finance";
+        $("ia-forms-wrap").classList.toggle("hidden", !porFormulario);
+        $("ia-itens-wrap").classList.toggle("hidden", porFormulario);
+        if (porFormulario) { renderFormularios(lista); return; }
 
         if (!lista.length) {
             tb.innerHTML = '<tr><td colspan="11" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
@@ -459,6 +488,121 @@
         }).join("");
         atualizarBulkbar();
     }
+
+    // ── Etapa do Financeiro: uma linha por FORM-08.52 ──
+    // O Financeiro lanca o formulario inteiro no GRV, entao a lista e' por
+    // formulario; clicar na linha abre os itens. Item que chegou aqui sem
+    // formulario (Pular Etapa) fica no grupo "Sem formulario".
+    const formulariosAbertos = new Set();
+    let formulariosCache = new Map();  // chave -> {ids, ...}
+
+    function agruparPorFormulario(lista) {
+        const grupos = new Map();
+        lista.forEach((a) => {
+            const chave = a.relatorio_id ? String(a.relatorio_id) : "sem";
+            if (!grupos.has(chave)) {
+                grupos.set(chave, {
+                    chave, relatorio_id: a.relatorio_id, numero: a.relatorio_numero_documento,
+                    criado_em: a.relatorio_criado_em, criado_por: a.relatorio_criado_por,
+                    tipo: a.relatorio_tipo_ajuste, motivo: a.relatorio_motivo_ajuste, itens: [],
+                });
+            }
+            grupos.get(chave).itens.push(a);
+        });
+        grupos.forEach((g) => { g.ids = g.itens.map((a) => a.id); });
+        // Formulario mais novo primeiro; "Sem formulario" no fim.
+        const ordem = Array.from(grupos.values()).sort((x, y) => (y.relatorio_id || 0) - (x.relatorio_id || 0));
+        return new Map(ordem.map((g) => [g.chave, g]));
+    }
+
+    function valorItemHtml(a) {
+        const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
+        if (!temCusto) return "—";
+        return `<span class="${a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg"}">${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}</span>`;
+    }
+
+    function itensDoFormularioHtml(g) {
+        return `<table class="erp-table"><thead><tr>
+                <th>Local</th><th>Cód. Produto</th><th>Qtd Contada</th><th>Qtd Estoque</th><th>Diferença</th>
+                <th>Custo Médio</th><th>Diferença R$</th><th style="text-align:right;">Ação</th></tr></thead><tbody>
+            ${g.itens.map((a) => `<tr>
+                <td>${escapeHtml(a.local_codigo)}</td>
+                <td>${escapeHtml(a.codigo_produto)}${a.descricao_produto ? `<div class="ia-hist">${escapeHtml(a.descricao_produto)}</div>` : ""}</td>
+                <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
+                <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
+                <td class="${a.diferenca >= 0 ? "ia-dif-pos" : "ia-dif-neg"}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
+                <td>${a.custo_medio !== null && a.custo_medio !== undefined ? fmtMoeda(a.custo_medio) : "—"}</td>
+                <td>${valorItemHtml(a)}</td>
+                <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
+            </tr>`).join("")}
+        </tbody></table>`;
+    }
+
+    function renderFormularios(lista) {
+        const tb = $("ia-forms-tbody");
+        formulariosCache = agruparPorFormulario(lista);
+        if (!formulariosCache.size) {
+            tb.innerHTML = '<tr><td colspan="8" class="ia-empty">Nenhum formulário aguardando o Financeiro</td></tr>';
+            atualizarBulkbar();
+            return;
+        }
+        tb.innerHTML = Array.from(formulariosCache.values()).map((g) => {
+            const aberto = formulariosAbertos.has(g.chave);
+            const comCusto = g.itens.filter((a) => a.custo_medio !== null && a.custo_medio !== undefined);
+            const total = comCusto.reduce((s, a) => s + (a.diferenca_valor || 0), 0);
+            const semCusto = g.itens.length - comCusto.length;
+            const marcados = g.ids.filter((id) => selecionados.has(id)).length;
+            const checkbox = PODE_FINANCE
+                ? `<input type="checkbox" class="ia-select-form" data-form="${g.chave}"${marcados === g.ids.length ? " checked" : ""}${marcados && marcados < g.ids.length ? ' data-parcial="1"' : ""} title="Selecionar o formulário inteiro">`
+                : "";
+            const acoes = [
+                g.relatorio_id ? `<button class="eui-btn eui-btn--subtle eui-btn--sm" data-form-pdf="${g.relatorio_id}"><i class="fas fa-file-pdf"></i> PDF</button>` : "",
+                PODE_FINANCE ? `<button class="eui-btn eui-btn--primary eui-btn--sm" data-form-finance="${g.chave}"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>` : "",
+            ].join("");
+            const titulo = g.relatorio_id ? `FORM-08.52 ${escapeHtml(g.numero || "")}` : "Sem formulário";
+            return `
+            <tr class="ia-form-row" data-form-row="${g.chave}">
+                <td class="ia-select-col">${checkbox}</td>
+                <td class="ia-form-num"><i class="fas fa-chevron-${aberto ? "down" : "right"}"></i> ${titulo}</td>
+                <td>${escapeHtml(g.criado_em || "—")}</td>
+                <td>${escapeHtml(g.criado_por || "—")}</td>
+                <td>${escapeHtml(g.tipo || "—")}${g.motivo ? `<div class="ia-hist">${escapeHtml(g.motivo)}</div>` : ""}</td>
+                <td>${g.itens.length}</td>
+                <td class="${total >= 0 ? "ia-dif-pos" : "ia-dif-neg"}">${comCusto.length ? `${total >= 0 ? "+" : ""}${fmtMoeda(total)}` : "—"}${semCusto ? `<div class="ia-hist">${semCusto} sem custo</div>` : ""}</td>
+                <td><div class="ia-form-acoes">${acoes}</div></td>
+            </tr>
+            ${aberto ? `<tr class="ia-form-itens"><td colspan="8">${itensDoFormularioHtml(g)}</td></tr>` : ""}`;
+        }).join("");
+        tb.querySelectorAll(".ia-select-form[data-parcial]").forEach((cb) => { cb.indeterminate = true; });
+        atualizarBulkbar();
+    }
+
+    $("ia-forms-tbody").addEventListener("click", (e) => {
+        const pdf = e.target.closest("[data-form-pdf]");
+        if (pdf) { window.open(`/api/logistica/inventario-ajustes/relatorio/${pdf.dataset.formPdf}.pdf`, "_blank"); return; }
+        const fin = e.target.closest("[data-form-finance]");
+        if (fin) {
+            const g = formulariosCache.get(fin.dataset.formFinance);
+            if (g) abrirModalFinance(g.ids.slice());
+            return;
+        }
+        // Checkbox e menu do item nao abrem/fecham o formulario.
+        if (e.target.closest("input, [data-kebab], .ia-form-itens")) return;
+        const linha = e.target.closest("[data-form-row]");
+        if (!linha) return;
+        const chave = linha.dataset.formRow;
+        if (formulariosAbertos.has(chave)) formulariosAbertos.delete(chave); else formulariosAbertos.add(chave);
+        renderFormularios(filtrarPorBusca(ajustesCache));
+    });
+
+    $("ia-forms-tbody").addEventListener("change", (e) => {
+        const cb = e.target.closest(".ia-select-form");
+        if (!cb) return;
+        const g = formulariosCache.get(cb.dataset.form);
+        if (!g) return;
+        g.ids.forEach((id) => { if (cb.checked) selecionados.add(id); else selecionados.delete(id); });
+        renderFormularios(filtrarPorBusca(ajustesCache));
+    });
 
     // ── Selecao em lote: FORM-08.52 (Relatorio) e ajuste executado (Finance) ──
     // A selecao e de UMA etapa por vez - as duas acoes em lote sao
@@ -500,13 +644,6 @@
                 toast("Dá pra agir em lote só com itens da mesma etapa - limpe a seleção antes.", "error");
                 return;
             }
-            // O limite de 13 e do formulario FORM-08.52; confirmar ajuste
-            // executado no Finance nao tem limite.
-            if (etapaDoItem === "Relatorio" && selecionados.size >= RELATORIO_MAX_ITENS) {
-                cb.checked = false;
-                toast(`O formulário FORM-08.52 comporta no máximo ${RELATORIO_MAX_ITENS} itens por documento.`, "error");
-                return;
-            }
             selecionados.add(id);
         } else {
             selecionados.delete(id);
@@ -520,11 +657,6 @@
         // Sem nada selecionado, "todos" segue a etapa do primeiro elegivel.
         const etapa = statusDaSelecao() || (todos.length ? statusDoItem(todos[0].dataset.id) : null);
         const checkboxes = todos.filter((cb) => statusDoItem(cb.dataset.id) === etapa);
-        if (marcar && etapa === "Relatorio" && checkboxes.length > RELATORIO_MAX_ITENS) {
-            e.target.checked = false;
-            toast(`Essa página tem mais de ${RELATORIO_MAX_ITENS} itens em Emissão do Formulário - selecione manualmente até ${RELATORIO_MAX_ITENS} por vez.`, "error");
-            return;
-        }
         checkboxes.forEach((cb) => {
             cb.checked = marcar;
             const id = Number(cb.dataset.id);
@@ -536,12 +668,14 @@
     // ── Confirmar ajuste executado (Finance): 1 item ou o lote inteiro ──
     // O numero do documento do GRV e obrigatorio - e a prova de que o
     // ajuste foi lancado no ERP.
-    let financeAlvo = null;  // id do item, ou "lote"
+    let financeAlvo = null;  // id do item, "lote" (selecao) ou lista de ids (um formulario)
 
     function abrirModalFinance(alvo) {
         financeAlvo = alvo;
-        const qtd = alvo === "lote" ? selecionados.size : 1;
-        $("ia-finance-sub").textContent = qtd > 1
+        const qtd = alvo === "lote" ? selecionados.size : (Array.isArray(alvo) ? alvo.length : 1);
+        $("ia-finance-sub").textContent = Array.isArray(alvo)
+            ? `${qtd === 1 ? "O item" : `Os ${qtd} itens`} deste formulário ${qtd === 1 ? "será confirmado" : "serão confirmados"} com o mesmo documento do GRV e ${qtd === 1 ? "segue" : "seguem"} para a Emissão Fiscal.`
+            : qtd > 1
             ? `${qtd} itens selecionados serão confirmados com o mesmo documento do GRV e seguem para a Emissão Fiscal.`
             : "Confirma que o ajuste foi lançado no ERP. O item segue para a Emissão Fiscal.";
         $("ia-finance-documento").value = "";
@@ -565,12 +699,13 @@
         const btn = $("ia-finance-salvar");
         btn.disabled = true;
         try {
-            if (alvo === "lote") {
+            if (alvo === "lote" || Array.isArray(alvo)) {
+                const ids = Array.isArray(alvo) ? alvo : Array.from(selecionados);
                 const resp = await api("/api/logistica/inventario-ajustes/finance-concluir-lote", {
                     method: "POST",
-                    body: JSON.stringify({ ajuste_ids: Array.from(selecionados), documento_grv, observacao }),
+                    body: JSON.stringify({ ajuste_ids: ids, documento_grv, observacao }),
                 });
-                selecionados.clear();
+                ids.forEach((id) => selecionados.delete(id));
                 toast(resp.message, "success");
             } else {
                 await api(`/api/logistica/inventario-ajustes/${alvo}/finance-concluir`, {
@@ -682,12 +817,29 @@
         menu.innerHTML = montarAcoes(a);
         menu.dataset.id = String(id);
         const rect = btnEl.getBoundingClientRect();
-        menu.style.top = (rect.bottom + 4) + "px";
         menu.style.left = "auto";
         menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.style.maxHeight = "";
         menu.classList.add("open");
+        // Linha perto do fim da tela: abria pra baixo e a metade do menu
+        // sumia fora da janela. Abre pra cima quando nao cabe embaixo e, se
+        // nao couber nem assim, rola dentro do menu.
+        const margem = 8;
+        const altura = menu.offsetHeight;
+        const abaixo = window.innerHeight - rect.bottom - margem - 4;
+        const acima = rect.top - margem - 4;
+        const praCima = altura > abaixo && acima > abaixo;
+        const espaco = praCima ? acima : abaixo;
+        if (altura > espaco) menu.style.maxHeight = espaco + "px";
+        menu.style.top = (praCima ? rect.top - 4 - Math.min(altura, espaco) : rect.bottom + 4) + "px";
     }
     function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+    // O menu e' fixo na tela: rolando a pagina ele ficava solto do botao.
+    // Rolar dentro do proprio menu (quando ele e' maior que a tela) nao fecha.
+    window.addEventListener("scroll", (e) => {
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    }, true);
 
     document.addEventListener("click", (e) => {
         const kebabBtn = e.target.closest("[data-kebab]");

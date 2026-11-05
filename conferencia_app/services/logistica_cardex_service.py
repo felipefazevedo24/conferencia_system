@@ -1507,3 +1507,46 @@ def conferir_fechamento(fechamento_id: int) -> dict | None:
     saida["diferencas"] = diferencas
     saida["itens_conferidos"] = len(set(congelado) | set(recalculado))
     return saida
+
+
+# --------------------------------------------------------------------------
+# Custo de inventario para o Ajuste de Estoque
+# --------------------------------------------------------------------------
+
+def custo_medio_inventario(codigo: str) -> float | None:
+    """Custo medio do item no Cardex no mes vigente (o custo de inventario da
+    Contabilidade). O ajuste usava tproduto.preco_custo, que e' o custo
+    fiscal e vem zerado em ~1.850 produtos ativos. None quando o Cardex nao
+    tem custo para o item ou o GRV esta fora: quem chama decide a reserva.
+    Fica no cache do proprio obter_periodo."""
+    chave = normalizar_codigo(codigo)
+    if not chave:
+        return None
+    inicio, fim = periodo_padrao()
+    try:
+        base = obter_periodo(inicio, fim, codigo=chave)
+    except Exception as exc:  # noqa: BLE001 - custo nunca derruba a contagem
+        current_app.logger.warning("Cardex indisponivel para o custo de %s: %s", codigo, exc)
+        return None
+    if not base.get("disponivel"):
+        return None
+    item = next((i for i in base.get("itens") or [] if i["codigo"] == chave), None)
+    custo = _float(((item or {}).get("fechamento") or {}).get("m"))
+    return custo if custo and custo > 0 else None
+
+
+def precarregar_custos_inventario(codigos: list[str], paralelos: int = 6) -> None:
+    """Esquenta o cache de custo_medio_inventario de varios codigos de uma
+    vez (ajuste em lote): uma consulta por codigo na bridge, em paralelo."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    app = current_app._get_current_object()
+    unicos = sorted({c for c in codigos if normalizar_codigo(c)})
+
+    def _um(codigo):
+        with app.app_context():
+            custo_medio_inventario(codigo)
+
+    if len(unicos) > 1:
+        with ThreadPoolExecutor(max_workers=paralelos) as pool:
+            list(pool.map(_um, unicos))

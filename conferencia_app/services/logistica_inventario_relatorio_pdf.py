@@ -21,7 +21,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.pdfgen import canvas as rl_canvas
+from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # Assinaturas do rodape do formulario. Ficam aqui (e nao no banco) porque
 # sao os responsaveis fixos do processo - trocou a pessoa, troca aqui.
@@ -161,6 +162,36 @@ def _lista_opcoes(opcoes: list[str], selecionada: str, largura: float) -> Table:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
     return tabela
+
+
+def _canvas_numerado(numero_documento: str):
+    """Rodape "FORM-08.52 Nº X · Página N de M" em toda pagina: sem limite de
+    itens o formulario passa de uma pagina, e o numero do documento so'
+    aparece no cabecalho da primeira - uma folha solta ficaria sem dono."""
+
+    class _Canvas(rl_canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._paginas = []
+
+        def showPage(self):
+            self._paginas.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total = len(self._paginas)
+            for estado in self._paginas:
+                self.__dict__.update(estado)
+                self.setFont("Helvetica", 7)
+                self.setFillColor(COR_MUTED)
+                self.drawRightString(
+                    A4[0] - 18 * mm, 6 * mm,
+                    f"FORM-08.52 Nº {numero_documento} · Página {self._pageNumber} de {total}",
+                )
+                super().showPage()
+            super().save()
+
+    return _Canvas
 
 
 def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
@@ -410,6 +441,9 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
+    # Total, assinaturas e data saem juntos: com varias paginas, o bloco
+    # quebrava no meio e os cargos/data iam sozinhos pra uma folha nova.
+    inicio_fecho = len(el)
     el.append(total_tbl)
     el.append(Spacer(1, 22))
 
@@ -445,6 +479,9 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         f"Data: {relatorio.criado_em.strftime('%d/%m/%Y %H:%M') if relatorio.criado_em else ''}{solicitado_por}",
         size=8, color=COR_MUTED,
     ))
+    fecho = el[inicio_fecho:]
+    del el[inicio_fecho:]
+    el.append(KeepTogether(fecho))
 
-    doc.build(el)
+    doc.build(el, canvasmaker=_canvas_numerado(relatorio.numero_documento))
     return buf.getvalue()

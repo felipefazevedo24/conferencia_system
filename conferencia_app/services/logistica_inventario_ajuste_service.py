@@ -29,7 +29,6 @@ from ..models import (
     LogisticaInventarioInicial,
     LogisticaInventarioRelatorioAjuste,
     RELATORIO_AJUSTE_DEPOSITO_TIPOS,
-    RELATORIO_AJUSTE_MAX_ITENS,
     RELATORIO_AJUSTE_MOTIVOS,
     RELATORIO_AJUSTE_TIPOS,
 )
@@ -90,9 +89,9 @@ def detectar_divergencia(
     None (codigo nao encontrado no GRV, ou API do GRV fora do ar), nao ha
     base de comparacao - nao cria ajuste. Se ja existir um ajuste aberto
     pro mesmo item+local, nao duplica (so o primeiro fica em fila pro
-    gestor). `custo_medio` (tproduto_deposito.custo_medio) e' opcional -
-    fica None se o GRV nao tiver custo pro codigo - e vira snapshot no
-    ajuste pra calcular o impacto financeiro (R$) da divergencia.
+    gestor). O custo do ajuste e' o custo medio do Cardex no mes; `custo_medio`
+    (o que veio do GRV) so' vale quando o Cardex nao tem custo pro item. Vira
+    snapshot no ajuste pra calcular o impacto financeiro (R$) da divergencia.
 
     So' abre ajuste quando a quantidade difere do GRV, qualquer que seja o
     motivo da contagem: sem diferenca nao ha o que o gestor validar (decisao
@@ -105,6 +104,14 @@ def detectar_divergencia(
         return None
     if ajuste_aberto_para(contagem.codigo_produto, contagem.local_codigo):
         return None
+
+    # Custo de inventario e' o custo medio do Cardex, nao o preco_custo do
+    # cadastro (custo fiscal, zerado em muitos itens - pedido da Logistica em
+    # 04/11/2026). Sem custo no Cardex, fica o que veio do GRV.
+    from . import logistica_cardex_service as cardex
+    custo_cardex = cardex.custo_medio_inventario(contagem.codigo_produto)
+    if custo_cardex is not None:
+        custo_medio = custo_cardex
 
     ajuste = LogisticaInventarioAjuste(
         contagem_id=contagem.id,
@@ -331,6 +338,21 @@ def confirmar_divergencia(
     return ajuste
 
 
+def confirmar_pelo_inventario_ciclico(ajuste: LogisticaInventarioAjuste, usuario: str, justificativa: str) -> None:
+    """Ajuste que veio do inventario ciclico ja foi validado pelo gestor la
+    (3a contagem ou recontagem dispensada): pula a Validacao de Suprimentos
+    e entra direto em Emissao do Formulario. Sem recontagem aqui - ela ja
+    aconteceu (ou foi dispensada) no ciclico."""
+    if ajuste.status_modulo != "Validacao":
+        return
+    ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
+    ajuste.gestor_confirmado_em = agora_br()
+    ajuste.gestor_confirmado_por = usuario
+    ajuste.status_modulo = "Relatorio"
+    ajuste.status_slug = status_slug("Relatorio")
+    db.session.commit()
+
+
 # ── Imagem de apoio da justificativa (foto do material/avaria/prateleira) ──
 # Guardada direto no banco (coluna `justificativa_imagem`), mesmo padrao do
 # ComexDocumento - sem Google Drive nem disco do servidor. Uma so' por
@@ -430,13 +452,10 @@ def gerar_relatorio_ajuste(
     ideia de confirmar_divergencia, so que em lote - util quando o gestor
     so' percebe que precisa de investigacao mais profunda na hora de
     agrupar o relatorio, nao antes)."""
+    # Sem limite de itens: o modelo em papel tinha 13 linhas, mas o PDF quebra
+    # a tabela em quantas paginas precisar (pedido da Logistica em 04/11/2026).
     if not ajuste_ids:
         raise ValueError("Selecione ao menos um item pra gerar o relatório.")
-    if len(ajuste_ids) > RELATORIO_AJUSTE_MAX_ITENS:
-        raise ValueError(
-            f"O formulário FORM-08.52 comporta no máximo {RELATORIO_AJUSTE_MAX_ITENS} itens por "
-            f"documento - selecione até {RELATORIO_AJUSTE_MAX_ITENS} itens por vez."
-        )
 
     ajustes = (
         LogisticaInventarioAjuste.query
