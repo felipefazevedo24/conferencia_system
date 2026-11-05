@@ -368,17 +368,19 @@ def _teste_dict(t) -> dict:
 @permission_required(PERM_GESTAO)
 def api_teste_produtos():
     try:
-        produtos = svc.consultar_teste(request.args.get("codigos") or "")
+        consulta, produtos = svc.consultar_teste(request.args.get("codigos") or "", _usuario())
     except (ValueError, cps.ErroApiInventario) as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"produtos": produtos, "gravacao_configurada": cps.configurada(gravacao=True)})
+    return jsonify({"produtos": produtos, "consulta_id": consulta.id, "consultado_em": _dt(consulta.enviado_em),
+                    "gravacao_configurada": cps.configurada(gravacao=True)})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/teste-api/simular", methods=["POST"])
 @permission_required(PERM_GESTAO)
 def api_teste_simular():
     try:
-        teste = svc.simular_teste((request.get_json(silent=True) or {}).get("itens"), _usuario())
+        payload = request.get_json(silent=True) or {}
+        teste = svc.simular_teste(payload.get("itens"), _usuario(), payload.get("consulta_id"))
     except (ValueError, cps.ErroApiInventario) as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"teste": _teste_dict(teste)})
