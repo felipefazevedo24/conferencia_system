@@ -5145,3 +5145,79 @@ class ComexNcmAliquota(db.Model):
     observacao = db.Column(db.Text)
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     atualizado_por = db.Column(db.String(100))
+
+
+class SpendCompraImportacao(db.Model):
+    """Cada upload da planilha de entradas do Custos no Spend de Compras.
+    Reimportar substitui so' as competencias que vieram no arquivo."""
+
+    __tablename__ = "spend_compra_importacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    arquivo = db.Column(db.String(255))
+    competencias = db.Column(db.String(500))  # "2026-09, 2026-10"
+    linhas = db.Column(db.Integer, nullable=False, default=0)
+    valor_total = db.Column(db.Float, nullable=False, default=0)
+    importado_por = db.Column(db.String(100))
+    importado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+
+
+class SpendCompraItem(db.Model):
+    """Item de entrada (uma linha da aba Base da planilha do Custos).
+
+    A classificacao de suprimentos NAO e' gravada aqui: sai na leitura do
+    de-para por conta (SpendClassificacaoConta) e das excecoes por item, pra
+    mudar o de-para refletir no Spend inteiro na hora. `competencia` e' a
+    coluna "Mes" do Custos (corte do fechamento), nao a data de lancamento.
+    `valor` = valor total + IPI - desconto, a mesma conta da planilha."""
+
+    __tablename__ = "spend_compra_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    importacao_id = db.Column(db.Integer, db.ForeignKey("spend_compra_importacao.id"), nullable=True, index=True)
+    competencia = db.Column(db.String(7), nullable=False, index=True)  # "2026-10"
+    data_lancamento = db.Column(db.Date)
+    data_nf = db.Column(db.Date)
+    nota_fiscal = db.Column(db.String(60), index=True)
+    fornecedor = db.Column(db.String(200), index=True)
+    cfop = db.Column(db.String(10), index=True)  # so' digitos
+    descricao_cfop = db.Column(db.String(200))
+    codigo_item = db.Column(db.String(80), index=True)
+    descricao = db.Column(db.String(400))
+    valor = db.Column(db.Float, nullable=False, default=0)
+    conta = db.Column(db.String(30), index=True)  # conta Dominio
+    nome_conta = db.Column(db.String(200))
+    centro_custo = db.Column(db.String(200))
+    familia = db.Column(db.String(160), index=True)
+    grupo = db.Column(db.String(160))
+    oc = db.Column(db.String(120))
+
+
+class SpendClassificacaoConta(db.Model):
+    """De-para conta Dominio -> classificacao de suprimentos (ex.: 94913 ->
+    Locacao de equipamentos). Cobre ~99% dos itens; o resto vai por excecao."""
+
+    __tablename__ = "spend_classificacao_conta"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conta = db.Column(db.String(30), nullable=False, unique=True, index=True)
+    classificacao = db.Column(db.String(120), nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+class SpendClassificacaoExcecao(db.Model):
+    """Item que foge da classificacao da conta (mesma conta, outro destino).
+    Vale para conta + codigo do item; ganha do de-para por conta."""
+
+    __tablename__ = "spend_classificacao_excecao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conta = db.Column(db.String(30), nullable=False, index=True)
+    codigo_item = db.Column(db.String(80), nullable=False, index=True)
+    descricao = db.Column(db.String(400))
+    classificacao = db.Column(db.String(120), nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("conta", "codigo_item", name="uq_spend_excecao_conta_item"),)

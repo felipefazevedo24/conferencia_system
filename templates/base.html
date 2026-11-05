@@ -257,6 +257,7 @@
                     <div class="submenu-panel" id="menu-compras">
                         {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Documento de entrada</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras" class="list-group-item list-group-item-action"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
+                        {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras/spend" class="list-group-item list-group-item-action"><i class="fas fa-chart-column"></i> Spend de Compras</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_HOMOLOGACAO') or can_access('PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO') %}<a href="/compras/homologacao" class="list-group-item list-group-item-action"><i class="fas fa-certificate"></i> Homologação de fornecedores</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO') or can_access('MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO') or can_access('PAGE_LANCAMENTO') %}<a href="/compras/divergencias-recebimento" class="list-group-item list-group-item-action"><i class="fas fa-triangle-exclamation"></i> Divergências de recebimento</a>{% endif %}
                         {% if can_access('PAGE_CADASTRO_WORKFLOW') %}<a href="/cadastros/" class="list-group-item list-group-item-action"><i class="fas fa-diagram-project"></i> Workflow de cadastros</a>{% endif %}
