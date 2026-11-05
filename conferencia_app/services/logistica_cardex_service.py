@@ -233,6 +233,7 @@ def _descomprimir(blob: bytes) -> dict:
 
 def limpar_cache() -> None:
     _CACHE.clear()
+    _ULTIMO_CUSTO.clear()
 
 
 # --------------------------------------------------------------------------
@@ -1516,8 +1517,10 @@ def conferir_fechamento(fechamento_id: int) -> dict | None:
 def custo_medio_inventario(codigo: str) -> float | None:
     """Custo medio do item no Cardex no mes vigente (o custo de inventario da
     Contabilidade). O ajuste usava tproduto.preco_custo, que e' o custo
-    fiscal e vem zerado em ~1.850 produtos ativos. None quando o Cardex nao
-    tem custo para o item ou o GRV esta fora: quem chama decide a reserva.
+    fiscal e vem zerado em ~1.850 produtos ativos. Item com saldo zero e sem
+    movimento no mes nao entra no Cardex: fica o ultimo custo que o GRV gravou
+    no kardex (ver _ultimo_custo_grv). None quando nenhum dos dois tem custo
+    ou o GRV esta fora: quem chama decide a reserva.
     Fica no cache do proprio obter_periodo."""
     chave = normalizar_codigo(codigo)
     if not chave:
@@ -1532,7 +1535,31 @@ def custo_medio_inventario(codigo: str) -> float | None:
         return None
     item = next((i for i in base.get("itens") or [] if i["codigo"] == chave), None)
     custo = _float(((item or {}).get("fechamento") or {}).get("m"))
-    return custo if custo and custo > 0 else None
+    if custo and custo > 0:
+        return custo
+    return _ultimo_custo_grv(chave)
+
+
+_ULTIMO_CUSTO: dict[str, tuple[float, float | None]] = {}
+
+
+def _ultimo_custo_grv(chave: str) -> float | None:
+    """Custo da ultima linha do kardex do deposito 1, de qualquer data. E' o
+    caso da sobra no inventario: o GRV diz saldo zero, entao nem o Cardex nem
+    o medio ponderado do GRV tem custo, e o ajuste subia sem valor. E' o mesmo
+    custo com que o Cardex abre a ficha (abertura da bridge); pedindo a
+    abertura de amanha, ela traz a ultima linha que existe."""
+    agora = time.monotonic()
+    if chave in _ULTIMO_CUSTO and _ULTIMO_CUSTO[chave][0] > agora:
+        return _ULTIMO_CUSTO[chave][1]
+    grv = buscar_cardex_grv(agora_br().date() + timedelta(days=1), None, codigo=chave)
+    if not grv.get("disponivel"):
+        return None
+    prod = next((p for p in grv.get("produtos") or [] if (p.get("codigo") or normalizar_codigo(p.get("codigo_interno"))) == chave), None)
+    custo = _float(((prod or {}).get("abertura") or {}).get("custo"))
+    custo = custo if custo and custo > 0 else None
+    _ULTIMO_CUSTO[chave] = (agora + _CACHE_TTL_SEGUNDOS, custo)
+    return custo
 
 
 def precarregar_custos_inventario(codigos: list[str], paralelos: int = 6) -> None:
