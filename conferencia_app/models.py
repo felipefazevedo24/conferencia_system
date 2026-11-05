@@ -4026,6 +4026,25 @@ class ComexProcessoOrdemFat(db.Model):
     processo = db.relationship("ComexProcesso", backref=db.backref("ordem_fat", uselist=False))
 
 
+class ComexExportacaoAntecipada(db.Model):
+    """Exportacao aberta pelo ORCAMENTO, antes de existir ordem de
+    faturamento conferida - pra antecipar a cotacao do frete. Fica presa na
+    Cotacao ate' o operador vincular a ordem de faturamento (conferida) do
+    orcamento, que entra em ComexProcessoOrdemFat. Esta linha fica como
+    registro de que o processo nasceu antecipado. Tabela a parte pra nao
+    precisar de migration."""
+
+    __tablename__ = "comex_exportacao_antecipada"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    orcamento = db.Column(db.String(80), nullable=False, index=True)
+    cliente = db.Column(db.String(160))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("exportacao_antecipada", uselist=False))
+
+
 class ComexPoItem(db.Model):
     """Item de linha da PO (Modulo 2) - codigo, NCM/HS code, part number,
     descricao, quantidade e valores, no formato do modelo de PO usado hoje

@@ -121,7 +121,9 @@ def _processo_payload(p: ComexProcesso) -> dict:
         # Exportacao puxada da ordem de faturamento (fluxo curto, sem OC/PO).
         "exportacao_expedicao": svc.exportacao_da_expedicao(p),
         "cod_ordem_fat": p.ordem_fat.cod_ordem_fat if p.ordem_fat else None,
-        "orcamento_fat": p.ordem_fat.orcamento if p.ordem_fat else None,
+        "orcamento_fat": (p.ordem_fat.orcamento if p.ordem_fat
+                          else p.exportacao_antecipada.orcamento if p.exportacao_antecipada else None),
+        "aguardando_ordem_fat": svc.aguardando_ordem_fat(p),
     }
 
 
@@ -264,6 +266,50 @@ def api_importar_ordem_fat():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": f"Exportação {processo.id_op} criada na Cotação.", "processo": _processo_payload(processo)})
+
+
+@comex_bp.route("/api/comex/exportacao-antecipada", methods=["POST"])
+@permission_required(PERMISSION)
+def api_criar_exportacao_antecipada():
+    """Exportacao pelo orcamento, antes da ordem de faturamento conferida
+    (antecipar a cotacao do frete)."""
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.criar_exportacao_antecipada(payload.get("orcamento"), payload.get("cliente"),
+                                                   payload.get("modal_transporte"), usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Exportação antecipada {processo.id_op} criada na Cotação - vincule a ordem de "
+                               "faturamento quando ela for conferida.", "processo": _processo_payload(processo)})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/ordem-fat")
+@permission_required(PERMISSION)
+def api_ordens_para_vincular(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    try:
+        ordens = svc.ordens_fat_para_vincular(processo, request.args.get("termo") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ordens": ordens})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/ordem-fat", methods=["POST"])
+@permission_required(PERMISSION)
+def api_vincular_ordem_fat(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.vincular_ordem_fat(processo, (request.get_json(silent=True) or {}).get("cod_ordem_fat"), usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Ordem de faturamento vinculada ao processo {processo.id_op}.",
+                    "processo": _processo_payload(processo)})
 
 
 @comex_bp.route("/api/comex/processo-manual", methods=["POST"])

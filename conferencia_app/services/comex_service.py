@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
-from ..models import ComexProcessoOrdemFat, ExpedicaoOrdemFat
+from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -148,9 +148,22 @@ MODULOS_EXPORTACAO = [
 
 
 def exportacao_da_expedicao(processo: ComexProcesso) -> bool:
-    """Fluxo curto so' pra quem nasceu da ordem de faturamento: processos
-    antigos marcados EXPO na PO seguem o fluxo completo onde estao."""
-    return processo.ordem_fat is not None
+    """Fluxo curto so' pra quem nasceu da ordem de faturamento (ou
+    antecipado pelo orcamento): processos antigos marcados EXPO na PO seguem
+    o fluxo completo onde estao."""
+    return processo.ordem_fat is not None or processo.exportacao_antecipada is not None
+
+
+def aguardando_ordem_fat(processo: ComexProcesso) -> bool:
+    """Exportacao antecipada pelo orcamento que ainda nao tem a ordem de
+    faturamento vinculada - so' pode cotar."""
+    return processo.exportacao_antecipada is not None and processo.ordem_fat is None
+
+
+def _exigir_ordem_fat_para_sair_da_cotacao(processo: ComexProcesso) -> None:
+    if processo.status_modulo == "Cotacao" and aguardando_ordem_fat(processo):
+        raise ValueError("Exportação antecipada pelo orçamento: vincule a ordem de faturamento "
+                         "conferida antes de seguir para a Instrução.")
 
 
 def sequencia_do_processo(processo: ComexProcesso) -> list[str]:
@@ -508,7 +521,7 @@ def criar_processo_manual(fornecedor: str, referencia: str, usuario: str) -> Com
     return processo
 
 
-def buscar_ordens_fat_para_exportar(termo: str) -> list[dict]:
+def buscar_ordens_fat_para_exportar(termo: str, vinculando: bool = False) -> list[dict]:
     """Ordens de faturamento da Conferencia de Expedicao pelo numero da
     ordem ou do orcamento - so' as ja' conferidas podem virar exportacao."""
     termo = str(termo or "").strip()
@@ -527,9 +540,12 @@ def buscar_ordens_fat_para_exportar(termo: str) -> list[dict]:
     resultado = []
     for o in ordens:
         processo = puxadas.get(o.cod_ordem_fat)
+        antecipada = _antecipada_aguardando(o.orcamento)
         bloqueio = None
         if processo:
             bloqueio = f"Já puxada no processo {processo.id_op}."
+        elif antecipada and not vinculando:
+            bloqueio = f"Orçamento com exportação antecipada {antecipada.id_op} - vincule por lá."
         elif not o.conferido_at:
             bloqueio = "Ainda não foi conferida na Conferência de Expedição."
         resultado.append({
@@ -541,16 +557,84 @@ def buscar_ordens_fat_para_exportar(termo: str) -> list[dict]:
     return resultado
 
 
-def _os_da_ordem_fat(ordem: ExpedicaoOrdemFat) -> str:
-    return ", ".join(dict.fromkeys(str(i.n_os).strip() for i in ordem.itens if str(i.n_os or "").strip()))
+def _antecipada_aguardando(orcamento) -> ComexProcesso | None:
+    """Exportacao antecipada ativa (sem ordem vinculada) desse orcamento."""
+    orcamento = str(orcamento or "").strip()
+    if not orcamento:
+        return None
+    for registro in ComexExportacaoAntecipada.query.filter_by(orcamento=orcamento).all():
+        p = registro.processo
+        if p.ordem_fat is None and p.status_modulo != STATUS_CANCELADO:
+            return p
+    return None
 
 
-def importar_ordem_fat(cod_ordem_fat, modal_transporte: str, usuario: str) -> ComexProcesso:
-    """Cria um processo de EXPORTACAO a partir de uma ordem de faturamento
-    ja' conferida. A direcao fica fixa em EXPO e o processo nasce na Cotacao
-    (exportacao nao tem OC/PO - ver MODULOS_EXPORTACAO)."""
+def criar_exportacao_antecipada(orcamento: str, cliente: str, modal_transporte: str, usuario: str) -> ComexProcesso:
+    """Exportacao pelo ORCAMENTO, sem ordem de faturamento conferida - pra
+    antecipar a cotacao do frete. Se a expedicao ja' tem ordem desse
+    orcamento (mesmo pendente), cliente e OS vem de la'."""
+    orcamento = str(orcamento or "").strip()[:80]
+    if not orcamento:
+        raise ValueError("Informe o número do orçamento.")
     if modal_transporte not in MODAIS_TRANSPORTE:
         raise ValueError("Selecione o modal de transporte (Aéreo ou Marítimo).")
+    existente = _antecipada_aguardando(orcamento)
+    if existente:
+        raise ValueError(f"O orçamento {orcamento} já tem a exportação antecipada {existente.id_op}.")
+    ordens = ExpedicaoOrdemFat.query.filter_by(orcamento=orcamento, excluido=False).all()
+    cliente = str(cliente or "").strip()[:160] or next((o.cliente for o in ordens if o.cliente), "")
+    if not cliente:
+        raise ValueError("Informe o cliente (o orçamento ainda não tem ordem de faturamento na expedição).")
+    os_texto = ", ".join(dict.fromkeys(x for o in ordens for x in _os_da_ordem_fat(o).split(", ") if x))
+
+    tipo_operacao = _derivar_tipo_operacao("EXPO", modal_transporte)
+    processo = ComexProcesso(
+        id_op=gerar_id_op(tipo_operacao),
+        tipo_operacao=tipo_operacao,
+        direcao_operacao="EXPO",
+        modal_transporte=modal_transporte,
+        status_modulo=MODULOS_EXPORTACAO[0],
+        status_slug=status_slug(MODULOS_EXPORTACAO[0]),
+        criado_por=usuario,
+        atualizado_por=usuario,
+        fornecedor=cliente,
+        numero_os=os_texto[:200] or None,
+    )
+    db.session.add(processo)
+    db.session.flush()
+    db.session.add(ComexExportacaoAntecipada(processo_id=processo.id, orcamento=orcamento, cliente=cliente))
+    db.session.commit()
+    return processo
+
+
+def ordens_fat_para_vincular(processo: ComexProcesso, termo: str = "") -> list[dict]:
+    """Ordens que podem ser ligadas a uma exportacao antecipada: por padrao
+    as do orcamento dela; `termo` permite achar por outro numero (orcamento
+    digitado diferente do da ordem)."""
+    if not aguardando_ordem_fat(processo):
+        raise ValueError("Este processo não está aguardando ordem de faturamento.")
+    return buscar_ordens_fat_para_exportar(termo or processo.exportacao_antecipada.orcamento, vinculando=True)
+
+
+def vincular_ordem_fat(processo: ComexProcesso, cod_ordem_fat, usuario: str) -> ComexProcesso:
+    """Liga a ordem de faturamento (ja' conferida) a' exportacao antecipada -
+    a cotacao feita antes fica no processo e o fluxo segue normal."""
+    _exigir_nao_cancelado(processo)
+    if not aguardando_ordem_fat(processo):
+        raise ValueError("Este processo não está aguardando ordem de faturamento.")
+    ordem = _ordem_fat_conferida_livre(cod_ordem_fat)
+    db.session.add(ComexProcessoOrdemFat(processo_id=processo.id, cod_ordem_fat=ordem.cod_ordem_fat,
+                                         orcamento=ordem.orcamento, pedido=ordem.pedido, cliente=ordem.cliente))
+    processo.numero_os = _os_da_ordem_fat(ordem)[:200] or processo.numero_os
+    processo.atualizado_em = agora_br()
+    processo.atualizado_por = usuario
+    texto = f"Ordem de faturamento {ordem.cod_ordem_fat} vinculada (orçamento {ordem.orcamento or '—'}, cliente {ordem.cliente or '—'})."
+    db.session.add(ComexComentario(processo_id=processo.id, texto=texto, criado_por=usuario))
+    db.session.commit()
+    return processo
+
+
+def _ordem_fat_conferida_livre(cod_ordem_fat) -> ExpedicaoOrdemFat:
     try:
         cod_ordem_fat = int(cod_ordem_fat)
     except (TypeError, ValueError):
@@ -563,6 +647,25 @@ def importar_ordem_fat(cod_ordem_fat, modal_transporte: str, usuario: str) -> Co
     ja = ComexProcessoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat).first()
     if ja:
         raise ValueError(f"Esta ordem de faturamento já foi puxada como o processo {ja.processo.id_op}.")
+    return ordem
+
+
+def _os_da_ordem_fat(ordem: ExpedicaoOrdemFat) -> str:
+    return ", ".join(dict.fromkeys(str(i.n_os).strip() for i in ordem.itens if str(i.n_os or "").strip()))
+
+
+def importar_ordem_fat(cod_ordem_fat, modal_transporte: str, usuario: str) -> ComexProcesso:
+    """Cria um processo de EXPORTACAO a partir de uma ordem de faturamento
+    ja' conferida. A direcao fica fixa em EXPO e o processo nasce na Cotacao
+    (exportacao nao tem OC/PO - ver MODULOS_EXPORTACAO)."""
+    if modal_transporte not in MODAIS_TRANSPORTE:
+        raise ValueError("Selecione o modal de transporte (Aéreo ou Marítimo).")
+    ordem = _ordem_fat_conferida_livre(cod_ordem_fat)
+    cod_ordem_fat = ordem.cod_ordem_fat
+    antecipada = _antecipada_aguardando(ordem.orcamento)
+    if antecipada:
+        raise ValueError(f"O orçamento {ordem.orcamento} tem a exportação antecipada {antecipada.id_op} - "
+                         "vincule a ordem por lá para não duplicar o processo.")
 
     tipo_operacao = _derivar_tipo_operacao("EXPO", modal_transporte)
     processo = ComexProcesso(
@@ -1129,6 +1232,7 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     do que o cadastro reflete) e simples acompanhamento/follow-up de status
     de embarque sem precisar repetir cada acao do fluxo normal."""
     _exigir_nao_cancelado(processo)
+    _exigir_ordem_fat_para_sair_da_cotacao(processo)
     proximo = _proximo_modulo(processo.status_modulo, sequencia_do_processo(processo))
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
@@ -1159,6 +1263,7 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     (NF/Cambio -> Concluido), que exige todos os campos operacionais
     preenchidos (ver CAMPOS_OPERACIONAIS / campos_faltando_para_concluir)."""
     _exigir_nao_cancelado(processo)
+    _exigir_ordem_fat_para_sair_da_cotacao(processo)
     proximo = _proximo_modulo(processo.status_modulo, sequencia_do_processo(processo))
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
@@ -1209,6 +1314,8 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
             ocs = [str(p.cod_ordem_compra or ""), p.cod_compra or ""]
             if p.ordem_fat:  # exportacao: acha pela ordem de faturamento ou orcamento
                 ocs += [str(p.ordem_fat.cod_ordem_fat), p.ordem_fat.orcamento or ""]
+            if p.exportacao_antecipada:
+                ocs.append(p.exportacao_antecipada.orcamento or "")
             try:
                 ocs += [str(c) for c in json.loads(p.po_ocs_vinculadas or "[]") or []]
             except (TypeError, ValueError):
@@ -1708,6 +1815,7 @@ def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> Come
     atualiza os campos, sem mexer no status_modulo)."""
     if processo.status_modulo == "Cotacao" and not processo.cotacao_vencedora_id:
         raise ValueError("Escolha uma cotação de frete antes de enviar a instrução de embarque.")
+    _exigir_ordem_fat_para_sair_da_cotacao(processo)
     # Limite so' por baixo (a PO precisa estar finalizada). Nao ha limite
     # por cima: campo como Numerario (Desembarque), DI (Desembaraco) e Data
     # de fechamento (Concluido) so' existe DEPOIS daqui. Quais campos podem
