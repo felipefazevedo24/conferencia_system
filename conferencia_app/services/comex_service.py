@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
+from ..models import ComexProcessoOrdemFat, ExpedicaoOrdemFat
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -132,24 +133,48 @@ def _parse_dt(value):
     return None
 
 
-def _proximo_modulo(atual: str) -> str | None:
+# Exportacao usa os mesmos status da importacao, pulando os que nao se
+# aplicam: nao tem compra (OC/PO) nem desembaraco/NF de importacao. Nasce na
+# Cotacao a partir da ordem de faturamento conferida (ver importar_ordem_fat).
+MODULOS_EXPORTACAO = [
+    "Cotacao",
+    "Instrucao",
+    "Coleta",
+    "EmTransito",
+    "Desembarque",
+    "Transporte",
+    "Concluido",
+]
+
+
+def exportacao_da_expedicao(processo: ComexProcesso) -> bool:
+    """Fluxo curto so' pra quem nasceu da ordem de faturamento: processos
+    antigos marcados EXPO na PO seguem o fluxo completo onde estao."""
+    return processo.ordem_fat is not None
+
+
+def sequencia_do_processo(processo: ComexProcesso) -> list[str]:
+    return MODULOS_EXPORTACAO if exportacao_da_expedicao(processo) else MODULOS_SEQUENCIA
+
+
+def _proximo_modulo(atual: str, sequencia: list[str] = MODULOS_SEQUENCIA) -> str | None:
     try:
-        idx = MODULOS_SEQUENCIA.index(atual)
+        idx = sequencia.index(atual)
     except ValueError:
         return None
-    if idx + 1 >= len(MODULOS_SEQUENCIA):
+    if idx + 1 >= len(sequencia):
         return None
-    return MODULOS_SEQUENCIA[idx + 1]
+    return sequencia[idx + 1]
 
 
-def _modulo_anterior(atual: str) -> str | None:
+def _modulo_anterior(atual: str, sequencia: list[str] = MODULOS_SEQUENCIA) -> str | None:
     try:
-        idx = MODULOS_SEQUENCIA.index(atual)
+        idx = sequencia.index(atual)
     except ValueError:
         return None
     if idx == 0:
         return None
-    return MODULOS_SEQUENCIA[idx - 1]
+    return sequencia[idx - 1]
 
 
 def gerar_id_op(tipo_operacao: str) -> str:
@@ -483,6 +508,85 @@ def criar_processo_manual(fornecedor: str, referencia: str, usuario: str) -> Com
     return processo
 
 
+def buscar_ordens_fat_para_exportar(termo: str) -> list[dict]:
+    """Ordens de faturamento da Conferencia de Expedicao pelo numero da
+    ordem ou do orcamento - so' as ja' conferidas podem virar exportacao."""
+    termo = str(termo or "").strip()
+    if not termo:
+        raise ValueError("Informe o número da ordem de faturamento ou do orçamento.")
+    filtro = ExpedicaoOrdemFat.orcamento == termo
+    if termo.isdigit():
+        filtro = db.or_(filtro, ExpedicaoOrdemFat.cod_ordem_fat == int(termo))
+    ordens = ExpedicaoOrdemFat.query.filter(filtro, ExpedicaoOrdemFat.excluido.is_(False)).order_by(
+        ExpedicaoOrdemFat.cod_ordem_fat.desc()).limit(50).all()
+    puxadas = {}
+    if ordens:
+        vinculos = ComexProcessoOrdemFat.query.filter(
+            ComexProcessoOrdemFat.cod_ordem_fat.in_([o.cod_ordem_fat for o in ordens])).all()
+        puxadas = {v.cod_ordem_fat: v.processo for v in vinculos}
+    resultado = []
+    for o in ordens:
+        processo = puxadas.get(o.cod_ordem_fat)
+        bloqueio = None
+        if processo:
+            bloqueio = f"Já puxada no processo {processo.id_op}."
+        elif not o.conferido_at:
+            bloqueio = "Ainda não foi conferida na Conferência de Expedição."
+        resultado.append({
+            "cod_ordem_fat": o.cod_ordem_fat, "orcamento": o.orcamento, "pedido": o.pedido, "cliente": o.cliente,
+            "status": o.status, "operacao_tipo": o.operacao_tipo, "numero_nf": o.numero_nf,
+            "conferido_em": o.conferido_at.strftime("%d/%m/%Y %H:%M") if o.conferido_at else None,
+            "os": _os_da_ordem_fat(o), "bloqueio": bloqueio,
+        })
+    return resultado
+
+
+def _os_da_ordem_fat(ordem: ExpedicaoOrdemFat) -> str:
+    return ", ".join(dict.fromkeys(str(i.n_os).strip() for i in ordem.itens if str(i.n_os or "").strip()))
+
+
+def importar_ordem_fat(cod_ordem_fat, modal_transporte: str, usuario: str) -> ComexProcesso:
+    """Cria um processo de EXPORTACAO a partir de uma ordem de faturamento
+    ja' conferida. A direcao fica fixa em EXPO e o processo nasce na Cotacao
+    (exportacao nao tem OC/PO - ver MODULOS_EXPORTACAO)."""
+    if modal_transporte not in MODAIS_TRANSPORTE:
+        raise ValueError("Selecione o modal de transporte (Aéreo ou Marítimo).")
+    try:
+        cod_ordem_fat = int(cod_ordem_fat)
+    except (TypeError, ValueError):
+        raise ValueError("Ordem de faturamento inválida.")
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        raise ValueError("Ordem de faturamento não encontrada na Conferência de Expedição.")
+    if not ordem.conferido_at:
+        raise ValueError("Esta ordem de faturamento ainda não foi conferida - confira na expedição antes de iniciar a exportação.")
+    ja = ComexProcessoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat).first()
+    if ja:
+        raise ValueError(f"Esta ordem de faturamento já foi puxada como o processo {ja.processo.id_op}.")
+
+    tipo_operacao = _derivar_tipo_operacao("EXPO", modal_transporte)
+    processo = ComexProcesso(
+        id_op=gerar_id_op(tipo_operacao),
+        tipo_operacao=tipo_operacao,
+        direcao_operacao="EXPO",
+        modal_transporte=modal_transporte,
+        status_modulo=MODULOS_EXPORTACAO[0],
+        status_slug=status_slug(MODULOS_EXPORTACAO[0]),
+        criado_por=usuario,
+        atualizado_por=usuario,
+        # "fornecedor" e' a contraparte do processo em todas as telas; na
+        # exportacao e' o cliente.
+        fornecedor=ordem.cliente,
+        numero_os=_os_da_ordem_fat(ordem)[:200] or None,
+    )
+    db.session.add(processo)
+    db.session.flush()
+    db.session.add(ComexProcessoOrdemFat(processo_id=processo.id, cod_ordem_fat=cod_ordem_fat,
+                                         orcamento=ordem.orcamento, pedido=ordem.pedido, cliente=ordem.cliente))
+    db.session.commit()
+    return processo
+
+
 # Campos da OC (Modulo 1) que o operador pode corrigir manualmente depois da
 # importacao - os dados vem do ERP, mas o requisito pede edicao total antes
 # de virar PO.
@@ -545,7 +649,10 @@ def cancelar(processo: ComexProcesso, motivo: str, usuario: str) -> list[str]:
     nesta PO voltam a ser OCs soltas (como no estorno da PO);
     po_ocs_vinculadas fica guardado pra reativar() religar. Devolve as OCs
     liberadas."""
-    if processo.status_modulo not in MODULOS_CANCELAVEIS:
+    if exportacao_da_expedicao(processo):
+        if processo.status_modulo != MODULOS_EXPORTACAO[0]:
+            raise ValueError("Só é possível cancelar exportação no status Cotação.")
+    elif processo.status_modulo not in MODULOS_CANCELAVEIS:
         raise ValueError("Só é possível cancelar processos no status OC ou PO.")
     if processo.po_processo_principal_id:
         raise ValueError("Esta OC está combinada na PO de outro processo - cancele o processo principal.")
@@ -576,7 +683,10 @@ def reativar(processo: ComexProcesso, usuario: str) -> dict:
     po_ocs_vinculadas)."""
     if processo.status_modulo != STATUS_CANCELADO:
         raise ValueError("Este processo não está cancelado.")
-    destino = "PO" if processo.po_numero else "OC"
+    if exportacao_da_expedicao(processo):
+        destino = MODULOS_EXPORTACAO[0]
+    else:
+        destino = "PO" if processo.po_numero else "OC"
     religadas, nao_religadas = [], []
     if destino == "PO" and processo.po_ocs_vinculadas:
         try:
@@ -684,11 +794,18 @@ def campo_liberado(status_modulo: str, modulo_minimo: str) -> bool:
     return _indice_modulo(status_modulo) >= _indice_modulo(modulo_minimo)
 
 
+def _campos_operacionais(processo: ComexProcesso):
+    """Exportacao pula o Desembaraco: os campos dele (DI, NF IMPO, Entrega
+    Real) nao aparecem nem travam a conclusao."""
+    sequencia = sequencia_do_processo(processo)
+    return [c for c in CAMPOS_OPERACIONAIS if c[3] in sequencia]
+
+
 def campos_operacionais_do_processo(processo: ComexProcesso) -> list[dict]:
     """Metadados dos campos pro front-end: rotulo, etapa em que abre, se ja
     esta liberado e o valor atual."""
     campos = []
-    for chave, atributo, label, modulo_minimo, tipo in CAMPOS_OPERACIONAIS:
+    for chave, atributo, label, modulo_minimo, tipo in _campos_operacionais(processo):
         valor = getattr(processo, atributo, None)
         if hasattr(valor, "isoformat"):
             valor = valor.isoformat()
@@ -707,7 +824,7 @@ def campos_operacionais_do_processo(processo: ComexProcesso) -> list[dict]:
 def campos_faltando_para_concluir(processo: ComexProcesso) -> list[str]:
     """Rotulos dos campos ainda vazios que travam a conclusao."""
     faltando = []
-    for chave, atributo, label, _modulo, _tipo in CAMPOS_OPERACIONAIS:
+    for chave, atributo, label, _modulo, _tipo in _campos_operacionais(processo):
         if chave == _CAMPO_AUTO_NA_CONCLUSAO:
             continue
         if not getattr(processo, atributo, None):
@@ -794,8 +911,11 @@ def salvar_po(
     _exigir_nao_cancelado(processo)
     if pagador_frete not in PAGADORES_FRETE:
         raise ValueError("Pagador do frete invalido.")
+    # A direcao vem da origem: OC = importacao. Exportacao nasce da ordem de
+    # faturamento (importar_ordem_fat) e nao passa pela PO.
+    direcao_operacao = processo.direcao_operacao or "IMPO"
     if direcao_operacao not in DIRECOES_OPERACAO:
-        raise ValueError("Selecione a direção da operação (Importação ou Exportação) antes de salvar a PO.")
+        raise ValueError("Direção da operação inválida.")
     if modal_transporte not in MODAIS_TRANSPORTE:
         raise ValueError("Selecione o modal de transporte (Aéreo ou Marítimo) antes de salvar a PO.")
     tipo_operacao = _derivar_tipo_operacao(direcao_operacao, modal_transporte)
@@ -977,9 +1097,10 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     retrocesso, nao um avanco/interacao real - contar como interacao
     mascararia processos parados que so foram estornados."""
     _exigir_nao_cancelado(processo)
-    anterior = _modulo_anterior(processo.status_modulo)
+    sequencia = sequencia_do_processo(processo)
+    anterior = _modulo_anterior(processo.status_modulo, sequencia)
     if anterior is None:
-        raise ValueError("Este processo já está no primeiro módulo (OC) - não há como estornar mais.")
+        raise ValueError(f"Este processo já está no primeiro módulo ({LABELS_MODULO[sequencia[0]]}) - não há como estornar mais.")
 
     # Estornar a PO de volta pra OC desfaz o agrupamento: as OCs combinadas
     # (que tinham sumido da lista principal - ver salvar_po) voltam a
@@ -1008,7 +1129,7 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     do que o cadastro reflete) e simples acompanhamento/follow-up de status
     de embarque sem precisar repetir cada acao do fluxo normal."""
     _exigir_nao_cancelado(processo)
-    proximo = _proximo_modulo(processo.status_modulo)
+    proximo = _proximo_modulo(processo.status_modulo, sequencia_do_processo(processo))
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
     processo.status_modulo = proximo
@@ -1038,7 +1159,7 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     (NF/Cambio -> Concluido), que exige todos os campos operacionais
     preenchidos (ver CAMPOS_OPERACIONAIS / campos_faltando_para_concluir)."""
     _exigir_nao_cancelado(processo)
-    proximo = _proximo_modulo(processo.status_modulo)
+    proximo = _proximo_modulo(processo.status_modulo, sequencia_do_processo(processo))
     if proximo is None:
         raise ValueError("Este processo já está Concluído - não há como avançar mais.")
 
@@ -1086,6 +1207,8 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
             # so existem "dentro" do processo principal - buscar pelo numero
             # delas tem que achar o principal).
             ocs = [str(p.cod_ordem_compra or ""), p.cod_compra or ""]
+            if p.ordem_fat:  # exportacao: acha pela ordem de faturamento ou orcamento
+                ocs += [str(p.ordem_fat.cod_ordem_fat), p.ordem_fat.orcamento or ""]
             try:
                 ocs += [str(c) for c in json.loads(p.po_ocs_vinculadas or "[]") or []]
             except (TypeError, ValueError):
@@ -1281,7 +1404,7 @@ def criar_link_cotacao(
     formulario publico e so confirma ou ajusta."""
     if tipo_frete not in TIPOS_FRETE:
         raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
-    if processo.po_status != "Finalizada":
+    if not exportacao_da_expedicao(processo) and processo.po_status != "Finalizada":
         raise ValueError("Finalize a PO antes de gerar uma cotação.")
 
     token = secrets.token_urlsafe(32)

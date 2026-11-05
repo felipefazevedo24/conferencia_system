@@ -4006,6 +4006,26 @@ class ComexProcesso(db.Model):
     )
 
 
+class ComexProcessoOrdemFat(db.Model):
+    """Origem de um processo de EXPORTACAO: a ordem de faturamento ja'
+    conferida na Conferencia de Expedicao, puxada no Comex pelo numero da
+    ordem ou do orcamento. Uma ordem gera no maximo um processo. Tabela a
+    parte (em vez de coluna em comex_processo) pra nao precisar de migration;
+    a direcao em si fica em ComexProcesso.direcao_operacao = "EXPO"."""
+
+    __tablename__ = "comex_processo_ordem_fat"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    cod_ordem_fat = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    orcamento = db.Column(db.String(80), index=True)
+    pedido = db.Column(db.String(80))
+    cliente = db.Column(db.String(160))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("ordem_fat", uselist=False))
+
+
 class ComexPoItem(db.Model):
     """Item de linha da PO (Modulo 2) - codigo, NCM/HS code, part number,
     descricao, quantidade e valores, no formato do modelo de PO usado hoje

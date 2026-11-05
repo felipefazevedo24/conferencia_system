@@ -99,6 +99,7 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cx-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
                 <button class="eui-btn eui-btn--subtle" id="cx-btn-processo-manual"><i class="fas fa-pen"></i> Criar Processo Manual</button>
+                <button class="eui-btn eui-btn--subtle" id="cx-btn-puxar-of"><i class="fas fa-plane-departure"></i> Puxar Ordem de Faturamento (Exportação)</button>
                 <button class="eui-btn eui-btn--primary" id="cx-btn-importar-oc"><i class="fas fa-cloud-arrow-down"></i> Importar OC</button>
             </div>
         </div>
@@ -114,9 +115,9 @@
                     <thead>
                         <tr>
                             <th>ID OP</th>
-                            <th>Fornecedor</th>
+                            <th>Fornecedor / Cliente</th>
                             <th>Tipo</th>
-                            <th>OC</th>
+                            <th>OC / OF</th>
                             <th>PO</th>
                             <th>Pagador Frete</th>
                             <th>Status</th>
@@ -153,6 +154,35 @@
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cx-fechar-processo-manual-2">Cancelar</button>
             <button class="eui-btn eui-btn--primary" id="cx-pm-btn-criar"><i class="fas fa-check"></i> Criar Processo</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Puxar Ordem de Faturamento (Exportacao) -->
+<div class="cx-modal" id="cx-modal-puxar-of">
+    <div class="cx-modal__box is-wide">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-plane-departure"></i> Puxar Ordem de Faturamento — Exportação</h3>
+            <button class="cx-modal__close" id="cx-fechar-puxar-of"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <p style="font-size:12.5px; color:var(--eui-muted); margin:0;">
+                Busque pelo número da ordem de faturamento ou do orçamento. Só a ordem já
+                <b>conferida</b> na Conferência de Expedição inicia a exportação. O processo nasce na
+                <b>Cotação</b> e segue Instrução → Coleta → Em Trânsito → Desembarque → Transporte → Concluído.
+            </p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <input type="text" id="cx-of-termo" class="eui-input" placeholder="Nº da ordem de faturamento ou do orçamento" style="flex:1; min-width:220px;">
+                <select id="cx-of-modal" class="eui-select" style="max-width:170px;">
+                    <option value="Marítimo">Marítimo</option>
+                    <option value="Aéreo">Aéreo</option>
+                </select>
+                <button class="eui-btn eui-btn--primary" id="cx-of-buscar"><i class="fas fa-magnifying-glass"></i> Buscar</button>
+            </div>
+            <div id="cx-of-resultados"></div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-puxar-of-2">Fechar</button>
         </div>
     </div>
 </div>
@@ -711,6 +741,7 @@
     }
 
     function ocColunaHtml(p) {
+        if (p.cod_ordem_fat) return `<span title="Ordem de faturamento${p.orcamento_fat ? " · Orçamento " + escapeHtml(p.orcamento_fat) : ""}">OF ${escapeHtml(p.cod_ordem_fat)}</span>`;
         const vinculadas = p.po_ocs_vinculadas || [];
         if (vinculadas.length > 1) {
             const lista = vinculadas.map((oc) => escapeHtml(String(oc))).join("/");
@@ -744,7 +775,7 @@
             <tr>
                 <td><strong>${escapeHtml(p.id_op)}</strong></td>
                 <td>${escapeHtml(p.fornecedor || "—")}</td>
-                <td>${escapeHtml((p.direcao_operacao === "EXPO" ? "Exportação" : "Importação") + " · " + (p.modal_transporte || (p.tipo_operacao === "IA" ? "Aéreo" : "Marítimo")))}</td>
+                <td><span class="eui-badge ${p.direcao_operacao === "EXPO" ? "eui-badge--warning" : "eui-badge--info"}">${p.direcao_operacao === "EXPO" ? "Exportação" : "Importação"}</span> ${escapeHtml(p.modal_transporte || (p.tipo_operacao === "IA" ? "Aéreo" : "Marítimo"))}</td>
                 <td>${ocColunaHtml(p)}</td>
                 <td>${escapeHtml(p.po_numero || "—")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
@@ -800,21 +831,23 @@
             if (p.cotacao_vencedora_id) {
                 itens += it("notificar-instrucao", "fa-paper-plane", "Enviar Instrução de Embarque");
             }
-            itens += it("editar-po", "fa-file-signature", "Ver PO");
-            itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
+            // Exportacao nasce aqui (sem PO): nao ha' o que estornar, so' cancelar.
+            itens += p.exportacao_expedicao
+                ? "<hr>" + btnPularStatus() + it("cancelar", "fa-ban", "Cancelar processo", true)
+                : it("editar-po", "fa-file-signature", "Ver PO") + "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
             itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
-            itens += it("editar-po", "fa-file-signature", "Ver PO");
+            if (!p.exportacao_expedicao) itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
         } else if (p.status_modulo === "Coleta" || p.status_modulo === "EmTransito") {
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
-            itens += it("editar-po", "fa-file-signature", "Ver PO");
+            if (!p.exportacao_expedicao) itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else if (p.status_modulo === "Cancelado") {
             // Sem PO, "ver" abriria o formulario de criar PO: mostra a OC
             // (com o historico, onde fica o motivo do cancelamento).
-            itens += p.po_numero ? it("ver", "fa-eye", "Detalhes") : it("editar-oc", "fa-eye", "Detalhes da OC");
+            itens += p.exportacao_expedicao ? "" : p.po_numero ? it("ver", "fa-eye", "Detalhes") : it("editar-oc", "fa-eye", "Detalhes da OC");
             itens += "<hr>" + it("reativar", "fa-rotate-left", "Reativar processo");
         } else if (p.status_modulo === "Concluido") {
             itens += it("ver", "fa-eye", "Detalhes");
@@ -992,6 +1025,61 @@
             erroEl.textContent = err.message;
             erroEl.style.display = "block";
         } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── MODAL: Puxar Ordem de Faturamento (Exportacao) ─────────────────
+    $("cx-btn-puxar-of").addEventListener("click", () => {
+        $("cx-of-termo").value = "";
+        $("cx-of-resultados").innerHTML = "";
+        $("cx-modal-puxar-of").classList.add("open");
+        $("cx-of-termo").focus();
+    });
+    function fecharModalOf() { $("cx-modal-puxar-of").classList.remove("open"); }
+    $("cx-fechar-puxar-of").addEventListener("click", fecharModalOf);
+    $("cx-fechar-puxar-of-2").addEventListener("click", fecharModalOf);
+    async function buscarOrdensFat() {
+        const box = $("cx-of-resultados");
+        box.innerHTML = '<p style="color:var(--eui-muted); font-size:13px;">Buscando…</p>';
+        try {
+            const data = await api("/api/comex/ordem-fat/buscar?termo=" + encodeURIComponent($("cx-of-termo").value.trim()));
+            const ordens = data.ordens || [];
+            if (!ordens.length) {
+                box.innerHTML = '<p style="color:var(--eui-muted); font-size:13px;">Nenhuma ordem de faturamento com esse número ou orçamento na Conferência de Expedição.</p>';
+                return;
+            }
+            box.innerHTML = ordens.map((o) => `
+                <div class="cx-oc-result">
+                    <div>
+                        <strong>OF ${escapeHtml(o.cod_ordem_fat)}</strong> — ${escapeHtml(o.cliente || "—")}
+                        <small>Orçamento: ${escapeHtml(o.orcamento || "—")} · Pedido: ${escapeHtml(o.pedido || "—")} · OS: ${escapeHtml(o.os || "—")}</small>
+                        <small>${escapeHtml(o.status || "")}${o.conferido_em ? " · conferida em " + escapeHtml(o.conferido_em) : ""} · ${o.operacao_tipo === "internacional" ? "Internacional" : "Nacional"}${o.numero_nf ? " · NF " + escapeHtml(o.numero_nf) : ""}</small>
+                    </div>
+                    ${o.bloqueio
+                        ? `<span class="eui-badge eui-badge--warning">${escapeHtml(o.bloqueio)}</span>`
+                        : `<button class="eui-btn eui-btn--primary eui-btn--sm" data-puxar-of="${escapeHtml(o.cod_ordem_fat)}"><i class="fas fa-plane-departure"></i> Iniciar exportação</button>`}
+                </div>`).join("");
+        } catch (err) {
+            box.innerHTML = `<p style="color:var(--eui-danger); font-size:13px;">${escapeHtml(err.message)}</p>`;
+        }
+    }
+    $("cx-of-buscar").addEventListener("click", buscarOrdensFat);
+    $("cx-of-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscarOrdensFat(); });
+    $("cx-of-resultados").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-puxar-of]");
+        if (!btn) return;
+        btn.disabled = true;
+        try {
+            const resp = await api("/api/comex/ordem-fat/importar", {
+                method: "POST",
+                body: JSON.stringify({ cod_ordem_fat: btn.dataset.puxarOf, modal_transporte: $("cx-of-modal").value }),
+            });
+            toast(resp.message, "success");
+            fecharModalOf();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
             btn.disabled = false;
         }
     });
@@ -1241,7 +1329,10 @@
         // anterior (po_numero existe) - na primeira vez o operador precisa
         // escolher explicitamente, nao herdar o "IMPO/Marítimo" provisorio
         // do import.
-        $("cx-po-direcao").value = p.po_numero ? (p.direcao_operacao || "") : "";
+        // Direcao vem da origem (OC = Importacao; exportacao nasce da ordem de
+        // faturamento) - fica travada, so' o modal e' escolhido aqui.
+        $("cx-po-direcao").value = p.direcao_operacao || "IMPO";
+        $("cx-po-direcao").disabled = true;
         $("cx-po-modal").value = p.po_numero ? (p.modal_transporte || "") : "";
         atualizarLabelFornecedor();
         $("cx-po-pagador-frete").value = p.pagador_frete || "";

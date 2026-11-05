@@ -118,6 +118,10 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "po_processo_principal_id": p.po_processo_principal_id,
         "po_processo_principal_id_op": _processo_principal_id_op(p),
         "processo_concluido_em": p.processo_concluido_em.strftime("%d/%m/%Y %H:%M") if p.processo_concluido_em else None,
+        # Exportacao puxada da ordem de faturamento (fluxo curto, sem OC/PO).
+        "exportacao_expedicao": svc.exportacao_da_expedicao(p),
+        "cod_ordem_fat": p.ordem_fat.cod_ordem_fat if p.ordem_fat else None,
+        "orcamento_fat": p.ordem_fat.orcamento if p.ordem_fat else None,
     }
 
 
@@ -236,6 +240,30 @@ def api_importar_oc():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "OC importada com sucesso.", "processo": _processo_payload(processo)})
+
+
+@comex_bp.route("/api/comex/ordem-fat/buscar")
+@permission_required(PERMISSION)
+def api_buscar_ordem_fat():
+    """Exportacao: ordens de faturamento da Conferencia de Expedicao pelo
+    numero da ordem ou do orcamento (dado local, sem ERP)."""
+    try:
+        ordens = svc.buscar_ordens_fat_para_exportar(request.args.get("termo") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ordens": ordens})
+
+
+@comex_bp.route("/api/comex/ordem-fat/importar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_importar_ordem_fat():
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.importar_ordem_fat(payload.get("cod_ordem_fat"), payload.get("modal_transporte"), usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Exportação {processo.id_op} criada na Cotação.", "processo": _processo_payload(processo)})
 
 
 @comex_bp.route("/api/comex/processo-manual", methods=["POST"])
