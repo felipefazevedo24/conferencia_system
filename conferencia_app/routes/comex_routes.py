@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from datetime import datetime
 from io import BytesIO
 from email.mime.application import MIMEApplication
@@ -33,6 +34,15 @@ PERMISSION = "PAGE_COMEX"
 # E-mails sempre em copia em todo e-mail do Comex (PO, cotacao de frete e
 # instrucao de embarque).
 PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
+
+
+
+def _separar_emails(texto) -> list[str]:
+    """O cadastro de fornecedor guarda varios e-mails num campo so', com ";".
+    No cabecalho To o separador tem que ser virgula: com ";" o SMTP nao acha
+    nenhum destinatario e a mensagem sai so' para as copias (aconteceu - o
+    forwarder nao recebia a cotacao)."""
+    return [e.strip() for e in re.split(r"[;,]", str(texto or "")) if e.strip()]
 
 
 def _remetente_comex() -> tuple[str, dict]:
@@ -506,11 +516,9 @@ def api_notificar_instrucao(processo_id):
         return jsonify({"error": str(exc)}), 400
 
     destinatarios_raw = str(payload.get("destinatarios") or "").strip()
-    destinatarios = [d.strip() for d in destinatarios_raw.split(";") if d.strip()]
+    destinatarios = _separar_emails(destinatarios_raw)
     if not destinatarios:
-        email_padrao = _cotacao_vencedora_email(processo)
-        if email_padrao:
-            destinatarios = [email_padrao]
+        destinatarios = _separar_emails(_cotacao_vencedora_email(processo))
     if not destinatarios:
         return jsonify({"error": "Nenhum e-mail cadastrado para o prestador vencedor. Informe um e-mail."}), 400
 
@@ -966,7 +974,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
     msg["Subject"] = f"Solicitação de Cotação de Frete – {processo.id_op} – Columbia Machine Brasil"
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
-    msg["To"] = destinatario
+    msg["To"] = ", ".join(_separar_emails(destinatario))
     msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
     corpo = (
         f"<p>Prezados,</p>"
