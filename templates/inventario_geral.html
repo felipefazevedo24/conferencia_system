@@ -686,7 +686,7 @@
                 ${passo(2, "Simular (valida no ERP, não grava)", simOk || enviado, finalizado && !simOk && !enviado)}
                 ${passo(3, "Aplicar (grava no estoque do ERP)", enviado, simOk && !enviado)}
             </div>
-            <p style="margin:0 0 8px;font-size:12.5px;color:var(--eui-muted);">O Sync divide o envio <b>automaticamente em lotes de ${pe.limite_lote} produtos</b> (limite da API) — não precisa selecionar. Simular e Aplicar enviam todos os lotes em sequência. Se algum lote falhar ao aplicar: <b>Aplicar pendentes</b> reenvia o mesmo pacote (falha passageira, ex.: timeout); <b>Simular de novo</b> relê o ERP e monta uma rodada nova só com o que ainda não foi gravado (ex.: erro de versão). O que já foi gravado nunca é reenviado.</p>
+            <p style="margin:0 0 8px;font-size:12.5px;color:var(--eui-muted);">O Sync divide o envio <b>automaticamente em lotes de ${pe.limite_lote} produtos</b> (limite da API) — não precisa selecionar. O envio usa <b>só os dados do Sync</b> (saldo e versão do print da abertura, mais as contagens) — o ERP não é lido de novo. Simular e Aplicar enviam todos os lotes em sequência. Se algum lote falhar ao aplicar: <b>Aplicar pendentes</b> reenvia o mesmo pacote (falha passageira, ex.: timeout); <b>Simular de novo</b> monta uma rodada nova só com o que ainda não foi gravado. O que já foi gravado nunca é reenviado.</p>
             <div class="ig-toolbar" style="margin:0;">
                 ${inv.status === "Finalizado" ? `<button class="eui-btn eui-btn--primary" id="ig-btn-simular" ${podeSimular ? "" : "disabled"}><i class="fas fa-vial"></i> ${!pe.rodada ? "Simular envio" : parcial ? "Simular de novo (só o que falta gravar)" : "Simular de novo"}</button>
                 <button class="eui-btn eui-btn--danger" id="ig-btn-aplicar" ${podeAplicar && estado.gravacao_configurada ? "" : `disabled title="${!estado.gravacao_configurada ? "Chave de gravação não configurada no servidor" : "Simule e confira antes de aplicar"}"`}><i class="fas fa-cloud-arrow-up"></i> ${algumAplicado ? `Aplicar pendentes (${pendentes})` : "Aplicar no ERP"}</button>` : ""}
@@ -761,7 +761,7 @@
                 if (!confirm("Finalizar o inventário? Depois disso não aceita mais contagem.")) return;
                 toast((await api("/api/inventario-geral/finalizar", { method: "POST" })).message, "success");
             } else if (id === "ig-btn-simular") {
-                toast("Relendo o ERP e simulando… (nada é gravado)", "");
+                toast("Simulando com os dados do Sync… (nada é gravado)", "");
                 const r = await api("/api/inventario-geral/simular", { method: "POST" });
                 const recus = (r.recusados_pelo_sync || []).length, falhas = (r.simulacoes || []).filter((x) => x.status !== "SIMULADO_SEM_GRAVAR").length;
                 toast(`${r.message} ${(r.simulacoes || []).length} lote(s)${falhas ? `, ${falhas} com erro` : ""}${recus ? ` · ${recus} produto(s) fora do envio` : ""} — veja o painel Envio ao ERP.`, falhas || recus ? "error" : "success");
@@ -813,7 +813,7 @@
         if (addLote) { addLote.insertAdjacentHTML("beforebegin", linhaLoteTeste("", "")); return; }
         const remLote = e.target.closest("[data-teste-rem-lote]"); if (remLote) { remLote.parentElement.remove(); return; }
         if (e.target.closest("#ig-teste-simular")) {
-            toast("Relendo o ERP e simulando… (nada é gravado)", "");
+            toast("Simulando com o retrato do Buscar… (nada é gravado)", "");
             api("/api/inventario-geral/teste-api/simular", { method: "POST", body: JSON.stringify({ itens: coletarTeste(), consulta_id: testeConsulta && testeConsulta.id }) })
                 .then((r) => { desenharRetornoTeste(r.teste); toast(`Simulação: ${r.teste.status}`, r.teste.status === "SIMULADO_SEM_GRAVAR" ? "success" : "error"); carregarHistoricoTeste(); })
                 .catch((err) => toast(err.message, "error"));

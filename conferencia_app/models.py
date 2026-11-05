@@ -4917,6 +4917,22 @@ class InventarioGeralResultado(db.Model):
                                  backref=db.backref("resultado", uselist=False, cascade="all, delete-orphan"))
 
 
+class InventarioGeralRetratoErp(db.Model):
+    """Produtos que ja' vieram inconsistentes no print da abertura (estoque
+    geral do ERP != soma dos depositos): o CPS recusa esses (409) e um
+    recusado derruba o lote de 500 inteiro. O envio usa so' o print do Sync,
+    sem reler o ERP - entao a lista fica gravada aqui. Uma linha por
+    inventario; sem ela (aberto antes desta tabela) o 1o Simular le o ERP uma
+    vez pra montar a lista. Tabela a parte pra nao precisar de migration."""
+
+    __tablename__ = "inventario_geral_retrato_erp"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, unique=True)
+    inconsistentes = db.Column(db.Text, nullable=False, default="[]")  # JSON: [cod_produto, ...]
+    lido_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class InventarioGeralRecusa(db.Model):
     """Produto que o proprio Sync deixou fora do envio ao ERP na ultima
     simulacao (saldo mudou, geral != depositos, sumiu do ERP). Retrato da

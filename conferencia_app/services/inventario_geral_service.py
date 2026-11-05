@@ -36,6 +36,7 @@ from ..models import InventarioGeralResultado as Resultado
 from ..models import InventarioGeralCancelamento as Cancelamento
 from ..models import InventarioGeralTesteApi as TesteApi
 from ..models import InventarioGeralRecusa as Recusa
+from ..models import InventarioGeralRetratoErp as RetratoErp
 from . import erp_estoque_service as erp
 from . import inventario_cps_client as cps
 
@@ -133,8 +134,21 @@ def abrir(usuario: str, descricao: str = "") -> Inventario:
                                     qtde_sistema=float(l["qtde"]), **base))
         else:
             db.session.add(Item(inventario_id=inv.id, qtde_sistema=total, **base))
+    _gravar_inconsistentes(inv, produtos)
     db.session.commit()
     return inv
+
+
+def _gravar_inconsistentes(inv: Inventario, produtos: list[dict]) -> RetratoErp:
+    cods = sorted(int(p["cod_produto"]) for p in produtos if _inconsistente(p))
+    retrato = RetratoErp(inventario_id=inv.id, inconsistentes=json.dumps(cods), lido_em=agora_br())
+    db.session.add(retrato)
+    return retrato
+
+
+def _inconsistente(estado: dict) -> bool:
+    geral = estado.get("estoque_produto")
+    return geral is not None and not _igual(geral, estado.get("qtde_total"))
 
 
 # ── Contagem ────────────────────────────────────────────────────────────
@@ -336,12 +350,13 @@ def finalizar(inv: Inventario, usuario: str) -> Inventario:
 
 
 # ── Envio ao ERP (CPS) ─────────────────────────────────────────────────
-def _payloads(inv: Inventario, atual: dict[int, dict], operador: str, rodada: int = 1,
+def _payloads(inv: Inventario, inconsistentes: set[int], operador: str, rodada: int = 1,
               ja_aplicados: set[int] | None = None) -> tuple[list[dict], list[dict]]:
     """Agrupa as linhas por produto (lote: todos os lotes contados, total =
-    soma). estoque_esperado/versao vem da leitura ATUAL (regra da API).
-    Produto ja' gravado no ERP (rodada anterior) nao vai de novo.
-    Devolve (payloads, recusados_pelo_sync)."""
+    soma). estoque_esperado/versao vem do PRINT da abertura: no inventario
+    geral o estoque fica parado, entao o Sync so' pre-envia o que ja' tem,
+    sem reler o ERP. Produto ja' gravado no ERP (rodada anterior) nao vai de
+    novo. Devolve (payloads, recusados_pelo_sync)."""
     por_produto: dict[int, list[Item]] = {}
     for item in inv.itens:
         if item.cod_produto not in (ja_aplicados or set()):
@@ -349,26 +364,21 @@ def _payloads(inv: Inventario, atual: dict[int, dict], operador: str, rodada: in
     linhas, recusados = [], []
     retrato = {p.cod_produto: p for p in Produto.query.filter_by(inventario_id=inv.id).all()}
     for cod, itens in sorted(por_produto.items()):
-        estado = atual.get(cod)
-        if not estado:
-            recusados.append({"cod_produto": cod, "motivo": "Produto não voltou na leitura atual do ERP (inativo?)."})
+        antes = retrato.get(cod)
+        if not antes:
+            recusados.append({"cod_produto": cod, "motivo": "Produto sem saldo/versão no print da abertura."})
             continue
         # O CPS recusa (409) produto cujo estoque geral nao bate com a soma
         # dos depositos - e um recusado derruba o lote de 500 inteiro. Visto
         # em 584 dos 2.051 itens com saldo na leitura de 19/10/2026: separa
         # aqui pra o resto seguir, e a lista vai pra revisao no CPS.
-        geral = estado.get("estoque_produto")
-        if geral is not None and not _igual(geral, estado.get("qtde_total")):
+        if cod in inconsistentes:
             recusados.append({"cod_produto": cod, "motivo": "Estoque geral do ERP difere da soma dos depósitos - revisar no CPS."})
-            continue
-        antes = retrato.get(cod)
-        if antes and not _igual(antes.qtde_total, estado.get("qtde_total")):
-            recusados.append({"cod_produto": cod, "motivo": "Saldo do ERP mudou desde a abertura - revise antes de enviar."})
             continue
         linha = {
             "cod_produto": cod,
-            "estoque_esperado": estado.get("qtde_total"),
-            "versao": estado.get("versao"),
+            "estoque_esperado": antes.qtde_total,
+            "versao": antes.versao,
             "qtde_inventariada": round(sum(i.qtde_final or 0 for i in itens), 6),
         }
         if com_lote(itens[0].tipo_controle):
@@ -449,14 +459,19 @@ def produtos_aplicados(inv: Inventario) -> set[int]:
 
 
 def simular_envio(inv: Inventario, usuario: str) -> dict:
-    """Le o ERP de novo, monta os lotes de 500 e chama /simular (nao grava)."""
+    """Monta os lotes de 500 com o print da abertura e chama /simular (nao grava)."""
     if inv.status != Inventario.STATUS_FINALIZADO:
         raise ValueError("Finalize o inventário (todas as contagens encerradas) antes de enviar ao ERP.")
-    atual = {int(p["cod_produto"]): p for p in cps.listar_deposito()}
+    retrato_erp = RetratoErp.query.filter_by(inventario_id=inv.id).first()
+    if not retrato_erp:
+        # Inventario aberto antes do print guardar os inconsistentes: le o ERP
+        # uma unica vez pra montar a lista; dai' em diante so' o print.
+        retrato_erp = _gravar_inconsistentes(inv, cps.listar_deposito())
+    inconsistentes = set(json.loads(retrato_erp.inconsistentes or "[]"))
     rodada = (rodada_atual(inv) or 0) + 1
     # Depois de uma aplicacao parcial, a rodada nova leva so' o que falta
     # gravar (com a versao atual - reaplicar o pacote velho daria 409 de novo).
-    payloads, recusados = _payloads(inv, atual, usuario, rodada, produtos_aplicados(inv))
+    payloads, recusados = _payloads(inv, inconsistentes, usuario, rodada, produtos_aplicados(inv))
     # Retrato do que o Sync deixou de fora nesta rodada (aparece no painel de envio).
     Recusa.query.filter_by(inventario_id=inv.id).delete()
     retrato = {p.cod_produto: p for p in Produto.query.filter_by(inventario_id=inv.id).all()}
