@@ -97,12 +97,6 @@ def compras_page():
     )
 
 
-@compras_bp.route("/compras/ui")
-@permission_required(PERM)
-def compras_ui():
-    return current_app.send_static_file("compras/index.html")
-
-
 @compras_bp.route("/api/compras/health")
 @permission_required(PERM)
 def compras_health():
@@ -182,6 +176,13 @@ def dashboard_performance():
             **filters,
         )
     )
+
+
+@compras_bp.route("/api/compras/fila")
+@permission_required(PERM)
+def fila_compras():
+    filters = _common_filters()
+    return _json_response(lambda: compras_service.fila_compras(**filters))
 
 
 @compras_bp.route("/api/compras/historico/ordens-compra")

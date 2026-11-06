@@ -5217,77 +5217,79 @@ class ComexNcmAliquota(db.Model):
     atualizado_por = db.Column(db.String(100))
 
 
-class SpendCompraImportacao(db.Model):
-    """Cada upload da planilha de entradas do Custos no Spend de Compras.
-    Reimportar substitui so' as competencias que vieram no arquivo."""
+class SpendEntradaGrv(db.Model):
+    """Espelho dos itens de NF de entrada do GRV (tcompras + tcom_aux) que
+    alimenta o Spend de Compras. A tela le daqui; o GRV so' e' consultado na
+    atualizacao (compras_spend_service.atualizar), que regrava os meses
+    mais recentes a cada rodada.
 
-    __tablename__ = "spend_compra_importacao"
+    Guarda toda entrada: o filtro de compra (CFOP) e o intercompany saem na
+    leitura. A classificacao de suprimentos tambem: e' calculada dos
+    exemplos (SpendClassificacaoExemplo), nunca gravada aqui.
+    `valor` = total + IPI - desconto do item."""
 
-    id = db.Column(db.Integer, primary_key=True)
-    arquivo = db.Column(db.String(255))
-    competencias = db.Column(db.String(500))  # "2026-09, 2026-10"
-    linhas = db.Column(db.Integer, nullable=False, default=0)
-    valor_total = db.Column(db.Float, nullable=False, default=0)
-    importado_por = db.Column(db.String(100))
-    importado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
-
-
-class SpendCompraItem(db.Model):
-    """Item de entrada (uma linha da aba Base da planilha do Custos).
-
-    A classificacao de suprimentos NAO e' gravada aqui: sai na leitura do
-    de-para por conta (SpendClassificacaoConta) e das excecoes por item, pra
-    mudar o de-para refletir no Spend inteiro na hora. `competencia` e' a
-    coluna "Mes" do Custos (corte do fechamento), nao a data de lancamento.
-    `valor` = valor total + IPI - desconto, a mesma conta da planilha."""
-
-    __tablename__ = "spend_compra_item"
+    __tablename__ = "spend_entrada_grv"
 
     id = db.Column(db.Integer, primary_key=True)
-    importacao_id = db.Column(db.Integer, db.ForeignKey("spend_compra_importacao.id"), nullable=True, index=True)
-    competencia = db.Column(db.String(7), nullable=False, index=True)  # "2026-10"
-    data_lancamento = db.Column(db.Date)
+    competencia = db.Column(db.String(7), nullable=False, index=True)  # mes do lancamento, "2026-10"
+    data_lancamento = db.Column(db.Date, nullable=False, index=True)
     data_nf = db.Column(db.Date)
-    nota_fiscal = db.Column(db.String(60), index=True)
-    fornecedor = db.Column(db.String(200), index=True)
-    cfop = db.Column(db.String(10), index=True)  # so' digitos
-    descricao_cfop = db.Column(db.String(200))
+    nota_fiscal = db.Column(db.String(60))
+    cod_fornecedor = db.Column(db.Integer, index=True)
+    fornecedor = db.Column(db.String(200))
+    cfop = db.Column(db.String(10))  # so' digitos
     codigo_item = db.Column(db.String(80), index=True)
     descricao = db.Column(db.String(400))
     valor = db.Column(db.Float, nullable=False, default=0)
-    conta = db.Column(db.String(30), index=True)  # conta Dominio
+    conta = db.Column(db.String(60))  # plano de contas do GRV
     nome_conta = db.Column(db.String(200))
-    centro_custo = db.Column(db.String(200))
-    familia = db.Column(db.String(160), index=True)
+    familia = db.Column(db.String(160))
     grupo = db.Column(db.String(160))
-    oc = db.Column(db.String(120))
 
 
-class SpendClassificacaoConta(db.Model):
-    """De-para conta Dominio -> classificacao de suprimentos (ex.: 94913 ->
-    Locacao de equipamentos). Cobre ~99% dos itens; o resto vai por excecao."""
+class SpendEntradaGrvSync(db.Model):
+    """Cada atualizacao do espelho de entradas: quando, a partir de que data
+    regravou e se deu erro. A ultima OK diz de quando e' o Spend da tela."""
 
-    __tablename__ = "spend_classificacao_conta"
+    __tablename__ = "spend_entrada_grv_sync"
 
-    id = db.Column(db.Integer, primary_key=True)
-    conta = db.Column(db.String(30), nullable=False, unique=True, index=True)
-    classificacao = db.Column(db.String(120), nullable=False)
-    atualizado_por = db.Column(db.String(100))
-    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
-
-
-class SpendClassificacaoExcecao(db.Model):
-    """Item que foge da classificacao da conta (mesma conta, outro destino).
-    Vale para conta + codigo do item; ganha do de-para por conta."""
-
-    __tablename__ = "spend_classificacao_excecao"
+    STATUS_ANDAMENTO = "Em andamento"
+    STATUS_OK = "OK"
+    STATUS_ERRO = "Erro"
 
     id = db.Column(db.Integer, primary_key=True)
-    conta = db.Column(db.String(30), nullable=False, index=True)
-    codigo_item = db.Column(db.String(80), nullable=False, index=True)
-    descricao = db.Column(db.String(400))
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ANDAMENTO, index=True)
+    iniciado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime)
+    iniciado_por = db.Column(db.String(100))
+    desde = db.Column(db.Date)
+    linhas = db.Column(db.Integer)
+    erro = db.Column(db.String(500))
+
+
+class SpendClassificacaoExemplo(db.Model):
+    """Exemplo que ensina a classificacao de suprimentos do Spend.
+
+    origem "planilha": semente da planilha "Spend baseline Oct" do Custos
+    (jan-out/2026) casada com o GRV, carregada uma vez de
+    conferencia_app/data/spend_classificacao_planilha.json.
+    origem "manual": confirmacao/correcao feita na tela; vale para o
+    fornecedor + item e ganha de qualquer palpite."""
+
+    __tablename__ = "spend_classificacao_exemplo"
+
+    ORIGEM_PLANILHA = "planilha"
+    ORIGEM_MANUAL = "manual"
+
+    id = db.Column(db.Integer, primary_key=True)
+    origem = db.Column(db.String(20), nullable=False, index=True)
+    cod_fornecedor = db.Column(db.Integer, index=True)
+    codigo_item = db.Column(db.String(80), nullable=False, default="", index=True)
+    conta = db.Column(db.String(60))
+    familia = db.Column(db.String(160))
+    grupo = db.Column(db.String(160))
+    cfop = db.Column(db.String(10))
     classificacao = db.Column(db.String(120), nullable=False)
+    peso = db.Column(db.Integer, nullable=False, default=1)  # linhas da planilha que deram o exemplo
     atualizado_por = db.Column(db.String(100))
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
-
-    __table_args__ = (db.UniqueConstraint("conta", "codigo_item", name="uq_spend_excecao_conta_item"),)

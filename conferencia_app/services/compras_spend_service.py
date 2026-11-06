@@ -1,41 +1,52 @@
-"""Spend de Compras: gasto por classificação de suprimentos.
+"""Spend de Compras: gasto por classificação de suprimentos, direto do GRV.
 
-A base é a planilha de entradas do Custos (aba Base, uma linha por item de
-NF, com a conta Domínio). O GRV não serve de fonte: lá cada item só tem uma
-das ~17 contas genéricas do plano do GRV, que acertam 11% do valor da
-classificação; a conta Domínio do Custos acerta 99% (medido em 05/11/2026
-contra a planilha "Spend baseline Oct").
+A base é o espelho das entradas de NF do GRV (SpendEntradaGrv). A tela lê o
+espelho e, quando ele passa de IDADE_MAXIMA_MIN, pede a atualização por
+trás: ninguém importa planilha.
 
-Classificação = exceção (conta + item) > de-para da conta > sem classificação.
+Entra no Spend: CFOP de compra/serviço de fornecedor de fora do grupo. O
+resto (retorno, remessa, devolução e a importação de máquina do Grupo
+Columbia, ~R$ 2,6 mi em jan–out/2026) fica no espelho e aparece à parte.
+
+Classificação: o GRV não tem a conta Domínio que o Custos usa (o plano do
+GRV tem ~17 contas genéricas, que sozinhas acertam 46% do valor). Ela é
+aprendida de exemplos (SpendClassificacaoExemplo), do mais específico para
+o mais genérico — ver _NIVEIS. Medido contra a planilha "Spend baseline
+Oct": 98% do valor nos meses dela e ~85% num mês novo, sem correção. Fora
+do primeiro nível é palpite e vai para "A revisar"; confirmar ou corrigir
+vira exemplo manual, que ganha de tudo para aquele fornecedor + item.
 É calculada na leitura, nunca gravada no item.
 """
 from __future__ import annotations
 
+import json
 import re
-import unicodedata
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
-import openpyxl
-
+from ..compras import db as grv
+from ..compras import queries
+from ..compras.config import get_settings
 from ..extensions import db
-from ..models import (
-    SpendClassificacaoConta,
-    SpendClassificacaoExcecao,
-    SpendCompraImportacao,
-    SpendCompraItem,
-)
+from ..models import SpendClassificacaoExemplo as Exemplo
+from ..models import SpendEntradaGrv as Entrada
+from ..models import SpendEntradaGrvSync as Sync
 from ..tempo import agora_br
 
 
 SEM_CLASSIFICACAO = "(sem classificação)"
 SEM_FAMILIA = "(sem família)"
-TAMANHO_MAXIMO_ARQUIVO = 25 * 1024 * 1024
+INICIO = date(2026, 1, 1)
+IDADE_MAXIMA_MIN = 60
+# Atualização "em andamento" há mais tempo que isso caiu no meio (worker
+# reiniciado): deixa outra começar.
+ANDAMENTO_EXPIRA_MIN = 15
+SEMENTE = Path(__file__).resolve().parents[1] / "data" / "spend_classificacao_planilha.json"
 
 # Sufixo do CFOP de entrada (1/2/3) que é compra ou serviço. O resto — saída,
 # retorno de conserto/industrialização, remessa, amostra, devolução, simples
-# faturamento, "outras entradas" — fica guardado mas fora do Spend. Na base
-# de jan–out/2026 isso era ~R$ 186 mil.
+# faturamento, "outras entradas" — fica guardado mas fora do Spend.
 _CFOP_COMPRA = frozenset({
     "101", "102", "111", "113", "116", "117", "118", "120", "121", "122", "124", "125", "126", "128",
     "251", "252", "253", "254", "255", "256", "257",
@@ -46,64 +57,28 @@ _CFOP_COMPRA = frozenset({
     "651", "652", "653",
     "933",
 })
-
-# Cabeçalho normalizado (sem acento, minúsculo, só letra/número) -> campo.
-_COLUNAS = {
-    "mes": ("mes",),
-    "data_lancamento": ("lancamento",),
-    "data_nf": ("datadanf",),
-    "nota_fiscal": ("notafiscal",),
-    "fornecedor": ("fornecedor",),
-    "cfop": ("cfop",),
-    "descricao_cfop": ("descricaocfop",),
-    "codigo_item": ("codinternocodfabricante", "codinterno"),
-    "descricao": ("descricao",),
-    "valor_total": ("valortotal",),
-    "ipi": ("valortotalipi",),
-    "desconto": ("valordesconto",),
-    "conta": ("conta",),
-    "nome_conta": ("classificacaocontabil",),
-    "centro_custo": ("ccdescricao", "descricaocc", "centrodecusto"),
-    "familia": ("familiagrv",),
-    "grupo": ("grupogrv",),
-    "oc": ("oc",),
-    "classificacao": ("classificacaodesuprimentos",),
-}
-_OBRIGATORIAS = ("data_lancamento", "nota_fiscal", "fornecedor", "cfop", "valor_total", "conta")
+# Compra de dentro do grupo (máquina importada da Columbia) não é spend de
+# suprimentos; o Custos tira da base dele.
+_INTERCOMPANY = "COLUMBIA MACHINE"
 
 
 def cfop_e_compra(cfop) -> bool:
-    digitos = re.sub(r"\D", "", str(cfop or ""))
+    digitos = _digitos(cfop)
     return len(digitos) == 4 and digitos[0] in "123" and digitos[1:] in _CFOP_COMPRA
 
 
-def _norm_cabecalho(valor) -> str:
-    texto = unicodedata.normalize("NFKD", str(valor or ""))
-    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
-    return "".join(ch for ch in texto.lower() if ch.isalnum())
+def e_intercompany(fornecedor) -> bool:
+    return _INTERCOMPANY in str(fornecedor or "").upper()
+
+
+def _digitos(valor) -> str:
+    return re.sub(r"\D", "", str(valor or ""))
 
 
 def _texto(valor, limite: int) -> str:
     if valor is None:
         return ""
-    if isinstance(valor, float) and valor.is_integer():
-        valor = int(valor)
     return " ".join(str(valor).split())[:limite]
-
-
-def _numero(valor) -> float:
-    # Célula contábil vazia chega como " -   ".
-    if isinstance(valor, (int, float)):
-        return float(valor)
-    texto = str(valor or "").strip().replace("R$", "").replace(" ", "")
-    if not texto or texto == "-":
-        return 0.0
-    if "," in texto:
-        texto = texto.replace(".", "").replace(",", ".")
-    try:
-        return float(texto)
-    except ValueError:
-        return 0.0
 
 
 def _data(valor) -> date | None:
@@ -111,215 +86,14 @@ def _data(valor) -> date | None:
         return valor.date()
     if isinstance(valor, date):
         return valor
-    texto = str(valor or "").strip()
-    for formato in ("%d/%m/%Y", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(texto[:10], formato).date()
-        except ValueError:
-            continue
-    return None
-
-
-def _norm_conta(valor) -> str:
-    return _texto(valor, 30)
-
-
-def _chave_item(codigo) -> str:
-    return _texto(codigo, 80).upper()
+    try:
+        return date.fromisoformat(str(valor or "")[:10])
+    except ValueError:
+        return None
 
 
 def _limpa_classificacao(valor) -> str:
     return " ".join(str(valor or "").split())
-
-
-def _competencia(mes_coluna, lancamento: date) -> str:
-    """Mês do Custos, com o ano do lançamento. O Custos corta o fechamento
-    alguns dias depois da virada (NF lançada 02/02 conta em janeiro), então
-    o ano acompanha o mês mais próximo do lançamento."""
-    try:
-        mes = int(_numero(mes_coluna))
-    except (TypeError, ValueError):
-        mes = 0
-    if not 1 <= mes <= 12:
-        return f"{lancamento.year:04d}-{lancamento.month:02d}"
-    ano = lancamento.year
-    if mes - lancamento.month > 6:
-        ano -= 1
-    elif lancamento.month - mes > 6:
-        ano += 1
-    return f"{ano:04d}-{mes:02d}"
-
-
-def _localizar_cabecalho(workbook):
-    planilhas = sorted(workbook.worksheets, key=lambda ws: 0 if _norm_cabecalho(ws.title) == "base" else 1)
-    for ws in planilhas:
-        for numero, linha in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), start=1):
-            nomes = [_norm_cabecalho(v) for v in linha]
-            indices = {}
-            for campo, aliases in _COLUNAS.items():
-                for alias in aliases:
-                    if alias in nomes:
-                        indices[campo] = nomes.index(alias)
-                        break
-            if all(campo in indices for campo in _OBRIGATORIAS):
-                return ws, numero, indices
-    return None, None, None
-
-
-def _ler_planilha(arquivo) -> tuple[list[dict], int]:
-    try:
-        workbook = openpyxl.load_workbook(arquivo, read_only=True, data_only=True)
-    except Exception:
-        raise ValueError("Não consegui abrir o arquivo. Envie a planilha em .xlsx.") from None
-    try:
-        ws, linha_cabecalho, indices = _localizar_cabecalho(workbook)
-        if ws is None:
-            raise ValueError(
-                "Não achei a aba com as colunas Lançamento, Nota Fiscal, Fornecedor, CFOP, Valor Total e Conta."
-            )
-
-        def campo(linha, nome):
-            idx = indices.get(nome)
-            return linha[idx] if idx is not None and idx < len(linha) else None
-
-        linhas, ignoradas = [], 0
-        for linha in ws.iter_rows(min_row=linha_cabecalho + 1, values_only=True):
-            if not any(v not in (None, "") for v in linha):
-                continue
-            lancamento = _data(campo(linha, "data_lancamento"))
-            valor = _numero(campo(linha, "valor_total")) + _numero(campo(linha, "ipi")) - _numero(campo(linha, "desconto"))
-            if lancamento is None or abs(valor) < 0.005:
-                ignoradas += 1
-                continue
-            linhas.append({
-                "competencia": _competencia(campo(linha, "mes"), lancamento),
-                "data_lancamento": lancamento,
-                "data_nf": _data(campo(linha, "data_nf")),
-                "nota_fiscal": _texto(campo(linha, "nota_fiscal"), 60),
-                "fornecedor": _texto(campo(linha, "fornecedor"), 200),
-                "cfop": re.sub(r"\D", "", _texto(campo(linha, "cfop"), 20))[:10],
-                "descricao_cfop": _texto(campo(linha, "descricao_cfop"), 200),
-                "codigo_item": _texto(campo(linha, "codigo_item"), 80),
-                "descricao": _texto(campo(linha, "descricao"), 400),
-                "valor": round(valor, 2),
-                "conta": _norm_conta(campo(linha, "conta")),
-                "nome_conta": _texto(campo(linha, "nome_conta"), 200),
-                "centro_custo": _texto(campo(linha, "centro_custo"), 200),
-                "familia": _texto(campo(linha, "familia"), 160),
-                "grupo": _texto(campo(linha, "grupo"), 160),
-                "oc": _texto(campo(linha, "oc"), 120),
-                "classificacao": _limpa_classificacao(campo(linha, "classificacao"))[:120],
-            })
-        return linhas, ignoradas
-    finally:
-        workbook.close()
-
-
-def _aprender_classificacao(linhas: list[dict], usuario: str) -> tuple[int, int]:
-    """Se a planilha trouxer a coluna Classificação de Suprimentos, preenche o
-    de-para das contas que ainda não têm regra (e as exceções delas). Conta
-    que já tem regra no Sync fica intocada: senão um arquivo antigo desfaria,
-    via exceção, uma correção feita na tela."""
-    por_conta: dict[str, Counter] = defaultdict(Counter)
-    por_item: dict[tuple, Counter] = defaultdict(Counter)
-    descricoes: dict[tuple, str] = {}
-    for linha in linhas:
-        classificacao, conta = linha["classificacao"], linha["conta"]
-        if not classificacao or not conta:
-            continue
-        por_conta[conta][classificacao] += 1
-        item = _chave_item(linha["codigo_item"])
-        if item:
-            por_item[(conta, item)][classificacao] += 1
-            descricoes.setdefault((conta, item), linha["descricao"])
-
-    existentes = {c.conta for c in SpendClassificacaoConta.query.with_entities(SpendClassificacaoConta.conta)}
-    aprendidas: dict[str, str] = {}
-    for conta, contagem in por_conta.items():
-        if conta in existentes:
-            continue
-        aprendidas[conta] = contagem.most_common(1)[0][0]
-        db.session.add(SpendClassificacaoConta(conta=conta, classificacao=aprendidas[conta], atualizado_por=usuario))
-
-    excecoes_existentes = {
-        (e.conta, _chave_item(e.codigo_item))
-        for e in SpendClassificacaoExcecao.query.with_entities(SpendClassificacaoExcecao.conta, SpendClassificacaoExcecao.codigo_item)
-    }
-    novas_excecoes = 0
-    for (conta, item), contagem in por_item.items():
-        if conta not in aprendidas or (conta, item) in excecoes_existentes:
-            continue
-        classificacao = contagem.most_common(1)[0][0]
-        if classificacao == aprendidas[conta]:
-            continue
-        db.session.add(SpendClassificacaoExcecao(
-            conta=conta, codigo_item=item, descricao=descricoes.get((conta, item), ""),
-            classificacao=classificacao, atualizado_por=usuario,
-        ))
-        novas_excecoes += 1
-    return len(aprendidas), novas_excecoes
-
-
-def importar_planilha(arquivo, usuario: str) -> dict:
-    if arquivo is None or not getattr(arquivo, "filename", ""):
-        raise ValueError("Escolha a planilha.")
-    nome = arquivo.filename
-    if not nome.lower().endswith((".xlsx", ".xlsm")):
-        raise ValueError("Envie a planilha em .xlsx.")
-    arquivo.stream.seek(0, 2)
-    tamanho = arquivo.stream.tell()
-    arquivo.stream.seek(0)
-    if tamanho > TAMANHO_MAXIMO_ARQUIVO:
-        raise ValueError("Arquivo acima de 25 MB.")
-
-    linhas, ignoradas = _ler_planilha(arquivo.stream)
-    if not linhas:
-        raise ValueError("Nenhuma linha com lançamento e valor na planilha.")
-
-    competencias = sorted({l["competencia"] for l in linhas})
-    try:
-        importacao = SpendCompraImportacao(
-            arquivo=nome[:255],
-            competencias=", ".join(competencias)[:500],
-            linhas=len(linhas),
-            valor_total=round(sum(l["valor"] for l in linhas), 2),
-            importado_por=usuario,
-        )
-        db.session.add(importacao)
-        db.session.flush()
-        removidas = SpendCompraItem.query.filter(SpendCompraItem.competencia.in_(competencias)).delete(
-            synchronize_session=False
-        )
-        campos_item = {c.name for c in SpendCompraItem.__table__.columns} - {"id"}
-        registros = [{**{k: v for k, v in l.items() if k in campos_item}, "importacao_id": importacao.id} for l in linhas]
-        # Em lotes: um INSERT so' com o ano inteiro passa do max_allowed_packet do MySQL.
-        for inicio in range(0, len(registros), 1000):
-            db.session.bulk_insert_mappings(SpendCompraItem, registros[inicio:inicio + 1000])
-        contas_aprendidas, excecoes_aprendidas = _aprender_classificacao(linhas, usuario)
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        raise
-
-    return {
-        "arquivo": nome,
-        "competencias": competencias,
-        "linhas": len(linhas),
-        "ignoradas": ignoradas,
-        "substituidas": removidas,
-        "contas_aprendidas": contas_aprendidas,
-        "excecoes_aprendidas": excecoes_aprendidas,
-    }
-
-
-def _classificador():
-    contas = {c.conta: c.classificacao for c in SpendClassificacaoConta.query.all()}
-    excecoes = {(e.conta, _chave_item(e.codigo_item)): e.classificacao for e in SpendClassificacaoExcecao.query.all()}
-
-    def classificar(conta, codigo_item) -> str:
-        return excecoes.get((conta, _chave_item(codigo_item))) or contas.get(conta) or SEM_CLASSIFICACAO
-
-    return classificar
 
 
 def _competencia_valida(valor) -> str | None:
@@ -327,62 +101,252 @@ def _competencia_valida(valor) -> str | None:
     return texto if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", texto) else None
 
 
-def _ultima_importacao() -> dict | None:
-    ultima = SpendCompraImportacao.query.order_by(SpendCompraImportacao.id.desc()).first()
-    if not ultima:
-        return None
+# ---------------------------------------------------------------------------
+# Espelho das entradas do GRV
+# ---------------------------------------------------------------------------
+def _ultima(situacao: str | None = None):
+    q = Sync.query
+    if situacao:
+        q = q.filter(Sync.status == situacao)
+    return q.order_by(Sync.id.desc()).first()
+
+
+def status() -> dict:
+    ok = _ultima(Sync.STATUS_OK)
+    ultima = _ultima()
+    agora = agora_br()
+    andamento = bool(
+        ultima and ultima.status == Sync.STATUS_ANDAMENTO
+        and ultima.iniciado_em > agora - timedelta(minutes=ANDAMENTO_EXPIRA_MIN)
+    )
+    idade = int((agora - ok.concluido_em).total_seconds() // 60) if ok and ok.concluido_em else None
     return {
-        "arquivo": ultima.arquivo,
-        "competencias": ultima.competencias,
-        "linhas": ultima.linhas,
-        "importado_por": ultima.importado_por,
-        "importado_em": ultima.importado_em.isoformat() if ultima.importado_em else None,
+        "atualizado_em": ok.concluido_em.strftime("%d/%m/%Y %H:%M") if ok and ok.concluido_em else None,
+        "idade_min": idade,
+        "vazio": ok is None,
+        "desatualizado": ok is None or idade is None or idade >= IDADE_MAXIMA_MIN,
+        "em_andamento": andamento,
+        "erro": ultima.erro if ultima and ultima.status == Sync.STATUS_ERRO else None,
     }
 
 
-def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, anterior=None) -> dict:
-    competencias = [
-        c for (c,) in db.session.query(SpendCompraItem.competencia).distinct().order_by(SpendCompraItem.competencia)
-    ]
-    if not competencias:
-        return {"vazio": True, "competencias": [], "ultima_importacao": _ultima_importacao()}
+def _meses(de: date, ate: date):
+    """Janelas [primeiro dia do mês, primeiro dia do mês seguinte) de `de` até `ate`."""
+    ini = de.replace(day=1)
+    while ini <= ate:
+        fim = (ini.replace(day=28) + timedelta(days=4)).replace(day=1)
+        yield ini, fim
+        ini = fim
 
+
+def _linha(r: dict) -> dict | None:
+    lancamento = _data(r.get("data_lancamento"))
+    if lancamento is None:
+        return None
+    cod_fornecedor = r.get("cod_fornecedor")
+    return {
+        "competencia": f"{lancamento.year:04d}-{lancamento.month:02d}",
+        "data_lancamento": lancamento,
+        "data_nf": _data(r.get("data_nf")),
+        "nota_fiscal": _texto(r.get("nota_fiscal"), 60),
+        "cod_fornecedor": int(cod_fornecedor) if cod_fornecedor not in (None, "") else None,
+        "fornecedor": _texto(r.get("fornecedor"), 200),
+        "cfop": _digitos(r.get("cfop"))[:10],
+        "codigo_item": _texto(r.get("codigo_item"), 80).upper(),
+        "descricao": _texto(r.get("descricao"), 400),
+        "valor": float(r.get("valor") or 0),
+        "conta": _texto(r.get("conta"), 60),
+        "nome_conta": _texto(r.get("nome_conta"), 200),
+        "familia": _texto(r.get("familia"), 160),
+        "grupo": _texto(r.get("grupo"), 160),
+    }
+
+
+def _semear() -> int:
+    """Carrega a semente da planilha do Custos uma única vez."""
+    if Exemplo.query.filter_by(origem=Exemplo.ORIGEM_PLANILHA).first():
+        return 0
+    dados = json.loads(SEMENTE.read_text(encoding="utf-8"))
+    agora = agora_br()
+    linhas = [
+        {**dict(zip(dados["colunas"], valores)), "origem": Exemplo.ORIGEM_PLANILHA,
+         "atualizado_por": "planilha Spend baseline Oct", "atualizado_em": agora}
+        for valores in dados["linhas"]
+    ]
+    for i in range(0, len(linhas), 1000):
+        db.session.bulk_insert_mappings(Exemplo, linhas[i:i + 1000])
+    return len(linhas)
+
+
+def atualizar(usuario: str) -> dict:
+    """Regrava do GRV as entradas lançadas desde o mês anterior ao da última
+    atualização boa (na primeira, desde INICIO): pega NF lançada com atraso
+    e estorno do mês que acabou de fechar. Se outra já estiver rodando, não
+    começa outra."""
+    if status()["em_andamento"]:
+        return {"ja_em_andamento": True}
+    ok = _ultima(Sync.STATUS_OK)
+    hoje = agora_br().date()
+    if ok and ok.concluido_em:
+        desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
+    else:
+        desde = INICIO
+    sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
+    db.session.add(sync)
+    db.session.commit()
+    try:
+        empresa = get_settings().PG_COD_EMPRESA
+        linhas = []
+        # Mês a mês: a bridge devolve tudo numa resposta só, e o ano inteiro passa de 3 MB.
+        for ini, fim in _meses(desde, hoje):
+            for r in grv.fetch_all(queries.SQL_SPEND_ENTRADAS, {
+                "cod_empresa": empresa, "data_de": ini.isoformat(), "data_ate": fim.isoformat(),
+            }):
+                linha = _linha(r)
+                if linha:
+                    linhas.append(linha)
+        Entrada.query.filter(Entrada.data_lancamento >= desde).delete(synchronize_session=False)
+        for i in range(0, len(linhas), 1000):
+            db.session.bulk_insert_mappings(Entrada, linhas[i:i + 1000])
+        _semear()
+        sync.status = Sync.STATUS_OK
+        sync.linhas = len(linhas)
+        sync.concluido_em = agora_br()
+        db.session.commit()
+        return {"linhas": len(linhas), "desde": desde.isoformat()}
+    except Exception as exc:  # noqa: BLE001 - GRV fora nao pode deixar a atualizacao "em andamento" para sempre
+        db.session.rollback()
+        sync = db.session.get(Sync, sync.id)
+        sync.status = Sync.STATUS_ERRO
+        sync.erro = str(exc)[:500]
+        sync.concluido_em = agora_br()
+        db.session.commit()
+        raise ValueError("Não deu para buscar as entradas do GRV agora. Tente de novo em instantes.") from exc
+
+
+# ---------------------------------------------------------------------------
+# Classificação aprendida
+# ---------------------------------------------------------------------------
+# Do mais específico para o mais genérico. Ordem escolhida treinando até o
+# mês M da planilha e testando em M+1 (jul–out/2026).
+_NIVEIS = (
+    ("fornecedor + item", lambda f: (f["cod_fornecedor"], f["codigo_item"])),
+    ("fornecedor + conta", lambda f: (f["cod_fornecedor"], f["conta"])),
+    ("item", lambda f: f["codigo_item"] or None),
+    ("fornecedor", lambda f: f["cod_fornecedor"]),
+    ("família + grupo", lambda f: (f["familia"], f["grupo"]) if f["familia"] else None),
+    ("CFOP + família", lambda f: (_digitos(f["cfop"])[-3:], f["familia"])),
+    ("conta", lambda f: f["conta"] or None),
+)
+
+
+def _features(r) -> dict:
+    return {
+        "cod_fornecedor": r.cod_fornecedor,
+        "codigo_item": (r.codigo_item or "").upper(),
+        "conta": r.conta or "",
+        "familia": r.familia or "",
+        "grupo": r.grupo or "",
+        "cfop": r.cfop or "",
+    }
+
+
+def _classificador():
+    votos = [defaultdict(Counter) for _ in _NIVEIS]
+    manual: dict = {}
+    exemplos = db.session.query(
+        Exemplo.origem, Exemplo.cod_fornecedor, Exemplo.codigo_item, Exemplo.conta,
+        Exemplo.familia, Exemplo.grupo, Exemplo.cfop, Exemplo.classificacao, Exemplo.peso,
+    )
+    for ex in exemplos:
+        f = _features(ex)
+        if ex.origem == Exemplo.ORIGEM_MANUAL:
+            manual[_NIVEIS[0][1](f)] = ex.classificacao
+        for i, (_, chave) in enumerate(_NIVEIS):
+            k = chave(f)
+            if k is not None:
+                votos[i][k][ex.classificacao] += ex.peso or 1
+    mapas = [{k: c.most_common(1)[0][0] for k, c in v.items()} for v in votos]
+
+    def classificar(f: dict) -> tuple[str, int | None, bool]:
+        """(classificação, nível, manual). Nível 0 = já aprendido para o fornecedor + item."""
+        k0 = _NIVEIS[0][1](f)
+        if k0 in manual:
+            return manual[k0], 0, True
+        for i, (_, chave) in enumerate(_NIVEIS):
+            k = chave(f)
+            if k is not None and k in mapas[i]:
+                return mapas[i][k], i, False
+        return SEM_CLASSIFICACAO, None, False
+
+    return classificar
+
+
+def _nomes_classificacao() -> list[str]:
+    nomes = {c for (c,) in db.session.query(Exemplo.classificacao).distinct()}
+    return sorted(nomes, key=lambda n: n.lower())
+
+
+# ---------------------------------------------------------------------------
+# Leitura
+# ---------------------------------------------------------------------------
+def _periodo(de, ate) -> tuple[list[str], str, str]:
+    competencias = [c for (c,) in db.session.query(Entrada.competencia).distinct().order_by(Entrada.competencia)]
+    if not competencias:
+        return [], "", ""
     de = _competencia_valida(de) or competencias[max(0, len(competencias) - 12)]
     ate = _competencia_valida(ate) or competencias[-1]
     if de > ate:
         de, ate = ate, de
+    return competencias, de, ate
+
+
+def _entradas(de: str, ate: str):
+    return (
+        db.session.query(
+            Entrada.competencia, Entrada.cod_fornecedor, Entrada.fornecedor, Entrada.nota_fiscal,
+            Entrada.cfop, Entrada.codigo_item, Entrada.descricao, Entrada.valor, Entrada.conta,
+            Entrada.familia, Entrada.grupo,
+        )
+        .filter(Entrada.competencia >= de, Entrada.competencia <= ate)
+        .all()
+    )
+
+
+def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, anterior=None) -> dict:
+    base = status()
+    competencias, de, ate = _periodo(de, ate)
+    if not competencias:
+        return {"vazio": True, "competencias": [], "base": base}
     familia = (familia or "").strip() or None
     classificacao = (classificacao or "").strip() or None
     meses = [c for c in competencias if de <= c <= ate]
 
-    rows = (
-        db.session.query(
-            SpendCompraItem.competencia, SpendCompraItem.fornecedor, SpendCompraItem.nota_fiscal,
-            SpendCompraItem.cfop, SpendCompraItem.codigo_item, SpendCompraItem.descricao,
-            SpendCompraItem.valor, SpendCompraItem.conta, SpendCompraItem.nome_conta, SpendCompraItem.familia,
-        )
-        .filter(SpendCompraItem.competencia >= de, SpendCompraItem.competencia <= ate)
-        .all()
-    )
     classificar = _classificador()
-
-    fora = {"valor": 0.0, "itens": 0}
+    fora = {"cfop": {"valor": 0.0, "itens": 0}, "intercompany": {"valor": 0.0, "itens": 0}}
+    revisar = {"valor": 0.0, "grupos": set()}
+    total_base = 0.0
     familias, classificacoes = set(), set()
-    sem_classificacao: dict[str, dict] = {}
     itens = []
-    for r in rows:
+    for r in _entradas(de, ate):
+        valor = r.valor or 0
         if not cfop_e_compra(r.cfop):
-            fora["valor"] += r.valor or 0
-            fora["itens"] += 1
+            fora["cfop"]["valor"] += valor
+            fora["cfop"]["itens"] += 1
             continue
-        cls = classificar(r.conta, r.codigo_item)
+        if e_intercompany(r.fornecedor):
+            fora["intercompany"]["valor"] += valor
+            fora["intercompany"]["itens"] += 1
+            continue
+        f = _features(r)
+        cls, nivel, _ = classificar(f)
         fam = r.familia or SEM_FAMILIA
         familias.add(fam)
         classificacoes.add(cls)
-        if cls == SEM_CLASSIFICACAO:
-            info = sem_classificacao.setdefault(r.conta or "", {"conta": r.conta or "", "nome_conta": r.nome_conta or "", "valor": 0.0, "itens": 0})
-            info["valor"] += r.valor or 0
-            info["itens"] += 1
+        total_base += valor
+        if nivel != 0:
+            revisar["valor"] += valor
+            revisar["grupos"].add((r.cod_fornecedor, f["codigo_item"]))
         if familia and fam != familia:
             continue
         if classificacao and cls != classificacao:
@@ -418,7 +382,10 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
             "nfs": len(nfs_fornecedor[nome]),
         })
 
-    atual = _competencia_valida(atual) if _competencia_valida(atual) in meses else meses[-1] if meses else None
+    # O mês corrente está pela metade: comparar com o anterior cheio engana.
+    hoje = agora_br().date()
+    fechados = [m for m in meses if m != f"{hoje.year:04d}-{hoje.month:02d}"] or meses
+    atual = _competencia_valida(atual) if _competencia_valida(atual) in meses else fechados[-1] if fechados else None
     if _competencia_valida(anterior) in meses and anterior != atual:
         anterior = _competencia_valida(anterior)
     else:
@@ -443,6 +410,7 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
     meses_com_valor = [v for v in por_mes.values() if v]
     return {
         "vazio": False,
+        "base": base,
         "competencias": competencias,
         "filtro": {"de": de, "ate": ate, "familia": familia, "classificacao": classificacao, "atual": atual, "anterior": anterior},
         "familias": sorted(familias),
@@ -462,131 +430,78 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
         ],
         "fornecedores": fornecedores,
         "comparativo": comparativo,
-        "sem_classificacao": sorted(
-            ({**s, "valor": round(s["valor"], 2)} for s in sem_classificacao.values()), key=lambda s: -s["valor"]
-        ),
-        "fora_spend": {"valor": round(fora["valor"], 2), "itens": fora["itens"]},
-        "ultima_importacao": _ultima_importacao(),
+        "revisar": {
+            "valor": round(revisar["valor"], 2),
+            "itens": len(revisar["grupos"]),
+            "pct": (revisar["valor"] / total_base) if total_base else 0.0,
+        },
+        "fora_spend": {k: {"valor": round(v["valor"], 2), "itens": v["itens"]} for k, v in fora.items()},
     }
 
 
-def listar_contas() -> dict:
-    """Contas que aparecem na base, com a regra atual de cada uma."""
-    mapa = {c.conta: c for c in SpendClassificacaoConta.query.all()}
-    excecoes_por_conta = Counter(e.conta for e in SpendClassificacaoExcecao.query.with_entities(SpendClassificacaoExcecao.conta))
-    agregado: dict[str, dict] = {}
-    for conta, nome_conta, valor, cfop in db.session.query(
-        SpendCompraItem.conta, SpendCompraItem.nome_conta, SpendCompraItem.valor, SpendCompraItem.cfop
-    ):
-        if not cfop_e_compra(cfop):
+def revisao(de=None, ate=None) -> dict:
+    """Cada fornecedor + item comprado no período, com a classificação e de
+    onde ela saiu. Palpites primeiro, do maior valor para o menor."""
+    competencias, de, ate = _periodo(de, ate)
+    classificar = _classificador()
+    grupos: dict = {}
+    for r in _entradas(de, ate) if competencias else []:
+        if not cfop_e_compra(r.cfop) or e_intercompany(r.fornecedor):
             continue
-        info = agregado.setdefault(conta or "", {"conta": conta or "", "nomes": Counter(), "valor": 0.0, "itens": 0})
-        info["nomes"][nome_conta or ""] += 1
-        info["valor"] += valor or 0
-        info["itens"] += 1
-    for conta in mapa:
-        agregado.setdefault(conta, {"conta": conta, "nomes": Counter(), "valor": 0.0, "itens": 0})
-
-    contas = []
-    for conta, info in agregado.items():
-        regra = mapa.get(conta)
-        contas.append({
-            "conta": conta,
-            "nome_conta": info["nomes"].most_common(1)[0][0] if info["nomes"] else "",
-            "valor": round(info["valor"], 2),
-            "itens": info["itens"],
-            "classificacao": regra.classificacao if regra else None,
-            "atualizado_por": regra.atualizado_por if regra else None,
-            "excecoes": excecoes_por_conta.get(conta, 0),
-        })
-    contas.sort(key=lambda c: (c["classificacao"] is not None, -c["valor"]))
-    return {"contas": contas, "classificacoes": _nomes_classificacao()}
-
-
-def _nomes_classificacao() -> list[str]:
-    nomes = {c for (c,) in db.session.query(SpendClassificacaoConta.classificacao).distinct()}
-    nomes |= {c for (c,) in db.session.query(SpendClassificacaoExcecao.classificacao).distinct()}
-    return sorted(nomes, key=lambda n: n.lower())
+        f = _features(r)
+        chave = (r.cod_fornecedor, f["codigo_item"])
+        g = grupos.get(chave)
+        if g is None:
+            cls, nivel, manual = classificar(f)
+            g = grupos[chave] = {
+                "cod_fornecedor": r.cod_fornecedor,
+                "fornecedor": r.fornecedor or "",
+                "codigo_item": f["codigo_item"],
+                "descricao": r.descricao or "",
+                "familia": r.familia or "",
+                "classificacao": cls,
+                "palpite": nivel != 0,
+                "origem": "manual" if manual else ("planilha" if nivel == 0 else (_NIVEIS[nivel][0] if nivel is not None else None)),
+                "valor": 0.0,
+            }
+        g["valor"] += r.valor or 0
+    itens = sorted(grupos.values(), key=lambda g: (not g["palpite"], -g["valor"]))
+    for g in itens:
+        g["valor"] = round(g["valor"], 2)
+    return {"de": de, "ate": ate, "itens": itens, "classificacoes": _nomes_classificacao()}
 
 
-def itens_da_conta(conta) -> dict:
-    conta = _norm_conta(conta)
-    regra = SpendClassificacaoConta.query.filter_by(conta=conta).first()
-    excecoes = {_chave_item(e.codigo_item): e for e in SpendClassificacaoExcecao.query.filter_by(conta=conta)}
-    agregado: dict[str, dict] = {}
-    for codigo, descricao, valor, cfop in db.session.query(
-        SpendCompraItem.codigo_item, SpendCompraItem.descricao, SpendCompraItem.valor, SpendCompraItem.cfop
-    ).filter(SpendCompraItem.conta == conta):
-        if not cfop_e_compra(cfop):
-            continue
-        chave = _chave_item(codigo)
-        info = agregado.setdefault(chave, {"codigo_item": codigo or "", "descricoes": Counter(), "valor": 0.0, "itens": 0})
-        info["descricoes"][descricao or ""] += 1
-        info["valor"] += valor or 0
-        info["itens"] += 1
-    itens = []
-    for chave, info in agregado.items():
-        excecao = excecoes.get(chave)
-        itens.append({
-            "codigo_item": info["codigo_item"],
-            "descricao": info["descricoes"].most_common(1)[0][0],
-            "valor": round(info["valor"], 2),
-            "itens": info["itens"],
-            "excecao": excecao.classificacao if excecao else None,
-        })
-    itens.sort(key=lambda i: -i["valor"])
-    return {"conta": conta, "classificacao": regra.classificacao if regra else None, "itens": itens}
-
-
-def salvar_classificacao_conta(conta, classificacao, usuario: str) -> None:
-    conta = _norm_conta(conta)
+def salvar_classificacao(cod_fornecedor, codigo_item, classificacao, usuario: str) -> None:
+    """Confirma ou corrige a classificação de um fornecedor + item. Vazia
+    desfaz a correção (volta ao que a planilha ou o palpite diz)."""
+    try:
+        fornecedor = int(cod_fornecedor)
+    except (TypeError, ValueError):
+        raise ValueError("Fornecedor inválido.") from None
+    item = _texto(codigo_item, 80).upper()
     classificacao = _limpa_classificacao(classificacao)
-    if not conta:
-        raise ValueError("Informe a conta.")
     if len(classificacao) > 120:
         raise ValueError("Classificação com mais de 120 caracteres.")
-    regra = SpendClassificacaoConta.query.filter_by(conta=conta).first()
+    exemplo = Exemplo.query.filter_by(origem=Exemplo.ORIGEM_MANUAL, cod_fornecedor=fornecedor, codigo_item=item).first()
     if not classificacao:
-        if regra:
-            db.session.delete(regra)
-    else:
-        if regra is None:
-            regra = SpendClassificacaoConta(conta=conta)
-            db.session.add(regra)
-        regra.classificacao = classificacao
-        regra.atualizado_por = usuario
-        regra.atualizado_em = agora_br()
-    db.session.commit()
-
-
-def salvar_excecao(conta, codigo_item, classificacao, usuario: str) -> None:
-    """Classificação vazia, ou igual à da conta, remove a exceção."""
-    conta = _norm_conta(conta)
-    item = _chave_item(codigo_item)
-    classificacao = _limpa_classificacao(classificacao)
-    if not conta or not item:
-        raise ValueError("Informe a conta e o item.")
-    if len(classificacao) > 120:
-        raise ValueError("Classificação com mais de 120 caracteres.")
-    excecao = next(
-        (e for e in SpendClassificacaoExcecao.query.filter_by(conta=conta) if _chave_item(e.codigo_item) == item),
-        None,
-    )
-    regra = SpendClassificacaoConta.query.filter_by(conta=conta).first()
-    if not classificacao or (regra and regra.classificacao == classificacao):
-        if excecao:
-            db.session.delete(excecao)
-    else:
-        if excecao is None:
-            descricao = (
-                db.session.query(SpendCompraItem.descricao)
-                .filter(SpendCompraItem.conta == conta, db.func.upper(SpendCompraItem.codigo_item) == item)
-                .limit(1)
-                .scalar()
-            )
-            excecao = SpendClassificacaoExcecao(conta=conta, codigo_item=item, descricao=descricao or "")
-            db.session.add(excecao)
-        excecao.classificacao = classificacao
-        excecao.atualizado_por = usuario
-        excecao.atualizado_em = agora_br()
+        if exemplo:
+            db.session.delete(exemplo)
+            db.session.commit()
+        return
+    if exemplo is None:
+        ref = (
+            Entrada.query.filter_by(cod_fornecedor=fornecedor, codigo_item=item)
+            .order_by(Entrada.data_lancamento.desc())
+            .first()
+        )
+        if ref is None:
+            raise ValueError("Item não encontrado nas entradas do GRV.")
+        exemplo = Exemplo(
+            origem=Exemplo.ORIGEM_MANUAL, cod_fornecedor=fornecedor, codigo_item=item,
+            conta=ref.conta, familia=ref.familia, grupo=ref.grupo, cfop=ref.cfop, peso=1,
+        )
+        db.session.add(exemplo)
+    exemplo.classificacao = classificacao
+    exemplo.atualizado_por = usuario
+    exemplo.atualizado_em = agora_br()
     db.session.commit()

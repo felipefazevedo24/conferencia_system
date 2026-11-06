@@ -693,3 +693,119 @@ def dashboard_performance(
         "detalhado": detalhado,
         "status_materiais": status_materiais,
     }
+
+
+# -------------------------------------------------------------------
+# Fila de compras: o que falta comprar, por OS aberta.
+# O dashboard conta OS/itens; a fila mostra os itens em si, para o
+# comprador trabalhar OS a OS.
+# -------------------------------------------------------------------
+_FILA_STATUS = {"A COMPRAR", "SOLICITACAO"}
+_FILA_ORDEM_BUCKET = {b: i for i, b in enumerate(["Expired", "On going", "Pipeline next week", "Planned", "Sem prazo"])}
+
+
+def _e_chapa(item: dict) -> bool:
+    # Chapa de materia-prima vem fracionada em kg por OS e e comprada por
+    # chapa inteira/tonelada, com nesting no meio: nao vira pedido por OS.
+    desc = str(item.get("material_descricao") or "").strip().upper()
+    unidade = str(item.get("unidade") or "").strip().upper()
+    return desc.startswith("CHAPA") and unidade == "KG"
+
+
+def fila_compras(
+    cod_empresa: Optional[int] = None,
+    classificacao: Optional[str] = None,
+    n_os: Optional[str] = None,
+    data_campo: Optional[str] = None,
+    data_de=None,
+    data_ate=None,
+) -> dict:
+    """Itens sem OC (A COMPRAR ou so com SC) das OS abertas, agrupados por OS.
+
+    O prazo e o mesmo do dashboard (compras_prazo, derivado da data prevista
+    da OS), entao o bucket de cada OS bate com o grafico de Compras.
+    Chapa fica fora e so e contada."""
+    filtros = dict(
+        cod_empresa=cod_empresa, classificacao=classificacao, n_os=n_os,
+        data_campo=data_campo, data_de=data_de, data_ate=data_ate,
+    )
+    # So OS abertas: a lista de materiais sozinha traz tambem OS canceladas.
+    abertas = {
+        (r.get("cod_empresa"), r.get("cod_os")): r
+        for r in painel_os(somente_abertas=True, limite=10000, **filtros)
+    }
+    materiais = listar_materiais_por_os(limite=20000, **filtros)
+
+    hoje = _date.today()
+    prox_semana_fim = hoje + _timedelta(days=7)
+    grupos: dict = {}
+    chapa_itens = 0
+    chapa_os: set = set()
+    for it in materiais:
+        chave = (it.get("cod_empresa"), it.get("cod_os"))
+        os_row = abertas.get(chave)
+        if os_row is None or it.get("metodo_reposicao", 0) not in (0, 3):
+            continue
+        status = str(it.get("status_material") or "").upper()
+        if status not in _FILA_STATUS:
+            continue
+        if _e_chapa(it):
+            chapa_itens += 1
+            chapa_os.add(chave)
+            continue
+
+        grupo = grupos.get(chave)
+        if grupo is None:
+            prazo = _to_date(os_row.get("compras_prazo"))
+            bucket = _bucket_da_fase(
+                _to_date(os_row.get("compras_inicio")), prazo, hoje, prox_semana_fim, False,
+            )
+            grupo = grupos[chave] = {
+                "n_os": os_row.get("n_os"),
+                "titulo": os_row.get("titulo"),
+                "cliente": os_row.get("cliente"),
+                "classificacao": os_row.get("classificacao") or os_row.get("u_classificacao"),
+                "dt_prevista": _to_date(os_row.get("dt_prevista")),
+                "compras_prazo": prazo,
+                "bucket": bucket,
+                "dias_atraso": (hoje - prazo).days if bucket == "Expired" else 0,
+                "itens": [],
+            }
+        necessaria = float(it.get("qtde_necessaria") or 0)
+        entregue = float(it.get("qtde_entregue") or 0)
+        reservada = float(it.get("qtde_reservada") or 0)
+        grupo["itens"].append({
+            "cod_os_completo": it.get("cod_os_completo"),
+            "cod_interno": it.get("cod_interno"),
+            "descricao": it.get("material_descricao"),
+            "unidade": it.get("unidade"),
+            "qtde_falta": round(max(necessaria - entregue - reservada, 0), 4),
+            "qtde_necessaria": round(necessaria, 4),
+            "n_sc": it.get("n_sc"),
+            "terceiro": it.get("metodo_reposicao") == 3,
+        })
+
+    lista = sorted(
+        grupos.values(),
+        key=lambda g: (
+            _FILA_ORDEM_BUCKET.get(g["bucket"], 99),
+            g["compras_prazo"] or _date.max,
+            str(g["n_os"] or ""),
+        ),
+    )
+    por_bucket = {b: 0 for b in _FILA_ORDEM_BUCKET}
+    for g in lista:
+        por_bucket[g["bucket"]] = por_bucket.get(g["bucket"], 0) + 1
+        g["dt_prevista"] = g["dt_prevista"].isoformat() if g["dt_prevista"] else None
+        g["compras_prazo"] = g["compras_prazo"].isoformat() if g["compras_prazo"] else None
+    return {
+        "hoje": hoje.isoformat(),
+        "resumo": {
+            "os": len(lista),
+            "itens": sum(len(g["itens"]) for g in lista),
+            "por_bucket": por_bucket,
+            "chapa_itens": chapa_itens,
+            "chapa_os": len(chapa_os),
+        },
+        "os": lista,
+    }

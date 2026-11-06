@@ -38,14 +38,13 @@
     .sp-tabela-wrap { overflow: auto; max-height: 560px; margin-top: 12px; border-top: 1px solid var(--eui-border); }
     .sp-tabela-wrap--solta { margin-top: 0; border-top: 0; max-height: 360px; }
     .sp-wrap .erp-table { font-size: 13px; }
-    .sp-wrap .erp-table td, .sp-wrap .erp-table th, .sp-modal .erp-table td, .sp-modal .erp-table th { padding: 8px 12px; }
+    .sp-wrap .erp-table td, .sp-wrap .erp-table th { padding: 8px 12px; }
     /* o th global do erp-table e' claro fixo; aqui segue o tema */
-    .sp-wrap .erp-table th, .sp-modal .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; }
+    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; }
     .sp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .sp-muted { color: var(--eui-muted); }
     .sp-linha-vazia { text-align: center; color: var(--eui-muted); padding: 28px 12px !important; }
     .sp-desc { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sp-modal .sp-desc { max-width: 360px; }
     .sp-cod { white-space: nowrap; }
     .sp-total td { font-weight: 700; background: var(--eui-surface-2); }
     .sp-barra { display: block; height: 4px; margin-top: 4px; border-radius: 0 4px 4px 0; background: var(--eui-primary); opacity: .55; }
@@ -57,18 +56,13 @@
 
     .sp-cls-input { min-width: 220px; font-size: 13px; padding: 6px 9px; }
     .sp-cls-input.is-saved { border-color: var(--eui-success); }
-    .sp-sem { display: inline-block; font-size: 11px; font-weight: 700; color: var(--eui-warning-soft-text); background: var(--eui-warning-soft); border-radius: 999px; padding: 1px 8px; }
+    .sp-sem { display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--eui-warning-soft-text); background: var(--eui-warning-soft); border-radius: 999px; padding: 1px 8px; }
     .sp-link { border: 0; background: none; padding: 0; color: var(--eui-primary); font-weight: 600; cursor: pointer; font-size: 12.5px; }
     .sp-link:hover { text-decoration: underline; }
 
-    .sp-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
-    .sp-modal-backdrop.open { display: flex; }
-    .sp-modal { background: var(--eui-surface); color: var(--eui-text); border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); box-shadow: var(--eui-shadow-lg); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; padding: 22px; }
-    .sp-modal--largo { max-width: 1040px; }
-    .sp-modal h3 { margin: 0 0 4px; font-size: 17px; }
-    .sp-modal-sub { font-size: 12.5px; color: var(--eui-muted); margin: 0 0 16px; }
-    .sp-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-    .sp-resultado { margin-top: 14px; }
+    .sp-rev-desc { max-width: 360px; }
+    .sp-rev-forn { min-width: 170px; max-width: 240px; }
+    .sp-erro-base { color: var(--eui-danger); }
 
     .sp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
     .sp-toast.error { border-left-color: var(--eui-danger); }
@@ -82,20 +76,20 @@
         <div>
             <div class="eui-page-header__eyebrow">Compras</div>
             <h1 class="eui-page-header__title"><i class="fas fa-chart-column"></i> Spend de Compras</h1>
-            <p class="eui-page-header__sub">Gasto por classificação de suprimentos, a partir da planilha de entradas do Custos.</p>
+            <p class="eui-page-header__sub">Gasto por classificação de suprimentos, a partir das entradas de NF do GRV.</p>
         </div>
         <div class="sp-head-actions">
             <a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>
-            <button type="button" class="eui-btn eui-btn--primary" id="sp-btn-importar"><i class="fas fa-file-arrow-up"></i> Importar planilha</button>
+            <button type="button" class="eui-btn eui-btn--ghost" id="sp-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </header>
 
     <div class="eui-card" id="sp-vazio" hidden>
         <div class="eui-empty">
-            <i class="fas fa-file-excel"></i>
-            <strong>Nenhuma planilha importada.</strong>
-            <span>Importe a aba Base da planilha de entradas do Custos.</span>
-            <button type="button" class="eui-btn eui-btn--primary" id="sp-btn-importar-vazio" style="margin-top:8px;"><i class="fas fa-file-arrow-up"></i> Importar planilha</button>
+            <i class="fas fa-rotate fa-spin" id="sp-vazio-icone"></i>
+            <strong id="sp-vazio-titulo">Buscando as entradas do GRV…</strong>
+            <span id="sp-vazio-texto">Na primeira vez leva alguns segundos.</span>
+            <button type="button" class="eui-btn eui-btn--primary" id="sp-vazio-tentar" style="margin-top:8px;" hidden><i class="fas fa-rotate"></i> Tentar de novo</button>
         </div>
     </div>
 
@@ -110,10 +104,10 @@
                 <div class="sp-base-info" id="sp-base-info"></div>
             </div>
 
-            <div class="eui-callout eui-callout--warning" id="sp-alerta-sem" hidden>
+            <div class="eui-callout eui-callout--warning" id="sp-alerta-rev" hidden>
                 <i class="fas fa-triangle-exclamation"></i>
-                <span id="sp-alerta-sem-texto"></span>
-                <button type="button" class="eui-btn eui-btn--sm eui-btn--warning sp-callout-acao" id="sp-alerta-sem-btn">Classificar</button>
+                <span id="sp-alerta-rev-texto"></span>
+                <button type="button" class="eui-btn eui-btn--sm eui-btn--warning sp-callout-acao" id="sp-alerta-rev-btn">Revisar</button>
             </div>
 
             <div id="sp-dados" class="sp-wrap">
@@ -153,7 +147,7 @@
                         <button type="button" class="is-active" data-tab="consolidado">Consolidado</button>
                         <button type="button" data-tab="comparativo">Comparativo</button>
                         <button type="button" data-tab="fornecedores">Fornecedores</button>
-                        <button type="button" data-tab="contas">Classificação de contas<span class="sp-tab-badge" id="sp-tab-sem" hidden></span></button>
+                        <button type="button" data-tab="classificacao">Classificação<span class="sp-tab-badge" id="sp-tab-rev" hidden></span></button>
                     </nav>
 
                     <div data-pane="consolidado">
@@ -190,15 +184,16 @@
                         <div class="sp-mais"><span id="sp-forn-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-forn-mais" hidden>Mostrar mais</button></div>
                     </div>
 
-                    <div data-pane="contas" hidden>
+                    <div data-pane="classificacao" hidden>
                         <div class="sp-pane-tools">
-                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-contas" placeholder="Buscar conta ou classificação" autocomplete="off"></div>
+                            <div class="sp-toggle" id="sp-rev-modo"><button type="button" class="is-active" data-modo="revisar">A revisar</button><button type="button" data-modo="todos">Todos</button></div>
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-rev" placeholder="Buscar fornecedor, item ou classificação" autocomplete="off"></div>
                         </div>
                         <div class="sp-tabela-wrap"><table class="erp-table">
-                            <thead><tr><th>Conta</th><th>Nome da conta</th><th class="sp-num">Valor</th><th class="sp-num">Itens</th><th>Classificação</th><th>Exceções</th></tr></thead>
-                            <tbody id="sp-tb-contas"></tbody>
+                            <thead><tr><th>Fornecedor</th><th>Item</th><th class="sp-num">Valor</th><th>Classificação</th><th>Origem</th><th></th></tr></thead>
+                            <tbody id="sp-tb-rev"></tbody>
                         </table></div>
-                        <div class="sp-mais"><span>A classificação da conta vale para todos os itens dela. Para um item ir para outra, use as exceções.</span></div>
+                        <div class="sp-mais"><span id="sp-rev-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-rev-mais" hidden>Mostrar mais</button></div>
                     </div>
                 </section>
             </div>
@@ -207,31 +202,6 @@
 </div>
 
 <datalist id="sp-lista-cls"></datalist>
-
-<div class="sp-modal-backdrop" id="sp-modal-importar">
-    <div class="sp-modal">
-        <h3><i class="fas fa-file-arrow-up"></i> Importar planilha</h3>
-        <p class="sp-modal-sub">Aba Base da planilha de entradas do Custos. Os meses que vierem no arquivo substituem os que já estão no Sync.</p>
-        <input type="file" class="eui-input" id="sp-arquivo" accept=".xlsx,.xlsm">
-        <div class="sp-resultado" id="sp-import-resultado"></div>
-        <div class="sp-modal-foot">
-            <button type="button" class="eui-btn eui-btn--ghost" data-fechar>Fechar</button>
-            <button type="button" class="eui-btn eui-btn--primary" id="sp-import-enviar"><i class="fas fa-upload"></i> Importar</button>
-        </div>
-    </div>
-</div>
-
-<div class="sp-modal-backdrop" id="sp-modal-itens">
-    <div class="sp-modal sp-modal--largo">
-        <h3>Exceções da conta <span id="sp-itens-conta"></span></h3>
-        <p class="sp-modal-sub" id="sp-itens-sub"></p>
-        <div class="sp-tabela-wrap sp-tabela-wrap--solta" style="max-height:60vh;"><table class="erp-table">
-            <thead><tr><th>Código</th><th>Descrição</th><th class="sp-num">Valor</th><th class="sp-num">Itens</th><th>Classificação</th></tr></thead>
-            <tbody id="sp-tb-itens"></tbody>
-        </table></div>
-        <div class="sp-modal-foot"><button type="button" class="eui-btn eui-btn--ghost" data-fechar>Fechar</button></div>
-    </div>
-</div>
 
 <div class="sp-toast" id="sp-toast"></div>
 {% endblock %}
@@ -255,7 +225,7 @@
     const fmtMes = (c) => { if (!c) return ""; const [a, m] = c.split("-"); return MESES[Number(m) - 1] + "/" + a.slice(2); };
     const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 
-    const estado = { dados: null, tab: "consolidado", consLimite: PAGINA, fornLimite: PAGINA, contas: null, seq: 0, charts: {}, modos: { cls: "grafico", mes: "grafico" } };
+    const estado = { dados: null, base: null, atualizando: false, tab: "consolidado", consLimite: PAGINA, fornLimite: PAGINA, revisao: null, revPeriodo: null, revModo: "revisar", revLimite: PAGINA, seq: 0, charts: {}, modos: { cls: "grafico", mes: "grafico" } };
 
     function toast(msg, tipo) {
         const el = $("sp-toast");
@@ -274,12 +244,6 @@
         return corpo;
     }
 
-    function abrirModal(id) { $(id).classList.add("open"); }
-    function fecharModal(id) { $(id).classList.remove("open"); }
-    document.querySelectorAll(".sp-modal-backdrop").forEach((bd) => {
-        bd.addEventListener("click", (ev) => { if (ev.target === bd || ev.target.closest("[data-fechar]")) bd.classList.remove("open"); });
-    });
-
     // ---------- Painel ----------
     function parametros(extra) {
         const qs = new URLSearchParams();
@@ -296,6 +260,7 @@
             const dados = await api("/api/compras/spend/painel?" + parametros(extra).toString());
             if (seq !== estado.seq) return;
             estado.dados = dados;
+            estado.base = dados.base;
             estado.consLimite = PAGINA;
             estado.fornLimite = PAGINA;
             render();
@@ -318,7 +283,7 @@
         const d = estado.dados;
         $("sp-vazio").hidden = !d.vazio;
         $("sp-conteudo").hidden = !!d.vazio;
-        if (d.vazio) return;
+        if (d.vazio) { renderVazio(); return; }
         const f = d.filtro;
         const meses = d.competencias.map((c) => ({ valor: c, rotulo: fmtMes(c) }));
         preencherSelect("sp-de", meses, f.de);
@@ -340,29 +305,37 @@
         renderConsolidado();
         renderComparativo();
         renderFornecedores();
-        if (estado.tab === "contas") carregarContas();
+        if (estado.tab === "classificacao" && estado.revPeriodo !== f.de + f.ate) carregarRevisao();
     }
 
     function renderInfo(d) {
-        const ult = d.ultima_importacao;
+        const b = estado.base || {};
         const partes = [];
-        if (ult) {
-            const quando = ult.importado_em ? new Date(ult.importado_em).toLocaleDateString("pt-BR") : "";
-            partes.push(`Última importação: ${esc(quando)}${ult.importado_por ? " por " + esc(ult.importado_por) : ""}`);
-        }
-        if (d.fora_spend.itens) {
-            partes.push(`${fmtC(d.fora_spend.valor)} fora do spend (${inteiro.format(d.fora_spend.itens)} itens com CFOP que não é compra)`);
-        }
+        if (estado.atualizando) partes.push('<i class="fas fa-rotate fa-spin"></i> Atualizando do GRV…');
+        else if (b.erro) partes.push(`<span class="sp-erro-base"><i class="fas fa-triangle-exclamation"></i> A última atualização do GRV falhou${b.atualizado_em ? ". Dados de " + esc(b.atualizado_em) : ""}</span>`);
+        else if (b.atualizado_em) partes.push(`Atualizado do GRV em ${esc(b.atualizado_em)}`);
+        const fs = d.fora_spend;
+        const fora = [];
+        if (fs.intercompany.itens) fora.push(`${fmtC(fs.intercompany.valor)} do Grupo Columbia`);
+        if (fs.cfop.itens) fora.push(`${fmtC(fs.cfop.valor)} de CFOP que não é compra`);
+        if (fora.length) partes.push("Fora do spend: " + fora.join(" · "));
         $("sp-base-info").innerHTML = partes.join("<br>");
 
-        const sem = d.sem_classificacao;
-        const valorSem = sem.reduce((s, x) => s + x.valor, 0);
-        $("sp-alerta-sem").hidden = !sem.length;
-        $("sp-alerta-sem-texto").innerHTML = sem.length
-            ? `<strong>${fmtR(valorSem)}</strong> em ${sem.length} ${sem.length === 1 ? "conta" : "contas"} sem classificação.`
+        const rv = d.revisar;
+        $("sp-alerta-rev").hidden = !rv.itens;
+        $("sp-alerta-rev-texto").innerHTML = rv.itens
+            ? `<strong>${fmtR(rv.valor)}</strong> (${fmtP(rv.pct)} do período) em ${inteiro.format(rv.itens)} ${rv.itens === 1 ? "item" : "itens"} com classificação no palpite.`
             : "";
-        $("sp-tab-sem").hidden = !sem.length;
-        $("sp-tab-sem").textContent = sem.length;
+        $("sp-tab-rev").hidden = !rv.itens;
+        $("sp-tab-rev").textContent = rv.itens;
+    }
+
+    function renderVazio() {
+        const erro = !estado.atualizando && !!(estado.base && estado.base.erro);
+        $("sp-vazio-icone").className = erro ? "fas fa-triangle-exclamation" : "fas fa-rotate fa-spin";
+        $("sp-vazio-titulo").textContent = erro ? "Não deu para buscar as entradas do GRV." : "Buscando as entradas do GRV…";
+        $("sp-vazio-texto").textContent = erro ? "Tente de novo em instantes." : "Na primeira vez leva alguns segundos.";
+        $("sp-vazio-tentar").hidden = !erro;
     }
 
     function renderKpis(d) {
@@ -534,7 +507,7 @@
         });
     }
 
-    document.querySelectorAll(".sp-toggle").forEach((grupo) => {
+    document.querySelectorAll(".sp-toggle[data-alvo]").forEach((grupo) => {
         grupo.addEventListener("click", (ev) => {
             const btn = ev.target.closest("button[data-modo]");
             if (!btn) return;
@@ -605,96 +578,98 @@
         $("sp-forn-mais").hidden = lista.length <= estado.fornLimite;
     }
 
-    // ---------- Classificação de contas ----------
-    async function carregarContas() {
+    // ---------- Classificação ----------
+    const ORIGEM = { manual: "Confirmado", planilha: "Planilha do Custos" };
+
+    async function carregarRevisao() {
+        const f = estado.dados && !estado.dados.vazio ? estado.dados.filtro : null;
+        const qs = new URLSearchParams();
+        if (f) { qs.set("de", f.de); qs.set("ate", f.ate); }
         try {
-            estado.contas = await api("/api/compras/spend/contas");
-            $("sp-lista-cls").innerHTML = estado.contas.classificacoes.map((c) => `<option value="${esc(c)}">`).join("");
-            renderContas();
+            estado.revisao = await api("/api/compras/spend/revisao?" + qs.toString());
+            estado.revPeriodo = estado.revisao.de + estado.revisao.ate;
+            estado.revLimite = PAGINA;
+            $("sp-lista-cls").innerHTML = estado.revisao.classificacoes.map((c) => `<option value="${esc(c)}">`).join("");
+            renderRevisao();
         } catch (err) {
             toast(err.message, "error");
         }
     }
 
-    function renderContas() {
-        if (!estado.contas) return;
-        const lista = filtrar(estado.contas.contas, $("sp-busca-contas").value, ["conta", "nome_conta", "classificacao"]);
-        $("sp-tb-contas").innerHTML = lista.map((c) => `<tr>
-            <td><strong>${esc(c.conta) || '<span class="sp-muted">(sem conta)</span>'}</strong></td>
-            <td>${esc(c.nome_conta)}</td>
-            <td class="sp-num">${fmtR(c.valor)}</td>
-            <td class="sp-num">${inteiro.format(c.itens)}</td>
-            <td>${c.conta ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" data-conta="${esc(c.conta)}" value="${esc(c.classificacao || "")}" placeholder="Sem classificação">` : ""}
-                ${c.classificacao ? "" : ' <span class="sp-sem">sem classificação</span>'}</td>
-            <td>${c.conta ? `<button type="button" class="sp-link" data-itens="${esc(c.conta)}">${c.excecoes ? c.excecoes + (c.excecoes === 1 ? " exceção" : " exceções") : "Itens"}</button>` : ""}</td></tr>`).join("")
-            || `<tr><td colspan="6" class="sp-linha-vazia">Nada encontrado.</td></tr>`;
-    }
-
-    async function salvarClassificacao(input, url, corpo) {
-        const valor = input.value.trim();
-        if (valor === (input.dataset.salvo ?? input.defaultValue)) return;
-        try {
-            await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign(corpo, { classificacao: valor })) });
-            input.dataset.salvo = valor;
-            input.classList.add("is-saved");
-            setTimeout(() => input.classList.remove("is-saved"), 1200);
-            toast(valor ? "Classificação salva." : "Classificação removida.", "success");
-            estado.precisaRecarregar = true;
-        } catch (err) {
-            toast(err.message, "error");
-        }
-    }
-
-    $("sp-tb-contas").addEventListener("change", (ev) => {
-        const input = ev.target.closest("input[data-conta]");
-        if (input) salvarClassificacao(input, "/api/compras/spend/contas", { conta: input.dataset.conta }).then(() => { carregar(); });
-    });
-    $("sp-tb-contas").addEventListener("click", (ev) => {
-        const btn = ev.target.closest("[data-itens]");
-        if (btn) abrirItens(btn.dataset.itens);
-    });
-
-    async function abrirItens(conta) {
-        try {
-            const dados = await api("/api/compras/spend/contas/" + encodeURIComponent(conta) + "/itens");
-            $("sp-itens-conta").textContent = conta;
-            $("sp-itens-sub").textContent = dados.classificacao
-                ? `Itens vão para ${dados.classificacao}. Preencha só o que for para outra classificação.`
-                : "Conta sem classificação. Preencha só o que for para uma classificação específica.";
-            $("sp-tb-itens").innerHTML = dados.itens.map((i) => `<tr>
-                <td class="sp-muted sp-cod">${esc(i.codigo_item) || "(sem código)"}</td>
-                <td class="sp-desc" title="${esc(i.descricao)}">${esc(i.descricao)}</td>
+    function renderRevisao() {
+        if (!estado.revisao) return;
+        const base = estado.revModo === "revisar" ? estado.revisao.itens.filter((i) => i.palpite) : estado.revisao.itens;
+        const lista = filtrar(base, $("sp-busca-rev").value, ["fornecedor", "codigo_item", "descricao", "classificacao"]);
+        $("sp-tb-rev").innerHTML = lista.slice(0, estado.revLimite).map((i) => {
+            const chave = `data-forn="${esc(i.cod_fornecedor)}" data-item="${esc(i.codigo_item)}"`;
+            const editavel = i.cod_fornecedor != null;
+            const semCls = i.classificacao === SEM_CLASSIFICACAO;
+            const origem = !i.palpite
+                ? `<span class="sp-muted">${esc(ORIGEM[i.origem] || i.origem)}</span>`
+                : `<span class="sp-sem" title="${i.origem ? "Deduzido por " + esc(i.origem) : ""}">${i.origem ? "Palpite" : "Sem classificação"}</span>`;
+            return `<tr>
+                <td class="sp-rev-forn">${esc(i.fornecedor)}</td>
+                <td><div class="sp-desc sp-rev-desc" title="${esc(i.descricao)}">${esc(i.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(i.codigo_item) || "(sem código)"}</div></td>
                 <td class="sp-num">${fmtR(i.valor)}</td>
-                <td class="sp-num">${inteiro.format(i.itens)}</td>
-                <td>${i.codigo_item ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" data-conta="${esc(conta)}" data-item="${esc(i.codigo_item)}" value="${esc(i.excecao || "")}" placeholder="${esc(dados.classificacao || "Sem classificação")}">` : ""}</td></tr>`).join("")
-                || `<tr><td colspan="5" class="sp-linha-vazia">Sem itens.</td></tr>`;
-            abrirModal("sp-modal-itens");
+                <td>${editavel ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" ${chave} value="${esc(semCls ? "" : i.classificacao)}" placeholder="Sem classificação">` : esc(i.classificacao)}</td>
+                <td>${origem}</td>
+                <td>${editavel && i.palpite && !semCls ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-confirmar ${chave}>Confirmar</button>` : ""}</td></tr>`;
+        }).join("") || `<tr><td colspan="6" class="sp-linha-vazia">${estado.revModo === "revisar" ? "Nada para revisar no período." : "Nada encontrado."}</td></tr>`;
+        $("sp-rev-info").textContent = lista.length ? `Mostrando ${inteiro.format(Math.min(lista.length, estado.revLimite))} de ${inteiro.format(lista.length)}` : "";
+        $("sp-rev-mais").hidden = lista.length <= estado.revLimite;
+    }
+
+    async function salvarRevisao(forn, item, valor) {
+        try {
+            await api("/api/compras/spend/classificacao", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cod_fornecedor: forn, codigo_item: item, classificacao: valor }),
+            });
+            toast(valor ? "Classificação salva." : "Correção desfeita.", "success");
+            const alvo = estado.revisao.itens.find((i) => String(i.cod_fornecedor) === forn && i.codigo_item === item);
+            if (alvo && valor) {
+                Object.assign(alvo, { classificacao: valor, palpite: false, origem: "manual" });
+                renderRevisao();
+            } else {
+                await carregarRevisao();
+            }
+            carregar();
         } catch (err) {
             toast(err.message, "error");
         }
     }
 
-    $("sp-tb-itens").addEventListener("change", (ev) => {
-        const input = ev.target.closest("input[data-item]");
-        if (input) salvarClassificacao(input, "/api/compras/spend/excecoes", { conta: input.dataset.conta, codigo_item: input.dataset.item });
+    $("sp-tb-rev").addEventListener("change", (ev) => {
+        const input = ev.target.closest("input[data-forn]");
+        if (input) salvarRevisao(input.dataset.forn, input.dataset.item, input.value.trim());
     });
-    $("sp-modal-itens").addEventListener("click", (ev) => {
-        if (!estado.precisaRecarregar) return;
-        if (ev.target === $("sp-modal-itens") || ev.target.closest("[data-fechar]")) {
-            estado.precisaRecarregar = false;
-            carregar();
-        }
+    $("sp-tb-rev").addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-confirmar]");
+        if (!btn) return;
+        const input = btn.closest("tr").querySelector("input[data-forn]");
+        salvarRevisao(btn.dataset.forn, btn.dataset.item, input.value.trim());
     });
+    $("sp-rev-modo").addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-modo]");
+        if (!btn) return;
+        estado.revModo = btn.dataset.modo;
+        estado.revLimite = PAGINA;
+        $("sp-rev-modo").querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b === btn));
+        renderRevisao();
+    });
+    $("sp-busca-rev").addEventListener("input", () => { estado.revLimite = PAGINA; renderRevisao(); });
+    $("sp-rev-mais").addEventListener("click", () => { estado.revLimite += PAGINA; renderRevisao(); });
 
     // ---------- Abas e filtros ----------
     function abrirTab(tab) {
         estado.tab = tab;
         document.querySelectorAll("#sp-tabs button").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === tab));
         document.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== tab; });
-        if (tab === "contas") carregarContas();
+        if (tab === "classificacao" && (!estado.revisao || estado.revPeriodo !== estado.dados.filtro.de + estado.dados.filtro.ate)) carregarRevisao();
     }
     $("sp-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) abrirTab(b.dataset.tab); });
-    $("sp-alerta-sem-btn").addEventListener("click", () => { abrirTab("contas"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });
+    $("sp-alerta-rev-btn").addEventListener("click", () => { abrirTab("classificacao"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });
 
     ["sp-de", "sp-ate", "sp-familia", "sp-classificacao"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
     ["sp-anterior", "sp-atual"].forEach((id) => $(id).addEventListener("change", () => carregar()));
@@ -704,41 +679,68 @@
     $("sp-cons-mais").addEventListener("click", () => { estado.consLimite += PAGINA; renderConsolidado(); });
     $("sp-busca-forn").addEventListener("input", () => { estado.fornLimite = PAGINA; renderFornecedores(); });
     $("sp-forn-mais").addEventListener("click", () => { estado.fornLimite += PAGINA; renderFornecedores(); });
-    $("sp-busca-contas").addEventListener("input", renderContas);
 
-    // ---------- Importação ----------
-    function abrirImportar() {
-        $("sp-arquivo").value = "";
-        $("sp-import-resultado").innerHTML = "";
-        abrirModal("sp-modal-importar");
+    // ---------- Atualização do GRV ----------
+    // A tela abre com o espelho e, se ele estiver velho, pede a atualização por trás.
+    function mostrarBase() {
+        $("sp-btn-atualizar").disabled = estado.atualizando;
+        if (estado.dados && !estado.dados.vazio) { renderInfo(estado.dados); return; }
+        $("sp-vazio").hidden = false;
+        $("sp-conteudo").hidden = true;
+        renderVazio();
     }
-    $("sp-btn-importar").addEventListener("click", abrirImportar);
-    $("sp-btn-importar-vazio").addEventListener("click", abrirImportar);
 
-    $("sp-import-enviar").addEventListener("click", async () => {
-        const arquivo = $("sp-arquivo").files[0];
-        if (!arquivo) { toast("Escolha a planilha.", "error"); return; }
-        const btn = $("sp-import-enviar");
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando…';
-        const corpo = new FormData();
-        corpo.append("arquivo", arquivo);
-        try {
-            const r = await api("/api/compras/spend/importar", { method: "POST", body: corpo });
-            const periodo = r.competencias.length > 1 ? `${fmtMes(r.competencias[0])} a ${fmtMes(r.competencias[r.competencias.length - 1])}` : fmtMes(r.competencias[0]);
-            const aprendido = r.contas_aprendidas ? `<br>${r.contas_aprendidas} contas e ${r.excecoes_aprendidas} exceções classificadas pela coluna Classificação de Suprimentos.` : "";
-            $("sp-import-resultado").innerHTML = `<div class="eui-callout eui-callout--success"><i class="fas fa-circle-check"></i><span>
-                <strong>${inteiro.format(r.linhas)} itens</strong> importados (${esc(periodo)}).${r.ignoradas ? ` ${inteiro.format(r.ignoradas)} linhas sem lançamento ou valor ignoradas.` : ""}${aprendido}</span></div>`;
-            carregar({ de: "", ate: "", atual: "", anterior: "" });
-        } catch (err) {
-            $("sp-import-resultado").innerHTML = `<div class="eui-callout eui-callout--danger"><i class="fas fa-circle-xmark"></i><span>${esc(err.message)}</span></div>`;
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-upload"></i> Importar';
+    async function lerStatus() {
+        try { estado.base = await api("/api/compras/spend/status"); } catch (_) {}
+    }
+
+    async function fimAtualizacao() {
+        estado.atualizando = false;
+        await lerStatus();
+        if (estado.base && !estado.base.vazio) await carregar();
+        mostrarBase();
+        if (estado.tab === "classificacao") carregarRevisao();
+    }
+
+    async function acompanhar() {
+        // outra pessoa já está atualizando: espera terminar
+        estado.atualizando = true;
+        mostrarBase();
+        for (let i = 0; i < 60; i++) {
+            await new Promise((ok) => setTimeout(ok, 5000));
+            await lerStatus();
+            if (estado.base && !estado.base.em_andamento) break;
         }
-    });
+        await fimAtualizacao();
+    }
 
-    carregar();
+    async function atualizarGrv() {
+        if (estado.atualizando) return;
+        estado.atualizando = true;
+        mostrarBase();
+        let r = null;
+        try {
+            r = await api("/api/compras/spend/atualizar", { method: "POST" });
+        } catch (err) {
+            if (estado.dados && !estado.dados.vazio) toast(err.message, "error");
+        }
+        if (r && r.ja_em_andamento) { estado.atualizando = false; acompanhar(); return; }
+        await fimAtualizacao();
+    }
+
+    $("sp-btn-atualizar").addEventListener("click", atualizarGrv);
+    $("sp-vazio-tentar").addEventListener("click", atualizarGrv);
+
+    async function iniciar() {
+        await lerStatus();
+        if (!estado.base) { toast("Falha ao consultar o servidor.", "error"); return; }
+        if (!estado.base.vazio) await carregar();
+        mostrarBase();
+        if (estado.base.em_andamento) acompanhar();
+        else if (estado.base.desatualizado) atualizarGrv();
+    }
+
+    iniciar();
 })();
 </script>
 {% endblock %}

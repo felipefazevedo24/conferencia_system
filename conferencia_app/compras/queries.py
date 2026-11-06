@@ -1983,3 +1983,45 @@ WHERE  s.cod_empresa = %(cod_empresa)s
 ORDER  BY 1, 2, 3
 LIMIT  %(limite)s;
 """
+
+# -------------------------------------------------------------------
+# Spend de Compras: itens de NF de entrada lancados no periodo.
+# Uma linha por item de tcom_aux (ligado ao cabecalho tcompras por
+# realciona_auto). valor = total + IPI - desconto, a mesma conta da
+# planilha do Custos. So' entrada que lanca financeiro: fica de fora a
+# digitacao ainda nao concluida e o material de cliente. CFOP e
+# intercompany sao filtrados no Sync.
+# -------------------------------------------------------------------
+SQL_SPEND_ENTRADAS = """
+SELECT c.dt_lancamento::date AS data_lancamento,
+       c.dt_nf::date AS data_nf,
+       NULLIF(TRIM(c.n_nf), '') AS nota_fiscal,
+       c.cod_fornecedor,
+       COALESCE(NULLIF(TRIM(f.razao_social), ''), NULLIF(TRIM(f.nome), ''), NULLIF(TRIM(c.fornecedor), '')) AS fornecedor,
+       COALESCE(NULLIF(TRIM(a.cfop), ''), NULLIF(TRIM(c.cfop), '')) AS cfop,
+       NULLIF(TRIM(a.cod_interno), '') AS codigo_item,
+       NULLIF(TRIM(a.produto), '') AS descricao,
+       (COALESCE(a.total, 0) + COALESCE(a.vl_ipi, 0) - COALESCE(a.vdesc_i17, 0))::numeric(18,2) AS valor,
+       NULLIF(TRIM(a.numero_plano_contas), '') AS conta,
+       NULLIF(TRIM(a.plano_contas), '') AS nome_conta,
+       NULLIF(TRIM(fam.nome), '') AS familia,
+       NULLIF(TRIM(g.nome), '') AS grupo
+FROM public.tcompras c
+JOIN public.ttp_move tm
+  ON tm.cod_empresa = c.cod_empresa AND tm.codigo = c.cod_tp_mov
+JOIN public.tcom_aux a
+  ON a.cod_empresa = c.cod_empresa AND a.realciona_auto = c.codigo
+LEFT JOIN public.tfornece f
+  ON f.cod_empresa = c.cod_empresa AND f.codigo = c.cod_fornecedor
+LEFT JOIN public.tproduto p
+  ON p.cod_empresa = a.cod_empresa AND p.codigo = a.cod_produto
+LEFT JOIN public.tfamilia fam
+  ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
+LEFT JOIN public.tfamgrp g
+  ON g.cod_empresa = p.cod_empresa AND g.cod_familia = p.cod_familia AND g.codigo = p.cod_grupo
+WHERE c.cod_empresa = %(cod_empresa)s
+  AND c.dt_lancamento >= %(data_de)s::date
+  AND c.dt_lancamento <  %(data_ate)s::date
+  AND COALESCE(tm.lancar_fincanceiro, 0) = 1
+ORDER BY c.codigo, a.numero_item;
+"""

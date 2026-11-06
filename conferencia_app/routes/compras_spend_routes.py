@@ -36,45 +36,36 @@ def spend_painel():
     ))
 
 
-@compras_spend_bp.route("/api/compras/spend/importar", methods=["POST"])
+@compras_spend_bp.route("/api/compras/spend/status")
 @permission_required(PERM)
-def spend_importar():
+def spend_status():
+    return jsonify(spend.status())
+
+
+@compras_spend_bp.route("/api/compras/spend/atualizar", methods=["POST"])
+@permission_required(PERM)
+def spend_atualizar():
     try:
-        resultado = spend.importar_planilha(request.files.get("arquivo"), _usuario())
+        resultado = spend.atualizar(_usuario())
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(resultado)
 
 
-@compras_spend_bp.route("/api/compras/spend/contas")
+@compras_spend_bp.route("/api/compras/spend/revisao")
 @permission_required(PERM)
-def spend_contas():
-    return jsonify(spend.listar_contas())
+def spend_revisao():
+    return jsonify(spend.revisao(de=request.args.get("de"), ate=request.args.get("ate")))
 
 
-@compras_spend_bp.route("/api/compras/spend/contas", methods=["POST"])
+@compras_spend_bp.route("/api/compras/spend/classificacao", methods=["POST"])
 @permission_required(PERM)
-def spend_salvar_conta():
+def spend_salvar_classificacao():
     payload = request.get_json(silent=True) or {}
     try:
-        spend.salvar_classificacao_conta(payload.get("conta"), payload.get("classificacao"), _usuario())
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"ok": True})
-
-
-@compras_spend_bp.route("/api/compras/spend/contas/<path:conta>/itens")
-@permission_required(PERM)
-def spend_itens_conta(conta):
-    return jsonify(spend.itens_da_conta(conta))
-
-
-@compras_spend_bp.route("/api/compras/spend/excecoes", methods=["POST"])
-@permission_required(PERM)
-def spend_salvar_excecao():
-    payload = request.get_json(silent=True) or {}
-    try:
-        spend.salvar_excecao(payload.get("conta"), payload.get("codigo_item"), payload.get("classificacao"), _usuario())
+        spend.salvar_classificacao(
+            payload.get("cod_fornecedor"), payload.get("codigo_item"), payload.get("classificacao"), _usuario(),
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True})
