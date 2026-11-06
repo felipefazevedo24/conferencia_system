@@ -4196,6 +4196,22 @@ class ComexCotacaoModal(db.Model):
     cotacao = db.relationship("ComexCotacao", backref=db.backref("modal_cotado", uselist=False))
 
 
+class ComexCotacaoModalSolicitado(db.Model):
+    """O que a Columbia pediu ao gerar o link LCL/Aereo: "LCL", "AEREO" ou
+    "AMBOS" (quando ainda vai decidir entre maritimo e aereo). O link
+    publico ja abre com isso selecionado; o prestador pode responder menos
+    do que foi pedido, mas confirma antes. Links antigos nao tem registro
+    aqui e o prestador escolhe livremente."""
+
+    __tablename__ = "comex_cotacao_modal_solicitado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    modal = db.Column(db.String(10), nullable=False)  # LCL | AEREO | AMBOS
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("modal_solicitado", uselist=False))
+
+
 class ComexCotacaoVolume(db.Model):
     """Dimensoes/peso de um volume da cotacao LCL/Aereo (ate 5 no modelo
     original, mas sem limite fixo aqui)."""

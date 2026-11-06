@@ -212,6 +212,7 @@
                   <option value="AEREO">Aéreo</option>
                   <option value="AMBOS">LCL e Aéreo (cotar os dois)</option>
                 </select>
+                ${data.modal_solicitado ? `<small class="muted" style="font-size:12px;">A Columbia solicitou: <strong>${esc(NOMES_MODAL[data.modal_solicitado] || data.modal_solicitado)}</strong></small>` : ''}
               </div>
             </div>`}
             <div class="field">
@@ -283,6 +284,7 @@
     }
 
     let numeroVolumes = 2;
+    const NOMES_MODAL = { LCL: 'LCL (marítimo)', AEREO: 'Aéreo', AMBOS: 'LCL e Aéreo' };
 
     function calcularTotais() {
       [['data-custo', ''], ['data-custo-aereo', 'aereo_']].forEach(([attr, prefixo]) => {
@@ -366,6 +368,9 @@
           document.querySelectorAll('textarea.auto').forEach((el) => el.addEventListener('input', () => ajustarAltura(el)));
           const selModal = document.getElementById('modal_cotado');
           if (selModal) selModal.addEventListener('change', atualizarModalCotado);
+          // O link ja' abre com o que a Columbia pediu; o prestador pode
+          // trocar, mas confirma no envio.
+          if (selModal && data.modal_solicitado) { selModal.value = data.modal_solicitado; atualizarModalCotado(); }
           const btnAdd = document.getElementById('btnAddVolume');
           if (btnAdd) {
             btnAdd.addEventListener('click', () => {
@@ -375,6 +380,13 @@
           }
           document.getElementById('formCotacao').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const cotado = data.tipo_frete === 'FCL' ? '' : document.getElementById('modal_cotado').value;
+            if (data.modal_solicitado && cotado && cotado !== data.modal_solicitado
+                && !confirm(`A Columbia solicitou cotação de ${NOMES_MODAL[data.modal_solicitado]}, mas você está enviando somente ${NOMES_MODAL[cotado]}.
+
+Confirma o envio só dessa opção?`)) {
+              return;
+            }
             const btn = document.getElementById('btnEnviar');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
