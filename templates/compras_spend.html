@@ -1,0 +1,746 @@
+{% extends "base.html" %}
+
+{% block title %}Spend de Compras - Columbia Sync{% endblock %}
+{% block shell_title %}Spend de Compras{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sp-wrap { display: grid; gap: 16px; }
+    .sp-wrap [hidden] { display: none !important; }
+    .sp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .sp-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sp-head-actions a { text-decoration: none; }
+
+    .sp-filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px; }
+    .sp-filtros .eui-field { min-width: 130px; }
+    .sp-filtros .eui-field--largo { min-width: 220px; }
+    .sp-base-info { margin-left: auto; font-size: 12px; color: var(--eui-muted); text-align: right; line-height: 1.5; }
+
+    .sp-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
+    .sp-callout-acao { margin-left: auto; }
+
+    .sp-graficos { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+    @media (max-width: 1100px) { .sp-graficos { grid-template-columns: minmax(0, 1fr); } }
+    .sp-canvas { position: relative; width: 100%; }
+    .sp-canvas--mes { height: 320px; }
+    .sp-toggle { display: inline-flex; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); overflow: hidden; }
+    .sp-toggle button { border: 0; background: transparent; color: var(--eui-muted); font-size: 12px; font-weight: 600; padding: 5px 10px; cursor: pointer; }
+    .sp-toggle button.is-active { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+
+    .sp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--eui-border); padding: 0 12px; overflow-x: auto; }
+    .sp-tabs button { border: 0; background: transparent; color: var(--eui-muted); font-size: 13px; font-weight: 600; padding: 12px 14px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+    .sp-tabs button:hover { color: var(--eui-text); }
+    .sp-tabs button.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .sp-tabs .sp-tab-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); font-size: 11px; line-height: 18px; text-align: center; }
+
+    .sp-pane-tools { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px 0; }
+    .sp-pane-tools .eui-toolbar__search { max-width: 420px; }
+    .sp-tabela-wrap { overflow: auto; max-height: 560px; margin-top: 12px; border-top: 1px solid var(--eui-border); }
+    .sp-tabela-wrap--solta { margin-top: 0; border-top: 0; max-height: 360px; }
+    .sp-wrap .erp-table { font-size: 13px; }
+    .sp-wrap .erp-table td, .sp-wrap .erp-table th { padding: 8px 12px; }
+    /* o th global do erp-table e' claro fixo; aqui segue o tema */
+    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; }
+    .sp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sp-muted { color: var(--eui-muted); }
+    .sp-linha-vazia { text-align: center; color: var(--eui-muted); padding: 28px 12px !important; }
+    .sp-desc { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sp-cod { white-space: nowrap; }
+    .sp-total td { font-weight: 700; background: var(--eui-surface-2); }
+    .sp-barra { display: block; height: 4px; margin-top: 4px; border-radius: 0 4px 4px 0; background: var(--eui-primary); opacity: .55; }
+    .sp-mais { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 18px 14px; font-size: 12px; color: var(--eui-muted); }
+    .sp-var-up::before { content: "▲ "; font-size: 10px; }
+    .sp-var-down::before { content: "▼ "; font-size: 10px; }
+    .sp-curva { display: inline-block; min-width: 22px; text-align: center; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 7px; background: var(--eui-surface-3); color: var(--eui-text-soft); }
+    .sp-curva--A { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+
+    .sp-cls-input { min-width: 220px; font-size: 13px; padding: 6px 9px; }
+    .sp-cls-input.is-saved { border-color: var(--eui-success); }
+    .sp-sem { display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--eui-warning-soft-text); background: var(--eui-warning-soft); border-radius: 999px; padding: 1px 8px; }
+    .sp-link { border: 0; background: none; padding: 0; color: var(--eui-primary); font-weight: 600; cursor: pointer; font-size: 12.5px; }
+    .sp-link:hover { text-decoration: underline; }
+
+    .sp-rev-desc { max-width: 360px; }
+    .sp-rev-forn { min-width: 170px; max-width: 240px; }
+    .sp-erro-base { color: var(--eui-danger); }
+
+    .sp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
+    .sp-toast.error { border-left-color: var(--eui-danger); }
+    .sp-toast.success { border-left-color: var(--eui-success); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sp-wrap">
+    <header class="eui-page-header sp-head">
+        <div>
+            <div class="eui-page-header__eyebrow">Compras</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-chart-column"></i> Spend de Compras</h1>
+            <p class="eui-page-header__sub">Gasto por classificação de suprimentos, a partir das entradas de NF do GRV.</p>
+        </div>
+        <div class="sp-head-actions">
+            <a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>
+            <button type="button" class="eui-btn eui-btn--ghost" id="sp-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+    </header>
+
+    <div class="eui-card" id="sp-vazio" hidden>
+        <div class="eui-empty">
+            <i class="fas fa-rotate fa-spin" id="sp-vazio-icone"></i>
+            <strong id="sp-vazio-titulo">Buscando as entradas do GRV…</strong>
+            <span id="sp-vazio-texto">Na primeira vez leva alguns segundos.</span>
+            <button type="button" class="eui-btn eui-btn--primary" id="sp-vazio-tentar" style="margin-top:8px;" hidden><i class="fas fa-rotate"></i> Tentar de novo</button>
+        </div>
+    </div>
+
+    <div id="sp-conteudo" hidden>
+        <div class="sp-wrap">
+            <div class="eui-card sp-filtros">
+                <label class="eui-field"><span class="eui-field__label">De</span><select class="eui-select" id="sp-de"></select></label>
+                <label class="eui-field"><span class="eui-field__label">Até</span><select class="eui-select" id="sp-ate"></select></label>
+                <label class="eui-field eui-field--largo"><span class="eui-field__label">Família</span><select class="eui-select" id="sp-familia"></select></label>
+                <label class="eui-field eui-field--largo"><span class="eui-field__label">Classificação</span><select class="eui-select" id="sp-classificacao"></select></label>
+                <button type="button" class="eui-btn eui-btn--subtle" id="sp-limpar" hidden><i class="fas fa-filter-circle-xmark"></i> Limpar</button>
+                <div class="sp-base-info" id="sp-base-info"></div>
+            </div>
+
+            <div class="eui-callout eui-callout--warning" id="sp-alerta-rev" hidden>
+                <i class="fas fa-triangle-exclamation"></i>
+                <span id="sp-alerta-rev-texto"></span>
+                <button type="button" class="eui-btn eui-btn--sm eui-btn--warning sp-callout-acao" id="sp-alerta-rev-btn">Revisar</button>
+            </div>
+
+            <div id="sp-dados" class="sp-wrap">
+                <div class="eui-stats">
+                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-sack-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Gasto no período</span><span class="eui-stat__value" id="sp-k-total">—</span><span class="eui-stat__hint" id="sp-k-total-hint"></span></div></div>
+                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-calendar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Média mensal</span><span class="eui-stat__value" id="sp-k-media">—</span><span class="eui-stat__hint" id="sp-k-media-hint"></span></div></div>
+                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-arrow-right-arrow-left"></i></div><div class="eui-stat__body"><span class="eui-stat__label" id="sp-k-atual-label">Último mês</span><span class="eui-stat__value" id="sp-k-atual">—</span><span class="eui-stat__hint" id="sp-k-atual-hint"></span></div></div>
+                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-building"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Fornecedores</span><span class="eui-stat__value" id="sp-k-forn">—</span><span class="eui-stat__hint" id="sp-k-forn-hint"></span></div></div>
+                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens</span><span class="eui-stat__value" id="sp-k-itens">—</span><span class="eui-stat__hint" id="sp-k-itens-hint"></span></div></div>
+                </div>
+
+                <div class="sp-graficos">
+                    <section class="eui-card">
+                        <div class="eui-card__head">
+                            <h2 class="eui-card__title"><i class="fas fa-layer-group"></i> Gasto por classificação</h2>
+                            <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
+                        </div>
+                        <div class="eui-card__body--tight">
+                            <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
+                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
+                        </div>
+                    </section>
+                    <section class="eui-card">
+                        <div class="eui-card__head">
+                            <h2 class="eui-card__title"><i class="fas fa-chart-column"></i> Gasto por mês</h2>
+                            <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
+                        </div>
+                        <div class="eui-card__body--tight">
+                            <div class="sp-canvas sp-canvas--mes" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
+                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="eui-card">
+                    <nav class="sp-tabs" id="sp-tabs">
+                        <button type="button" class="is-active" data-tab="consolidado">Consolidado</button>
+                        <button type="button" data-tab="comparativo">Comparativo</button>
+                        <button type="button" data-tab="fornecedores">Fornecedores</button>
+                        <button type="button" data-tab="classificacao">Classificação<span class="sp-tab-badge" id="sp-tab-rev" hidden></span></button>
+                    </nav>
+
+                    <div data-pane="consolidado">
+                        <div class="sp-pane-tools">
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-cons" placeholder="Buscar família, classificação ou descrição" autocomplete="off"></div>
+                        </div>
+                        <div class="sp-tabela-wrap"><table class="erp-table">
+                            <thead><tr><th>Família</th><th>Classificação</th><th>Descrição</th><th class="sp-num">Valor</th><th class="sp-num">%</th></tr></thead>
+                            <tbody id="sp-tb-cons"></tbody>
+                        </table></div>
+                        <div class="sp-mais"><span id="sp-cons-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-cons-mais" hidden>Mostrar mais</button></div>
+                    </div>
+
+                    <div data-pane="comparativo" hidden>
+                        <div class="sp-pane-tools">
+                            <label class="eui-field"><span class="eui-field__label">Anterior</span><select class="eui-select" id="sp-anterior"></select></label>
+                            <label class="eui-field"><span class="eui-field__label">Atual</span><select class="eui-select" id="sp-atual"></select></label>
+                        </div>
+                        <div class="sp-tabela-wrap"><table class="erp-table">
+                            <thead><tr><th>Classificação</th><th class="sp-num" id="sp-th-anterior">Anterior</th><th class="sp-num" id="sp-th-atual">Atual</th><th class="sp-num">Variação</th><th class="sp-num">Variação %</th></tr></thead>
+                            <tbody id="sp-tb-comp"></tbody>
+                        </table></div>
+                        <div class="sp-mais"></div>
+                    </div>
+
+                    <div data-pane="fornecedores" hidden>
+                        <div class="sp-pane-tools">
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-forn" placeholder="Buscar fornecedor" autocomplete="off"></div>
+                        </div>
+                        <div class="sp-tabela-wrap"><table class="erp-table">
+                            <thead><tr><th class="sp-num">#</th><th>Fornecedor</th><th class="sp-num">NFs</th><th class="sp-num">Valor</th><th class="sp-num">%</th><th class="sp-num">% acumulado</th><th>Curva</th></tr></thead>
+                            <tbody id="sp-tb-forn"></tbody>
+                        </table></div>
+                        <div class="sp-mais"><span id="sp-forn-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-forn-mais" hidden>Mostrar mais</button></div>
+                    </div>
+
+                    <div data-pane="classificacao" hidden>
+                        <div class="sp-pane-tools">
+                            <div class="sp-toggle" id="sp-rev-modo"><button type="button" class="is-active" data-modo="revisar">A revisar</button><button type="button" data-modo="todos">Todos</button></div>
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-rev" placeholder="Buscar fornecedor, item ou classificação" autocomplete="off"></div>
+                        </div>
+                        <div class="sp-tabela-wrap"><table class="erp-table">
+                            <thead><tr><th>Fornecedor</th><th>Item</th><th class="sp-num">Valor</th><th>Classificação</th><th>Origem</th><th></th></tr></thead>
+                            <tbody id="sp-tb-rev"></tbody>
+                        </table></div>
+                        <div class="sp-mais"><span id="sp-rev-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-rev-mais" hidden>Mostrar mais</button></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<datalist id="sp-lista-cls"></datalist>
+
+<div class="sp-toast" id="sp-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const PAGINA = 200;
+    const TOP_CLASSIFICACOES = 12;
+    const SEM_CLASSIFICACAO = "(sem classificação)";
+    const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+    const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+    const inteiro = new Intl.NumberFormat("pt-BR");
+    const pctFmt = new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const fmtR = (v) => brl.format(v || 0);
+    const fmtC = (v) => "R$ " + compacto.format(v || 0);
+    const fmtP = (v) => (v == null ? "—" : pctFmt.format(v));
+    const fmtMes = (c) => { if (!c) return ""; const [a, m] = c.split("-"); return MESES[Number(m) - 1] + "/" + a.slice(2); };
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+    const estado = { dados: null, base: null, atualizando: false, tab: "consolidado", consLimite: PAGINA, fornLimite: PAGINA, revisao: null, revPeriodo: null, revModo: "revisar", revLimite: PAGINA, seq: 0, charts: {}, modos: { cls: "grafico", mes: "grafico" } };
+
+    function toast(msg, tipo) {
+        const el = $("sp-toast");
+        el.textContent = msg;
+        el.className = "sp-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 3500);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, options);
+        let corpo = {};
+        try { corpo = await resp.json(); } catch (_) {}
+        if (!resp.ok) throw new Error(corpo.error || "Falha ao consultar o servidor.");
+        return corpo;
+    }
+
+    // ---------- Painel ----------
+    function parametros(extra) {
+        const qs = new URLSearchParams();
+        const campos = { de: "sp-de", ate: "sp-ate", familia: "sp-familia", classificacao: "sp-classificacao", anterior: "sp-anterior", atual: "sp-atual" };
+        Object.entries(campos).forEach(([k, id]) => { const v = $(id).value; if (v) qs.set(k, v); });
+        Object.entries(extra || {}).forEach(([k, v]) => { if (v == null || v === "") qs.delete(k); else qs.set(k, v); });
+        return qs;
+    }
+
+    async function carregar(extra) {
+        const seq = ++estado.seq;
+        $("sp-dados").classList.add("sp-carregando");
+        try {
+            const dados = await api("/api/compras/spend/painel?" + parametros(extra).toString());
+            if (seq !== estado.seq) return;
+            estado.dados = dados;
+            estado.base = dados.base;
+            estado.consLimite = PAGINA;
+            estado.fornLimite = PAGINA;
+            render();
+        } catch (err) {
+            if (seq === estado.seq) toast(err.message, "error");
+        } finally {
+            if (seq === estado.seq) $("sp-dados").classList.remove("sp-carregando");
+        }
+    }
+
+    function preencherSelect(id, opcoes, valor, vazio) {
+        const sel = $(id);
+        const html = (vazio ? [`<option value="">${esc(vazio)}</option>`] : [])
+            .concat(opcoes.map((o) => `<option value="${esc(o.valor)}">${esc(o.rotulo)}</option>`));
+        sel.innerHTML = html.join("");
+        sel.value = valor || "";
+    }
+
+    function render() {
+        const d = estado.dados;
+        $("sp-vazio").hidden = !d.vazio;
+        $("sp-conteudo").hidden = !!d.vazio;
+        if (d.vazio) { renderVazio(); return; }
+        const f = d.filtro;
+        const meses = d.competencias.map((c) => ({ valor: c, rotulo: fmtMes(c) }));
+        preencherSelect("sp-de", meses, f.de);
+        preencherSelect("sp-ate", meses, f.ate);
+        const familias = d.familias.slice();
+        if (f.familia && !familias.includes(f.familia)) familias.push(f.familia);
+        preencherSelect("sp-familia", familias.map((x) => ({ valor: x, rotulo: x })), f.familia, "Todas");
+        const classes = d.classificacoes.slice();
+        if (f.classificacao && !classes.includes(f.classificacao)) classes.push(f.classificacao);
+        preencherSelect("sp-classificacao", classes.map((x) => ({ valor: x, rotulo: x })), f.classificacao, "Todas");
+        const doPeriodo = meses.filter((m) => m.valor >= f.de && m.valor <= f.ate);
+        preencherSelect("sp-anterior", doPeriodo, f.anterior, f.anterior ? null : "—");
+        preencherSelect("sp-atual", doPeriodo, f.atual);
+        $("sp-limpar").hidden = !(f.familia || f.classificacao);
+
+        renderInfo(d);
+        renderKpis(d);
+        renderGraficos();
+        renderConsolidado();
+        renderComparativo();
+        renderFornecedores();
+        if (estado.tab === "classificacao" && estado.revPeriodo !== f.de + f.ate) carregarRevisao();
+    }
+
+    function renderInfo(d) {
+        const b = estado.base || {};
+        const partes = [];
+        if (estado.atualizando) partes.push('<i class="fas fa-rotate fa-spin"></i> Atualizando do GRV…');
+        else if (b.erro) partes.push(`<span class="sp-erro-base"><i class="fas fa-triangle-exclamation"></i> A última atualização do GRV falhou${b.atualizado_em ? ". Dados de " + esc(b.atualizado_em) : ""}</span>`);
+        else if (b.atualizado_em) partes.push(`Atualizado do GRV em ${esc(b.atualizado_em)}`);
+        const fs = d.fora_spend;
+        const fora = [];
+        if (fs.intercompany.itens) fora.push(`${fmtC(fs.intercompany.valor)} do Grupo Columbia`);
+        if (fs.cfop.itens) fora.push(`${fmtC(fs.cfop.valor)} de CFOP que não é compra`);
+        if (fora.length) partes.push("Fora do spend: " + fora.join(" · "));
+        $("sp-base-info").innerHTML = partes.join("<br>");
+
+        const rv = d.revisar;
+        $("sp-alerta-rev").hidden = !rv.itens;
+        $("sp-alerta-rev-texto").innerHTML = rv.itens
+            ? `<strong>${fmtR(rv.valor)}</strong> (${fmtP(rv.pct)} do período) em ${inteiro.format(rv.itens)} ${rv.itens === 1 ? "item" : "itens"} com classificação no palpite.`
+            : "";
+        $("sp-tab-rev").hidden = !rv.itens;
+        $("sp-tab-rev").textContent = rv.itens;
+    }
+
+    function renderVazio() {
+        const erro = !estado.atualizando && !!(estado.base && estado.base.erro);
+        $("sp-vazio-icone").className = erro ? "fas fa-triangle-exclamation" : "fas fa-rotate fa-spin";
+        $("sp-vazio-titulo").textContent = erro ? "Não deu para buscar as entradas do GRV." : "Buscando as entradas do GRV…";
+        $("sp-vazio-texto").textContent = erro ? "Tente de novo em instantes." : "Na primeira vez leva alguns segundos.";
+        $("sp-vazio-tentar").hidden = !erro;
+    }
+
+    function renderKpis(d) {
+        const k = d.kpis;
+        const f = d.filtro;
+        $("sp-k-total").textContent = fmtC(k.total);
+        $("sp-k-total-hint").textContent = f.de === f.ate ? fmtMes(f.de) : `${fmtMes(f.de)} a ${fmtMes(f.ate)}`;
+        $("sp-k-media").textContent = fmtC(k.media_mensal);
+        $("sp-k-media-hint").textContent = `${d.por_mes.filter((m) => m.valor).length} meses com gasto`;
+
+        const porMes = Object.fromEntries(d.por_mes.map((m) => [m.competencia, m.valor]));
+        const atual = porMes[f.atual] || 0;
+        const anterior = f.anterior ? porMes[f.anterior] || 0 : null;
+        $("sp-k-atual-label").textContent = f.atual ? fmtMes(f.atual) : "Último mês";
+        $("sp-k-atual").textContent = fmtC(atual);
+        if (anterior) {
+            const v = (atual - anterior) / anterior;
+            $("sp-k-atual-hint").innerHTML = `<span class="${v >= 0 ? "sp-var-up" : "sp-var-down"}">${fmtP(Math.abs(v))}</span> vs ${esc(fmtMes(f.anterior))}`;
+        } else {
+            $("sp-k-atual-hint").textContent = "";
+        }
+
+        $("sp-k-forn").textContent = inteiro.format(k.fornecedores);
+        const curvaA = d.fornecedores.filter((x) => x.curva === "A").length;
+        $("sp-k-forn-hint").textContent = curvaA ? `${inteiro.format(curvaA)} fazem 80% do gasto` : "";
+        $("sp-k-itens").textContent = inteiro.format(k.itens);
+        $("sp-k-itens-hint").textContent = `${inteiro.format(k.nfs)} notas`;
+    }
+
+    // ---------- Gráficos ----------
+    function cssVar(nome, padrao) {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+        return v || padrao;
+    }
+
+    function tema() {
+        return {
+            serie: cssVar("--eui-primary", "#0f62c9"),
+            texto: cssVar("--eui-muted", "#64748b"),
+            grade: cssVar("--eui-border", "#e3e8ef"),
+            fonte: cssVar("--eui-font", "system-ui, sans-serif"),
+            superficie: cssVar("--eui-surface", "#ffffff"),
+            tinta: cssVar("--eui-text", "#0f172a"),
+        };
+    }
+
+    function dadosClassificacao() {
+        const lista = estado.dados.por_classificacao;
+        if (lista.length <= TOP_CLASSIFICACOES + 1) return lista;
+        const topo = lista.slice(0, TOP_CLASSIFICACOES);
+        const resto = lista.slice(TOP_CLASSIFICACOES);
+        return topo.concat([{
+            classificacao: `Outras (${resto.length})`,
+            valor: resto.reduce((s, x) => s + x.valor, 0),
+            pct: resto.reduce((s, x) => s + x.pct, 0),
+            agrupado: true,
+        }]);
+    }
+
+    function opcoesBase(t, callbacks) {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: t.superficie, titleColor: t.tinta, bodyColor: t.tinta,
+                    borderColor: t.grade, borderWidth: 1, padding: 10, displayColors: false,
+                    titleFont: { family: t.fonte, weight: "600" }, bodyFont: { family: t.fonte },
+                    callbacks: callbacks,
+                },
+            },
+        };
+    }
+
+    function eixoValor(t) {
+        return {
+            beginAtZero: true,
+            grid: { color: t.grade, lineWidth: 1, drawTicks: false },
+            border: { display: false },
+            ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, padding: 6, maxRotation: 0, maxTicksLimit: 6, callback: (v) => fmtC(v) },
+        };
+    }
+
+    function eixoCategoria(t) {
+        return {
+            grid: { display: false },
+            border: { color: t.grade },
+            ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, maxRotation: 0, autoSkipPadding: 6 },
+        };
+    }
+
+    function renderGraficos() {
+        if (!window.Chart) return;
+        const t = tema();
+        Object.values(estado.charts).forEach((c) => c.destroy());
+        estado.charts = {};
+
+        const cls = dadosClassificacao();
+        $("sp-cls-grafico").style.height = Math.max(160, cls.length * 30 + 40) + "px";
+        const filtroCls = estado.dados.filtro.classificacao;
+        estado.charts.cls = new Chart($("sp-chart-cls"), {
+            type: "bar",
+            data: {
+                labels: cls.map((x) => x.classificacao),
+                datasets: [{
+                    data: cls.map((x) => x.valor),
+                    backgroundColor: t.serie,
+                    borderRadius: 4, borderSkipped: "start",
+                    barPercentage: 0.78, categoryPercentage: 0.92,
+                }],
+            },
+            options: Object.assign(opcoesBase(t, { label: (ctx) => `${fmtR(cls[ctx.dataIndex].valor)} · ${fmtP(cls[ctx.dataIndex].pct)}` }), {
+                indexAxis: "y",
+                scales: { x: eixoValor(t), y: eixoCategoria(t) },
+                onHover: (ev, els) => {
+                    const item = els.length ? cls[els[0].index] : null;
+                    ev.native.target.style.cursor = item && !item.agrupado && !filtroCls ? "pointer" : "default";
+                },
+                onClick: (ev, els) => {
+                    if (!els.length || filtroCls) return;
+                    const item = cls[els[0].index];
+                    if (item.agrupado) return;
+                    $("sp-classificacao").value = item.classificacao;
+                    carregar({ classificacao: item.classificacao });
+                },
+            }),
+        });
+
+        const meses = estado.dados.por_mes;
+        estado.charts.mes = new Chart($("sp-chart-mes"), {
+            type: "bar",
+            data: {
+                // ano so' no primeiro mes e em janeiro: com "mmm/aa" em todos, 12 meses nao cabem
+                labels: meses.map((m, i) => { const [a, mm] = m.competencia.split("-"); return i === 0 || mm === "01" ? [MESES[Number(mm) - 1], a] : MESES[Number(mm) - 1]; }),
+                datasets: [{
+                    data: meses.map((m) => m.valor),
+                    backgroundColor: t.serie,
+                    borderRadius: 4, borderSkipped: "start",
+                    barPercentage: 0.7, categoryPercentage: 0.9,
+                }],
+            },
+            options: Object.assign(opcoesBase(t, {
+                title: (ctx) => fmtMes(meses[ctx[0].dataIndex].competencia),
+                label: (ctx) => fmtR(meses[ctx.dataIndex].valor),
+            }), {
+                scales: { y: eixoValor(t), x: eixoCategoria(t) },
+            }),
+        });
+
+        $("sp-cls-tabela").innerHTML = tabelaSimples(["Classificação", "Valor", "%"], cls.map((x) => [esc(x.classificacao), fmtR(x.valor), fmtP(x.pct)]));
+        $("sp-mes-tabela").innerHTML = tabelaSimples(["Mês", "Valor"], meses.map((m) => [esc(fmtMes(m.competencia)), fmtR(m.valor)]));
+        aplicarModos();
+    }
+
+    function tabelaSimples(cabecalho, linhas) {
+        const th = cabecalho.map((c, i) => `<th${i ? ' class="sp-num"' : ""}>${c}</th>`).join("");
+        const tr = linhas.map((l) => "<tr>" + l.map((c, i) => `<td${i ? ' class="sp-num"' : ""}>${c}</td>`).join("") + "</tr>").join("");
+        return `<table class="erp-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+    }
+
+    function aplicarModos() {
+        ["cls", "mes"].forEach((alvo) => {
+            const tabela = estado.modos[alvo] === "tabela";
+            $(`sp-${alvo}-grafico`).hidden = tabela;
+            $(`sp-${alvo}-tabela`).hidden = !tabela;
+            document.querySelectorAll(`.sp-toggle[data-alvo="${alvo}"] button`).forEach((b) => b.classList.toggle("is-active", b.dataset.modo === estado.modos[alvo]));
+        });
+    }
+
+    document.querySelectorAll(".sp-toggle[data-alvo]").forEach((grupo) => {
+        grupo.addEventListener("click", (ev) => {
+            const btn = ev.target.closest("button[data-modo]");
+            if (!btn) return;
+            estado.modos[grupo.dataset.alvo] = btn.dataset.modo;
+            aplicarModos();
+        });
+    });
+
+    document.addEventListener("sync-theme-change", () => { if (estado.dados && !estado.dados.vazio) renderGraficos(); });
+
+    // ---------- Tabelas ----------
+    function filtrar(lista, termo, campos) {
+        const t = termo.trim().toLowerCase();
+        if (!t) return lista;
+        return lista.filter((x) => campos.some((c) => String(x[c] || "").toLowerCase().includes(t)));
+    }
+
+    function renderConsolidado() {
+        const lista = filtrar(estado.dados.consolidado, $("sp-busca-cons").value, ["familia", "classificacao", "descricao"]);
+        const maior = lista.length ? lista[0].valor : 0;
+        const linhas = lista.slice(0, estado.consLimite).map((x) => `<tr>
+            <td class="sp-muted">${esc(x.familia)}</td>
+            <td>${esc(x.classificacao)}</td>
+            <td class="sp-desc" title="${esc(x.descricao)}">${esc(x.descricao)}</td>
+            <td class="sp-num">${fmtR(x.valor)}<span class="sp-barra" style="width:${maior ? Math.max(2, (x.valor / maior) * 100) : 0}%"></span></td>
+            <td class="sp-num">${fmtP(x.pct)}</td></tr>`);
+        $("sp-tb-cons").innerHTML = linhas.join("") || `<tr><td colspan="5" class="sp-linha-vazia">Nada encontrado.</td></tr>`;
+        $("sp-cons-info").textContent = lista.length ? `Mostrando ${inteiro.format(Math.min(lista.length, estado.consLimite))} de ${inteiro.format(lista.length)}` : "";
+        $("sp-cons-mais").hidden = lista.length <= estado.consLimite;
+    }
+
+    function renderComparativo() {
+        const d = estado.dados;
+        $("sp-th-anterior").textContent = d.filtro.anterior ? fmtMes(d.filtro.anterior) : "Anterior";
+        $("sp-th-atual").textContent = fmtMes(d.filtro.atual);
+        const lista = d.comparativo;
+        const variacao = (v, p) => {
+            const cls = v > 0 ? "sp-var-up" : v < 0 ? "sp-var-down" : "";
+            return [`<span class="${cls}">${fmtR(Math.abs(v))}</span>`, p == null ? "—" : `<span class="${cls}">${fmtP(Math.abs(p))}</span>`];
+        };
+        const linhas = lista.map((x) => {
+            const [v, p] = variacao(x.variacao, x.variacao_pct);
+            return `<tr><td>${esc(x.classificacao)}</td><td class="sp-num">${fmtR(x.anterior)}</td><td class="sp-num">${fmtR(x.atual)}</td><td class="sp-num">${v}</td><td class="sp-num">${p}</td></tr>`;
+        });
+        if (lista.length) {
+            const a = lista.reduce((s, x) => s + x.anterior, 0);
+            const b = lista.reduce((s, x) => s + x.atual, 0);
+            const [v, p] = variacao(b - a, a ? (b - a) / a : null);
+            linhas.push(`<tr class="sp-total"><td>Total</td><td class="sp-num">${fmtR(a)}</td><td class="sp-num">${fmtR(b)}</td><td class="sp-num">${v}</td><td class="sp-num">${p}</td></tr>`);
+        }
+        $("sp-tb-comp").innerHTML = linhas.join("") || `<tr><td colspan="5" class="sp-linha-vazia">Sem gasto nos meses escolhidos.</td></tr>`;
+    }
+
+    function renderFornecedores() {
+        const todos = estado.dados.fornecedores;
+        const posicao = new Map(todos.map((x, i) => [x, i + 1]));
+        const lista = filtrar(todos, $("sp-busca-forn").value, ["fornecedor"]);
+        const linhas = lista.slice(0, estado.fornLimite).map((x) => `<tr>
+            <td class="sp-num sp-muted">${posicao.get(x)}</td>
+            <td>${esc(x.fornecedor)}</td>
+            <td class="sp-num">${inteiro.format(x.nfs)}</td>
+            <td class="sp-num">${fmtR(x.valor)}</td>
+            <td class="sp-num">${fmtP(x.pct)}</td>
+            <td class="sp-num">${fmtP(x.acumulado)}</td>
+            <td><span class="sp-curva sp-curva--${x.curva}">${x.curva}</span></td></tr>`);
+        $("sp-tb-forn").innerHTML = linhas.join("") || `<tr><td colspan="7" class="sp-linha-vazia">Nada encontrado.</td></tr>`;
+        $("sp-forn-info").textContent = lista.length ? `Mostrando ${inteiro.format(Math.min(lista.length, estado.fornLimite))} de ${inteiro.format(lista.length)}. Curva A: até 80% do gasto; B: até 95%.` : "";
+        $("sp-forn-mais").hidden = lista.length <= estado.fornLimite;
+    }
+
+    // ---------- Classificação ----------
+    const ORIGEM = { manual: "Confirmado", planilha: "Planilha do Custos" };
+
+    async function carregarRevisao() {
+        const f = estado.dados && !estado.dados.vazio ? estado.dados.filtro : null;
+        const qs = new URLSearchParams();
+        if (f) { qs.set("de", f.de); qs.set("ate", f.ate); }
+        try {
+            estado.revisao = await api("/api/compras/spend/revisao?" + qs.toString());
+            estado.revPeriodo = estado.revisao.de + estado.revisao.ate;
+            estado.revLimite = PAGINA;
+            $("sp-lista-cls").innerHTML = estado.revisao.classificacoes.map((c) => `<option value="${esc(c)}">`).join("");
+            renderRevisao();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    function renderRevisao() {
+        if (!estado.revisao) return;
+        const base = estado.revModo === "revisar" ? estado.revisao.itens.filter((i) => i.palpite) : estado.revisao.itens;
+        const lista = filtrar(base, $("sp-busca-rev").value, ["fornecedor", "codigo_item", "descricao", "classificacao"]);
+        $("sp-tb-rev").innerHTML = lista.slice(0, estado.revLimite).map((i) => {
+            const chave = `data-forn="${esc(i.cod_fornecedor)}" data-item="${esc(i.codigo_item)}"`;
+            const editavel = i.cod_fornecedor != null;
+            const semCls = i.classificacao === SEM_CLASSIFICACAO;
+            const origem = !i.palpite
+                ? `<span class="sp-muted">${esc(ORIGEM[i.origem] || i.origem)}</span>`
+                : `<span class="sp-sem" title="${i.origem ? "Deduzido por " + esc(i.origem) : ""}">${i.origem ? "Palpite" : "Sem classificação"}</span>`;
+            return `<tr>
+                <td class="sp-rev-forn">${esc(i.fornecedor)}</td>
+                <td><div class="sp-desc sp-rev-desc" title="${esc(i.descricao)}">${esc(i.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(i.codigo_item) || "(sem código)"}</div></td>
+                <td class="sp-num">${fmtR(i.valor)}</td>
+                <td>${editavel ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" ${chave} value="${esc(semCls ? "" : i.classificacao)}" placeholder="Sem classificação">` : esc(i.classificacao)}</td>
+                <td>${origem}</td>
+                <td>${editavel && i.palpite && !semCls ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-confirmar ${chave}>Confirmar</button>` : ""}</td></tr>`;
+        }).join("") || `<tr><td colspan="6" class="sp-linha-vazia">${estado.revModo === "revisar" ? "Nada para revisar no período." : "Nada encontrado."}</td></tr>`;
+        $("sp-rev-info").textContent = lista.length ? `Mostrando ${inteiro.format(Math.min(lista.length, estado.revLimite))} de ${inteiro.format(lista.length)}` : "";
+        $("sp-rev-mais").hidden = lista.length <= estado.revLimite;
+    }
+
+    async function salvarRevisao(forn, item, valor) {
+        try {
+            await api("/api/compras/spend/classificacao", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cod_fornecedor: forn, codigo_item: item, classificacao: valor }),
+            });
+            toast(valor ? "Classificação salva." : "Correção desfeita.", "success");
+            const alvo = estado.revisao.itens.find((i) => String(i.cod_fornecedor) === forn && i.codigo_item === item);
+            if (alvo && valor) {
+                Object.assign(alvo, { classificacao: valor, palpite: false, origem: "manual" });
+                renderRevisao();
+            } else {
+                await carregarRevisao();
+            }
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    $("sp-tb-rev").addEventListener("change", (ev) => {
+        const input = ev.target.closest("input[data-forn]");
+        if (input) salvarRevisao(input.dataset.forn, input.dataset.item, input.value.trim());
+    });
+    $("sp-tb-rev").addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-confirmar]");
+        if (!btn) return;
+        const input = btn.closest("tr").querySelector("input[data-forn]");
+        salvarRevisao(btn.dataset.forn, btn.dataset.item, input.value.trim());
+    });
+    $("sp-rev-modo").addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-modo]");
+        if (!btn) return;
+        estado.revModo = btn.dataset.modo;
+        estado.revLimite = PAGINA;
+        $("sp-rev-modo").querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b === btn));
+        renderRevisao();
+    });
+    $("sp-busca-rev").addEventListener("input", () => { estado.revLimite = PAGINA; renderRevisao(); });
+    $("sp-rev-mais").addEventListener("click", () => { estado.revLimite += PAGINA; renderRevisao(); });
+
+    // ---------- Abas e filtros ----------
+    function abrirTab(tab) {
+        estado.tab = tab;
+        document.querySelectorAll("#sp-tabs button").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === tab));
+        document.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== tab; });
+        if (tab === "classificacao" && (!estado.revisao || estado.revPeriodo !== estado.dados.filtro.de + estado.dados.filtro.ate)) carregarRevisao();
+    }
+    $("sp-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) abrirTab(b.dataset.tab); });
+    $("sp-alerta-rev-btn").addEventListener("click", () => { abrirTab("classificacao"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });
+
+    ["sp-de", "sp-ate", "sp-familia", "sp-classificacao"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
+    ["sp-anterior", "sp-atual"].forEach((id) => $(id).addEventListener("change", () => carregar()));
+    $("sp-limpar").addEventListener("click", () => carregar({ familia: "", classificacao: "" }));
+
+    $("sp-busca-cons").addEventListener("input", () => { estado.consLimite = PAGINA; renderConsolidado(); });
+    $("sp-cons-mais").addEventListener("click", () => { estado.consLimite += PAGINA; renderConsolidado(); });
+    $("sp-busca-forn").addEventListener("input", () => { estado.fornLimite = PAGINA; renderFornecedores(); });
+    $("sp-forn-mais").addEventListener("click", () => { estado.fornLimite += PAGINA; renderFornecedores(); });
+
+    // ---------- Atualização do GRV ----------
+    // A tela abre com o espelho e, se ele estiver velho, pede a atualização por trás.
+    function mostrarBase() {
+        $("sp-btn-atualizar").disabled = estado.atualizando;
+        if (estado.dados && !estado.dados.vazio) { renderInfo(estado.dados); return; }
+        $("sp-vazio").hidden = false;
+        $("sp-conteudo").hidden = true;
+        renderVazio();
+    }
+
+    async function lerStatus() {
+        try { estado.base = await api("/api/compras/spend/status"); } catch (_) {}
+    }
+
+    async function fimAtualizacao() {
+        estado.atualizando = false;
+        await lerStatus();
+        if (estado.base && !estado.base.vazio) await carregar();
+        mostrarBase();
+        if (estado.tab === "classificacao") carregarRevisao();
+    }
+
+    async function acompanhar() {
+        // outra pessoa já está atualizando: espera terminar
+        estado.atualizando = true;
+        mostrarBase();
+        for (let i = 0; i < 60; i++) {
+            await new Promise((ok) => setTimeout(ok, 5000));
+            await lerStatus();
+            if (estado.base && !estado.base.em_andamento) break;
+        }
+        await fimAtualizacao();
+    }
+
+    async function atualizarGrv() {
+        if (estado.atualizando) return;
+        estado.atualizando = true;
+        mostrarBase();
+        let r = null;
+        try {
+            r = await api("/api/compras/spend/atualizar", { method: "POST" });
+        } catch (err) {
+            if (estado.dados && !estado.dados.vazio) toast(err.message, "error");
+        }
+        if (r && r.ja_em_andamento) { estado.atualizando = false; acompanhar(); return; }
+        await fimAtualizacao();
+    }
+
+    $("sp-btn-atualizar").addEventListener("click", atualizarGrv);
+    $("sp-vazio-tentar").addEventListener("click", atualizarGrv);
+
+    async function iniciar() {
+        await lerStatus();
+        if (!estado.base) { toast("Falha ao consultar o servidor.", "error"); return; }
+        if (!estado.base.vazio) await carregar();
+        mostrarBase();
+        if (estado.base.em_andamento) acompanhar();
+        else if (estado.base.desatualizado) atualizarGrv();
+    }
+
+    iniciar();
+})();
+</script>
+{% endblock %}

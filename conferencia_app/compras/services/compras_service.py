@@ -171,13 +171,6 @@ def _norm_data(v) -> Optional[str]:
     return str(v)[:10]
 
 
-def _only_digits(v: Optional[str]) -> Optional[str]:
-    if v is None:
-        return None
-    s = ''.join(ch for ch in str(v) if ch.isdigit())
-    return s or None
-
-
 def _filtro_data(data_campo, data_de, data_ate) -> dict:
     return {
         "data_campo": _norm_data_campo(data_campo),
@@ -470,161 +463,6 @@ def visibility_compras(
     }
 
 
-def _parse_date_like(v):
-    if v is None or v == "":
-        return None
-    if hasattr(v, "date") and hasattr(v, "year"):
-        try:
-            return v.date()
-        except Exception:
-            pass
-    if hasattr(v, "year") and hasattr(v, "month") and hasattr(v, "day"):
-        return v
-    try:
-        return _datetime.fromisoformat(str(v)[:10]).date()
-    except Exception:
-        return None
-
-
-def _month_periods(rows: list[dict], data_de=None, data_ate=None) -> list[str]:
-    dt_de = _parse_date_like(data_de)
-    dt_ate = _parse_date_like(data_ate)
-    if dt_de and dt_ate:
-        atual = dt_de.replace(day=1)
-        fim = dt_ate.replace(day=1)
-        meses = []
-        while atual <= fim:
-            meses.append(f"{atual.year:04d}-{atual.month:02d}")
-            if atual.month == 12:
-                atual = atual.replace(year=atual.year + 1, month=1)
-            else:
-                atual = atual.replace(month=atual.month + 1)
-        return meses
-    return sorted({str(r.get("periodo_mes")) for r in rows if r.get("periodo_mes")})
-
-
-def _join_distinct(values: set[str], fallback: str) -> str:
-    cleaned = sorted(v for v in values if v)
-    return ", ".join(cleaned) if cleaned else fallback
-
-
-def spend_baseline(
-    cod_empresa: Optional[int] = None,
-    tipo_item: Optional[str] = None,
-    classificacao_item: Optional[str] = None,
-    destinatario_cnpj: Optional[str] = None,
-    data_de=None,
-    data_ate=None,
-    limite: int = 10000,
-) -> list[dict]:
-    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
-    tipo = (tipo_item or "").strip().upper() or None
-    if tipo not in {None, "SERVICO", "PRODUTO"}:
-        tipo = None
-    params = {
-        "cod_empresa": empresa,
-        "tipo_item": tipo,
-        "classificacao_item": classificacao_item,
-        "destinatario_cnpj": _only_digits(destinatario_cnpj),
-        "data_de": _norm_data(data_de),
-        "data_ate": _norm_data(data_ate),
-        "limite": max(1, min(int(limite or 10000), 30000)),
-    }
-    rows = db.fetch_all(queries.SQL_SPEND_BASELINE, params)
-    meses = _month_periods(rows, data_de=data_de, data_ate=data_ate)
-    month_keys = {mes: f"mes_{mes.replace('-', '_')}" for mes in meses}
-
-    agrupado: dict[tuple, dict] = {}
-    meta: dict[tuple, dict] = {}
-
-    for row in rows:
-        key = (
-            row.get("cod_empresa"),
-            str(row.get("cnpj") or ""),
-            str(row.get("fornecedor") or ""),
-        )
-        if key not in agrupado:
-            item = {
-                "cod_empresa": row.get("cod_empresa"),
-                "cnpj": row.get("cnpj"),
-                "fornecedor": row.get("fornecedor"),
-                "tipo_item": "",
-                "classificacao_item": "",
-                "cfop_entrada": "",
-                "cfop_nf": "",
-                "natureza_operacao": "",
-                "total_periodo": 0.0,
-                "qtd_itens_total": 0,
-                "qtd_nf_total": 0,
-            }
-            for month_key in month_keys.values():
-                item[month_key] = 0.0
-            agrupado[key] = item
-            meta[key] = {
-                "tipo_item": set(),
-                "classificacao_item": set(),
-                "cfop_entrada": set(),
-                "cfop_nf": set(),
-                "natureza_operacao": set(),
-            }
-
-        item = agrupado[key]
-        info = meta[key]
-        periodo = str(row.get("periodo_mes") or "")
-        valor = float(row.get("valor_mensal") or 0)
-        if periodo in month_keys:
-            item[month_keys[periodo]] += valor
-        item["total_periodo"] += valor
-        item["qtd_itens_total"] += int(row.get("qtd_itens") or 0)
-        item["qtd_nf_total"] += int(row.get("qtd_nf") or 0)
-
-        for campo in info.keys():
-            valor_campo = str(row.get(campo) or "").strip()
-            if valor_campo and not valor_campo.startswith("(Sem "):
-                info[campo].add(valor_campo)
-
-    result = []
-    for key, item in agrupado.items():
-        info = meta[key]
-        item["tipo_item"] = _join_distinct(info["tipo_item"], "PRODUTO")
-        item["classificacao_item"] = _join_distinct(info["classificacao_item"], "(Sem classificação)")
-        item["cfop_entrada"] = _join_distinct(info["cfop_entrada"], "(Sem CFOP entrada)")
-        item["cfop_nf"] = _join_distinct(info["cfop_nf"], "(Sem CFOP NF)")
-        item["natureza_operacao"] = _join_distinct(info["natureza_operacao"], "(Sem natureza)")
-        item["total_periodo"] = round(item["total_periodo"], 2)
-        for month_key in month_keys.values():
-            item[month_key] = round(float(item[month_key] or 0), 2)
-        result.append(item)
-
-    result.sort(key=lambda r: (-float(r.get("total_periodo") or 0), str(r.get("fornecedor") or "")))
-    return result
-
-
-def spend_baseline_composicao(
-    cod_empresa: Optional[int] = None,
-    cnpj: Optional[str] = None,
-    fornecedor: Optional[str] = None,
-    tipo_item: Optional[str] = None,
-    data_de=None,
-    data_ate=None,
-    limite: int = 30000,
-) -> list[dict]:
-    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
-    tipo = (tipo_item or "").strip().upper() or None
-    if tipo not in {None, "SERVICO", "PRODUTO"}:
-        tipo = None
-    params = {
-        "cod_empresa": empresa,
-        "cnpj": _only_digits(cnpj),
-        "fornecedor": (fornecedor or "").strip() or None,
-        "tipo_item": tipo,
-        "data_de": _norm_data(data_de),
-        "data_ate": _norm_data(data_ate),
-        "limite": max(1, min(int(limite or 30000), 50000)),
-    }
-    return db.fetch_all(queries.SQL_SPEND_BASELINE_COMPOSICAO, params)
-
-
 def healthcheck_db() -> bool:
     row = db.fetch_one(queries.SQL_HEALTHCHECK)
     return bool(row and row.get("ok") == 1)
@@ -854,4 +692,120 @@ def dashboard_performance(
         "consolidado": consolidado,
         "detalhado": detalhado,
         "status_materiais": status_materiais,
+    }
+
+
+# -------------------------------------------------------------------
+# Fila de compras: o que falta comprar, por OS aberta.
+# O dashboard conta OS/itens; a fila mostra os itens em si, para o
+# comprador trabalhar OS a OS.
+# -------------------------------------------------------------------
+_FILA_STATUS = {"A COMPRAR", "SOLICITACAO"}
+_FILA_ORDEM_BUCKET = {b: i for i, b in enumerate(["Expired", "On going", "Pipeline next week", "Planned", "Sem prazo"])}
+
+
+def _e_chapa(item: dict) -> bool:
+    # Chapa de materia-prima vem fracionada em kg por OS e e comprada por
+    # chapa inteira/tonelada, com nesting no meio: nao vira pedido por OS.
+    desc = str(item.get("material_descricao") or "").strip().upper()
+    unidade = str(item.get("unidade") or "").strip().upper()
+    return desc.startswith("CHAPA") and unidade == "KG"
+
+
+def fila_compras(
+    cod_empresa: Optional[int] = None,
+    classificacao: Optional[str] = None,
+    n_os: Optional[str] = None,
+    data_campo: Optional[str] = None,
+    data_de=None,
+    data_ate=None,
+) -> dict:
+    """Itens sem OC (A COMPRAR ou so com SC) das OS abertas, agrupados por OS.
+
+    O prazo e o mesmo do dashboard (compras_prazo, derivado da data prevista
+    da OS), entao o bucket de cada OS bate com o grafico de Compras.
+    Chapa fica fora e so e contada."""
+    filtros = dict(
+        cod_empresa=cod_empresa, classificacao=classificacao, n_os=n_os,
+        data_campo=data_campo, data_de=data_de, data_ate=data_ate,
+    )
+    # So OS abertas: a lista de materiais sozinha traz tambem OS canceladas.
+    abertas = {
+        (r.get("cod_empresa"), r.get("cod_os")): r
+        for r in painel_os(somente_abertas=True, limite=10000, **filtros)
+    }
+    materiais = listar_materiais_por_os(limite=20000, **filtros)
+
+    hoje = _date.today()
+    prox_semana_fim = hoje + _timedelta(days=7)
+    grupos: dict = {}
+    chapa_itens = 0
+    chapa_os: set = set()
+    for it in materiais:
+        chave = (it.get("cod_empresa"), it.get("cod_os"))
+        os_row = abertas.get(chave)
+        if os_row is None or it.get("metodo_reposicao", 0) not in (0, 3):
+            continue
+        status = str(it.get("status_material") or "").upper()
+        if status not in _FILA_STATUS:
+            continue
+        if _e_chapa(it):
+            chapa_itens += 1
+            chapa_os.add(chave)
+            continue
+
+        grupo = grupos.get(chave)
+        if grupo is None:
+            prazo = _to_date(os_row.get("compras_prazo"))
+            bucket = _bucket_da_fase(
+                _to_date(os_row.get("compras_inicio")), prazo, hoje, prox_semana_fim, False,
+            )
+            grupo = grupos[chave] = {
+                "n_os": os_row.get("n_os"),
+                "titulo": os_row.get("titulo"),
+                "cliente": os_row.get("cliente"),
+                "classificacao": os_row.get("classificacao") or os_row.get("u_classificacao"),
+                "dt_prevista": _to_date(os_row.get("dt_prevista")),
+                "compras_prazo": prazo,
+                "bucket": bucket,
+                "dias_atraso": (hoje - prazo).days if bucket == "Expired" else 0,
+                "itens": [],
+            }
+        necessaria = float(it.get("qtde_necessaria") or 0)
+        entregue = float(it.get("qtde_entregue") or 0)
+        reservada = float(it.get("qtde_reservada") or 0)
+        grupo["itens"].append({
+            "cod_os_completo": it.get("cod_os_completo"),
+            "cod_interno": it.get("cod_interno"),
+            "descricao": it.get("material_descricao"),
+            "unidade": it.get("unidade"),
+            "qtde_falta": round(max(necessaria - entregue - reservada, 0), 4),
+            "qtde_necessaria": round(necessaria, 4),
+            "n_sc": it.get("n_sc"),
+            "terceiro": it.get("metodo_reposicao") == 3,
+        })
+
+    lista = sorted(
+        grupos.values(),
+        key=lambda g: (
+            _FILA_ORDEM_BUCKET.get(g["bucket"], 99),
+            g["compras_prazo"] or _date.max,
+            str(g["n_os"] or ""),
+        ),
+    )
+    por_bucket = {b: 0 for b in _FILA_ORDEM_BUCKET}
+    for g in lista:
+        por_bucket[g["bucket"]] = por_bucket.get(g["bucket"], 0) + 1
+        g["dt_prevista"] = g["dt_prevista"].isoformat() if g["dt_prevista"] else None
+        g["compras_prazo"] = g["compras_prazo"].isoformat() if g["compras_prazo"] else None
+    return {
+        "hoje": hoje.isoformat(),
+        "resumo": {
+            "os": len(lista),
+            "itens": sum(len(g["itens"]) for g in lista),
+            "por_bucket": por_bucket,
+            "chapa_itens": chapa_itens,
+            "chapa_os": len(chapa_os),
+        },
+        "os": lista,
     }

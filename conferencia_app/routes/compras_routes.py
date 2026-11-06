@@ -97,12 +97,6 @@ def compras_page():
     )
 
 
-@compras_bp.route("/compras/ui")
-@permission_required(PERM)
-def compras_ui():
-    return current_app.send_static_file("compras/index.html")
-
-
 @compras_bp.route("/api/compras/health")
 @permission_required(PERM)
 def compras_health():
@@ -184,6 +178,13 @@ def dashboard_performance():
     )
 
 
+@compras_bp.route("/api/compras/fila")
+@permission_required(PERM)
+def fila_compras():
+    filters = _common_filters()
+    return _json_response(lambda: compras_service.fila_compras(**filters))
+
+
 @compras_bp.route("/api/compras/historico/ordens-compra")
 @permission_required(PERM)
 def historico_ordens_compra():
@@ -206,37 +207,5 @@ def visibility():
             somente_sc_sem_oc=_arg_bool("somente_sc_sem_oc", False),
             limite=_arg_int("limite", 8000, 1, 30000),
             **filters,
-        )
-    )
-
-
-@compras_bp.route("/api/compras/spend/baseline")
-@permission_required(PERM)
-def spend_baseline():
-    return _json_response(
-        lambda: compras_service.spend_baseline(
-            cod_empresa=_arg_int("empresa"),
-            tipo_item=request.args.get("tipo_item") or None,
-            classificacao_item=request.args.get("classificacao_item") or None,
-            destinatario_cnpj=request.args.get("destinatario_cnpj") or None,
-            data_de=_arg_date("data_de"),
-            data_ate=_arg_date("data_ate"),
-            limite=_arg_int("limite", 10000, 1, 30000),
-        )
-    )
-
-
-@compras_bp.route("/api/compras/spend/baseline/composicao")
-@permission_required(PERM)
-def spend_baseline_composicao():
-    return _json_response(
-        lambda: compras_service.spend_baseline_composicao(
-            cod_empresa=_arg_int("empresa"),
-            cnpj=request.args.get("cnpj") or None,
-            fornecedor=request.args.get("fornecedor") or None,
-            tipo_item=request.args.get("tipo_item") or None,
-            data_de=_arg_date("data_de"),
-            data_ate=_arg_date("data_ate"),
-            limite=_arg_int("limite", 30000, 1, 50000),
         )
     )
