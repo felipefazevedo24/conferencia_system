@@ -536,7 +536,8 @@
 
             <div class="cx-section-title">Cotações recebidas</div>
             <div class="cx-field">
-                <label>Taxa de câmbio de referência <small style="font-weight:400; color:var(--eui-muted);">— mesma taxa usada pra comparar todos os fornecedores, independente do que cada um informou</small></label>
+                <div id="cx-cot-ptax-info" style="font-size:13px; margin-bottom:6px;"></div>
+                <label>Taxa manual <small style="font-weight:400; color:var(--eui-muted);">— usada só se a PTAX do Banco Central não responder; o markup de cada forwarder é aplicado em cima</small></label>
                 <div style="display:flex; gap:8px;">
                     <input type="text" inputmode="decimal" id="cx-cot-taxa-cambio" class="eui-input" placeholder="Ex.: 5,35" style="max-width:160px;">
                     <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-cot-btn-salvar-taxa">Salvar taxa</button>
@@ -552,7 +553,7 @@
                             <th>Transit time</th>
                             <th>Total USD</th>
                             <th>Total BRL</th>
-                            <th>Total Consolidado (BRL)</th>
+                            <th>Total em R$ (PTAX + markup)</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -1809,6 +1810,9 @@
         $("cx-cot-tbody").innerHTML = '<tr><td colspan="8" class="cx-empty">Carregando…</td></tr>';
         try {
             const data = await api(`/api/comex/processos/${processoId}/cotacoes`);
+            $("cx-cot-ptax-info").innerHTML = data.ptax
+                ? `PTAX do dia (Banco Central): <strong>${_fmtTaxa(data.ptax.cotacao)}</strong> em ${data.ptax.data.split("-").reverse().join("/")}`
+                : '<span style="color:#b45309;">Não consegui buscar a PTAX no Banco Central — os totais usam a taxa manual abaixo.</span>';
             cotacoesExistentesAtual = data.cotacoes || [];
             renderCotacoes(cotacoesExistentesAtual);
             return cotacoesExistentesAtual;
@@ -1817,6 +1821,25 @@
             cotacoesExistentesAtual = [];
             return [];
         }
+    }
+
+    function _fmtTaxa(v) {
+        return Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+
+    // Taxa usada no total: PTAX (ou manual) + markup do forwarder do cadastro,
+    // achado pelos e-mails da cotacao.
+    function taxaAgenteHtml(c) {
+        if (c.taxa_agente == null || c.status !== "Recebida") return "";
+        let detalhe;
+        if (c.markup_pct != null) {
+            detalhe = `markup ${String(c.markup_pct).replace(".", ",")}%`;
+        } else {
+            const motivo = c.forwarder_cadastro ? "sem markup cadastrado" : "forwarder fora do cadastro";
+            detalhe = `<span style="color:#b45309;">${motivo}</span>`;
+        }
+        const fonte = c.taxa_base_fonte === "manual" ? " (taxa manual)" : "";
+        return `<br><small style="color:var(--eui-muted);">taxa ${_fmtTaxa(c.taxa_agente)}${fonte} · ${detalhe}</small>`;
     }
 
     function renderCotacoes(cotacoes) {
@@ -1833,7 +1856,9 @@
         const linhaGrupo = (titulo) => `<tr><td colspan="8" style="background:var(--eui-surface-2, #f1f5f9); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em;">${titulo}</td></tr>`;
         $("cx-cot-tbody").innerHTML = GRUPOS.map(([g, titulo]) => {
             const doGrupo = cotacoes.filter((c) => grupoDe(c) === g);
-            if (g !== "PENDENTE") doGrupo.sort((a, b) => (a.custo_total_usd ?? Infinity) - (b.custo_total_usd ?? Infinity));
+            // Mesmo criterio da sugerida: total em R$ (com markup); sem taxa, US$.
+            const custo = (c) => c.custo_total_consolidado_brl ?? c.custo_total_usd ?? Infinity;
+            if (g !== "PENDENTE") doGrupo.sort((a, b) => custo(a) - custo(b));
             return doGrupo.length ? linhaGrupo(titulo) + doGrupo.map(linhaCotacao).join("") : "";
         }).join("");
 
@@ -1863,7 +1888,7 @@
                     <td>${escapeHtml(c.transit_time || "—")}</td>
                     <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
                     <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>
-                    <td>${c.custo_total_consolidado_brl != null ? _fmtMoedaGenerico(c.custo_total_consolidado_brl, "R$") : "—"}</td>
+                    <td>${c.custo_total_consolidado_brl != null ? _fmtMoedaGenerico(c.custo_total_consolidado_brl, "R$") : "—"}${taxaAgenteHtml(c)}</td>
                     <td style="text-align:right; white-space:nowrap;">${acao}</td>
                 </tr>
             `;

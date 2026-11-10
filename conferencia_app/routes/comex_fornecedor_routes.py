@@ -27,6 +27,7 @@ def _fornecedor_payload(f: ComexFornecedor) -> dict:
         "email": f.email,
         "telefone": f.telefone,
         "tipo_fornecedor": f.tipo_fornecedor,
+        "markup_pct": f.markup.markup_pct if f.markup else None,
         "ativo": f.ativo,
         "criado_em": f.criado_em.isoformat() if f.criado_em else None,
         "criado_por": f.criado_por,
