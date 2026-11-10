@@ -469,6 +469,19 @@
             <div class="cx-field" id="cx-cot-substatus-wrap">
                 <span class="eui-badge" id="cx-cot-substatus-badge"></span>
             </div>
+            <div class="cx-section-title">POs deste embarque</div>
+            <small style="color:var(--eui-muted); margin-top:-8px;">Inclua POs finalizadas de outros processos do mesmo fornecedor para cotar um embarque só — permitido até a Instrução de Embarque.</small>
+            <div class="cx-table-wrap">
+                <table class="erp-table">
+                    <thead><tr><th>PO</th><th>Processo</th><th>OC</th><th>Valor (US$)</th><th></th></tr></thead>
+                    <tbody id="cx-emb-tbody"><tr><td colspan="5" class="cx-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cx-doc-add" id="cx-emb-add">
+                <select id="cx-emb-candidatas" class="eui-select"></select>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-emb-btn-incluir"><i class="fas fa-plus"></i> Incluir PO</button>
+            </div>
+            <small id="cx-emb-motivo" style="color:var(--eui-muted);"></small>
             <div class="cx-section-title" id="cx-cot-secao-titulo">Gerar novo link de cotação</div>
             <small style="color:var(--eui-muted); margin-top:-8px;" id="cx-cot-secao-sub">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
             <div class="cx-field">
@@ -824,7 +837,7 @@
                 <td>${escapeHtml(p.fornecedor || "—")}</td>
                 <td><span class="eui-badge ${p.direcao_operacao === "EXPO" ? "eui-badge--warning" : "eui-badge--info"}">${p.direcao_operacao === "EXPO" ? "Exportação" : "Importação"}</span> ${escapeHtml(p.modal_transporte || (p.tipo_operacao === "IA" ? "Aéreo" : "Marítimo"))}</td>
                 <td>${ocColunaHtml(p)}</td>
-                <td>${escapeHtml(p.po_numero || "—")}</td>
+                <td>${escapeHtml(p.po_numero || "—")}${(p.embarque_pos || []).map((x) => `<br><small title="PO incluída neste embarque (${escapeHtml(x.id_op)})">+ ${escapeHtml(x.po_numero || x.id_op)}</small>`).join("")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
                 <td>${badgeStatus(p)}${badgePendencias(p)}</td>
                 <td style="text-align:right;"><button class="cx-actions-btn" data-kebab="${p.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
@@ -1679,8 +1692,92 @@
         $("cx-modal-cotacao").classList.add("open");
         comentariosCot.carregar(p.id);
 
+        carregarEmbarque(p.id);
         const cotacoesExistentes = await carregarCotacoes(p.id);
         preencherFormularioCotacao(p, cotacoesExistentes[0] || null);
+    }
+
+    // ── POs do embarque: incluir PO de outro processo do mesmo fornecedor
+    // (comex_embarque_service). O incluido some da lista e segue este. ──
+    let embarqueAtual = null;
+
+    function renderEmbarque(emb) {
+        embarqueAtual = emb;
+        $("cx-emb-tbody").innerHTML = emb.pos.map((x, idx) => `
+            <tr>
+                <td><strong>${escapeHtml(x.po_numero || "—")}</strong>${idx === 0 ? ' <span class="eui-badge eui-badge--info">principal</span>' : ""}</td>
+                <td>${escapeHtml(x.id_op)}</td>
+                <td>${escapeHtml(x.cod_ordem_compra != null ? String(x.cod_ordem_compra) : "—")}</td>
+                <td>${x.valor_usd != null ? _fmtMoedaGenerico(x.valor_usd, "US$") : "—"}</td>
+                <td style="text-align:right;">${idx > 0 && emb.editavel ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-emb-remover="${x.processo_id}" title="Tirar do embarque"><i class="fas fa-xmark"></i></button>` : ""}</td>
+            </tr>`).join("") + (emb.pos.length > 1
+                ? `<tr><td colspan="3" style="text-align:right; font-weight:600;">Total do embarque</td><td style="font-weight:600;">${emb.subtotal_usd != null ? _fmtMoedaGenerico(emb.subtotal_usd, "US$") : "—"}</td><td></td></tr>`
+                : "");
+        $("cx-emb-add").classList.toggle("hidden", !emb.editavel || !emb.candidatas.length);
+        $("cx-emb-candidatas").innerHTML = emb.candidatas.map((x) =>
+            `<option value="${x.id}">${escapeHtml(x.po_numero || x.id_op)} — ${escapeHtml(x.id_op)}${x.valor_usd != null ? " — " + _fmtMoedaGenerico(x.valor_usd, "US$") : ""}</option>`).join("");
+        $("cx-emb-motivo").textContent = !emb.editavel ? emb.motivo
+            : !emb.candidatas.length ? "Nenhuma outra PO finalizada deste fornecedor disponível para incluir." : "";
+    }
+
+    async function carregarEmbarque(processoId) {
+        $("cx-emb-tbody").innerHTML = '<tr><td colspan="5" class="cx-empty">Carregando…</td></tr>';
+        try {
+            renderEmbarque(await api(`/api/comex/processos/${processoId}/embarque`));
+        } catch (err) {
+            $("cx-emb-tbody").innerHTML = `<tr><td colspan="5" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    // 409 = ja' ha' cotacao gerada com a composicao atual: confirma e repete.
+    async function alterarEmbarque(url, body) {
+        let confirmar = false;
+        for (;;) {
+            const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, confirmar }) });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.status === 409 && data.confirmar && !confirmar) {
+                if (!confirm(data.error)) return;
+                confirmar = true;
+                continue;
+            }
+            if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+            toast(data.message, "success");
+            processoCotacaoAtual = data.processo;
+            renderEmbarque(data.embarque);
+            $("cx-cot-valor-mercadoria").value = data.embarque.subtotal_usd != null ? data.embarque.subtotal_usd : "";
+            renderCotacoes(cotacoesExistentesAtual);
+            carregar();
+            return;
+        }
+    }
+
+    $("cx-emb-btn-incluir").addEventListener("click", async () => {
+        if (!processoCotacaoAtual || !$("cx-emb-candidatas").value) return;
+        const btn = $("cx-emb-btn-incluir");
+        btn.disabled = true;
+        try {
+            await alterarEmbarque(`/api/comex/processos/${processoCotacaoAtual.id}/embarque/pos`, { processo_id: parseInt($("cx-emb-candidatas").value, 10) });
+        } catch (err) { toast(err.message, "error"); } finally { btn.disabled = false; }
+    });
+
+    $("cx-emb-tbody").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-emb-remover]");
+        if (!btn || !processoCotacaoAtual) return;
+        if (!confirm("Tirar esta PO do embarque? O processo volta a aparecer sozinho na lista.")) return;
+        try {
+            await alterarEmbarque(`/api/comex/processos/${processoCotacaoAtual.id}/embarque/pos/${btn.dataset.embRemover}/remover`, {});
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    // POs com que o link foi gerado; destaca se a composicao mudou depois.
+    function composicaoHtml(c) {
+        if (!c.composicao) return "";
+        const daCotacao = c.composicao.map((x) => x.po_numero || x.id_op);
+        const atual = embarqueAtual ? embarqueAtual.pos.map((x) => x.po_numero || x.id_op) : daCotacao;
+        const mudou = daCotacao.join("|") !== atual.join("|");
+        if (daCotacao.length < 2 && !mudou) return "";
+        const cor = mudou ? "#b45309" : "var(--eui-muted)";
+        return `<br><small style="color:${cor};" title="${mudou ? "As POs do embarque mudaram depois que este link foi gerado" : "POs cotadas neste link"}">${mudou ? "Cotado com: " : "POs: "}${escapeHtml(daCotacao.join(", "))}</small>`;
     }
     function fecharModalCotacao() { $("cx-modal-cotacao").classList.remove("open"); processoCotacaoAtual = null; }
     $("cx-fechar-cotacao").addEventListener("click", fecharModalCotacao);
@@ -1733,7 +1830,8 @@
         // da PO (o prestador precisa do valor real pra calcular o seguro) -
         // so cai pro valor salvo numa cotacao anterior se a PO ainda nao tem
         // itens lancados.
-        const valorMercadoria = p.po_subtotal_usd != null ? p.po_subtotal_usd : (base ? base.valor_mercadoria_usd : null);
+        const subtotalPos = p.embarque_subtotal_usd != null ? p.embarque_subtotal_usd : p.po_subtotal_usd;
+        const valorMercadoria = subtotalPos != null ? subtotalPos : (base ? base.valor_mercadoria_usd : null);
         $("cx-cot-valor-mercadoria").value = valorMercadoria != null ? valorMercadoria : "";
         volumesCotacaoAtual = (base && base.volumes && base.volumes.length)
             ? base.volumes.map((v) => ({ ...v }))
@@ -1882,7 +1980,7 @@
             }
             return `
                 <tr>
-                    <td>${escapeHtml(c.fornecedor_frete || "—")}</td>
+                    <td>${escapeHtml(c.fornecedor_frete || "—")}${composicaoHtml(c)}</td>
                     <td>${c.tipo_frete === "FCL" ? "FCL" : c.modal_cotado === "AEREO" ? "Aéreo" : c.modal_cotado === "LCL" ? "LCL" : c.modal_solicitado ? "Pedido: " + PEDIDO[c.modal_solicitado] : "LCL/Aéreo"}</td>
                     <td>${badge}</td>
                     <td>${escapeHtml(c.transit_time || "—")}</td>

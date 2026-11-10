@@ -580,9 +580,10 @@ def _coletar_comex() -> dict:
 
     # OCs combinadas na PO de outro processo somem da lista principal -
     # mesma logica de listar_processos() do modulo Comex (comex_service).
+    from ..services.comex_service import _fora_de_embarque
     processos = (
         ComexProcesso.query
-        .filter(ComexProcesso.po_processo_principal_id.is_(None))
+        .filter(ComexProcesso.po_processo_principal_id.is_(None), _fora_de_embarque())
         .all()
     )
 

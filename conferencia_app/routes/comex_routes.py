@@ -22,7 +22,7 @@ from ..auth import has_permission, permission_required
 from ..extensions import db
 from ..models import ComexCotacao, ComexDocumento, ComexProcesso, ComexPoItem
 from ..services import comex_service as svc
-from ..services import comex_custo_service, comex_po_pdf
+from ..services import comex_custo_service, comex_embarque_service, comex_po_pdf
 from ..services.smtp_service import enviar_mensagem_smtp
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 from ..tempo import agora_br
@@ -149,6 +149,12 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "po_ocs_vinculadas": _ocs_vinculadas_lista(p),
         "po_processo_principal_id": p.po_processo_principal_id,
         "po_processo_principal_id_op": _processo_principal_id_op(p),
+        # Embarque com mais de uma PO (comex_embarque_service): as incluidas
+        # no principal, ou o principal de quem esta' incluida.
+        "embarque_pos": [{"id": v.processo.id, "id_op": v.processo.id_op, "po_numero": v.processo.po_numero}
+                         for v in p.pos_embarque],
+        "embarque_principal_id_op": p.embarque_principal.principal.id_op if p.embarque_principal else None,
+        "embarque_subtotal_usd": comex_embarque_service.subtotal_embarque(p) if p.pos_embarque else svc.subtotal_itens_po(p),
         "processo_concluido_em": p.processo_concluido_em.strftime("%d/%m/%Y %H:%M") if p.processo_concluido_em else None,
         # Exportacao puxada da ordem de faturamento (fluxo curto, sem OC/PO).
         "exportacao_expedicao": svc.exportacao_da_expedicao(p),
@@ -471,6 +477,25 @@ def api_apagar_po(processo_id):
     return jsonify({"message": "PO apagada.", "processo": _processo_payload(processo)})
 
 
+def _texto_pos_embarque(processo: ComexProcesso) -> str:
+    numeros = [p.po_numero for p in comex_embarque_service.processos_do_embarque(processo) if p.po_numero]
+    if not numeros:
+        return ""
+    rotulo = "POs deste embarque" if len(numeros) > 1 else "PO deste embarque"
+    return f"<p>{rotulo} (em anexo): <strong>{html.escape(', '.join(numeros))}</strong>.</p>"
+
+
+def _anexar_pos_embarque(msg: MIMEMultipart, processo: ComexProcesso) -> None:
+    """PDF de cada PO do embarque (principal + incluidas)."""
+    for p in comex_embarque_service.processos_do_embarque(processo):
+        if not p.po_numero:
+            continue
+        pdf = comex_po_pdf.gerar_po_pdf(p, _ocs_vinculadas_do_processo(p), svc.listar_itens_po(p))
+        parte = MIMEApplication(pdf, _subtype="pdf")
+        parte.add_header("Content-Disposition", "attachment", filename=f"{p.po_numero}.pdf")
+        msg.attach(parte)
+
+
 def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list[str]) -> None:
     """"Resultado da Cotação de Frete" - avisa o fornecedor vencedor que foi
     selecionado e pode seguir com o booking. Disparado a partir do botao
@@ -488,11 +513,13 @@ def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list
         f"<p>Prezados,</p>"
         f"<p>Agradecemos o envio da cotação referente ao processo <strong>{processo.id_op}</strong>.</p>"
         f"<p>Informamos que a análise foi concluída, a {html.escape(nome_fornecedor)} foi selecionada para este embarque.</p>"
+        f"{_texto_pos_embarque(processo)}"
         f"<p>Favor seguir com a solicitação do booking.</p>"
         f"<p>Atenciosamente,</p>"
         f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
+    _anexar_pos_embarque(msg, processo)
     enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
 
 
@@ -941,6 +968,7 @@ def _cotacao_payload(c: ComexCotacao, cambio: dict | None = None) -> dict:
         "modal_cotado": c.modal_cotado.modal if c.modal_cotado else None,
         # LCL | AEREO | AMBOS - o que a Columbia pediu ao gerar o link.
         "modal_solicitado": c.modal_solicitado.modal if c.modal_solicitado else None,
+        "composicao": comex_embarque_service.composicao_da_cotacao(c),
         "status": c.status,
         "fornecedor_frete": c.fornecedor_frete,
         "origem": c.origem,
@@ -996,6 +1024,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
         f"<p>Prezados,</p>"
         f"<p>Solicitamos, por gentileza, a cotação de frete referente ao processo <strong>{processo.id_op}</strong>.</p>"
         f"{_texto_modal_solicitado(cotacao)}"
+        f"{_texto_pos_embarque(processo)}"
         f"<p>A cotação deverá ser imputada através do link, acesse-o e preencha as informações solicitadas:</p>"
         f"<p><a href=\"{link}\">{link}</a></p>"
         f"<p>Agradecemos sua atenção e ficamos no aguardo do retorno dentro do prazo estabelecido.</p>"
@@ -1003,6 +1032,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
         f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
+    _anexar_pos_embarque(msg, processo)
     enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
 
 
@@ -1165,6 +1195,7 @@ def api_cotacao_publica_dados(token):
         "status": cotacao.status,
         "tipo_frete": cotacao.tipo_frete,
         "modal_solicitado": cotacao.modal_solicitado.modal if cotacao.modal_solicitado else None,
+        "pos": [x["po_numero"] for x in (comex_embarque_service.composicao_da_cotacao(cotacao) or []) if x.get("po_numero")],
         "id_op": processo.id_op,
         "termos": svc.TERMOS_COTACAO,
         "etapas_custo": [{"campo": p, "label": l} for p, l in svc.ETAPAS_CUSTO_COTACAO],
@@ -1200,3 +1231,52 @@ def api_cotacao_publica_submeter(token):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Cotação enviada com sucesso. Obrigado!"})
+
+
+# ── Embarque com mais de uma PO (comex_embarque_service) ──────────────
+def _embarque_payload(principal: ComexProcesso) -> dict:
+    motivo = comex_embarque_service._motivo_principal(principal)
+    return {
+        "pos": comex_embarque_service.resumo_pos(principal),
+        "subtotal_usd": comex_embarque_service.subtotal_embarque(principal),
+        "editavel": motivo is None,
+        "motivo": motivo,
+        "candidatas": [] if motivo else [
+            {"id": p.id, "id_op": p.id_op, "po_numero": p.po_numero, "cod_ordem_compra": p.cod_ordem_compra,
+             "valor_usd": svc.subtotal_itens_po(p)}
+            for p in comex_embarque_service.candidatas(principal)
+        ],
+    }
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/embarque")
+@permission_required(PERMISSION)
+def api_embarque(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    return jsonify(_embarque_payload(processo))
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/embarque/pos", methods=["POST"])
+@comex_bp.route("/api/comex/processos/<int:processo_id>/embarque/pos/<int:outro_id>/remover", methods=["POST"])
+@permission_required(PERMISSION)
+def api_alterar_embarque(processo_id, outro_id=None):
+    """Inclui (sem `outro_id`, com `processo_id` no corpo) ou remove uma PO
+    do embarque. 409 = ja' ha' cotacao gerada; a tela confirma e repete com
+    `confirmar`."""
+    principal = ComexProcesso.query.get(processo_id)
+    payload = request.get_json(silent=True) or {}
+    outro = ComexProcesso.query.get(outro_id or payload.get("processo_id") or 0)
+    if not principal or not outro:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    usuario = session.get("username", "desconhecido")
+    acao = comex_embarque_service.remover_po if outro_id else comex_embarque_service.incluir_po
+    try:
+        acao(principal, outro, usuario, confirmar=bool(payload.get("confirmar")))
+    except comex_embarque_service.ConfirmacaoNecessaria as exc:
+        return jsonify({"error": str(exc), "confirmar": True}), 409
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "PO removida do embarque." if outro_id else "PO incluída no embarque.",
+                    "embarque": _embarque_payload(principal), "processo": _processo_payload(principal)})

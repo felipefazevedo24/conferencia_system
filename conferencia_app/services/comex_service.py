@@ -30,6 +30,7 @@ from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
 from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal, ComexCotacaoModalSolicitado, ComexFornecedor
+from ..models import ComexCotacaoComposicao, ComexEmbarquePo
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -761,6 +762,8 @@ def cancelar(processo: ComexProcesso, motivo: str, usuario: str) -> list[str]:
         raise ValueError("Só é possível cancelar processos no status OC ou PO.")
     if processo.po_processo_principal_id:
         raise ValueError("Esta OC está combinada na PO de outro processo - cancele o processo principal.")
+    if processo.embarque_principal:
+        raise ValueError(f"Esta PO está no embarque de {processo.embarque_principal.principal.id_op} - remova-a de lá antes.")
     motivo = str(motivo or "").strip()
     if not motivo:
         raise ValueError("Informe o motivo do cancelamento.")
@@ -776,6 +779,10 @@ def cancelar(processo: ComexProcesso, motivo: str, usuario: str) -> list[str]:
     texto = f"Processo CANCELADO (estava em {LABELS_MODULO.get(anterior, anterior)}). Motivo: {motivo}"
     if ocs_liberadas:
         texto += f" | OCs combinadas liberadas: {', '.join(ocs_liberadas)}."
+    from . import comex_embarque_service
+    pos_liberadas = comex_embarque_service.liberar_todas(processo, usuario)
+    if pos_liberadas:
+        texto += f" | POs do embarque liberadas: {', '.join(pos_liberadas)}."
     db.session.add(ComexComentario(processo_id=processo.id, texto=texto, criado_por=usuario))
     db.session.commit()
     return ocs_liberadas
@@ -1294,12 +1301,18 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     return processo
 
 
+def _fora_de_embarque():
+    """Filtro: processo cuja PO foi incluida no embarque de outro some da
+    lista e segue o principal (comex_embarque_service)."""
+    return ~ComexProcesso.id.in_(db.session.query(ComexEmbarquePo.processo_id))
+
+
 def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[ComexProcesso]:
     # OCs combinadas na PO de outro processo (po_processo_principal_id
     # preenchido) somem da lista principal - passam a existir so "dentro"
     # do processo consolidado (ver salvar_po e o checklist de itens, que
     # mostra a origem por OC). Continuam no banco, so nao aparecem soltas.
-    query = ComexProcesso.query.filter(ComexProcesso.po_processo_principal_id.is_(None))
+    query = ComexProcesso.query.filter(ComexProcesso.po_processo_principal_id.is_(None), _fora_de_embarque())
     if status_modulo:
         query = query.filter_by(status_modulo=status_modulo)
     else:
@@ -1322,6 +1335,9 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
                 ocs += [str(c) for c in json.loads(p.po_ocs_vinculadas or "[]") or []]
             except (TypeError, ValueError):
                 pass
+            # POs incluidas no embarque (somem da lista) acham o principal.
+            for v in p.pos_embarque:
+                ocs += [v.processo.id_op or "", v.processo.po_numero or "", str(v.processo.cod_ordem_compra or "")]
             return ocs
 
         processos = [
@@ -1339,7 +1355,7 @@ def metricas_por_modulo() -> dict:
     contagens = {slug: 0 for slug in STATUS_SLUGS.values()}
     query = (
         ComexProcesso.query
-        .filter(ComexProcesso.po_processo_principal_id.is_(None))
+        .filter(ComexProcesso.po_processo_principal_id.is_(None), _fora_de_embarque())
         .with_entities(ComexProcesso.status_slug)
     )
     for processo in query.all():
@@ -1562,6 +1578,9 @@ def criar_link_cotacao(
         raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
     if not exportacao_da_expedicao(processo) and processo.po_status != "Finalizada":
         raise ValueError("Finalize a PO antes de gerar uma cotação.")
+    if processo.embarque_principal:
+        raise ValueError(f"Esta PO está no embarque de {processo.embarque_principal.principal.id_op} - gere a cotação por lá.")
+    from . import comex_embarque_service
     modal_solicitado = _normalizar_modal_solicitado(tipo_frete, modal_solicitado)
 
     token = secrets.token_urlsafe(32)
@@ -1594,8 +1613,9 @@ def criar_link_cotacao(
         _adicionar_volumes(cotacao, pre_preenchido.get("volumes"))
     # Valor da mercadoria - essencial pro prestador calcular o seguro. Se o
     # operador nao informou, sugere o subtotal dos itens da PO.
-    cotacao.valor_mercadoria_usd = _to_float(pre_preenchido.get("valor_mercadoria_usd")) or subtotal_itens_po(processo)
+    cotacao.valor_mercadoria_usd = _to_float(pre_preenchido.get("valor_mercadoria_usd")) or comex_embarque_service.subtotal_embarque(processo)
     db.session.add(cotacao)
+    comex_embarque_service.gravar_composicao(cotacao, processo)
 
     if processo.status_modulo == "PO":
         processo.status_modulo = "Cotacao"
@@ -1723,6 +1743,8 @@ def _cotacao_aereo_irma(cotacao: ComexCotacao, dados_aereo: dict, volumes: list 
     )
     db.session.add(irma)
     _gravar_emails_cotacao(irma, emails_da_cotacao(cotacao))
+    if cotacao.composicao:
+        db.session.add(ComexCotacaoComposicao(cotacao=irma, pos=cotacao.composicao.pos))
     _preencher_logistica_e_custos(irma, dados_aereo)
     _adicionar_volumes(irma, volumes)
     db.session.add(ComexCotacaoModal(cotacao=irma, modal="AEREO"))

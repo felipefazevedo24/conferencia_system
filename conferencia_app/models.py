@@ -4358,6 +4358,42 @@ class ComexFornecedor(db.Model):
     atualizado_por = db.Column(db.String(100))
 
 
+class ComexEmbarquePo(db.Model):
+    """PO de outro processo incluida no embarque/cotacao de um processo
+    principal (mesmo fornecedor, PO finalizada, antes da Instrucao). O
+    incluido some da lista e segue o principal - um embarque so'. Remover
+    devolve ele ao proprio status (que nunca e' alterado enquanto incluido).
+    Diferente das OCs combinadas na PO (po_processo_principal_id): aqui cada
+    processo mantem a sua PO."""
+
+    __tablename__ = "comex_embarque_po"
+
+    id = db.Column(db.Integer, primary_key=True)
+    principal_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    incluido_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    incluido_por = db.Column(db.String(100))
+
+    principal = db.relationship("ComexProcesso", foreign_keys=[principal_id],
+                                backref=db.backref("pos_embarque", order_by="ComexEmbarquePo.id"))
+    processo = db.relationship("ComexProcesso", foreign_keys=[processo_id],
+                               backref=db.backref("embarque_principal", uselist=False))
+
+
+class ComexCotacaoComposicao(db.Model):
+    """POs que faziam parte do embarque quando o link de cotacao foi gerado
+    (JSON: [{processo_id, id_op, po_numero, valor_usd}]) - pra saber com que
+    base o forwarder cotou se POs entrarem/sairem depois."""
+
+    __tablename__ = "comex_cotacao_composicao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, unique=True)
+    pos = db.Column(db.Text, nullable=False)
+
+    cotacao = db.relationship("ComexCotacao", backref=db.backref("composicao", uselist=False))
+
+
 class ComexForwarderMarkup(db.Model):
     """Markup (%) que o Freight Forwarder cobra sobre a PTAX pra converter o
     frete. A analise de propostas e a provisao convertem o frete por
