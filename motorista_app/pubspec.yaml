@@ -2,7 +2,7 @@ name: motorista_app
 description: "App do motorista: viagens, paradas e rastreamento em segundo plano confiável."
 publish_to: 'none'
 
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.11.4
