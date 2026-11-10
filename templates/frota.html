@@ -1149,6 +1149,9 @@ function recarregarTudo() {
         await carregarCadastros();
         await carregarTemplateChecklist();
         await carregarDashboard();
+        // A Central de Viagens abre a Frota direto numa aba (?aba=abastecimentos).
+        const aba = new URLSearchParams(location.search).get('aba');
+        if (aba) document.querySelector(`.doc-tab[data-tab="${CSS.escape(aba)}"]`)?.click();
     } catch (e) { toast(e.message, 'error'); }
 })();
 </script>

@@ -156,6 +156,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="SOLICITACOES">Solicitações <span class="count" id="count-solicitacoes">0</span></button>
                 <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
+                {% if can_access('PAGE_LOGISTICA_FROTA') %}<button class="vt-tab" data-tab="FROTA"><i class="fas fa-gas-pump"></i> Frota e combustível</button>{% endif %}
             </div>
             <div class="vt-toolbar">
                 <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
@@ -180,6 +181,11 @@
                 </table>
             </div>
         </div>
+        {% if can_access('PAGE_LOGISTICA_FROTA') %}
+        <div id="vt-frota" style="display:none;">
+            <iframe data-src="/logistica/frota?embed=1&aba=abastecimentos" title="Frota e combustível" style="width:100%; min-height:78vh; border:0; display:block;"></iframe>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -2571,10 +2577,25 @@ buscaInput.addEventListener('input', () => {
   }, 250);
 });
 
+// A Frota é a própria tela /logistica/frota embutida: só troca o que aparece
+// no card, sem mexer em state.tab (os recarregamentos da tabela seguem valendo).
+function mostrarFrota(ativo) {
+  const box = document.getElementById('vt-frota');
+  if (!box) return;
+  const card = box.closest('.eui-card');
+  box.style.display = ativo ? '' : 'none';
+  card.querySelector('.vt-toolbar').style.display = ativo ? 'none' : '';
+  card.querySelector('.eui-card__body--tight').style.display = ativo ? 'none' : '';
+  const frame = box.querySelector('iframe');
+  if (ativo && !frame.getAttribute('src')) frame.src = frame.dataset.src;
+}
+
 Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
   tab.addEventListener('click', async () => {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
+    mostrarFrota(tab.dataset.tab === 'FROTA');
+    if (tab.dataset.tab === 'FROTA') return;
     state.tab = tab.dataset.tab;
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : null;
     if (state.tab === 'VIAGENS') state.selectedIds = [];
