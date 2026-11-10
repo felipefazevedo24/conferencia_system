@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import os
 from datetime import date, datetime, timedelta
+from io import BytesIO
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, send_file, session
 from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
 
@@ -17,9 +18,11 @@ from ..models import (
     FrotaAbastecimento,
     FrotaChecklistDiario,
     FrotaDocumento,
+    FrotaFaturaCombustivel,
     FrotaManutencao,
     FrotaMulta,
 )
+from ..services import frota_combustivel_service as combustivel_svc
 from ..tempo import agora_br
 
 frota_bp = Blueprint("frota", __name__, url_prefix="/api/frota")
@@ -289,6 +292,10 @@ def _abast_dict(a: FrotaAbastecimento) -> dict:
         "posto": a.posto,
         "tanque_cheio": a.tanque_cheio,
         "observacao": a.observacao,
+        "chave_nfce": a.chave_nfce,
+        "numero_nfce": a.numero_nfce,
+        "placa_nota": a.placa_nota,
+        "operador": a.operador,
     }
 
 
@@ -522,7 +529,18 @@ def listar_abastecimentos():
     if request.args.get("veiculo_id"):
         q = q.filter_by(veiculo_id=_parse_int(request.args.get("veiculo_id")))
     regs = q.order_by(FrotaAbastecimento.data.desc()).limit(500).all()
-    return jsonify([_abast_dict(a) for a in regs])
+    faturadas = combustivel_svc.chaves_faturadas()
+    consumo = combustivel_svc.alertas_abastecimentos()
+    saida = []
+    for a in regs:
+        item = _abast_dict(a)
+        fatura = faturadas.get(a.chave_nfce) if a.chave_nfce else None
+        item["fatura_id"] = fatura.id if fatura else None
+        item["fatura_numero"] = fatura.numero if fatura else None
+        item["kml"] = consumo.get(a.id, {}).get("kml")
+        item["alertas"] = consumo.get(a.id, {}).get("alertas", [])
+        saida.append(item)
+    return jsonify(saida)
 
 
 @frota_bp.route("/abastecimentos", methods=["POST"])
@@ -569,6 +587,74 @@ def excluir_abastecimento(aid: int):
     if not a:
         return jsonify({"sucesso": False, "msg": "Não encontrado."}), 404
     db.session.delete(a)
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@frota_bp.route("/abastecimentos/<int:aid>/xml", methods=["GET"])
+@permission_required(PERM)
+def xml_abastecimento(aid: int):
+    a = db.session.get(FrotaAbastecimento, aid)
+    if not a or not a.xml_nfce:
+        return jsonify({"sucesso": False, "msg": "XML não encontrado."}), 404
+    return send_file(BytesIO(a.xml_nfce), mimetype="application/xml", as_attachment=True,
+                     download_name=f"{a.chave_nfce or aid}.xml")
+
+
+# ----------------------------------------------------------------------------- COMBUSTIVEL (XML do posto)
+@frota_bp.route("/combustivel/importar", methods=["POST"])
+@permission_required(PERM)
+def importar_xml_combustivel():
+    arquivos = [(f.filename or "arquivo.xml", f.read()) for f in request.files.getlist("arquivos") if f]
+    if not arquivos:
+        return jsonify({"sucesso": False, "msg": "Selecione os XMLs do posto."}), 400
+    resultados = combustivel_svc.importar_xmls(arquivos, _user())
+    return jsonify({"sucesso": True, "resultados": resultados})
+
+
+@frota_bp.route("/faturas", methods=["GET"])
+@permission_required(PERM)
+def listar_faturas():
+    faturas = FrotaFaturaCombustivel.query.order_by(FrotaFaturaCombustivel.emitida_em.desc()).limit(200).all()
+    faturadas = combustivel_svc.chaves_faturadas()
+    com_chave = FrotaAbastecimento.query.filter(FrotaAbastecimento.chave_nfce.isnot(None)).all()
+    return jsonify({
+        "faturas": [combustivel_svc.fatura_dict(f) for f in faturas],
+        "aguardando_nfe": [_abast_dict(a) for a in com_chave if a.chave_nfce not in faturadas],
+    })
+
+
+@frota_bp.route("/faturas/<int:fid>", methods=["GET"])
+@permission_required(PERM)
+def detalhe_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura:
+        return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    conferencia = combustivel_svc.conferir_fatura(fatura)
+    return jsonify({
+        "fatura": combustivel_svc.fatura_dict(fatura, conferencia),
+        "notas": conferencia["notas"],
+        "rateio": combustivel_svc.ratear_fatura(fatura, conferencia),
+    })
+
+
+@frota_bp.route("/faturas/<int:fid>/xml", methods=["GET"])
+@permission_required(PERM)
+def xml_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura or not fatura.xml:
+        return jsonify({"sucesso": False, "msg": "XML não encontrado."}), 404
+    return send_file(BytesIO(fatura.xml), mimetype="application/xml", as_attachment=True,
+                     download_name=f"{fatura.chave}.xml")
+
+
+@frota_bp.route("/faturas/<int:fid>", methods=["DELETE"])
+@permission_required(PERM)
+def excluir_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura:
+        return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    db.session.delete(fatura)
     db.session.commit()
     return jsonify({"sucesso": True})
 
