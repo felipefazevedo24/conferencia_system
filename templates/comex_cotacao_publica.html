@@ -355,7 +355,8 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Link inválido.');
 
-        document.getElementById('subtitulo').textContent = `Processo ${data.id_op} — ${data.tipo_frete === 'FCL' ? 'Container fechado (FCL)' : 'LCL / Aéreo'}`;
+        document.getElementById('subtitulo').textContent = `Processo ${data.id_op} — ${data.tipo_frete === 'FCL' ? 'Container fechado (FCL)' : 'LCL / Aéreo'}`
+          + ((data.pos || []).length ? ` — ${data.pos.length > 1 ? 'POs' : 'PO'} ${data.pos.join(', ')}` : '');
         const conteudo = document.getElementById('conteudo');
 
         if (data.status === 'Recebida') {
