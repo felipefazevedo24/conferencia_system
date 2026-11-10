@@ -80,6 +80,7 @@ A partir da versão 1.1.0 o app se atualiza sozinho:
 Cuidados:
 - **Gere o APK sempre neste mesmo PC.** O release é assinado com a chave de debug do PC (`~/.android/debug.keystore`). Se gerar em outro computador, o Android recusa a atualização e o motorista precisa desinstalar e instalar de novo.
 - A 1.1.0 (a primeira com atualização automática) precisa ser instalada à mão uma última vez.
+- Instalação do zero: o motorista abre `https://sync.columbiamachine.com.br/motorista/app` no celular. A página entrega esse mesmo APK publicado.
 
 ## 7) Subir código no GitHub (se você alterou arquivos)
 

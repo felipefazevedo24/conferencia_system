@@ -3132,7 +3132,21 @@ motorista_bp = Blueprint("motorista_viagem", __name__)
 def motorista_app_download():
     """Página pública com o link para baixar o APK do app do motorista e o
     passo a passo de instalação. Sem login — o motorista abre pelo celular."""
-    return render_template("motorista_app_download.html")
+    return render_template("motorista_app_download.html", versao=motorista_app_svc.versao_atual())
+
+
+@motorista_bp.route("/motorista/app.apk", methods=["GET"])
+def motorista_app_download_apk():
+    # Mesmo APK que o gestor publica na Central: um lugar só para subir a
+    # versão nova, tanto para quem instala do zero quanto para a atualização.
+    if not motorista_app_svc.versao_atual():
+        return ("Nenhuma versão do app publicada ainda.", 404)
+    return send_file(
+        motorista_app_svc.caminho_apk(),
+        mimetype="application/vnd.android.package-archive",
+        as_attachment=True,
+        download_name="motorista_sync.apk",
+    )
 
 
 # ---- Painel permanente do motorista (link PWA compartilhável) ----
