@@ -69,6 +69,18 @@ Checklist mínimo:
 4. Concluir viagem com KM final.
 5. Testar offline/online para validar fila de envio.
 
+## 6.1) Distribuir para os motoristas (atualização pelo app)
+
+A partir da versão 1.1.0 o app se atualiza sozinho:
+
+1. No Sync: **Central de Viagens → Veículos e motoristas → App do motorista → Publicar APK novo** (só administrador).
+2. Escolha o `build/app/outputs/flutter-apk/app-release.apk`. O Sync lê a versão de dentro do APK e recusa se o build não for maior que o publicado.
+3. Na próxima vez que o motorista abrir o app aparece "Nova versão": ele toca em **Atualizar** e depois em **Instalar** (o Android sempre pede esse toque).
+
+Cuidados:
+- **Gere o APK sempre neste mesmo PC.** O release é assinado com a chave de debug do PC (`~/.android/debug.keystore`). Se gerar em outro computador, o Android recusa a atualização e o motorista precisa desinstalar e instalar de novo.
+- A 1.1.0 (a primeira com atualização automática) precisa ser instalada à mão uma última vez.
+
 ## 7) Subir código no GitHub (se você alterou arquivos)
 
 ```powershell

@@ -209,6 +209,27 @@
     </div>
 </div>
 
+<div id="modalDepartamentos" class="vt-modal" style="z-index:10040;">
+  <div class="vt-modal__box" style="max-width:620px;">
+    <div class="vt-modal__head">
+      <strong>Departamento de cada solicitação</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDepartamentos')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <div class="vt-mini">É o departamento que paga o combustível desta viagem.</div>
+      <div class="eui-field">
+        <label class="eui-field__label">Aplicar a todas</label>
+        <select id="deps-todas" class="eui-select" onchange="aplicarDepartamentoATodas('deps-lista', this.value)"></select>
+      </div>
+      <div id="deps-lista" style="display:grid; gap:6px;"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDepartamentos')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarDepartamentos()">Continuar</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalCbImport" class="vt-modal">
   <div class="vt-modal__box" style="max-width:640px;">
     <div class="vt-modal__head">
@@ -411,14 +432,8 @@
       <input type="hidden" id="alocar-id">
       <div class="vt-grid-2">
         <div class="eui-field">
-          <label class="eui-field__label">Departamento</label>
-          <select id="alocar-departamento" class="eui-select">
-            <option value="COMPRAS">COMPRAS</option>
-            <option value="ASSISTÊNCIA TÉCNICA">ASSISTÊNCIA TÉCNICA</option>
-            <option value="ENGENHARIA/PCP">ENGENHARIA/PCP</option>
-            <option value="LOGÍSTICA" selected>LOGÍSTICA</option>
-            <option value="FACILITIES">FACILITIES</option>
-          </select>
+          <label class="eui-field__label" id="alocar-departamento-label">Departamento</label>
+          <select id="alocar-departamento" class="eui-select" onchange="aplicarDepartamentoATodas('alocar-deps', this.value)"></select>
         </div>
         <div class="eui-field">
           <label class="eui-field__label">Veículo</label>
@@ -441,6 +456,7 @@
         <label class="eui-field__label">Observações</label>
         <textarea id="alocar-obs" class="eui-input" rows="3" placeholder="Ex.: janela de atendimento, rota sugerida, cuidados."></textarea>
       </div>
+      <div id="alocar-deps" style="display:grid; gap:6px;"></div>
       <div id="alocar-state" class="vt-mini"></div>
     </div>
     <div class="vt-modal__foot">
@@ -584,6 +600,7 @@
       <div id="cad-form-wrap"></div>
       <div id="cad-link-wrap"></div>
       <div class="cad-lista" id="cad-lista"><div class="vt-mini">Carregando…</div></div>
+      <div id="cad-app-wrap" style="border-top:1px solid var(--eui-border); padding-top:12px;"></div>
     </div>
     <div class="vt-modal__foot"><button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCadastros')">Fechar</button></div>
   </div>
@@ -603,6 +620,7 @@ const PODE_EXCLUIR = document.querySelector('.vt-wrap')?.dataset.podeExcluir ===
   'modalDetalhe',
   'modalCbImport',
   'modalCbNfe',
+  'modalDepartamentos',
   'modalRealocarParada',
   'modalReorganizar',
   'modalImportar',
@@ -1680,6 +1698,56 @@ function acaoAbrirOrigem(id) {
   showToast('Documento de origem não encontrado.', 'error');
 }
 
+// ---------------------------------------------------------------- Departamento
+// Sem valor padrão de propósito: com LOGÍSTICA pré-selecionado o gestor só
+// confirmava, e o rateio de combustível caía 99% em Logística.
+const DEPARTAMENTOS = ['COMPRAS', 'ASSISTÊNCIA TÉCNICA', 'ENGENHARIA/PCP', 'LOGÍSTICA', 'FACILITIES'];
+const opcoesDepartamento = (valor = '') => '<option value="">Selecione...</option>'
+  + DEPARTAMENTOS.map((d) => `<option value="${d}" ${d === valor ? 'selected' : ''}>${d}</option>`).join('');
+
+function linhasDepartamentoHtml(itens) {
+  return itens.map((s) => `
+    <div style="display:grid; grid-template-columns:1fr 200px; gap:8px; align-items:center;">
+      <div class="vt-mini"><strong>${s.codigo || ('#' + s.id)}</strong> · ${s.tipo || ''} · ${s.parceiro_nome || '-'}</div>
+      <select class="eui-select" data-sol-dep="${Number(s.id)}">${opcoesDepartamento()}</select>
+    </div>`).join('');
+}
+
+function aplicarDepartamentoATodas(containerId, valor) {
+  if (!valor) return;
+  document.querySelectorAll(`#${containerId} [data-sol-dep]`).forEach((sel) => { sel.value = valor; });
+}
+
+function coletarDepartamentos(containerId) {
+  const mapa = {};
+  let faltando = 0;
+  document.querySelectorAll(`#${containerId} [data-sol-dep]`).forEach((sel) => {
+    if (sel.value) mapa[sel.dataset.solDep] = sel.value;
+    else faltando += 1;
+  });
+  return { mapa, faltando };
+}
+
+let depsCallback = null;
+function pedirDepartamentos(itens, onConfirm) {
+  document.getElementById('deps-todas').innerHTML = opcoesDepartamento();
+  document.getElementById('deps-lista').innerHTML = linhasDepartamentoHtml(itens);
+  depsCallback = onConfirm;
+  openModal('modalDepartamentos');
+}
+
+async function confirmarDepartamentos() {
+  const { mapa, faltando } = coletarDepartamentos('deps-lista');
+  if (faltando) {
+    showToast('Escolha o departamento de todas as solicitações.', 'error');
+    return;
+  }
+  closeModal('modalDepartamentos');
+  const fn = depsCallback;
+  depsCallback = null;
+  if (fn) await fn(mapa);
+}
+
 function acaoAlocar(id) {
   const row = rowById(id);
   if (!row) return;
@@ -1693,6 +1761,9 @@ function acaoAlocar(id) {
   document.getElementById('alocar-obs').value = row.observacoes_logistica || '';
   document.getElementById('alocar-saida').value = row.data_hora_saida_prevista || '';
   document.getElementById('alocar-retorno').value = row.data_hora_retorno_prevista || '';
+  document.getElementById('alocar-departamento-label').textContent = 'Departamento';
+  document.getElementById('alocar-departamento').innerHTML = opcoesDepartamento();
+  document.getElementById('alocar-deps').innerHTML = '';
 
   const veiculoSel = document.getElementById('alocar-veiculo');
   const motoristaSel = document.getElementById('alocar-motorista');
@@ -1719,6 +1790,11 @@ function acaoAlocarSelecionadas({ autoCriarViagem = false } = {}) {
   document.getElementById('alocar-obs').value = '';
   document.getElementById('alocar-saida').value = '';
   document.getElementById('alocar-retorno').value = '';
+  document.getElementById('alocar-departamento-label').textContent = 'Departamento (aplicar a todas)';
+  document.getElementById('alocar-departamento').innerHTML = opcoesDepartamento();
+  document.getElementById('alocar-deps').innerHTML = linhasDepartamentoHtml(
+    state.selectedIds.map((sid) => rowById(Number(sid))).filter(Boolean)
+  );
 
   const veiculoSel = document.getElementById('alocar-veiculo');
   const motoristaSel = document.getElementById('alocar-motorista');
@@ -2088,7 +2164,7 @@ async function confirmarCancelarViagemModal() {
   await loadDashboard();
 }
 
-async function confirmarAdicionarSolicitacaoNaViagem() {
+async function confirmarAdicionarSolicitacaoNaViagem(departamentos = null) {
   const vid = Number(document.getElementById('addsol-viagem-id').value || 0);
   const sid = Number(document.getElementById('addsol-select').value || 0);
   const stateBox = document.getElementById('addsol-state');
@@ -2100,9 +2176,14 @@ async function confirmarAdicionarSolicitacaoNaViagem() {
   const r = await fetch(`/api/viagem/${vid}/anexar-solicitacao/${sid}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify({ departamentos: departamentos || {} }),
   });
   const d = await r.json().catch(() => ({}));
+  if (d && Array.isArray(d.sem_departamento) && d.sem_departamento.length) {
+    stateBox.textContent = '';
+    pedirDepartamentos(d.sem_departamento, (mapa) => confirmarAdicionarSolicitacaoNaViagem(mapa));
+    return;
+  }
   if (!r.ok || !d.sucesso) {
     stateBox.textContent = '';
     if (d && d.viagem_id) {
@@ -2230,7 +2311,7 @@ function fecharMontagemPosAlocacao() {
   if (el) el.remove();
 }
 
-async function criarViagemComSolicitacoesSelecionadas() {
+async function criarViagemComSolicitacoesSelecionadas(departamentos = null) {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
   if (!ids.length) return;
   showToast('Criando viagem...', 'info');
@@ -2240,9 +2321,14 @@ async function criarViagemComSolicitacoesSelecionadas() {
     body: JSON.stringify({
       ids,
       modo: 'nova',
+      departamentos: departamentos || {},
     })
   });
   const d = await r.json().catch(() => ({}));
+  if (d && Array.isArray(d.sem_departamento) && d.sem_departamento.length) {
+    pedirDepartamentos(d.sem_departamento, (mapa) => criarViagemComSolicitacoesSelecionadas(mapa));
+    return;
+  }
   if (!r.ok || !d.sucesso) {
     if (d && d.viagem_id) {
       showToast(d.msg || 'Solicitações já vinculadas a outra viagem. Abrindo viagem existente.', 'info');
@@ -2262,9 +2348,10 @@ async function criarViagemComSolicitacoesSelecionadas() {
   }
 }
 
-async function anexarSolicitacoesEmViagemSelecionada() {
+async function anexarSolicitacoesEmViagemSelecionada(departamentos = null) {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
-  const viagemId = Number(document.getElementById('vt-mv-select')?.value || 0);
+  // O select some quando o modal de montagem fecha; no retry vem guardado.
+  const viagemId = Number(document.getElementById('vt-mv-select')?.value || state.anexarViagemId || 0);
   if (!ids.length || !viagemId) return;
   const r = await fetch('/api/viagem/montar-com-solicitacoes', {
     method: 'POST',
@@ -2273,9 +2360,15 @@ async function anexarSolicitacoesEmViagemSelecionada() {
       ids,
       modo: 'anexar',
       viagem_id: viagemId,
+      departamentos: departamentos || {},
     })
   });
   const d = await r.json().catch(() => ({}));
+  if (d && Array.isArray(d.sem_departamento) && d.sem_departamento.length) {
+    state.anexarViagemId = viagemId;
+    pedirDepartamentos(d.sem_departamento, (mapa) => anexarSolicitacoesEmViagemSelecionada(mapa));
+    return;
+  }
   if (!r.ok || !d.sucesso) {
     if (d && d.viagem_id) {
       showToast(d.msg || 'Solicitações já vinculadas a outra viagem. Abrindo viagem existente.', 'info');
@@ -2312,6 +2405,11 @@ async function confirmarAlocacao() {
     showToast('Nenhuma solicitação selecionada.', 'error');
     return;
   }
+  const deps = coletarDepartamentos('alocar-deps');
+  if (ids.length > 1 ? deps.faltando : !departamento_solicitante) {
+    showToast(ids.length > 1 ? 'Escolha o departamento de todas as solicitações.' : 'Escolha o departamento.', 'error');
+    return;
+  }
 
   const rowsSelecionadas = ids.map((sid) => rowById(Number(sid))).filter(Boolean);
   if (rowsSelecionadas.some((r) => isAvulsaNaoAprovada(r))) {
@@ -2332,6 +2430,7 @@ async function confirmarAlocacao() {
         data_hora_saida_prevista,
         data_hora_retorno_prevista: data_hora_retorno_prevista || null,
         departamento_solicitante,
+        departamentos: deps.mapa,
         observacoes_logistica,
       })
     });
@@ -2894,7 +2993,46 @@ async function abrirCadastros() {
   openModal('modalCadastros');
   document.getElementById('cad-form-wrap').innerHTML = '';
   document.getElementById('cad-link-wrap').innerHTML = '';
+  carregarAppMotorista();
   await carregarCadastros();
+}
+
+// App do motorista: o APK publicado aqui é oferecido sozinho aos celulares
+// na próxima vez que o app abrir.
+async function carregarAppMotorista() {
+  const wrap = document.getElementById('cad-app-wrap');
+  const r = await fetch('/api/viagem/motorista-app', { credentials: 'same-origin' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { wrap.innerHTML = ''; return; }
+  const v = d.versao;
+  const atual = v
+    ? `Versão publicada: <strong>${cadEsc(v.versao_nome)}</strong> (build ${Number(v.versao_codigo)}) · ${(Number(v.tamanho) / 1048576).toFixed(1)} MB · ${cadEsc(v.publicado_por || '-')} em ${formatDateTime(v.publicado_em)}`
+    : 'Nenhuma versão publicada ainda.';
+  wrap.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+      <div><strong><i class="fas fa-mobile-screen"></i> App do motorista</strong><div class="vt-mini">${atual}</div></div>
+      ${d.pode_publicar ? `<label class="eui-btn eui-btn--ghost" style="cursor:pointer;"><i class="fas fa-upload"></i> Publicar APK novo<input type="file" accept=".apk" hidden onchange="publicarAppMotorista(this)"></label>` : ''}
+    </div>
+    <div id="cad-app-state" class="vt-mini"></div>`;
+}
+
+async function publicarAppMotorista(input) {
+  const arquivo = input.files && input.files[0];
+  input.value = '';
+  if (!arquivo) return;
+  const estado = document.getElementById('cad-app-state');
+  estado.textContent = `Enviando ${(arquivo.size / 1048576).toFixed(1)} MB...`;
+  const fd = new FormData();
+  fd.append('apk', arquivo);
+  const r = await fetch('/api/viagem/motorista-app', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    estado.textContent = '';
+    showToast(d.msg || 'Não foi possível publicar o APK.', 'error');
+    return;
+  }
+  showToast(`Versão ${d.versao.versao_nome} publicada. Os celulares atualizam ao abrir o app.`, 'success');
+  carregarAppMotorista();
 }
 
 async function carregarCadastros() {

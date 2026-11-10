@@ -3201,8 +3201,14 @@ def alocar_solicitacoes_lote_agendamento():
 
     departamento = str(payload.get("departamento_solicitante") or "").strip().upper()
     departamentos_validos = ["COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES"]
-    if not departamento or departamento not in departamentos_validos:
-        return jsonify({"error": "Selecione o departamento solicitante."}), 400
+    # Departamento por solicitação (lote com departamentos diferentes); o
+    # campo único continua valendo para quem não veio no mapa.
+    mapa_raw = payload.get("departamentos") if isinstance(payload.get("departamentos"), dict) else {}
+    departamento_por_id = {str(k): str(v or "").strip().upper() for k, v in mapa_raw.items()}
+    for sid in ids:
+        dep = departamento_por_id.get(str(sid)) or departamento
+        if not dep or dep not in departamentos_validos:
+            return jsonify({"error": "Selecione o departamento de cada solicitação."}), 400
 
     rows = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.id.in_(ids)).all()
     found_ids = {int(r.id) for r in rows}
@@ -3283,7 +3289,7 @@ def alocar_solicitacoes_lote_agendamento():
         row.alocado_em = agora_br()
         row.status = "Alocada"
         row.atualizado_em = agora_br()
-        row.departamento_solicitante = departamento
+        row.departamento_solicitante = departamento_por_id.get(str(row.id)) or departamento
         if observacao:
             row.observacoes_logistica = observacao
 

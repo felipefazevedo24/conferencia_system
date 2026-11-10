@@ -37,6 +37,9 @@ TAMANHO_MAX_XML = 1_000_000
 # Consumo aceito em relação à mediana do próprio veículo. O MED impresso
 # pelo posto não serve: sem km anterior ele divide o odômetro inteiro.
 FAIXA_CONSUMO = (0.65, 1.35)
+# Viagem acima disso é quase certamente odômetro errado: fica fora do rateio
+# (e gera aviso na conclusão da viagem). Viagens reais chegaram a ~1.100 km.
+KM_LIMITE_VIAGEM = 1500
 
 
 # ----------------------------------------------------------------------------- leitura do XML
@@ -361,9 +364,10 @@ def _departamento(sol: AgendamentoSolicitacao | None) -> str:
     return dep
 
 
-def km_por_departamento(veiculo_id: int, inicio: datetime, fim: datetime) -> dict[str, float]:
+def km_por_departamento(veiculo_id: int, inicio: datetime, fim: datetime) -> tuple[dict[str, float], list[str]]:
     """Km das viagens concluídas do veículo no período, dividido entre os
-    departamentos das paradas. Viagem sem solicitação vai para Logística."""
+    departamentos das paradas. Viagem sem solicitação vai para Logística.
+    Devolve também as viagens deixadas de fora por km absurdo."""
     saida = func.coalesce(Viagem.saida_real, Viagem.saida_prevista)
     viagens = Viagem.query.filter(
         Viagem.veiculo_id == veiculo_id,
@@ -372,9 +376,13 @@ def km_por_departamento(veiculo_id: int, inicio: datetime, fim: datetime) -> dic
         saida < fim,
     ).all()
     km_dep: dict[str, float] = defaultdict(float)
+    ignoradas: list[str] = []
     for v in viagens:
         km = float(v.km_percorrido or 0)
         if km <= 0:
+            continue
+        if km > KM_LIMITE_VIAGEM:
+            ignoradas.append(f"{v.codigo} ({km:,.0f} km)".replace(",", "."))
             continue
         paradas = ViagemParada.query.filter(
             ViagemParada.viagem_id == v.id,
@@ -393,7 +401,7 @@ def km_por_departamento(veiculo_id: int, inicio: datetime, fim: datetime) -> dic
         parte = km / len(paradas)
         for p in paradas:
             km_dep[_departamento(sols.get(p.solicitacao_id))] += parte
-    return dict(km_dep)
+    return dict(km_dep), ignoradas
 
 
 def ratear_fatura(fatura: FrotaFaturaCombustivel, conferencia: dict | None = None) -> dict:
@@ -411,9 +419,11 @@ def ratear_fatura(fatura: FrotaFaturaCombustivel, conferencia: dict | None = Non
     por_veiculo = []
     avisos = []
     for vid, custo in custo_veiculo.items():
-        km_dep = km_por_departamento(vid, inicio, fim)
+        km_dep, ignoradas = km_por_departamento(vid, inicio, fim)
         total_km = sum(km_dep.values())
         label = _veiculo_label(veiculos.get(vid))
+        if ignoradas:
+            avisos.append(f"{label}: fora do rateio por km suspeito: {', '.join(ignoradas)}. Corrija o odômetro da viagem.")
         if total_km <= 0:
             dep_valor[DEPARTAMENTO_PADRAO] += custo
             avisos.append(f"{label} sem viagem concluída com km na semana: custo vai para {DEPARTAMENTO_PADRAO}.")

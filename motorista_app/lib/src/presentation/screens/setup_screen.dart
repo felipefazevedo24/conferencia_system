@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/link_parser.dart';
+import '../../core/theme.dart';
 import '../../data/remote/api_client.dart';
 import '../providers/providers.dart';
 
@@ -63,46 +64,56 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.local_shipping, size: 64, color: Color(0xFF0F62C9)),
+      body: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: AppTheme.gradienteMarca,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppRadius.xl)),
+            ),
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 48, 24, 36),
+            child: Column(children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.local_shipping_rounded, size: 36, color: Colors.white),
+              ),
               const SizedBox(height: 16),
-              Text(
-                'Configurar seu app',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
+              const Text('Motorista Sync', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              const Text('Columbia Machine', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('Conectar este celular',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.text)),
+              const SizedBox(height: 6),
               const Text(
-                'Cole abaixo o link que o despachante te enviou pelo WhatsApp '
-                '(o mesmo link do painel de viagens).',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54),
+                'Cole o link que a logística te mandou pelo WhatsApp.',
+                style: TextStyle(color: AppColors.textMuted),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
               TextField(
                 controller: _controller,
                 minLines: 2,
                 maxLines: 4,
                 decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
                   hintText: 'https://sync.columbiamachine.com.br/motorista/painel/...',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: _colarDaAreaDeTransferencia,
-                icon: const Icon(Icons.paste),
-                label: const Text('Colar da área de transferência'),
+                icon: const Icon(Icons.content_paste_rounded),
+                label: const Text('Colar link'),
               ),
               if (_erro != null) ...[
                 const SizedBox(height: 12),
-                Text(_erro!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                Text(_erro!, style: const TextStyle(color: AppColors.danger500, fontWeight: FontWeight.w600)),
               ],
               const SizedBox(height: 16),
               FilledButton(
@@ -113,11 +124,11 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Confirmar'),
+                    : const Text('Conectar'),
               ),
-            ],
+            ]),
           ),
-        ),
+        ],
       ),
     );
   }

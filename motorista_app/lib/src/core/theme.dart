@@ -110,8 +110,37 @@ class AppTheme {
       listTileTheme: const ListTileThemeData(
         iconColor: AppColors.primary600,
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        showDragHandle: true,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
+      ),
     );
   }
+
+  static String labelStatus(String status) {
+    switch (status) {
+      case 'EmAndamento':
+        return 'Em andamento';
+      case 'Concluida':
+        return 'Concluída';
+      case 'Nao_realizada':
+        return 'Não realizada';
+      default:
+        return status;
+    }
+  }
+
+  /// Fundo escuro dos cabeçalhos (mesmo azul-marinho da barra do Sync).
+  static const gradienteMarca = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [AppColors.brand900, AppColors.brand700],
+  );
 
   /// Cor de destaque por status de viagem/parada — mesma linguagem visual
   /// usada no restante do site (verde = ok/ativo, âmbar = pendente, etc.).
