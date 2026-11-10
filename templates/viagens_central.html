@@ -156,7 +156,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="SOLICITACOES">Solicitações <span class="count" id="count-solicitacoes">0</span></button>
                 <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
-                {% if can_access('PAGE_LOGISTICA_FROTA') %}<button class="vt-tab" data-tab="FROTA"><i class="fas fa-gas-pump"></i> Frota e combustível</button>{% endif %}
+                {% if can_access('PAGE_LOGISTICA_FROTA') %}<button class="vt-tab" data-tab="COMBUSTIVEL"><i class="fas fa-gas-pump"></i> Combustível</button>{% endif %}
             </div>
             <div class="vt-toolbar">
                 <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
@@ -182,8 +182,15 @@
             </div>
         </div>
         {% if can_access('PAGE_LOGISTICA_FROTA') %}
-        <div id="vt-frota" style="display:none;">
-            <iframe data-src="/logistica/frota?embed=1&aba=abastecimentos" title="Frota e combustível" style="width:100%; min-height:78vh; border:0; display:block;"></iframe>
+        <div id="vt-combustivel" style="display:none;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:12px 16px;">
+                <div class="vt-tabs">
+                    <button class="vt-tab is-active" data-cb="ABAST" onclick="cbTrocar('ABAST')">Abastecimentos</button>
+                    <button class="vt-tab" data-cb="NFE" onclick="cbTrocar('NFE')">NF-e do posto</button>
+                </div>
+                <label class="eui-btn eui-btn--primary" style="margin-left:auto; cursor:pointer;"><i class="fas fa-file-import"></i> Importar XML do posto<input type="file" accept=".xml" multiple hidden onchange="cbImportar(this)"></label>
+            </div>
+            <div class="vt-table-wrap" id="cb-conteudo"></div>
         </div>
         {% endif %}
     </div>
@@ -200,6 +207,28 @@
         <div class="vt-modal__body" id="detalheBody"></div>
         <div class="vt-modal__foot"><button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDetalhe')">Fechar</button></div>
     </div>
+</div>
+
+<div id="modalCbImport" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:640px;">
+    <div class="vt-modal__head">
+      <strong>Importação dos XMLs</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCbImport')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body" id="cbImportBody"></div>
+    <div class="vt-modal__foot"><button class="eui-btn eui-btn--primary" onclick="closeModal('modalCbImport')">Fechar</button></div>
+  </div>
+</div>
+
+<div id="modalCbNfe" class="vt-modal">
+  <div class="vt-modal__box">
+    <div class="vt-modal__head">
+      <strong id="cbNfeTitulo">NF-e do posto</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCbNfe')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body" id="cbNfeBody"></div>
+    <div class="vt-modal__foot" id="cbNfeFoot"></div>
+  </div>
 </div>
 
 <div id="modalLiberacao" class="vt-modal">
@@ -572,6 +601,8 @@ const PODE_EXCLUIR = document.querySelector('.vt-wrap')?.dataset.podeExcluir ===
 [
   'vt-actions-menu',
   'modalDetalhe',
+  'modalCbImport',
+  'modalCbNfe',
   'modalRealocarParada',
   'modalReorganizar',
   'modalImportar',
@@ -2577,25 +2608,166 @@ buscaInput.addEventListener('input', () => {
   }, 250);
 });
 
-// A Frota é a própria tela /logistica/frota embutida: só troca o que aparece
-// no card, sem mexer em state.tab (os recarregamentos da tabela seguem valendo).
-function mostrarFrota(ativo) {
-  const box = document.getElementById('vt-frota');
+// ---------------------------------------------------------------- Combustível
+// Usa as APIs de /api/frota. Não mexe em state.tab: os recarregamentos da
+// tabela de solicitações/viagens seguem valendo enquanto a aba está aberta.
+const cbState = { sub: 'ABAST' };
+const cbMoeda = (n) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const cbNum = (n, d) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const cbData = (s) => { if (!s) return '-'; const [y, m, d] = String(s).split('T')[0].split('-'); return `${d}/${m}/${y}`; };
+const cbBadgeNfe = (st) => `<span class="eui-badge ${st === 'Conferida' ? 'eui-badge--success' : 'eui-badge--danger'}">${st}</span>`;
+const cbCorDif = (v) => Math.abs(Number(v) || 0) < 0.01 ? '' : 'color:var(--eui-danger, #dc2626); font-weight:700;';
+
+function mostrarCombustivel(ativo) {
+  const box = document.getElementById('vt-combustivel');
   if (!box) return;
   const card = box.closest('.eui-card');
   box.style.display = ativo ? '' : 'none';
   card.querySelector('.vt-toolbar').style.display = ativo ? 'none' : '';
   card.querySelector('.eui-card__body--tight').style.display = ativo ? 'none' : '';
-  const frame = box.querySelector('iframe');
-  if (ativo && !frame.getAttribute('src')) frame.src = frame.dataset.src;
+  if (ativo) cbTrocar(cbState.sub);
 }
 
-Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
+function cbTrocar(sub) {
+  cbState.sub = sub;
+  document.querySelectorAll('[data-cb]').forEach((b) => b.classList.toggle('is-active', b.dataset.cb === sub));
+  cbCarregar();
+}
+
+async function cbGet(url) {
+  const r = await fetch(url);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.msg || 'Não foi possível carregar o combustível.');
+  return d;
+}
+
+async function cbCarregar() {
+  const el = document.getElementById('cb-conteudo');
+  el.innerHTML = '<div class="vt-empty">Carregando...</div>';
+  try {
+    el.innerHTML = cbState.sub === 'NFE' ? await cbHtmlNfe() : await cbHtmlAbast();
+  } catch (e) {
+    el.innerHTML = `<div class="vt-empty">${e.message}</div>`;
+  }
+}
+
+async function cbHtmlAbast() {
+  const lista = await cbGet('/api/frota/abastecimentos');
+  if (!lista.length) return '<div class="vt-empty">Nenhum abastecimento. Importe os XMLs das NFC-e do posto.</div>';
+  return `<table class="erp-table"><thead><tr><th>Data</th><th>Veículo</th><th>NFC-e</th><th>Km</th><th>Litros</th><th>R$/L</th><th>Total</th><th>Km/L</th><th>NF-e</th><th></th></tr></thead><tbody>${lista.map((a) => `<tr>
+    <td>${formatDateTime(a.data)}</td>
+    <td>${a.veiculo_label || '-'}</td>
+    <td>${a.numero_nfce ? `<a href="/api/frota/abastecimentos/${a.id}/xml" title="Baixar XML">${a.numero_nfce}</a>` : '-'}</td>
+    <td>${a.km_atual != null ? Number(a.km_atual).toLocaleString('pt-BR') : '-'}</td>
+    <td>${cbNum(a.litros, 2)}</td>
+    <td>${cbMoeda(a.valor_litro)}</td>
+    <td><strong>${cbMoeda(a.valor_total)}</strong></td>
+    <td>${a.kml != null ? cbNum(a.kml, 2) : '-'}${(a.alertas || []).length ? ` <i class="fas fa-triangle-exclamation" style="color:var(--eui-danger, #dc2626);" title="${a.alertas.join(' ').replace(/"/g, '&quot;')}"></i>` : ''}</td>
+    <td>${a.fatura_numero ? `<a href="#" onclick="cbAbrirNfe(${a.fatura_id}); return false;">${a.fatura_numero}</a>` : (a.chave_nfce ? '<span class="eui-badge eui-badge--warning">Aguardando</span>' : '-')}</td>
+    <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" title="Excluir" onclick="cbExcluir('/api/frota/abastecimentos/${a.id}', this)"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+async function cbHtmlNfe() {
+  const d = await cbGet('/api/frota/faturas');
+  const faturas = d.faturas || [];
+  const aguardando = d.aguardando_nfe || [];
+  const tabFaturas = faturas.length
+    ? `<table class="erp-table"><thead><tr><th>Emissão</th><th>NF-e</th><th>NFC-e lançadas</th><th>Total NF-e</th><th>Soma NFC-e</th><th>Diferença</th><th>Situação</th><th></th></tr></thead><tbody>${faturas.map((f) => `<tr>
+        <td>${cbData(f.emitida_em)}</td>
+        <td>${f.numero}</td>
+        <td>${f.qtd_lancadas} / ${f.qtd_nfce}</td>
+        <td><strong>${cbMoeda(f.valor_total)}</strong></td>
+        <td>${cbMoeda(f.soma_nfce)}</td>
+        <td style="${cbCorDif(f.diferenca)}">${cbMoeda(f.diferenca)}</td>
+        <td>${cbBadgeNfe(f.status)}</td>
+        <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" onclick="cbAbrirNfe(${f.id})">Abrir</button></td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="vt-empty">Nenhuma NF-e do posto importada.</div>';
+  const tabAguardando = aguardando.length
+    ? `<table class="erp-table"><thead><tr><th>Data</th><th>NFC-e</th><th>Veículo</th><th>Litros</th><th>Total</th></tr></thead><tbody>${aguardando.map((a) => `<tr>
+        <td>${formatDateTime(a.data)}</td><td>${a.numero_nfce || '-'}</td><td>${a.veiculo_label || '-'}</td>
+        <td>${cbNum(a.litros, 2)}</td><td>${cbMoeda(a.valor_total)}</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="vt-mini" style="padding:0 16px 16px;">Nenhuma.</div>';
+  return `${tabFaturas}<div style="padding:16px 16px 6px;"><strong>NFC-e aguardando NF-e</strong> <span class="vt-mini">(${aguardando.length})</span></div>${tabAguardando}`;
+}
+
+async function cbImportar(input) {
+  const arquivos = Array.from(input.files || []);
+  input.value = '';
+  if (!arquivos.length) return;
+  const fd = new FormData();
+  arquivos.forEach((f) => fd.append('arquivos', f));
+  const r = await fetch('/api/frota/combustivel/importar', { method: 'POST', body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível importar.', 'error'); return; }
+  const res = d.resultados || [];
+  document.getElementById('cbImportBody').innerHTML = `
+    <div><strong>${res.filter((x) => x.ok).length}</strong> de ${res.length} arquivo(s) importado(s).</div>
+    <table class="erp-table"><tbody>${res.map((x) => `<tr>
+      <td><span class="eui-badge ${x.ok ? 'eui-badge--success' : 'eui-badge--danger'}">${x.ok ? 'OK' : 'Erro'}</span></td>
+      <td>${x.msg}<div class="vt-mini">${x.arquivo}</div></td>
+    </tr>`).join('')}</tbody></table>`;
+  openModal('modalCbImport');
+  cbCarregar();
+}
+
+async function cbAbrirNfe(id) {
+  let d;
+  try { d = await cbGet(`/api/frota/faturas/${id}`); } catch (e) { showToast(e.message, 'error'); return; }
+  const f = d.fatura;
+  const r = d.rateio;
+  document.getElementById('cbNfeTitulo').textContent = `NF-e ${f.numero} · ${cbData(f.emitida_em)}`;
+  document.getElementById('cbNfeBody').innerHTML = `
+    <div style="display:flex; gap:22px; flex-wrap:wrap;">
+      <div><span class="vt-mini">Total NF-e</span><br><strong>${cbMoeda(f.valor_total)}</strong></div>
+      <div><span class="vt-mini">Soma NFC-e</span><br><strong>${cbMoeda(f.soma_nfce)}</strong></div>
+      <div><span class="vt-mini">Diferença</span><br><strong style="${cbCorDif(f.diferenca)}">${cbMoeda(f.diferenca)}</strong></div>
+      <div><span class="vt-mini">Situação</span><br>${cbBadgeNfe(f.status)}</div>
+    </div>
+    <table class="erp-table"><thead><tr><th>NFC-e</th><th>Data</th><th>Veículo</th><th>Litros</th><th>Valor</th><th></th></tr></thead><tbody>${d.notas.map((n) => `<tr>
+      <td>${n.numero} <span class="vt-mini">série ${n.serie}</span></td>
+      <td>${n.lancada ? formatDateTime(n.data) : '-'}</td>
+      <td>${n.veiculo_label || '-'}</td>
+      <td>${n.lancada ? cbNum(n.litros, 2) : '-'}</td>
+      <td>${n.lancada ? cbMoeda(n.valor) : '-'}</td>
+      <td><span class="eui-badge ${n.lancada ? 'eui-badge--success' : 'eui-badge--danger'}">${n.lancada ? 'Lançada' : 'Não lançada'}</span></td>
+    </tr>`).join('')}</tbody></table>
+    <div><strong>Rateio por departamento</strong> <span class="vt-mini">viagens de ${cbData(r.periodo.inicio)} a ${cbData(r.periodo.fim)}</span></div>
+    ${(r.avisos || []).map((a) => `<div class="vt-mini" style="color:var(--eui-warning, #b45309);"><i class="fas fa-triangle-exclamation"></i> ${a}</div>`).join('')}
+    <table class="erp-table"><thead><tr><th>Departamento</th><th>Km</th><th>%</th><th>Valor</th></tr></thead><tbody>${r.departamentos.length ? r.departamentos.map((x) => `<tr>
+      <td>${x.departamento}</td><td>${cbNum(x.km, 1)}</td><td>${cbNum(x.pct, 1)}%</td><td><strong>${cbMoeda(x.valor)}</strong></td>
+    </tr>`).join('') : '<tr><td colspan="4" class="vt-empty">Nenhuma NFC-e lançada para ratear.</td></tr>'}</tbody></table>`;
+  document.getElementById('cbNfeFoot').innerHTML = `
+    <button class="eui-btn eui-btn--ghost" onclick="cbExcluir('/api/frota/faturas/${f.id}', this, 'modalCbNfe')"><i class="fas fa-trash"></i> Excluir NF-e</button>
+    <a class="eui-btn eui-btn--ghost" href="/api/frota/faturas/${f.id}/xml"><i class="fas fa-download"></i> XML</a>
+    <button class="eui-btn eui-btn--primary" onclick="closeModal('modalCbNfe')">Fechar</button>`;
+  openModal('modalCbNfe');
+}
+
+async function cbExcluir(url, btn, modalId) {
+  // Segundo clique confirma, sem popup do navegador.
+  if (btn.dataset.confirmar !== '1') {
+    btn.dataset.confirmar = '1';
+    btn.classList.add('eui-btn--danger');
+    btn.innerHTML = '<i class="fas fa-trash"></i> Confirmar';
+    return;
+  }
+  const r = await fetch(url, { method: 'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível excluir.', 'error'); return; }
+  if (modalId) closeModal(modalId);
+  showToast('Excluído.', 'success');
+  cbCarregar();
+}
+
+Array.from(document.querySelectorAll('.vt-tab[data-tab]')).forEach((tab) => {
   tab.addEventListener('click', async () => {
-    document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
+    document.querySelectorAll('.vt-tab[data-tab]').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
-    mostrarFrota(tab.dataset.tab === 'FROTA');
-    if (tab.dataset.tab === 'FROTA') return;
+    mostrarCombustivel(tab.dataset.tab === 'COMBUSTIVEL');
+    if (tab.dataset.tab === 'COMBUSTIVEL') return;
     state.tab = tab.dataset.tab;
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : null;
     if (state.tab === 'VIAGENS') state.selectedIds = [];
