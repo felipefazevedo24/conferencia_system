@@ -13,7 +13,11 @@ import statistics
 import xml.etree.ElementTree as et
 from collections import defaultdict
 from datetime import datetime, time, timedelta
+from io import BytesIO
 
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 from sqlalchemy import func
 
 from ..extensions import db
@@ -281,9 +285,19 @@ def conferir_fatura(fatura: FrotaFaturaCombustivel) -> dict:
     }
 
 
+def _fechamento(fatura: FrotaFaturaCombustivel) -> dict | None:
+    if not fatura.fechada_em or not fatura.fechamento_json:
+        return None
+    return json.loads(fatura.fechamento_json)
+
+
 def fatura_dict(fatura: FrotaFaturaCombustivel, conferencia: dict | None = None) -> dict:
-    conferencia = conferencia or conferir_fatura(fatura)
+    fechamento = _fechamento(fatura)
+    conferencia = conferencia or (fechamento["conferencia"] if fechamento else conferir_fatura(fatura))
     return {
+        "fechada": bool(fechamento),
+        "fechada_em": fatura.fechada_em.isoformat() if fatura.fechada_em else None,
+        "fechada_por": fatura.fechada_por,
         "id": fatura.id,
         "chave": fatura.chave,
         "numero": fatura.numero,
@@ -439,3 +453,165 @@ def ratear_fatura(fatura: FrotaFaturaCombustivel, conferencia: dict | None = Non
         "veiculos": por_veiculo,
         "avisos": avisos,
     }
+
+
+# ----------------------------------------------------------------------------- fechamento
+def detalhe_fatura(fatura: FrotaFaturaCombustivel) -> dict:
+    """Fechada: devolve o que foi congelado. Aberta: calcula na hora."""
+    fechamento = _fechamento(fatura)
+    if fechamento:
+        conferencia, rateio = fechamento["conferencia"], fechamento["rateio"]
+    else:
+        conferencia = conferir_fatura(fatura)
+        rateio = ratear_fatura(fatura, conferencia)
+    return {"fatura": fatura_dict(fatura, conferencia), "notas": conferencia["notas"], "rateio": rateio}
+
+
+def fechar_fatura(fatura: FrotaFaturaCombustivel, usuario: str) -> None:
+    if fatura.fechada_em:
+        raise ValueError(f"NF-e {fatura.numero} já está fechada.")
+    conferencia = conferir_fatura(fatura)
+    if conferencia["status"] != "Conferida":
+        motivo = (
+            f"faltam {conferencia['faltando']} NFC-e" if conferencia["faltando"]
+            else f"diferença de {_fmt_moeda(conferencia['diferenca'])}"
+        )
+        raise ValueError(f"Só dá para fechar NF-e conferida: {motivo}.")
+    fatura.fechamento_json = json.dumps(
+        {"conferencia": conferencia, "rateio": ratear_fatura(fatura, conferencia)},
+        ensure_ascii=False,
+    )
+    fatura.fechada_em = agora_br()
+    fatura.fechada_por = usuario
+    db.session.commit()
+
+
+def reabrir_fatura(fatura: FrotaFaturaCombustivel) -> None:
+    if not fatura.fechada_em:
+        raise ValueError(f"NF-e {fatura.numero} não está fechada.")
+    fatura.fechada_em = None
+    fatura.fechada_por = None
+    fatura.fechamento_json = None
+    db.session.commit()
+
+
+def fatura_fechada_da_nfce(chave: str | None) -> FrotaFaturaCombustivel | None:
+    if not chave:
+        return None
+    fatura = chaves_faturadas().get(chave)
+    return fatura if fatura and fatura.fechada_em else None
+
+
+# ----------------------------------------------------------------------------- excel
+_NEGRITO = Font(bold=True)
+_CABECALHO = PatternFill("solid", fgColor="DCE6F1")
+_MOEDA = 'R$ #,##0.00'
+
+
+def _tabela(ws, linha: int, cabecalho: list[str], linhas: list[list], formatos: dict[int, str]) -> int:
+    for col, titulo in enumerate(cabecalho, start=1):
+        cel = ws.cell(row=linha, column=col, value=titulo)
+        cel.font = _NEGRITO
+        cel.fill = _CABECALHO
+    for valores in linhas:
+        linha += 1
+        for col, valor in enumerate(valores, start=1):
+            cel = ws.cell(row=linha, column=col, value=valor)
+            if col in formatos:
+                cel.number_format = formatos[col]
+    return linha + 2
+
+
+def _larguras(ws, larguras: list[int]) -> None:
+    for col, largura in enumerate(larguras, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = largura
+
+
+def _salvar(wb: Workbook) -> BytesIO:
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream
+
+
+def excel_fatura(fatura: FrotaFaturaCombustivel) -> tuple[BytesIO, str]:
+    d = detalhe_fatura(fatura)
+    f, r = d["fatura"], d["rateio"]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rateio"
+    situacao = (
+        f"Fechada por {f['fechada_por']} em {fatura.fechada_em:%d/%m/%Y %H:%M}" if f["fechada"]
+        else "Aberta (prévia: pode mudar até fechar)"
+    )
+    cabecalho = [
+        ("NF-e", f"{f['numero']} (série {f['serie']})"),
+        ("Emissão", fatura.emitida_em.strftime("%d/%m/%Y")),
+        ("Posto", f["emitente_nome"]),
+        ("Viagens consideradas", f"{r['periodo']['inicio'][:10]} a {r['periodo']['fim']}"),
+        ("Situação", situacao),
+    ]
+    for i, (rotulo, valor) in enumerate(cabecalho, start=1):
+        ws.cell(row=i, column=1, value=rotulo).font = _NEGRITO
+        ws.cell(row=i, column=2, value=valor)
+    linhas = [[x["departamento"], x["km"], x["pct"] / 100, x["valor"]] for x in r["departamentos"]]
+    linhas.append(["Total", None, None, r["total_rateado"]])
+    prox = _tabela(ws, len(cabecalho) + 2, ["Departamento", "Km", "%", "Valor"], linhas, {3: "0.0%", 4: _MOEDA})
+    for aviso in r["avisos"]:
+        ws.cell(row=prox, column=1, value=aviso)
+        prox += 1
+    _larguras(ws, [26, 40, 10, 16])
+
+    ws2 = wb.create_sheet("NFC-e")
+    _tabela(ws2, 1, ["NFC-e", "Série", "Data", "Veículo", "Litros", "Valor", "Situação"], [
+        [n["numero"], n["serie"], (n["data"] or "")[:16].replace("T", " "), n["veiculo_label"],
+         n["litros"], n["valor"], "Lançada" if n["lancada"] else "Não lançada"]
+        for n in d["notas"]
+    ], {6: _MOEDA})
+    _larguras(ws2, [12, 8, 18, 28, 10, 14, 14])
+    return _salvar(wb), f"rateio_combustivel_NFe_{fatura.numero}.xlsx"
+
+
+def excel_mes(ano: int, mes: int) -> tuple[BytesIO, str]:
+    """Mês pela data de emissão da NF-e. Só NF-e fechadas entram no total."""
+    inicio = datetime(ano, mes, 1)
+    fim = datetime(ano + (mes == 12), mes % 12 + 1, 1)
+    faturas = (
+        FrotaFaturaCombustivel.query
+        .filter(FrotaFaturaCombustivel.emitida_em >= inicio, FrotaFaturaCombustivel.emitida_em < fim)
+        .order_by(FrotaFaturaCombustivel.emitida_em)
+        .all()
+    )
+    fechadas = [f for f in faturas if f.fechada_em]
+    abertas = [f for f in faturas if not f.fechada_em]
+
+    por_dep: dict[str, float] = defaultdict(float)
+    detalhado = []
+    for f in fechadas:
+        for x in _fechamento(f)["rateio"]["departamentos"]:
+            por_dep[x["departamento"]] += x["valor"]
+            detalhado.append([f.numero, f.emitida_em.strftime("%d/%m/%Y"), x["departamento"], x["km"], x["valor"]])
+    total = round(sum(por_dep.values()), 2)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Resumo"
+    ws.cell(row=1, column=1, value=f"Combustível por departamento · {mes:02d}/{ano}").font = Font(bold=True, size=13)
+    ws.cell(row=2, column=1, value=f"{len(fechadas)} NF-e fechada(s) no total; {len(abertas)} aberta(s) fora do total.")
+    linhas = [
+        [dep, round(valor, 2), (valor / total) if total else 0]
+        for dep, valor in sorted(por_dep.items(), key=lambda x: -x[1])
+    ]
+    linhas.append(["Total", total, None])
+    prox = _tabela(ws, 4, ["Departamento", "Valor", "%"], linhas, {2: _MOEDA, 3: "0.0%"})
+    if abertas:
+        ws.cell(row=prox, column=1, value="NF-e abertas (fora do total)").font = _NEGRITO
+        _tabela(ws, prox + 1, ["NF-e", "Emissão", "Valor"], [
+            [f.numero, f.emitida_em.strftime("%d/%m/%Y"), f.valor_total] for f in abertas
+        ], {3: _MOEDA})
+    _larguras(ws, [30, 16, 10])
+
+    ws2 = wb.create_sheet("Por NF-e")
+    _tabela(ws2, 1, ["NF-e", "Emissão", "Departamento", "Km", "Valor"], detalhado, {5: _MOEDA})
+    _larguras(ws2, [10, 12, 26, 10, 14])
+    return _salvar(wb), f"rateio_combustivel_{ano}-{mes:02d}.xlsx"

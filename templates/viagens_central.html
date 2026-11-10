@@ -2615,7 +2615,9 @@ const cbState = { sub: 'ABAST' };
 const cbMoeda = (n) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const cbNum = (n, d) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const cbData = (s) => { if (!s) return '-'; const [y, m, d] = String(s).split('T')[0].split('-'); return `${d}/${m}/${y}`; };
-const cbBadgeNfe = (st) => `<span class="eui-badge ${st === 'Conferida' ? 'eui-badge--success' : 'eui-badge--danger'}">${st}</span>`;
+const cbBadgeNfe = (f) => f.fechada
+  ? '<span class="eui-badge eui-badge--info"><i class="fas fa-lock"></i> Fechada</span>'
+  : `<span class="eui-badge ${f.status === 'Conferida' ? 'eui-badge--success' : 'eui-badge--danger'}">${f.status}</span>`;
 const cbCorDif = (v) => Math.abs(Number(v) || 0) < 0.01 ? '' : 'color:var(--eui-danger, #dc2626); font-weight:700;';
 
 function mostrarCombustivel(ativo) {
@@ -2680,7 +2682,7 @@ async function cbHtmlNfe() {
         <td><strong>${cbMoeda(f.valor_total)}</strong></td>
         <td>${cbMoeda(f.soma_nfce)}</td>
         <td style="${cbCorDif(f.diferenca)}">${cbMoeda(f.diferenca)}</td>
-        <td>${cbBadgeNfe(f.status)}</td>
+        <td>${cbBadgeNfe(f)}</td>
         <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" onclick="cbAbrirNfe(${f.id})">Abrir</button></td>
       </tr>`).join('')}</tbody></table>`
     : '<div class="vt-empty">Nenhuma NF-e do posto importada.</div>';
@@ -2690,7 +2692,39 @@ async function cbHtmlNfe() {
         <td>${cbNum(a.litros, 2)}</td><td>${cbMoeda(a.valor_total)}</td>
       </tr>`).join('')}</tbody></table>`
     : '<div class="vt-mini" style="padding:0 16px 16px;">Nenhuma.</div>';
-  return `${tabFaturas}<div style="padding:16px 16px 6px;"><strong>NFC-e aguardando NF-e</strong> <span class="vt-mini">(${aguardando.length})</span></div>${tabAguardando}`;
+  const mesAtual = new Date().toISOString().slice(0, 7);
+  const exportar = `<div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; padding:0 16px 12px;">
+      <span class="vt-mini">Rateio do mês (só NF-e fechadas)</span>
+      <input type="month" id="cbMes" class="eui-input" style="width:auto;" value="${mesAtual}">
+      <button class="eui-btn eui-btn--ghost" onclick="cbExcelMes()"><i class="fas fa-file-excel"></i> Excel do mês</button>
+    </div>`;
+  return `${exportar}${tabFaturas}<div style="padding:16px 16px 6px;"><strong>NFC-e aguardando NF-e</strong> <span class="vt-mini">(${aguardando.length})</span></div>${tabAguardando}`;
+}
+
+function cbExcelMes() {
+  const mes = document.getElementById('cbMes')?.value;
+  if (!mes) { showToast('Escolha o mês.', 'error'); return; }
+  window.location.href = `/api/frota/faturas/rateio.xlsx?mes=${encodeURIComponent(mes)}`;
+}
+
+async function cbAcaoNfe(id, acao) {
+  const r = await fetch(`/api/frota/faturas/${id}/${acao}`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível concluir.', 'error'); return; }
+  showToast(acao === 'fechar' ? 'NF-e fechada.' : 'NF-e reaberta.', 'success');
+  cbCarregar();
+  cbAbrirNfe(id);
+}
+
+async function cbReabrir(id, btn) {
+  // Segundo clique confirma: reabrir descongela o rateio já entregue.
+  if (btn.dataset.confirmar !== '1') {
+    btn.dataset.confirmar = '1';
+    btn.classList.add('eui-btn--danger');
+    btn.innerHTML = '<i class="fas fa-lock-open"></i> Confirmar reabertura';
+    return;
+  }
+  cbAcaoNfe(id, 'reabrir');
 }
 
 async function cbImportar(input) {
@@ -2724,8 +2758,9 @@ async function cbAbrirNfe(id) {
       <div><span class="vt-mini">Total NF-e</span><br><strong>${cbMoeda(f.valor_total)}</strong></div>
       <div><span class="vt-mini">Soma NFC-e</span><br><strong>${cbMoeda(f.soma_nfce)}</strong></div>
       <div><span class="vt-mini">Diferença</span><br><strong style="${cbCorDif(f.diferenca)}">${cbMoeda(f.diferenca)}</strong></div>
-      <div><span class="vt-mini">Situação</span><br>${cbBadgeNfe(f.status)}</div>
+      <div><span class="vt-mini">Situação</span><br>${cbBadgeNfe(f)}</div>
     </div>
+    ${f.fechada ? `<div class="vt-mini"><i class="fas fa-lock"></i> Fechada por ${f.fechada_por || '-'} em ${formatDateTime(f.fechada_em)}. Rateio e NFC-e congelados.</div>` : ''}
     <table class="erp-table"><thead><tr><th>NFC-e</th><th>Data</th><th>Veículo</th><th>Litros</th><th>Valor</th><th></th></tr></thead><tbody>${d.notas.map((n) => `<tr>
       <td>${n.numero} <span class="vt-mini">série ${n.serie}</span></td>
       <td>${n.lancada ? formatDateTime(n.data) : '-'}</td>
@@ -2740,9 +2775,13 @@ async function cbAbrirNfe(id) {
       <td>${x.departamento}</td><td>${cbNum(x.km, 1)}</td><td>${cbNum(x.pct, 1)}%</td><td><strong>${cbMoeda(x.valor)}</strong></td>
     </tr>`).join('') : '<tr><td colspan="4" class="vt-empty">Nenhuma NFC-e lançada para ratear.</td></tr>'}</tbody></table>`;
   document.getElementById('cbNfeFoot').innerHTML = `
-    <button class="eui-btn eui-btn--ghost" onclick="cbExcluir('/api/frota/faturas/${f.id}', this, 'modalCbNfe')"><i class="fas fa-trash"></i> Excluir NF-e</button>
+    ${f.fechada
+      ? `<button class="eui-btn eui-btn--ghost" onclick="cbReabrir(${f.id}, this)"><i class="fas fa-lock-open"></i> Reabrir</button>`
+      : `<button class="eui-btn eui-btn--ghost" onclick="cbExcluir('/api/frota/faturas/${f.id}', this, 'modalCbNfe')"><i class="fas fa-trash"></i> Excluir NF-e</button>`}
     <a class="eui-btn eui-btn--ghost" href="/api/frota/faturas/${f.id}/xml"><i class="fas fa-download"></i> XML</a>
-    <button class="eui-btn eui-btn--primary" onclick="closeModal('modalCbNfe')">Fechar</button>`;
+    <a class="eui-btn eui-btn--ghost" href="/api/frota/faturas/${f.id}/rateio.xlsx"><i class="fas fa-file-excel"></i> Excel</a>
+    ${f.fechada ? '' : `<button class="eui-btn eui-btn--primary" onclick="cbAcaoNfe(${f.id}, 'fechar')"><i class="fas fa-lock"></i> Fechar NF-e</button>`}
+    <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCbNfe')">Sair</button>`;
   openModal('modalCbNfe');
 }
 
