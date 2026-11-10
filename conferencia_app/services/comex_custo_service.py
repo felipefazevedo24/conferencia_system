@@ -30,6 +30,7 @@ Regras das planilhas (iguais nas duas, salvo onde indicado):
 from __future__ import annotations
 
 import re
+import time
 from datetime import date, timedelta
 
 import requests
@@ -228,6 +229,22 @@ def ptax_venda(hoje: date | None = None, timeout: int = 8) -> dict | None:
             return {"cotacao": float(valores[-1]["cotacaoVenda"]), "data": dia.isoformat()}
         dia -= timedelta(days=1)
     return None
+
+
+_PTAX_CACHE: dict = {}
+
+
+def ptax_do_dia() -> dict | None:
+    """`ptax_venda` com cache: a analise de propostas abre varias vezes e o
+    BCB e' lento. Acerto vale 1h (a PTAX do dia sai a tarde); falha, 10 min,
+    pra nao travar cada abertura esperando o timeout."""
+    agora = time.monotonic()
+    em_cache = _PTAX_CACHE.get("ptax")
+    if em_cache and agora - em_cache[1] < (3600 if em_cache[0] else 600):
+        return em_cache[0]
+    valor = ptax_venda()
+    _PTAX_CACHE["ptax"] = (valor, agora)
+    return valor
 
 
 # ── Cadastro de NCM (banco) ─────────────────────────────────────────────

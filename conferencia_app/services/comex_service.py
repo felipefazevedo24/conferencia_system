@@ -29,7 +29,7 @@ from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
-from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal, ComexCotacaoModalSolicitado
+from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal, ComexCotacaoModalSolicitado, ComexFornecedor
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -1782,7 +1782,9 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         _cotacao_aereo_irma(cotacao, dados.get("aereo") or {}, dados.get("volumes"))
     db.session.commit()
 
-    _recalcular_sugerida(cotacao.processo_id)
+    from . import comex_custo_service
+    ptax = comex_custo_service.ptax_do_dia()
+    recalcular_sugerida(cotacao.processo_id, ptax["cotacao"] if ptax else None)
     db.session.commit()
     return cotacao
 
@@ -1795,22 +1797,32 @@ def modal_da_cotacao(cotacao: ComexCotacao) -> str:
     return cotacao.modal_cotado.modal if cotacao.modal_cotado else "LCL_AEREO"
 
 
-def _recalcular_sugerida(processo_id: int) -> None:
+def recalcular_sugerida(processo_id: int, ptax: float | None = None) -> bool:
     """Marca como `is_sugerida_pelo_sistema` a cotacao Recebida de menor
-    custo total em USD de CADA modal (FCL, LCL, Aereo) - aereo e maritimo
-    nao concorrem entre si, a decisao entre eles e' do operador.
-    Recalculado a cada nova cotacao recebida."""
-    recebidas = (
-        ComexCotacao.query
-        .filter_by(processo_id=processo_id, status="Recebida")
-        .order_by(ComexCotacao.custo_total_usd.asc())
-        .all()
-    )
+    custo de CADA modal (FCL, LCL, Aereo) - aereo e maritimo nao concorrem
+    entre si, a decisao entre eles e' do operador. O custo comparado e' o
+    total em R$ com o markup de cada forwarder (um forwarder mais barato em
+    US$ pode sair mais caro em R$); sem taxa nenhuma, compara em US$.
+    Devolve se alguma marcacao mudou."""
+    recebidas = ComexCotacao.query.filter_by(processo_id=processo_id, status="Recebida").order_by(ComexCotacao.id).all()
+    mapa = forwarders_por_email()
+
+    def custo(c):
+        total = cambio_da_cotacao(c, ptax, mapa)["custo_total_consolidado_brl"]
+        if total is not None:
+            return (0, total)
+        return (1, c.custo_total_usd if c.custo_total_usd is not None else float("inf"))
+
+    mudou = False
     vistos = set()
-    for c in recebidas:
+    for c in sorted(recebidas, key=custo):
         modal = modal_da_cotacao(c)
-        c.is_sugerida_pelo_sistema = modal not in vistos
+        sugerida = modal not in vistos
         vistos.add(modal)
+        if bool(c.is_sugerida_pelo_sistema) != sugerida:
+            c.is_sugerida_pelo_sistema = sugerida
+            mudou = True
+    return mudou
 
 
 def listar_cotacoes(processo: ComexProcesso) -> list[ComexCotacao]:
@@ -1837,18 +1849,50 @@ def definir_taxa_cambio(processo: ComexProcesso, taxa: float | str | None, usuar
     return processo
 
 
-def custo_total_consolidado_brl(cotacao: ComexCotacao) -> float | None:
-    """Custo total da cotacao convertido pra um unico valor em BRL, usando a
-    taxa de cambio de referencia do processo (a mesma pra todos os
-    fornecedores comparados) - (custo_total_usd * taxa) + custo_total_brl.
-    None se faltar a taxa ou nao houver nenhum custo lancado ainda."""
-    taxa = cotacao.processo.taxa_cambio_referencia if cotacao.processo else None
-    if not taxa:
-        return None
-    if cotacao.custo_total_usd is None and cotacao.custo_total_brl is None:
-        return None
-    total = (float(cotacao.custo_total_usd or 0) * taxa) + float(cotacao.custo_total_brl or 0)
-    return round(total, 2)
+def _lista_emails(texto) -> list[str]:
+    return [e.strip().lower() for e in re.split(r"[;,]", str(texto or "")) if e.strip()]
+
+
+def forwarders_por_email() -> dict:
+    """{e-mail: Freight Forwarder} do cadastro - a cotacao nao guarda o
+    fornecedor, so' os e-mails pra onde o link foi; e' por eles que se acha
+    o markup (vale tambem pras cotacoes antigas)."""
+    mapa = {}
+    for f in ComexFornecedor.query.filter_by(tipo_fornecedor="Freight Forwarder").all():
+        for e in _lista_emails(f.email):
+            mapa.setdefault(e, f)
+    return mapa
+
+
+def forwarder_da_cotacao(cotacao: ComexCotacao, mapa: dict | None = None) -> ComexFornecedor | None:
+    mapa = forwarders_por_email() if mapa is None else mapa
+    for e in _lista_emails(emails_da_cotacao(cotacao)):
+        if e in mapa:
+            return mapa[e]
+    return None
+
+
+def cambio_da_cotacao(cotacao: ComexCotacao, ptax: float | None, mapa: dict | None = None) -> dict:
+    """Total da cotacao em R$: US$ x PTAX do dia x (1 + markup do forwarder)
+    + R$. O markup e' so' do frete (decisao de 09/11/2026); impostos usam a
+    PTAX pura. Sem PTAX (BCB fora do ar) cai na taxa manual do processo;
+    forwarder sem markup cadastrado converte pela PTAX pura, com aviso."""
+    manual = cotacao.processo.taxa_cambio_referencia if cotacao.processo else None
+    base = ptax or manual
+    forwarder = forwarder_da_cotacao(cotacao, mapa)
+    markup = forwarder.markup.markup_pct if forwarder and forwarder.markup else None
+    taxa = round(base * (1 + (markup or 0) / 100), 4) if base else None
+    total = None
+    if taxa and (cotacao.custo_total_usd is not None or cotacao.custo_total_brl is not None):
+        total = round(float(cotacao.custo_total_usd or 0) * taxa + float(cotacao.custo_total_brl or 0), 2)
+    return {
+        "taxa_base": base,
+        "taxa_base_fonte": "PTAX" if ptax else ("manual" if manual else None),
+        "forwarder_cadastro": (forwarder.nome_fantasia or forwarder.razao_social) if forwarder else None,
+        "markup_pct": markup,
+        "taxa_agente": taxa,
+        "custo_total_consolidado_brl": total,
+    }
 
 
 COTACAO_SUBSTATUS_NAO_INICIADO = "Não iniciado"

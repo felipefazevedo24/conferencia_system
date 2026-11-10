@@ -22,7 +22,7 @@ from ..auth import has_permission, permission_required
 from ..extensions import db
 from ..models import ComexCotacao, ComexDocumento, ComexProcesso, ComexPoItem
 from ..services import comex_service as svc
-from ..services import comex_po_pdf
+from ..services import comex_custo_service, comex_po_pdf
 from ..services.smtp_service import enviar_mensagem_smtp
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 from ..tempo import agora_br
@@ -927,7 +927,9 @@ def api_adicionar_comentario(processo_id):
 
 # ── Cotação (Módulo 3) — link público (sem login) para o prestador de ─────
 # frete preencher, no formato do "modelo de cotação.xlsx" da empresa. ─────
-def _cotacao_payload(c: ComexCotacao) -> dict:
+def _cotacao_payload(c: ComexCotacao, cambio: dict | None = None) -> dict:
+    """`cambio` (svc.cambio_da_cotacao) so' na analise interna - o link
+    publico do prestador nao ve markup nem total em R$."""
     custos = {}
     for prefixo, _ in svc.ETAPAS_CUSTO_COTACAO:
         custos[f"{prefixo}_usd"] = getattr(c, f"{prefixo}_usd")
@@ -956,7 +958,8 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         **custos,
         "custo_total_usd": c.custo_total_usd,
         "custo_total_brl": c.custo_total_brl,
-        "custo_total_consolidado_brl": svc.custo_total_consolidado_brl(c),
+        "custo_total_consolidado_brl": None,
+        **(cambio or {}),
         "is_sugerida_pelo_sistema": bool(c.is_sugerida_pelo_sistema),
         "is_escolhida": bool(c.is_escolhida),
         "proximas_saidas": c.proximas_saidas,
@@ -1010,7 +1013,18 @@ def api_listar_cotacoes(processo_id):
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404
     cotacoes = svc.listar_cotacoes(processo)
-    return jsonify({"cotacoes": [_cotacao_payload(c) for c in cotacoes]})
+    ptax = comex_custo_service.ptax_do_dia()
+    taxa = ptax["cotacao"] if ptax else None
+    # PTAX e markup mudam depois que a cotacao chegou: a sugerida e'
+    # reavaliada aqui pra bater com os totais da tela (depois da escolha,
+    # fica congelada - a justificativa ja' foi dada contra ela).
+    if not processo.cotacao_vencedora_id and svc.recalcular_sugerida(processo.id, taxa):
+        db.session.commit()
+    mapa = svc.forwarders_por_email()
+    return jsonify({
+        "ptax": ptax,
+        "cotacoes": [_cotacao_payload(c, svc.cambio_da_cotacao(c, taxa, mapa)) for c in cotacoes],
+    })
 
 
 @comex_bp.route("/api/comex/processos/<int:processo_id>/taxa-cambio", methods=["POST"])

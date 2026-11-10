@@ -123,6 +123,13 @@
                     <input type="text" id="cf-email" class="eui-input" placeholder="Separe vários com ; (ex.: a@x.com; b@x.com)">
                 </div>
             </div>
+            <div class="cx-grid-2" id="cf-markup-wrap">
+                <div class="cx-field">
+                    <label>Markup sobre a PTAX (%) <small style="font-weight:400; color:var(--eui-muted);">— converte o frete na análise de propostas</small></label>
+                    <input type="text" inputmode="decimal" id="cf-markup" class="eui-input" placeholder="Ex.: 3,5">
+                </div>
+                <div></div>
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cf-cancelar">Cancelar</button>
@@ -184,7 +191,7 @@
             <td><strong>${f.razao_social || "—"}</strong></td>
             <td>${f.nome_fantasia || "—"}</td>
             <td>${f.cnpj || "—"}</td>
-            <td><span class="cx-badge-tipo ${classeTipo(f.tipo_fornecedor)}">${f.tipo_fornecedor}</span>${f.ativo ? "" : ' <span class="cx-badge-inativo">Inativo</span>'}</td>
+            <td><span class="cx-badge-tipo ${classeTipo(f.tipo_fornecedor)}">${f.tipo_fornecedor}</span>${f.ativo ? "" : ' <span class="cx-badge-inativo">Inativo</span>'}${f.markup_pct != null ? `<br><small style="color:var(--eui-muted);">Markup PTAX ${String(f.markup_pct).replace(".", ",")}%</small>` : ""}</td>
             <td>${f.email || "—"}</td>
             <td>${f.telefone || "—"}</td>
             <td style="text-align:right; white-space:nowrap;">
@@ -225,11 +232,19 @@
         $("cf-telefone").value = fornecedor ? (fornecedor.telefone || "") : "";
         $("cf-email").value = fornecedor ? (fornecedor.email || "") : "";
         $("cf-tipo").value = fornecedor ? (fornecedor.tipo_fornecedor || "") : (TIPOS[0] || "");
+        $("cf-markup").value = fornecedor && fornecedor.markup_pct != null ? String(fornecedor.markup_pct).replace(".", ",") : "";
+        atualizarCampoMarkup();
         $("cf-modal-titulo").innerHTML = fornecedor
             ? '<i class="fas fa-pen-to-square"></i> Editar fornecedor'
             : '<i class="fas fa-address-book"></i> Novo fornecedor';
         $("cf-modal").classList.add("open");
     }
+
+    // Markup sobre a PTAX so' existe pra Freight Forwarder.
+    function atualizarCampoMarkup() {
+        $("cf-markup-wrap").classList.toggle("hidden", $("cf-tipo").value !== "Freight Forwarder");
+    }
+    $("cf-tipo").addEventListener("change", atualizarCampoMarkup);
 
     function fecharModal() {
         $("cf-modal").classList.remove("open");
@@ -249,6 +264,7 @@
             telefone: $("cf-telefone").value.trim(),
             email: $("cf-email").value.trim(),
             tipo_fornecedor: $("cf-tipo").value,
+            markup_pct: $("cf-markup").value.trim(),
         };
         const btn = $("cf-salvar");
         btn.disabled = true;

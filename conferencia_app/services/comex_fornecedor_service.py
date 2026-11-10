@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 
 from ..extensions import db
-from ..models import ComexFornecedor
+from ..models import ComexFornecedor, ComexForwarderMarkup
 from ..tempo import agora_br
 
 TIPOS_FORNECEDOR = ("Freight Forwarder", "Transportador", "Prod/Dist")
@@ -52,6 +52,30 @@ def _validar_dados(dados: dict) -> dict:
     }
 
 
+def _gravar_markup(fornecedor: ComexFornecedor, dados: dict) -> None:
+    """Markup sobre a PTAX - so' Freight Forwarder. Vazio remove."""
+    if "markup_pct" not in dados:
+        return
+    bruto = str(dados.get("markup_pct") or "").strip().replace(",", ".")
+    if fornecedor.tipo_fornecedor != "Freight Forwarder":
+        bruto = ""
+    if bruto:
+        try:
+            valor = float(bruto)
+        except ValueError:
+            raise ValueError("Markup sobre a PTAX inválido.")
+        if not 0 <= valor < 100:
+            raise ValueError("Markup sobre a PTAX deve estar entre 0 e 100%.")
+    atual = fornecedor.markup
+    if not bruto:
+        if atual:
+            db.session.delete(atual)
+    elif atual:
+        atual.markup_pct = valor
+    else:
+        db.session.add(ComexForwarderMarkup(fornecedor=fornecedor, markup_pct=valor))
+
+
 def listar_fornecedores(tipo: str | None = None, ativo: bool | None = True, busca: str = "") -> list[ComexFornecedor]:
     query = ComexFornecedor.query
     if tipo:
@@ -84,6 +108,7 @@ def criar_fornecedor(dados: dict, usuario: str) -> ComexFornecedor:
         atualizado_por=usuario,
     )
     db.session.add(fornecedor)
+    _gravar_markup(fornecedor, dados)
     db.session.commit()
     return fornecedor
 
@@ -92,6 +117,7 @@ def atualizar_fornecedor(fornecedor: ComexFornecedor, dados: dict, usuario: str)
     campos = _validar_dados(dados)
     for chave, valor in campos.items():
         setattr(fornecedor, chave, valor)
+    _gravar_markup(fornecedor, dados)
     fornecedor.atualizado_em = agora_br()
     fornecedor.atualizado_por = usuario
     db.session.commit()

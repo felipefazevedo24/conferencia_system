@@ -4327,6 +4327,21 @@ class ComexFornecedor(db.Model):
     atualizado_por = db.Column(db.String(100))
 
 
+class ComexForwarderMarkup(db.Model):
+    """Markup (%) que o Freight Forwarder cobra sobre a PTAX pra converter o
+    frete. A analise de propostas e a provisao convertem o frete por
+    PTAX x (1 + markup); impostos usam a PTAX pura. Tabela a parte pra nao
+    precisar de migration em comex_fornecedor."""
+
+    __tablename__ = "comex_forwarder_markup"
+
+    id = db.Column(db.Integer, primary_key=True)
+    fornecedor_id = db.Column(db.Integer, db.ForeignKey("comex_fornecedor.id"), nullable=False, unique=True)
+    markup_pct = db.Column(db.Float, nullable=False)  # 3.0 = 3%
+
+    fornecedor = db.relationship("ComexFornecedor", backref=db.backref("markup", uselist=False))
+
+
 class ComexDocumento(db.Model):
     """Documento anexado ao processo em QUALQUER modulo do workflow (nota
     fiscal, BL/AWB, invoice, packing list, comprovante etc.) - requisito
