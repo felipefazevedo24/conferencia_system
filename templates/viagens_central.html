@@ -4,6 +4,8 @@
 {% block shell_title %}Central de Viagens{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
     .vt-wrap { display: grid; gap: 16px; }
     .vt-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
@@ -154,6 +156,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="SOLICITACOES">Solicitações <span class="count" id="count-solicitacoes">0</span></button>
                 <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
+                {% if can_access('PAGE_LOGISTICA_FROTA') %}<button class="vt-tab" data-tab="FROTA"><i class="fas fa-gas-pump"></i> Frota e combustível</button>{% endif %}
             </div>
             <div class="vt-toolbar">
                 <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
@@ -178,6 +181,11 @@
                 </table>
             </div>
         </div>
+        {% if can_access('PAGE_LOGISTICA_FROTA') %}
+        <div id="vt-frota" style="display:none;">
+            <iframe data-src="/logistica/frota?embed=1&aba=abastecimentos" title="Frota e combustível" style="width:100%; min-height:78vh; border:0; display:block;"></iframe>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -1709,7 +1717,7 @@ async function acaoAbrirViagem(viagemId) {
   const paradasHtml = paradas.length
     ? `<ol style="margin:6px 0 0 18px; padding:0;">${paradas.map((p) => {
         const podeRealocar = Number(p.solicitacao_id || 0) > 0 && String(p.status || '').trim() === 'Pendente';
-        return `<li style="margin-bottom:8px;"><strong>${p.tipo || 'PARADA'}</strong> · ${p.parceiro_nome || '-'} · ${(p.cidade || '-')}/${(p.uf || '-')} <span class="vt-mini">(${p.status || '-'})</span>${podeRealocar ? ` <button class="eui-btn eui-btn--ghost" style="margin-left:6px;" onclick="abrirModalRealocarParada(${Number(p.id)}, ${vid}, '${String(p.parceiro_nome || '').replace(/'/g, "&#39;")}')"><i class='fas fa-shuffle'></i> Realocar</button>` : ''}</li>`;
+        return `<li style="margin-bottom:8px;"><strong>${p.tipo || 'PARADA'}</strong> · ${p.parceiro_nome || '-'} · ${(p.cidade || '-')}/${(p.uf || '-')} <span class="vt-mini">(${labelStatusViagem(p.status)})</span>${podeRealocar ? ` <button class="eui-btn eui-btn--ghost" style="margin-left:6px;" onclick="abrirModalRealocarParada(${Number(p.id)}, ${vid}, '${String(p.parceiro_nome || '').replace(/'/g, "&#39;")}')"><i class='fas fa-shuffle'></i> Realocar</button>` : ''}${origemParadaHtml(p)}</li>`;
       }).join('')}</ol>`
     : '<div class="vt-mini">Sem paradas cadastradas.</div>';
 
@@ -1740,18 +1748,150 @@ async function acaoAbrirViagem(viagemId) {
 
   document.getElementById('detalheBody').innerHTML = `
     <div><strong>Código:</strong> ${d.codigo || ('#' + vid)}</div>
-    <div><strong>Status:</strong> ${d.status || '-'}</div>
+    <div><strong>Status:</strong> ${labelStatusViagem(d.status)}</div>
     <div><strong>Tipo:</strong> ${d.tipo || '-'}</div>
     <div><strong>Motorista:</strong> ${d.motorista_nome || '-'}</div>
     <div><strong>Veículo:</strong> ${d.veiculo_label || '-'}</div>
     <div><strong>Saída prevista:</strong> ${formatDateTime(d.saida_prevista)}</div>
     <div><strong>Retorno previsto:</strong> ${formatDateTime(d.retorno_previsto)}</div>
     <div><strong>Paradas:</strong> ${Number(d.qtd_paradas || 0)}</div>
+    ${mapaViagemTemConteudo(d) ? '<div id="detalhe-mapa" style="height:300px; margin-top:10px; border-radius:var(--eui-radius); border:1px solid var(--eui-border);"></div><div id="detalhe-mapa-info" class="vt-mini" style="margin-top:4px;"></div>' : ''}
     <div style="margin-top:8px;"><strong>Roteiro:</strong>${paradasHtml}</div>
     ${eventosHtml}
     ${acoesHtml}
   `;
   openModal('modalDetalhe');
+  desenharMapaViagem(d, true);
+  acompanharViagemAberta(vid, st);
+}
+
+function labelStatusViagem(status) {
+  const st = String(status || '').trim();
+  return ({
+    'Planejada': 'Planejada',
+    'EmAndamento': 'Em andamento',
+    'Concluida': 'Concluída',
+    'Cancelada': 'Cancelada',
+    'Pendente': 'Pendente',
+    'Nao_realizada': 'Não realizada',
+  })[st] || st || '-';
+}
+
+function origemParadaHtml(p) {
+  const s = p.solicitacao;
+  if (!s) return '';
+  const quem = s.solicitante
+    ? `Solicitado por ${s.solicitante}${s.departamento ? ` (${s.departamento})` : ''}`
+    : (s.departamento || '');
+  let doc = '';
+  if (s.romaneio_numero) doc = `Romaneio ${s.romaneio_numero}`;
+  else if (s.documento_numero) doc = `${s.documento_tipo || 'Doc'} ${s.documento_numero}`;
+  if (s.numero_nf && s.documento_tipo !== 'NF') doc += `${doc ? ' · ' : ''}NF ${s.numero_nf}`;
+  const partes = [s.codigo, quem, doc].filter(Boolean);
+  const links = [
+    s.link_origem ? `<a href="${s.link_origem}" target="_blank" rel="noopener">abrir documento</a>` : '',
+    s.anexo_url ? `<a href="${s.anexo_url}" target="_blank" rel="noopener">anexo</a>` : '',
+  ].filter(Boolean);
+  return `<div class="vt-mini" style="margin-top:2px;">${partes.join(' · ')}${links.length ? ' · ' + links.join(' · ') : ''}</div>`;
+}
+
+let detalheMapa = null;
+let detalheMapaCamadas = null;
+let detalheMapaTimer = null;
+
+function mapaViagemTemConteudo(d) {
+  const temParada = (d.paradas || []).some((p) => p.latitude && p.longitude);
+  return (d.posicoes || []).length > 0 || temParada || d.status === 'EmAndamento';
+}
+
+function desenharMapaViagem(d, ajustarZoom) {
+  const el = document.getElementById('detalhe-mapa');
+  if (!el) return;
+  if (typeof L === 'undefined') {
+    el.outerHTML = '<div class="vt-mini" style="margin-top:10px;">Mapa indisponível no momento.</div>';
+    return;
+  }
+  // O corpo do modal é recriado a cada abertura; o mapa antigo fica preso no
+  // elemento descartado e precisa ser desmontado.
+  if (detalheMapa && detalheMapa.getContainer() !== el) {
+    detalheMapa.remove();
+    detalheMapa = null;
+  }
+  if (!detalheMapa) {
+    detalheMapa = L.map(el).setView([-22.8531, -47.2158], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(detalheMapa);
+    detalheMapaCamadas = L.layerGroup().addTo(detalheMapa);
+  }
+  detalheMapaCamadas.clearLayers();
+
+  const pts = (d.posicoes || []).filter((p) => p.lat && p.lng);
+  const paradas = (d.paradas || []).filter((p) => p.latitude && p.longitude);
+  if (paradas.length >= 2) {
+    L.polyline(paradas.map((p) => [p.latitude, p.longitude]), { color: '#0f62c9', weight: 3, opacity: .5, dashArray: '6,8' }).addTo(detalheMapaCamadas);
+  }
+  paradas.forEach((p) => {
+    const cor = p.status === 'Concluida' ? '#059669' : (p.status === 'Nao_realizada' ? '#dc2626' : '#155eef');
+    L.marker([p.latitude, p.longitude], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="background:${cor};color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">${p.sequencia}</div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+      }),
+    }).bindPopup(`<strong>${p.tipo || ''} · ${p.parceiro_nome || ''}</strong><br>${p.endereco || ''}<br><small>${labelStatusViagem(p.status)}</small>`).addTo(detalheMapaCamadas);
+  });
+  if (pts.length >= 2) {
+    L.polyline(pts.map((p) => [p.lat, p.lng]), { color: '#059669', weight: 4, opacity: .85 }).addTo(detalheMapaCamadas);
+  }
+  const ult = pts[pts.length - 1];
+  if (ult) {
+    L.marker([ult.lat, ult.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div style="background:#dc2626;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35)"><i class="fas fa-truck" style="font-size:14px;"></i></div>',
+        iconSize: [32, 32], iconAnchor: [16, 16],
+      }),
+      zIndexOffset: 1000,
+    }).bindPopup(`<strong>${d.motorista_nome || 'Motorista'}</strong><br>${formatDateTime(ult.em)}${ult.vel != null ? ` · ${Math.round(ult.vel)} km/h` : ''}`).addTo(detalheMapaCamadas);
+  }
+
+  const info = document.getElementById('detalhe-mapa-info');
+  if (info) {
+    if (ult) {
+      const min = Math.max(0, Math.round((Date.now() - new Date(ult.em).getTime()) / 60000));
+      info.textContent = `Última posição: ${formatDateTime(ult.em)} (${min <= 0 ? 'agora' : `há ${min} min`})`;
+    } else {
+      info.textContent = d.status === 'EmAndamento' ? 'O app do motorista ainda não enviou posição.' : '';
+    }
+  }
+
+  // Só enquadra na abertura: nas atualizações o gestor pode ter dado zoom.
+  if (ajustarZoom) {
+    const bounds = L.latLngBounds([]);
+    pts.forEach((p) => bounds.extend([p.lat, p.lng]));
+    paradas.forEach((p) => bounds.extend([p.latitude, p.longitude]));
+    if (bounds.isValid()) detalheMapa.fitBounds(bounds, { padding: [25, 25], maxZoom: 14 });
+  }
+  setTimeout(() => detalheMapa && detalheMapa.invalidateSize(), 200);
+}
+
+function acompanharViagemAberta(vid, status) {
+  clearInterval(detalheMapaTimer);
+  detalheMapaTimer = null;
+  if (status !== 'EmAndamento') return;
+  detalheMapaTimer = setInterval(async () => {
+    const aberto = document.getElementById('modalDetalhe').classList.contains('open');
+    if (!aberto || state.detalheViagemId !== vid || !document.getElementById('detalhe-mapa')) {
+      clearInterval(detalheMapaTimer);
+      detalheMapaTimer = null;
+      return;
+    }
+    const r = await fetch(`/api/viagem/${vid}`).catch(() => null);
+    if (!r || !r.ok) return;
+    const d = await r.json().catch(() => null);
+    if (!d || state.detalheViagemId !== vid) return;
+    state.detalheViagemData = d;
+    desenharMapaViagem(d, false);
+  }, 30000);
 }
 
 async function abrirModalRealocarParada(paradaId, viagemOrigemId, parceiroNome) {
@@ -2437,10 +2577,25 @@ buscaInput.addEventListener('input', () => {
   }, 250);
 });
 
+// A Frota é a própria tela /logistica/frota embutida: só troca o que aparece
+// no card, sem mexer em state.tab (os recarregamentos da tabela seguem valendo).
+function mostrarFrota(ativo) {
+  const box = document.getElementById('vt-frota');
+  if (!box) return;
+  const card = box.closest('.eui-card');
+  box.style.display = ativo ? '' : 'none';
+  card.querySelector('.vt-toolbar').style.display = ativo ? 'none' : '';
+  card.querySelector('.eui-card__body--tight').style.display = ativo ? 'none' : '';
+  const frame = box.querySelector('iframe');
+  if (ativo && !frame.getAttribute('src')) frame.src = frame.dataset.src;
+}
+
 Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
   tab.addEventListener('click', async () => {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
+    mostrarFrota(tab.dataset.tab === 'FROTA');
+    if (tab.dataset.tab === 'FROTA') return;
     state.tab = tab.dataset.tab;
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : null;
     if (state.tab === 'VIAGENS') state.selectedIds = [];

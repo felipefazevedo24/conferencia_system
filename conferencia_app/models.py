@@ -1530,6 +1530,37 @@ class FrotaAbastecimento(db.Model):
     observacao = db.Column(db.String(400))
     criado_por = db.Column(db.String(100))
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    # Preenchidos quando o abastecimento vem do XML da NFC-e do posto. A chave
+    # é o que liga a NFC-e à NF-e semanal (FrotaFaturaCombustivel).
+    chave_nfce = db.Column(db.String(44), index=True)
+    numero_nfce = db.Column(db.String(20))
+    placa_nota = db.Column(db.String(12))
+    operador = db.Column(db.String(120))
+    xml_nfce = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+
+
+class FrotaFaturaCombustivel(db.Model):
+    """NF-e semanal do posto (CFOP 5929) que fatura as NFC-e da semana.
+
+    As NFC-e cobertas vêm do NFref do próprio XML. Conferência (o que falta
+    lançar, diferença de valor) e rateio por departamento são calculados na
+    hora, nunca gravados: lançar uma NFC-e atrasada corrige a fatura sozinho.
+    """
+    __tablename__ = "frota_fatura_combustivel"
+
+    id = db.Column(db.Integer, primary_key=True)
+    chave = db.Column(db.String(44), nullable=False, unique=True, index=True)
+    numero = db.Column(db.String(20), nullable=False)
+    serie = db.Column(db.String(5))
+    emitida_em = db.Column(db.DateTime, nullable=False, index=True)
+    cnpj_emitente = db.Column(db.String(14), index=True)
+    emitente_nome = db.Column(db.String(160))
+    valor_total = db.Column(db.Float, nullable=False, default=0)
+    litros_total = db.Column(db.Float, nullable=False, default=0)
+    chaves_referenciadas = db.Column(db.Text, nullable=False, default="[]")  # json
+    xml = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaMulta(db.Model):

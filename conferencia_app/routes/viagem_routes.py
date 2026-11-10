@@ -8,6 +8,7 @@ import os
 import math
 import re
 from datetime import date, datetime, timedelta
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 from sqlalchemy import func, or_, true
@@ -546,6 +547,16 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
             out["motorista_link"] = f"/motorista/viagem/{v.id}/{_token_motorista(v.id)}"
         paradas_regs = ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
         out["paradas"] = [_parada_dict(p) for p in paradas_regs]
+        # Uma consulta só para todas as solicitações: o detalhe é recarregado a
+        # cada 30 s enquanto o gestor acompanha o mapa.
+        sol_ids = {p.solicitacao_id for p in paradas_regs if p.solicitacao_id}
+        sols = (
+            {s.id: s for s in AgendamentoSolicitacao.query.filter(AgendamentoSolicitacao.id.in_(sol_ids)).all()}
+            if sol_ids else {}
+        )
+        for item in out["paradas"]:
+            sol = sols.get(item["solicitacao_id"])
+            item["solicitacao"] = _origem_solicitacao_dict(sol) if sol else None
         out["checklist_liberacao"] = _checklist_liberacao(v, paradas_regs)
         out["eventos"] = [_evento_dict(e) for e in ViagemEvento.query.filter_by(viagem_id=v.id).order_by(ViagemEvento.registrado_em).all()]
         out["posicoes"] = [
@@ -636,6 +647,47 @@ def _parada_dict(p: ViagemParada) -> dict:
         "observacao": p.observacao,
         "assinatura_path": p.assinatura_path,
         "foto_paths": fotos,
+    }
+
+
+def _origem_solicitacao_dict(s: AgendamentoSolicitacao) -> dict:
+    """De onde a parada veio: quem pediu e o documento de origem.
+
+    O link segue o mesmo destino do "Abrir origem" da Central: entrega vai
+    para o romaneio, coleta vai para a OC em Compras.
+    """
+    try:
+        payload = json.loads(s.payload_origem) if s.payload_origem else {}
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    tipo = str(s.tipo or "").strip().upper()
+    romaneio = str(payload.get("romaneio_numero") or "").strip()
+    numero_oc = str(s.numero_oc or "").strip()
+    documento_numero = str(s.documento_numero or "").strip()
+    link_origem = ""
+    if tipo == "ENTREGA":
+        termo = romaneio or str(s.orcamento or "").strip()
+        link_origem = "/expedicao/romaneio" + (f"?q={quote(termo)}" if termo else "")
+    elif numero_oc or documento_numero:
+        link_origem = f"/compras?q={quote(numero_oc or documento_numero)}"
+    anexo = payload.get("anexo") if isinstance(payload.get("anexo"), dict) else {}
+    return {
+        "id": s.id,
+        "codigo": str(s.codigo or f"LOG-{s.id}").strip(),
+        "solicitante": str(s.solicitante or "").strip(),
+        "departamento": str(s.departamento_solicitante or "").strip(),
+        "documento_tipo": str(s.documento_tipo or "").strip(),
+        "documento_numero": documento_numero,
+        "numero_oc": numero_oc,
+        "numero_nf": str(s.numero_nf or "").strip(),
+        "romaneio_numero": romaneio,
+        "link_origem": link_origem,
+        "anexo_url": (
+            f"/api/logistica/central-viagens/solicitacoes/{s.id}/anexo"
+            if anexo.get("caminho_relativo") else ""
+        ),
     }
 
 

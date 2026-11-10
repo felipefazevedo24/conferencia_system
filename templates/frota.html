@@ -164,6 +164,7 @@
         <button class="doc-tab" data-tab="documentos"><i class="fa-solid fa-file-contract"></i> Documentos</button>
         <button class="doc-tab" data-tab="manutencoes"><i class="fa-solid fa-wrench"></i> Manutenção</button>
         <button class="doc-tab" data-tab="abastecimentos"><i class="fa-solid fa-gas-pump"></i> Abastecimento</button>
+        <button class="doc-tab" data-tab="faturas"><i class="fa-solid fa-file-invoice-dollar"></i> NF-e do posto</button>
         <button class="doc-tab" data-tab="multas"><i class="fa-solid fa-triangle-exclamation"></i> Multas</button>
         <button class="doc-tab" data-tab="checklist"><i class="fa-solid fa-clipboard-check"></i> Checklist</button>
     </div>
@@ -231,13 +232,43 @@
             <div class="doc-panel-head">
                 <div class="doc-panel-title"><i class="fa-solid fa-gas-pump"></i> Abastecimentos <span class="doc-panel-count" id="abast-count">0</span></div>
                 <div class="doc-panel-actions">
+                    <label class="doc-btn doc-btn-secondary doc-btn-sm" style="cursor:pointer"><i class="fa-solid fa-file-import"></i> Importar XML do posto<input type="file" accept=".xml" multiple hidden onchange="importarXmlPosto(this)"></label>
                     <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalAbast()"><i class="fa-solid fa-plus"></i> Novo abastecimento</button>
                 </div>
             </div>
             <div class="doc-table-wrapper">
                 <table class="doc-table">
-                    <thead><tr><th>Data</th><th>Veículo</th><th>Motorista</th><th class="num">KM</th><th class="num">Litros</th><th class="num">R$/L</th><th class="num">Total</th><th>Posto</th><th>Cheio?</th><th></th></tr></thead>
+                    <thead><tr><th>Data</th><th>Veículo</th><th>Motorista</th><th class="num">KM</th><th class="num">Litros</th><th class="num">R$/L</th><th class="num">Total</th><th class="num">Km/L</th><th>Posto</th><th>Cheio?</th><th>NFC-e</th><th>NF-e</th><th></th></tr></thead>
                     <tbody id="abast-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- NF-E DO POSTO -->
+    <div class="tab-panel" id="tab-faturas" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-file-invoice-dollar"></i> NF-e do posto <span class="doc-panel-count" id="fatura-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <label class="doc-btn doc-btn-primary doc-btn-sm" style="cursor:pointer"><i class="fa-solid fa-file-import"></i> Importar XML do posto<input type="file" accept=".xml" multiple hidden onchange="importarXmlPosto(this)"></label>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Emissão</th><th>NF-e</th><th class="num">NFC-e lançadas</th><th class="num">Total NF-e</th><th class="num">Soma NFC-e</th><th class="num">Diferença</th><th>Situação</th><th></th></tr></thead>
+                    <tbody id="fatura-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-hourglass-half"></i> NFC-e aguardando NF-e <span class="doc-panel-count" id="aguardando-count">0</span></div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Data</th><th>NFC-e</th><th>Veículo</th><th class="num">Litros</th><th class="num">Total</th></tr></thead>
+                    <tbody id="aguardando-tbody"></tbody>
                 </table>
             </div>
         </div>
@@ -427,6 +458,22 @@
 </div>
 
 <!-- MODAL: Abastecimento -->
+<div class="doc-modal-overlay" id="modal-import">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Importação dos XMLs</h3><button class="doc-modal-close" onclick="fecharModal('modal-import')">&times;</button></div>
+        <div class="doc-modal-body" id="import-body"></div>
+        <div class="doc-modal-foot"><button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-import')">Fechar</button></div>
+    </div>
+</div>
+
+<div class="doc-modal-overlay" id="modal-fatura">
+    <div class="doc-modal" style="max-width:860px;width:96%">
+        <div class="doc-modal-head"><h3 id="fatura-titulo">NF-e do posto</h3><button class="doc-modal-close" onclick="fecharModal('modal-fatura')">&times;</button></div>
+        <div class="doc-modal-body" id="fatura-body"></div>
+        <div class="doc-modal-foot" id="fatura-foot"></div>
+    </div>
+</div>
+
 <div class="doc-modal-overlay" id="modal-abast">
     <div class="doc-modal">
         <div class="doc-modal-head"><h3>Novo abastecimento</h3><button class="doc-modal-close" onclick="fecharModal('modal-abast')">&times;</button></div>
@@ -669,6 +716,7 @@ document.getElementById('tabs').addEventListener('click', e => {
     if (tab === 'documentos') carregarDocumentos();
     else if (tab === 'manutencoes') carregarManutencoes();
     else if (tab === 'abastecimentos') carregarAbastecimentos();
+    else if (tab === 'faturas') carregarFaturas();
     else if (tab === 'multas') carregarMultas();
     else if (tab === 'checklist') carregarChecklist();
 });
@@ -815,7 +863,7 @@ async function carregarAbastecimentos() {
     const data = await apiGet('/api/frota/abastecimentos');
     document.getElementById('abast-count').textContent = data.length;
     const tb = document.getElementById('abast-tbody');
-    if (!data.length) { tb.innerHTML = '<tr><td colspan="10" class="doc-empty" style="padding:32px">Nenhum abastecimento registrado.</td></tr>'; return; }
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="13" class="doc-empty" style="padding:32px">Nenhum abastecimento registrado.</td></tr>'; return; }
     tb.innerHTML = data.map(a => `<tr>
         <td>${fmtDateTime(a.data)}</td>
         <td>${a.veiculo_label}</td>
@@ -824,10 +872,121 @@ async function carregarAbastecimentos() {
         <td class="num">${fmtNum(a.litros, 2)}</td>
         <td class="num">${fmtMoney(a.valor_litro)}</td>
         <td class="num"><strong>${fmtMoney(a.valor_total)}</strong></td>
+        <td class="num">${a.kml != null ? fmtNum(a.kml, 2) : '—'}${(a.alertas || []).length ? ` <i class="fa-solid fa-triangle-exclamation" style="color:var(--doc-danger)" title="${a.alertas.join(' ').replace(/"/g, '&quot;')}"></i>` : ''}</td>
         <td>${a.posto || '—'}</td>
         <td>${a.tanque_cheio ? '<span class="doc-chip ok">Sim</span>' : '<span class="doc-chip slate">Não</span>'}</td>
+        <td>${a.numero_nfce ? `<a href="/api/frota/abastecimentos/${a.id}/xml" title="Baixar XML">${a.numero_nfce}</a>` : '—'}</td>
+        <td>${a.fatura_numero ? `<a href="#" onclick="abrirFatura(${a.fatura_id}); return false;">${a.fatura_numero}</a>` : (a.chave_nfce ? '<span class="doc-chip warn">Aguardando</span>' : '—')}</td>
         <td style="text-align:right"><button class="doc-btn doc-btn-ghost" onclick="excluirAbast(${a.id})"><i class="fa-solid fa-trash"></i></button></td>
     </tr>`).join('');
+}
+
+// -------------------- XML do posto (NFC-e e NF-e)
+async function importarXmlPosto(input) {
+    const arquivos = Array.from(input.files || []);
+    input.value = '';
+    if (!arquivos.length) return;
+    const fd = new FormData();
+    arquivos.forEach(f => fd.append('arquivos', f));
+    try {
+        const d = await apiSend('/api/frota/combustivel/importar', 'POST', fd);
+        const res = d.resultados || [];
+        const ok = res.filter(r => r.ok).length;
+        document.getElementById('import-body').innerHTML = `
+            <div style="margin-bottom:10px"><strong>${ok}</strong> de ${res.length} arquivo(s) importado(s).</div>
+            <table class="doc-table"><tbody>${res.map(r => `<tr>
+                <td>${r.ok ? '<span class="doc-chip ok">OK</span>' : '<span class="doc-chip danger">Erro</span>'}</td>
+                <td>${r.msg}<div style="font-size:11px;color:var(--doc-muted)">${r.arquivo}</div></td>
+            </tr>`).join('')}</tbody></table>`;
+        abrirModal('modal-import');
+        recarregarTudo();
+    } catch (err) { toast(err.message, 'error'); }
+}
+
+const chipFatura = st => st === 'Conferida' ? '<span class="doc-chip ok">Conferida</span>' : '<span class="doc-chip danger">Divergente</span>';
+const corDiferenca = v => Math.abs(Number(v) || 0) < 0.01 ? '' : 'color:var(--doc-danger);font-weight:700';
+
+async function carregarFaturas() {
+    const d = await apiGet('/api/frota/faturas');
+    const faturas = d.faturas || [];
+    document.getElementById('fatura-count').textContent = faturas.length;
+    document.getElementById('fatura-tbody').innerHTML = faturas.length ? faturas.map(f => `<tr>
+        <td>${fmtDate(f.emitida_em)}</td>
+        <td>${f.numero}</td>
+        <td class="num">${f.qtd_lancadas} / ${f.qtd_nfce}</td>
+        <td class="num"><strong>${fmtMoney(f.valor_total)}</strong></td>
+        <td class="num">${fmtMoney(f.soma_nfce)}</td>
+        <td class="num" style="${corDiferenca(f.diferenca)}">${fmtMoney(f.diferenca)}</td>
+        <td>${chipFatura(f.status)}</td>
+        <td style="text-align:right"><button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="abrirFatura(${f.id})">Abrir</button></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="doc-empty" style="padding:32px">Nenhuma NF-e importada.</td></tr>';
+    const ag = d.aguardando_nfe || [];
+    document.getElementById('aguardando-count').textContent = ag.length;
+    document.getElementById('aguardando-tbody').innerHTML = ag.length ? ag.map(a => `<tr>
+        <td>${fmtDateTime(a.data)}</td>
+        <td>${a.numero_nfce || '—'}</td>
+        <td>${a.veiculo_label}</td>
+        <td class="num">${fmtNum(a.litros, 2)}</td>
+        <td class="num">${fmtMoney(a.valor_total)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="doc-empty" style="padding:20px">Nenhuma.</td></tr>';
+}
+
+async function abrirFatura(id) {
+    let d;
+    try { d = await apiGet('/api/frota/faturas/' + id); }
+    catch (err) { toast(err.message, 'error'); return; }
+    const f = d.fatura, r = d.rateio;
+    document.getElementById('fatura-titulo').textContent = `NF-e ${f.numero} · ${fmtDate(f.emitida_em)}`;
+    document.getElementById('fatura-body').innerHTML = `
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">
+            <div>Total NF-e<br><strong>${fmtMoney(f.valor_total)}</strong></div>
+            <div>Soma NFC-e<br><strong>${fmtMoney(f.soma_nfce)}</strong></div>
+            <div>Diferença<br><strong style="${corDiferenca(f.diferenca)}">${fmtMoney(f.diferenca)}</strong></div>
+            <div>Situação<br>${chipFatura(f.status)}</div>
+        </div>
+        <table class="doc-table">
+            <thead><tr><th>NFC-e</th><th>Data</th><th>Veículo</th><th class="num">Litros</th><th class="num">Valor</th><th></th></tr></thead>
+            <tbody>${d.notas.map(n => `<tr>
+                <td>${n.numero} <span style="color:var(--doc-muted);font-size:11px">série ${n.serie}</span></td>
+                <td>${n.lancada ? fmtDateTime(n.data) : '—'}</td>
+                <td>${n.veiculo_label || '—'}</td>
+                <td class="num">${n.lancada ? fmtNum(n.litros, 2) : '—'}</td>
+                <td class="num">${n.lancada ? fmtMoney(n.valor) : '—'}</td>
+                <td>${n.lancada ? '<span class="doc-chip ok">Lançada</span>' : '<span class="doc-chip danger">Não lançada</span>'}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+        <h4 style="margin:18px 0 6px">Rateio por departamento <span style="font-weight:400;color:var(--doc-muted);font-size:12px">viagens de ${fmtDate(r.periodo.inicio)} a ${fmtDate(r.periodo.fim)}</span></h4>
+        ${(r.avisos || []).map(a => `<div class="doc-chip warn" style="display:block;white-space:normal;margin-bottom:6px">${a}</div>`).join('')}
+        <table class="doc-table">
+            <thead><tr><th>Departamento</th><th class="num">Km</th><th class="num">%</th><th class="num">Valor</th></tr></thead>
+            <tbody>${r.departamentos.length ? r.departamentos.map(x => `<tr>
+                <td>${x.departamento}</td>
+                <td class="num">${fmtNum(x.km, 1)}</td>
+                <td class="num">${fmtNum(x.pct, 1)}%</td>
+                <td class="num"><strong>${fmtMoney(x.valor)}</strong></td>
+            </tr>`).join('') : '<tr><td colspan="4" class="doc-empty" style="padding:16px">Nenhuma NFC-e lançada para ratear.</td></tr>'}</tbody>
+        </table>`;
+    document.getElementById('fatura-foot').innerHTML = `
+        <button type="button" class="doc-btn doc-btn-ghost" id="btn-excluir-fatura" onclick="excluirFatura(${f.id}, this)"><i class="fa-solid fa-trash"></i> Excluir NF-e</button>
+        <a class="doc-btn doc-btn-secondary" href="/api/frota/faturas/${f.id}/xml"><i class="fa-solid fa-download"></i> XML</a>
+        <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-fatura')">Fechar</button>`;
+    abrirModal('modal-fatura');
+}
+
+async function excluirFatura(id, btn) {
+    // Segundo clique confirma, sem popup do navegador.
+    if (btn.dataset.confirmar !== '1') {
+        btn.dataset.confirmar = '1';
+        btn.classList.add('doc-btn-danger');
+        btn.innerHTML = '<i class="fa-solid fa-trash"></i> Confirmar exclusão';
+        return;
+    }
+    try {
+        await apiSend('/api/frota/faturas/' + id, 'DELETE');
+        toast('NF-e excluída.');
+        fecharModal('modal-fatura');
+        recarregarTudo();
+    } catch (err) { toast(err.message, 'error'); }
 }
 async function excluirAbast(id) {
     if (!confirm('Excluir este abastecimento?')) return;
@@ -979,6 +1138,7 @@ function recarregarTudo() {
     if (ativa === 'documentos') carregarDocumentos();
     else if (ativa === 'manutencoes') carregarManutencoes();
     else if (ativa === 'abastecimentos') carregarAbastecimentos();
+    else if (ativa === 'faturas') carregarFaturas();
     else if (ativa === 'multas') carregarMultas();
     else if (ativa === 'checklist') carregarChecklist();
 }
@@ -989,6 +1149,9 @@ function recarregarTudo() {
         await carregarCadastros();
         await carregarTemplateChecklist();
         await carregarDashboard();
+        // A Central de Viagens abre a Frota direto numa aba (?aba=abastecimentos).
+        const aba = new URLSearchParams(location.search).get('aba');
+        if (aba) document.querySelector(`.doc-tab[data-tab="${CSS.escape(aba)}"]`)?.click();
     } catch (e) { toast(e.message, 'error'); }
 })();
 </script>
