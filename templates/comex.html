@@ -492,7 +492,13 @@
             </div>
             <div class="cx-grid-2" id="cx-cot-incoterm-wrap">
                 <div class="cx-field"><label>Incoterm</label><input type="text" id="cx-cot-incoterm" class="eui-input" placeholder="Ex.: FOB, EXW, CIF..."></div>
-                <div></div>
+                <div class="cx-field"><label>Modal a cotar</label>
+                    <select id="cx-cot-modal-solicitado" class="eui-select">
+                        <option value="LCL">LCL (marítimo)</option>
+                        <option value="AEREO">Aéreo</option>
+                        <option value="AMBOS">LCL e Aéreo (cotar os dois)</option>
+                    </select>
+                </div>
             </div>
             <div class="cx-grid-2 hidden" id="cx-cot-equipamento-wrap">
                 <div class="cx-field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="cx-cot-qtd-40hc" class="eui-input"></div>
@@ -543,13 +549,14 @@
                             <th>Prestador</th>
                             <th>Tipo</th>
                             <th>Status</th>
+                            <th>Transit time</th>
                             <th>Total USD</th>
                             <th>Total BRL</th>
                             <th>Total Consolidado (BRL)</th>
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody id="cx-cot-tbody"><tr><td colspan="7" class="cx-empty">Carregando…</td></tr></tbody>
+                    <tbody id="cx-cot-tbody"><tr><td colspan="8" class="cx-empty">Carregando…</td></tr></tbody>
                 </table>
             </div>
             <div class="cx-field hidden" id="cx-cot-escolhida-wrap">
@@ -1713,6 +1720,10 @@
         $("cx-cot-origem").value = base ? (base.origem || "") : "";
         $("cx-cot-destino").value = base ? (base.destino || "") : "";
         $("cx-cot-incoterm").value = base ? (base.incoterm || "") : "";
+        // A base pode ser a cotacao Aereo "irma" (nasce sem pedido) - vale o
+        // ultimo pedido feito no processo.
+        const pedidoAnterior = (base && base.modal_solicitado) || (cotacoesExistentesAtual.find((c) => c.modal_solicitado) || {}).modal_solicitado;
+        $("cx-cot-modal-solicitado").value = pedidoAnterior || (p.modal_transporte === "Aéreo" ? "AEREO" : "LCL");
         $("cx-cot-qtd-40hc").value = base && base.qtd_40hc != null ? base.qtd_40hc : "";
         $("cx-cot-qtd-20dry").value = base && base.qtd_20dry != null ? base.qtd_20dry : "";
         $("cx-cot-imo").value = base ? (base.imo_classe || "") : "";
@@ -1795,14 +1806,14 @@
     });
 
     async function carregarCotacoes(processoId) {
-        $("cx-cot-tbody").innerHTML = '<tr><td colspan="7" class="cx-empty">Carregando…</td></tr>';
+        $("cx-cot-tbody").innerHTML = '<tr><td colspan="8" class="cx-empty">Carregando…</td></tr>';
         try {
             const data = await api(`/api/comex/processos/${processoId}/cotacoes`);
             cotacoesExistentesAtual = data.cotacoes || [];
             renderCotacoes(cotacoesExistentesAtual);
             return cotacoesExistentesAtual;
         } catch (err) {
-            $("cx-cot-tbody").innerHTML = `<tr><td colspan="7" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
+            $("cx-cot-tbody").innerHTML = `<tr><td colspan="8" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
             cotacoesExistentesAtual = [];
             return [];
         }
@@ -1810,11 +1821,23 @@
 
     function renderCotacoes(cotacoes) {
         if (!cotacoes.length) {
-            $("cx-cot-tbody").innerHTML = '<tr><td colspan="7" class="cx-empty">Nenhum link de cotação gerado ainda.</td></tr>';
+            $("cx-cot-tbody").innerHTML = '<tr><td colspan="8" class="cx-empty">Nenhum link de cotação gerado ainda.</td></tr>';
             $("cx-cot-escolhida-wrap").classList.add("hidden");
             return;
         }
-        $("cx-cot-tbody").innerHTML = cotacoes.map((c) => {
+        // Analise por modal: aereo e maritimo nao concorrem entre si - cada
+        // grupo tem a sua sugerida (menor custo do modal). Pendentes no fim.
+        const grupoDe = (c) => c.status !== "Recebida" ? "PENDENTE" : c.tipo_frete === "FCL" ? "FCL" : (c.modal_cotado || "LCL_AEREO");
+        const GRUPOS = [["FCL", "FCL (container fechado)"], ["LCL", "LCL (marítimo)"], ["AEREO", "Aéreo"], ["LCL_AEREO", "LCL / Aéreo"], ["PENDENTE", "Aguardando resposta"]];
+        const PEDIDO = { LCL: "LCL", AEREO: "Aéreo", AMBOS: "LCL e Aéreo" };
+        const linhaGrupo = (titulo) => `<tr><td colspan="8" style="background:var(--eui-surface-2, #f1f5f9); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em;">${titulo}</td></tr>`;
+        $("cx-cot-tbody").innerHTML = GRUPOS.map(([g, titulo]) => {
+            const doGrupo = cotacoes.filter((c) => grupoDe(c) === g);
+            if (g !== "PENDENTE") doGrupo.sort((a, b) => (a.custo_total_usd ?? Infinity) - (b.custo_total_usd ?? Infinity));
+            return doGrupo.length ? linhaGrupo(titulo) + doGrupo.map(linhaCotacao).join("") : "";
+        }).join("");
+
+        function linhaCotacao(c) {
             const statusLabel = c.status === "Recebida" ? "Recebida" : (c.expirado ? "Expirado" : "Aguardando");
             const statusCor = c.status === "Recebida" ? "#15803d" : (c.expirado ? "#dc2626" : "#b45309");
             const badge = `<span class="eui-badge" style="background:${statusCor}1a; color:${statusCor}; border:1px solid ${statusCor}40;">${statusLabel}${c.is_sugerida_pelo_sistema ? " · sugerida" : ""}</span>`;
@@ -1835,21 +1858,22 @@
             return `
                 <tr>
                     <td>${escapeHtml(c.fornecedor_frete || "—")}</td>
-                    <td>${c.tipo_frete === "FCL" ? "FCL" : c.modal_cotado === "AEREO" ? "Aéreo" : c.modal_cotado === "LCL" ? "LCL" : "LCL/Aéreo"}</td>
+                    <td>${c.tipo_frete === "FCL" ? "FCL" : c.modal_cotado === "AEREO" ? "Aéreo" : c.modal_cotado === "LCL" ? "LCL" : c.modal_solicitado ? "Pedido: " + PEDIDO[c.modal_solicitado] : "LCL/Aéreo"}</td>
                     <td>${badge}</td>
+                    <td>${escapeHtml(c.transit_time || "—")}</td>
                     <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
                     <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>
                     <td>${c.custo_total_consolidado_brl != null ? _fmtMoedaGenerico(c.custo_total_consolidado_brl, "R$") : "—"}</td>
                     <td style="text-align:right; white-space:nowrap;">${acao}</td>
                 </tr>
             `;
-        }).join("");
+        }
 
         const escolhida = cotacoes.find((c) => c.is_escolhida);
         $("cx-cot-escolhida-wrap").classList.toggle("hidden", !escolhida);
         if (escolhida) {
             $("cx-cot-escolhida-info").innerHTML =
-                `<strong>${escapeHtml(escolhida.fornecedor_frete || "—")}</strong> — ${_fmtMoedaGenerico(escolhida.custo_total_usd, "US$")} / ${_fmtMoedaGenerico(escolhida.custo_total_brl, "R$")}` +
+                `<strong>${escapeHtml(escolhida.fornecedor_frete || "—")}</strong>${escolhida.modal_cotado ? " (" + (escolhida.modal_cotado === "AEREO" ? "Aéreo" : "LCL") + ")" : ""} — ${_fmtMoedaGenerico(escolhida.custo_total_usd, "US$")} / ${_fmtMoedaGenerico(escolhida.custo_total_brl, "R$")}` +
                 (escolhida.saida_escolhida ? `<br><small style="color:var(--eui-muted);">Saída confirmada: ${escapeHtml(escolhida.saida_escolhida)}</small>` : "");
         }
     }
@@ -1889,6 +1913,7 @@
                         origem: $("cx-cot-origem").value.trim(),
                         destino: $("cx-cot-destino").value.trim(),
                         incoterm: $("cx-cot-incoterm").value.trim(),
+                        modal_solicitado: $("cx-cot-modal-solicitado").value,
                         qtd_40hc: $("cx-cot-qtd-40hc").value || null,
                         qtd_20dry: $("cx-cot-qtd-20dry").value || null,
                         imo_classe: $("cx-cot-imo").value.trim(),
@@ -1934,6 +1959,7 @@
             origem: $("cx-cot-origem").value.trim(),
             destino: $("cx-cot-destino").value.trim(),
             incoterm: $("cx-cot-incoterm").value.trim(),
+            modal_solicitado: $("cx-cot-modal-solicitado").value,
             qtd_40hc: $("cx-cot-qtd-40hc").value || null,
             qtd_20dry: $("cx-cot-qtd-20dry").value || null,
             imo_classe: $("cx-cot-imo").value.trim(),

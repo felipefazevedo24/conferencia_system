@@ -29,7 +29,7 @@ from ..compras.services import compras_service
 from ..extensions import db
 from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from ..models import ComexExportacaoAntecipada, ComexProcessoOrdemFat, ExpedicaoOrdemFat
-from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal
+from ..models import ComexCotacaoDestinatarios, ComexCotacaoModal, ComexCotacaoModalSolicitado
 from . import expedicao_photo_storage as storage
 from ..tempo import agora_br
 
@@ -1519,6 +1519,26 @@ def emails_da_cotacao(cotacao: ComexCotacao | None) -> str | None:
     return cotacao.email_instrucao_embarque
 
 
+def _normalizar_modal_solicitado(tipo_frete: str, modal) -> str | None:
+    if tipo_frete == "FCL":
+        return None
+    modal = str(modal or "").strip().upper()
+    if modal and modal not in MODAIS_COTADOS:
+        raise ValueError("Modal a cotar inválido (use LCL, Aéreo ou os dois).")
+    return modal or None
+
+
+def _gravar_modal_solicitado(cotacao: ComexCotacao, modal: str | None) -> None:
+    atual = cotacao.modal_solicitado
+    if not modal:
+        if atual:
+            db.session.delete(atual)
+    elif atual:
+        atual.modal = modal
+    else:
+        db.session.add(ComexCotacaoModalSolicitado(cotacao=cotacao, modal=modal))
+
+
 def criar_link_cotacao(
     processo: ComexProcesso,
     *,
@@ -1527,6 +1547,7 @@ def criar_link_cotacao(
     email_instrucao_embarque: str | None = None,
     validade_dias: int = 14,
     pre_preenchido: dict | None = None,
+    modal_solicitado: str | None = None,
 ) -> tuple[ComexCotacao, str]:
     """Gera um novo link publico de cotacao (Modulo 3) para um prestador de
     frete preencher sem login. O token bruto so existe neste retorno - so o
@@ -1541,6 +1562,7 @@ def criar_link_cotacao(
         raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
     if not exportacao_da_expedicao(processo) and processo.po_status != "Finalizada":
         raise ValueError("Finalize a PO antes de gerar uma cotação.")
+    modal_solicitado = _normalizar_modal_solicitado(tipo_frete, modal_solicitado)
 
     token = secrets.token_urlsafe(32)
     agora = agora_br()
@@ -1560,6 +1582,7 @@ def criar_link_cotacao(
         criado_por=usuario,
     )
     _gravar_emails_cotacao(cotacao, email_instrucao_embarque)
+    _gravar_modal_solicitado(cotacao, modal_solicitado)
     pre_preenchido = pre_preenchido or {}
     for campo, tamanho in _CAMPOS_COTACAO_PRE_PREENCHIDO.items():
         valor = str(pre_preenchido.get(campo) or "").strip()
@@ -1602,6 +1625,7 @@ def editar_cotacao_pendente(cotacao: ComexCotacao, *, tipo_frete: str, dados: di
         raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
 
     dados = dados or {}
+    _gravar_modal_solicitado(cotacao, _normalizar_modal_solicitado(tipo_frete, dados.get("modal_solicitado")))
     cotacao.tipo_frete = tipo_frete
     for campo, tamanho in _CAMPOS_COTACAO_PRE_PREENCHIDO.items():
         valor = str(dados.get(campo) or "").strip()
@@ -1720,6 +1744,10 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         modal_cotado = str(dados.get("modal_cotado") or "").strip().upper()
         if modal_cotado not in MODAIS_COTADOS:
             raise ValueError("Informe o frete cotado: LCL, Aéreo ou os dois.")
+        # Aereo em branco viraria uma cotacao de custo zero - e a sugerida do modal.
+        aereo = dados.get("aereo") or {}
+        if modal_cotado == "AMBOS" and not any(_to_float(aereo.get(c)) for c in _CAMPOS_COTACAO_CUSTO):
+            raise ValueError("Informe os custos do frete Aéreo ou marque que está cotando só LCL.")
 
     for campo, tamanho in _CAMPOS_COTACAO_TEXTO.items():
         if campo in dados:
@@ -1759,18 +1787,30 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
     return cotacao
 
 
+def modal_da_cotacao(cotacao: ComexCotacao) -> str:
+    """FCL, LCL ou AEREO - grupo em que a cotacao concorre. Link LCL/Aereo
+    antigo, sem o modal informado, fica no grupo LCL_AEREO."""
+    if cotacao.tipo_frete == "FCL":
+        return "FCL"
+    return cotacao.modal_cotado.modal if cotacao.modal_cotado else "LCL_AEREO"
+
+
 def _recalcular_sugerida(processo_id: int) -> None:
     """Marca como `is_sugerida_pelo_sistema` a cotacao Recebida de menor
-    custo total em USD para o processo - recalculado a cada nova cotacao
-    recebida (a sugestao pode mudar de "dona" com o tempo)."""
+    custo total em USD de CADA modal (FCL, LCL, Aereo) - aereo e maritimo
+    nao concorrem entre si, a decisao entre eles e' do operador.
+    Recalculado a cada nova cotacao recebida."""
     recebidas = (
         ComexCotacao.query
         .filter_by(processo_id=processo_id, status="Recebida")
         .order_by(ComexCotacao.custo_total_usd.asc())
         .all()
     )
-    for idx, c in enumerate(recebidas):
-        c.is_sugerida_pelo_sistema = (idx == 0)
+    vistos = set()
+    for c in recebidas:
+        modal = modal_da_cotacao(c)
+        c.is_sugerida_pelo_sistema = modal not in vistos
+        vistos.add(modal)
 
 
 def listar_cotacoes(processo: ComexProcesso) -> list[ComexCotacao]:
@@ -1847,7 +1887,7 @@ def escolher_cotacao(
         raise ValueError("Só é possível escolher uma cotação que já foi recebida do prestador.")
     justificativa = (justificativa or "").strip()
     if not cotacao.is_sugerida_pelo_sistema and not justificativa:
-        raise ValueError("Informe a justificativa para escolher uma cotação diferente da sugerida pelo sistema (menor custo).")
+        raise ValueError("Informe a justificativa para escolher uma cotação diferente da sugerida pelo sistema (menor custo do modal).")
     saida_escolhida = (saida_escolhida or "").strip()
     if not saida_escolhida:
         raise ValueError("Informe a saída de embarque escolhida com o prestador antes de confirmar.")

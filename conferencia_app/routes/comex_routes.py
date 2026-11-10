@@ -937,6 +937,8 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         "tipo_frete": c.tipo_frete,
         # LCL | AEREO quando o prestador informou (link LCL/Aereo).
         "modal_cotado": c.modal_cotado.modal if c.modal_cotado else None,
+        # LCL | AEREO | AMBOS - o que a Columbia pediu ao gerar o link.
+        "modal_solicitado": c.modal_solicitado.modal if c.modal_solicitado else None,
         "status": c.status,
         "fornecedor_frete": c.fornecedor_frete,
         "origem": c.origem,
@@ -971,6 +973,15 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
     }
 
 
+def _texto_modal_solicitado(cotacao: ComexCotacao) -> str:
+    modal = cotacao.modal_solicitado.modal if cotacao.modal_solicitado else None
+    if modal == "AMBOS":
+        return "<p><strong>Favor cotar as duas modalidades: LCL (marítimo) e Aéreo.</strong></p>"
+    if modal:
+        return f"<p>Modalidade: <strong>{svc.MODAIS_COTADOS[modal]}</strong>.</p>"
+    return ""
+
+
 def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, link: str, destinatario: str) -> None:
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"Solicitação de Cotação de Frete – {processo.id_op} – Columbia Machine Brasil"
@@ -981,6 +992,7 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Solicitamos, por gentileza, a cotação de frete referente ao processo <strong>{processo.id_op}</strong>.</p>"
+        f"{_texto_modal_solicitado(cotacao)}"
         f"<p>A cotação deverá ser imputada através do link, acesse-o e preencha as informações solicitadas:</p>"
         f"<p><a href=\"{link}\">{link}</a></p>"
         f"<p>Agradecemos sua atenção e ficamos no aguardo do retorno dentro do prazo estabelecido.</p>"
@@ -1037,6 +1049,7 @@ def api_criar_link_cotacao(processo_id):
             usuario=usuario,
             email_instrucao_embarque=payload.get("email_instrucao_embarque"),
             pre_preenchido=payload,
+            modal_solicitado=payload.get("modal_solicitado"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -1137,6 +1150,7 @@ def api_cotacao_publica_dados(token):
         "valido": svc.link_cotacao_valido(cotacao),
         "status": cotacao.status,
         "tipo_frete": cotacao.tipo_frete,
+        "modal_solicitado": cotacao.modal_solicitado.modal if cotacao.modal_solicitado else None,
         "id_op": processo.id_op,
         "termos": svc.TERMOS_COTACAO,
         "etapas_custo": [{"campo": p, "label": l} for p, l in svc.ETAPAS_CUSTO_COTACAO],
