@@ -45,27 +45,39 @@ def _cotacao_escolhida(processo: ComexProcesso) -> ComexCotacao | None:
 
 
 def motivo_sem_provisao(processo: ComexProcesso) -> str | None:
+    """O que impede a provisao. Sem cotacao escolhida ou sem itens na PO
+    ainda da' - o operador informa frete/itens na tela (calculo do
+    Simulador de custo, pedido de 11/11/2026)."""
     if processo.direcao_operacao == "EXPO" or svc.exportacao_da_expedicao(processo):
         return "Provisão de impostos é só para importação."
     if processo.embarque_principal:
         return f"Esta PO está no embarque de {processo.embarque_principal.principal.id_op} - provisione por lá."
-    if not processo.cotacao_vencedora_id:
-        return "Escolha a cotação de frete antes de provisionar."
+    # Frete pago pelo cliente/fornecedor: processo so' de gestao e suporte
+    # ao cliente, nao impacta custo - sem provisao (usuario, 11/11/2026).
+    if processo.pagador_frete == "Cliente-Fornecedor":
+        return "Frete pago pelo cliente/fornecedor: processo só de gestão, sem provisão de custo."
     return None
 
 
-def _itens(processo: ComexProcesso) -> list[dict]:
-    itens = [{"codigo": it.codigo, "descricao": it.descricao, "ncm": it.ncm, "quantidade": it.quantidade,
-              "valor_usd": it.valor_total, "po": p.po_numero}
-             for p in embarque.processos_do_embarque(processo) for it in svc.listar_itens_po(p)]
+def itens_da_po(processo: ComexProcesso) -> list[dict]:
+    """Itens de todas as POs do embarque - ponto de partida editavel da tela."""
+    return [{"codigo": it.codigo, "descricao": it.descricao, "ncm": it.ncm, "quantidade": it.quantidade,
+             "valor_usd": it.valor_total, "po": p.po_numero}
+            for p in embarque.processos_do_embarque(processo) for it in svc.listar_itens_po(p)]
+
+
+def _itens(processo: ComexProcesso, informados: list | None) -> list[dict]:
+    """Itens informados na tela (ajustados ou digitados, como no Simulador)
+    ou, sem eles, os da PO. NCM sem aliquota cadastrada bloqueia."""
+    itens = [dict(i) for i in informados if any(str(v or "").strip() for v in i.values())] if informados else itens_da_po(processo)
     if not itens:
-        raise ValueError("A PO não tem itens lançados - lance os itens (NCM e valor) antes de provisionar.")
-    aliquotas = custo.aliquotas_do_cadastro(i["ncm"] for i in itens)
-    faltam = sorted({custo.formatar_ncm(i["ncm"]) or "(sem NCM)" for i in itens if custo.normalizar_ncm(i["ncm"]) not in aliquotas})
+        raise ValueError("Informe os itens (NCM, quantidade e valor em US$) - a PO não tem itens lançados.")
+    aliquotas = custo.aliquotas_do_cadastro(i.get("ncm") for i in itens)
+    faltam = sorted({custo.formatar_ncm(i.get("ncm")) or "(sem NCM)" for i in itens if custo.normalizar_ncm(i.get("ncm")) not in aliquotas})
     if faltam:
         raise ValueError(f"NCM sem alíquota cadastrada: {', '.join(faltam)}. Cadastre no Simulador de custo > NCMs.")
     for i in itens:
-        i["aliquotas"] = aliquotas[custo.normalizar_ncm(i["ncm"])]
+        i["aliquotas"] = aliquotas[custo.normalizar_ncm(i.get("ncm"))]
     return itens
 
 
@@ -89,8 +101,17 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     if not ptax or ptax <= 0:
         raise ValueError("Informe a PTAX.")
     cotacao = _cotacao_escolhida(processo)
-    itens = _itens(processo)
-    frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
+    itens = _itens(processo, dados.get("itens"))
+    if cotacao:
+        frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
+        cambio = svc.cambio_da_cotacao(cotacao, ptax)
+    else:
+        # Sem cotacao escolhida (ex.: frete por conta do fornecedor): base e
+        # frete informados na tela, como no Simulador de custo.
+        frete_usd, seguro_usd = custo._num(dados.get("frete_usd")) or 0.0, custo._num(dados.get("seguro_usd")) or 0.0
+        frete_brl = custo._num(dados["frete_brl"]) if dados.get("frete_brl") not in (None, "") else None
+        cambio = {"custo_total_consolidado_brl": round(frete_brl if frete_brl is not None else (frete_usd + seguro_usd) * ptax, 2),
+                  "taxa_agente": None, "markup_pct": None}
     desp = {c: dados.get(c) for c in ("acrescimos_brl", "taxa_siscomex_brl", "afrmm_brl", "despesas_desembaraco_brl")}
     cour = {c: dados.get(c) for c in ("servico_courier_brl", "tarifa_aeroportuaria_brl", "multas_brl")}
     resultado = custo.comparar(itens, ptax, despachante={"frete_usd": frete_usd, "seguro_usd": seguro_usd, **desp},
@@ -99,12 +120,12 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     # aviso do simulador pedindo peso nao se aplica aqui.
     for modelo in ("despachante", "courier"):
         resultado[modelo]["avisos"] = [a for a in resultado[modelo]["avisos"] if not a.startswith("Frete rateado pelo valor FOB")]
-    cambio = svc.cambio_da_cotacao(cotacao, ptax)
     resultado.update({
         "incoterm": incoterm, "frete_cif_usd": frete_usd, "seguro_cif_usd": seguro_usd,
-        "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]),
+        "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]) if cotacao else ["informado na tela"],
         "frete_brl": cambio["custo_total_consolidado_brl"], "taxa_agente": cambio["taxa_agente"],
-        "markup_pct": cambio["markup_pct"], "forwarder": cotacao.fornecedor_frete,
+        "markup_pct": cambio["markup_pct"], "forwarder": cotacao.fornecedor_frete if cotacao else None,
+        "com_cotacao": bool(cotacao), "itens_informados": bool(dados.get("itens")),
         "pos": [p.po_numero for p in embarque.processos_do_embarque(processo)],
     })
     return resultado
@@ -200,7 +221,7 @@ def processos_da_gestao() -> list[ComexProcesso]:
                          ComexProcesso.status_modulo != svc.STATUS_CANCELADO)
                  .all())
     return [p for p in processos
-            if motivo_sem_provisao(p) in (None, "Escolha a cotação de frete antes de provisionar.")
+            if motivo_sem_provisao(p) is None
             and (p.provisoes or svc._indice_modulo(p.status_modulo) >= indice_instrucao)]
 
 

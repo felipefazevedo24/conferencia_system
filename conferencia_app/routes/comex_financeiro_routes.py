@@ -110,6 +110,10 @@ def api_financeiro_processo(processo_id):
     return jsonify({
         "linha": svc.linha_gestao(processo),
         "motivo": svc.motivo_sem_provisao(processo),
+        # Ponto de partida da tela: itens das POs do embarque (editaveis) e
+        # se ha' cotacao escolhida (senao o frete e' informado na tela).
+        "itens_po": [{k: v for k, v in i.items() if k != "aliquotas"} for i in svc.itens_da_po(processo)],
+        "tem_cotacao": bool(cotacao),
         "padroes": {**(json.loads(ultima.parametros) if ultima else {}),
                     "incoterm": ultima.incoterm if ultima else (incoterm if incoterm in svc.INCOTERMS else "")},
         "provisoes": [_provisao_payload(p) for p in reversed(processo.provisoes)],

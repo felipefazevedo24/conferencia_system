@@ -173,6 +173,20 @@
                     <div class="gf-field"><label>PTAX (vazio = do dia)</label>${input("gf-ptax", "")}</div>
                     ${CAMPOS_PROV.map(([c, rot, m]) => `<div class="gf-field"><label>${rot} <span class="gf-muted">${m === "d" ? "despachante" : "courier"}</span></label>${input("gf-" + c, pad[c])}</div>`).join("")}
                 </div>
+                ${d.tem_cotacao ? `<div class="gf-muted">Frete: cotação escolhida (base pelo Incoterm; provisionado em R$ com o markup do forwarder).</div>` : `
+                <div class="gf-warn">Sem cotação de frete escolhida — informe a base do frete (como no Simulador de custo).</div>
+                <div class="gf-grid">
+                    <div class="gf-field"><label>Frete internacional (US$) — base</label>${input("gf-frete_usd", pad.frete_usd)}</div>
+                    <div class="gf-field"><label>Seguro (US$) — base</label>${input("gf-seguro_usd", pad.seguro_usd)}</div>
+                    <div class="gf-field"><label>Frete provisionado (R$) <span class="gf-muted">vazio = (frete + seguro) × PTAX</span></label>${input("gf-frete_brl", pad.frete_brl)}</div>
+                </div>`}
+                <div class="gf-field"><label>Itens (base de NCM do Simulador de custo) <span class="gf-muted">— vêm da PO; ajuste ou inclua à mão</span></label>
+                    <div class="gf-table-wrap"><table class="erp-table">
+                        <thead><tr><th>PO</th><th>Código</th><th>Descrição</th><th>NCM *</th><th>Qtde</th><th>Valor total (US$) *</th><th></th></tr></thead>
+                        <tbody id="gf-itens"></tbody>
+                    </table></div>
+                    <div><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="gf-add-item"><i class="fas fa-plus"></i> Adicionar item</button></div>
+                </div>
                 <div><button class="eui-btn eui-btn--ghost" id="gf-calcular"><i class="fas fa-calculator"></i> Calcular Despachante x Courier</button></div>
                 <div id="gf-simulacao"></div>` : ""}
             ${versoes ? `<div class="gf-table-wrap"><table class="erp-table"><thead><tr><th>Versão</th><th>Gerada</th><th>Parâmetros</th><th class="gf-num">Impostos</th><th class="gf-num">Frete</th><th class="gf-num">Despesas</th><th>Controladoria</th><th></th></tr></thead><tbody>${versoes}</tbody></table></div>` : '<div class="gf-muted">Nenhuma provisão gravada ainda.</div>'}
@@ -190,12 +204,30 @@
             <div class="gf-field"><label>Nota de despesas do despachante</label>${PODE_EDITAR ? '<input type="file" id="gf-arq-despesas">' : ""}${anexoLink(d, "despesas")}</div>
             ${r.atualizado_em ? `<div class="gf-muted">Atualizado em ${esc(r.atualizado_em)} por ${esc(r.atualizado_por)}</div>` : ""}
             ${PODE_EDITAR ? '<div><button class="eui-btn eui-btn--primary" id="gf-salvar-real"><i class="fas fa-check"></i> Salvar realizado</button></div>' : ""}`;
+        // Itens: os da ultima provisao (se foram ajustados) ou os da PO.
+        itensProv = ((pad.itens && pad.itens.length) ? pad.itens : d.itens_po).map((i) => ({ ...i }));
+        if (!itensProv.length) itensProv = [{}];
+        renderItens();
         $("gf-modal").classList.add("open");
+    }
+
+    let itensProv = [];
+    // Numero vindo do banco aparece com virgula; texto digitado fica como esta'.
+    const valorItem = (v) => v == null ? "" : typeof v === "number" ? String(v).replace(".", ",") : v;
+    const CAMPOS_ITEM = [["codigo", 110], ["descricao", 220], ["ncm", 110], ["quantidade", 70], ["valor_usd", 110]];
+    function renderItens() {
+        const tb = $("gf-itens");
+        if (!tb) return;
+        tb.innerHTML = itensProv.map((i, idx) => `<tr><td class="gf-muted">${esc(i.po || "manual")}</td>${CAMPOS_ITEM.map(([c, w]) =>
+            `<td><input class="eui-input" data-item="${idx}" data-campo="${c}" value="${esc(valorItem(i[c]))}" style="min-width:${w}px;"></td>`).join("")}
+            <td><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-rem-item="${idx}"><i class="fas fa-trash"></i></button></td></tr>`).join("");
     }
 
     function parametros() {
         const p = { incoterm: $("gf-incoterm").value, ptax: num($("gf-ptax").value) };
         CAMPOS_PROV.forEach(([c]) => { p[c] = num($("gf-" + c).value); });
+        ["frete_usd", "seguro_usd", "frete_brl"].forEach((c) => { const el = $("gf-" + c); if (el) p[c] = num(el.value); });
+        p.itens = itensProv.map((i) => ({ ...i, quantidade: num(i.quantidade), valor_usd: num(i.valor_usd) }));
         return p;
     }
 
@@ -221,7 +253,15 @@
             <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> Gravar provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"}) e enviar à Controladoria</button></div>`;
     }
 
+    $("gf-corpo").addEventListener("input", (e) => {
+        const el = e.target.closest("[data-item]");
+        if (el) itensProv[+el.dataset.item][el.dataset.campo] = el.value;
+    });
+
     $("gf-corpo").addEventListener("click", async (e) => {
+        if (e.target.closest("#gf-add-item")) { itensProv.push({}); renderItens(); return; }
+        const rem = e.target.closest("[data-rem-item]");
+        if (rem) { itensProv.splice(+rem.dataset.remItem, 1); if (!itensProv.length) itensProv = [{}]; renderItens(); return; }
         try {
             if (e.target.closest("#gf-calcular")) {
                 simulacao = await api(`/api/comex/processos/${atual.linha.id}/provisao/simular`, { method: "POST", body: JSON.stringify(parametros()) });
