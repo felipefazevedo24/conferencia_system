@@ -4400,6 +4400,74 @@ class ComexCotacaoComposicao(db.Model):
     cotacao = db.relationship("ComexCotacao", backref=db.backref("composicao", uselist=False))
 
 
+class ComexProvisao(db.Model):
+    """Provisao de custo da importacao, gravada como retrato (cambio,
+    aliquotas e valores da epoca). Recalcular cria nova versao; a ultima e'
+    a vigente. Resumo em colunas (pra gestao financeira somar) e o calculo
+    completo dos dois modelos em `resultado` (JSON)."""
+
+    __tablename__ = "comex_provisao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    versao = db.Column(db.Integer, nullable=False)
+    modelo = db.Column(db.String(12), nullable=False)  # despachante | courier
+    incoterm = db.Column(db.String(10))
+    ptax = db.Column(db.Float, nullable=False)
+    impostos_brl = db.Column(db.Float, nullable=False)  # II+IPI+PIS+COFINS+ICMS+taxas
+    frete_brl = db.Column(db.Float)                     # cotacao escolhida (PTAX + markup)
+    despesas_brl = db.Column(db.Float)
+    parametros = db.Column(db.Text)
+    resultado = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    criado_por = db.Column(db.String(100))
+    email_enviado = db.Column(db.Boolean)
+    email_erro = db.Column(db.String(500))
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("provisoes", order_by="ComexProvisao.versao"))
+
+
+class ComexRealizado(db.Model):
+    """Custo realizado da importacao. Impostos federais lidos da DUIMP
+    (formal) ou DIR (courier); ICMS, fatura do frete e despesas digitados
+    (nao vem na DUIMP/DIR). Um por processo, editavel."""
+
+    __tablename__ = "comex_realizado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, unique=True)
+    documento_tipo = db.Column(db.String(6))  # DUIMP | DIR
+    documento_numero = db.Column(db.String(40))
+    documento_nome = db.Column(db.String(255))
+    documento_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    referencia_importador = db.Column(db.String(80))
+    cambio = db.Column(db.Float)
+    ii = db.Column(db.Float)
+    ipi = db.Column(db.Float)
+    pis = db.Column(db.Float)
+    cofins = db.Column(db.Float)
+    taxa_siscomex = db.Column(db.Float)
+    afrmm = db.Column(db.Float)
+    cbs_ibs = db.Column(db.Float)
+    multas = db.Column(db.Float)
+    icms = db.Column(db.Float)
+    icms_guia_nome = db.Column(db.String(255))
+    icms_guia_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    frete_fatura_brl = db.Column(db.Float)
+    frete_fatura_nome = db.Column(db.String(255))
+    frete_fatura_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    despesa_despachante = db.Column(db.Float)
+    despesa_armazenagem = db.Column(db.Float)
+    despesa_capatazia = db.Column(db.Float)
+    despesa_outras = db.Column(db.Float)
+    despesas_nome = db.Column(db.String(255))
+    despesas_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+
+    processo = db.relationship("ComexProcesso", backref=db.backref("realizado", uselist=False))
+
+
 class ComexForwarderMarkup(db.Model):
     """Markup (%) que o Freight Forwarder cobra sobre a PTAX pra converter o
     frete. A analise de propostas e a provisao convertem o frete por

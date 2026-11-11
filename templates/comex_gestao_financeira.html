@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão financeira — Comex{% endblock %}
+{% block shell_title %}Comex — Gestão financeira{% endblock %}
+
+{% block extra_head %}
+<style>
+    .gf-wrap { display: grid; gap: 18px; }
+    .gf-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .gf-kpi { border: 1px solid var(--eui-border); border-radius: 12px; padding: 14px 16px; background: var(--eui-surface); }
+    .gf-kpi small { color: var(--eui-muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+    .gf-kpi strong { display: block; font-size: 20px; margin-top: 4px; color: var(--eui-text); }
+    .gf-table-wrap { overflow-x: auto; }
+    .gf-mes td { background: var(--eui-surface-2, #f1f5f9); font-weight: 800; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; }
+    .gf-num { text-align: right; white-space: nowrap; }
+    .gf-pos { color: #b91c1c; }
+    .gf-neg { color: #15803d; }
+    .gf-muted { color: var(--eui-muted); font-size: 12px; }
+    .gf-warn { color: #b45309; font-size: 12px; font-weight: 600; }
+    .gf-empty { padding: 32px 20px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .gf-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 20px; }
+    .gf-modal.open { display: flex; }
+    .gf-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(1100px, 100%); max-height: 92vh; overflow-y: auto; }
+    .gf-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--eui-border); position: sticky; top: 0; background: var(--eui-surface); z-index: 1; }
+    .gf-modal__title { font-size: 16px; font-weight: 800; margin: 0; color: var(--eui-text); }
+    .gf-modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: var(--eui-muted); }
+    .gf-modal__body { padding: 18px 22px; display: grid; gap: 14px; }
+    .gf-section { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-top: 8px; }
+    .gf-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    @media (max-width: 820px) { .gf-grid { grid-template-columns: 1fr 1fr; } }
+    .gf-field { display: grid; gap: 5px; }
+    .gf-field label { font-size: 12px; font-weight: 700; color: var(--eui-text); }
+    .gf-modelos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 720px) { .gf-modelos { grid-template-columns: 1fr; } }
+    .gf-modelo { border: 2px solid var(--eui-border); border-radius: 12px; padding: 12px 14px; cursor: pointer; display: grid; gap: 4px; font-size: 13px; }
+    .gf-modelo.sel { border-color: var(--eui-primary); }
+    .gf-modelo .linha { display: flex; justify-content: space-between; gap: 10px; }
+    .gf-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 400px; display: none; }
+    .gf-toast.error { border-left-color: var(--eui-danger); }
+    .gf-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="gf-wrap">
+    <div class="gf-kpis" id="gf-kpis"></div>
+    <div class="eui-card">
+        <div class="gf-muted" style="margin-bottom:10px;">Importações agrupadas pelo mês previsto de chegada (ETA). Provisão = versão vigente gravada na instrução de embarque; realizado = DUIMP/DIR + ICMS, fatura do frete e despesas lançados. Diferença positiva (vermelho) = gastou mais que o provisionado.</div>
+        <div class="gf-table-wrap">
+            <table class="erp-table">
+                <thead>
+                    <tr><th>Processo</th><th>Situação</th>
+                        <th class="gf-num">Impostos<br>prov. / real.</th><th class="gf-num">Frete<br>prov. / real.</th>
+                        <th class="gf-num">Despesas<br>prov. / real.</th><th class="gf-num">Total<br>prov. / real.</th><th class="gf-num">Diferença</th><th></th></tr>
+                </thead>
+                <tbody id="gf-tbody"><tr><td colspan="8" class="gf-empty">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="gf-modal" id="gf-modal">
+    <div class="gf-modal__box">
+        <div class="gf-modal__head">
+            <h3 class="gf-modal__title" id="gf-titulo">Processo</h3>
+            <button class="gf-modal__close" id="gf-fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="gf-modal__body" id="gf-corpo"></div>
+    </div>
+</div>
+
+<div class="gf-toast" id="gf-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const PODE_EDITAR = {{ 'true' if pode_editar else 'false' }};
+    const INCOTERMS = {{ incoterms | list | tojson }};
+    const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const brl = (v) => v == null ? "—" : "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const num = (v) => { const t = String(v == null ? "" : v).trim().replace(/\s/g, ""); return t === "" ? null : (parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t)); };
+    const soma = (o) => ["impostos", "frete", "despesas"].some((k) => o[k] != null) ? ["impostos", "frete", "despesas"].reduce((t, k) => t + (o[k] || 0), 0) : null;
+    const dif = (p, r) => (p == null || r == null) ? null : r - p;
+    const difHtml = (d) => d == null ? "—" : `<span class="${d > 0.005 ? "gf-pos" : d < -0.005 ? "gf-neg" : ""}">${d > 0 ? "+" : ""}${brl(d)}</span>`;
+
+    function toast(msg, tipo) {
+        const el = $("gf-toast");
+        el.textContent = msg; el.className = "gf-toast" + (tipo ? " " + tipo : ""); el.style.display = "block";
+        clearTimeout(el._t); el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
+    }
+    async function api(url, options) {
+        const opts = Object.assign({}, options || {});
+        if (!(opts.body instanceof FormData)) opts.headers = { "Content-Type": "application/json" };
+        const resp = await fetch(url, opts);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    // ── Lista por mes da ETA ──
+    const COR = { "Sem provisão": "#b45309", Provisionado: "#2563eb", Realizado: "#15803d" };
+    function rotuloMes(m) { if (!m) return "Sem previsão de chegada"; const [a, mm] = m.split("-"); return `${MESES[+mm - 1]}/${a}`; }
+    function par(p, r) { return `${brl(p)}<br><span class="gf-muted">${brl(r)}</span>`; }
+
+    async function carregar() {
+        const { processos } = await api("/api/comex/financeiro");
+        const grupos = {};
+        processos.forEach((p) => { (grupos[p.mes || "~"] = grupos[p.mes || "~"] || []).push(p); });
+        const chaves = Object.keys(grupos).sort();
+        let tProv = 0, tReal = 0, semProv = 0;
+        processos.forEach((p) => { tProv += soma(p.provisao) || 0; tReal += soma(p.realizado) || 0; if (p.situacao === "Sem provisão") semProv++; });
+        $("gf-kpis").innerHTML = `
+            <div class="gf-kpi"><small>Total provisionado</small><strong>${brl(tProv)}</strong></div>
+            <div class="gf-kpi"><small>Total realizado</small><strong>${brl(tReal)}</strong></div>
+            <div class="gf-kpi"><small>Processos</small><strong>${processos.length}</strong></div>
+            <div class="gf-kpi"><small>Sem provisão</small><strong style="color:${semProv ? "#b45309" : "inherit"};">${semProv}</strong></div>`;
+        $("gf-tbody").innerHTML = processos.length ? chaves.map((k) => {
+            const lista = grupos[k];
+            const tp = lista.reduce((t, p) => t + (soma(p.provisao) || 0), 0), tr = lista.reduce((t, p) => t + (soma(p.realizado) || 0), 0);
+            return `<tr class="gf-mes"><td colspan="5">${rotuloMes(k === "~" ? null : k)} · ${lista.length} processo(s)</td><td class="gf-num">${par(tp, tr)}</td><td class="gf-num">${difHtml(tr ? tr - tp : null)}</td><td></td></tr>` +
+                lista.map((p) => `
+                <tr>
+                    <td><strong>${esc(p.id_op)}</strong> <span class="gf-muted">${esc(p.status_modulo)}</span><br><span class="gf-muted">${esc(p.fornecedor || "")}${p.pos.length ? " · " + esc(p.pos.join(", ")) : ""}</span></td>
+                    <td><span class="eui-badge" style="background:${COR[p.situacao]}1a; color:${COR[p.situacao]};">${esc(p.situacao)}</span>${p.provisao_versao ? `<br><span class="gf-muted">v${p.provisao_versao} · ${esc(p.provisao_modelo)}</span>` : ""}</td>
+                    <td class="gf-num">${par(p.provisao.impostos, p.realizado.impostos)}</td>
+                    <td class="gf-num">${par(p.provisao.frete, p.realizado.frete)}</td>
+                    <td class="gf-num">${par(p.provisao.despesas, p.realizado.despesas)}</td>
+                    <td class="gf-num"><strong>${par(soma(p.provisao), soma(p.realizado))}</strong></td>
+                    <td class="gf-num">${difHtml(dif(soma(p.provisao), soma(p.realizado)))}</td>
+                    <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-abrir="${p.id}"><i class="fas fa-eye"></i> Abrir</button></td>
+                </tr>`).join("");
+        }).join("") : '<tr><td colspan="8" class="gf-empty">Nenhuma importação em instrução de embarque ou adiante.</td></tr>';
+    }
+    $("gf-tbody").addEventListener("click", (e) => { const b = e.target.closest("[data-abrir]"); if (b) abrir(+b.dataset.abrir); });
+    $("gf-fechar").addEventListener("click", () => $("gf-modal").classList.remove("open"));
+
+    // ── Detalhe do processo ──
+    let atual = null, simulacao = null, modeloSel = null;
+    const CAMPOS_PROV = [["taxa_siscomex_brl", "Taxa Siscomex (R$)", "d"], ["afrmm_brl", "AFRMM (R$)", "d"], ["despesas_desembaraco_brl", "Despesas desembaraço (R$)", "d"],
+        ["acrescimos_brl", "Outros acréscimos à base (R$)", "d"], ["servico_courier_brl", "Serviço do courier (R$)", "c"], ["tarifa_aeroportuaria_brl", "Tarifa aeroportuária (R$)", "c"], ["multas_brl", "Multas (R$)", "c"]];
+    const LIDOS = [["cambio", "Câmbio"], ["ii", "II"], ["ipi", "IPI"], ["pis", "PIS"], ["cofins", "COFINS"], ["taxa_siscomex", "Taxa Siscomex"], ["afrmm", "AFRMM"], ["cbs_ibs", "CBS/IBS"], ["multas", "Multas"]];
+    const DESPESAS = [["despesa_despachante", "Despachante"], ["despesa_armazenagem", "Armazenagem"], ["despesa_capatazia", "Capatazia"], ["despesa_outras", "Outras"]];
+    const ro = PODE_EDITAR ? "" : "disabled";
+    const input = (id, valor, extra) => `<input type="text" inputmode="decimal" class="eui-input" id="${id}" value="${valor == null ? "" : String(valor).replace(".", ",")}" ${ro} ${extra || ""}>`;
+    const anexoLink = (d, chave) => d.realizado && d.realizado.anexos[chave] ? `<a class="gf-muted" href="/api/comex/processos/${d.linha.id}/realizado/${chave}" target="_blank"><i class="fas fa-paperclip"></i> ${esc(d.realizado.anexos[chave])}</a>` : "";
+
+    async function abrir(id) {
+        const d = await api(`/api/comex/processos/${id}/financeiro`);
+        atual = d; simulacao = null; modeloSel = null;
+        const l = d.linha, r = d.realizado || {}, pad = d.padroes || {};
+        $("gf-titulo").innerHTML = `<i class="fas fa-scale-balanced"></i> ${esc(l.id_op)} — ${esc(l.fornecedor || "")}`;
+        const versoes = d.provisoes.map((p) => `
+            <tr><td>v${p.versao}</td><td>${esc(p.criado_em)}<br><span class="gf-muted">${esc(p.criado_por)}</span></td><td>${esc(p.modelo)} · ${esc(p.incoterm)} · PTAX ${p.ptax.toFixed(4).replace(".", ",")}</td>
+            <td class="gf-num">${brl(p.impostos_brl)}</td><td class="gf-num">${brl(p.frete_brl)}</td><td class="gf-num">${brl(p.despesas_brl)}</td>
+            <td>${p.email_enviado === false ? `<span class="gf-warn" title="${esc(p.email_erro)}">e-mail falhou</span>` : p.email_enviado ? "enviado" : ""}</td>
+            <td style="white-space:nowrap;"><a href="/api/comex/provisoes/${p.id}.pdf" target="_blank">PDF</a> · <a href="/api/comex/provisoes/${p.id}.xlsx">Excel</a></td></tr>`).join("");
+        const ROTULO_GRUPO = { impostos: "Impostos e taxas", frete: "Frete internacional", despesas: "Despesas de desembaraço" };
+        const comparativo = ["impostos", "frete", "despesas"].map((k) => `<tr><td>${ROTULO_GRUPO[k]}</td>
+            <td class="gf-num">${brl(l.provisao[k])}</td><td class="gf-num">${brl(l.realizado[k])}</td><td class="gf-num">${difHtml(dif(l.provisao[k], l.realizado[k]))}</td></tr>`).join("") +
+            `<tr><td><strong>Total</strong></td><td class="gf-num"><strong>${brl(soma(l.provisao))}</strong></td><td class="gf-num"><strong>${brl(soma(l.realizado))}</strong></td><td class="gf-num">${difHtml(dif(soma(l.provisao), soma(l.realizado)))}</td></tr>`;
+        $("gf-corpo").innerHTML = `
+            <div class="gf-section">Provisão x realizado</div>
+            <div class="gf-table-wrap"><table class="erp-table"><thead><tr><th></th><th class="gf-num">Provisionado</th><th class="gf-num">Realizado</th><th class="gf-num">Diferença</th></tr></thead><tbody>${comparativo}</tbody></table></div>
+
+            <div class="gf-section">Provisão (instrução de embarque)</div>
+            ${d.motivo ? `<div class="gf-warn">${esc(d.motivo)}</div>` : PODE_EDITAR ? `
+                <div class="gf-grid">
+                    <div class="gf-field"><label>Incoterm *</label><select id="gf-incoterm" class="eui-select"><option value="">Selecione…</option>${INCOTERMS.map((i) => `<option ${pad.incoterm === i ? "selected" : ""}>${i}</option>`).join("")}</select></div>
+                    <div class="gf-field"><label>PTAX (vazio = do dia)</label>${input("gf-ptax", "")}</div>
+                    ${CAMPOS_PROV.map(([c, rot, m]) => `<div class="gf-field"><label>${rot} <span class="gf-muted">${m === "d" ? "despachante" : "courier"}</span></label>${input("gf-" + c, pad[c])}</div>`).join("")}
+                </div>
+                <div><button class="eui-btn eui-btn--ghost" id="gf-calcular"><i class="fas fa-calculator"></i> Calcular Despachante x Courier</button></div>
+                <div id="gf-simulacao"></div>` : ""}
+            ${versoes ? `<div class="gf-table-wrap"><table class="erp-table"><thead><tr><th>Versão</th><th>Gerada</th><th>Parâmetros</th><th class="gf-num">Impostos</th><th class="gf-num">Frete</th><th class="gf-num">Despesas</th><th>Controladoria</th><th></th></tr></thead><tbody>${versoes}</tbody></table></div>` : '<div class="gf-muted">Nenhuma provisão gravada ainda.</div>'}
+
+            <div class="gf-section">Realizado</div>
+            <div class="gf-field"><label>DUIMP (formal) ou DIR (courier) em PDF — lê os impostos federais automaticamente</label>
+                ${PODE_EDITAR ? '<input type="file" id="gf-arq-documento" accept="application/pdf">' : ""}
+                ${r.documento_tipo ? `<span class="gf-muted">${esc(r.documento_tipo)} ${esc(r.documento_numero || "")}${r.referencia_importador ? " · ref. importador " + esc(r.referencia_importador) : ""} ${anexoLink(d, "documento")}</span>` : ""}</div>
+            <div class="gf-grid">${LIDOS.map(([c, rot]) => `<div class="gf-field"><label>${rot}${c === "cambio" ? "" : " (R$)"}</label>${input("gf-r-" + c, r[c])}</div>`).join("")}</div>
+            <div class="gf-grid">
+                <div class="gf-field"><label>ICMS pago (R$) <span class="gf-muted">guia estadual</span></label>${input("gf-r-icms", r.icms)}${PODE_EDITAR ? '<input type="file" id="gf-arq-icms_guia">' : ""}${anexoLink(d, "icms_guia")}</div>
+                <div class="gf-field"><label>Fatura do frete do forwarder (R$)</label>${input("gf-r-frete_fatura_brl", r.frete_fatura_brl)}${PODE_EDITAR ? '<input type="file" id="gf-arq-frete_fatura">' : ""}${anexoLink(d, "frete_fatura")}</div>
+            </div>
+            <div class="gf-grid">${DESPESAS.map(([c, rot]) => `<div class="gf-field"><label>${rot} (R$)</label>${input("gf-r-" + c, r[c])}</div>`).join("")}</div>
+            <div class="gf-field"><label>Nota de despesas do despachante</label>${PODE_EDITAR ? '<input type="file" id="gf-arq-despesas">' : ""}${anexoLink(d, "despesas")}</div>
+            ${r.atualizado_em ? `<div class="gf-muted">Atualizado em ${esc(r.atualizado_em)} por ${esc(r.atualizado_por)}</div>` : ""}
+            ${PODE_EDITAR ? '<div><button class="eui-btn eui-btn--primary" id="gf-salvar-real"><i class="fas fa-check"></i> Salvar realizado</button></div>' : ""}`;
+        $("gf-modal").classList.add("open");
+    }
+
+    function parametros() {
+        const p = { incoterm: $("gf-incoterm").value, ptax: num($("gf-ptax").value) };
+        CAMPOS_PROV.forEach(([c]) => { p[c] = num($("gf-" + c).value); });
+        return p;
+    }
+
+    function blocoModelo(chave, titulo, res) {
+        const t = res[chave].totais;
+        return `<div class="gf-modelo ${modeloSel === chave ? "sel" : ""}" data-modelo="${chave}">
+            <strong>${titulo}${res.mais_barato === chave ? ' <span class="eui-badge eui-badge--success">mais barato</span>' : ""}</strong>
+            <div class="linha"><span>II / IPI / PIS / COFINS</span><span>${brl(t.ii)} / ${brl(t.ipi)} / ${brl(t.pis)} / ${brl(t.cofins)}</span></div>
+            <div class="linha"><span>ICMS</span><span>${brl(t.icms)}</span></div>
+            <div class="linha"><span>Taxas</span><span>${brl(t.taxas)}</span></div>
+            <div class="linha"><span><strong>Impostos e taxas</strong></span><span><strong>${brl(t.impostos + t.taxas)}</strong></span></div>
+            <div class="linha"><span>Despesas</span><span>${brl(t.despesas)}</span></div>
+            <div class="linha"><span>Frete (cotação, PTAX + markup)</span><span>${brl(res.frete_brl)}</span></div>
+            ${(res[chave].avisos || []).map((a) => `<div class="gf-warn">${esc(a)}</div>`).join("")}
+        </div>`;
+    }
+
+    function renderSimulacao() {
+        const res = simulacao.resultado;
+        $("gf-simulacao").innerHTML = `
+            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")} · base do frete (${esc(res.incoterm)}): US$ ${res.frete_cif_usd.toLocaleString("pt-BR")} + seguro US$ ${res.seguro_cif_usd.toLocaleString("pt-BR")} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
+            <div class="gf-modelos">${blocoModelo("despachante", "Despachante (DUIMP)", res)}${blocoModelo("courier", "Courier", res)}</div>
+            <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> Gravar provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"}) e enviar à Controladoria</button></div>`;
+    }
+
+    $("gf-corpo").addEventListener("click", async (e) => {
+        try {
+            if (e.target.closest("#gf-calcular")) {
+                simulacao = await api(`/api/comex/processos/${atual.linha.id}/provisao/simular`, { method: "POST", body: JSON.stringify(parametros()) });
+                if (!$("gf-ptax").value) $("gf-ptax").value = String(simulacao.ptax).replace(".", ",");
+                modeloSel = null; renderSimulacao();
+            } else if (e.target.closest("[data-modelo]")) {
+                modeloSel = e.target.closest("[data-modelo]").dataset.modelo; renderSimulacao();
+            } else if (e.target.closest("#gf-gravar")) {
+                const r = await api(`/api/comex/processos/${atual.linha.id}/provisao`, { method: "POST", body: JSON.stringify({ ...parametros(), ptax: simulacao.ptax, modelo: modeloSel }) });
+                toast(r.message, r.message.includes("NÃO") ? "error" : "success");
+                abrir(atual.linha.id); carregar();
+            } else if (e.target.closest("#gf-salvar-real")) {
+                const fd = new FormData();
+                const payload = {};
+                [...LIDOS, ["icms"], ["frete_fatura_brl"], ...DESPESAS].forEach(([c]) => { payload[c] = num($("gf-r-" + c).value); });
+                fd.append("payload", JSON.stringify(payload));
+                ["documento", "icms_guia", "frete_fatura", "despesas"].forEach((k) => { const f = $("gf-arq-" + k); if (f && f.files[0]) fd.append(k, f.files[0], f.files[0].name); });
+                const r = await api(`/api/comex/processos/${atual.linha.id}/realizado`, { method: "POST", body: fd });
+                toast(r.message, "success");
+                abrir(atual.linha.id); carregar();
+            }
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    carregar().then(() => {
+        const alvo = new URLSearchParams(location.search).get("processo");
+        if (alvo) abrir(+alvo).catch((err) => toast(err.message, "error"));
+    }).catch((err) => { $("gf-tbody").innerHTML = `<tr><td colspan="8" class="gf-empty">${esc(err.message)}</td></tr>`; });
+})();
+</script>
+{% endblock %}

@@ -22,7 +22,7 @@ from ..auth import has_permission, permission_required
 from ..extensions import db
 from ..models import ComexCotacao, ComexDocumento, ComexProcesso, ComexPoItem
 from ..services import comex_service as svc
-from ..services import comex_custo_service, comex_embarque_service, comex_po_pdf
+from ..services import comex_custo_service, comex_embarque_service, comex_po_pdf, comex_provisao_service
 from ..services.smtp_service import enviar_mensagem_smtp
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 from ..tempo import agora_br
@@ -162,6 +162,9 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "orcamento_fat": (p.ordem_fat.orcamento if p.ordem_fat
                           else p.exportacao_antecipada.orcamento if p.exportacao_antecipada else None),
         "aguardando_ordem_fat": svc.aguardando_ordem_fat(p),
+        # Provisao de impostos (comex_provisao_service): opcional, com aviso.
+        "pode_provisionar": comex_provisao_service.motivo_sem_provisao(p) is None,
+        "sem_provisao": comex_provisao_service.sem_provisao(p),
     }
 
 

@@ -59,6 +59,7 @@ PERMISSION_CATALOG = {
     "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO": "Compras > Homologação de fornecedores > Validação financeira (parecer do Financeiro)",
     "PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento (ver o painel)",
     "MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento > Tratar (o que será feito e situação)",
+    "PAGE_COMEX_FINANCEIRO_CONSULTA": "Comex > Gestão financeira > Consultar provisão x realizado (só leitura)",
     "PAGE_COMPRAS_ST_COTACAO": "Compras > Serviço terceiro > Criar e enviar cotação com desenho (Engenharia)",
     "PAGE_COMPRAS_ST_ANALISE": "Compras > Serviço terceiro > Analisar propostas, escolher vencedor e cadastros",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
@@ -138,6 +139,8 @@ BASE_ROLE_PERMISSIONS = {
         # A Contabilidade é quem pediu o Cardex e quem fecha o mês.
         "PAGE_LOGISTICA_CARDEX",
         "PAGE_LOGISTICA_CARDEX_FECHAR",
+        # Consulta a provisao x realizado das importacoes (Comex edita).
+        "PAGE_COMEX_FINANCEIRO_CONSULTA",
     },
     "Logística": {
         "PAGE_RECEBIMENTO_ENDERECAMENTO",

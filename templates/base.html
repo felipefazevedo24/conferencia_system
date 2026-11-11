@@ -398,16 +398,19 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_COMEX') %}
+                {% if can_access('PAGE_COMEX') or can_access('PAGE_COMEX_FINANCEIRO_CONSULTA') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-comex" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-ship"></i><span>Comex</span></span>
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-comex">
+                        {% if can_access('PAGE_COMEX') %}
                         <a href="/comex" class="list-group-item list-group-item-action"><i class="fas fa-globe"></i> Processos de Importação/Exportação</a>
                         <a href="/comex/fornecedores" class="list-group-item list-group-item-action"><i class="fas fa-address-book"></i> Fornecedores</a>
                         <a href="/comex/simulador-custo" class="list-group-item list-group-item-action"><i class="fas fa-calculator"></i> Simulador de custo</a>
+                        {% endif %}
+                        <a href="/comex/gestao-financeira" class="list-group-item list-group-item-action"><i class="fas fa-scale-balanced"></i> Gestão financeira</a>
                     </div>
                 </div>
                 {% endif %}

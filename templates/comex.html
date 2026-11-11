@@ -814,6 +814,14 @@
     // no Concluido: processo fechado antes da regra nova (ou via "Pular
     // Status") ficou sem os dados e precisa ser completado.
     function badgePendencias(p) {
+        // Provisao e' opcional: so' avisa (importacao da Instrucao em diante).
+        const semProvisao = p.sem_provisao
+            ? ` <a href="/comex/gestao-financeira?processo=${p.id}" class="eui-badge eui-badge--warning" title="Importação sem provisão de impostos - clique para provisionar">Sem provisão</a>`
+            : "";
+        return semProvisao + _badgeCamposFaltando(p);
+    }
+
+    function _badgeCamposFaltando(p) {
         const faltando = p.campos_faltando_concluir || [];
         if (!faltando.length) return "";
         const concluido = p.status_modulo === "Concluido";
@@ -899,6 +907,7 @@
                 : it("editar-po", "fa-file-signature", "Ver PO") + "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
             itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
+            if (p.pode_provisionar) itens += it("provisao", "fa-scale-balanced", "Provisão de impostos / financeiro");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             if (!p.exportacao_expedicao) itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
@@ -957,6 +966,8 @@
         if (!p) return;
         if (act === "criar-po" || act === "editar-po" || act === "ver") {
             abrirModalPo(p);
+        } else if (act === "provisao") {
+            location.href = `/comex/gestao-financeira?processo=${p.id}`;
         } else if (act === "cotacao") {
             abrirModalCotacao(p);
         } else if (act === "instrucao") {
