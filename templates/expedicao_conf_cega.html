@@ -1069,6 +1069,7 @@
                     else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
                     else if (act === "imprimir-etiqueta-columbia") imprimirEtiquetaColumbia(cod);
                     else if (act === "imprimir-etiqueta-produto") imprimirEtiquetaProduto(cod);
+                    else if (act === "desenhos-cotacao-st") abrirDesenhosCotacaoSt(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
                     else if (act === "expedir-sem-conf") expedirSemConferencia(cod);
                     else if (act === "excluir") excluirOrdem(cod);
@@ -1132,6 +1133,10 @@
             if (cfg.codKey === "cod_ordem_compra" && !["pendente", "faturado_sem_conf", "finalizado_sem_conf"].includes(s)) {
                 itens += it("imprimir-etiqueta-produto", "fa-tags", "Imprimir etiquetas de identificação");
             }
+            // Desenhos da cotacao de servico terceiro (Compras) ligada pela OC ou pela OS.
+            if (cfg.codKey === "cod_ordem_compra") {
+                itens += it("desenhos-cotacao-st", "fa-compass-drafting", "Desenhos da cotação (Compras)");
+            }
             // So' a quantidade de volumes, sem reabrir a conferencia.
             if (cfg.podeAlterarVolumes && s !== "expedido" && s !== "finalizado_sem_conf") {
                 itens += "<hr>" + it("alterar-volumes", "fa-boxes-stacked", "Alterar qtde. de volumes");
@@ -1186,6 +1191,22 @@
         }
         function imprimirEtiquetaRedMolds(cod) { imprimirEtiqueta(cod, "red-molds"); }
         function imprimirEtiquetaColumbia(cod) { imprimirEtiqueta(cod, "columbia"); }
+
+        async function abrirDesenhosCotacaoSt(cod) {
+            try {
+                const resp = await fetch(`/api/compras/st/ordem-st/${encodeURIComponent(cod)}`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || "Falha ao buscar a cotação.");
+                if (!data.cotacoes.length) { toast("Nenhuma cotação de serviço terceiro ligada a esta OC (nem às OS dos itens).", "error"); return; }
+                const e = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+                const html = data.cotacoes.map((c) => `<h3>${e(c.numero)} — ${e(c.tipo)} — ${e(c.vencedora || "")}</h3><ul>` +
+                    c.itens.map((i) => `<li>${e(i.descricao)}${i.n_os ? " (OS " + e(i.n_os) + ")" : ""}: ` +
+                        i.desenhos.map((d) => `<a href="${d.url}" target="_blank">${e(d.nome)}</a>`).join(", ") + "</li>").join("") + "</ul>").join("");
+                const w = window.open("", "_blank");
+                w.document.write(`<!doctype html><meta charset="utf-8"><title>Desenhos — OC ${e(cod)}</title><body style="font-family:sans-serif; padding:20px;">${html}</body>`);
+                w.document.close();
+            } catch (err) { toast(err.message, "error"); }
+        }
 
         // Identificacao do produto (ST): uma etiqueta 70 x 50 por peca conferida.
         async function imprimirEtiquetaProduto(cod) {

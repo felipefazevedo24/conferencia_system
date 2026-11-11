@@ -5391,3 +5391,160 @@ class SpendClassificacaoExemplo(db.Model):
     peso = db.Column(db.Integer, nullable=False, default=1)  # linhas da planilha que deram o exemplo
     atualizado_por = db.Column(db.String(100))
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
+# ── Compras > Servico terceiro ─────────────────────────────────────────
+# Workflow: a Engenharia cria a cotacao (tipo de servico, itens com
+# desenho tecnico, texto livre) e escolhe fornecedores do cadastro de
+# servico terceiro que estejam com a homologacao vigente; cada fornecedor
+# recebe um link publico (e-mail com os desenhos anexos) e responde preco
+# por peca (net, IPI/ICMS/ISS, bruto). Compras analisa, escolhe o vencedor
+# (sugerida = menor total net) e informa a OC do CPS - a ordem do Servico
+# Terceiro da expedicao acha a cotacao por essa OC ou pela OS dos itens.
+compra_st_fornecedor_tipo = db.Table(
+    "compra_st_fornecedor_tipo",
+    db.Column("fornecedor_id", db.Integer, db.ForeignKey("compra_st_fornecedor.id"), primary_key=True),
+    db.Column("tipo_id", db.Integer, db.ForeignKey("compra_st_tipo_servico.id"), primary_key=True),
+)
+
+
+class CompraStTipoServico(db.Model):
+    """Tipo de servico terceiro (Pintura, Usinagem...) - lista editavel por Compras."""
+
+    __tablename__ = "compra_st_tipo_servico"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=False, unique=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    criado_por = db.Column(db.String(100))
+
+
+class CompraStFornecedor(db.Model):
+    """Fornecedor de servico terceiro, ligado a uma homologacao. So' entra
+    numa cotacao se a homologacao estiver Homologado e dentro da validade
+    (calculado na hora - ver compras_st_service.autorizado)."""
+
+    __tablename__ = "compra_st_fornecedor"
+
+    id = db.Column(db.Integer, primary_key=True)
+    homologacao_id = db.Column(db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True)
+    emails = db.Column(db.String(300), nullable=False)
+    contato = db.Column(db.String(120))
+    telefone = db.Column(db.String(40))
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    criado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+
+    homologacao = db.relationship("ComprasHomologacaoFornecedor")
+    tipos = db.relationship("CompraStTipoServico", secondary=compra_st_fornecedor_tipo, order_by="CompraStTipoServico.nome")
+
+
+class CompraStCotacao(db.Model):
+    """Pedido de cotacao de servico terceiro. Status: Aberta -> Fechada
+    (vencedor escolhido) | Cancelada."""
+
+    __tablename__ = "compra_st_cotacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo_id = db.Column(db.Integer, db.ForeignKey("compra_st_tipo_servico.id"), nullable=False)
+    texto_fornecedor = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    criado_por = db.Column(db.String(100))
+
+    vencedora_id = db.Column(db.Integer, db.ForeignKey("compra_st_resposta.id", use_alter=True, name="fk_compra_st_cot_vencedora"))
+    justificativa = db.Column(db.Text)
+    escolhida_em = db.Column(db.DateTime)
+    escolhida_por = db.Column(db.String(100))
+    # OC de servico gerada no CPS depois da escolha - liga a ordem do
+    # Servico Terceiro da expedicao (ExpedicaoOrdemST.cod_ordem_compra).
+    cod_ordem_compra = db.Column(db.String(40), index=True)
+
+    tipo = db.relationship("CompraStTipoServico")
+    itens = db.relationship("CompraStCotacaoItem", backref="cotacao", cascade="all, delete-orphan", order_by="CompraStCotacaoItem.ordem")
+    respostas = db.relationship("CompraStResposta", backref="cotacao", cascade="all, delete-orphan",
+                                order_by="CompraStResposta.id", foreign_keys="CompraStResposta.cotacao_id")
+    vencedora = db.relationship("CompraStResposta", foreign_keys=[vencedora_id], post_update=True)
+
+
+class CompraStCotacaoItem(db.Model):
+    __tablename__ = "compra_st_cotacao_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("compra_st_cotacao.id"), nullable=False, index=True)
+    ordem = db.Column(db.Integer, nullable=False, default=0)
+    codigo = db.Column(db.String(60))
+    descricao = db.Column(db.String(300), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False)
+    n_os = db.Column(db.String(40), index=True)
+
+    desenhos = db.relationship("CompraStDesenho", backref="item", cascade="all, delete-orphan", order_by="CompraStDesenho.id")
+
+
+class CompraStDesenho(db.Model):
+    """Desenho tecnico do item - vai no banco (padrao do projeto)."""
+
+    __tablename__ = "compra_st_desenho"
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("compra_st_cotacao_item.id"), nullable=False, index=True)
+    nome_arquivo = db.Column(db.String(255), nullable=False)
+    content_type = db.Column(db.String(100))
+    tamanho = db.Column(db.Integer)
+    conteudo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"), nullable=False)
+
+
+class CompraStResposta(db.Model):
+    """Um link por fornecedor. So' o hash do token fica salvo."""
+
+    __tablename__ = "compra_st_resposta"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("compra_st_cotacao.id"), nullable=False, index=True)
+    fornecedor_id = db.Column(db.Integer, db.ForeignKey("compra_st_fornecedor.id"), nullable=False)
+    emails = db.Column(db.String(300))
+    token_hash = db.Column(db.String(64), nullable=False, unique=True)
+    expira_em = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="Pendente")  # Pendente | Recebida
+    email_enviado = db.Column(db.Boolean)
+    email_erro = db.Column(db.String(500))
+    recebida_em = db.Column(db.DateTime)
+
+    prazo_entrega = db.Column(db.String(80))
+    condicao_pagamento = db.Column(db.String(120))
+    validade_proposta = db.Column(db.Date)
+    frete_tipo = db.Column(db.String(3))  # CIF | FOB
+    frete_valor = db.Column(db.Float)
+    observacoes = db.Column(db.Text)
+    proposta_nome = db.Column(db.String(255))
+    proposta_content_type = db.Column(db.String(100))
+    proposta_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+
+    # Fotografia do que o fornecedor mandou (a proposta dele, nao estado
+    # derivado de sistema externo).
+    total_net = db.Column(db.Float)
+    total_bruto = db.Column(db.Float)
+    divergencia_bruto = db.Column(db.Boolean, default=False)
+    is_sugerida = db.Column(db.Boolean, default=False)
+
+    fornecedor = db.relationship("CompraStFornecedor")
+    itens = db.relationship("CompraStRespostaItem", backref="resposta", cascade="all, delete-orphan", order_by="CompraStRespostaItem.id")
+
+
+class CompraStRespostaItem(db.Model):
+    __tablename__ = "compra_st_resposta_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    resposta_id = db.Column(db.Integer, db.ForeignKey("compra_st_resposta.id"), nullable=False, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("compra_st_cotacao_item.id"), nullable=False)
+    preco_net = db.Column(db.Float, nullable=False)
+    ipi_pct = db.Column(db.Float, nullable=False, default=0)
+    icms_pct = db.Column(db.Float, nullable=False, default=0)
+    iss_pct = db.Column(db.Float, nullable=False, default=0)
+    preco_bruto = db.Column(db.Float, nullable=False)
+    bruto_calculado = db.Column(db.Float)
+
+    item = db.relationship("CompraStCotacaoItem")

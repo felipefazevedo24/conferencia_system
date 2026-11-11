@@ -59,6 +59,8 @@ PERMISSION_CATALOG = {
     "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO": "Compras > Homologação de fornecedores > Validação financeira (parecer do Financeiro)",
     "PAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento (ver o painel)",
     "MANAGE_COMPRAS_DIVERGENCIA_RECEBIMENTO": "Compras > Divergências de recebimento > Tratar (o que será feito e situação)",
+    "PAGE_COMPRAS_ST_COTACAO": "Compras > Serviço terceiro > Criar e enviar cotação com desenho (Engenharia)",
+    "PAGE_COMPRAS_ST_ANALISE": "Compras > Serviço terceiro > Analisar propostas, escolher vencedor e cadastros",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
     "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
@@ -181,6 +183,12 @@ BASE_ROLE_PERMISSIONS = {
         # Só a consulta de estoque: PAGE_LOGISTICA_INVENTARIO abriria também a
         # contagem de inventário e o Controle de Chapas (pedido de 28/09/2026).
         "PAGE_LOGISTICA_ESTOQUE",
+        "PAGE_COMPRAS_ST_COTACAO",
+        "PAGE_COMPRAS_ST_ANALISE",
+    },
+    # Cria a cotacao de servico terceiro (desenhos); Compras escolhe.
+    "Engenharia": {
+        "PAGE_COMPRAS_ST_COTACAO",
     },
     "Produção": {
         "PAGE_PRODUCAO",

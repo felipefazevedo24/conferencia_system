@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}Serviço terceiro — Compras{% endblock %}
+{% block shell_title %}Compras — Serviço terceiro{% endblock %}
+
+{% block extra_head %}
+<style>
+    .st-wrap { display: grid; gap: 18px; }
+    .st-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .st-tab { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 7px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--eui-text); }
+    .st-tab.active { background: var(--eui-primary); color: #fff; border-color: var(--eui-primary); }
+    .st-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .st-table-wrap { overflow-x: auto; }
+    .st-empty { padding: 32px 20px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .st-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 20px; }
+    .st-modal.open { display: flex; }
+    .st-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(1100px, 100%); max-height: 92vh; overflow-y: auto; }
+    .st-modal__box.is-narrow { width: min(620px, 100%); }
+    .st-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--eui-border); }
+    .st-modal__title { font-size: 16px; font-weight: 800; margin: 0; color: var(--eui-text); }
+    .st-modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: var(--eui-muted); }
+    .st-modal__body { padding: 18px 22px; display: grid; gap: 14px; }
+    .st-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--eui-border); flex-wrap: wrap; }
+    .st-field { display: grid; gap: 6px; }
+    .st-field label { font-size: 12.5px; font-weight: 700; color: var(--eui-text); }
+    .st-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 720px) { .st-grid-2 { grid-template-columns: 1fr; } }
+    .st-section { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); margin-top: 6px; }
+    .st-check { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px; }
+    .st-check label { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+    .st-check label.off { opacity: .55; }
+    .st-muted { color: var(--eui-muted); font-size: 12px; }
+    .st-warn { color: #b45309; font-size: 12px; font-weight: 600; }
+    .st-itens input, .st-itens textarea { min-width: 80px; }
+    .st-num { text-align: right; white-space: nowrap; }
+    .st-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
+    .st-toast.error { border-left-color: var(--eui-danger); }
+    .st-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="st-wrap">
+    <div class="st-tabs">
+        <button class="st-tab active" data-aba="cotacoes"><i class="fas fa-file-signature"></i> Cotações</button>
+        {% if pode_analisar %}
+        <button class="st-tab" data-aba="fornecedores"><i class="fas fa-address-book"></i> Fornecedores</button>
+        <button class="st-tab" data-aba="tipos"><i class="fas fa-tags"></i> Tipos de serviço</button>
+        {% endif %}
+    </div>
+
+    <div class="eui-card" id="aba-cotacoes">
+        <div class="st-bar">
+            <span class="st-muted">A Engenharia cria a cotação com os desenhos; cada fornecedor responde pelo próprio link e Compras escolhe o vencedor.</span>
+            {% if pode_cotar %}<button class="eui-btn eui-btn--primary" id="st-btn-nova"><i class="fas fa-plus"></i> Nova cotação</button>{% endif %}
+        </div>
+        <div class="st-table-wrap">
+            <table class="erp-table">
+                <thead><tr><th>Nº</th><th>Serviço</th><th>Criada</th><th>Peças</th><th>Propostas</th><th>Status</th><th>Vencedor / OC</th><th></th></tr></thead>
+                <tbody id="st-cot-tbody"><tr><td colspan="8" class="st-empty">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if pode_analisar %}
+    <div class="eui-card hidden" id="aba-fornecedores">
+        <div class="st-bar">
+            <span class="st-muted">Só recebe cotação o fornecedor com a homologação <strong>Homologado</strong> e dentro da validade.</span>
+            <button class="eui-btn eui-btn--primary" id="st-btn-novo-forn"><i class="fas fa-plus"></i> Novo fornecedor</button>
+        </div>
+        <div class="st-table-wrap">
+            <table class="erp-table">
+                <thead><tr><th>Fornecedor</th><th>Serviços</th><th>E-mails</th><th>Homologação</th><th></th></tr></thead>
+                <tbody id="st-forn-tbody"><tr><td colspan="5" class="st-empty">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="eui-card hidden" id="aba-tipos">
+        <div class="st-bar">
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="st-tipo-nome" class="eui-input" placeholder="Novo tipo (ex.: Galvanização)" maxlength="80">
+                <button class="eui-btn eui-btn--primary" id="st-btn-tipo"><i class="fas fa-plus"></i> Adicionar</button>
+            </div>
+        </div>
+        <div class="st-table-wrap">
+            <table class="erp-table">
+                <thead><tr><th>Tipo de serviço</th><th>Situação</th><th></th></tr></thead>
+                <tbody id="st-tipo-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Nova cotacao -->
+<div class="st-modal" id="st-modal-nova">
+    <div class="st-modal__box">
+        <div class="st-modal__head">
+            <h3 class="st-modal__title"><i class="fas fa-file-signature"></i> Nova cotação de serviço terceiro</h3>
+            <button class="st-modal__close" data-fechar><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="st-modal__body">
+            <div class="st-field">
+                <label>Tipo de serviço *</label>
+                <select id="st-nova-tipo" class="eui-select"></select>
+            </div>
+            <div class="st-field">
+                <label>Fornecedores homologados para o serviço *</label>
+                <div class="st-check" id="st-nova-forns"><span class="st-muted">Escolha o tipo de serviço.</span></div>
+            </div>
+            <div class="st-section">Peças</div>
+            <div class="st-table-wrap">
+                <table class="erp-table st-itens">
+                    <thead><tr><th>#</th><th>Código</th><th>Descrição *</th><th>Qtde *</th><th>OS</th><th>Desenho técnico *</th><th></th></tr></thead>
+                    <tbody id="st-nova-itens"></tbody>
+                </table>
+            </div>
+            <div><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="st-nova-add-item"><i class="fas fa-plus"></i> Adicionar peça</button></div>
+            <div class="st-field">
+                <label>Mensagem para o fornecedor <small class="st-muted">— vai no e-mail e no link (prazo de entrega desejado, observações técnicas…)</small></label>
+                <textarea id="st-nova-texto" class="eui-input" rows="5"></textarea>
+            </div>
+        </div>
+        <div class="st-modal__foot">
+            <button class="eui-btn eui-btn--ghost" data-fechar>Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="st-nova-enviar"><i class="fas fa-paper-plane"></i> Criar e enviar aos fornecedores</button>
+        </div>
+    </div>
+</div>
+
+<!-- Detalhe / analise -->
+<div class="st-modal" id="st-modal-det">
+    <div class="st-modal__box">
+        <div class="st-modal__head">
+            <h3 class="st-modal__title" id="st-det-titulo">Cotação</h3>
+            <button class="st-modal__close" data-fechar><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="st-modal__body" id="st-det-corpo"></div>
+        <div class="st-modal__foot" id="st-det-foot"></div>
+    </div>
+</div>
+
+<!-- Fornecedor -->
+<div class="st-modal" id="st-modal-forn">
+    <div class="st-modal__box is-narrow">
+        <div class="st-modal__head">
+            <h3 class="st-modal__title" id="st-forn-titulo">Fornecedor de serviço terceiro</h3>
+            <button class="st-modal__close" data-fechar><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="st-modal__body">
+            <input type="hidden" id="st-forn-id">
+            <div class="st-field">
+                <label>Homologação (fornecedor homologado) *</label>
+                <select id="st-forn-homolog" class="eui-select"></select>
+            </div>
+            <div class="st-field">
+                <label>Serviços que presta *</label>
+                <div class="st-check" id="st-forn-tipos"></div>
+            </div>
+            <div class="st-field">
+                <label>E-mail(s) para cotação *</label>
+                <input type="text" id="st-forn-emails" class="eui-input" placeholder="Separe vários com ;">
+            </div>
+            <div class="st-grid-2">
+                <div class="st-field"><label>Contato</label><input type="text" id="st-forn-contato" class="eui-input" maxlength="120"></div>
+                <div class="st-field"><label>Telefone</label><input type="text" id="st-forn-telefone" class="eui-input" maxlength="40"></div>
+            </div>
+            <label style="display:flex; gap:8px; font-size:13px;"><input type="checkbox" id="st-forn-ativo" checked> Ativo</label>
+        </div>
+        <div class="st-modal__foot">
+            <button class="eui-btn eui-btn--ghost" data-fechar>Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="st-forn-salvar"><i class="fas fa-check"></i> Salvar</button>
+        </div>
+    </div>
+</div>
+
+<div class="st-toast" id="st-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const PODE_ANALISAR = {{ 'true' if pode_analisar else 'false' }};
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const brl = (v) => v == null ? "—" : "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const pct = (v) => (v == null ? 0 : v).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+
+    function toast(msg, tipo) {
+        const el = $("st-toast");
+        el.textContent = msg;
+        el.className = "st-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 5000);
+    }
+
+    async function api(url, options) {
+        const opts = Object.assign({}, options || {});
+        if (!(opts.body instanceof FormData)) opts.headers = { "Content-Type": "application/json" };
+        const resp = await fetch(url, opts);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    document.querySelectorAll("[data-fechar]").forEach((b) => b.addEventListener("click", () => b.closest(".st-modal").classList.remove("open")));
+
+    // ── Abas ──
+    document.querySelectorAll(".st-tab").forEach((t) => t.addEventListener("click", () => {
+        document.querySelectorAll(".st-tab").forEach((x) => x.classList.toggle("active", x === t));
+        ["cotacoes", "fornecedores", "tipos"].forEach((a) => { const el = $("aba-" + a); if (el) el.classList.toggle("hidden", a !== t.dataset.aba); });
+        if (t.dataset.aba === "fornecedores") carregarFornecedores();
+        if (t.dataset.aba === "tipos") carregarTipos();
+    }));
+
+    let tipos = [];
+    async function carregarTipos() {
+        tipos = (await api("/api/compras/st/tipos")).tipos;
+        const tb = $("st-tipo-tbody");
+        if (tb) tb.innerHTML = tipos.map((t) => `
+            <tr><td>${esc(t.nome)}</td><td>${t.ativo ? "Ativo" : '<span class="st-warn">Inativo</span>'}</td>
+            <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-tipo-ativo="${t.id}" data-ativo="${t.ativo ? 0 : 1}">${t.ativo ? "Desativar" : "Reativar"}</button></td></tr>`).join("");
+        return tipos;
+    }
+
+    // ── Cotacoes ──
+    const COR_STATUS = { Aberta: "#b45309", Fechada: "#15803d", Cancelada: "#64748b" };
+    async function carregarCotacoes() {
+        try {
+            const { cotacoes } = await api("/api/compras/st/cotacoes");
+            $("st-cot-tbody").innerHTML = cotacoes.length ? cotacoes.map((c) => `
+                <tr>
+                    <td><strong>${esc(c.numero)}</strong></td><td>${esc(c.tipo)}</td>
+                    <td>${esc(c.criado_em)}<br><span class="st-muted">${esc(c.criado_por || "")}</span></td>
+                    <td>${c.qtd_itens}</td><td>${c.qtd_recebidas} de ${c.qtd_fornecedores}</td>
+                    <td><span class="eui-badge" style="background:${COR_STATUS[c.status]}1a; color:${COR_STATUS[c.status]};">${esc(c.status)}</span></td>
+                    <td>${esc(c.vencedora || "—")}${c.cod_ordem_compra ? `<br><span class="st-muted">OC ${esc(c.cod_ordem_compra)}</span>` : ""}</td>
+                    <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-abrir="${c.id}"><i class="fas fa-eye"></i> Abrir</button></td>
+                </tr>`).join("") : '<tr><td colspan="8" class="st-empty">Nenhuma cotação ainda.</td></tr>';
+        } catch (err) {
+            $("st-cot-tbody").innerHTML = `<tr><td colspan="8" class="st-empty">${esc(err.message)}</td></tr>`;
+        }
+    }
+    $("st-cot-tbody").addEventListener("click", (e) => { const b = e.target.closest("[data-abrir]"); if (b) abrirCotacao(b.dataset.abrir); });
+
+    // ── Nova cotacao ──
+    let itensNova = [];
+    let chaveArquivo = 0;
+    const arquivosNova = {};  // chave -> File
+
+    function renderItensNova() {
+        $("st-nova-itens").innerHTML = itensNova.map((it, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td><input type="text" class="eui-input" data-i="${idx}" data-f="codigo" value="${esc(it.codigo)}" placeholder="Código CPS" style="width:120px;">
+                    <div class="st-muted" data-aviso="${idx}">${esc(it.aviso || "")}</div></td>
+                <td><input type="text" class="eui-input" data-i="${idx}" data-f="descricao" value="${esc(it.descricao)}" maxlength="300" style="min-width:220px;"></td>
+                <td><input type="number" min="0" step="any" class="eui-input" data-i="${idx}" data-f="quantidade" value="${esc(it.quantidade)}" style="width:80px;"></td>
+                <td><input type="text" class="eui-input" data-i="${idx}" data-f="n_os" value="${esc(it.n_os)}" maxlength="40" style="width:90px;"></td>
+                <td><input type="file" multiple data-arq="${idx}">
+                    <div class="st-muted">${it.arquivos.map((k) => esc(arquivosNova[k].name)).join("<br>")}</div></td>
+                <td>${itensNova.length > 1 ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-rem="${idx}"><i class="fas fa-trash"></i></button>` : ""}</td>
+            </tr>`).join("");
+    }
+    const itemVazio = () => ({ codigo: "", descricao: "", quantidade: "", n_os: "", arquivos: [], aviso: "" });
+
+    $("st-nova-itens").addEventListener("input", (e) => {
+        const el = e.target.closest("[data-f]");
+        if (el) itensNova[el.dataset.i][el.dataset.f] = el.value;
+    });
+    // Codigo: puxa a descricao do CPS quando disponivel.
+    $("st-nova-itens").addEventListener("change", async (e) => {
+        const cod = e.target.closest('[data-f="codigo"]');
+        if (cod && cod.value.trim()) {
+            const idx = +cod.dataset.i;
+            const r = await api(`/api/compras/st/produto?codigo=${encodeURIComponent(cod.value.trim())}`).catch(() => ({}));
+            if (r.descricao && !itensNova[idx].descricao) itensNova[idx].descricao = r.descricao;
+            itensNova[idx].aviso = r.descricao ? "" : (r.aviso || "");
+            renderItensNova();
+        }
+        const arq = e.target.closest("[data-arq]");
+        if (arq) {
+            const idx = +arq.dataset.arq;
+            Array.from(arq.files).forEach((f) => { const k = "arq" + (++chaveArquivo); arquivosNova[k] = f; itensNova[idx].arquivos.push(k); });
+            renderItensNova();
+        }
+    });
+    $("st-nova-itens").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-rem]");
+        if (b) { itensNova.splice(+b.dataset.rem, 1); renderItensNova(); }
+    });
+    $("st-nova-add-item").addEventListener("click", () => { itensNova.push(itemVazio()); renderItensNova(); });
+
+    async function carregarFornecedoresDoTipo() {
+        const tipoId = $("st-nova-tipo").value;
+        const cont = $("st-nova-forns");
+        if (!tipoId) { cont.innerHTML = '<span class="st-muted">Escolha o tipo de serviço.</span>'; return; }
+        const { fornecedores } = await api(`/api/compras/st/fornecedores?tipo_id=${tipoId}`);
+        cont.innerHTML = fornecedores.length ? fornecedores.map((f) => `
+            <label class="${f.motivo_bloqueio ? "off" : ""}">
+                <input type="checkbox" value="${f.id}" ${f.motivo_bloqueio ? "disabled" : ""}>
+                <span><strong>${esc(f.nome)}</strong> <span class="st-muted">${esc(f.emails)}</span>
+                ${f.motivo_bloqueio ? `<br><span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : `<br><span class="st-muted">Homologado até ${esc(f.homologacao_valido_ate)}</span>`}</span>
+            </label>`).join("") : '<span class="st-muted">Nenhum fornecedor cadastrado para este serviço — Compras cadastra na aba Fornecedores.</span>';
+    }
+    $("st-nova-tipo").addEventListener("change", carregarFornecedoresDoTipo);
+
+    const btnNova = $("st-btn-nova");
+    if (btnNova) btnNova.addEventListener("click", async () => {
+        await carregarTipos();
+        $("st-nova-tipo").innerHTML = '<option value="">Selecione…</option>' + tipos.filter((t) => t.ativo).map((t) => `<option value="${t.id}">${esc(t.nome)}</option>`).join("");
+        itensNova = [itemVazio()];
+        Object.keys(arquivosNova).forEach((k) => delete arquivosNova[k]);
+        $("st-nova-texto").value = "";
+        renderItensNova();
+        carregarFornecedoresDoTipo();
+        $("st-modal-nova").classList.add("open");
+    });
+
+    $("st-nova-enviar").addEventListener("click", async () => {
+        const fornecedorIds = Array.from($("st-nova-forns").querySelectorAll("input:checked")).map((c) => +c.value);
+        const fd = new FormData();
+        fd.append("payload", JSON.stringify({
+            tipo_id: $("st-nova-tipo").value, fornecedor_ids: fornecedorIds, texto_fornecedor: $("st-nova-texto").value,
+            itens: itensNova.map((it) => ({ codigo: it.codigo, descricao: it.descricao, quantidade: it.quantidade, n_os: it.n_os, arquivos: it.arquivos })),
+        }));
+        itensNova.forEach((it) => it.arquivos.forEach((k) => fd.append(k, arquivosNova[k], arquivosNova[k].name)));
+        const btn = $("st-nova-enviar");
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
+        try {
+            const r = await api("/api/compras/st/cotacoes", { method: "POST", body: fd });
+            toast(r.message, r.falhas.length ? "error" : "success");
+            $("st-modal-nova").classList.remove("open");
+            carregarCotacoes();
+            abrirCotacao(r.cotacao.id);
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Criar e enviar aos fornecedores';
+        }
+    });
+
+    // ── Detalhe / analise ──
+    let cotacaoAtual = null;
+    async function abrirCotacao(id) {
+        const { cotacao: c } = await api(`/api/compras/st/cotacoes/${id}`);
+        cotacaoAtual = c;
+        $("st-det-titulo").innerHTML = `<i class="fas fa-file-signature"></i> ${esc(c.numero)} — ${esc(c.tipo)} <span class="eui-badge" style="background:${COR_STATUS[c.status]}1a; color:${COR_STATUS[c.status]};">${esc(c.status)}</span>`;
+        const recebidas = c.respostas.filter((r) => r.status === "Recebida").sort((a, b) => a.total_net - b.total_net);
+        const itensHtml = c.itens.map((i) => `
+            <tr><td>${i.ordem}</td><td>${esc(i.codigo || "—")}</td><td>${esc(i.descricao)}</td><td class="st-num">${i.quantidade}</td><td>${esc(i.n_os || "—")}</td>
+            <td>${i.desenhos.map((d) => `<a href="${d.url}" target="_blank">${esc(d.nome)}</a>`).join("<br>")}</td></tr>`).join("");
+        // Comparativo por peca: uma coluna por proposta recebida.
+        const comparativo = recebidas.length ? `
+            <div class="st-section">Comparativo por peça (net / bruto por peça)</div>
+            <div class="st-table-wrap"><table class="erp-table">
+                <thead><tr><th>Peça</th><th>Qtde</th>${recebidas.map((r) => `<th>${esc(r.fornecedor)}${r.is_sugerida ? ' <span class="eui-badge eui-badge--success">sugerida</span>' : ""}</th>`).join("")}</tr></thead>
+                <tbody>
+                ${c.itens.map((i) => `<tr><td>${esc(i.descricao)}</td><td class="st-num">${i.quantidade}</td>${recebidas.map((r) => {
+                    const p = r.itens.find((x) => x.item_id === i.id) || {};
+                    const diverge = p.bruto_calculado != null && Math.abs(p.preco_bruto - p.bruto_calculado) > p.bruto_calculado * 0.01;
+                    return `<td class="st-num">${brl(p.preco_net)} / ${brl(p.preco_bruto)}<br><span class="st-muted">IPI ${pct(p.ipi_pct)} · ICMS ${pct(p.icms_pct)} · ISS ${pct(p.iss_pct)}</span>${diverge ? `<br><span class="st-warn" title="Cálculo da nota: ${brl(p.bruto_calculado)}">bruto fora da fórmula (${brl(p.bruto_calculado)})</span>` : ""}</td>`;
+                }).join("")}</tr>`).join("")}
+                <tr><td colspan="2"><strong>Frete</strong></td>${recebidas.map((r) => `<td class="st-num">${esc(r.frete_tipo || "")} ${brl(r.frete_valor)}</td>`).join("")}</tr>
+                <tr><td colspan="2"><strong>Total net</strong></td>${recebidas.map((r) => `<td class="st-num"><strong>${brl(r.total_net)}</strong></td>`).join("")}</tr>
+                <tr><td colspan="2"><strong>Total bruto</strong></td>${recebidas.map((r) => `<td class="st-num">${brl(r.total_bruto)}</td>`).join("")}</tr>
+                <tr><td colspan="2">Prazo de entrega</td>${recebidas.map((r) => `<td>${esc(r.prazo_entrega)}</td>`).join("")}</tr>
+                <tr><td colspan="2">Condição de pagamento</td>${recebidas.map((r) => `<td>${esc(r.condicao_pagamento)}</td>`).join("")}</tr>
+                <tr><td colspan="2">Validade da proposta</td>${recebidas.map((r) => `<td>${esc(r.validade_proposta || "—")}</td>`).join("")}</tr>
+                <tr><td colspan="2">Observações / proposta</td>${recebidas.map((r) => `<td>${esc(r.observacoes || "")}${r.proposta_url ? `<br><a href="${r.proposta_url}" target="_blank"><i class="fas fa-paperclip"></i> ${esc(r.proposta_nome)}</a>` : ""}</td>`).join("")}</tr>
+                ${c.status === "Aberta" && PODE_ANALISAR ? `<tr><td colspan="2"></td>${recebidas.map((r) => `<td><button class="eui-btn eui-btn--primary eui-btn--sm" data-escolher="${r.id}" data-sugerida="${r.is_sugerida ? 1 : 0}">Escolher</button></td>`).join("")}</tr>` : ""}
+                </tbody>
+            </table></div>` : '<div class="st-muted">Nenhuma proposta recebida ainda.</div>';
+        const statusLinks = c.respostas.map((r) => `
+            <tr><td>${esc(r.fornecedor)}${r.is_vencedora ? ' <span class="eui-badge eui-badge--success">vencedor</span>' : ""}</td><td>${esc(r.emails)}</td>
+            <td>${r.status === "Recebida" ? `Recebida em ${esc(r.recebida_em)}` : r.expirado ? '<span class="st-warn">Link expirado</span>' : "Aguardando"}</td>
+            <td>${r.email_enviado === false ? `<span class="st-warn" title="${esc(r.email_erro)}">e-mail falhou</span>` : "e-mail enviado"}</td></tr>`).join("");
+        $("st-det-corpo").innerHTML = `
+            ${c.texto_fornecedor ? `<div class="st-field"><label>Mensagem enviada ao fornecedor</label><div style="white-space:pre-wrap; font-size:13px;">${esc(c.texto_fornecedor)}</div></div>` : ""}
+            <div class="st-section">Peças</div>
+            <div class="st-table-wrap"><table class="erp-table"><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtde</th><th>OS</th><th>Desenhos</th></tr></thead><tbody>${itensHtml}</tbody></table></div>
+            <div class="st-section">Fornecedores consultados</div>
+            <div class="st-table-wrap"><table class="erp-table"><thead><tr><th>Fornecedor</th><th>E-mails</th><th>Resposta</th><th>Envio</th></tr></thead><tbody>${statusLinks}</tbody></table></div>
+            ${comparativo}
+            ${c.status === "Fechada" ? `
+                <div class="st-field"><label>Escolhida por ${esc(c.escolhida_por)} em ${esc(c.escolhida_em)}</label>${c.justificativa ? `<div class="st-muted">Justificativa: ${esc(c.justificativa)}</div>` : ""}</div>
+                <div class="st-field"><label>OC de serviço gerada no CPS <small class="st-muted">— liga a ordem do Serviço Terceiro da expedição</small></label>
+                    <div style="display:flex; gap:8px;"><input type="text" id="st-det-oc" class="eui-input" value="${esc(c.cod_ordem_compra || "")}" style="max-width:200px;" ${PODE_ANALISAR ? "" : "disabled"}>
+                    ${PODE_ANALISAR ? '<button class="eui-btn eui-btn--ghost eui-btn--sm" id="st-det-salvar-oc">Salvar OC</button>' : ""}</div></div>` : ""}`;
+        $("st-det-foot").innerHTML = (c.status === "Aberta" ? '<button class="eui-btn eui-btn--ghost" id="st-det-cancelar">Cancelar cotação</button>' : "") +
+            '<button class="eui-btn eui-btn--ghost" data-fechar-det>Fechar</button>';
+        $("st-modal-det").classList.add("open");
+    }
+
+    $("st-modal-det").addEventListener("click", async (e) => {
+        if (e.target.closest("[data-fechar-det]")) { $("st-modal-det").classList.remove("open"); return; }
+        const c = cotacaoAtual;
+        try {
+            const esc_ = e.target.closest("[data-escolher]");
+            if (esc_) {
+                let justificativa = "";
+                if (esc_.dataset.sugerida !== "1") {
+                    justificativa = prompt("Esta não é a proposta de menor total net. Informe a justificativa:") || "";
+                    if (!justificativa.trim()) { toast("Justificativa obrigatória para escolher outra proposta.", "error"); return; }
+                } else if (!confirm("Confirmar esta proposta como vencedora? O fornecedor será avisado por e-mail.")) return;
+                const r = await api(`/api/compras/st/cotacoes/${c.id}/escolher`, { method: "POST", body: JSON.stringify({ resposta_id: +esc_.dataset.escolher, justificativa }) });
+                toast(r.message, r.message.includes("NÃO") ? "error" : "success");
+                abrirCotacao(c.id); carregarCotacoes();
+            } else if (e.target.closest("#st-det-salvar-oc")) {
+                const r = await api(`/api/compras/st/cotacoes/${c.id}/oc`, { method: "POST", body: JSON.stringify({ cod_ordem_compra: $("st-det-oc").value }) });
+                toast(r.message, "success"); carregarCotacoes();
+            } else if (e.target.closest("#st-det-cancelar")) {
+                if (!confirm("Cancelar esta cotação? Os links dos fornecedores deixam de valer.")) return;
+                const r = await api(`/api/compras/st/cotacoes/${c.id}/cancelar`, { method: "POST" });
+                toast(r.message, "success"); abrirCotacao(c.id); carregarCotacoes();
+            }
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    // ── Fornecedores ──
+    let fornecedores = [];
+    async function carregarFornecedores() {
+        fornecedores = (await api("/api/compras/st/fornecedores")).fornecedores;
+        $("st-forn-tbody").innerHTML = fornecedores.length ? fornecedores.map((f) => `
+            <tr style="${f.ativo ? "" : "opacity:.55"}">
+                <td><strong>${esc(f.nome)}</strong><br><span class="st-muted">${esc(f.razao_social)}</span></td>
+                <td>${f.tipos.map((t) => esc(t.nome)).join(", ")}</td>
+                <td>${esc(f.emails)}</td>
+                <td>${f.motivo_bloqueio ? `<span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : `Homologado até ${esc(f.homologacao_valido_ate)}`}</td>
+                <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-editar-forn="${f.id}"><i class="fas fa-pen"></i></button></td>
+            </tr>`).join("") : '<tr><td colspan="5" class="st-empty">Nenhum fornecedor de serviço terceiro cadastrado.</td></tr>';
+    }
+
+    async function abrirFornecedor(f) {
+        const [{ homologacoes }] = await Promise.all([api("/api/compras/st/homologacoes"), carregarTipos()]);
+        const opcoes = homologacoes.slice();
+        if (f && !opcoes.some((h) => h.id === f.homologacao_id)) opcoes.unshift({ id: f.homologacao_id, razao_social: f.razao_social + " (" + f.homologacao_status + ")" });
+        $("st-forn-homolog").innerHTML = '<option value="">Selecione…</option>' + opcoes.map((h) =>
+            `<option value="${h.id}" data-email="${esc(h.email || "")}" data-contato="${esc(h.contato || "")}" data-telefone="${esc(h.telefone || "")}">${esc(h.razao_social)}${h.cnpj ? " — " + esc(h.cnpj) : ""}${h.valido_ate ? " (até " + esc(h.valido_ate) + ")" : ""}</option>`).join("");
+        $("st-forn-id").value = f ? f.id : "";
+        $("st-forn-homolog").value = f ? f.homologacao_id : "";
+        const marcados = new Set(f ? f.tipos.map((t) => t.id) : []);
+        $("st-forn-tipos").innerHTML = tipos.filter((t) => t.ativo || marcados.has(t.id)).map((t) => `<label><input type="checkbox" value="${t.id}" ${marcados.has(t.id) ? "checked" : ""}> ${esc(t.nome)}</label>`).join("");
+        $("st-forn-emails").value = f ? f.emails : "";
+        $("st-forn-contato").value = f ? (f.contato || "") : "";
+        $("st-forn-telefone").value = f ? (f.telefone || "") : "";
+        $("st-forn-ativo").checked = f ? f.ativo : true;
+        $("st-modal-forn").classList.add("open");
+    }
+    // Homologacao escolhida pre-preenche contato/e-mail do cadastro dela.
+    $("st-forn-homolog").addEventListener("change", () => {
+        const op = $("st-forn-homolog").selectedOptions[0];
+        if (!op || $("st-forn-id").value) return;
+        if (!$("st-forn-emails").value) $("st-forn-emails").value = op.dataset.email || "";
+        if (!$("st-forn-contato").value) $("st-forn-contato").value = op.dataset.contato || "";
+        if (!$("st-forn-telefone").value) $("st-forn-telefone").value = op.dataset.telefone || "";
+    });
+
+    if (PODE_ANALISAR) {
+        $("st-btn-novo-forn").addEventListener("click", () => abrirFornecedor(null));
+        $("st-forn-tbody").addEventListener("click", (e) => {
+            const b = e.target.closest("[data-editar-forn]");
+            if (b) abrirFornecedor(fornecedores.find((f) => f.id === +b.dataset.editarForn));
+        });
+        $("st-forn-salvar").addEventListener("click", async () => {
+            const id = $("st-forn-id").value;
+            const payload = {
+                homologacao_id: $("st-forn-homolog").value, emails: $("st-forn-emails").value,
+                contato: $("st-forn-contato").value, telefone: $("st-forn-telefone").value, ativo: $("st-forn-ativo").checked,
+                tipo_ids: Array.from($("st-forn-tipos").querySelectorAll("input:checked")).map((c) => +c.value),
+            };
+            try {
+                const r = await api(id ? `/api/compras/st/fornecedores/${id}` : "/api/compras/st/fornecedores", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
+                toast(r.message, "success");
+                $("st-modal-forn").classList.remove("open");
+                carregarFornecedores();
+            } catch (err) { toast(err.message, "error"); }
+        });
+        $("st-btn-tipo").addEventListener("click", async () => {
+            try {
+                const r = await api("/api/compras/st/tipos", { method: "POST", body: JSON.stringify({ nome: $("st-tipo-nome").value }) });
+                $("st-tipo-nome").value = "";
+                toast(r.message, "success"); carregarTipos();
+            } catch (err) { toast(err.message, "error"); }
+        });
+        $("st-tipo-tbody").addEventListener("click", async (e) => {
+            const b = e.target.closest("[data-tipo-ativo]");
+            if (!b) return;
+            try {
+                await api(`/api/compras/st/tipos/${b.dataset.tipoAtivo}`, { method: "PUT", body: JSON.stringify({ ativo: b.dataset.ativo === "1" }) });
+                carregarTipos();
+            } catch (err) { toast(err.message, "error"); }
+        });
+    }
+
+    carregarCotacoes();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotação de Serviço | Columbia Sync</title>
+  <meta name="theme-color" content="#06070a">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --panel: rgba(16, 18, 24, .9); --panel-2: rgba(20, 24, 32, .78);
+      --line: rgba(160, 184, 215, .24); --text: #eef5ff; --muted: #92a3bd;
+      --green-bg: rgba(52, 211, 153, .16); --red-bg: rgba(251, 113, 133, .16);
+      --radius: 12px; --shadow: 0 14px 40px rgba(0, 0, 0, .5);
+    }
+    body {
+      margin: 0; min-height: 100vh; font-family: "Manrope", "Trebuchet MS", sans-serif; color: var(--text);
+      background: radial-gradient(1200px 460px at 12% -5%, rgba(47, 137, 255, .24), transparent 58%),
+        radial-gradient(900px 420px at 90% 3%, rgba(18, 197, 153, .14), transparent 56%),
+        linear-gradient(180deg, #090b10 0%, #05060a 100%);
+    }
+    .hero { color: #fff; background: linear-gradient(160deg, rgba(15,18,25,.95), rgba(8,9,13,.98)); border-bottom: 1px solid rgba(255,255,255,.08); padding: 26px 16px 34px; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .brand { display: inline-flex; align-items: center; gap: 14px; text-decoration: none; }
+    .brand img { width: 60px; height: 60px; object-fit: contain; }
+    .brand span { color: #a9cdff; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .22em; }
+    h1 { font-size: clamp(22px, 4vw, 32px); line-height: 1.1; margin: 16px 0 4px; font-weight: 800; }
+    .subtitle { margin: 0; color: #c4d3ea; font-size: 14px; }
+    .main { max-width: 1100px; margin: -14px auto 0; padding: 0 16px 46px; }
+    .section { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; color: #f4f8ff; font-weight: 800; }
+    h2 i { color: #7fb2ff; margin-right: 6px; }
+    label { display: block; font-size: 11px; font-weight: 800; color: #9bb0cd; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    input, select, textarea { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 14px; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #4b9bff; }
+    select option { color: #111; }
+    textarea { resize: vertical; min-height: 90px; }
+    .field { margin-bottom: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 680px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+    .msg { white-space: pre-wrap; font-size: 14px; color: #dbe7f8; line-height: 1.55; }
+    .tbl-wrap { overflow-x: auto; }
+    table.itens { width: 100%; border-collapse: collapse; min-width: 860px; }
+    table.itens th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #91a6c4; padding: 6px; border-bottom: 1px solid var(--line); }
+    table.itens td { padding: 6px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: top; font-size: 13px; }
+    table.itens input { padding: 7px 8px; min-width: 70px; }
+    .num { text-align: right; white-space: nowrap; }
+    .desenhos a { color: #9ccaff; display: block; font-size: 12px; margin-top: 2px; }
+    .calc { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .calc.warn { color: #ffd9a0; font-weight: 700; }
+    .totais { display: flex; gap: 24px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; font-weight: 800; color: #cfe4ff; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: var(--radius); padding: 12px 18px; font-size: 14px; font-weight: 900; cursor: pointer; }
+    .btn-primary { border: 1px solid #4b9bff; background: linear-gradient(135deg, #2a7cf0, #1e62be); color: #fff; width: 100%; justify-content: center; }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+    .empty-state { text-align: center; padding: 40px 22px; background: rgba(255,255,255,.03); border: 1px dashed rgba(161, 188, 219, .34); border-radius: var(--radius); color: var(--muted); }
+    .empty-state i { width: 58px; height: 58px; display: inline-grid; place-items: center; border-radius: var(--radius); background: rgba(47, 137, 255, .2); color: #cfe5ff; font-size: 24px; margin-bottom: 13px; }
+    .empty-state.is-success i { background: var(--green-bg); color: #9af0d0; }
+    .empty-state.is-error i { background: var(--red-bg); color: #ffc5ce; }
+    .empty-state h3 { margin: 0 0 6px; color: #f2f8ff; }
+    .toast { position: fixed; top: 16px; right: 16px; z-index: 999; background: #1a1d26; border: 1px solid var(--line); border-left: 4px solid #4b9bff; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 700; color: var(--text); max-width: 360px; display: none; box-shadow: var(--shadow); }
+    .toast.error { border-left-color: #fb7185; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <a class="brand" href="#"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Machine Brasil"><span>Columbia&nbsp;Sync</span></a>
+      <h1>Cotação de Serviço</h1>
+      <p class="subtitle" id="subtitulo">Carregando…</p>
+    </div>
+  </header>
+  <main class="main">
+    <div id="carregando" class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Carregando…</h3></div>
+    <div id="conteudo" class="hidden"></div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const token = "{{ token }}";
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const brl = (v) => 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const num = (v) => { const t = String(v || '').trim().replace(/\s/g, ''); return parseFloat(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t) || 0; };
+    let dados = null;
+
+    function toast(msg, tipo) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.className = 'toast' + (tipo ? ' ' + tipo : ''); el.style.display = 'block';
+      clearTimeout(el._t); el._t = setTimeout(() => { el.style.display = 'none'; }, 6000);
+    }
+
+    function estado(icone, titulo, texto, classe) {
+      return `<div class="empty-state ${classe || ''}"><i class="fas ${icone}"></i><h3>${esc(titulo)}</h3><p>${esc(texto)}</p></div>`;
+    }
+
+    // Bruto como sai na nota: ICMS/ISS por dentro, IPI por fora (mesma
+    // regra do servidor, so' pra mostrar a conferencia enquanto digita).
+    function brutoCalculado(net, ipi, icms, iss) {
+      const dentro = (icms + iss) / 100;
+      return dentro >= 1 ? null : net / (1 - dentro) * (1 + ipi / 100);
+    }
+
+    function montar(d) {
+      const linhas = d.itens.map((i) => `
+        <tr data-item="${i.id}">
+          <td>${i.ordem}</td>
+          <td>${esc(i.codigo || '—')}</td>
+          <td>${esc(i.descricao)}${i.n_os ? `<div class="calc">OS ${esc(i.n_os)}</div>` : ''}
+            <div class="desenhos">${i.desenhos.map((x) => `<a href="${x.url}"><i class="fas fa-file-arrow-down"></i> ${esc(x.nome)}</a>`).join('')}</div></td>
+          <td class="num">${i.quantidade.toLocaleString('pt-BR')}</td>
+          <td><input inputmode="decimal" data-c="preco_net" placeholder="0,00"></td>
+          <td><input inputmode="decimal" data-c="ipi_pct" placeholder="0"></td>
+          <td><input inputmode="decimal" data-c="icms_pct" placeholder="0"></td>
+          <td><input inputmode="decimal" data-c="iss_pct" placeholder="0"></td>
+          <td><input inputmode="decimal" data-c="preco_bruto" placeholder="0,00"><div class="calc" data-calc></div></td>
+        </tr>`).join('');
+      return `
+        <form id="form" autocomplete="off">
+          ${d.texto ? `<div class="section"><h2><i class="fas fa-message"></i> Mensagem da Columbia</h2><div class="msg">${esc(d.texto)}</div></div>` : ''}
+          <div class="section">
+            <h2><i class="fas fa-gears"></i> Peças — preço por peça</h2>
+            <p class="calc">Informe o preço <strong>net</strong> (sem impostos) e o <strong>bruto</strong> (com impostos) de cada peça, e as alíquotas. Baixe os desenhos técnicos em cada linha.</p>
+            <div class="tbl-wrap"><table class="itens">
+              <thead><tr><th>#</th><th>Código</th><th>Descrição / desenhos</th><th class="num">Qtde</th><th>Preço net (R$/peça) *</th><th>IPI %</th><th>ICMS %</th><th>ISS %</th><th>Preço bruto (R$/peça) *</th></tr></thead>
+              <tbody>${linhas}</tbody>
+            </table></div>
+            <div class="totais"><span>Total net: <span id="totNet">R$ 0,00</span></span><span>Total bruto: <span id="totBruto">R$ 0,00</span></span></div>
+          </div>
+          <div class="section">
+            <h2><i class="fas fa-handshake"></i> Condições</h2>
+            <div class="grid3">
+              <div class="field"><label>Prazo de entrega *</label><input id="prazo_entrega" maxlength="80" placeholder="Ex.: 15 dias úteis"></div>
+              <div class="field"><label>Condição de pagamento *</label><input id="condicao_pagamento" maxlength="120" placeholder="Ex.: 28 DDL"></div>
+              <div class="field"><label>Validade da proposta</label><input type="date" id="validade_proposta"></div>
+            </div>
+            <div class="grid2">
+              <div class="field"><label>Frete *</label><select id="frete_tipo"><option value="">Selecione…</option><option value="CIF">CIF (por conta do fornecedor)</option><option value="FOB">FOB (por conta da Columbia)</option></select></div>
+              <div class="field"><label>Valor do frete (R$)</label><input inputmode="decimal" id="frete_valor" placeholder="0,00"></div>
+            </div>
+            <div class="field"><label>Observações</label><textarea id="observacoes"></textarea></div>
+            <div class="field"><label>Proposta formal (PDF, opcional)</label><input type="file" id="proposta"></div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="btnEnviar"><i class="fas fa-paper-plane"></i> Enviar cotação</button>
+        </form>`;
+    }
+
+    function atualizar() {
+      let totNet = 0, totBruto = 0;
+      document.querySelectorAll('[data-item]').forEach((tr) => {
+        const v = (c) => num(tr.querySelector(`[data-c="${c}"]`).value);
+        const item = dados.itens.find((i) => i.id === +tr.dataset.item);
+        const net = v('preco_net'), bruto = v('preco_bruto');
+        totNet += net * item.quantidade; totBruto += bruto * item.quantidade;
+        const calc = net ? brutoCalculado(net, v('ipi_pct'), v('icms_pct'), v('iss_pct')) : null;
+        const el = tr.querySelector('[data-calc]');
+        const diverge = calc && bruto && Math.abs(bruto - calc) > calc * 0.01;
+        el.textContent = calc ? `Cálculo da nota: ${brl(calc)}${diverge ? ' — difere do informado' : ''}` : '';
+        el.className = 'calc' + (diverge ? ' warn' : '');
+      });
+      const frete = num(document.getElementById('frete_valor').value);
+      document.getElementById('totNet').textContent = brl(totNet + frete);
+      document.getElementById('totBruto').textContent = brl(totBruto + frete);
+    }
+
+    async function enviar(confirmar) {
+      const g = (id) => document.getElementById(id).value;
+      const payload = {
+        prazo_entrega: g('prazo_entrega'), condicao_pagamento: g('condicao_pagamento'), validade_proposta: g('validade_proposta') || null,
+        frete_tipo: g('frete_tipo'), frete_valor: g('frete_valor'), observacoes: g('observacoes'), confirmar_divergencia: confirmar,
+        itens: Array.from(document.querySelectorAll('[data-item]')).map((tr) => {
+          const o = { item_id: +tr.dataset.item };
+          tr.querySelectorAll('[data-c]').forEach((inp) => { o[inp.dataset.c] = inp.value; });
+          return o;
+        }),
+      };
+      const fd = new FormData();
+      fd.append('payload', JSON.stringify(payload));
+      const arq = document.getElementById('proposta').files[0];
+      if (arq) fd.append('proposta', arq, arq.name);
+      const r = await fetch(`/api/st-cotacao/${token}`, { method: 'POST', body: fd });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 409 && d.confirmar && !confirmar) {
+        if (confirm(d.error)) return enviar(true);
+        return false;
+      }
+      if (!r.ok) throw new Error(d.error || 'Erro ao enviar a cotação.');
+      return true;
+    }
+
+    async function carregar() {
+      const conteudo = document.getElementById('conteudo');
+      try {
+        const resp = await fetch(`/api/st-cotacao/${token}`);
+        dados = await resp.json();
+        if (!resp.ok) throw new Error(dados.error || 'Link inválido.');
+        document.getElementById('subtitulo').textContent = `${dados.numero} — Serviço de ${dados.tipo} — ${dados.fornecedor}`;
+        if (dados.status === 'Recebida') {
+          conteudo.innerHTML = estado('fa-circle-check', 'Cotação já enviada', 'Obrigado! Sua cotação já foi recebida e está em análise.', 'is-success');
+        } else if (!dados.valido) {
+          conteudo.innerHTML = estado('fa-triangle-exclamation', 'Link indisponível', 'Este link expirou ou a cotação foi encerrada. Entre em contato com a Columbia Machine Brasil.', 'is-error');
+        } else {
+          conteudo.innerHTML = montar(dados);
+          document.getElementById('form').addEventListener('input', atualizar);
+          document.getElementById('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnEnviar');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
+            try {
+              if (await enviar(false)) {
+                conteudo.innerHTML = estado('fa-circle-check', 'Cotação enviada!', 'Obrigado! Recebemos sua cotação e nossa equipe vai analisá-la.', 'is-success');
+                return;
+              }
+            } catch (err) { toast(err.message, 'error'); }
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar cotação';
+          });
+        }
+      } catch (err) {
+        conteudo.innerHTML = estado('fa-triangle-exclamation', 'Não foi possível carregar', err.message, 'is-error');
+      } finally {
+        document.getElementById('carregando').classList.add('hidden');
+        conteudo.classList.remove('hidden');
+      }
+    }
+    carregar();
+  </script>
+</body>
+</html>
