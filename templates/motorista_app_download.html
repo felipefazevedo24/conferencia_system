@@ -36,9 +36,14 @@
     <h1>App do Motorista — Columbia Sync</h1>
     <p class="sub">Baixe e instale para ter o rastreamento funcionando de verdade, mesmo com o celular no bolso.</p>
 
-    <a class="btn-download" href="{{ url_for('static', filename='downloads/motorista-app.apk') }}" download>
+    {% if versao %}
+    <a class="btn-download" href="{{ url_for('motorista_viagem.motorista_app_download_apk') }}" download>
         ⬇ Baixar aplicativo (.apk)
     </a>
+    <p class="sub" style="margin-top:8px;">Versão {{ versao.versao_nome }}</p>
+    {% else %}
+    <div class="aviso">App ainda não disponível. Fale com a logística.</div>
+    {% endif %}
 
     <div class="passos">
         <h2>Como instalar</h2>

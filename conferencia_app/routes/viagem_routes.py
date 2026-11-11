@@ -14,7 +14,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from sqlalchemy import func, or_, true
 from werkzeug.utils import secure_filename
 
-from ..auth import has_permission, permission_required, permission_required_any
+from ..auth import has_permission, is_admin_session, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoMotorista,
@@ -33,6 +33,8 @@ from ..services.agendamento_service import _geocode_endereco, montar_endereco_ro
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
 from ..services.solicitacao_coleta_service import validar_liberacao_coleta
+from ..services.frota_combustivel_service import KM_LIMITE_VIAGEM
+from ..services import motorista_app_service as motorista_app_svc
 from ..services import viagem_relatorio_service as relatorio_svc
 from ..tempo import agora_br
 
@@ -708,6 +710,51 @@ def _evento_dict(e: ViagemEvento) -> dict:
     }
 
 
+# Km "absurdo" só gera aviso, nunca bloqueia: travar a saída do motorista por
+# causa de um número custa mais que corrigir depois. Limites vêm do histórico
+# real: viagens legítimas chegaram a ~1.100 km; os erros eram odômetro de
+# outro veículo (25 mil x 295 mil) ou dígito trocado (286 mil x 586 mil).
+KM_LIMITE_DIFERENCA_VEICULO = 1000
+
+
+def _ultimo_km_veiculo(veiculo_id: int, ignorar_viagem_id: int | None = None) -> int | None:
+    """Último odômetro conhecido do veículo: viagem encerrada ou abastecimento, o mais recente."""
+    q = Viagem.query.filter(Viagem.veiculo_id == veiculo_id, Viagem.km_final.isnot(None))
+    if ignorar_viagem_id:
+        q = q.filter(Viagem.id != ignorar_viagem_id)
+    quando_viagem = func.coalesce(Viagem.retorno_real, Viagem.saida_real)
+    viagem = q.order_by(quando_viagem.desc()).first()
+    abast = (
+        FrotaAbastecimento.query.filter(FrotaAbastecimento.veiculo_id == veiculo_id)
+        .order_by(FrotaAbastecimento.data.desc()).first()
+    )
+    candidatos = []
+    if viagem:
+        candidatos.append((viagem.retorno_real or viagem.saida_real or datetime.min, viagem.km_final))
+    if abast and abast.km_atual is not None:
+        candidatos.append((abast.data or datetime.min, abast.km_atual))
+    return max(candidatos)[1] if candidatos else None
+
+
+def _avisos_km(v: Viagem, km_inicial: int | None = None, km_final: int | None = None) -> list[str]:
+    avisos = []
+    if km_inicial is not None:
+        ref = _ultimo_km_veiculo(v.veiculo_id, v.id)
+        if ref is not None and abs(km_inicial - ref) > KM_LIMITE_DIFERENCA_VEICULO:
+            avisos.append(f"KM inicial {km_inicial} está longe do último KM conhecido do veículo ({ref}).")
+    if km_final is not None and v.km_inicial is not None:
+        if km_final < v.km_inicial:
+            avisos.append(f"KM final {km_final} é menor que o inicial ({v.km_inicial}).")
+        elif km_final - v.km_inicial > KM_LIMITE_VIAGEM:
+            avisos.append(f"Viagem de {km_final - v.km_inicial} km ({v.km_inicial} → {km_final}). Confira o odômetro.")
+    return avisos
+
+
+def _registrar_avisos_km(v: Viagem, avisos: list[str]) -> None:
+    if avisos:
+        _log_evento(v.id, "OCORRENCIA", "KM suspeito", descricao=" ".join(avisos), severidade="warning")
+
+
 def _log_evento(viagem_id, tipo, titulo, **kwargs):
     db.session.add(ViagemEvento(
         viagem_id=viagem_id,
@@ -1370,9 +1417,11 @@ def iniciar(vid: int):
     _log_evento(v.id, "INICIO", "Viagem iniciada",
                 descricao=f"KM inicial: {v.km_inicial or '—'}",
                 latitude=lat, longitude=lng, km=v.km_inicial, severidade="success")
+    avisos_km = _avisos_km(v, km_inicial=v.km_inicial)
+    _registrar_avisos_km(v, avisos_km)
     db.session.commit()
     _avisar_saida_entrega_dap(v)
-    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
+    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "avisos_km": avisos_km})
 
 
 @viagem_bp.route("/<int:vid>/concluir", methods=["POST"])
@@ -1422,8 +1471,10 @@ def concluir(vid: int):
     _log_evento(v.id, "FIM", "Viagem concluída",
                 descricao=f"KM final: {v.km_final or '—'} · percorrido: {v.km_percorrido or 0:.1f} km",
                 latitude=lat, longitude=lng, km=v.km_final, severidade="success")
+    avisos_km = _avisos_km(v, km_final=v.km_final)
+    _registrar_avisos_km(v, avisos_km)
     db.session.commit()
-    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
+    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "avisos_km": avisos_km})
 
 
 @viagem_bp.route("/<int:vid>/cancelar", methods=["POST"])
@@ -1862,6 +1913,9 @@ def nova_viagem_de_solicitacao(sid: int):
         return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
     if not sol.veiculo_id:
         return jsonify({"sucesso": False, "msg": "Alocar veículo na solicitação antes de montar a viagem."}), 400
+    falta_departamento = _exigir_departamentos([sol], request.get_json(silent=True) or {})
+    if falta_departamento:
+        return falta_departamento
 
     conflito_em_aberta = (
         db.session.query(ViagemParada.id, Viagem.id, Viagem.codigo)
@@ -1942,6 +1996,9 @@ def nova_viagem_avulsa_de_solicitacao(sid: int):
         return jsonify({"sucesso": False, "msg": bloqueio_avulsa}), 409
     if not sol.veiculo_id:
         return jsonify({"sucesso": False, "msg": "Alocar veículo na solicitação antes de montar a viagem avulsa."}), 400
+    falta_departamento = _exigir_departamentos([sol], request.get_json(silent=True) or {})
+    if falta_departamento:
+        return falta_departamento
 
     motorista = AgendamentoMotorista.query.get(sol.motorista_id) if sol.motorista_id else None
     viagem = Viagem(
@@ -1997,6 +2054,9 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     bloqueio_liberacao = validar_liberacao_coleta(sol)
     if bloqueio_liberacao:
         return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
+    falta_departamento = _exigir_departamentos([sol], request.get_json(silent=True) or {})
+    if falta_departamento:
+        return falta_departamento
 
     vinculo = (
         db.session.query(ViagemParada.id, ViagemParada.viagem_id, Viagem.codigo)
@@ -2082,6 +2142,34 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "liberacao_revogada": liberacao_revogada})
 
 
+DEPARTAMENTOS_SOLICITANTES = ("COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES")
+
+
+def _exigir_departamentos(solicitacoes: list, payload: dict):
+    """Solicitação só entra em viagem com departamento: é ele que paga o
+    combustível no rateio. Aplica o que veio em payload["departamentos"]
+    ({id: depto}) e, se ainda faltar algum, devolve a lista para a tela pedir."""
+    informados = payload.get("departamentos") if isinstance(payload.get("departamentos"), dict) else {}
+    for sol in solicitacoes:
+        dep = str(informados.get(str(sol.id)) or "").strip().upper()
+        if not dep:
+            continue
+        if dep not in DEPARTAMENTOS_SOLICITANTES:
+            return jsonify({"sucesso": False, "msg": f"Departamento inválido: {dep}."}), 400
+        sol.departamento_solicitante = dep
+    faltando = [s for s in solicitacoes if not str(s.departamento_solicitante or "").strip()]
+    if not faltando:
+        return None
+    return jsonify({
+        "sucesso": False,
+        "msg": "Informe o departamento de cada solicitação antes de montar a viagem.",
+        "sem_departamento": [
+            {"id": s.id, "codigo": s.codigo, "tipo": s.tipo, "parceiro_nome": s.parceiro_nome}
+            for s in faltando
+        ],
+    }), 400
+
+
 @viagem_bp.route("/montar-com-solicitacoes", methods=["POST"])
 @permission_required(PERM)
 def montar_viagem_com_solicitacoes():
@@ -2117,6 +2205,9 @@ def montar_viagem_com_solicitacoes():
             return jsonify({"sucesso": False, "msg": bloqueio_liberacao}), 409
         if not sol.veiculo_id or not sol.motorista_id:
             return jsonify({"sucesso": False, "msg": f"Defina veículo e motorista da solicitação {sol.codigo or sol.id} antes de montar viagem."}), 409
+    falta_departamento = _exigir_departamentos(solicitacoes, payload)
+    if falta_departamento:
+        return falta_departamento
 
     veiculos = {int(sol.veiculo_id) for sol in solicitacoes if sol.veiculo_id}
     motoristas = {int(sol.motorista_id) for sol in solicitacoes if sol.motorista_id}
@@ -2390,6 +2481,28 @@ def relatorio_excel():
 
 
 # --------------------------------------------------------------------------- LINK DO PAINEL DO MOTORISTA (gestor)
+@viagem_bp.route("/motorista-app", methods=["GET"])
+@permission_required(PERM)
+def motorista_app_info():
+    return jsonify({"sucesso": True, "versao": motorista_app_svc.versao_atual(), "pode_publicar": is_admin_session()})
+
+
+@viagem_bp.route("/motorista-app", methods=["POST"])
+@permission_required(PERM)
+def motorista_app_publicar():
+    # O APK vai para o celular de todos os motoristas: só admin publica.
+    if not is_admin_session():
+        return jsonify({"sucesso": False, "msg": "Só administrador publica o app do motorista."}), 403
+    arquivo = request.files.get("apk")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"sucesso": False, "msg": "Selecione o APK."}), 400
+    try:
+        info = motorista_app_svc.publicar_apk(arquivo, _user())
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True, "versao": info})
+
+
 @viagem_bp.route("/motorista/<int:mid>/painel-link", methods=["GET"])
 @permission_required_any(PERM, PERM_CADASTROS)
 def motorista_painel_link(mid: int):
@@ -3019,7 +3132,21 @@ motorista_bp = Blueprint("motorista_viagem", __name__)
 def motorista_app_download():
     """Página pública com o link para baixar o APK do app do motorista e o
     passo a passo de instalação. Sem login — o motorista abre pelo celular."""
-    return render_template("motorista_app_download.html")
+    return render_template("motorista_app_download.html", versao=motorista_app_svc.versao_atual())
+
+
+@motorista_bp.route("/motorista/app.apk", methods=["GET"])
+def motorista_app_download_apk():
+    # Mesmo APK que o gestor publica na Central: um lugar só para subir a
+    # versão nova, tanto para quem instala do zero quanto para a atualização.
+    if not motorista_app_svc.versao_atual():
+        return ("Nenhuma versão do app publicada ainda.", 404)
+    return send_file(
+        motorista_app_svc.caminho_apk(),
+        mimetype="application/vnd.android.package-archive",
+        as_attachment=True,
+        download_name="motorista_sync.apk",
+    )
 
 
 # ---- Painel permanente do motorista (link PWA compartilhável) ----
@@ -3053,11 +3180,47 @@ def motorista_painel_viagens(mid: int, token: str):
         .limit(20)
         .all()
     )
+    viagens = []
+    for v in ativas:
+        item = _viagem_dict(v, detalhada=True)
+        # O app compara o km digitado com este antes de enviar (aviso de km absurdo).
+        item["km_referencia"] = _ultimo_km_veiculo(v.veiculo_id, v.id)
+        viagens.append(item)
     return jsonify({
         "motorista": {"id": mot.id, "nome": mot.nome},
-        "viagens": [_viagem_dict(v, detalhada=True) for v in ativas],
+        "viagens": viagens,
         "historico": [_viagem_dict(v) for v in concluidas],
     })
+
+
+@motorista_bp.route("/motorista/painel/<int:mid>/<token>/app-versao", methods=["GET"])
+def motorista_app_versao(mid: int, token: str):
+    if not _motorista_por_token(mid, token):
+        return jsonify({"erro": "Token inválido."}), 403
+    info = motorista_app_svc.versao_atual()
+    if not info:
+        return jsonify({"versao_codigo": 0})
+    # Sem URL aqui: o app monta com o próprio https. Atrás do proxy do
+    # PythonAnywhere o url_for externo pode sair http, que o Android bloqueia.
+    return jsonify({
+        "versao_codigo": info["versao_codigo"],
+        "versao_nome": info["versao_nome"],
+        "tamanho": info["tamanho"],
+    })
+
+
+@motorista_bp.route("/motorista/painel/<int:mid>/<token>/app.apk", methods=["GET"])
+def motorista_app_apk(mid: int, token: str):
+    if not _motorista_por_token(mid, token):
+        return jsonify({"erro": "Token inválido."}), 403
+    if not motorista_app_svc.versao_atual():
+        return jsonify({"erro": "Nenhuma versão publicada."}), 404
+    return send_file(
+        motorista_app_svc.caminho_apk(),
+        mimetype="application/vnd.android.package-archive",
+        as_attachment=True,
+        download_name="motorista_sync.apk",
+    )
 
 
 @motorista_bp.route("/motorista/viagem/<int:vid>/<token>", methods=["GET"])
@@ -3113,8 +3276,11 @@ def motorista_iniciar_publico(vid: int, token: str):
             km=km_ini,
             severidade="success",
         )
+        avisos_km = _avisos_km(v, km_inicial=km_ini)
+        _registrar_avisos_km(v, avisos_km)
         db.session.commit()
         _avisar_saida_entrega_dap(v)
+        return jsonify({"sucesso": True, "status": v.status, "avisos_km": avisos_km})
     return jsonify({"sucesso": True, "status": v.status})
 
 
@@ -3187,8 +3353,10 @@ def motorista_concluir_publico(vid: int, token: str):
     _log_evento(v.id, "FIM", "Viagem concluida pelo motorista",
                 descricao=f"KM final: {v.km_final or '—'} · percorrido: {v.km_percorrido or 0:.1f} km",
                 latitude=lat, longitude=lng, km=v.km_final, severidade="success")
+    avisos_km = _avisos_km(v, km_final=v.km_final)
+    _registrar_avisos_km(v, avisos_km)
     db.session.commit()
-    return jsonify({"sucesso": True, "status": v.status})
+    return jsonify({"sucesso": True, "status": v.status, "avisos_km": avisos_km})
 
 
 @motorista_bp.route("/motorista/viagem/<int:vid>/<token>/status", methods=["GET"])

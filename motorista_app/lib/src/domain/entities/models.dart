@@ -37,6 +37,9 @@ class Viagem {
   final int? qtdParadas;
   final int? qtdParadasOk;
   final String? motoristaLink; // URL completa com vid + token específico da viagem
+  /// Último odômetro conhecido do veículo (servidor): o km digitado é
+  /// comparado com ele para avisar erro de digitação antes de enviar.
+  final int? kmReferencia;
 
   const Viagem({
     required this.id,
@@ -61,6 +64,7 @@ class Viagem {
     this.qtdParadas,
     this.qtdParadasOk,
     this.motoristaLink,
+    this.kmReferencia,
   });
 
   bool get finalizada => status == 'Concluida' || status == 'Cancelada';
@@ -90,6 +94,7 @@ class Viagem {
       qtdParadas: (json['qtd_paradas'] as num?)?.toInt(),
       qtdParadasOk: (json['qtd_paradas_ok'] as num?)?.toInt(),
       motoristaLink: json['motorista_link'] as String?,
+      kmReferencia: (json['km_referencia'] as num?)?.toInt(),
     );
   }
 

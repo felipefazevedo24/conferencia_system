@@ -91,6 +91,11 @@ class ApiClient {
     return _get('/motorista/painel/$mid/$token/viagens');
   }
 
+  /// Versão do APK publicada no Sync (versao_codigo 0 = nenhuma).
+  Future<Map<String, dynamic>> appVersao({required int mid, required String token}) {
+    return _get('/motorista/painel/$mid/$token/app-versao');
+  }
+
   // ---- Viagem (por vid + token específico da viagem) ----
 
   Future<Map<String, dynamic>> iniciarViagem({

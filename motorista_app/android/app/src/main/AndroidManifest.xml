@@ -20,6 +20,9 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
+    <!-- Atualização pelo próprio app: baixa o APK novo do Sync e abre o instalador. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
     <application
         android:label="Motorista Sync"
         android:name="${applicationName}"

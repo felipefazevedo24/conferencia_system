@@ -586,6 +586,9 @@ def excluir_abastecimento(aid: int):
     a = db.session.get(FrotaAbastecimento, aid)
     if not a:
         return jsonify({"sucesso": False, "msg": "Não encontrado."}), 404
+    fechada = combustivel_svc.fatura_fechada_da_nfce(a.chave_nfce)
+    if fechada:
+        return jsonify({"sucesso": False, "msg": f"NFC-e da NF-e {fechada.numero}, que está fechada. Reabra a NF-e antes."}), 400
     db.session.delete(a)
     db.session.commit()
     return jsonify({"sucesso": True})
@@ -630,12 +633,59 @@ def detalhe_fatura(fid: int):
     fatura = db.session.get(FrotaFaturaCombustivel, fid)
     if not fatura:
         return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
-    conferencia = combustivel_svc.conferir_fatura(fatura)
-    return jsonify({
-        "fatura": combustivel_svc.fatura_dict(fatura, conferencia),
-        "notas": conferencia["notas"],
-        "rateio": combustivel_svc.ratear_fatura(fatura, conferencia),
-    })
+    return jsonify(combustivel_svc.detalhe_fatura(fatura))
+
+
+@frota_bp.route("/faturas/<int:fid>/fechar", methods=["POST"])
+@permission_required(PERM)
+def fechar_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura:
+        return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    try:
+        combustivel_svc.fechar_fatura(fatura, _user())
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True})
+
+
+@frota_bp.route("/faturas/<int:fid>/reabrir", methods=["POST"])
+@permission_required(PERM)
+def reabrir_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura:
+        return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    try:
+        combustivel_svc.reabrir_fatura(fatura)
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True})
+
+
+_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@frota_bp.route("/faturas/<int:fid>/rateio.xlsx", methods=["GET"])
+@permission_required(PERM)
+def excel_rateio_fatura(fid: int):
+    fatura = db.session.get(FrotaFaturaCombustivel, fid)
+    if not fatura:
+        return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    stream, nome = combustivel_svc.excel_fatura(fatura)
+    return send_file(stream, mimetype=_XLSX, as_attachment=True, download_name=nome)
+
+
+@frota_bp.route("/faturas/rateio.xlsx", methods=["GET"])
+@permission_required(PERM)
+def excel_rateio_mes():
+    try:
+        ano, mes = (int(x) for x in str(request.args.get("mes") or "").split("-"))
+        if not 1 <= mes <= 12:
+            raise ValueError
+    except ValueError:
+        return jsonify({"sucesso": False, "msg": "Informe o mês (AAAA-MM)."}), 400
+    stream, nome = combustivel_svc.excel_mes(ano, mes)
+    return send_file(stream, mimetype=_XLSX, as_attachment=True, download_name=nome)
 
 
 @frota_bp.route("/faturas/<int:fid>/xml", methods=["GET"])
@@ -654,6 +704,8 @@ def excluir_fatura(fid: int):
     fatura = db.session.get(FrotaFaturaCombustivel, fid)
     if not fatura:
         return jsonify({"sucesso": False, "msg": "NF-e não encontrada."}), 404
+    if fatura.fechada_em:
+        return jsonify({"sucesso": False, "msg": f"NF-e {fatura.numero} está fechada. Reabra antes de excluir."}), 400
     db.session.delete(fatura)
     db.session.commit()
     return jsonify({"sucesso": True})

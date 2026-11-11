@@ -1542,9 +1542,10 @@ class FrotaAbastecimento(db.Model):
 class FrotaFaturaCombustivel(db.Model):
     """NF-e semanal do posto (CFOP 5929) que fatura as NFC-e da semana.
 
-    As NFC-e cobertas vêm do NFref do próprio XML. Conferência (o que falta
-    lançar, diferença de valor) e rateio por departamento são calculados na
-    hora, nunca gravados: lançar uma NFC-e atrasada corrige a fatura sozinho.
+    As NFC-e cobertas vêm do NFref do próprio XML. Enquanto aberta, conferência
+    (o que falta lançar, diferença de valor) e rateio por departamento são
+    calculados na hora: lançar uma NFC-e atrasada corrige a fatura sozinho.
+    Ao fechar, os dois ficam congelados em fechamento_json.
     """
     __tablename__ = "frota_fatura_combustivel"
 
@@ -1561,6 +1562,11 @@ class FrotaFaturaCombustivel(db.Model):
     xml = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
     criado_por = db.Column(db.String(100))
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    # Fechar congela conferência e rateio (json): depois disso editar viagem ou
+    # lançar NFC-e não muda mais o que já foi passado ao financeiro.
+    fechada_em = db.Column(db.DateTime, index=True)
+    fechada_por = db.Column(db.String(100))
+    fechamento_json = db.Column(db.Text)
 
 
 class FrotaMulta(db.Model):
