@@ -5276,6 +5276,7 @@ class InventarioCiclicoItem(db.Model):
     STATUS_AGUARDA_3A = "Aguardando 3ª"         # 2a divergiu: conta o gestor
     STATUS_CONFERE = "Confere"
     STATUS_AJUSTE = "Divergência confirmada"    # 3a divergiu: foi pro Ajuste de Estoque
+    STATUS_MANTIDA = "Divergência mantida"      # gestor decidiu nao ajustar (ex.: chapa), com justificativa
     STATUS_CANCELADO = "Cancelado"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -5303,6 +5304,10 @@ class InventarioCiclicoItem(db.Model):
 
     contagem_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_inicial.id"))  # registro em Realizados
     ajuste_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_ajuste.id"))
+
+    divergencia_mantida_justificativa = db.Column(db.String(500))
+    divergencia_mantida_por = db.Column(db.String(100))
+    divergencia_mantida_em = db.Column(db.DateTime)
 
 
 class EstoqueGrvEspelho(db.Model):

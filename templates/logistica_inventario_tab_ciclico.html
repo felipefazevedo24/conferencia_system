@@ -104,6 +104,7 @@
                 <strong id="ic-pend-contador" style="font-size:13px;">Nenhum selecionado</strong>
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="ic-lote-liberar" disabled><i class="fas fa-rotate"></i> Liberar 2ª contagem</button>
                 <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="ic-lote-ajuste" disabled><i class="fas fa-scale-balanced"></i> Seguir para ajuste</button>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="ic-lote-manter" disabled><i class="fas fa-lock"></i> Manter divergência</button>
             </div>
             <div class="ic-scroll" style="max-height:48vh;"><table class="ic-table">
                 <thead><tr><th style="width:34px;"><input type="checkbox" id="ic-pend-todos" title="Selecionar todos"></th><th>Nº</th><th>Conferente</th><th>Endereço</th><th>Código</th><th>Descrição</th><th style="text-align:right;">GRV</th><th style="text-align:right;">1ª</th><th style="text-align:right;">2ª</th><th>Situação</th><th></th></tr></thead>
@@ -174,6 +175,10 @@
             <div class="eui-card__head"><strong id="ic-confirmar-titulo"></strong></div>
             <div class="eui-card__body" style="display:grid;gap:14px;">
                 <div id="ic-confirmar-texto"></div>
+                <div class="ic-field ic-hidden" id="ic-confirmar-just-wrap">
+                    <label for="ic-confirmar-just">Justificativa *</label>
+                    <textarea class="eui-input" id="ic-confirmar-just" rows="3" maxlength="500" placeholder="Ex.: chapa - saldo fica com a diferença até o próximo corte"></textarea>
+                </div>
                 <div class="ic-acoes">
                     <button type="button" class="eui-btn eui-btn--ghost" data-fechar>Voltar</button>
                     <button type="button" class="eui-btn eui-btn--danger" id="ic-confirmar-ok"></button>
@@ -414,7 +419,7 @@
 
     const CLASSE_STATUS = {
         'Aguardando 1ª': 'pendente', 'Aguardando 2ª': 'pendente', 'Divergente na 1ª': 'aguarda',
-        'Aguardando 3ª': 'aguarda', 'Confere': 'confere', 'Divergência confirmada': 'diverg', 'Cancelado': 'pendente',
+        'Aguardando 3ª': 'aguarda', 'Confere': 'confere', 'Divergência confirmada': 'diverg', 'Divergência mantida': 'pendente', 'Cancelado': 'pendente',
     };
     const st = (s) => `<span class="ic-st ${CLASSE_STATUS[s] || 'pendente'}">${esc(s)}</span>`;
     const end = (e) => e ? `<span class="ic-end">${esc(e)}</span>` : '<span class="ic-hint">sem endereço</span>';
@@ -430,6 +435,8 @@
         $('ic-lote-liberar').innerHTML = `<i class="fas fa-rotate"></i> Liberar 2ª contagem${liberaveis ? ` (${liberaveis})` : ''}`;
         $('ic-lote-ajuste').disabled = !sel.length;
         $('ic-lote-ajuste').innerHTML = `<i class="fas fa-scale-balanced"></i> Seguir para ajuste${sel.length ? ` (${sel.length})` : ''}`;
+        $('ic-lote-manter').disabled = !sel.length;
+        $('ic-lote-manter').innerHTML = `<i class="fas fa-lock"></i> Manter divergência${sel.length ? ` (${sel.length})` : ''}`;
         const todos = $('ic-pend-todos');
         todos.checked = pendencias.length > 0 && sel.length === pendencias.length;
         todos.indeterminate = sel.length > 0 && sel.length < pendencias.length;
@@ -464,10 +471,10 @@
         atualizarLote();
     }
 
-    async function executarLote(acao, ids, btn) {
+    async function executarLote(acao, ids, btn, justificativa) {
         btn.disabled = true;
         try {
-            const d = await api('/api/inventario-ciclico/pendencias/lote', { method: 'POST', body: JSON.stringify({ acao, ids }) });
+            const d = await api('/api/inventario-ciclico/pendencias/lote', { method: 'POST', body: JSON.stringify({ acao, ids, justificativa }) });
             toast(d.message, d.erros && d.erros.length ? 'error' : 'success');
             ids.forEach((id) => pendMarcados.delete(id));
             $('ic-modal-confirmar').classList.remove('open');
@@ -579,7 +586,7 @@
                 const grv = i.grv3 ?? i.grv2 ?? i.grv1;
                 return `<tr><td>${end(i.endereco)}</td><td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
                     <td class="num">${num(i.contagem1)}</td><td class="num">${num(i.contagem2)}</td><td class="num">${num(i.contagem3)}</td>
-                    <td class="num">${num(grv)}</td><td>${st(i.status)}</td></tr>`;
+                    <td class="num">${num(grv)}</td><td${i.divergencia_mantida_justificativa ? ` title="${esc(i.divergencia_mantida_por)}: ${esc(i.divergencia_mantida_justificativa)}"` : ''}>${st(i.status)}</td></tr>`;
             }).join('') || '<tr><td colspan="8" class="ic-vazio">Sem itens.</td></tr>';
             abrirModal('ic-modal-itens');
         } catch (e) { toast(e.message, 'error'); }
@@ -587,7 +594,10 @@
 
     let urlConfirmada = null;
     let acaoConfirmada = null;  // quando a confirmacao e' de uma acao em lote
-    function pedirConfirmacao(titulo, texto, botao, url, acao) {
+    // comJustificativa: mostra o campo (obrigatorio) - a acao le em $('ic-confirmar-just').
+    function pedirConfirmacao(titulo, texto, botao, url, acao, comJustificativa) {
+        $('ic-confirmar-just').value = '';
+        $('ic-confirmar-just-wrap').classList.toggle('ic-hidden', !comJustificativa);
         $('ic-confirmar-titulo').textContent = titulo;
         $('ic-confirmar-texto').textContent = texto;
         $('ic-confirmar-ok').textContent = botao;
@@ -677,6 +687,18 @@
                     `Cancelar ${cancelar.dataset.numero}? Os itens ainda não fechados saem da lista do conferente. O que já foi contado fica como está.`,
                     'Cancelar distribuição', `/api/inventario-ciclico/distribuicoes/${cancelar.dataset.cancelar}/cancelar`);
             }
+        });
+        $('ic-lote-manter').addEventListener('click', () => {
+            const sel = pendencias.filter((i) => pendMarcados.has(i.id));
+            const texto = sel.length === 1
+                ? `${sel[0].codigo} fecha com a ${sel[0].status === 'Aguardando 3ª' ? 2 : 1}ª contagem e o estoque fica com a diferença, sem ajuste.`
+                : `${sel.length} itens fecham com a última contagem e o estoque fica com a diferença, sem ajuste.`;
+            pedirConfirmacao('Manter divergência', texto, `Manter divergência (${sel.length})`, null, (btn) => {
+                const just = $('ic-confirmar-just').value.trim();
+                if (!just) { toast('Justifique por que a divergência vai ser mantida.', 'error'); $('ic-confirmar-just').focus(); return; }
+                return executarLote('manter', sel.map((i) => i.id), btn, just);
+            }, true);
+            $('ic-confirmar-just').focus();
         });
         $('ic-confirmar-ok').addEventListener('click', executarConfirmado);
         document.querySelectorAll('.ic-modal [data-fechar]').forEach((b) => b.addEventListener('click', () => fecharModal(b)));

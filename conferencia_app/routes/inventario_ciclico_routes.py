@@ -45,6 +45,9 @@ def _item_gestao(i: Item) -> dict:
         "contagem2": i.contagem2, "contagem2_por": i.contagem2_por, "contagem2_em": _dt(i.contagem2_em), "grv2": i.grv2,
         "contagem3": i.contagem3, "contagem3_por": i.contagem3_por, "contagem3_em": _dt(i.contagem3_em), "grv3": i.grv3,
         "ajuste_id": i.ajuste_id,
+        "divergencia_mantida_justificativa": i.divergencia_mantida_justificativa,
+        "divergencia_mantida_por": i.divergencia_mantida_por,
+        "divergencia_mantida_em": _dt(i.divergencia_mantida_em),
     }
 
 
@@ -216,11 +219,13 @@ def api_pendencias_lote():
     p = request.get_json(silent=True) or {}
     acao = str(p.get("acao") or "")
     try:
-        res = svc.acao_em_lote(acao, p.get("ids"), _usuario())
+        res = svc.acao_em_lote(acao, p.get("ids"), _usuario(), p.get("justificativa"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     if acao == "liberar":
         msg = f"2ª contagem liberada para {res['feitos']} item(ns)."
+    elif acao == "manter":
+        msg = f"Divergência mantida em {res['feitos']} item(ns). Estoque sem ajuste."
     else:
         msg = f"{res['feitos']} item(ns) enviados para o Ajuste de Estoque."
         if res["feitos"] > res["ajustes"]:
