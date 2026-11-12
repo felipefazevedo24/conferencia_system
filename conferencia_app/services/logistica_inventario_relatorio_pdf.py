@@ -14,6 +14,7 @@ Table/Paragraph -> bytes, servido via send_file."""
 import pathlib
 from io import BytesIO
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -380,7 +381,10 @@ def gerar_relatorio_ajuste_pdf(relatorio, ajustes: list) -> bytes:
         # lote inteiro) - pre-carregada da aprovacao (Modulo 02) e
         # editavel na hora de gerar o relatorio (ver gerar_relatorio_ajuste).
         linha_justificativa = len(linhas)
-        linhas.append([_p(f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}", size=7.5)] + [""] * 9)
+        texto_item = f"<i>Justificativa:</i> {a.gestor_justificativa or '—'}"
+        if a.saida_avulsa_numero:
+            texto_item += f"<br/><b>Baixado por saída avulsa — nº {xml_escape(a.saida_avulsa_numero)}</b>"
+        linhas.append([_p(texto_item, size=7.5)] + [""] * 9)
         span_comandos.append(("SPAN", (0, linha_justificativa), (-1, linha_justificativa)))
 
         # Foto de apoio (opcional) - anexada enquanto o item ainda estava

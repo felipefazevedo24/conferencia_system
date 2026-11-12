@@ -283,6 +283,7 @@ def confirmar_divergencia(
     justificativa: str | None = None,
     solicitar_analise_causa: bool = False,
     recontagem_justificativa: str | None = None,
+    saida_avulsa_numero: str | None = None,
 ) -> LogisticaInventarioAjuste:
     """Modulo 02 -> Modulo 03. Gestor confirma que a diferenca e' real -
     NAO manda direto pro Finance: entra na fila de "Relatorio", aguardando
@@ -321,6 +322,9 @@ def confirmar_divergencia(
             )
         ajuste.recontagem_justificativa = texto[:500]
 
+    if (saida_avulsa_numero or "").strip():
+        _aplicar_saida_avulsa(ajuste, usuario, _validar_numero_baixa(saida_avulsa_numero))
+
     ajuste.gestor_justificativa = (justificativa or "").strip()[:500] or None
     ajuste.gestor_confirmado_em = agora_br()
     ajuste.gestor_confirmado_por = usuario
@@ -336,6 +340,58 @@ def confirmar_divergencia(
 
     db.session.commit()
     return ajuste
+
+
+def _validar_numero_baixa(numero: str | None) -> str:
+    texto = (numero or "").strip()
+    if not texto:
+        raise ValueError("Informe o número da baixa (saída avulsa).")
+    return texto[:60]
+
+
+def _aplicar_saida_avulsa(ajuste: LogisticaInventarioAjuste, usuario: str, numero: str) -> None:
+    """Sem commit. So' perda: sobra de estoque nao sai por saida avulsa."""
+    if not (ajuste.diferenca_vigente or 0) < 0:
+        raise ValueError(
+            f"O item {ajuste.codigo_produto} não é perda de estoque - "
+            "só diferença negativa pode ser baixada por saída avulsa."
+        )
+    ajuste.saida_avulsa_numero = numero
+    ajuste.saida_avulsa_em = agora_br()
+    ajuste.saida_avulsa_por = usuario
+
+
+def marcar_saida_avulsa(ajuste_ids: list[int], usuario: str, numero: str | None) -> list[LogisticaInventarioAjuste]:
+    """Na Emissao do Formulario: marca um ou varios itens como ja baixados
+    por saida avulsa (mesmo numero pra todos). Remarcar troca o numero.
+    Ou passa tudo, ou nada."""
+    numero = _validar_numero_baixa(numero)
+    ids = [int(i) for i in (ajuste_ids or [])]
+    if not ids:
+        raise ValueError("Selecione ao menos um item.")
+    ajustes = LogisticaInventarioAjuste.query.filter(LogisticaInventarioAjuste.id.in_(ids)).all()
+    if len(ajustes) != len(set(ids)):
+        raise ValueError("Algum item selecionado não foi encontrado - atualize a lista.")
+    for ajuste in ajustes:
+        if ajuste.status_modulo != "Relatorio":
+            raise ValueError(f"O item {ajuste.codigo_produto} não está em Emissão do Formulário.")
+        _aplicar_saida_avulsa(ajuste, usuario, numero)
+    db.session.commit()
+    return ajustes
+
+
+def remover_saida_avulsa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjuste:
+    if ajuste.status_modulo != "Relatorio":
+        raise ValueError("Só dá pra remover a baixa por saída avulsa em Emissão do Formulário.")
+    _limpar_saida_avulsa(ajuste)
+    db.session.commit()
+    return ajuste
+
+
+def _limpar_saida_avulsa(ajuste: LogisticaInventarioAjuste) -> None:
+    ajuste.saida_avulsa_numero = None
+    ajuste.saida_avulsa_em = None
+    ajuste.saida_avulsa_por = None
 
 
 def confirmar_pelo_inventario_ciclico(ajuste: LogisticaInventarioAjuste, usuario: str, justificativa: str) -> None:
@@ -472,6 +528,16 @@ def gerar_relatorio_ajuste(
             "ou estão em outra etapa)."
         )
 
+    # Lote baixado por saida avulsa vai direto pra Concluido; o resto vai pro
+    # Financeiro. Um mesmo formulario nao pode ter os dois destinos.
+    com_saida_avulsa = [a for a in ajustes if a.saida_avulsa_numero]
+    if com_saida_avulsa and len(com_saida_avulsa) != len(ajustes):
+        raise ValueError(
+            "Não dá pra misturar itens baixados por saída avulsa com itens que vão pro "
+            "Financeiro no mesmo formulário - gere formulários separados."
+        )
+    destino = "Concluido" if com_saida_avulsa else "Finance"
+
     # O Tipo de Ajuste e' um so' pro lote e quem escolhe e' o gestor, aqui no
     # formulario (o motivo saiu da contagem em 03/11/2026).
 
@@ -545,8 +611,8 @@ def gerar_relatorio_ajuste(
         # Etapa, que ignora essa validacao).
         ajuste.gestor_confirmado_em = ajuste.gestor_confirmado_em or agora
         ajuste.gestor_confirmado_por = ajuste.gestor_confirmado_por or usuario
-        ajuste.status_modulo = "Finance"
-        ajuste.status_slug = status_slug("Finance")
+        ajuste.status_modulo = destino
+        ajuste.status_slug = status_slug(destino)
         if solicitar_analise_causa and not ajuste.analise_causa:
             db.session.add(LogisticaInventarioAnaliseCausa(
                 ajuste_id=ajuste.id,
@@ -682,7 +748,11 @@ def estornar_etapa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjus
         raise ValueError("Este ajuste já está na primeira etapa (Validação de Suprimentos) - não há como estornar.")
 
     atual = ajuste.status_modulo
-    if atual == "Concluido":
+    # Concluido por saida avulsa nao passou por Financeiro/Fiscal: volta
+    # pra Emissao do Formulario, de onde saiu.
+    if atual == "Concluido" and ajuste.saida_avulsa_numero and not ajuste.fiscal_concluido_em:
+        anterior = "Relatorio"
+    elif atual == "Concluido":
         ajuste.fiscal_nf_numero = None
         ajuste.fiscal_concluido_em = None
         ajuste.fiscal_concluido_por = None
@@ -695,6 +765,7 @@ def estornar_etapa(ajuste: LogisticaInventarioAjuste) -> LogisticaInventarioAjus
         ajuste.gestor_justificativa = None
         ajuste.gestor_confirmado_em = None
         ajuste.gestor_confirmado_por = None
+        _limpar_saida_avulsa(ajuste)
 
     ajuste.status_modulo = anterior
     ajuste.status_slug = status_slug(anterior)

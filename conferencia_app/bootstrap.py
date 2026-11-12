@@ -1348,6 +1348,11 @@ def initialize_database(app: Flask) -> None:
             pass
 
         try:
+            _ensure_inventario_ajuste_saida_avulsa_columns()
+        except Exception:
+            pass
+
+        try:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
@@ -1927,6 +1932,25 @@ def _ensure_viagem_columns() -> None:
         missing_columns = [
             ("avulsa", "ALTER TABLE viagem ADD COLUMN avulsa BOOLEAN NOT NULL DEFAULT 0"),
             ("funcionario_responsavel", "ALTER TABLE viagem ADD COLUMN funcionario_responsavel VARCHAR(160)"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols:
+                conn.execute(db.text(ddl))
+                conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_inventario_ajuste_saida_avulsa_columns() -> None:
+    if not _has_table("logistica_inventario_ajuste"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("logistica_inventario_ajuste")
+        missing_columns = [
+            ("saida_avulsa_numero", "ALTER TABLE logistica_inventario_ajuste ADD COLUMN saida_avulsa_numero VARCHAR(60)"),
+            ("saida_avulsa_em", "ALTER TABLE logistica_inventario_ajuste ADD COLUMN saida_avulsa_em DATETIME"),
+            ("saida_avulsa_por", "ALTER TABLE logistica_inventario_ajuste ADD COLUMN saida_avulsa_por VARCHAR(100)"),
         ]
         for column_name, ddl in missing_columns:
             if column_name not in cols:

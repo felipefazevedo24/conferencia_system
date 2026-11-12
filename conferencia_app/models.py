@@ -2062,6 +2062,13 @@ class LogisticaInventarioAjuste(db.Model):
     gestor_confirmado_em = db.Column(db.DateTime)
     gestor_confirmado_por = db.Column(db.String(100))
 
+    # Perda (diferenca negativa) ja baixada no ERP por uma saida avulsa: o
+    # item ainda sai no FORM-08.52, mas vai direto pra Concluido, sem
+    # Financeiro/Fiscal - nao ha ajuste pra lancar. Marcado = numero preenchido.
+    saida_avulsa_numero = db.Column(db.String(60))
+    saida_avulsa_em = db.Column(db.DateTime)
+    saida_avulsa_por = db.Column(db.String(100))
+
     # Imagem de apoio da justificativa (ex.: foto do material, da avaria,
     # da prateleira vazia) - guardada direto no banco, mesmo padrao do
     # ComexDocumento (sem Google Drive nem disco do servidor). Uma so' por

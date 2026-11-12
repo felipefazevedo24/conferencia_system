@@ -103,6 +103,7 @@
                     <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">Emissão do Formulário</span></strong>
                     <div style="display:flex; gap:8px;">
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
+                        <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-saida-avulsa"><i class="fas fa-dolly"></i> Baixado por saída avulsa</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar ao Financeiro</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>
                     </div>
@@ -220,6 +221,15 @@
                 <small>Envia esse item pra fila separada de Análise de Causa Raiz, pro operador/gestor investigarem o motivo detalhado depois. Não bloqueia o fluxo.</small>
             </div>
         </div>
+        <!-- So' pra perda (diferenca negativa). -->
+        <div class="ia-modal-check hidden" id="ia-confirmar-saida-avulsa-wrap">
+            <input type="checkbox" id="ia-confirmar-saida-avulsa">
+            <div style="flex:1;">
+                <label for="ia-confirmar-saida-avulsa" style="margin:0; cursor:pointer;"><strong>Baixado por saída avulsa</strong></label>
+                <small>Depois do formulário, o item vai direto pra Concluído.</small>
+                <input type="text" id="ia-confirmar-saida-avulsa-numero" class="eui-input hidden" maxlength="60" placeholder="Nº da baixa *" style="width:100%; margin-top:8px;">
+            </div>
+        </div>
         <div class="ia-modal-foot">
             <button class="eui-btn eui-btn--ghost" id="ia-confirmar-cancelar">Cancelar</button>
             <button class="eui-btn eui-btn--primary" id="ia-confirmar-salvar"><i class="fas fa-check"></i> Confirmar</button>
@@ -234,7 +244,7 @@
         <h3><i class="fas fa-file-invoice"></i> Gerar Relatório de Ajuste (FORM-08.52)</h3>
         <p style="font-size:12.5px; color:var(--eui-muted); margin:0 0 14px;">
             Preenche o formulário uma vez pro lote inteiro — os <strong id="ia-relatorio-qtd">0</strong> itens
-            selecionados vão juntos, com o mesmo número de documento, direto ao Financeiro. A justificativa
+            selecionados vão juntos, com o mesmo número de documento, <span id="ia-relatorio-destino">direto ao Financeiro</span>. A justificativa
             (motivo) é <strong>por item</strong>, não genérica — vem pré-carregada da confirmação da divergência,
             mas pode editar aqui antes de gerar.
         </p>
@@ -420,6 +430,16 @@
     const ETAPA_ANTERIOR = {
         Relatorio: "Validacao", Finance: "Relatorio", Fiscal: "Finance", Concluido: "Fiscal", Descartado: "Validacao",
     };
+    // Concluido por saida avulsa nao passou pelo Fiscal: volta pro formulario.
+    function etapaAnteriorDe(a) {
+        if (a && a.status_modulo === "Concluido" && a.saida_avulsa_numero && !a.fiscal_concluido_em) return "Relatorio";
+        return a ? ETAPA_ANTERIOR[a.status_modulo] : undefined;
+    }
+    function ehPerda(a) { return Number(a.diferenca_vigente) < 0; }
+    function codigoComDescricaoHtml(a) {
+        const dica = a.descricao_produto ? ` title="${escapeHtml(a.descricao_produto)}" style="cursor:help;"` : "";
+        return `<span${dica}>${escapeHtml(a.codigo_produto)}</span>`;
+    }
     function badgeStatus(a) {
         const cor = CORES_STATUS[a.status_modulo] || "#475569";
         return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
@@ -428,6 +448,7 @@
     function historicoHtml(a) {
         const linhas = [];
         if (a.gestor_confirmado_em) linhas.push(`Suprimentos: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
+        if (a.saida_avulsa_numero) linhas.push(`Saída avulsa nº ${escapeHtml(a.saida_avulsa_numero)}: ${escapeHtml(a.saida_avulsa_por)} em ${escapeHtml(a.saida_avulsa_em)}`);
         if (a.finance_concluido_em) linhas.push(`Financeiro: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_documento_grv ? " — GRV " + escapeHtml(a.finance_documento_grv) : ""}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
         if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${escapeHtml(a.fiscal_concluido_por)} em ${escapeHtml(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? " — NF " + escapeHtml(a.fiscal_nf_numero) : ""}`);
         return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
@@ -475,7 +496,7 @@
                 <td class="ia-select-col">${checkboxHtml}</td>
                 <td>${escapeHtml(a.criado_em)}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
-                <td>${escapeHtml(a.codigo_produto)}${a.motivo_inventario ? `<div class="ia-hist">Motivo: ${escapeHtml(a.motivo_inventario)}</div>` : ""}</td>
+                <td>${codigoComDescricaoHtml(a)}${a.motivo_inventario ? `<div class="ia-hist">Motivo: ${escapeHtml(a.motivo_inventario)}</div>` : ""}</td>
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
                 <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
@@ -625,7 +646,13 @@
         $("ia-bulk-etapa").textContent = ehFinance ? LABEL_STATUS.Finance : LABEL_STATUS.Relatorio;
         $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
         $("ia-bulk-gerar").classList.toggle("hidden", ehFinance);
+        $("ia-bulk-saida-avulsa").classList.toggle("hidden", ehFinance);
         $("ia-bulk-finance").classList.toggle("hidden", !ehFinance);
+        const todosSaidaAvulsa = selecionados.size > 0
+            && Array.from(selecionados).every((id) => (ajustePorId(id) || {}).saida_avulsa_numero);
+        $("ia-bulk-gerar").innerHTML = todosSaidaAvulsa
+            ? '<i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Concluir'
+            : '<i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar ao Financeiro';
         // "Selecionar todos" considera apenas o que pode entrar na selecao atual.
         const elegiveis = Array.from($("ia-tbody").querySelectorAll(".ia-select-item"))
             .filter((cb) => !etapa || statusDoItem(cb.dataset.id) === etapa);
@@ -727,6 +754,36 @@
         abrirModalFinance("lote");
     });
 
+    // Mesmo numero da baixa pra todos os itens. true = marcou.
+    async function pedirSaidaAvulsa(ids) {
+        const naoPerda = ids.map((id) => ajustePorId(id)).filter((a) => a && !ehPerda(a));
+        if (naoPerda.length) {
+            toast(`Só perda de estoque (diferença negativa) sai por saída avulsa: ${naoPerda.map((a) => a.codigo_produto).join(", ")}.`, "error");
+            return false;
+        }
+        const numero = await dialogo({
+            titulo: "Baixado por saída avulsa",
+            texto: `${ids.length > 1 ? `${ids.length} itens` : "O item"} vão direto pra Concluído depois do formulário.`,
+            campo: "Nº da baixa", obrigatorio: true,
+        });
+        if (numero === null) return false;
+        await api("/api/logistica/inventario-ajustes/saida-avulsa", {
+            method: "POST", body: JSON.stringify({ ajuste_ids: ids, numero }),
+        });
+        return true;
+    }
+
+    $("ia-bulk-saida-avulsa").addEventListener("click", async () => {
+        if (!selecionados.size) return;
+        try {
+            if (!await pedirSaidaAvulsa(Array.from(selecionados))) return;
+            toast("Atualizado!", "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+
     $("ia-bulk-limpar").addEventListener("click", () => {
         selecionados.clear();
         renderTabela(filtrarPorBusca(ajustesCache));
@@ -782,6 +839,10 @@
         let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
             itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Marcar improcedente", true);
+        } else if (a.status_modulo === "Relatorio" && PODE_VALIDAR && ehPerda(a)) {
+            itens += a.saida_avulsa_numero
+                ? it("saida-avulsa", "fa-pen", "Alterar nº da baixa") + it("remover-saida-avulsa", "fa-xmark", "Remover saída avulsa", true)
+                : it("saida-avulsa", "fa-dolly", "Baixado por saída avulsa");
         } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
             itens += it("finance", "fa-coins", "Confirmar ajuste executado");
         } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
@@ -800,7 +861,7 @@
         if (pular) itens += (itens ? "<hr>" : "") + pular;
         if (PODE_ADMIN) {
             itens += (itens ? "<hr>" : "") + it("atualizar-grv", "fa-arrows-rotate", "Atualizar quantidade GRV");
-            const anterior = ETAPA_ANTERIOR[a.status_modulo];
+            const anterior = etapaAnteriorDe(a);
             if (anterior) itens += it("estornar", "fa-rotate-left", `Estornar para "${LABEL_STATUS[anterior]}"`, true);
         }
         return itens || '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
@@ -860,8 +921,12 @@
         $("ia-recontagem-sistemico").value = "";
         $("ia-recontagem-justificativa").value = "";
         $("ia-recontagem-just-wrap").classList.add("hidden");
+        $("ia-confirmar-saida-avulsa").checked = false;
+        $("ia-confirmar-saida-avulsa-numero").value = "";
+        $("ia-confirmar-saida-avulsa-numero").classList.add("hidden");
 
         const a = (ajustesCache || []).find((x) => String(x.id) === String(id)) || {};
+        atualizarOpcaoSaidaAvulsa(a);
         $("ia-recontagem-apurada").innerHTML =
             `Apurado em ${escapeHtml(a.criado_em || "—")}: sistêmico <b>${fmtQtd(a.qtde_estoque_no_momento)}</b>, ` +
             `físico <b>${fmtQtd(a.qtde_contada)}</b>, diferença <b>${fmtQtd(a.diferenca)}</b>. ` +
@@ -904,7 +969,22 @@
              </div>`;
         $("ia-recontagem-just-wrap").classList.toggle("hidden", bate);
         if (a.recontagem_justificativa) $("ia-recontagem-justificativa").value = a.recontagem_justificativa;
+        atualizarOpcaoSaidaAvulsa(a);
     }
+
+    // A recontagem pode mudar a diferenca: a opcao segue a diferenca vigente.
+    function atualizarOpcaoSaidaAvulsa(a) {
+        const perda = ehPerda(a);
+        $("ia-confirmar-saida-avulsa-wrap").classList.toggle("hidden", !perda);
+        if (!perda) {
+            $("ia-confirmar-saida-avulsa").checked = false;
+            $("ia-confirmar-saida-avulsa-numero").classList.add("hidden");
+        }
+    }
+    $("ia-confirmar-saida-avulsa").addEventListener("change", (e) => {
+        $("ia-confirmar-saida-avulsa-numero").classList.toggle("hidden", !e.target.checked);
+        if (e.target.checked) $("ia-confirmar-saida-avulsa-numero").focus();
+    });
 
     $("ia-recontagem-salvar").addEventListener("click", async () => {
         const id = confirmarAjusteId;
@@ -939,11 +1019,18 @@
         if (!id) return;
         const justificativa = $("ia-confirmar-justificativa").value.trim();
         const solicitar_analise_causa = $("ia-confirmar-causa-raiz").checked;
+        const saidaAvulsa = $("ia-confirmar-saida-avulsa").checked;
+        const saida_avulsa_numero = saidaAvulsa ? $("ia-confirmar-saida-avulsa-numero").value.trim() : "";
+        if (saidaAvulsa && !saida_avulsa_numero) {
+            toast("Informe o nº da baixa.", "error");
+            $("ia-confirmar-saida-avulsa-numero").focus();
+            return;
+        }
         try {
             await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, {
                 method: "POST",
                 body: JSON.stringify({
-                    justificativa, solicitar_analise_causa,
+                    justificativa, solicitar_analise_causa, saida_avulsa_numero,
                     recontagem_justificativa: $("ia-recontagem-justificativa").value.trim(),
                 }),
             });
@@ -995,9 +1082,14 @@
                 if (await dialogo({ titulo: "Atualizar quantidade GRV", texto: "Consulta agora o saldo deste item no GRV. Só este ajuste é atualizado.", botao: "Atualizar" }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/atualizar-grv`, { method: "POST" });
             } else if (act === "estornar") {
-                const anterior = ETAPA_ANTERIOR[statusDoItem(id)];
+                const anterior = etapaAnteriorDe(ajustePorId(id));
                 if (await dialogo({ titulo: "Estornar etapa", texto: `Volta para "${LABEL_STATUS[anterior] || anterior}". Só os dados da etapa atual são limpos.`, botao: "Estornar", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
+            } else if (act === "saida-avulsa") {
+                if (!await pedirSaidaAvulsa([Number(id)])) return;
+            } else if (act === "remover-saida-avulsa") {
+                if (await dialogo({ titulo: "Remover saída avulsa", texto: "Depois do formulário, o item volta a seguir pro Financeiro.", botao: "Remover", perigo: true }) === null) return;
+                await api(`/api/logistica/inventario-ajustes/${id}/saida-avulsa`, { method: "DELETE" });
             } else {
                 return;
             }
@@ -1117,13 +1209,22 @@
             return;
         }
         const itens = Array.from(selecionados).map((id) => ajustePorId(id)).filter(Boolean);
+        const comSaidaAvulsa = itens.filter((a) => a.saida_avulsa_numero).length;
+        if (comSaidaAvulsa && comSaidaAvulsa !== itens.length) {
+            toast("Não dá pra misturar itens baixados por saída avulsa com itens que vão pro Financeiro - gere formulários separados.", "error");
+            return;
+        }
+        $("ia-relatorio-destino").textContent = comSaidaAvulsa ? "direto pra Concluído (baixados por saída avulsa)" : "direto ao Financeiro";
+        $("ia-relatorio-salvar").innerHTML = comSaidaAvulsa
+            ? '<i class="fas fa-file-invoice"></i> Gerar Relatório e Concluir'
+            : '<i class="fas fa-file-invoice"></i> Gerar Relatório e Enviar ao Financeiro';
         $("ia-relatorio-qtd").textContent = itens.length;
         // Justificativa vem pre-carregada da confirmacao da divergencia
         // (gestor_justificativa) - atrelada a esse item, nao um texto
         // generico compartilhado por todo o lote (ver textarea por linha).
         $("ia-relatorio-itens-tbody").innerHTML = itens.map((a) => `
             <tr data-ajuste-id="${a.id}">
-                <td>${escapeHtml(a.codigo_produto)}</td>
+                <td>${codigoComDescricaoHtml(a)}${a.saida_avulsa_numero ? `<div class="ia-hist">Saída avulsa nº ${escapeHtml(a.saida_avulsa_numero)}</div>` : ""}</td>
                 <td>${escapeHtml(a.local_codigo)}</td>
                 <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
                 <td>${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
@@ -1161,8 +1262,8 @@
             const texto = ta.value.trim();
             justificativas[ta.dataset.ajusteId] = texto;
             if (!texto) {
-                const linha = ta.closest("tr");
-                faltando.push(linha ? linha.children[0].textContent : ta.dataset.ajusteId);
+                const item = ajustePorId(ta.dataset.ajusteId);
+                faltando.push(item ? item.codigo_produto : ta.dataset.ajusteId);
             }
         });
         if (faltando.length) {

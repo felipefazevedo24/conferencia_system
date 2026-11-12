@@ -1001,6 +1001,9 @@ def _fmt_ajuste(a) -> dict:
         "gestor_justificativa": a.gestor_justificativa,
         "gestor_confirmado_em": a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M") if a.gestor_confirmado_em else None,
         "gestor_confirmado_por": a.gestor_confirmado_por,
+        "saida_avulsa_numero": a.saida_avulsa_numero,
+        "saida_avulsa_em": a.saida_avulsa_em.strftime("%d/%m/%Y %H:%M") if a.saida_avulsa_em else None,
+        "saida_avulsa_por": a.saida_avulsa_por,
         "finance_observacao": a.finance_observacao,
         "finance_documento_grv": a.finance_documento_grv,
         "finance_concluido_em": a.finance_concluido_em.strftime("%d/%m/%Y %H:%M") if a.finance_concluido_em else None,
@@ -1071,6 +1074,9 @@ def exportar_inventario_ajustes_excel():
     status_modulo = request.args.get("status") or None
     busca = request.args.get("busca") or ""
     ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo, busca=busca)
+    # Ajuste antigo pode nao ter a descricao gravada - completa pelo GRV
+    # (best-effort: ERP fora do ar so' deixa a coluna em branco).
+    ajuste_svc.garantir_descricoes(ajustes)
 
     wb = Workbook()
     ws = wb.active
@@ -1080,6 +1086,7 @@ def exportar_inventario_ajustes_excel():
         "Detectado em",
         "Local",
         "Cód. Produto",
+        "Descrição",
         "Unidade",
         "Qtd Contada",
         "Qtd Estoque",
@@ -1090,6 +1097,7 @@ def exportar_inventario_ajustes_excel():
         "Suprimentos - Justificativa",
         "Suprimentos - Confirmado em",
         "Suprimentos - Confirmado por",
+        "Saída avulsa - Nº da baixa",
         "Financeiro - Observação",
         "Financeiro - Concluído em",
         "Financeiro - Concluído por",
@@ -1104,8 +1112,8 @@ def exportar_inventario_ajustes_excel():
     # (69.96), o que parecia "sem valor" comparado com a tela.
     FORMATO_MOEDA_SEM_SINAL = '"R$" #,##0.00'
     FORMATO_MOEDA_COM_SINAL = '+"R$" #,##0.00;-"R$" #,##0.00'
-    COL_CUSTO_MEDIO = 8   # H
-    COL_DIFERENCA_VALOR = 9  # I
+    COL_CUSTO_MEDIO = 9   # I
+    COL_DIFERENCA_VALOR = 10  # J
 
     for a in ajustes:
         diferenca_valor = (a.diferenca * a.custo_medio) if a.custo_medio is not None else None
@@ -1114,6 +1122,7 @@ def exportar_inventario_ajustes_excel():
             a.criado_em.strftime("%d/%m/%Y %H:%M:%S") if a.criado_em else "",
             a.local_codigo,
             a.codigo_produto,
+            a.descricao_produto or "",
             a.unidade_medida,
             float(a.qtde_contada or 0),
             float(a.qtde_estoque_no_momento or 0),
@@ -1124,6 +1133,7 @@ def exportar_inventario_ajustes_excel():
             a.gestor_justificativa or "",
             a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M:%S") if a.gestor_confirmado_em else "",
             a.gestor_confirmado_por or "",
+            a.saida_avulsa_numero or "",
             a.finance_observacao or "",
             a.finance_concluido_em.strftime("%d/%m/%Y %H:%M:%S") if a.finance_concluido_em else "",
             a.finance_concluido_por or "",
@@ -1173,6 +1183,7 @@ def api_confirmar_ajuste(ajuste_id):
             payload.get("justificativa"),
             solicitar_analise_causa=bool(payload.get("solicitar_analise_causa")),
             recontagem_justificativa=payload.get("recontagem_justificativa"),
+            saida_avulsa_numero=payload.get("saida_avulsa_numero"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -1323,8 +1334,18 @@ def api_gerar_relatorio_ajuste():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    pdf_url = f"/api/logistica/inventario-ajustes/relatorio/{relatorio.id}.pdf"
+    # Lote baixado por saida avulsa nao vai pro Financeiro - nada a avisar.
+    if all(a.status_modulo == "Concluido" for a in relatorio.ajustes):
+        return jsonify({
+            "message": f"FORM-08.52 {relatorio.numero_documento} emitido - {len(ajuste_ids)} item(ns) concluído(s) (baixados por saída avulsa).",
+            "relatorio_id": relatorio.id,
+            "numero_documento": relatorio.numero_documento,
+            "pdf_url": pdf_url,
+        })
+
     # Aviso no Teams pro Finance - assincrono, falha no webhook nao afeta o relatorio.
-    base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
+    base =str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/") or request.url_root.rstrip("/")
     teams_service.notificar_relatorio_ajuste_inventario(
         relatorio.numero_documento,
         len(ajuste_ids),
@@ -1351,7 +1372,7 @@ def api_gerar_relatorio_ajuste():
         "message": f"FORM-08.52 {relatorio.numero_documento} emitido - {len(ajuste_ids)} item(ns) enviado(s) ao Financeiro.",
         "relatorio_id": relatorio.id,
         "numero_documento": relatorio.numero_documento,
-        "pdf_url": f"/api/logistica/inventario-ajustes/relatorio/{relatorio.id}.pdf",
+        "pdf_url": pdf_url,
     })
 
 
@@ -1392,6 +1413,41 @@ def api_descartar_ajuste(ajuste_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/saida-avulsa", methods=["POST"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_marcar_saida_avulsa():
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajustes = ajuste_svc.marcar_saida_avulsa(
+            payload.get("ajuste_ids") or [],
+            session.get("username", "desconhecido"),
+            payload.get("numero"),
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({
+        "message": f"{len(ajustes)} item(ns) marcado(s) como baixado(s) por saída avulsa.",
+        "ajustes": [_fmt_ajuste(a) for a in ajustes],
+    })
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/saida-avulsa", methods=["DELETE"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_remover_saida_avulsa(ajuste_id):
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    try:
+        ajuste = ajuste_svc.remover_saida_avulsa(ajuste)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Baixa por saída avulsa removida.", "ajuste": _fmt_ajuste(ajuste)})
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])
 @permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
