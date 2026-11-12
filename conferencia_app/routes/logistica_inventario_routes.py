@@ -25,6 +25,7 @@ from ..models import (
     ChapaControleExclusao,
     ChapaAuditoria,
     ChapaLoteCorrecao,
+    InventarioCiclicoItem,
     ItemNota,
     LogisticaInventarioAjuste,
     LogisticaInventarioAnaliseCausa,
@@ -50,6 +51,7 @@ from ..services.erp_estoque_service import (
     qtde_grv_para,
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
+from ..services import inventario_ciclico_service as ciclico_svc
 from ..services import estoque_planejamento_service as planejamento_svc
 from ..services.estoque_analise_export import gerar_excel_analise
 from ..tempo import agora_br
@@ -283,6 +285,20 @@ def _enviar_para_grv(payload: dict) -> dict:
 
 def _pode_analisar() -> bool:
     return any(has_permission(p) for p in PERMISSOES_ANALISE)
+
+
+def _ids_do_ciclico(rows) -> set[int]:
+    """Quais contagens vieram do inventario ciclico (o resto e' avulso).
+    Pelo vinculo do item, nao pelo motivo: antes de 03/11 o avulso tambem
+    escolhia o motivo "Inventario Ciclico"."""
+    ids = [row.id for row in rows]
+    vinculados: set[int] = set()
+    for i in range(0, len(ids), 500):
+        vinculados.update(
+            cid for (cid,) in db.session.query(InventarioCiclicoItem.contagem_id)
+            .filter(InventarioCiclicoItem.contagem_id.in_(ids[i:i + 500]))
+        )
+    return vinculados
 
 
 def _render_inventario(aba: str):
@@ -682,8 +698,28 @@ def consultar_cadastro_produto():
     return jsonify({"disponivel": True, "encontrado": True, **cadastro})
 
 
+@logistica_inventario_bp.route("/api/logistica/inventario-inicial/contagem-recente", methods=["GET"])
+@permission_required(PERMISSION)
+def consultar_contagem_recente():
+    """Se o codigo ja foi contado nos ultimos dias, a tela pede confirmacao
+    antes de recontar. Sem a quantidade: a contagem e' cega."""
+    codigo = (request.args.get("codigo") or "").strip().upper()
+    if not codigo:
+        return jsonify({"error": "Informe o codigo."}), 400
+    row = ciclico_svc.contagens_recentes([codigo]).get(codigo)
+    resposta = {"recente": bool(row), "dias": ciclico_svc.DIAS_CONTAGEM_RECENTE}
+    if row:
+        resposta.update({
+            "criado_em": row.criado_em.strftime("%d/%m/%Y %H:%M") if row.criado_em else None,
+            "criado_por": row.criado_por,
+            "local_codigo": row.local_codigo or "",
+            "tipo": "Cíclico" if row.id in _ids_do_ciclico([row]) else "Avulso",
+        })
+    return jsonify(resposta)
+
+
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL, PERMISSOES_CICLICO[1])
 def listar_inventario_inicial():
     limite = request.args.get("limit", type=int) or 100
     limite = max(1, min(limite, 500))
@@ -701,9 +737,18 @@ def listar_inventario_inicial():
     # criar_inventario_inicial), nao uma consulta em tempo real - o
     # "forcar_grv"/cache do buscar_estoque_grv() nao se aplica mais aqui.
     # A comparacao exige permissao de analise (nao vaza pro conferente).
-    incluir_grv = request.args.get("comparar_grv") == "1" and _pode_analisar()
+    # A lista de realizados fica na Gestao do ciclico, que tambem ve o GRV.
+    incluir_grv = request.args.get("comparar_grv") == "1" and (
+        _pode_analisar() or has_permission(PERMISSOES_CICLICO[1])
+    )
 
-    resposta = {"registros": [_fmt_registro(row, incluir_grv) for row in rows]}
+    do_ciclico = _ids_do_ciclico(rows)
+    registros = []
+    for row in rows:
+        dados = _fmt_registro(row, incluir_grv)
+        dados["tipo"] = "Cíclico" if row.id in do_ciclico else "Avulso"
+        registros.append(dados)
+    resposta = {"registros": registros}
     if incluir_grv:
         # Quantas contagens retornadas nao conseguiram capturar o saldo do
         # GRV no momento em que foram feitas (API fora do ar naquela hora,
@@ -714,14 +759,17 @@ def listar_inventario_inicial():
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial/exportar", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL, PERMISSOES_CICLICO[1])
 def exportar_inventario_inicial_excel():
     local = (request.args.get("local") or "").strip().lower()
     codigo = (request.args.get("codigo") or "").strip().lower()
-    comparar_grv = request.args.get("comparar_grv") == "1" and _pode_analisar()
+    comparar_grv = request.args.get("comparar_grv") == "1" and (
+        _pode_analisar() or has_permission(PERMISSOES_CICLICO[1])
+    )
 
     query = _build_query(local=local, codigo=codigo)
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).all()
+    do_ciclico = _ids_do_ciclico(rows)
 
     wb = Workbook()
     ws = wb.active
@@ -729,6 +777,7 @@ def exportar_inventario_inicial_excel():
 
     headers = [
         "Data",
+        "Tipo",
         "Local",
         "Codigo Produto",
         "Unidade",
@@ -745,6 +794,7 @@ def exportar_inventario_inicial_excel():
     for row in rows:
         linha = [
             row.criado_em.strftime("%d/%m/%Y %H:%M:%S") if row.criado_em else "",
+            "Cíclico" if row.id in do_ciclico else "Avulso",
             row.local_codigo,
             row.codigo_produto,
             row.unidade_medida,
@@ -828,8 +878,9 @@ def criar_inventario_inicial():
         except (TypeError, ValueError):
             return jsonify({"error": "Quantidade invalida."}), 400
 
-    if quantidade <= 0:
-        return jsonify({"error": "Quantidade deve ser maior que zero."}), 400
+    # Zero e' contagem valida: o item nao estava no local (perda total).
+    if not math.isfinite(quantidade) or quantidade < 0:
+        return jsonify({"error": "Quantidade não pode ser negativa."}), 400
 
     # Unidade e exigencia de lote vem do cadastro do GRV, nao do que foi
     # escolhido na tela - e' o que evita contar em UN um item que o GRV

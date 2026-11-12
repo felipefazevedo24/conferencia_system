@@ -1,6 +1,12 @@
 <style>
-    .invc-grid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; }
-    .invc-field { display: grid; gap: 6px; }
+    /* 6 colunas: Local/Codigo dividem a 1a linha; Unidade/Quantidade/Lote a 2a. */
+    .invc-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+    .invc-field { display: grid; gap: 6px; align-content: start; }
+    .invc-span-3 { grid-column: span 3; }
+    .invc-span-2 { grid-column: span 2; }
+    /* A regra global input[type="number"] (ui_erp.css) vence o .eui-input e
+       deixava a Quantidade mais alta e com outro fundo que os demais campos. */
+    .invc-grid input.eui-input[type="number"] { padding: 8px 12px; background: var(--eui-surface); border: 1px solid var(--eui-border-strong); border-radius: var(--eui-radius-sm); font-size: 13px; color: var(--eui-text); }
     .invc-field label { font-size: 12px; font-weight: 600; color: var(--eui-text-soft); }
     .invc-scan { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .invc-hint { font-size: 12px; color: var(--eui-muted); min-height: 16px; }
@@ -31,6 +37,7 @@
 
     @media (max-width: 760px) {
         .invc-grid { grid-template-columns: 1fr; }
+        .invc-grid > .invc-field { grid-column: 1 / -1; }
         .invc-scan { grid-template-columns: 1fr; }
         .invc-actions { flex-direction: column; }
         .invc-actions .eui-btn { width: 100%; }
@@ -46,30 +53,30 @@
     </div>
     <div class="eui-card__body">
         <div class="invc-grid">
-            <div class="invc-field">
+            <div class="invc-field invc-span-3">
                 <label for="inv-local">Local (opcional)</label>
                 <div class="invc-scan">
                     <input id="inv-local" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o local" />
                     <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
                 </div>
             </div>
-            <div class="invc-field">
+            <div class="invc-field invc-span-3">
                 <label for="inv-codigo">Cód. Produto</label>
                 <div class="invc-scan">
                     <input id="inv-codigo" class="eui-input" autocomplete="off" placeholder="Bipe ou digite o código" />
                     <button type="button" class="eui-btn eui-btn--subtle" data-scan-target="inv-codigo"><i class="fas fa-camera"></i> Ler</button>
                 </div>
             </div>
-            <div class="invc-field">
+            <div class="invc-field invc-span-2">
                 <label for="inv-unidade">Unidade de medida</label>
                 <select id="inv-unidade" class="eui-input"></select>
                 <div id="inv-unidade-hint" class="invc-hint"></div>
             </div>
-            <div class="invc-field">
+            <div class="invc-field invc-span-2">
                 <label for="inv-quantidade" id="inv-quantidade-label">Quantidade</label>
-                <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+                <input id="inv-quantidade" class="eui-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="Informe a quantidade" />
             </div>
-            <div class="invc-field">
+            <div class="invc-field invc-span-2">
                 <label for="inv-lote"><span id="inv-lote-label">Lote</span> <span id="inv-lote-req" class="invc-req" hidden>*</span></label>
                 <input id="inv-lote" class="eui-input" autocomplete="off" placeholder="Informe o lote (opcional)" />
                 <div id="inv-lote-hint" class="invc-hint"></div>
@@ -91,6 +98,20 @@
             <button type="button" class="eui-btn eui-btn--primary" id="inv-salvar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
         </div>
         <div id="inv-status" class="inv-status"></div>
+    </div>
+</div>
+
+<!-- Codigo contado nos ultimos dias: confirma antes de contar de novo. -->
+<div class="scan-modal" id="inv-recente-modal">
+    <div class="scan-box" style="width:min(460px, 100%);">
+        <div class="scan-head">
+            <h3><i class="fas fa-clock-rotate-left"></i> Contado recentemente</h3>
+        </div>
+        <p id="inv-recente-texto" style="margin:0; font-size:13px; line-height:1.5;"></p>
+        <div class="invc-actions">
+            <button type="button" class="eui-btn eui-btn--subtle" id="inv-recente-cancelar">Cancelar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="inv-recente-ok"><i class="fas fa-rotate"></i> Contar mesmo assim</button>
+        </div>
     </div>
 </div>
 
@@ -258,6 +279,36 @@
         }
     }
 
+    // Best-effort: se a consulta falhar, segue sem o aviso.
+    async function contagemRecente(codigo) {
+        try {
+            const r = await api(`/api/logistica/inventario-inicial/contagem-recente?codigo=${encodeURIComponent(codigo)}`);
+            return r.recente ? r : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function confirmarRecontagem(codigo, r) {
+        const modalRecente = document.getElementById('inv-recente-modal');
+        const onde = r.local_codigo ? ` no local ${r.local_codigo}` : '';
+        document.getElementById('inv-recente-texto').textContent =
+            `${codigo} já foi inventariado em ${r.criado_em} por ${r.criado_por}${onde} (${r.tipo.toLowerCase()}). Quer contar de novo mesmo assim?`;
+        modalRecente.classList.add('open');
+        return new Promise((resolve) => {
+            const fechar = (ok) => {
+                modalRecente.classList.remove('open');
+                document.getElementById('inv-recente-ok').onclick = null;
+                document.getElementById('inv-recente-cancelar').onclick = null;
+                modalRecente.onclick = null;
+                resolve(ok);
+            };
+            document.getElementById('inv-recente-ok').onclick = () => fechar(true);
+            document.getElementById('inv-recente-cancelar').onclick = () => fechar(false);
+            modalRecente.onclick = (ev) => { if (ev.target === modalRecente) fechar(false); };
+        });
+    }
+
     async function salvarRegistro() {
         const localCodigo = (document.getElementById('inv-local').value || '').trim();
         const codigoProduto = (document.getElementById('inv-codigo').value || '').trim();
@@ -275,7 +326,7 @@
         }
 
         const quantidade = Number(String(quantidadeTxt).replace(',', '.'));
-        if (!Number.isFinite(quantidade) || quantidade <= 0) {
+        if (!Number.isFinite(quantidade) || quantidade < 0) {
             showStatus('Quantidade invalida.', 'err');
             return;
         }
@@ -300,6 +351,8 @@
         const btnSalvar = document.getElementById('inv-salvar');
         btnSalvar.disabled = true;
         try {
+            const recente = await contagemRecente(codigoProduto);
+            if (recente && !(await confirmarRecontagem(codigoProduto, recente))) return;
             await api('/api/logistica/inventario-inicial', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

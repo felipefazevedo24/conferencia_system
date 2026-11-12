@@ -1,10 +1,8 @@
-{# Aba Inventario ciclico da tela Inventario (logistica_inventario.html). #}
+{# Inventario ciclico dentro da aba Inventariar (logistica_inventario.html):
+   as sub-abas "Inventário cíclico" (#ic-contar) e "Gestão" (#ic-gestao) ficam
+   la' e decidem qual secao aparece. #}
 <style>
     .ic-wrap { display: grid; gap: 16px; }
-    .ic-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--eui-border, #e5e7eb); }
-    .ic-tab { border: 0; background: transparent; padding: 10px 14px; font-weight: 700; font-size: 13px; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; }
-    .ic-tab.is-active { color: var(--eui-primary, #2563eb); border-bottom-color: var(--eui-primary, #2563eb); }
-    .ic-tab .ic-badge { margin-left: 6px; }
     .ic-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     .ic-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--eui-muted); padding: 7px 8px; border-bottom: 1px solid var(--eui-border, #e5e7eb); position: sticky; top: 0; background: #fff; }
     .ic-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
@@ -50,11 +48,6 @@
     }
 </style>
 <div class="ic-wrap">
-
-    <div class="ic-tabs" id="ic-tabs">
-        {% if pode_ciclico_contar %}<button type="button" class="ic-tab" data-tab="contar">Minhas contagens <span class="ic-badge r2 ic-hidden" id="ic-badge-minhas"></span></button>{% endif %}
-        {% if pode_ciclico_gestao %}<button type="button" class="ic-tab" data-tab="gestao">Gestão <span class="ic-badge ic-hidden" id="ic-badge-pend"></span></button>{% endif %}
-    </div>
 
     {% if pode_ciclico_contar %}
     <section id="ic-contar" class="eui-card ic-hidden"><div class="eui-card__body">
@@ -125,6 +118,8 @@
                 <tbody id="ic-dist-tbody"></tbody>
             </table></div>
         </div></div>
+
+        {% include "logistica_inventario_tab_realizados.html" %}
     </section>
 
     <div class="ic-modal" id="ic-modal-selecao">
@@ -215,17 +210,7 @@
         return d;
     }
 
-    // ── Abas ──
-    const abas = Array.from(document.querySelectorAll('#ic-tabs [data-tab]'));
-    function mostrarAba(nome) {
-        abas.forEach((b) => b.classList.toggle('is-active', b.dataset.tab === nome));
-        const contar = $('ic-contar'), gestao = $('ic-gestao');
-        if (contar) contar.classList.toggle('ic-hidden', nome !== 'contar');
-        if (gestao) gestao.classList.toggle('ic-hidden', nome !== 'gestao');
-    }
-    abas.forEach((b) => b.addEventListener('click', () => mostrarAba(b.dataset.tab)));
-    if (abas.length) mostrarAba(abas[0].dataset.tab);
-
+    // Badges ficam nas sub-abas do Inventariar (logistica_inventario.html).
     function badge(id, n) {
         const el = $(id);
         if (!el) return;
@@ -352,7 +337,8 @@
                 <td><input type="checkbox" data-chave="${esc(chave(l))}" ${l.em_aberto ? 'disabled' : ''} ${selecao.marcados.has(chave(l)) ? 'checked' : ''}></td>
                 <td>${end(l.endereco)}</td><td class="ic-cod">${esc(l.codigo)}</td><td>${esc(l.descricao)}</td>
                 <td class="num">${num(l.saldo)} ${esc(l.unidade)}</td>
-                <td>${l.em_aberto ? '<span class="ic-st pendente" title="Já está em outra distribuição aberta">Em outra distribuição</span>' : ''}</td>
+                <td>${l.em_aberto ? '<span class="ic-st pendente" title="Já está em outra distribuição aberta">Em outra distribuição</span>'
+                    : (l.contado_em ? `<span class="ic-st aguarda" title="Contado por ${esc(l.contado_por)}">Contado em ${esc(l.contado_em)}</span>` : '')}</td>
             </tr>`).join('') : '<tr><td colspan="6" class="ic-vazio">Nenhum item.</td></tr>';
         const todos = $('ic-sel-todos');
         todos.checked = livres.length > 0 && livres.every((l) => selecao.marcados.has(chave(l)));
@@ -379,8 +365,10 @@
             const d = await api('/api/inventario-ciclico/previa', { method: 'POST', body: JSON.stringify(f) });
             selecao = { filtro: f, linhas: d.linhas || [], marcados: new Set() };
             const emAberto = selecao.linhas.filter((l) => l.em_aberto).length;
+            const recentes = selecao.linhas.filter((l) => !l.em_aberto && l.contado_em).length;
             const avisos = [];
             if (emAberto) avisos.push(`${emAberto} já em outra distribuição`);
+            if (recentes) avisos.push(`${recentes} contado(s) nos últimos 15 dias`);
             if ((d.nao_encontrados || []).length) avisos.push(`não achados no GRV: ${d.nao_encontrados.join(', ')}`);
             $('ic-sel-aviso').textContent = avisos.join(' · ');
             $('ic-sel-aviso').classList.toggle('warn', avisos.length > 0);
@@ -393,10 +381,22 @@
         btn.innerHTML = rotulo;
     }
 
-    async function distribuir() {
+    async function distribuir(confirmouRecentes) {
         const btn = $('ic-btn-distribuir');
         if (!$('ic-conferente').value) { toast('Escolha o conferente.', 'error'); $('ic-conferente').focus(); return; }
-        const itens = selecao.linhas.filter((l) => selecao.marcados.has(chave(l))).map((l) => ({ codigo: l.codigo, endereco: l.endereco }));
+        const marcadas = selecao.linhas.filter((l) => selecao.marcados.has(chave(l)));
+        const recentes = marcadas.filter((l) => l.contado_em);
+        if (recentes.length && !confirmouRecentes) {
+            const texto = recentes.length === 1
+                ? `${recentes[0].codigo} foi contado em ${recentes[0].contado_em} por ${recentes[0].contado_por}. Distribuir mesmo assim?`
+                : `${recentes.length} itens selecionados foram contados nos últimos 15 dias. Distribuir mesmo assim?`;
+            pedirConfirmacao('Contado recentemente', texto, 'Distribuir mesmo assim', null, async () => {
+                $('ic-modal-confirmar').classList.remove('open');
+                await distribuir(true);
+            });
+            return;
+        }
+        const itens = marcadas.map((l) => ({ codigo: l.codigo, endereco: l.endereco }));
         btn.disabled = true;
         try {
             const d = await api('/api/inventario-ciclico/distribuicoes', {
@@ -631,7 +631,7 @@
         $('ic-espelho-atualizar').addEventListener('click', async () => {
             try { atualizarEspelho(await api('/api/inventario-ciclico/espelho')); } catch (e) { toast(e.message, 'error'); }
         });
-        $('ic-btn-distribuir').addEventListener('click', distribuir);
+        $('ic-btn-distribuir').addEventListener('click', () => distribuir());
         $('ic-sel-busca').addEventListener('input', renderSelecao);
         $('ic-sel-tbody').addEventListener('change', (ev) => {
             const k = ev.target.dataset && ev.target.dataset.chave;

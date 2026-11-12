@@ -12,6 +12,10 @@
     .invu-tabs button.active { background: var(--eui-surface); box-shadow: var(--eui-shadow-xs); color: var(--eui-primary); }
     .invu-panel { display: none; }
     .invu-panel.active { display: block; }
+    /* Sub-abas do Inventariar: avulso, ciclico (conferente) e gestao do ciclico. */
+    .invu-sub { display: flex; gap: 4px; border-bottom: 1px solid var(--eui-border); margin-bottom: 16px; overflow-x: auto; }
+    .invu-sub button { border: 0; background: transparent; padding: 10px 14px; margin-bottom: -1px; font: inherit; font-size: 13px; font-weight: 700; color: var(--eui-muted); cursor: pointer; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .invu-sub button.active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
 </style>
 {% endblock %}
 
@@ -25,23 +29,31 @@
         </div>
     </header>
 
+    {% set pode_ciclico = pode_ciclico_contar or pode_ciclico_gestao %}
     <nav class="invu-tabs" id="invu-tabs" aria-label="Seções do inventário">
-        {% if pode_inventariar %}<button type="button" data-aba="inventariar"><i class="fas fa-plus-circle"></i> Inventariar</button>{% endif %}
+        {% if pode_inventariar or pode_ciclico %}<button type="button" data-aba="inventariar"><i class="fas fa-plus-circle"></i> Inventariar</button>{% endif %}
         {% if pode_analisar %}
-        <button type="button" data-aba="realizados"><i class="fas fa-magnifying-glass"></i> Realizados</button>
         <button type="button" data-aba="ajustes"><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</button>
         {% endif %}
         {% if pode_analise_causa %}<button type="button" data-aba="analise"><i class="fas fa-magnifying-glass-chart"></i> Análise de Causa Raiz</button>{% endif %}
-        {% if pode_ciclico_contar or pode_ciclico_gestao %}<button type="button" data-aba="ciclico"><i class="fas fa-rotate"></i> Inventário cíclico</button>{% endif %}
     </nav>
 
-    {% if pode_inventariar %}<section class="invu-panel" data-panel="inventariar">{% include "logistica_inventario_tab_contagem.html" %}</section>{% endif %}
+    {% if pode_inventariar or pode_ciclico %}
+    <section class="invu-panel" data-panel="inventariar">
+        {# Uma opcao so' (ex.: so' conta o avulso): a barra nao aparece. #}
+        <nav class="invu-sub{% if [pode_inventariar, pode_ciclico_contar, pode_ciclico_gestao] | select | list | length < 2 %} hidden{% endif %}" id="invu-sub" aria-label="Tipo de inventário">
+            {% if pode_inventariar %}<button type="button" data-sub="avulso"><i class="fas fa-clipboard-check"></i> Inventário avulso</button>{% endif %}
+            {% if pode_ciclico_contar %}<button type="button" data-sub="contar"><i class="fas fa-rotate"></i> Inventário cíclico <span class="ic-badge r2 ic-hidden" id="ic-badge-minhas"></span></button>{% endif %}
+            {% if pode_ciclico_gestao %}<button type="button" data-sub="gestao"><i class="fas fa-sliders"></i> Gestão <span class="ic-badge ic-hidden" id="ic-badge-pend"></span></button>{% endif %}
+        </nav>
+        {% if pode_inventariar %}<div id="invu-sub-avulso">{% include "logistica_inventario_tab_contagem.html" %}</div>{% endif %}
+        {% if pode_ciclico %}{% include "logistica_inventario_tab_ciclico.html" %}{% endif %}
+    </section>
+    {% endif %}
     {% if pode_analisar %}
-    <section class="invu-panel" data-panel="realizados">{% include "logistica_inventario_tab_realizados.html" %}</section>
     <section class="invu-panel" data-panel="ajustes">{% include "logistica_inventario_ajustes.html" %}</section>
     {% endif %}
     {% if pode_analise_causa %}<section class="invu-panel" data-panel="analise">{% include "logistica_inventario_analise_causa.html" %}</section>{% endif %}
-    {% if pode_ciclico_contar or pode_ciclico_gestao %}<section class="invu-panel" data-panel="ciclico">{% include "logistica_inventario_tab_ciclico.html" %}</section>{% endif %}
 </div>
 {% endblock %}
 
@@ -58,14 +70,52 @@
 
     const botoes = Array.from(document.querySelectorAll('#invu-tabs [data-aba]'));
     const paineis = Array.from(document.querySelectorAll('.invu-panel'));
+    const subBotoes = Array.from(document.querySelectorAll('#invu-sub [data-sub]'));
+    let abaAtual = '';
+    let subAtual = '';
+
+    function atualizarUrl() {
+        if (!abaAtual) return;
+        const sub = abaAtual === 'inventariar' && subAtual ? '&sub=' + subAtual : '';
+        history.replaceState(null, '', '/logistica/inventario?aba=' + abaAtual + sub);
+    }
     function mostrar(aba) {
         if (!botoes.some((b) => b.dataset.aba === aba)) aba = botoes.length ? botoes[0].dataset.aba : '';
+        abaAtual = aba;
         botoes.forEach((b) => b.classList.toggle('active', b.dataset.aba === aba));
         paineis.forEach((p) => p.classList.toggle('active', p.dataset.panel === aba));
-        if (aba) history.replaceState(null, '', '/logistica/inventario?aba=' + aba);
+        atualizarUrl();
+    }
+    // Avulso e o ciclico (contar/gestao) dividem a aba Inventariar.
+    function mostrarSub(sub) {
+        if (!subBotoes.some((b) => b.dataset.sub === sub)) sub = subBotoes.length ? subBotoes[0].dataset.sub : '';
+        subAtual = sub;
+        subBotoes.forEach((b) => b.classList.toggle('active', b.dataset.sub === sub));
+        const avulso = document.getElementById('invu-sub-avulso');
+        if (avulso) avulso.hidden = sub !== 'avulso';
+        ['contar', 'gestao'].forEach((nome) => {
+            const secao = document.getElementById('ic-' + nome);
+            if (secao) secao.classList.toggle('ic-hidden', sub !== nome);
+        });
+        atualizarUrl();
     }
     botoes.forEach((b) => b.addEventListener('click', () => mostrar(b.dataset.aba)));
-    mostrar({{ aba_inicial | tojson }});
+    subBotoes.forEach((b) => b.addEventListener('click', () => mostrarSub(b.dataset.sub)));
+
+    // Links antigos: ?aba=ciclico (menu, redirect de /logistica/inventario-ciclico)
+    // cai no ciclico; ?aba=realizados (/logistica/inventario/consulta) cai na
+    // Gestao, onde a lista de realizados ficou.
+    let abaInicial = {{ aba_inicial | tojson }};
+    let subInicial = new URLSearchParams(location.search).get('sub') || '';
+    if (abaInicial === 'ciclico') {
+        abaInicial = 'inventariar';
+        subInicial = subBotoes.some((b) => b.dataset.sub === 'contar') ? 'contar' : 'gestao';
+    } else if (abaInicial === 'realizados') {
+        abaInicial = 'inventariar';
+        subInicial = 'gestao';
+    }
+    mostrarSub(subInicial);
+    mostrar(abaInicial);
 })();
 </script>
 {% endblock %}

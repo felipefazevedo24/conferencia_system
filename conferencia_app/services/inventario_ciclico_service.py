@@ -23,6 +23,9 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import timedelta
+
+from sqlalchemy import func
 
 from ..extensions import db
 from ..models import (
@@ -49,6 +52,31 @@ STATUS_FECHADOS = {Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_CANCELAD
 STATUS_CONFERENTE = {Item.STATUS_AGUARDA_1A: 1, Item.STATUS_AGUARDA_2A: 2}
 MOTIVO = "Inventário Cíclico"
 PERM_VALIDACAO_SUPRIMENTOS = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
+# Codigo contado ha menos que isso: avulso e distribuicao pedem confirmacao
+# antes de contar de novo.
+DIAS_CONTAGEM_RECENTE = 15
+
+
+def contagens_recentes(codigos) -> dict[str, LogisticaInventarioInicial]:
+    """Ultima contagem (avulsa ou ciclica) de cada codigo nos ultimos
+    DIAS_CONTAGEM_RECENTE dias, em qualquer local. Chave: codigo em maiusculas."""
+    chaves = sorted({str(c or "").strip().upper() for c in codigos or [] if str(c or "").strip()})
+    limite = agora_br() - timedelta(days=DIAS_CONTAGEM_RECENTE)
+    ultimas: dict[str, LogisticaInventarioInicial] = {}
+    # Em blocos: familia inteira pode ter milhares de codigos.
+    for i in range(0, len(chaves), 500):
+        rows = (
+            LogisticaInventarioInicial.query
+            .filter(
+                func.upper(LogisticaInventarioInicial.codigo_produto).in_(chaves[i:i + 500]),
+                LogisticaInventarioInicial.criado_em >= limite,
+            )
+            .order_by(LogisticaInventarioInicial.criado_em.desc())
+            .all()
+        )
+        for row in rows:
+            ultimas.setdefault(row.codigo_produto.strip().upper(), row)
+    return ultimas
 
 
 def numero(dist: Distribuicao) -> str:
@@ -170,8 +198,12 @@ def previa(criterio: str, familia: str, grupo: str, codigos_texto: str) -> dict:
     criterio, familia, grupo, codigos = _validar_filtro(criterio, familia, grupo, codigos_texto)
     linhas, nao_encontrados = montar_linhas(_estoque(), criterio, familia, grupo, codigos)
     em_aberto = _chaves_em_aberto()
+    recentes = contagens_recentes(l["codigo"] for l in linhas)
     for l in linhas:
         l["em_aberto"] = (l["codigo"], l["endereco"]) in em_aberto
+        recente = recentes.get(str(l["codigo"]).strip().upper())
+        l["contado_em"] = recente.criado_em.strftime("%d/%m/%Y") if recente else None
+        l["contado_por"] = recente.criado_por if recente else None
     return {"linhas": linhas, "nao_encontrados": nao_encontrados}
 
 
