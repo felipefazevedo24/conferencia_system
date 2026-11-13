@@ -1609,6 +1609,32 @@ class FrotaChecklistDiario(db.Model):
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
+class ViagemRetiradaVeiculo(db.Model):
+    """Termo de retirada de veículo por funcionário que não é motorista.
+
+    Fluxo: a Central gera o termo com os dados da retirada e as cláusulas,
+    imprime, liberador e solicitante assinam no papel e a foto/PDF assinado
+    volta para cá. A devolução é preenchida à mão no papel: o arquivo
+    assinado é o registro. "Assinado" se calcula pela presença do arquivo.
+    """
+    __tablename__ = "viagem_retirada_veiculo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    retirado_por = db.Column(db.String(160), nullable=False, index=True)
+    retirada_em = db.Column(db.DateTime, nullable=False, index=True)
+    km_retirada = db.Column(db.Integer, nullable=False)
+    local = db.Column(db.String(200), nullable=False)
+    liberado_por = db.Column(db.String(160), nullable=False)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    assinado_arquivo = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    assinado_nome = db.Column(db.String(200))
+    assinado_mime = db.Column(db.String(100))
+    assinado_em = db.Column(db.DateTime)
+    assinado_por = db.Column(db.String(100))
+
+
 # ============================================================================
 # MODELOS WMS - WAREHOUSE MANAGEMENT SYSTEM
 # ============================================================================

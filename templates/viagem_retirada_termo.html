@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Termo de Retirada de Veículo nº {{ '%04d' % r.id }}</title>
+<style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e5e7eb; font-family: Arial, sans-serif; color: #111; font-size: 12.5px; line-height: 1.45; }
+    .barra { max-width: 210mm; margin: 16px auto 0; display: flex; justify-content: flex-end; gap: 8px; }
+    .barra button { font: inherit; font-weight: 700; padding: 9px 18px; border-radius: 6px; border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; cursor: pointer; }
+    .folha { max-width: 210mm; margin: 12px auto 24px; background: #fff; padding: 14mm; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+    .cab { display: flex; align-items: center; gap: 18px; padding-bottom: 10px; border-bottom: 2px solid #111; }
+    .cab img { height: 46px; }
+    .cab h1 { margin: 0; font-size: 18px; letter-spacing: .5px; text-transform: uppercase; }
+    .cab .num { margin-left: auto; text-align: right; font-size: 12px; }
+    .cab .num strong { font-size: 16px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin: 18px 0 6px; }
+    table.dados { width: 100%; border-collapse: collapse; }
+    table.dados td { border: 1px solid #9ca3af; padding: 7px 9px; vertical-align: top; }
+    table.dados .rot { display: block; font-size: 9.5px; text-transform: uppercase; color: #4b5563; margin-bottom: 2px; }
+    table.dados .val { font-size: 13.5px; font-weight: 700; }
+    table.dados .branco { height: 24px; }
+    ol { margin: 0; padding-left: 20px; }
+    ol li { margin-bottom: 5px; text-align: justify; }
+    .declara { margin-top: 12px; text-align: justify; }
+    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 54px; }
+    .assinaturas div { border-top: 1px solid #111; padding-top: 5px; text-align: center; }
+    .assinaturas strong { display: block; font-size: 11px; text-transform: uppercase; }
+    @media print {
+        body { background: #fff; }
+        .barra { display: none; }
+        .folha { margin: 0; padding: 0; box-shadow: none; max-width: none; }
+    }
+</style>
+</head>
+<body>
+<div class="barra"><button type="button" onclick="window.print()">Imprimir</button></div>
+<div class="folha">
+    <div class="cab">
+        <img src="/static/columbia_sync_logo_v2.png" alt="Columbia">
+        <div>
+            <h1>Termo de Retirada de Veículo</h1>
+            <div>Columbia Machine Brasil</div>
+        </div>
+        <div class="num">Nº<br><strong>{{ '%04d' % r.id }}</strong></div>
+    </div>
+
+    <h2>Retirada</h2>
+    <table class="dados">
+        <tr>
+            <td colspan="2"><span class="rot">Veículo</span><span class="val">{{ veiculo_label }}</span></td>
+            <td colspan="2"><span class="rot">Nome de quem está retirando</span><span class="val">{{ r.retirado_por }}</span></td>
+        </tr>
+        <tr>
+            <td><span class="rot">Data</span><span class="val">{{ r.retirada_em.strftime('%d/%m/%Y') }}</span></td>
+            <td><span class="rot">Horário</span><span class="val">{{ r.retirada_em.strftime('%H:%M') }}</span></td>
+            <td><span class="rot">Km</span><span class="val">{{ '{:,}'.format(r.km_retirada).replace(',', '.') }}</span></td>
+            <td><span class="rot">Local</span><span class="val">{{ r.local }}</span></td>
+        </tr>
+    </table>
+
+    <h2>Devolução</h2>
+    <table class="dados">
+        <tr>
+            <td><span class="rot">Data</span><div class="branco"></div></td>
+            <td><span class="rot">Horário</span><div class="branco"></div></td>
+            <td><span class="rot">Km</span><div class="branco"></div></td>
+            <td><span class="rot">Recebido por</span><div class="branco"></div></td>
+        </tr>
+    </table>
+
+    <h2>Cláusulas</h2>
+    <ol>
+        {% for c in clausulas %}<li>{{ c }}</li>{% endfor %}
+    </ol>
+    <p class="declara">Declaro que li e concordo com as cláusulas acima e que recebi o veículo nas condições descritas neste termo.</p>
+
+    <div class="assinaturas">
+        <div><strong>Responsável pela liberação do veículo</strong>{{ r.liberado_por }}</div>
+        <div><strong>Solicitante do veículo</strong>{{ r.retirado_por }}</div>
+    </div>
+</div>
+</body>
+</html>
