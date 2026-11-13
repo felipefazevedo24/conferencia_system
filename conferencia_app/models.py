@@ -4975,6 +4975,12 @@ class AssistenciaProducaoPeca(db.Model):
         cascade="all, delete-orphan",
         order_by="AssistenciaProducaoPecaHistorico.id",
     )
+    anexos = db.relationship(
+        "AssistenciaProducaoPecaAnexo",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+        order_by="AssistenciaProducaoPecaAnexo.id",
+    )
 
 
 class AssistenciaProducaoPecaHistorico(db.Model):
@@ -4993,6 +4999,46 @@ class AssistenciaProducaoPecaHistorico(db.Model):
     motivo = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
+class AssistenciaProducaoPecaAnexo(db.Model):
+    """Documento de uma Solicitacao de Producao de Pecas (desenho, CAD, PDF,
+    foto...). Chega pelo EDI (origem "EDI") ou pela tela (origem "Sync").
+    Limite: 100 MB somando os anexos da solicitacao.
+
+    O conteudo fica no banco em partes (AssistenciaProducaoPecaAnexoParte):
+    um blob unico de ate' 100 MB estoura o max_allowed_packet do MySQL."""
+
+    __tablename__ = "assistencia_producao_peca_anexo"
+
+    ORIGEM_EDI = "EDI"
+    ORIGEM_SYNC = "Sync"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer, db.ForeignKey("assistencia_producao_peca.id"), nullable=False, index=True
+    )
+    nome = db.Column(db.String(260), nullable=False)
+    content_type = db.Column(db.String(120), nullable=False)
+    tamanho = db.Column(db.BigInteger, nullable=False, default=0)
+    origem = db.Column(db.String(10), nullable=False)
+    enviado_por = db.Column(db.String(100), nullable=False)
+    enviado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
+class AssistenciaProducaoPecaAnexoParte(db.Model):
+    """Pedaco (ate' 2 MB) do conteudo de um anexo, na ordem. Sem relationship
+    de proposito: carregar as partes junto com o anexo traria ate' 100 MB pra
+    memoria so' pra listar - o service le e apaga por consulta."""
+
+    __tablename__ = "assistencia_producao_peca_anexo_parte"
+
+    id = db.Column(db.Integer, primary_key=True)
+    anexo_id = db.Column(
+        db.Integer, db.ForeignKey("assistencia_producao_peca_anexo.id"), nullable=False, index=True
+    )
+    ordem = db.Column(db.Integer, nullable=False)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"), nullable=False)
 
 
 class CargoAcesso(db.Model):

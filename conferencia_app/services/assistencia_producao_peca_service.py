@@ -7,13 +7,15 @@ Workflow:
     cancelar: encerra com motivo, de qualquer etapa antes do Concluido.
 
 A solicitacao so' nasce pelo EDI (receber_edi); a tela nao cria nem edita,
-so' movimenta o status.
+so' movimenta o status e anexa documentos. O sistema de origem acompanha
+o status (e baixa os documentos) pela consulta do EDI - ver as rotas.
 """
 from __future__ import annotations
 
 import base64
 import binascii
 import hmac
+import io
 import json
 import os
 from datetime import date, datetime
@@ -23,6 +25,8 @@ from flask import current_app
 from ..extensions import db
 from ..models import (
     AssistenciaProducaoPeca as Solicitacao,
+    AssistenciaProducaoPecaAnexo as Anexo,
+    AssistenciaProducaoPecaAnexoParte as AnexoParte,
     AssistenciaProducaoPecaHistorico as Historico,
 )
 from ..tempo import agora_br
@@ -140,10 +144,14 @@ _OBRIGATORIOS = (
 )
 
 
-def receber_edi(dados: dict) -> tuple[Solicitacao, bool]:
+def receber_edi(dados: dict, arquivos=None) -> tuple[Solicitacao, bool]:
     """Cria a solicitacao a partir do EDI. Devolve (solicitacao, criada) -
     criada=False quando o `id_externo` ja existia (reenvio do sistema de
-    origem): devolve a existente sem duplicar."""
+    origem): devolve a existente sem duplicar (e sem mexer nos anexos - pra
+    acrescentar documento depois existe a rota de anexos).
+
+    `arquivos`: [(nome, stream)] do multipart; o JSON tambem aceita `anexos`
+    em base64. Anexo invalido recusa a solicitacao inteira."""
     if not isinstance(dados, dict):
         raise ValueError("Envie os campos em JSON.")
 
@@ -177,11 +185,17 @@ def receber_edi(dados: dict) -> tuple[Solicitacao, bool]:
         status=Solicitacao.STATUS_PENDENTE,
         recebido_em=agora_br(),
     )
+    arquivos = list(arquivos or []) + anexos_base64(dados)
     _consultar_erp(solicitacao)
     solicitacao.historico.append(Historico(
         acao="recebido", status_de=None, status_para=Solicitacao.STATUS_PENDENTE, usuario=USUARIO_EDI,
     ))
     db.session.add(solicitacao)
+    try:
+        _gravar_anexos(solicitacao, arquivos, Anexo.ORIGEM_EDI, USUARIO_EDI)
+    except ValueError:
+        db.session.rollback()
+        raise
     db.session.commit()
     return solicitacao, True
 
@@ -268,3 +282,187 @@ def atrasada(solicitacao: Solicitacao, hoje: date | None = None) -> bool:
     if solicitacao.status in STATUS_FINAIS or not solicitacao.prazo:
         return False
     return solicitacao.prazo < (hoje or agora_br().date())
+
+
+def obter_por_referencia(id_externo=None, protocolo_txt=None) -> Solicitacao | None:
+    """O sistema de origem acha a solicitacao pelo proprio id_externo ou pelo
+    protocolo que recebeu na criacao (PP-00012)."""
+    id_externo = _txt(id_externo)
+    if id_externo:
+        return Solicitacao.query.filter_by(id_externo=id_externo[:100]).first()
+    numero = _txt(protocolo_txt).upper().removeprefix("PP-")
+    return db.session.get(Solicitacao, int(numero)) if numero.isdigit() else None
+
+
+def alteradas_desde(desde) -> list[Solicitacao]:
+    """Pro sistema de origem replicar so' o que mudou: recebidas ou
+    movimentadas (status ou anexo) a partir de `desde` (horario de Brasilia)."""
+    try:
+        momento = datetime.fromisoformat(_txt(desde).replace("Z", "")).replace(tzinfo=None)
+    except ValueError:
+        raise ValueError("Parâmetro desde inválido - use AAAA-MM-DD ou AAAA-MM-DDTHH:MM:SS.")
+    return (
+        Solicitacao.query
+        .filter(db.or_(Solicitacao.recebido_em >= momento, Solicitacao.atualizado_em >= momento))
+        .order_by(Solicitacao.id)
+        .all()
+    )
+
+
+# ── Anexos ───────────────────────────────────────────────────────────────
+MAX_ANEXOS_BYTES = 100 * 1024 * 1024  # somando os anexos da solicitacao
+PARTE_BYTES = 2 * 1024 * 1024
+# Pedido de 13/11/2026: PDF, imagens, CAD e Office/ZIP.
+EXTENSOES_ANEXO = {
+    "pdf": "application/pdf",
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp",
+    "dwg": "application/acad", "dxf": "application/dxf",
+    "step": "application/step", "stp": "application/step", "igs": "application/iges", "iges": "application/iges",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xls": "application/vnd.ms-excel",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "doc": "application/msword",
+    "zip": "application/zip",
+}
+# PDF e imagem abrem no navegador: o conteudo tem que ser mesmo o que a
+# extensao diz (senao um HTML renomeado pra .pdf rodaria no dominio do Sync).
+# O resto so' baixa como arquivo.
+_ASSINATURA_ANEXO = {
+    "pdf": b"%PDF",
+    "png": b"\x89PNG\r\n\x1a\n",
+    "jpg": b"\xff\xd8\xff",
+    "jpeg": b"\xff\xd8\xff",
+    "webp": b"RIFF",
+}
+ABRE_NO_NAVEGADOR = frozenset(_ASSINATURA_ANEXO)
+
+
+def _mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.1f}".replace(".", ",") + " MB"
+
+
+def extensao(nome: str) -> str:
+    return nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+
+
+def usado_bytes(solicitacao: Solicitacao) -> int:
+    return sum(a.tamanho or 0 for a in solicitacao.anexos)
+
+
+def anexos_base64(dados: dict) -> list:
+    """`anexos: [{"nome": "...", "conteudo_base64": "..."}]` no JSON do EDI."""
+    lista = dados.get("anexos") if isinstance(dados, dict) else None
+    if not lista:
+        return []
+    if not isinstance(lista, list):
+        raise ValueError("anexos deve ser uma lista de {nome, conteudo_base64}.")
+    arquivos = []
+    for i, item in enumerate(lista, 1):
+        item = item if isinstance(item, dict) else {}
+        nome = _txt(item.get("nome"))
+        bruto = _txt(item.get("conteudo_base64"))
+        if bruto.startswith("data:") and "," in bruto:
+            bruto = bruto.split(",", 1)[1]
+        try:
+            conteudo = base64.b64decode(bruto, validate=False) if bruto else b""
+        except (binascii.Error, ValueError):
+            raise ValueError(f"Anexo {i} ({nome or 'sem nome'}): conteúdo base64 inválido.")
+        arquivos.append((nome, io.BytesIO(conteudo)))
+    return arquivos
+
+
+def _gravar_anexos(solicitacao: Solicitacao, arquivos, origem: str, usuario: str) -> list[Anexo]:
+    """Grava em partes, lendo o arquivo aos pedacos (nunca 100 MB inteiros
+    na sessao). Nao faz commit: quem chama confirma ou desfaz."""
+    gravados = []
+    if not arquivos:
+        return gravados
+    usado_antes = usado_bytes(solicitacao)
+    usado = usado_antes
+    for nome, stream in arquivos:
+        nome = os.path.basename(_txt(nome).replace("\\", "/"))[:260]
+        ext = extensao(nome)
+        if not nome or ext not in EXTENSOES_ANEXO:
+            raise ValueError(
+                f'Arquivo "{nome or "sem nome"}" não aceito - envie PDF, imagem (PNG/JPG/WEBP), '
+                "CAD (DWG/DXF/STEP/IGES), Excel, Word ou ZIP."
+            )
+        anexo = Anexo(nome=nome, content_type=EXTENSOES_ANEXO[ext], tamanho=0, origem=origem,
+                      enviado_por=usuario, enviado_em=agora_br())
+        solicitacao.anexos.append(anexo)
+        db.session.flush()
+        ordem = 0
+        while True:
+            pedaco = stream.read(PARTE_BYTES)
+            if not pedaco:
+                break
+            if ordem == 0 and ext in _ASSINATURA_ANEXO and not pedaco.startswith(_ASSINATURA_ANEXO[ext]):
+                raise ValueError(f'"{nome}" não é um arquivo .{ext} válido.')
+            usado += len(pedaco)
+            if usado > MAX_ANEXOS_BYTES:
+                raise ValueError(
+                    f"Limite de {_mb(MAX_ANEXOS_BYTES)} de anexos por solicitação ultrapassado "
+                    f"(a solicitação já tinha {_mb(usado_antes)})."
+                )
+            parte = AnexoParte(anexo_id=anexo.id, ordem=ordem, dados=pedaco)
+            db.session.add(parte)
+            db.session.flush()
+            db.session.expunge(parte)  # nao acumula os bytes na sessao
+            anexo.tamanho += len(pedaco)
+            ordem += 1
+        if not anexo.tamanho:
+            raise ValueError(f'"{nome}" está vazio.')
+        gravados.append(anexo)
+    solicitacao.historico.append(Historico(
+        acao="anexado", status_de=solicitacao.status, status_para=solicitacao.status,
+        motivo=", ".join(a.nome for a in gravados)[:500], usuario=usuario, criado_em=agora_br(),
+    ))
+    return gravados
+
+
+def anexar(solicitacao: Solicitacao, arquivos, origem: str, usuario: str) -> list[Anexo]:
+    """Acrescenta documentos a uma solicitacao que ja existe (EDI ou tela).
+    Marca atualizado_em pra consulta `desde` do sistema de origem enxergar."""
+    if not arquivos:
+        raise ValueError("Nenhum arquivo enviado.")
+    try:
+        gravados = _gravar_anexos(solicitacao, arquivos, origem, usuario)
+    except ValueError:
+        db.session.rollback()
+        raise
+    solicitacao.atualizado_em = agora_br()
+    solicitacao.atualizado_por = usuario
+    db.session.commit()
+    return gravados
+
+
+def remover_anexo(solicitacao: Solicitacao, anexo: Anexo, usuario: str) -> None:
+    """A equipe so' remove o que ela mesma anexou: o que veio do sistema de
+    origem e' documento dele."""
+    if anexo.origem != Anexo.ORIGEM_SYNC:
+        raise ValueError("Anexo enviado pelo sistema de origem não pode ser removido pelo Sync.")
+    AnexoParte.query.filter_by(anexo_id=anexo.id).delete(synchronize_session=False)
+    agora = agora_br()
+    solicitacao.historico.append(Historico(
+        acao="anexo removido", status_de=solicitacao.status, status_para=solicitacao.status,
+        motivo=anexo.nome[:500], usuario=usuario, criado_em=agora,
+    ))
+    solicitacao.anexos.remove(anexo)
+    solicitacao.atualizado_em = agora
+    solicitacao.atualizado_por = usuario
+    db.session.commit()
+
+
+def obter_anexo(solicitacao_id: int | None, anexo_id: int) -> Anexo | None:
+    anexo = db.session.get(Anexo, anexo_id)
+    if anexo is None or (solicitacao_id is not None and anexo.solicitacao_id != solicitacao_id):
+        return None
+    return anexo
+
+
+def conteudo_anexo(anexo_id: int):
+    """Gera o arquivo parte a parte (uma consulta por parte) pra nao montar
+    100 MB na memoria no download."""
+    ids = [i for (i,) in db.session.query(AnexoParte.id).filter_by(anexo_id=anexo_id).order_by(AnexoParte.ordem)]
+    for parte_id in ids:
+        yield db.session.query(AnexoParte.dados).filter_by(id=parte_id).scalar()
