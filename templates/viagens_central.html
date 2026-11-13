@@ -2930,7 +2930,6 @@ async function cbExcluir(url, btn, modalId) {
 }
 
 // ---------------------------------------------------------------- Retiradas
-const rtState = { usuarioNome: '' };
 const rtEsc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function mostrarRetiradas(ativo) {
@@ -2951,7 +2950,6 @@ async function rtCarregar() {
   const r = await fetch('/api/viagem/retiradas');
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { el.innerHTML = `<div class="vt-empty">${rtEsc(d.msg || 'Não foi possível carregar as retiradas.')}</div>`; return; }
-  rtState.usuarioNome = d.usuario_nome || '';
   const lista = d.retiradas || [];
   if (!lista.length) { el.innerHTML = '<div class="vt-empty">Nenhuma retirada registrada.</div>'; return; }
   el.innerHTML = `<table class="erp-table"><thead><tr><th>Nº</th><th>Retirada</th><th>Veículo</th><th>Retirado por</th><th>Km</th><th>Local</th><th>Liberado por</th><th>Termo assinado</th><th></th></tr></thead><tbody>${lista.map((x) => `<tr>
@@ -2975,19 +2973,17 @@ async function rtCarregar() {
 async function rtNova() {
   const agora = new Date();
   const dois = (n) => String(n).padStart(2, '0');
-  if (!rtState.usuarioNome) {
-    const r = await fetch('/api/viagem/retiradas');
-    const d = await r.json().catch(() => ({}));
-    rtState.usuarioNome = d.usuario_nome || '';
-  }
-  document.getElementById('rt-veiculo').innerHTML = '<option value="">Selecione...</option>' + (state.veiculos || []).map((v) =>
-    `<option value="${v.id}">${rtEsc(v.nome || v.codigo || ('Veículo ' + v.id))}</option>`).join('');
+  const r = await fetch('/api/viagem/retiradas/form');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível carregar os veículos.', 'error'); return; }
+  document.getElementById('rt-veiculo').innerHTML = '<option value="">Selecione...</option>' + (d.veiculos || []).map((v) =>
+    `<option value="${v.id}">${rtEsc(v.nome)}</option>`).join('');
   document.getElementById('rt-retirado-por').value = '';
   document.getElementById('rt-data').value = `${agora.getFullYear()}-${dois(agora.getMonth() + 1)}-${dois(agora.getDate())}`;
   document.getElementById('rt-hora').value = `${dois(agora.getHours())}:${dois(agora.getMinutes())}`;
   document.getElementById('rt-km').value = '';
   document.getElementById('rt-local').value = '';
-  document.getElementById('rt-liberado-por').value = rtState.usuarioNome;
+  document.getElementById('rt-liberado-por').value = d.usuario_nome || '';
   openModal('modalRetirada');
 }
 

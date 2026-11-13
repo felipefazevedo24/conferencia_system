@@ -27,7 +27,15 @@ def _nome_usuario() -> str:
 @retirada_bp.route("", methods=["GET"])
 @permission_required(PERM)
 def listar():
-    return jsonify({"retiradas": retirada_svc.listar(), "usuario_nome": _nome_usuario()})
+    return jsonify({"retiradas": retirada_svc.listar()})
+
+
+@retirada_bp.route("/form", methods=["GET"])
+@permission_required(PERM)
+def dados_form():
+    # Veículos vêm daqui e não do painel de solicitações: aquele exige
+    # PAGE_LOGISTICA_AGENDAMENTO e, sem ela, o formulário ficava sem veículos.
+    return jsonify({"veiculos": retirada_svc.veiculos_ativos(), "usuario_nome": _nome_usuario()})
 
 
 @retirada_bp.route("", methods=["POST"])

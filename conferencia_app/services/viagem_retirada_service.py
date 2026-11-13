@@ -98,6 +98,15 @@ def veiculo_label(v: AgendamentoVeiculo | None) -> str:
     return v.nome_exibicao + (f" ({v.placa})" if v.placa else "")
 
 
+def veiculos_ativos() -> list[dict]:
+    rows = (
+        AgendamentoVeiculo.query.filter_by(ativo=True)
+        .order_by(AgendamentoVeiculo.ordem_exibicao.asc(), AgendamentoVeiculo.nome_exibicao.asc())
+        .all()
+    )
+    return [{"id": v.id, "nome": veiculo_label(v)} for v in rows]
+
+
 def listar() -> list[dict]:
     # O arquivo assinado fica fora da listagem: são fotos de vários MB.
     rows = (
