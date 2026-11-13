@@ -82,6 +82,7 @@ from .routes.compras_st_routes import compras_st_bp
 from .routes.compras_divergencia_recebimento_routes import compras_divergencia_recebimento_bp
 from .routes.producao_routes import producao_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
+from .routes.viagem_retirada_routes import retirada_bp
 from .routes.comex_routes import comex_bp
 from .routes.comex_custo_routes import comex_custo_bp
 from .routes.comex_financeiro_routes import comex_financeiro_bp
@@ -151,6 +152,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(compras_divergencia_recebimento_bp)
     app.register_blueprint(producao_bp)
     app.register_blueprint(viagem_bp)
+    app.register_blueprint(retirada_bp)
     app.register_blueprint(motorista_bp)
     app.register_blueprint(solicitacao_nf_bp)
     app.register_blueprint(divergencia_aprovacao_bp)

@@ -48,7 +48,7 @@ CRITERIOS = {
     "grupo": "Grupo",
     "familia_grupo": "Família + grupo",
 }
-STATUS_FECHADOS = {Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_CANCELADO}
+STATUS_FECHADOS = {Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_MANTIDA, Item.STATUS_CANCELADO}
 STATUS_CONFERENTE = {Item.STATUS_AGUARDA_1A: 1, Item.STATUS_AGUARDA_2A: 2}
 MOTIVO = "Inventário Cíclico"
 PERM_VALIDACAO_SUPRIMENTOS = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
@@ -325,10 +325,11 @@ def _avisar_teams(ajustes: list, origem: str) -> None:
 
 
 def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: str, rodada: int, bateu: bool,
-            obs_extra: str = "", validado_por: str = "", validacao: str = ""):
+            obs_extra: str = "", validado_por: str = "", validacao: str = "", manter: bool = False):
     """Fecha a linha; devolve o ajuste aberto (ou None). `validado_por` e'
     o gestor que decidiu no ciclico; com a permissao de Validacao, o ajuste
-    ja sai confirmado (ver confirmar_pelo_inventario_ciclico)."""
+    ja sai confirmado (ver confirmar_pelo_inventario_ciclico). `manter`:
+    divergencia mantida - registra a contagem e nao abre ajuste."""
     agora = agora_br()
     contagem = LogisticaInventarioInicial(
         local_codigo=item.endereco or "",
@@ -346,9 +347,9 @@ def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: st
     db.session.add(contagem)
     db.session.flush()
     item.contagem_id = contagem.id
-    item.status = Item.STATUS_CONFERE if bateu else Item.STATUS_AJUSTE
+    item.status = Item.STATUS_MANTIDA if manter else (Item.STATUS_CONFERE if bateu else Item.STATUS_AJUSTE)
     db.session.commit()
-    if not bateu:
+    if not bateu and not manter:
         # None quando ja ha ajuste aberto pro mesmo codigo + endereco (nao duplica).
         ajuste = ajuste_svc.detectar_divergencia(contagem, grv, custo, item.descricao)
         if ajuste:
@@ -411,10 +412,27 @@ def seguir_para_ajuste(item: Item, usuario: str, custo: float | None = None, *, 
     return ajuste
 
 
-ACOES_LOTE = {"liberar": "Liberar 2ª contagem", "ajuste": "Seguir para ajuste"}
+def manter_divergencia(item: Item, usuario: str, justificativa: str) -> None:
+    """Gestor decide nao ajustar o estoque (ex.: chapa): fecha com a ultima
+    contagem do conferente, sem abrir ajuste. A contagem vai pros
+    Realizados com a justificativa."""
+    if item.distribuicao.cancelado_em or item.status not in {Item.STATUS_DIVERGENTE_1A, Item.STATUS_AGUARDA_3A}:
+        raise ValueError("Só dá para manter a divergência de item divergente aguardando recontagem.")
+    if item.status == Item.STATUS_DIVERGENTE_1A:
+        rodada, qtd, grv, contou = 1, item.contagem1, item.grv1, item.contagem1_por
+    else:
+        rodada, qtd, grv, contou = 2, item.contagem2, item.grv2, item.contagem2_por
+    item.divergencia_mantida_justificativa = justificativa
+    item.divergencia_mantida_por = usuario
+    item.divergencia_mantida_em = agora_br()
+    _fechar(item, float(qtd or 0), float(grv or 0), None, contou or usuario, rodada, False,
+            obs_extra=f" (divergência mantida por {usuario}: {justificativa})", manter=True)
 
 
-def acao_em_lote(acao: str, ids: list, usuario: str) -> dict:
+ACOES_LOTE = {"liberar": "Liberar 2ª contagem", "ajuste": "Seguir para ajuste", "manter": "Manter divergência"}
+
+
+def acao_em_lote(acao: str, ids: list, usuario: str, justificativa: str | None = None) -> dict:
     """Liberar a 2a ou seguir para ajuste varios itens de uma vez. Item que
     nao pode (status mudou, outra aba ja tratou) entra em "erros" e o resto
     segue - um nao trava os outros."""
@@ -426,6 +444,9 @@ def acao_em_lote(acao: str, ids: list, usuario: str) -> dict:
         raise ValueError("Seleção inválida.") from None
     if not ids:
         raise ValueError("Selecione ao menos um item.")
+    justificativa = str(justificativa or "").strip()[:500]
+    if acao == "manter" and not justificativa:
+        raise ValueError("Justifique por que a divergência vai ser mantida.")
     itens = Item.query.filter(Item.id.in_(ids)).order_by(Item.id).all()
     custos = {}
     if acao == "ajuste":
@@ -440,6 +461,8 @@ def acao_em_lote(acao: str, ids: list, usuario: str) -> dict:
         try:
             if acao == "liberar":
                 liberar_recontagem(item, usuario)
+            elif acao == "manter":
+                manter_divergencia(item, usuario, justificativa)
             else:
                 contou = item.contagem1_por if item.status == Item.STATUS_DIVERGENTE_1A else item.contagem2_por
                 ajuste = seguir_para_ajuste(item, usuario, custos.get((item.codigo, item.endereco or "")), avisar=False)
@@ -487,6 +510,6 @@ def resumo(dist: Distribuicao) -> dict:
     contagem: dict[str, int] = {}
     for item in dist.itens:
         contagem[item.status] = contagem.get(item.status, 0) + 1
-    fechados = sum(contagem.get(s, 0) for s in (Item.STATUS_CONFERE, Item.STATUS_AJUSTE))
+    fechados = sum(contagem.get(s, 0) for s in (Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_MANTIDA))
     total = sum(v for s, v in contagem.items() if s != Item.STATUS_CANCELADO) or 0
     return {"por_status": contagem, "total": total, "fechados": fechados}

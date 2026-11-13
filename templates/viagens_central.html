@@ -133,6 +133,7 @@
           <button class="eui-btn eui-btn--ghost" onclick="abrirRelatorio()"><i class="fas fa-file-excel"></i> Baixar relatório</button>
           {% endif %}
           <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--ghost"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
+          <button class="eui-btn eui-btn--ghost" onclick="rtNova()"><i class="fas fa-file-signature"></i> Retirada de veículo</button>
             {% if can_access('MANAGE_LOGISTICA_VIAGEM_CADASTROS') %}
             <button id="btnCadastrosFrota" class="eui-btn eui-btn--ghost" onclick="abrirCadastros()"><i class="fas fa-id-card"></i> Veículos e motoristas</button>
             {% endif %}
@@ -156,6 +157,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="SOLICITACOES">Solicitações <span class="count" id="count-solicitacoes">0</span></button>
                 <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
+                <button class="vt-tab" data-tab="RETIRADAS"><i class="fas fa-file-signature"></i> Retiradas</button>
                 {% if can_access('PAGE_LOGISTICA_FROTA') %}<button class="vt-tab" data-tab="COMBUSTIVEL"><i class="fas fa-gas-pump"></i> Combustível</button>{% endif %}
             </div>
             <div class="vt-toolbar">
@@ -180,6 +182,9 @@
                     <tbody id="vt-body"></tbody>
                 </table>
             </div>
+        </div>
+        <div id="vt-retiradas" style="display:none;">
+            <div class="vt-table-wrap" id="rt-conteudo"></div>
         </div>
         {% if can_access('PAGE_LOGISTICA_FROTA') %}
         <div id="vt-combustivel" style="display:none;">
@@ -226,6 +231,30 @@
     <div class="vt-modal__foot">
       <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDepartamentos')">Cancelar</button>
       <button class="eui-btn eui-btn--primary" onclick="confirmarDepartamentos()">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalRetirada" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:560px;">
+    <div class="vt-modal__head">
+      <strong>Retirada de veículo</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRetirada')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body" style="display:grid; gap:10px;">
+      <div class="eui-field"><label class="eui-field__label">Veículo</label><select id="rt-veiculo" class="eui-select"></select></div>
+      <div class="eui-field"><label class="eui-field__label">Nome de quem está retirando</label><input id="rt-retirado-por" class="eui-input" maxlength="160"></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+        <div class="eui-field"><label class="eui-field__label">Data</label><input id="rt-data" type="date" class="eui-input"></div>
+        <div class="eui-field"><label class="eui-field__label">Horário</label><input id="rt-hora" type="time" class="eui-input"></div>
+        <div class="eui-field"><label class="eui-field__label">Km</label><input id="rt-km" type="number" min="0" step="1" class="eui-input"></div>
+      </div>
+      <div class="eui-field"><label class="eui-field__label">Local</label><input id="rt-local" class="eui-input" maxlength="200"></div>
+      <div class="eui-field"><label class="eui-field__label">Responsável pela liberação</label><input id="rt-liberado-por" class="eui-input" maxlength="160"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRetirada')">Cancelar</button>
+      <button id="rt-btn-gerar" class="eui-btn eui-btn--primary" onclick="rtGerar()"><i class="fas fa-print"></i> Gerar e imprimir</button>
     </div>
   </div>
 </div>
@@ -2900,12 +2929,115 @@ async function cbExcluir(url, btn, modalId) {
   cbCarregar();
 }
 
+// ---------------------------------------------------------------- Retiradas
+const rtEsc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function mostrarRetiradas(ativo) {
+  const box = document.getElementById('vt-retiradas');
+  const card = box.closest('.eui-card');
+  box.style.display = ativo ? '' : 'none';
+  // Combustível também esconde a lista: só devolve se ele não estiver aberto.
+  const cb = document.getElementById('vt-combustivel');
+  if (!ativo && cb && cb.style.display !== 'none') return;
+  card.querySelector('.vt-toolbar').style.display = ativo ? 'none' : '';
+  card.querySelector('.eui-card__body--tight').style.display = ativo ? 'none' : '';
+  if (ativo) rtCarregar();
+}
+
+async function rtCarregar() {
+  const el = document.getElementById('rt-conteudo');
+  el.innerHTML = '<div class="vt-empty">Carregando...</div>';
+  const r = await fetch('/api/viagem/retiradas');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { el.innerHTML = `<div class="vt-empty">${rtEsc(d.msg || 'Não foi possível carregar as retiradas.')}</div>`; return; }
+  const lista = d.retiradas || [];
+  if (!lista.length) { el.innerHTML = '<div class="vt-empty">Nenhuma retirada registrada.</div>'; return; }
+  el.innerHTML = `<table class="erp-table"><thead><tr><th>Nº</th><th>Retirada</th><th>Veículo</th><th>Retirado por</th><th>Km</th><th>Local</th><th>Liberado por</th><th>Termo assinado</th><th></th></tr></thead><tbody>${lista.map((x) => `<tr>
+    <td>${String(x.id).padStart(4, '0')}</td>
+    <td>${formatDateTime(x.retirada_em)}</td>
+    <td>${rtEsc(x.veiculo_label)}</td>
+    <td><strong>${rtEsc(x.retirado_por)}</strong></td>
+    <td>${Number(x.km_retirada).toLocaleString('pt-BR')}</td>
+    <td>${rtEsc(x.local)}</td>
+    <td>${rtEsc(x.liberado_por)}</td>
+    <td>${x.assinado
+      ? `<a href="/api/viagem/retiradas/${x.id}/assinado" target="_blank" rel="noopener" class="eui-badge eui-badge--success" title="Enviado por ${rtEsc(x.assinado_por)} em ${formatDateTime(x.assinado_em)}"><i class="fas fa-file-circle-check"></i> Ver</a>`
+      : '<span class="eui-badge eui-badge--warning">Pendente</span>'}</td>
+    <td style="text-align:right; white-space:nowrap;">
+      <a class="eui-btn eui-btn--ghost" href="/api/viagem/retiradas/${x.id}/termo" target="_blank" rel="noopener" title="Imprimir termo"><i class="fas fa-print"></i></a>
+      <label class="eui-btn eui-btn--ghost" style="cursor:pointer;" title="${x.assinado ? 'Substituir termo assinado' : 'Anexar termo assinado'}"><i class="fas fa-upload"></i> ${x.assinado ? 'Substituir' : 'Anexar assinado'}<input type="file" accept="image/*,.pdf,.heic" hidden onchange="rtAnexar(${x.id}, this)"></label>
+    </td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+async function rtNova() {
+  const agora = new Date();
+  const dois = (n) => String(n).padStart(2, '0');
+  const r = await fetch('/api/viagem/retiradas/form');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível carregar os veículos.', 'error'); return; }
+  document.getElementById('rt-veiculo').innerHTML = '<option value="">Selecione...</option>' + (d.veiculos || []).map((v) =>
+    `<option value="${v.id}">${rtEsc(v.nome)}</option>`).join('');
+  document.getElementById('rt-retirado-por').value = '';
+  document.getElementById('rt-data').value = `${agora.getFullYear()}-${dois(agora.getMonth() + 1)}-${dois(agora.getDate())}`;
+  document.getElementById('rt-hora').value = `${dois(agora.getHours())}:${dois(agora.getMinutes())}`;
+  document.getElementById('rt-km').value = '';
+  document.getElementById('rt-local').value = '';
+  document.getElementById('rt-liberado-por').value = d.usuario_nome || '';
+  openModal('modalRetirada');
+}
+
+async function rtGerar() {
+  const btn = document.getElementById('rt-btn-gerar');
+  const val = (id) => document.getElementById(id).value;
+  if (['rt-veiculo', 'rt-retirado-por', 'rt-data', 'rt-hora', 'rt-km', 'rt-local', 'rt-liberado-por'].some((id) => !String(val(id)).trim())) {
+    showToast('Preencha todos os campos.', 'error');
+    return;
+  }
+  // A aba do termo abre já no clique: depois do await o navegador bloquearia.
+  const aba = window.open('', '_blank');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/viagem/retiradas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        veiculo_id: val('rt-veiculo'), retirado_por: val('rt-retirado-por'), data: val('rt-data'),
+        hora: val('rt-hora'), km: val('rt-km'), local: val('rt-local'), liberado_por: val('rt-liberado-por'),
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { if (aba) aba.close(); showToast(d.msg || 'Não foi possível gerar o termo.', 'error'); return; }
+    const url = `/api/viagem/retiradas/${d.id}/termo`;
+    if (aba) aba.location = url; else window.open(url, '_blank');
+    closeModal('modalRetirada');
+    showToast('Termo gerado.', 'success');
+    if (document.getElementById('vt-retiradas').style.display !== 'none') rtCarregar();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function rtAnexar(id, input) {
+  const arquivo = input.files && input.files[0];
+  input.value = '';
+  if (!arquivo) return;
+  const fd = new FormData();
+  fd.append('arquivo', arquivo);
+  const r = await fetch(`/api/viagem/retiradas/${id}/assinado`, { method: 'POST', body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível anexar.', 'error'); return; }
+  showToast('Termo assinado anexado.', 'success');
+  rtCarregar();
+}
+
 Array.from(document.querySelectorAll('.vt-tab[data-tab]')).forEach((tab) => {
   tab.addEventListener('click', async () => {
     document.querySelectorAll('.vt-tab[data-tab]').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
     mostrarCombustivel(tab.dataset.tab === 'COMBUSTIVEL');
-    if (tab.dataset.tab === 'COMBUSTIVEL') return;
+    mostrarRetiradas(tab.dataset.tab === 'RETIRADAS');
+    if (tab.dataset.tab === 'COMBUSTIVEL' || tab.dataset.tab === 'RETIRADAS') return;
     state.tab = tab.dataset.tab;
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : null;
     if (state.tab === 'VIAGENS') state.selectedIds = [];
