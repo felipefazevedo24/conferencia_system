@@ -23,6 +23,7 @@ compras_st_bp = Blueprint("compras_st", __name__)
 
 PERM_COTACAO = "PAGE_COMPRAS_ST_COTACAO"
 PERM_ANALISE = "PAGE_COMPRAS_ST_ANALISE"
+PERM_SEM_HOMOLOGACAO = "PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO"
 # Desenhos anexados ao e-mail ate' este total; acima disso o e-mail avisa
 # para baixar pelo link (servidor de e-mail costuma recusar mensagem grande).
 MAX_ANEXOS_EMAIL = 15 * 1024 * 1024
@@ -36,6 +37,10 @@ def _pode_analisar() -> bool:
     return is_admin_session() or has_permission(PERM_ANALISE)
 
 
+def _pode_sem_homologacao() -> bool:
+    return is_admin_session() or has_permission(PERM_SEM_HOMOLOGACAO)
+
+
 # ── Payloads ───────────────────────────────────────────────────────────
 def _tipo_payload(t: CompraStTipoServico) -> dict:
     return {"id": t.id, "nome": t.nome, "ativo": t.ativo}
@@ -43,11 +48,16 @@ def _tipo_payload(t: CompraStTipoServico) -> dict:
 
 def _fornecedor_payload(f: CompraStFornecedor) -> dict:
     h = f.homologacao
+    sem = svc.sem_homologacao(f)
+    validade = f.valido_ate if sem else (h.valido_ate if h else None)
     return {
-        "id": f.id, "nome": svc.nome_fornecedor(f), "razao_social": h.razao_social if h else None,
-        "cnpj": h.cnpj if h else None, "homologacao_id": f.homologacao_id,
+        "id": f.id, "nome": svc.nome_fornecedor(f), "razao_social": h.razao_social if h else f.razao_social,
+        "cnpj": h.cnpj if h else f.cnpj, "homologacao_id": f.homologacao_id,
         "homologacao_status": h.status if h else None,
         "homologacao_valido_ate": h.valido_ate.strftime("%d/%m/%Y") if h and h.valido_ate else None,
+        "sem_homologacao": sem, "justificativa": f.justificativa if sem else None,
+        "valido_ate": validade.isoformat() if validade else None,
+        "liberado_ate_texto": (f"{'Liberado' if sem else 'Homologado'} até {validade:%d/%m/%Y}" if validade else None),
         "emails": f.emails, "contato": f.contato, "telefone": f.telefone, "ativo": f.ativo,
         "tipos": [_tipo_payload(t) for t in f.tipos],
         "motivo_bloqueio": svc.motivo_nao_autorizado(f),
@@ -107,6 +117,15 @@ def _email_usuario(username: str | None) -> list[str]:
     return [u.email] if u and u.email else []
 
 
+# Pedido de 13/11/2026: Compras em copia em todo convite e resultado.
+EMAIL_COPIA_COMPRAS = "compras@colmac.com"
+
+
+def _copias(*usuarios) -> str:
+    emails = [EMAIL_COPIA_COMPRAS] + [e for u in usuarios for e in _email_usuario(u)]
+    return ", ".join(dict.fromkeys(e.strip().lower() for e in emails))
+
+
 def _enviar_email_cotacao(resposta: CompraStResposta, link: str) -> None:
     c = resposta.cotacao
     msg = MIMEMultipart("mixed")
@@ -114,9 +133,7 @@ def _enviar_email_cotacao(resposta: CompraStResposta, link: str) -> None:
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(_separar_emails(resposta.emails))
-    copias = _email_usuario(c.criado_por)
-    if copias:
-        msg["Cc"] = ", ".join(copias)
+    msg["Cc"] = _copias(c.criado_por)
     linhas = "".join(
         f"<tr><td>{i.ordem}</td><td>{html.escape(i.codigo or '')}</td><td>{html.escape(i.descricao)}</td>"
         f"<td style='text-align:right'>{i.quantidade:g}</td></tr>" for i in c.itens
@@ -152,9 +169,7 @@ def _enviar_email_vencedor(c: CompraStCotacao) -> None:
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(_separar_emails(r.emails))
-    copias = _email_usuario(c.criado_por) + _email_usuario(c.escolhida_por)
-    if copias:
-        msg["Cc"] = ", ".join(dict.fromkeys(copias))
+    msg["Cc"] = _copias(c.criado_por, c.escolhida_por)
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Agradecemos o envio da cotação ST-{c.id:04d} (serviço de {html.escape(c.tipo.nome)}).</p>"
@@ -171,7 +186,8 @@ def _enviar_email_vencedor(c: CompraStCotacao) -> None:
 @permission_required_any(PERM_COTACAO, PERM_ANALISE)
 def page_servico_terceiro():
     return render_template("compras_servico_terceiro.html", user=session.get("username"), pode_analisar=_pode_analisar(),
-                           pode_cotar=is_admin_session() or has_permission(PERM_COTACAO))
+                           pode_cotar=is_admin_session() or has_permission(PERM_COTACAO),
+                           pode_sem_homologacao=_pode_sem_homologacao())
 
 
 @compras_st_bp.route("/api/compras/st/tipos")
@@ -219,10 +235,13 @@ def api_fornecedores():
 
 @compras_st_bp.route("/api/compras/st/fornecedores", methods=["POST"])
 @compras_st_bp.route("/api/compras/st/fornecedores/<int:fornecedor_id>", methods=["PUT"])
-@permission_required(PERM_ANALISE)
+@permission_required_any(PERM_ANALISE, PERM_SEM_HOMOLOGACAO)
 def api_salvar_fornecedor(fornecedor_id=None):
     try:
-        f = svc.salvar_fornecedor(request.get_json(silent=True) or {}, _usuario(), fornecedor_id)
+        f = svc.salvar_fornecedor(request.get_json(silent=True) or {}, _usuario(), fornecedor_id,
+                                  pode_homologado=_pode_analisar(), pode_sem_homologacao=_pode_sem_homologacao())
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Fornecedor salvo.", "fornecedor": _fornecedor_payload(f)})

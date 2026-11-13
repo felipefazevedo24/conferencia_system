@@ -123,16 +123,22 @@ def alternar_tipo(tipo: CompraStTipoServico, ativo: bool) -> CompraStTipoServico
 # ── Fornecedores ───────────────────────────────────────────────────────
 def nome_fornecedor(f: CompraStFornecedor) -> str:
     h = f.homologacao
-    return (h.nome_fantasia or h.razao_social) if h else f"Fornecedor {f.id}"
+    if h:
+        return h.nome_fantasia or h.razao_social
+    return f.razao_social or f"Fornecedor {f.id}"
 
 
 def motivo_nao_autorizado(f: CompraStFornecedor, hoje: date | None = None) -> str | None:
-    """None = pode receber cotacao. Calculado na hora (a homologacao vence
-    sozinha)."""
+    """None = pode receber cotacao. Calculado na hora (a homologacao - ou a
+    validade do cadastro sem homologacao - vence sozinha)."""
     hoje = hoje or agora_br().date()
     h = f.homologacao
     if not f.ativo:
         return "Fornecedor inativo."
+    if not f.homologacao_id:
+        if not f.valido_ate or f.valido_ate < hoje:
+            return "Cadastro sem homologação vencido" + (f" em {f.valido_ate:%d/%m/%Y}." if f.valido_ate else ".")
+        return None
     if not h or h.status != ComprasHomologacaoFornecedor.STATUS_HOMOLOGADO:
         return f"Homologação {h.status.lower() if h else 'inexistente'}."
     if not h.valido_ate or h.valido_ate < hoje:
@@ -150,21 +156,80 @@ def listar_fornecedores() -> list[CompraStFornecedor]:
     return sorted(CompraStFornecedor.query.all(), key=lambda f: nome_fornecedor(f).lower())
 
 
-def salvar_fornecedor(dados: dict, usuario: str, fornecedor_id: int | None = None) -> CompraStFornecedor:
+def cnpj_valido(cnpj: str) -> bool:
+    if len(cnpj) != 14 or not cnpj.isdigit() or cnpj == cnpj[0] * 14:
+        return False
+    for tamanho in (12, 13):
+        pesos = list(range(tamanho - 7, 1, -1)) + list(range(9, 1, -1))
+        resto = sum(int(d) * p for d, p in zip(cnpj[:tamanho], pesos)) % 11
+        if int(cnpj[tamanho]) != (0 if resto < 2 else 11 - resto):
+            return False
+    return True
+
+
+def cnpj_do_fornecedor(f: CompraStFornecedor) -> str:
+    return re.sub(r"\D", "", (f.homologacao.cnpj if f.homologacao else f.cnpj) or "")
+
+
+def sem_homologacao(f: CompraStFornecedor | None) -> bool:
+    return bool(f) and not f.homologacao_id
+
+
+def _dados_sem_homologacao(fornecedor: CompraStFornecedor | None, dados: dict) -> dict:
+    razao = _texto(dados.get("razao_social"), 200)
+    cnpj = re.sub(r"\D", "", str(dados.get("cnpj") or ""))
+    justificativa = (str(dados.get("justificativa") or "")).strip()
+    try:
+        valido_ate = date.fromisoformat(str(dados.get("valido_ate") or "")[:10])
+    except ValueError:
+        valido_ate = None
+    if not razao:
+        raise ValueError("Informe a razão social.")
+    if not cnpj_valido(cnpj):
+        raise ValueError("CNPJ inválido.")
+    if not justificativa:
+        raise ValueError("Informe a justificativa do cadastro sem homologação.")
+    if not valido_ate:
+        raise ValueError("Informe até quando o fornecedor pode receber cotação sem homologação.")
+    if valido_ate < agora_br().date():
+        raise ValueError("A validade não pode ser anterior a hoje.")
+    for outro in CompraStFornecedor.query.all():
+        if outro is not fornecedor and cnpj_do_fornecedor(outro) == cnpj:
+            raise ValueError(f"CNPJ já cadastrado como fornecedor de serviço terceiro ({nome_fornecedor(outro)}).")
+    return {"razao_social": razao, "cnpj": cnpj, "justificativa": justificativa, "valido_ate": valido_ate}
+
+
+def salvar_fornecedor(dados: dict, usuario: str, fornecedor_id: int | None = None,
+                      pode_homologado: bool = True, pode_sem_homologacao: bool = False) -> CompraStFornecedor:
+    """Homologado (PAGE_COMPRAS_ST_ANALISE) ou sem homologacao
+    (PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO, so' o time de Compras). Na
+    edicao o tipo do cadastro nao muda."""
     fornecedor = db.session.get(CompraStFornecedor, fornecedor_id) if fornecedor_id else None
     if fornecedor_id and not fornecedor:
         raise ValueError("Fornecedor não encontrado.")
-    homologacao = db.session.get(ComprasHomologacaoFornecedor, int(dados.get("homologacao_id") or 0))
-    if not homologacao:
-        raise ValueError("Escolha a homologação do fornecedor.")
-    duplicado = CompraStFornecedor.query.filter_by(homologacao_id=homologacao.id).first()
-    if duplicado and duplicado is not fornecedor:
-        raise ValueError(f"{homologacao.razao_social} já está cadastrado como fornecedor de serviço terceiro.")
+    sem = sem_homologacao(fornecedor) if fornecedor else bool(dados.get("sem_homologacao"))
+    if sem and not pode_sem_homologacao:
+        raise PermissionError("Só o time de Compras cadastra ou altera fornecedor sem homologação.")
+    if not sem and not pode_homologado:
+        raise PermissionError("Sem permissão para cadastrar fornecedor homologado.")
     tipos = CompraStTipoServico.query.filter(CompraStTipoServico.id.in_([int(t) for t in dados.get("tipo_ids") or []])).all()
+    if sem:
+        proprios = _dados_sem_homologacao(fornecedor, dados)
+        homologacao = None
+    else:
+        homologacao = db.session.get(ComprasHomologacaoFornecedor, int(dados.get("homologacao_id") or 0))
+        if not homologacao:
+            raise ValueError("Escolha a homologação do fornecedor.")
+        duplicado = CompraStFornecedor.query.filter_by(homologacao_id=homologacao.id).first()
+        if duplicado and duplicado is not fornecedor:
+            raise ValueError(f"{homologacao.razao_social} já está cadastrado como fornecedor de serviço terceiro.")
     if not tipos:
         raise ValueError("Marque ao menos um tipo de serviço.")
     fornecedor = fornecedor or CompraStFornecedor(criado_por=usuario)
     fornecedor.homologacao = homologacao
+    if sem:
+        for campo, valor in proprios.items():
+            setattr(fornecedor, campo, valor)
     fornecedor.emails = _emails(dados.get("emails"))
     fornecedor.contato = _texto(dados.get("contato"), 120)
     fornecedor.telefone = _texto(dados.get("telefone"), 40)

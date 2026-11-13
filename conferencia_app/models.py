@@ -5581,12 +5581,22 @@ class CompraStTipoServico(db.Model):
 class CompraStFornecedor(db.Model):
     """Fornecedor de servico terceiro, ligado a uma homologacao. So' entra
     numa cotacao se a homologacao estiver Homologado e dentro da validade
-    (calculado na hora - ver compras_st_service.autorizado)."""
+    (calculado na hora - ver compras_st_service.motivo_nao_autorizado).
+
+    Sem homologacao (homologacao_id nulo, pedido de 13/11/2026): so' quem tem
+    PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO cadastra, com razao social,
+    CNPJ, justificativa e validade proprios; recebe cotacao ate' valido_ate.
+    Colunas novas e o NULL em homologacao_id: bootstrap
+    _ensure_compra_st_fornecedor_sem_homologacao."""
 
     __tablename__ = "compra_st_fornecedor"
 
     id = db.Column(db.Integer, primary_key=True)
-    homologacao_id = db.Column(db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True)
+    homologacao_id = db.Column(db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=True, index=True)
+    razao_social = db.Column(db.String(200))
+    cnpj = db.Column(db.String(14), index=True)
+    justificativa = db.Column(db.Text)
+    valido_ate = db.Column(db.Date)
     emails = db.Column(db.String(300), nullable=False)
     contato = db.Column(db.String(120))
     telefone = db.Column(db.String(40))
