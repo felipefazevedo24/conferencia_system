@@ -124,7 +124,7 @@ _LIMITE_CORPO = int(svc.MAX_ANEXOS_BYTES * 1.4) + 1024 * 1024
 
 def _corpo_grande_demais():
     if (request.content_length or 0) > _LIMITE_CORPO:
-        return jsonify({"error": "Envio maior que o limite de 100 MB de anexos por solicitação."}), 413
+        return jsonify({"error": f"Envio maior que o limite de {svc._mb(svc.MAX_ANEXOS_BYTES)} de anexos por solicitação."}), 413
     return None
 
 

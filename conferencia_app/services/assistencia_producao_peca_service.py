@@ -310,7 +310,7 @@ def alteradas_desde(desde) -> list[Solicitacao]:
 
 
 # ── Anexos ───────────────────────────────────────────────────────────────
-MAX_ANEXOS_BYTES = 100 * 1024 * 1024  # somando os anexos da solicitacao
+MAX_ANEXOS_BYTES = 10 * 1024 * 1024  # somando os anexos da solicitacao (reduzido de 100 MB em 13/11/2026)
 PARTE_BYTES = 2 * 1024 * 1024
 # Pedido de 13/11/2026: PDF, imagens, CAD e Office/ZIP.
 EXTENSOES_ANEXO = {
@@ -372,7 +372,7 @@ def anexos_base64(dados: dict) -> list:
 
 
 def _gravar_anexos(solicitacao: Solicitacao, arquivos, origem: str, usuario: str) -> list[Anexo]:
-    """Grava em partes, lendo o arquivo aos pedacos (nunca 100 MB inteiros
+    """Grava em partes, lendo o arquivo aos pedacos (nunca o arquivo inteiro
     na sessao). Nao faz commit: quem chama confirma ou desfaz."""
     gravados = []
     if not arquivos:
@@ -462,7 +462,7 @@ def obter_anexo(solicitacao_id: int | None, anexo_id: int) -> Anexo | None:
 
 def conteudo_anexo(anexo_id: int):
     """Gera o arquivo parte a parte (uma consulta por parte) pra nao montar
-    100 MB na memoria no download."""
+    o arquivo inteiro na memoria no download."""
     ids = [i for (i,) in db.session.query(AnexoParte.id).filter_by(anexo_id=anexo_id).order_by(AnexoParte.ordem)]
     for parte_id in ids:
         yield db.session.query(AnexoParte.dados).filter_by(id=parte_id).scalar()

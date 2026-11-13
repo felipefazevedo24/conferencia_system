@@ -5030,10 +5030,10 @@ class AssistenciaProducaoPecaHistorico(db.Model):
 class AssistenciaProducaoPecaAnexo(db.Model):
     """Documento de uma Solicitacao de Producao de Pecas (desenho, CAD, PDF,
     foto...). Chega pelo EDI (origem "EDI") ou pela tela (origem "Sync").
-    Limite: 100 MB somando os anexos da solicitacao.
+    Limite: 10 MB somando os anexos da solicitacao.
 
     O conteudo fica no banco em partes (AssistenciaProducaoPecaAnexoParte):
-    um blob unico de ate' 100 MB estoura o max_allowed_packet do MySQL."""
+    um blob unico grande arrisca o max_allowed_packet do MySQL."""
 
     __tablename__ = "assistencia_producao_peca_anexo"
 
@@ -5054,7 +5054,7 @@ class AssistenciaProducaoPecaAnexo(db.Model):
 
 class AssistenciaProducaoPecaAnexoParte(db.Model):
     """Pedaco (ate' 2 MB) do conteudo de um anexo, na ordem. Sem relationship
-    de proposito: carregar as partes junto com o anexo traria ate' 100 MB pra
+    de proposito: carregar as partes junto com o anexo traria o arquivo inteiro pra
     memoria so' pra listar - o service le e apaga por consulta."""
 
     __tablename__ = "assistencia_producao_peca_anexo_parte"
