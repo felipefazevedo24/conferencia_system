@@ -122,6 +122,28 @@
   color: var(--eui-muted, #64748b); cursor: pointer; white-space: nowrap; }
 .at-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .at-module { display: grid; gap: 18px; }
+
+/* Aviso e janela de motivo: ficaram na Conferencia de Expedicao quando a tela
+   virou modulo, e sem eles o aviso caia sem estilo no rodape e o Excluir/
+   Estornar quebravam. */
+.ce-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+.ce-toast.error { border-left-color: var(--eui-danger); }
+.ce-toast.success { border-left-color: var(--eui-success); }
+.ce-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); padding: 20px; }
+.ce-modal.open { display: flex; animation: ceFade .18s ease; }
+.ce-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(480px, 100%); overflow: hidden; animation: cePop .2s cubic-bezier(.2,.9,.3,1); }
+.ce-modal__head { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--eui-border); }
+.ce-modal__ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--eui-danger-soft, rgba(220,38,38,.12)); color: var(--eui-danger); font-size: 20px; flex: 0 0 auto; }
+.ce-modal__title { font-size: 16px; font-weight: 800; color: var(--eui-text); margin: 0; }
+.ce-modal__sub { font-size: 12.5px; color: var(--eui-text-soft); margin: 2px 0 0; }
+.ce-modal__body { padding: 18px 22px; }
+.ce-modal__body label { display: block; font-size: 12.5px; font-weight: 700; color: var(--eui-text); margin-bottom: 8px; }
+.ce-modal__body textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; color: var(--eui-text); background: var(--eui-surface-2, #fff); }
+.ce-modal__body textarea:focus { outline: none; border-color: var(--eui-primary); box-shadow: 0 0 0 3px rgba(15,98,201,.15); }
+.ce-modal__err { color: var(--eui-danger); font-size: 12px; font-weight: 700; margin-top: 8px; min-height: 16px; }
+.ce-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--eui-border); background: var(--eui-surface-3, rgba(0,0,0,.02)); }
+@keyframes ceFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cePop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
 </style>
 {% endblock %}
 {% block content %}
@@ -205,6 +227,26 @@
             </div>
         </div>
  <div id="at-toast" class="ce-toast" style="display:none"></div>
+ <div id="ce-motivo-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-motivo-title">
+  <div class="ce-modal__box">
+   <div class="ce-modal__head">
+    <div class="ce-modal__ico"><i class="fas fa-user-shield"></i></div>
+    <div>
+     <h3 class="ce-modal__title" id="ce-motivo-title"></h3>
+     <p class="ce-modal__sub" id="ce-motivo-sub"></p>
+    </div>
+   </div>
+   <div class="ce-modal__body">
+    <label for="ce-motivo-input">Informe o motivo</label>
+    <textarea id="ce-motivo-input"></textarea>
+    <div class="ce-modal__err" id="ce-motivo-err"></div>
+   </div>
+   <div class="ce-modal__foot">
+    <button class="eui-btn eui-btn--subtle" id="ce-motivo-cancelar">Cancelar</button>
+    <button class="eui-btn eui-btn--danger" id="ce-motivo-confirmar"></button>
+   </div>
+  </div>
+ </div>
 </div>
 {% endblock %}
 {% block extra_js %}

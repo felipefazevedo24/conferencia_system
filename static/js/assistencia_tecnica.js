@@ -36,6 +36,49 @@
         t._t = setTimeout(() => { t.style.display = "none"; }, 4200);
     }
 
+    // Janela de motivo do Excluir/Estornar. Resolve com o texto, ou null se
+    // a pessoa cancelar.
+    function pedirMotivo(opts) {
+        return new Promise((resolve) => {
+            const modal = $("ce-motivo-modal");
+            const input = $("ce-motivo-input");
+            const err = $("ce-motivo-err");
+            const btnOk = $("ce-motivo-confirmar");
+            const btnCancel = $("ce-motivo-cancelar");
+
+            $("ce-motivo-title").textContent = opts.title;
+            $("ce-motivo-sub").textContent = opts.sub;
+            btnOk.innerHTML = '<i class="fas fa-check"></i> ' + escapeHtml(opts.okLabel);
+            input.placeholder = opts.placeholder || "";
+            input.value = "";
+            err.textContent = "";
+            modal.classList.add("open");
+            setTimeout(() => input.focus(), 60);
+
+            function fechar(valor) {
+                modal.classList.remove("open");
+                btnOk.removeEventListener("click", onOk);
+                btnCancel.removeEventListener("click", onCancel);
+                modal.removeEventListener("click", onBackdrop);
+                document.removeEventListener("keydown", onKey);
+                resolve(valor);
+            }
+            function onOk() {
+                const v = input.value.trim();
+                if (!v) { err.textContent = "Informe o motivo."; input.focus(); return; }
+                fechar(v);
+            }
+            function onCancel() { fechar(null); }
+            function onBackdrop(e) { if (e.target === modal) fechar(null); }
+            function onKey(e) { if (e.key === "Escape") fechar(null); }
+
+            btnOk.addEventListener("click", onOk);
+            btnCancel.addEventListener("click", onCancel);
+            modal.addEventListener("click", onBackdrop);
+            document.addEventListener("keydown", onKey);
+        });
+    }
+
     function criarControladorAvulso() {
         let ordens = [];
         let currentFilter = null;
@@ -47,7 +90,8 @@
             const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
             let data = {};
             try { data = await resp.json(); } catch (e) {}
-            if (!resp.ok || !data.sucesso) throw new Error(data.erro || ("Erro " + resp.status));
+            // O bloqueio por cargo (roles_required) responde em "error", nao "erro".
+            if (!resp.ok || !data.sucesso) throw new Error(data.erro || data.error || ("Erro " + resp.status));
             return data;
         }
 
