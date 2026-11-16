@@ -1135,6 +1135,9 @@ def excluir_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) -
         status_novo=None,
         detalhes=json.dumps({"motivo": motivo}, ensure_ascii=False),
     ))
+    # Anexo nao tem cascade a partir da solicitacao: no MySQL a chave
+    # estrangeira barra o delete de quem tem laudo/foto.
+    SolicitacaoNFAnexo.query.filter_by(solicitacao_id=solicitacao.id).delete()
     db.session.delete(solicitacao)
     db.session.commit()
 

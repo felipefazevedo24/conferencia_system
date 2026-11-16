@@ -261,13 +261,15 @@ def create_app(test_config=None) -> Flask:
         # Cache-busting baseado no mtime mais recente da pasta static/css.
         # Garante que deploys de produção (PythonAnywhere) sirvam a versão
         # atualizada de qualquer CSS sem depender de Ctrl+F5 dos usuários.
+        # O JS entra tambem: so' com CSS, um deploy que mexia so' em JS
+        # mantinha o ?v= e o navegador seguia com o script antigo.
         try:
-            css_dir = os.path.join(app.static_folder, "css")
             mtimes = []
-            for root_, _dirs, files in os.walk(css_dir):
-                for fn in files:
-                    if fn.endswith(".css"):
-                        mtimes.append(os.path.getmtime(os.path.join(root_, fn)))
+            for pasta in ("css", "js"):
+                for root_, _dirs, files in os.walk(os.path.join(app.static_folder, pasta)):
+                    for fn in files:
+                        if fn.endswith((".css", ".js")):
+                            mtimes.append(os.path.getmtime(os.path.join(root_, fn)))
             asset_version = str(int(max(mtimes))) if mtimes else str(int(time.time()))
         except Exception:
             asset_version = str(int(time.time()))
