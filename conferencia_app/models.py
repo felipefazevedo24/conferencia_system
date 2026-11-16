@@ -5501,6 +5501,13 @@ class SpendEntradaGrv(db.Model):
     nome_conta = db.Column(db.String(200))
     familia = db.Column(db.String(160))
     grupo = db.Column(db.String(160))
+    # OC e comprador do cabecalho da NF; SC e requisitante da OC (ver
+    # SQL_SPEND_REQUISITANTES). NULL = linha gravada antes de buscar isso;
+    # "" = buscou e nao tem.
+    ordem_compra = db.Column(db.String(30))
+    comprador = db.Column(db.String(100))
+    solicitacao = db.Column(db.String(200))
+    requisitante = db.Column(db.String(300))
 
 
 class SpendEntradaGrvSync(db.Model):

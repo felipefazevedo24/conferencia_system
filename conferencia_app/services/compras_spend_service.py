@@ -22,6 +22,7 @@ vira exemplo manual, que ganha de tudo para aquele fornecedor + item.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -192,7 +193,41 @@ def _linha(r: dict) -> dict | None:
         "nome_conta": _texto(r.get("nome_conta"), 200),
         "familia": _texto(r.get("familia"), 160),
         "grupo": _texto(r.get("grupo"), 160),
+        "ordem_compra": _digitos(r.get("ordem_compra"))[:30],
+        "comprador": _texto(r.get("comprador"), 100),
+        "solicitacao": "",
+        "requisitante": "",
     }
+
+
+def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
+    """SC e requisitante de cada linha pela OC. Casa pelo código do item; sem
+    casamento (serviço, item trocado na NF) usa todos os da OC. Falhou a
+    consulta: segue sem requisitante (False) em vez de derrubar o Spend."""
+    ocs = sorted({int(l["ordem_compra"]) for l in linhas if l["ordem_compra"]})
+    por_item: dict = {}
+    por_oc: dict = defaultdict(lambda: (set(), set()))
+    try:
+        for i in range(0, len(ocs), 500):
+            for r in grv.fetch_all(queries.SQL_SPEND_REQUISITANTES, {"cod_empresa": empresa, "ocs": ocs[i:i + 500]}):
+                oc = _digitos(r.get("ordem_compra"))
+                sols = [s.strip() for s in str(r.get("solicitacao") or "").split(",") if s.strip()]
+                reqs = [s.strip() for s in str(r.get("requisitante") or "").split(",") if s.strip()]
+                if r.get("codigo_item"):
+                    por_item[(oc, str(r["codigo_item"]).upper())] = (sols, reqs)
+                por_oc[oc][0].update(sols)
+                por_oc[oc][1].update(reqs)
+    except Exception:  # noqa: BLE001 - requisitante e' complemento; o Spend tem que atualizar mesmo sem ele
+        logging.getLogger(__name__).exception("Spend: falha ao buscar requisitantes das OCs")
+        return False
+    for l in linhas:
+        oc = l["ordem_compra"]
+        if not oc or oc not in por_oc:
+            continue
+        sols, reqs = por_item.get((oc, l["codigo_item"])) or (sorted(por_oc[oc][0]), sorted(por_oc[oc][1]))
+        l["solicitacao"] = ", ".join(sols)[:200]
+        l["requisitante"] = ", ".join(reqs)[:300]
+    return True
 
 
 def _semear() -> int:
@@ -224,6 +259,10 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
+    # Linha gravada antes de existir OC/requisitante no espelho (NULL):
+    # rebusca o ano inteiro uma vez para preencher.
+    if Entrada.query.filter(Entrada.ordem_compra.is_(None)).first() is not None:
+        desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
     db.session.commit()
@@ -238,6 +277,7 @@ def atualizar(usuario: str) -> dict:
                 linha = _linha(r)
                 if linha:
                     linhas.append(linha)
+        _preencher_requisitantes(linhas, empresa)
         Entrada.query.filter(Entrada.data_lancamento >= desde).delete(synchronize_session=False)
         for i in range(0, len(linhas), 1000):
             db.session.bulk_insert_mappings(Entrada, linhas[i:i + 1000])
@@ -527,7 +567,8 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
     )
     for r in linhas:
         if termo and termo not in " ".join(
-            str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia)
+            str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia,
+                                   r.ordem_compra, r.solicitacao, r.requisitante, r.comprador)
         ).upper():
             continue
         sit = situacao(r, regras)
@@ -557,6 +598,10 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             "familia": r.familia or "",
             "conta": " - ".join(x for x in (r.conta, r.nome_conta) if x),
             "valor": round(r.valor or 0, 2),
+            "ordem_compra": r.ordem_compra or "",
+            "solicitacao": r.solicitacao or "",
+            "requisitante": r.requisitante or "",
+            "comprador": r.comprador or "",
             "situacao": sit,
             "situacao_texto": SITUACOES[sit],
             "no_spend": entra_no_spend(sit),

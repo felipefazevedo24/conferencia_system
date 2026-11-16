@@ -1363,6 +1363,11 @@ def initialize_database(app: Flask) -> None:
             app.logger.exception("Bootstrap: falha ao ajustar compra_st_fornecedor (fornecedor sem homologacao)")
 
         try:
+            _ensure_spend_entrada_oc_columns()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao ajustar spend_entrada_grv (OC e requisitante)")
+
+        try:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
@@ -1993,6 +1998,29 @@ def _ensure_compra_st_fornecedor_sem_homologacao() -> None:
         if db.engine.dialect.name == "mysql" and coluna and not coluna.get("nullable", True):
             conn.execute(db.text("ALTER TABLE compra_st_fornecedor MODIFY COLUMN homologacao_id INTEGER NULL"))
             conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_spend_entrada_oc_columns() -> None:
+    """Spend > Base de notas com OC, comprador, SC e requisitante (16/11/2026).
+    As linhas antigas ficam NULL e a proxima atualizacao do Spend rebusca o
+    ano inteiro para preenche-las."""
+    if not _has_table("spend_entrada_grv"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("spend_entrada_grv")
+        missing_columns = [
+            ("ordem_compra", "ALTER TABLE spend_entrada_grv ADD COLUMN ordem_compra VARCHAR(30)"),
+            ("comprador", "ALTER TABLE spend_entrada_grv ADD COLUMN comprador VARCHAR(100)"),
+            ("solicitacao", "ALTER TABLE spend_entrada_grv ADD COLUMN solicitacao VARCHAR(200)"),
+            ("requisitante", "ALTER TABLE spend_entrada_grv ADD COLUMN requisitante VARCHAR(300)"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols:
+                conn.execute(db.text(ddl))
+                conn.commit()
     finally:
         conn.close()
 
