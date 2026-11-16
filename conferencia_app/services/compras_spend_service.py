@@ -7,6 +7,8 @@ trás: ninguém importa planilha.
 Entra no Spend: CFOP de compra/serviço de fornecedor de fora do grupo. O
 resto (retorno, remessa, devolução e a importação de máquina do Grupo
 Columbia, ~R$ 2,6 mi em jan–out/2026) fica no espelho e aparece à parte.
+Compras pode passar por cima do filtro por fornecedor + item
+(SpendInclusaoManual), pela aba "Base de notas", que mostra o espelho todo.
 
 Classificação: o GRV não tem a conta Domínio que o Custos usa (o plano do
 GRV tem ~17 contas genéricas, que sozinhas acertam 46% do valor). Ela é
@@ -32,6 +34,7 @@ from ..extensions import db
 from ..models import SpendClassificacaoExemplo as Exemplo
 from ..models import SpendEntradaGrv as Entrada
 from ..models import SpendEntradaGrvSync as Sync
+from ..models import SpendInclusaoManual as Inclusao
 from ..tempo import agora_br
 
 
@@ -69,6 +72,36 @@ def cfop_e_compra(cfop) -> bool:
 
 def e_intercompany(fornecedor) -> bool:
     return _INTERCOMPANY in str(fornecedor or "").upper()
+
+
+# Por que a linha esta' (ou nao) no Spend - a tela "Base de notas" mostra.
+SITUACOES = {
+    "spend": "No Spend",
+    "incluida": "Incluída manualmente",
+    "cfop": "Fora: CFOP não é compra",
+    "intercompany": "Fora: Grupo Columbia",
+    "excluida": "Fora: excluída manualmente",
+}
+
+
+def _regras_inclusao() -> dict:
+    return {(i.cod_fornecedor, i.codigo_item): i for i in Inclusao.query.all()}
+
+
+def situacao(r, regras: dict) -> str:
+    """Decisao manual (fornecedor + item) ganha do filtro automatico."""
+    regra = regras.get((r.cod_fornecedor, (r.codigo_item or "").upper()))
+    if regra is not None:
+        return "incluida" if regra.incluir else "excluida"
+    if not cfop_e_compra(r.cfop):
+        return "cfop"
+    if e_intercompany(r.fornecedor):
+        return "intercompany"
+    return "spend"
+
+
+def entra_no_spend(codigo: str) -> bool:
+    return codigo in ("spend", "incluida")
 
 
 def _digitos(valor) -> str:
@@ -323,20 +356,18 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
     meses = [c for c in competencias if de <= c <= ate]
 
     classificar = _classificador()
-    fora = {"cfop": {"valor": 0.0, "itens": 0}, "intercompany": {"valor": 0.0, "itens": 0}}
+    regras = _regras_inclusao()
+    fora = {k: {"valor": 0.0, "itens": 0} for k in ("cfop", "intercompany", "excluida")}
     revisar = {"valor": 0.0, "grupos": set()}
     total_base = 0.0
     familias, classificacoes = set(), set()
     itens = []
     for r in _entradas(de, ate):
         valor = r.valor or 0
-        if not cfop_e_compra(r.cfop):
-            fora["cfop"]["valor"] += valor
-            fora["cfop"]["itens"] += 1
-            continue
-        if e_intercompany(r.fornecedor):
-            fora["intercompany"]["valor"] += valor
-            fora["intercompany"]["itens"] += 1
+        sit = situacao(r, regras)
+        if not entra_no_spend(sit):
+            fora[sit]["valor"] += valor
+            fora[sit]["itens"] += 1
             continue
         f = _features(r)
         cls, nivel, _ = classificar(f)
@@ -444,9 +475,10 @@ def revisao(de=None, ate=None) -> dict:
     onde ela saiu. Palpites primeiro, do maior valor para o menor."""
     competencias, de, ate = _periodo(de, ate)
     classificar = _classificador()
+    regras = _regras_inclusao()
     grupos: dict = {}
     for r in _entradas(de, ate) if competencias else []:
-        if not cfop_e_compra(r.cfop) or e_intercompany(r.fornecedor):
+        if not entra_no_spend(situacao(r, regras)):
             continue
         f = _features(r)
         chave = (r.cod_fornecedor, f["codigo_item"])
@@ -469,6 +501,106 @@ def revisao(de=None, ate=None) -> dict:
     for g in itens:
         g["valor"] = round(g["valor"], 2)
     return {"de": de, "ate": ate, "itens": itens, "classificacoes": _nomes_classificacao()}
+
+
+NOTAS_POR_PAGINA = 200
+
+
+def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0) -> dict:
+    """Toda linha de NF do espelho no periodo - inclusive o que o filtro
+    tirou do Spend - com CFOP, situacao (e por que) e classificacao.
+    Paginado aqui: o ano inteiro passa de dezenas de milhares de linhas."""
+    from .classificacao_contabil_service import descricao_cfop_entrada
+
+    competencias, de, ate = _periodo(de, ate)
+    if not competencias:
+        return {"de": de, "ate": ate, "linhas": [], "total": 0, "totais": {}, "classificacoes": []}
+    classificar = _classificador()
+    regras = _regras_inclusao()
+    termo = (busca or "").strip().upper()
+    totais = {k: {"valor": 0.0, "linhas": 0} for k in SITUACOES}
+    filtradas = []
+    linhas = (
+        db.session.query(Entrada)
+        .filter(Entrada.competencia >= de, Entrada.competencia <= ate)
+        .order_by(Entrada.data_lancamento.desc(), Entrada.nota_fiscal, Entrada.id)
+    )
+    for r in linhas:
+        if termo and termo not in " ".join(
+            str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia)
+        ).upper():
+            continue
+        sit = situacao(r, regras)
+        totais[sit]["valor"] += r.valor or 0
+        totais[sit]["linhas"] += 1
+        if filtro_situacao == "spend" and not entra_no_spend(sit):
+            continue
+        if filtro_situacao == "fora" and entra_no_spend(sit):
+            continue
+        filtradas.append((r, sit))
+
+    pagina = []
+    for r, sit in filtradas[offset:offset + NOTAS_POR_PAGINA]:
+        cls, nivel, manual = classificar(_features(r))
+        regra = regras.get((r.cod_fornecedor, (r.codigo_item or "").upper()))
+        pagina.append({
+            "id": r.id,
+            "data_lancamento": r.data_lancamento.strftime("%d/%m/%Y") if r.data_lancamento else "",
+            "nota_fiscal": r.nota_fiscal or "",
+            "cod_fornecedor": r.cod_fornecedor,
+            "fornecedor": r.fornecedor or "",
+            "cfop": r.cfop or "",
+            "cfop_descricao": descricao_cfop_entrada(r.cfop) if r.cfop else "",
+            "codigo_item": (r.codigo_item or "").upper(),
+            "descricao": r.descricao or "",
+            "familia": r.familia or "",
+            "conta": " - ".join(x for x in (r.conta, r.nome_conta) if x),
+            "valor": round(r.valor or 0, 2),
+            "situacao": sit,
+            "situacao_texto": SITUACOES[sit],
+            "no_spend": entra_no_spend(sit),
+            "motivo_manual": regra.motivo if regra else None,
+            "manual_por": regra.atualizado_por if regra else None,
+            "classificacao": cls,
+            "classificacao_manual": manual,
+            "palpite": nivel != 0,
+        })
+    return {
+        "de": de, "ate": ate, "offset": offset, "por_pagina": NOTAS_POR_PAGINA,
+        "total": len(filtradas),
+        "valor_filtrado": round(sum(r.valor or 0 for r, _ in filtradas), 2),
+        "totais": {k: {"valor": round(v["valor"], 2), "linhas": v["linhas"], "texto": SITUACOES[k]} for k, v in totais.items()},
+        "linhas": pagina,
+        "classificacoes": _nomes_classificacao(),
+    }
+
+
+def salvar_inclusao(cod_fornecedor, codigo_item, incluir, motivo, usuario: str) -> None:
+    """Decide se o fornecedor + item entra (True) ou nao (False) no Spend.
+    None apaga a decisao: volta ao filtro automatico."""
+    try:
+        fornecedor = int(cod_fornecedor)
+    except (TypeError, ValueError):
+        raise ValueError("Fornecedor inválido.") from None
+    item = _texto(codigo_item, 80).upper()
+    regra = Inclusao.query.filter_by(cod_fornecedor=fornecedor, codigo_item=item).first()
+    if incluir is None:
+        if regra:
+            db.session.delete(regra)
+            db.session.commit()
+        return
+    motivo = str(motivo or "").strip()
+    if not motivo:
+        raise ValueError("Informe o motivo.")
+    if not Entrada.query.filter_by(cod_fornecedor=fornecedor, codigo_item=item).first():
+        raise ValueError("Item não encontrado nas entradas do GRV.")
+    regra = regra or Inclusao(cod_fornecedor=fornecedor, codigo_item=item)
+    regra.incluir = bool(incluir)
+    regra.motivo = motivo[:500]
+    regra.atualizado_por = usuario
+    regra.atualizado_em = agora_br()
+    db.session.add(regra)
+    db.session.commit()
 
 
 def salvar_classificacao(cod_fornecedor, codigo_item, classificacao, usuario: str) -> None:

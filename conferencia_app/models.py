@@ -5523,6 +5523,24 @@ class SpendEntradaGrvSync(db.Model):
     erro = db.Column(db.String(500))
 
 
+class SpendInclusaoManual(db.Model):
+    """Decisao manual de Compras se um fornecedor + item entra ou nao no
+    Spend, passando por cima do filtro automatico (CFOP de compra e
+    intercompany). Vale para todas as notas desse fornecedor + item,
+    inclusive as futuras. Apagar a linha volta a regra automatica."""
+
+    __tablename__ = "spend_inclusao_manual"
+    __table_args__ = (db.UniqueConstraint("cod_fornecedor", "codigo_item", name="uq_spend_inclusao_forn_item"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    cod_fornecedor = db.Column(db.Integer, nullable=False, index=True)
+    codigo_item = db.Column(db.String(80), nullable=False, default="")
+    incluir = db.Column(db.Boolean, nullable=False)
+    motivo = db.Column(db.String(500), nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class SpendClassificacaoExemplo(db.Model):
     """Exemplo que ensina a classificacao de suprimentos do Spend.
 
