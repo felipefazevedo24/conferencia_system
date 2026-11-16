@@ -506,7 +506,7 @@ def revisao(de=None, ate=None) -> dict:
 NOTAS_POR_PAGINA = 200
 
 
-def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0) -> dict:
+def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, todas=False) -> dict:
     """Toda linha de NF do espelho no periodo - inclusive o que o filtro
     tirou do Spend - com CFOP, situacao (e por que) e classificacao.
     Paginado aqui: o ano inteiro passa de dezenas de milhares de linhas."""
@@ -540,7 +540,8 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0) ->
         filtradas.append((r, sit))
 
     pagina = []
-    for r, sit in filtradas[offset:offset + NOTAS_POR_PAGINA]:
+    # todas=True: exportacao para Excel, sem paginar.
+    for r, sit in (filtradas if todas else filtradas[offset:offset + NOTAS_POR_PAGINA]):
         cls, nivel, manual = classificar(_features(r))
         regra = regras.get((r.cod_fornecedor, (r.codigo_item or "").upper()))
         pagina.append({

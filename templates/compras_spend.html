@@ -209,6 +209,7 @@
                         <div class="sp-pane-tools">
                             <div class="sp-toggle" id="sp-nf-modo"><button type="button" class="is-active" data-modo="">Todas</button><button type="button" data-modo="spend">No Spend</button><button type="button" data-modo="fora">Fora do Spend</button></div>
                             <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-nf" placeholder="Buscar fornecedor, NF, item, descrição, CFOP ou família" autocomplete="off"></div>
+                            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-nf-excel" style="margin-left:auto"><i class="fas fa-file-excel"></i> Exportar Excel</button>
                         </div>
                         <div class="sp-nf-totais" id="sp-nf-totais"></div>
                         <div class="sp-tabela-wrap"><table class="erp-table">
@@ -803,6 +804,16 @@
     });
     $("sp-busca-nf").addEventListener("input", () => { clearTimeout(nf.timer); nf.timer = setTimeout(() => carregarNotas(), 350); });
     $("sp-nf-mais").addEventListener("click", () => carregarNotas(true));
+    // Mesmo filtro da tela (periodo, situacao e busca), todas as linhas.
+    $("sp-nf-excel").addEventListener("click", () => {
+        const f = estado.dados && !estado.dados.vazio ? estado.dados.filtro : null;
+        const qs = new URLSearchParams();
+        if (f) { qs.set("de", f.de); qs.set("ate", f.ate); }
+        if (nf.modo) qs.set("situacao", nf.modo);
+        const busca = $("sp-busca-nf").value.trim();
+        if (busca) qs.set("busca", busca);
+        window.location.href = "/api/compras/spend/notas.xlsx?" + qs.toString();
+    });
 
     // ---------- Abas e filtros ----------
     function abrirTab(tab) {
