@@ -58,6 +58,82 @@ def spend_revisao():
     return jsonify(spend.revisao(de=request.args.get("de"), ate=request.args.get("ate")))
 
 
+@compras_spend_bp.route("/api/compras/spend/notas")
+@permission_required(PERM)
+def spend_notas():
+    a = request.args
+    return jsonify(spend.base_notas(
+        de=a.get("de"), ate=a.get("ate"), filtro_situacao=a.get("situacao"),
+        busca=a.get("busca"), offset=max(0, a.get("offset", 0, type=int)),
+    ))
+
+
+_COLUNAS_XLSX = (
+    ("Lançamento", "data_lancamento", 12), ("NF", "nota_fiscal", 12), ("Cód. fornecedor", "cod_fornecedor", 10),
+    ("Fornecedor", "fornecedor", 36), ("CFOP", "cfop", 8), ("Descrição do CFOP", "cfop_descricao", 40),
+    ("Código do item", "codigo_item", 16), ("Descrição", "descricao", 45), ("Família", "familia", 28),
+    ("Conta", "conta", 30), ("Valor (R$)", "valor", 14), ("Situação", "situacao_texto", 26),
+    ("Motivo da decisão manual", "motivo_manual", 36), ("Decidido por", "manual_por", 14),
+    ("Classificação", "classificacao", 28), ("Origem da classificação", "origem_cls", 18),
+)
+
+
+@compras_spend_bp.route("/api/compras/spend/notas.xlsx")
+@permission_required(PERM)
+def spend_notas_xlsx():
+    """A Base de notas inteira do filtro (sem paginar), para conciliar no Excel."""
+    from datetime import datetime
+    from io import BytesIO
+
+    from flask import send_file
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    a = request.args
+    dados = spend.base_notas(de=a.get("de"), ate=a.get("ate"), filtro_situacao=a.get("situacao"),
+                             busca=a.get("busca"), todas=True)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Base de notas"
+    for col, (titulo, _, largura) in enumerate(_COLUNAS_XLSX, start=1):
+        cel = ws.cell(row=1, column=col, value=titulo)
+        cel.font = Font(bold=True, color="FFFFFF")
+        cel.fill = PatternFill(start_color="0F62C9", end_color="0F62C9", fill_type="solid")
+        ws.column_dimensions[cel.column_letter].width = largura
+    for linha, l in enumerate(dados["linhas"], start=2):
+        l = {**l, "origem_cls": "Confirmado" if l["classificacao_manual"] else ("Palpite" if l["palpite"] else "Planilha do Custos")}
+        for col, (_, chave, _) in enumerate(_COLUNAS_XLSX, start=1):
+            valor = l.get(chave)
+            if chave == "data_lancamento" and valor:
+                valor = datetime.strptime(valor, "%d/%m/%Y").date()
+            cel = ws.cell(row=linha, column=col, value=valor)
+            if chave == "data_lancamento":
+                cel.number_format = "DD/MM/YYYY"
+            elif chave == "valor":
+                cel.number_format = "#,##0.00"
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=f"spend-base-notas-{dados['de']}-a-{dados['ate']}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@compras_spend_bp.route("/api/compras/spend/inclusao", methods=["POST"])
+@permission_required(PERM)
+def spend_salvar_inclusao():
+    payload = request.get_json(silent=True) or {}
+    try:
+        spend.salvar_inclusao(
+            payload.get("cod_fornecedor"), payload.get("codigo_item"), payload.get("incluir"),
+            payload.get("motivo"), _usuario(),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
 @compras_spend_bp.route("/api/compras/spend/classificacao", methods=["POST"])
 @permission_required(PERM)
 def spend_salvar_classificacao():

@@ -1358,6 +1358,11 @@ def initialize_database(app: Flask) -> None:
             pass
 
         try:
+            _ensure_compra_st_fornecedor_sem_homologacao()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao ajustar compra_st_fornecedor (fornecedor sem homologacao)")
+
+        try:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
@@ -1961,6 +1966,33 @@ def _ensure_inventario_ajuste_saida_avulsa_columns() -> None:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_compra_st_fornecedor_sem_homologacao() -> None:
+    """Fornecedor de servico terceiro sem homologacao (13/11/2026): colunas
+    proprias e homologacao_id passa a aceitar NULL. O MODIFY e' so' no MySQL
+    (SQLite nao altera coluna; banco novo ja' nasce certo pelo create_all)."""
+    if not _has_table("compra_st_fornecedor"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("compra_st_fornecedor")
+        missing_columns = [
+            ("razao_social", "ALTER TABLE compra_st_fornecedor ADD COLUMN razao_social VARCHAR(200)"),
+            ("cnpj", "ALTER TABLE compra_st_fornecedor ADD COLUMN cnpj VARCHAR(14)"),
+            ("justificativa", "ALTER TABLE compra_st_fornecedor ADD COLUMN justificativa TEXT"),
+            ("valido_ate", "ALTER TABLE compra_st_fornecedor ADD COLUMN valido_ate DATE"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols:
+                conn.execute(db.text(ddl))
+                conn.commit()
+        coluna = _get_column_details("compra_st_fornecedor", "homologacao_id")
+        if db.engine.dialect.name == "mysql" and coluna and not coluna.get("nullable", True):
+            conn.execute(db.text("ALTER TABLE compra_st_fornecedor MODIFY COLUMN homologacao_id INTEGER NULL"))
+            conn.commit()
     finally:
         conn.close()
 

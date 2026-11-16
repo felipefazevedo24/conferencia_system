@@ -57,6 +57,19 @@
 .pp-motivo.is-open { display: grid; gap: 8px; }
 .pp-motivo .row { display: flex; justify-content: flex-end; gap: 8px; }
 
+.pp-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pp-doc { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--eui-border, #e3e8ef); border-radius: 8px; font-size: 12.5px; }
+.pp-doc i.ico { color: var(--eui-primary, #0f62c9); width: 16px; text-align: center; }
+.pp-doc a { font-weight: 600; color: var(--eui-text, #0f172a); text-decoration: none; overflow-wrap: anywhere; }
+.pp-doc a:hover { text-decoration: underline; }
+.pp-doc small { color: var(--eui-text-muted, #64748b); margin-left: auto; white-space: nowrap; }
+.pp-doc button { border: 0; background: none; color: var(--eui-danger, #b91c1c); cursor: pointer; padding: 2px 4px; }
+.pp-docs-vazio { font-size: 12.5px; color: var(--eui-text-muted, #94a3b8); }
+.pp-docs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--eui-text-muted, #64748b); }
+.pp-uso { flex: 0 0 140px; height: 6px; border-radius: 6px; background: var(--eui-surface-3, #eef1f6); overflow: hidden; }
+.pp-uso span { display: block; height: 100%; background: var(--eui-primary, #0f62c9); }
+.pp-uso.is-cheio span { background: var(--eui-danger, #dc2626); }
+
 .pp-toast { position: fixed; right: 20px; bottom: 20px; z-index: 2000; padding: 10px 16px; border-radius: 10px; color: #fff; font-size: 13px; background: #16a34a; box-shadow: 0 10px 30px rgba(0,0,0,.18); display: none; }
 .pp-toast.is-error { background: #dc2626; }
 </style>
@@ -67,8 +80,9 @@
   <div>
    <div class="eui-page-header__eyebrow">Assistência Técnica</div>
    <h1 class="eui-page-header__title"><i class="fas fa-gears"></i> Solicitação de Produção de Peças</h1>
-   <p class="eui-page-header__sub">Recebidas por EDI. Aqui só se efetiva o andamento:
-    Pendente → Em andamento → Em produção → Concluído.</p>
+   <p class="eui-page-header__sub">Recebidas por EDI. Aqui se efetiva o andamento
+    (Pendente → Em andamento → Em produção → Concluído) e se consultam ou anexam os documentos.
+    O sistema de origem acompanha o status pela API.</p>
   </div>
  </header>
 
@@ -120,7 +134,58 @@
     const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
     const BADGE = { "Pendente": "warning", "Em andamento": "info", "Em produção": "violet", "Concluído": "success", "Cancelado": "neutral" };
-    const ACAO = { recebido: "Recebida por EDI", efetivado: "Efetivada", estornado: "Estornada", cancelado: "Cancelada" };
+    const ACAO = { recebido: "Recebida por EDI", efetivado: "Efetivada", estornado: "Estornada", cancelado: "Cancelada",
+                   anexado: "Documento anexado", "anexo removido": "Documento removido" };
+    const ACEITOS = ".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,.step,.stp,.igs,.iges,.xlsx,.xls,.docx,.doc,.zip";
+    const mb = (n) => (n / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + " MB";
+    const ICONE = { pdf: "fa-file-pdf", png: "fa-file-image", jpg: "fa-file-image", jpeg: "fa-file-image", webp: "fa-file-image",
+                    xlsx: "fa-file-excel", xls: "fa-file-excel", docx: "fa-file-word", doc: "fa-file-word", zip: "fa-file-zipper" };
+
+    function documentos(s) {
+        const anexos = s.anexos || [];
+        const pct = Math.min(100, (s.anexos_usado_bytes / s.anexos_limite_bytes) * 100);
+        const lista = anexos.length ? `<ul class="pp-docs">${anexos.map((a) => {
+            const ext = (a.nome.split(".").pop() || "").toLowerCase();
+            const remover = a.origem === "Sync" ? `<button type="button" title="Remover" data-act="remover-anexo" data-anexo="${a.id}"><i class="fas fa-trash"></i></button>` : "";
+            return `<li class="pp-doc"><i class="fas ${ICONE[ext] || "fa-file-lines"} ico"></i>
+                <a href="${API}/${s.id}/anexos/${a.id}" target="_blank" rel="noopener">${esc(a.nome)}</a>
+                <small>${mb(a.tamanho)} · ${a.origem === "EDI" ? "sistema de origem" : esc(a.enviado_por)} · ${esc(a.enviado_em)}</small>${remover}</li>`;
+        }).join("")}</ul>` : `<div class="pp-docs-vazio">Nenhum documento anexado.</div>`;
+        return `<div class="pp-section-title">Documentos</div>${lista}
+            <div class="pp-docs-bar">
+              <span class="pp-uso ${pct >= 100 ? "is-cheio" : ""}"><span style="width:${pct}%"></span></span>
+              <span>${mb(s.anexos_usado_bytes)} de ${mb(s.anexos_limite_bytes)}</span>
+              <label class="eui-btn eui-btn--ghost eui-btn--sm" style="margin-left:auto">
+                <i class="fas fa-paperclip"></i> Anexar documentos
+                <input type="file" multiple accept="${ACEITOS}" data-anexar hidden>
+              </label>
+              <span data-progresso></span>
+            </div>`;
+    }
+
+    function enviarAnexos(id, arquivos, el) {
+        const prog = el.querySelector("[data-progresso]");
+        const form = new FormData();
+        for (const f of arquivos) form.append("anexos", f);
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API}/${id}/anexos`);
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) prog.textContent = `Enviando… ${Math.round((e.loaded / e.total) * 100)}%`; };
+        xhr.onload = () => {
+            let j = {};
+            try { j = JSON.parse(xhr.responseText); } catch (e) { /* resposta sem JSON */ }
+            prog.textContent = "";
+            if (xhr.status >= 200 && xhr.status < 300 && j.solicitacao) {
+                const i = dados.findIndex((s) => s.id === id);
+                if (i >= 0) dados[i] = j.solicitacao;
+                render();
+                toast(arquivos.length > 1 ? `${arquivos.length} documentos anexados.` : "Documento anexado.");
+            } else {
+                toast(j.error || "Falha ao anexar.", true);
+            }
+        };
+        xhr.onerror = () => { prog.textContent = ""; toast("Falha de conexão ao anexar.", true); };
+        xhr.send(form);
+    }
 
     let dados = [], fluxo = [], filtro = "", abertos = new Set();
 
@@ -213,9 +278,12 @@
                     : `<div class="pp-sem-img">Sem imagem da peça</div>`}
               </div>
             </div>
+            ${documentos(s)}
             <div class="pp-section-title">Histórico</div>
             <ul class="pp-hist">
-              ${(s.historico || []).slice().reverse().map((h) => `<li><b>${ACAO[h.acao] || esc(h.acao)}</b>: ${h.status_de ? esc(h.status_de) + " → " : ""}${esc(h.status_para)}
+              ${(s.historico || []).slice().reverse().map((h) => h.acao === "anexado" || h.acao === "anexo removido"
+                  ? `<li><b>${ACAO[h.acao]}</b>: ${esc(h.motivo)} <small>· ${esc(h.usuario)} · ${esc(h.criado_em)}</small></li>`
+                  : `<li><b>${ACAO[h.acao] || esc(h.acao)}</b>: ${h.status_de ? esc(h.status_de) + " → " : ""}${esc(h.status_para)}
                   <small>· ${esc(h.usuario)} · ${esc(h.criado_em)}</small>${h.motivo ? `<br><small>Motivo: ${esc(h.motivo)}</small>` : ""}</li>`).join("")}
             </ul>
             ${acoes.length ? `<div class="pp-actions">${acoes.join("")}</div>` : ""}
@@ -287,6 +355,19 @@
             btn.textContent = cancelar ? "Confirmar cancelamento" : `Confirmar estorno para ${s.status_anterior}`;
             caixa.classList.add("is-open");
             caixa.querySelector("textarea").focus();
+        } else if (act === "remover-anexo") {
+            const anexo = (s.anexos || []).find((a) => a.id === Number(alvo.dataset.anexo));
+            if (anexo && confirm(`Remover o documento "${anexo.nome}"?`)) {
+                fetch(`${API}/${id}/anexos/${anexo.id}`, { method: "DELETE" })
+                    .then(async (r) => {
+                        const j = await r.json();
+                        if (!r.ok) throw new Error(j.error || "Falha ao remover.");
+                        dados[dados.findIndex((x) => x.id === id)] = j.solicitacao;
+                        render();
+                        toast("Documento removido.");
+                    })
+                    .catch((e) => toast(e.message, true));
+            }
         } else if (act === "fechar-motivo") {
             caixa.classList.remove("is-open");
         } else if (act === "confirmar-motivo") {
@@ -294,6 +375,22 @@
             if (caixa.dataset.rota === "cancelar" && !motivo) { toast("Informe o motivo do cancelamento.", true); return; }
             acao(id, caixa.dataset.rota, { motivo });
         }
+    });
+
+    $("pp-lista").addEventListener("change", (ev) => {
+        const input = ev.target.closest("[data-anexar]");
+        const el = ev.target.closest(".pp-card");
+        if (!input || !el || !input.files.length) return;
+        const id = Number(el.dataset.id);
+        const s = dados.find((x) => x.id === id);
+        const arquivos = Array.from(input.files);
+        const total = arquivos.reduce((t, f) => t + f.size, 0);
+        input.value = "";
+        if (s.anexos_usado_bytes + total > s.anexos_limite_bytes) {
+            toast(`Passa do limite: ${mb(s.anexos_usado_bytes)} já usados + ${mb(total)} > ${mb(s.anexos_limite_bytes)}.`, true);
+            return;
+        }
+        enviarAnexos(id, arquivos, el);
     });
 
     $("pp-stats").addEventListener("click", (ev) => {

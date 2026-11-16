@@ -5001,6 +5001,12 @@ class AssistenciaProducaoPeca(db.Model):
         cascade="all, delete-orphan",
         order_by="AssistenciaProducaoPecaHistorico.id",
     )
+    anexos = db.relationship(
+        "AssistenciaProducaoPecaAnexo",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+        order_by="AssistenciaProducaoPecaAnexo.id",
+    )
 
 
 class AssistenciaProducaoPecaHistorico(db.Model):
@@ -5019,6 +5025,46 @@ class AssistenciaProducaoPecaHistorico(db.Model):
     motivo = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
+class AssistenciaProducaoPecaAnexo(db.Model):
+    """Documento de uma Solicitacao de Producao de Pecas (desenho, CAD, PDF,
+    foto...). Chega pelo EDI (origem "EDI") ou pela tela (origem "Sync").
+    Limite: 10 MB somando os anexos da solicitacao.
+
+    O conteudo fica no banco em partes (AssistenciaProducaoPecaAnexoParte):
+    um blob unico grande arrisca o max_allowed_packet do MySQL."""
+
+    __tablename__ = "assistencia_producao_peca_anexo"
+
+    ORIGEM_EDI = "EDI"
+    ORIGEM_SYNC = "Sync"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer, db.ForeignKey("assistencia_producao_peca.id"), nullable=False, index=True
+    )
+    nome = db.Column(db.String(260), nullable=False)
+    content_type = db.Column(db.String(120), nullable=False)
+    tamanho = db.Column(db.BigInteger, nullable=False, default=0)
+    origem = db.Column(db.String(10), nullable=False)
+    enviado_por = db.Column(db.String(100), nullable=False)
+    enviado_em = db.Column(db.DateTime, nullable=False, default=agora_br)
+
+
+class AssistenciaProducaoPecaAnexoParte(db.Model):
+    """Pedaco (ate' 2 MB) do conteudo de um anexo, na ordem. Sem relationship
+    de proposito: carregar as partes junto com o anexo traria o arquivo inteiro pra
+    memoria so' pra listar - o service le e apaga por consulta."""
+
+    __tablename__ = "assistencia_producao_peca_anexo_parte"
+
+    id = db.Column(db.Integer, primary_key=True)
+    anexo_id = db.Column(
+        db.Integer, db.ForeignKey("assistencia_producao_peca_anexo.id"), nullable=False, index=True
+    )
+    ordem = db.Column(db.Integer, nullable=False)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"), nullable=False)
 
 
 class CargoAcesso(db.Model):
@@ -5477,6 +5523,24 @@ class SpendEntradaGrvSync(db.Model):
     erro = db.Column(db.String(500))
 
 
+class SpendInclusaoManual(db.Model):
+    """Decisao manual de Compras se um fornecedor + item entra ou nao no
+    Spend, passando por cima do filtro automatico (CFOP de compra e
+    intercompany). Vale para todas as notas desse fornecedor + item,
+    inclusive as futuras. Apagar a linha volta a regra automatica."""
+
+    __tablename__ = "spend_inclusao_manual"
+    __table_args__ = (db.UniqueConstraint("cod_fornecedor", "codigo_item", name="uq_spend_inclusao_forn_item"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    cod_fornecedor = db.Column(db.Integer, nullable=False, index=True)
+    codigo_item = db.Column(db.String(80), nullable=False, default="")
+    incluir = db.Column(db.Boolean, nullable=False)
+    motivo = db.Column(db.String(500), nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class SpendClassificacaoExemplo(db.Model):
     """Exemplo que ensina a classificacao de suprimentos do Spend.
 
@@ -5535,12 +5599,22 @@ class CompraStTipoServico(db.Model):
 class CompraStFornecedor(db.Model):
     """Fornecedor de servico terceiro, ligado a uma homologacao. So' entra
     numa cotacao se a homologacao estiver Homologado e dentro da validade
-    (calculado na hora - ver compras_st_service.autorizado)."""
+    (calculado na hora - ver compras_st_service.motivo_nao_autorizado).
+
+    Sem homologacao (homologacao_id nulo, pedido de 13/11/2026): so' quem tem
+    PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO cadastra, com razao social,
+    CNPJ, justificativa e validade proprios; recebe cotacao ate' valido_ate.
+    Colunas novas e o NULL em homologacao_id: bootstrap
+    _ensure_compra_st_fornecedor_sem_homologacao."""
 
     __tablename__ = "compra_st_fornecedor"
 
     id = db.Column(db.Integer, primary_key=True)
-    homologacao_id = db.Column(db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=False, index=True)
+    homologacao_id = db.Column(db.Integer, db.ForeignKey("compras_homologacao_fornecedor.id"), nullable=True, index=True)
+    razao_social = db.Column(db.String(200))
+    cnpj = db.Column(db.String(14), index=True)
+    justificativa = db.Column(db.Text)
+    valido_ate = db.Column(db.Date)
     emails = db.Column(db.String(300), nullable=False)
     contato = db.Column(db.String(120))
     telefone = db.Column(db.String(40))

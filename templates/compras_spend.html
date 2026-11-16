@@ -64,6 +64,14 @@
     .sp-rev-forn { min-width: 170px; max-width: 240px; }
     .sp-erro-base { color: var(--eui-danger); }
 
+    .sp-nf-totais { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 18px 0; font-size: 12px; }
+    .sp-nf-totais span { border: 1px solid var(--eui-border); border-radius: 999px; padding: 3px 10px; color: var(--eui-text-soft); }
+    .sp-nf-totais b { color: var(--eui-text); }
+    .sp-sit { display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; background: var(--eui-surface-3); color: var(--eui-text-soft); }
+    .sp-sit--dentro { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+    .sp-sit--manual { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .sp-nf-acao { white-space: nowrap; }
+
     .sp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
     .sp-toast.error { border-left-color: var(--eui-danger); }
     .sp-toast.success { border-left-color: var(--eui-success); }
@@ -148,6 +156,7 @@
                         <button type="button" data-tab="comparativo">Comparativo</button>
                         <button type="button" data-tab="fornecedores">Fornecedores</button>
                         <button type="button" data-tab="classificacao">Classificação<span class="sp-tab-badge" id="sp-tab-rev" hidden></span></button>
+                        <button type="button" data-tab="notas">Base de notas</button>
                     </nav>
 
                     <div data-pane="consolidado">
@@ -194,6 +203,20 @@
                             <tbody id="sp-tb-rev"></tbody>
                         </table></div>
                         <div class="sp-mais"><span id="sp-rev-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-rev-mais" hidden>Mostrar mais</button></div>
+                    </div>
+
+                    <div data-pane="notas" hidden>
+                        <div class="sp-pane-tools">
+                            <div class="sp-toggle" id="sp-nf-modo"><button type="button" class="is-active" data-modo="">Todas</button><button type="button" data-modo="spend">No Spend</button><button type="button" data-modo="fora">Fora do Spend</button></div>
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-nf" placeholder="Buscar fornecedor, NF, item, descrição, CFOP ou família" autocomplete="off"></div>
+                            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-nf-excel" style="margin-left:auto"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+                        </div>
+                        <div class="sp-nf-totais" id="sp-nf-totais"></div>
+                        <div class="sp-tabela-wrap"><table class="erp-table">
+                            <thead><tr><th>Lançamento</th><th>NF</th><th>Fornecedor</th><th>CFOP</th><th>Item</th><th class="sp-num">Valor</th><th>Situação</th><th>Classificação</th><th></th></tr></thead>
+                            <tbody id="sp-tb-nf"></tbody>
+                        </table></div>
+                        <div class="sp-mais"><span id="sp-nf-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-nf-mais" hidden>Mostrar mais</button></div>
                     </div>
                 </section>
             </div>
@@ -306,6 +329,7 @@
         renderComparativo();
         renderFornecedores();
         if (estado.tab === "classificacao" && estado.revPeriodo !== f.de + f.ate) carregarRevisao();
+        if (estado.tab === "notas" && nf.periodo !== f.de + f.ate) carregarNotas();
     }
 
     function renderInfo(d) {
@@ -318,6 +342,7 @@
         const fora = [];
         if (fs.intercompany.itens) fora.push(`${fmtC(fs.intercompany.valor)} do Grupo Columbia`);
         if (fs.cfop.itens) fora.push(`${fmtC(fs.cfop.valor)} de CFOP que não é compra`);
+        if (fs.excluida && fs.excluida.itens) fora.push(`${fmtC(fs.excluida.valor)} tirados manualmente`);
         if (fora.length) partes.push("Fora do spend: " + fora.join(" · "));
         $("sp-base-info").innerHTML = partes.join("<br>");
 
@@ -661,12 +686,142 @@
     $("sp-busca-rev").addEventListener("input", () => { estado.revLimite = PAGINA; renderRevisao(); });
     $("sp-rev-mais").addEventListener("click", () => { estado.revLimite += PAGINA; renderRevisao(); });
 
+    // ---------- Base de notas ----------
+    // Todo o espelho do período (inclusive o que o filtro tirou), paginado no servidor.
+    const nf = { modo: "", linhas: [], total: 0, offset: 0, periodo: null, seq: 0, timer: null };
+
+    async function carregarNotas(maisUma) {
+        const f = estado.dados && !estado.dados.vazio ? estado.dados.filtro : null;
+        const qs = new URLSearchParams();
+        if (f) { qs.set("de", f.de); qs.set("ate", f.ate); }
+        if (nf.modo) qs.set("situacao", nf.modo);
+        const busca = $("sp-busca-nf").value.trim();
+        if (busca) qs.set("busca", busca);
+        qs.set("offset", maisUma ? nf.linhas.length : 0);
+        const seq = ++nf.seq;
+        try {
+            const r = await api("/api/compras/spend/notas?" + qs.toString());
+            if (seq !== nf.seq) return;
+            nf.linhas = maisUma ? nf.linhas.concat(r.linhas) : r.linhas;
+            nf.total = r.total;
+            nf.valor = r.valor_filtrado;
+            nf.totais = r.totais;
+            nf.periodo = f ? f.de + f.ate : "";
+            if (r.classificacoes && r.classificacoes.length) $("sp-lista-cls").innerHTML = r.classificacoes.map((c) => `<option value="${esc(c)}">`).join("");
+            renderNotas();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    function renderNotas() {
+        $("sp-nf-totais").innerHTML = Object.values(nf.totais || {}).filter((t) => t.linhas)
+            .map((t) => `<span>${esc(t.texto)}: <b>${fmtR(t.valor)}</b> · ${inteiro.format(t.linhas)} ${t.linhas === 1 ? "linha" : "linhas"}</span>`).join("");
+        $("sp-tb-nf").innerHTML = nf.linhas.map((l, i) => {
+            const editavel = l.cod_fornecedor != null;
+            const manual = l.situacao === "incluida" || l.situacao === "excluida";
+            const cls = manual ? "sp-sit--manual" : (l.no_spend ? "sp-sit--dentro" : "");
+            const sit = `<span class="sp-sit ${cls}">${esc(l.situacao_texto)}</span>`
+                + (manual ? `<div class="sp-muted" style="font-size:11.5px">${esc(l.motivo_manual)} · ${esc(l.manual_por || "")}</div>` : "");
+            let acao = "";
+            if (editavel) {
+                acao = manual
+                    ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-nf-acao="regra" data-i="${i}" title="Desfaz a decisão manual">Voltar à regra</button>`
+                    : (l.no_spend
+                        ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-nf-acao="tirar" data-i="${i}">Tirar do Spend</button>`
+                        : `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-nf-acao="incluir" data-i="${i}">Incluir no Spend</button>`);
+            }
+            const semCls = l.classificacao === SEM_CLASSIFICACAO;
+            return `<tr>
+                <td class="sp-cod">${esc(l.data_lancamento)}</td>
+                <td class="sp-cod">${esc(l.nota_fiscal)}</td>
+                <td class="sp-rev-forn">${esc(l.fornecedor)}</td>
+                <td class="sp-cod" title="${esc(l.cfop_descricao)}">${esc(l.cfop)}${l.cfop_descricao ? `<div class="sp-muted sp-desc" style="max-width:180px;font-size:11.5px">${esc(l.cfop_descricao)}</div>` : ""}</td>
+                <td><div class="sp-desc sp-rev-desc" title="${esc(l.descricao)}">${esc(l.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(l.codigo_item) || "(sem código)"}${l.familia ? " · " + esc(l.familia) : ""}</div></td>
+                <td class="sp-num">${fmtR(l.valor)}</td>
+                <td>${sit}</td>
+                <td>${editavel ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" data-i="${i}" value="${esc(semCls ? "" : l.classificacao)}" placeholder="Sem classificação" title="${l.classificacao_manual ? "Confirmado" : (l.palpite ? "Palpite" : "Planilha do Custos")}">` : esc(l.classificacao)}</td>
+                <td class="sp-nf-acao">${acao}</td></tr>`;
+        }).join("") || `<tr><td colspan="9" class="sp-linha-vazia">Nenhuma nota no filtro.</td></tr>`;
+        $("sp-nf-info").textContent = nf.total
+            ? `Mostrando ${inteiro.format(nf.linhas.length)} de ${inteiro.format(nf.total)} linhas · ${fmtR(nf.valor)} no filtro · decisões valem para o fornecedor + item`
+            : "";
+        $("sp-nf-mais").hidden = nf.linhas.length >= nf.total;
+    }
+
+    async function salvarInclusao(l, incluir) {
+        let motivo = "";
+        if (incluir !== null) {
+            motivo = window.prompt(`${incluir ? "Incluir no" : "Tirar do"} Spend todas as notas de ${l.fornecedor} com o item ${l.codigo_item || "(sem código)"}.\n\nMotivo:`);
+            if (motivo === null) return;
+            if (!motivo.trim()) { toast("Informe o motivo.", "error"); return; }
+        } else if (!window.confirm(`Voltar à regra automática (CFOP / intercompany) para ${l.fornecedor} · ${l.codigo_item || "(sem código)"}?`)) {
+            return;
+        }
+        try {
+            await api("/api/compras/spend/inclusao", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cod_fornecedor: l.cod_fornecedor, codigo_item: l.codigo_item, incluir, motivo }),
+            });
+            toast(incluir === null ? "Voltou à regra automática." : (incluir ? "Incluído no Spend." : "Tirado do Spend."), "success");
+            await carregarNotas();
+            estado.revisao = null;
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    $("sp-tb-nf").addEventListener("click", (ev) => {
+        const b = ev.target.closest("button[data-nf-acao]");
+        if (!b) return;
+        const l = nf.linhas[Number(b.dataset.i)];
+        salvarInclusao(l, b.dataset.nfAcao === "regra" ? null : b.dataset.nfAcao === "incluir");
+    });
+    $("sp-tb-nf").addEventListener("change", async (ev) => {
+        const input = ev.target.closest("input[data-i]");
+        if (!input) return;
+        const l = nf.linhas[Number(input.dataset.i)];
+        try {
+            await api("/api/compras/spend/classificacao", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cod_fornecedor: l.cod_fornecedor, codigo_item: l.codigo_item, classificacao: input.value.trim() }),
+            });
+            toast(input.value.trim() ? "Classificação salva para o fornecedor + item." : "Correção desfeita.", "success");
+            await carregarNotas();
+            estado.revisao = null;
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    });
+    $("sp-nf-modo").addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-modo]");
+        if (!btn) return;
+        nf.modo = btn.dataset.modo;
+        $("sp-nf-modo").querySelectorAll("button").forEach((b) => b.classList.toggle("is-active", b === btn));
+        carregarNotas();
+    });
+    $("sp-busca-nf").addEventListener("input", () => { clearTimeout(nf.timer); nf.timer = setTimeout(() => carregarNotas(), 350); });
+    $("sp-nf-mais").addEventListener("click", () => carregarNotas(true));
+    // Mesmo filtro da tela (periodo, situacao e busca), todas as linhas.
+    $("sp-nf-excel").addEventListener("click", () => {
+        const f = estado.dados && !estado.dados.vazio ? estado.dados.filtro : null;
+        const qs = new URLSearchParams();
+        if (f) { qs.set("de", f.de); qs.set("ate", f.ate); }
+        if (nf.modo) qs.set("situacao", nf.modo);
+        const busca = $("sp-busca-nf").value.trim();
+        if (busca) qs.set("busca", busca);
+        window.location.href = "/api/compras/spend/notas.xlsx?" + qs.toString();
+    });
+
     // ---------- Abas e filtros ----------
     function abrirTab(tab) {
         estado.tab = tab;
         document.querySelectorAll("#sp-tabs button").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === tab));
         document.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== tab; });
         if (tab === "classificacao" && (!estado.revisao || estado.revPeriodo !== estado.dados.filtro.de + estado.dados.filtro.ate)) carregarRevisao();
+        if (tab === "notas" && nf.periodo !== estado.dados.filtro.de + estado.dados.filtro.ate) carregarNotas();
     }
     $("sp-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) abrirTab(b.dataset.tab); });
     $("sp-alerta-rev-btn").addEventListener("click", () => { abrirTab("classificacao"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });

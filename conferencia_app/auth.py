@@ -62,6 +62,7 @@ PERMISSION_CATALOG = {
     "PAGE_COMEX_FINANCEIRO_CONSULTA": "Comex > Gestão financeira > Consultar provisão x realizado (só leitura)",
     "PAGE_COMPRAS_ST_COTACAO": "Compras > Serviço terceiro > Criar e enviar cotação com desenho (Engenharia)",
     "PAGE_COMPRAS_ST_ANALISE": "Compras > Serviço terceiro > Analisar propostas, escolher vencedor e cadastros",
+    "PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO": "Compras > Serviço terceiro > Cadastrar fornecedor sem homologação",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_EXPEDICAO_CONFERENCIA": "Logística > Expedição > Conferência",
     "PAGE_EXPEDICAO_CONF_CEGA": "Logística > Expedição > Conferência de Expedição (cega)",
@@ -188,6 +189,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_ESTOQUE",
         "PAGE_COMPRAS_ST_COTACAO",
         "PAGE_COMPRAS_ST_ANALISE",
+        "PAGE_COMPRAS_ST_FORNECEDOR_SEM_HOMOLOGACAO",
     },
     # Cria a cotacao de servico terceiro (desenhos); Compras escolhe.
     "Engenharia": {

@@ -66,7 +66,7 @@
     {% if pode_analisar %}
     <div class="eui-card hidden" id="aba-fornecedores">
         <div class="st-bar">
-            <span class="st-muted">Só recebe cotação o fornecedor com a homologação <strong>Homologado</strong> e dentro da validade.</span>
+            <span class="st-muted">Só recebe cotação o fornecedor com a homologação <strong>Homologado</strong> e dentro da validade, ou cadastrado por Compras sem homologação, até a data liberada.</span>
             <button class="eui-btn eui-btn--primary" id="st-btn-novo-forn"><i class="fas fa-plus"></i> Novo fornecedor</button>
         </div>
         <div class="st-table-wrap">
@@ -151,9 +151,22 @@
         </div>
         <div class="st-modal__body">
             <input type="hidden" id="st-forn-id">
-            <div class="st-field">
+            {% if pode_sem_homologacao %}
+            <label style="display:flex; gap:8px; font-size:13px; margin-bottom:10px;" id="st-forn-sem-wrap">
+                <input type="checkbox" id="st-forn-sem"> Cadastrar sem homologação (só Compras)
+            </label>
+            {% endif %}
+            <div class="st-field" id="st-forn-homolog-wrap">
                 <label>Homologação (fornecedor homologado) *</label>
                 <select id="st-forn-homolog" class="eui-select"></select>
+            </div>
+            <div id="st-forn-sem-campos" class="hidden">
+                <div class="st-field"><label>Razão social *</label><input type="text" id="st-forn-razao" class="eui-input" maxlength="200"></div>
+                <div class="st-grid-2">
+                    <div class="st-field"><label>CNPJ *</label><input type="text" id="st-forn-cnpj" class="eui-input" maxlength="18" placeholder="00.000.000/0000-00"></div>
+                    <div class="st-field"><label>Pode receber cotação até *</label><input type="date" id="st-forn-valido" class="eui-input"></div>
+                </div>
+                <div class="st-field"><label>Justificativa (por que sem homologação) *</label><textarea id="st-forn-justificativa" class="eui-input" rows="2"></textarea></div>
             </div>
             <div class="st-field">
                 <label>Serviços que presta *</label>
@@ -184,6 +197,7 @@
 (function () {
     const $ = (id) => document.getElementById(id);
     const PODE_ANALISAR = {{ 'true' if pode_analisar else 'false' }};
+    const PODE_SEM_HOMOLOGACAO = {{ 'true' if pode_sem_homologacao else 'false' }};
     const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const brl = (v) => v == null ? "—" : "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const pct = (v) => (v == null ? 0 : v).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
@@ -303,7 +317,7 @@
             <label class="${f.motivo_bloqueio ? "off" : ""}">
                 <input type="checkbox" value="${f.id}" ${f.motivo_bloqueio ? "disabled" : ""}>
                 <span><strong>${esc(f.nome)}</strong> <span class="st-muted">${esc(f.emails)}</span>
-                ${f.motivo_bloqueio ? `<br><span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : `<br><span class="st-muted">Homologado até ${esc(f.homologacao_valido_ate)}</span>`}</span>
+                ${f.motivo_bloqueio ? `<br><span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : `<br><span class="st-muted">${esc(f.liberado_ate_texto)}</span>`}</span>
             </label>`).join("") : '<span class="st-muted">Nenhum fornecedor cadastrado para este serviço — Compras cadastra na aba Fornecedores.</span>';
     }
     $("st-nova-tipo").addEventListener("change", carregarFornecedoresDoTipo);
@@ -431,7 +445,7 @@
                 <td><strong>${esc(f.nome)}</strong><br><span class="st-muted">${esc(f.razao_social)}</span></td>
                 <td>${f.tipos.map((t) => esc(t.nome)).join(", ")}</td>
                 <td>${esc(f.emails)}</td>
-                <td>${f.motivo_bloqueio ? `<span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : `Homologado até ${esc(f.homologacao_valido_ate)}`}</td>
+                <td>${f.motivo_bloqueio ? `<span class="st-warn">${esc(f.motivo_bloqueio)}</span>` : esc(f.liberado_ate_texto)}${f.sem_homologacao ? `<br><span class="st-muted">Sem homologação: ${esc(f.justificativa)}</span>` : ""}</td>
                 <td style="text-align:right;"><button class="eui-btn eui-btn--ghost eui-btn--sm" data-editar-forn="${f.id}"><i class="fas fa-pen"></i></button></td>
             </tr>`).join("") : '<tr><td colspan="5" class="st-empty">Nenhum fornecedor de serviço terceiro cadastrado.</td></tr>';
     }
@@ -439,7 +453,7 @@
     async function abrirFornecedor(f) {
         const [{ homologacoes }] = await Promise.all([api("/api/compras/st/homologacoes"), carregarTipos()]);
         const opcoes = homologacoes.slice();
-        if (f && !opcoes.some((h) => h.id === f.homologacao_id)) opcoes.unshift({ id: f.homologacao_id, razao_social: f.razao_social + " (" + f.homologacao_status + ")" });
+        if (f && f.homologacao_id && !opcoes.some((h) => h.id === f.homologacao_id)) opcoes.unshift({ id: f.homologacao_id, razao_social: f.razao_social + " (" + f.homologacao_status + ")" });
         $("st-forn-homolog").innerHTML = '<option value="">Selecione…</option>' + opcoes.map((h) =>
             `<option value="${h.id}" data-email="${esc(h.email || "")}" data-contato="${esc(h.contato || "")}" data-telefone="${esc(h.telefone || "")}">${esc(h.razao_social)}${h.cnpj ? " — " + esc(h.cnpj) : ""}${h.valido_ate ? " (até " + esc(h.valido_ate) + ")" : ""}</option>`).join("");
         $("st-forn-id").value = f ? f.id : "";
@@ -450,8 +464,24 @@
         $("st-forn-contato").value = f ? (f.contato || "") : "";
         $("st-forn-telefone").value = f ? (f.telefone || "") : "";
         $("st-forn-ativo").checked = f ? f.ativo : true;
+        // Sem homologacao: o tipo do cadastro nao muda na edicao.
+        const sem = !!(f && f.sem_homologacao);
+        if ($("st-forn-sem")) {
+            $("st-forn-sem").checked = sem;
+            $("st-forn-sem-wrap").classList.toggle("hidden", !!f);
+        }
+        $("st-forn-razao").value = sem ? (f.razao_social || "") : "";
+        $("st-forn-cnpj").value = sem ? (f.cnpj || "") : "";
+        $("st-forn-valido").value = sem ? (f.valido_ate || "") : "";
+        $("st-forn-justificativa").value = sem ? (f.justificativa || "") : "";
+        alternarSemHomologacao(sem);
         $("st-modal-forn").classList.add("open");
     }
+    function alternarSemHomologacao(sem) {
+        $("st-forn-homolog-wrap").classList.toggle("hidden", sem);
+        $("st-forn-sem-campos").classList.toggle("hidden", !sem);
+    }
+    if ($("st-forn-sem")) $("st-forn-sem").addEventListener("change", (e) => alternarSemHomologacao(e.target.checked));
     // Homologacao escolhida pre-preenche contato/e-mail do cadastro dela.
     $("st-forn-homolog").addEventListener("change", () => {
         const op = $("st-forn-homolog").selectedOptions[0];
@@ -473,6 +503,9 @@
                 homologacao_id: $("st-forn-homolog").value, emails: $("st-forn-emails").value,
                 contato: $("st-forn-contato").value, telefone: $("st-forn-telefone").value, ativo: $("st-forn-ativo").checked,
                 tipo_ids: Array.from($("st-forn-tipos").querySelectorAll("input:checked")).map((c) => +c.value),
+                sem_homologacao: !$("st-forn-sem-campos").classList.contains("hidden"),
+                razao_social: $("st-forn-razao").value, cnpj: $("st-forn-cnpj").value,
+                valido_ate: $("st-forn-valido").value, justificativa: $("st-forn-justificativa").value,
             };
             try {
                 const r = await api(id ? `/api/compras/st/fornecedores/${id}` : "/api/compras/st/fornecedores", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
