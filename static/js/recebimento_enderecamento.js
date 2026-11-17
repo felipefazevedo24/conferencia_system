@@ -109,9 +109,11 @@
     if (item.status === 'Pendente') {
      if (item.impedimento) {
       actions.append(el('span', item.impedimento, 'pa-meta'));
-      const corrigir = el('a', null, 'pa-act'); corrigir.href = '/conferencia';
-      corrigir.append(el('i', null, 'fas fa-arrow-up-right-from-square'), document.createTextNode(' Corrigir no recebimento'));
-      actions.append(corrigir);
+      if (item.corrigir_no_recebimento) {
+       const corrigir = el('a', null, 'pa-act'); corrigir.href = '/conferencia';
+       corrigir.append(el('i', null, 'fas fa-arrow-up-right-from-square'), document.createTextNode(' Corrigir no recebimento'));
+       actions.append(corrigir);
+      }
      }
      else actions.append(button('Endereçar material', () => openWork(item), 'fa-qrcode', 'primary'));
     }
@@ -129,7 +131,8 @@
     };
     const menuItens = [];
     menuItens.push({texto:'Ver histórico e origem', icone:'fa-history', acao:() => history(item.id)});
-    if (item.status === 'Aguardando sincronização' && $('putaway').dataset.manage === 'true') menuItens.push({texto:'Revisar leituras', icone:'fa-redo', acao:reabrir('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.')});
+    // A rota de revisão é só de administrador: o menu segue a mesma regra.
+    if (item.status === 'Aguardando sincronização' && isAdmin) menuItens.push({texto:'Revisar leituras', icone:'fa-redo', acao:reabrir('Informe o motivo da revisão. Será necessário bipar novamente o SKU e o endereço. Os endereços já enviados ao GRV serão preservados.')});
     if (item.status === 'Concluído') menuItens.push({texto:'Movimentar ou conferir saldo', icone:'fa-exchange-alt', acao:() => { location.href='/wms/enderecamento?sku='+encodeURIComponent(item.sku); }});
     if (menuItens.length) actions.append(kebab(menuItens));
     const actionCell = el('td', null, 'pa-actions'); actionCell.append(actions); card.append(actionCell); $('pa-list').append(card);

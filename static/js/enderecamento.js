@@ -68,7 +68,7 @@
     if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
     if(s.em_inventario)desc.append(node('span','Em análise de inventário','end-badge end-badge--inventario'));
     cell(row,'Descrição',desc);
-    cell(row,'Saldo no GRV',`${number(s.saldo)} ${s.unidade||''}`.trim());
+    cell(row,'Saldo no GRV',saldoCelula(s));
     // Sem endereço, "movimentar" é endereçar: sem origem, o destino é o 1º endereço.
     const actions=node('div',null,'end-actions');actions.append(button(s.endereco?'Movimentar':'Endereçar',()=>open(s)));
     // Ações secundárias ficam no menu de três pontos; a linha mostra só a principal.
@@ -77,6 +77,7 @@
     if(admin)extras.push({texto:'Histórico',icone:'fa-history',acao:()=>{$('end-history-search').value=s.sku;historyPage=1;showPanel('historico');}});
     // Inventário de um material endereçado: permissão própria (o servidor também confere).
     if(podePedirInventario&&s.endereco&&!s.em_inventario)extras.push({texto:'Pedir inventário',icone:'fa-clipboard-check',acao:()=>pedirInventario(s)});
+    if(manage&&s.multi)extras.push({texto:'Contar endereço',icone:'fa-calculator',acao:()=>contarEndereco(s)});
     if(extras.length)actions.append(maisAcoes(extras));
     cell(row,'Ações',actions);$('end-balances').append(row);
    }
@@ -84,6 +85,45 @@
    const termo=$('end-search').value.trim();
    $('end-search-summary').textContent=termo?`${data.total} resultado(s) para ${ROTULO_POR[por]} ${por==='endereco'&&!termo.endsWith('*')?'= ':''}"${termo}"`:`${data.total} registro(s)`;
    $('end-page').textContent=`Página ${page} · ${data.total} registro(s)`;$('end-prev').disabled=page===1;$('end-next').disabled=page*40>=data.total;
+  }catch(e){message(e.message);}
+ }
+ // Com 2+ endereços, a quantidade de cada endereço vem do Sync; com um só, é o saldo do GRV.
+ function saldoCelula(s){
+  const total=`${number(s.saldo)} ${s.unidade||''}`.trim();
+  if(!s.multi)return total;
+  const box=node('div');
+  box.append(node('div',s.qtd_endereco==null?'Neste endereço: a conferir':`Neste endereço: ${number(s.qtd_endereco)} ${s.unidade||''}`.trim()));
+  if(s.qtd_endereco!=null&&!s.conferido)box.append(node('span','a conferir','end-badge warn'));
+  box.append(node('div',`${total} no GRV`,'end-muted'));
+  return box;
+ }
+ let saidasPage=1,saidasVersion=0;
+ async function saidas(){
+  const version=++saidasVersion;
+  try{
+   const data=await request('/saidas?'+new URLSearchParams({pagina:saidasPage}));
+   if(version!==saidasVersion)return;
+   $('end-saidas-total').hidden=!data.total;$('end-saidas-total').textContent=data.total;
+   const box=$('end-saidas');box.replaceChildren();
+   if(!data.itens.length)box.append(node('p','Nenhuma saída a corrigir.','end-empty'));
+   for(const m of data.itens){
+    const d=m.detalhes||{},card=node('article'),head=node('div',null,'end-history-head');
+    head.append(node('strong',`${m.sku} · saída ${d.saida??''}`),node('span',d.pendencia||'Sem endereço','end-badge warn'));card.append(head);
+    card.append(node('p',`${number(m.quantidade)} ${m.unidade} · ${d.data||''} · endereço na saída: ${d.informado||'nenhum'}`));
+    const acoes=node('div',null,'end-actions');
+    for(const e of d.opcoes||[])acoes.append(button(`Saiu de ${e}`,()=>resolverSaida(m,e),'eui-btn--primary'));
+    acoes.append(button('Não baixar',()=>resolverSaida(m,null)));
+    card.append(acoes);box.append(card);
+   }
+   $('end-saidas-page').textContent=`Página ${saidasPage} · ${data.total} saída(s)`;$('end-saidas-prev').disabled=saidasPage===1;$('end-saidas-next').disabled=saidasPage*40>=data.total;
+  }catch(e){message(e.message);}
+ }
+ async function resolverSaida(m,endereco){
+  if(!endereco&&!await dialogRecebimento({titulo:'Não baixar saída',mensagem:`A saída ${m.detalhes?.saida??''} de ${m.sku} não vai baixar a quantidade de nenhum endereço. Confirmar?`,confirmar:'Não baixar',cancelar:'Cancelar'}))return;
+  try{
+   await request(`/saidas/${m.id}/resolver`,{endereco});
+   message(endereco?`Saída de ${m.sku} baixada de ${endereco}.`:`Saída de ${m.sku} marcada como não baixada.`);
+   await saidas();
   }catch(e){message(e.message);}
  }
  async function history(){
@@ -96,9 +136,16 @@
    for(const m of data.itens){
     const card=node('article'),head=node('div',null,'end-history-head');
     head.append(node('strong',`${m.sku} · ${m.tipo}`),node('span',m.sincronizado?'Sincronizado':'Envio pendente','end-badge'+(m.sincronizado?'':' warn')));card.append(head);
-    card.append(node('p',m.tipo==='Endereço desativado'
-     ?`Endereço ${m.origem} desativado: o material deixou de apontar para ele`
-     :`${number(m.quantidade)} ${m.unidade} · ${m.origem||(m.tipo==='Recebimento'?'Entrada / contagem':'Sem origem')} → ${m.destino||'Endereços do recebimento'}`));
+    const texto={
+     'Endereço desativado':()=>`Endereço ${m.origem} desativado: o material deixou de apontar para ele`,
+     'Saldo zerado no GRV':()=>'Material sem saldo no GRV: endereços retirados',
+     'Endereço zerado':()=>m.motivo||'Endereço zerado',
+     'Saída GRV':()=>`${number(m.quantidade)} ${m.unidade} · saída do GRV em ${m.origem}`,
+     'Saída sem endereço':()=>`${number(m.quantidade)} ${m.unidade} · saída do GRV sem endereço definido`,
+     'Saída não baixada':()=>`${number(m.quantidade)} ${m.unidade} · saída do GRV não baixada`,
+     'Contagem de endereço':()=>`${number(m.quantidade)} ${m.unidade} contados em ${m.destino}`,
+    }[m.tipo];
+    card.append(node('p',texto?texto():`${number(m.quantidade)} ${m.unidade} · ${m.origem||(m.tipo==='Recebimento'?'Entrada / contagem':'Sem origem')} → ${m.destino||'Endereços do recebimento'}`));
     if(m.detalhes?.depois)card.append(node('p',`Endereços do material após a operação: ${m.detalhes.depois.join(' · ')}`));
     if(m.detalhes?.alocacoes)card.append(node('p',m.detalhes.alocacoes.map(a=>`${a.endereco}: ${number(a.quantidade)} ${m.unidade}`).join(' · ')));
     if(m.detalhes?.diferenca!=null)card.append(node('p',`Saldo anterior: ${number(m.detalhes.destino_antes)} · Ajuste: ${number(m.detalhes.diferenca)} ${m.unidade}`));
@@ -157,9 +204,17 @@
   }catch(e){message(e.message);}
  }
  // Quem pede já informa o que contou: o inventário abre na hora.
- let contando=null;
+ // O mesmo diálogo serve à contagem do endereço (material com 2+ endereços):
+ // aí o número vira a quantidade do endereço no Sync e zero é válido.
+ let contando=null,contagemEndereco=false;
+ function contarEndereco(s){
+  pedirInventario(s);contagemEndereco=true;
+  $('end-count-title').textContent='Contar endereço';$('end-count-submit').textContent='Gravar contagem';
+  $('end-count-label').textContent=`Quantidade no endereço${s.unidade?` (${s.unidade})`:''} · zero se estiver vazio`;
+ }
  function pedirInventario(s){
-  contando=s;$('end-count-form').reset();$('end-count-feedback').textContent='';
+  contando=s;contagemEndereco=false;$('end-count-form').reset();$('end-count-feedback').textContent='';
+  $('end-count-title').textContent='Pedir inventário';$('end-count-submit').textContent='Abrir inventário';
   $('end-count-hint').textContent=`${s.sku}${s.descricao?' · '+s.descricao:''} · endereço ${s.endereco}`;
   $('end-count-label').textContent=`Quantidade contada${s.unidade?` (${s.unidade})`:''}`;
   $('end-count').showModal();$('end-count-quantity').focus();
@@ -168,6 +223,18 @@
  $('end-count-form').onsubmit=async e=>{
   e.preventDefault();
   const s=contando,digitado=$('end-count-quantity').value.trim(),contado=Number(digitado.replace(',','.'));
+  if(contagemEndereco){
+   if(!digitado||!Number.isFinite(contado)||contado<0){$('end-count-feedback').textContent='Informe a quantidade contada (zero se estiver vazio).';$('end-count-quantity').focus();return;}
+   contagemOcupada(true);$('end-count-feedback').textContent='Gravando a contagem…';
+   try{
+    await request('/contar',{sku:s.sku,endereco:s.endereco,quantidade:digitado});
+    $('end-count').close();
+    message(contado?`Contagem de ${s.sku} em ${s.endereco} gravada.`:`${s.endereco} contado vazio: o endereço sai do material no GRV.`);
+    await refresh();
+   }catch(err){$('end-count-feedback').textContent=err.message;}
+   finally{contagemOcupada(false);}
+   return;
+  }
   if(!digitado||!Number.isFinite(contado)||contado<=0){$('end-count-feedback').textContent='Informe a quantidade contada, maior que zero.';$('end-count-quantity').focus();return;}
   contagemOcupada(true);$('end-count-feedback').textContent='Abrindo o inventário…';
   try{
@@ -183,9 +250,10 @@
  $('end-count-close').onclick=$('end-count-cancel').onclick=()=>$('end-count').close();
  function showPanel(name){
   document.querySelectorAll('.end-tabs button').forEach(b=>{const on=b.dataset.panel===name;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});
-  for(const p of ['saldos','locais','receber','historico'])$('end-panel-'+p).hidden=p!==name;
+  for(const p of ['saldos','locais','receber','saidas','historico'])$('end-panel-'+p).hidden=p!==name;
   if(name==='historico'&&!admin)return showPanel('saldos');
   if(name==='historico')history();
+  if(name==='saidas')saidas();
   if(name==='saldos')refresh();
   if(name==='locais')places();
   if(name==='receber')document.dispatchEvent(new CustomEvent('recebimento:abrir-enderecamento'));
@@ -332,5 +400,6 @@
  $('end-search').value=new URLSearchParams(location.search).get('sku')||'';
  TabelaOrdenavel.ativar($('end-balances').closest('table'));
  TabelaOrdenavel.ativar($('end-places').closest('table'));
- refresh();
+ $('end-saidas-prev').onclick=()=>{saidasPage--;saidas();};$('end-saidas-next').onclick=()=>{saidasPage++;saidas();};
+ refresh();saidas();
 })();

@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, session, render_template, current_app
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 
 from ..auth import permission_required, roles_required, is_admin_session, has_permission
 from ..extensions import db
@@ -17,13 +17,17 @@ MANAGE = "MANAGE_RECEBIMENTO_ENDERECAMENTO"
 PEDIR_INVENTARIO = "PEDIR_INVENTARIO_ENDERECAMENTO"
 
 
-def serializar(t, inventariados=None):
+def serializar(t, inventariados=None, sem_saldo=()):
     """`inventariados`: SKUs em análise de inventário, quando quem chama já
-    consultou para a lista inteira (evita uma consulta por linha)."""
+    consultou para a lista inteira (evita uma consulta por linha).
+    `sem_saldo`: SKUs sem saldo no GRV, bloqueados até a NF entrar."""
     from ..services import enderecamento_service as modulo_svc
     sku_vigente = str(t.item.codigo_grv or "").strip() or t.sku
     if inventariados is None:
         inventariados = modulo_svc.skus_em_inventario([sku_vigente])
+    impedimento = svc.impedimento(t) if t.status == 'Pendente' else ''
+    if t.status == 'Pendente' and not impedimento and sku_vigente in sem_saldo:
+        impedimento = svc.SEM_SALDO
     return {"id": t.id, "item_id": t.item_nota_id, "nota": t.item.numero_nota,
             "chave": t.item.chave_acesso, "fornecedor": t.item.fornecedor,
             # O SKU vigente é o do item: a tarefa guarda o da criação, que fica
@@ -37,15 +41,19 @@ def serializar(t, inventariados=None):
             "criado_em": t.criado_em.isoformat(), "confirmado_por": t.confirmado_por,
             "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
             "erro": t.erro, "enviado": t.enderecos_enviados,
-            "impedimento": svc.impedimento(t) if t.status == 'Pendente' else '',
+            "impedimento": impedimento,
+            # Sem saldo se resolve no GRV (entrada da NF), não no recebimento.
+            "corrigir_no_recebimento": bool(impedimento) and impedimento != svc.SEM_SALDO,
             "em_inventario": str(sku_vigente or "").strip().upper() in inventariados,
             "recebimento_status": t.item.status}
 
 
 def skus_que_nao_enderecam(query, so_cache=False):
-    """Dos SKUs com tarefa aberta, quais não entram na fila: família/grupo que
-    não endereça ou sem saldo no GRV (depósito 1) - sem saldo não há o que
-    endereçar (decisão da Logística, 06/10/2026).
+    """Dos SKUs com tarefa aberta: (os que não entram na fila, os sem saldo).
+
+    Família/grupo que não endereça sai da fila. Sem saldo no GRV (depósito 1)
+    fica na fila, bloqueado até a entrada da NF (decisão da Logística em
+    17/11/2026; antes, desde 06/10, sumia da fila e ninguém via o material).
 
     A consulta é restrita aos SKUs que têm tarefa, para o filtro não virar um
     IN gigante. Falha do GRV não filtra nada: esconder trabalho da fila é pior
@@ -55,7 +63,7 @@ def skus_que_nao_enderecam(query, so_cache=False):
     from ..services import enderecamento_service as modulo_svc
     skus = [s for (s,) in query.with_entities(ItemNota.codigo_grv).distinct() if s]
     if not skus:
-        return set()
+        return set(), set()
     try:
         estoque = (erp_estoque_service.estoque_grv_em_cache() if so_cache
                    else erp_estoque_service.buscar_estoque_grv())
@@ -66,15 +74,16 @@ def skus_que_nao_enderecam(query, so_cache=False):
         current_app.logger.warning('Fila de endereçamento sem o GRV: nada foi filtrado por família.',
                                    exc_info=True)
         return None
-    def nao_endereca(sku):
+    excluidos, sem_saldo = set(), set()
+    for sku in skus:
         agregado = por_codigo.get(str(sku).strip().upper())
         if not agregado:
-            return False  # SKU fora do snapshot: sem informação, não esconde
-        if float(agregado.get('qtde_total') or 0) <= 0:
-            return True
-        return modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque'))
-
-    return {sku for sku in skus if nao_endereca(sku)}
+            continue  # SKU fora do snapshot: sem informação, não esconde
+        if modulo_svc.sem_enderecamento(agregado.get('familia'), agregado.get('grupo'), agregado.get('controla_estoque')):
+            excluidos.add(sku)
+        elif float(agregado.get('qtde_total') or 0) <= 0:
+            sem_saldo.add(sku)
+    return excluidos, sem_saldo
 
 
 @recebimento_enderecamento_bp.get("/api/recebimento/enderecamento")
@@ -94,23 +103,27 @@ def listar():
     status = request.args.get("status", "Pendente")
     if status not in ("Pendente", "Aguardando sincronização", "Concluído"):
         return jsonify(erro="Status inválido."), 400
-    # Item sem vínculo de SKU não tem como ser endereçado, e material de
-    # família/grupo que não endereça nunca vai ter endereço: nenhum dos dois é
-    # pendência de endereçamento. Os dois voltam sozinhos se o cadastro mudar.
+    # Material de família/grupo que não endereça nunca vai ter endereço: não é
+    # pendência e volta sozinho se o cadastro mudar. Sem vínculo de SKU e sem
+    # saldo ficam na fila, bloqueados e no fim da lista: sumir com eles
+    # escondia material parado no armazém.
     auto = request.args.get("auto") == "1"
-    excluidos = skus_que_nao_enderecam(query.filter(Tarefa.status == "Pendente"), so_cache=auto)
-    if excluidos is None:
+    filtro = skus_que_nao_enderecam(query.filter(Tarefa.status == "Pendente"), so_cache=auto)
+    if filtro is None:
         # Cada worker do PythonAnywhere tem o próprio cache: na atualização
         # automática, cair num worker frio devolvia a fila SEM o filtro de
         # família (06/10/2026: 10093/002-1, família 03/grupo 2, reaparecia).
         # A tela mantém a lista que já tem.
         if auto:
             return jsonify(sem_filtro=True)
-        excluidos = set()
+        filtro = set(), set()
+    excluidos, sem_saldo = filtro
 
     def pendencia_real(consulta):
-        consulta = consulta.filter(ItemNota.codigo_grv.isnot(None), ItemNota.codigo_grv != "")
-        return consulta.filter(~ItemNota.codigo_grv.in_(excluidos)) if excluidos else consulta
+        return consulta.filter(or_(ItemNota.codigo_grv.is_(None), ~ItemNota.codigo_grv.in_(excluidos))) if excluidos else consulta
+
+    bloqueado = or_(ItemNota.codigo_grv.is_(None), ItemNota.codigo_grv == "",
+                    *([ItemNota.codigo_grv.in_(sem_saldo)] if sem_saldo else []))
 
     contadores = {s: (pendencia_real(query) if s == "Pendente" else query)
                   .filter(Tarefa.status == s).count()
@@ -120,11 +133,12 @@ def listar():
         Tarefa.concluido_em >= inicio, Tarefa.concluido_em < inicio + timedelta(days=1)).count()
     pagina = max(1, request.args.get("pagina", 1, type=int))
     listagem = pendencia_real(query) if status == "Pendente" else query
-    tarefas = listagem.filter(Tarefa.status == status).order_by(Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
+    ordem = [case((bloqueado, 1), else_=0)] if status == "Pendente" else []
+    tarefas = listagem.filter(Tarefa.status == status).order_by(*ordem, Tarefa.criado_em.asc(), Tarefa.id.asc()).offset((pagina-1)*40).limit(40).all()
     from ..services import enderecamento_service as modulo_svc
     skus_da_pagina = [str(t.item.codigo_grv or "").strip() or t.sku for t in tarefas]
     inventariados = modulo_svc.skus_em_inventario(skus_da_pagina)
-    return jsonify(itens=[serializar(t, inventariados) for t in tarefas], contadores=contadores,
+    return jsonify(itens=[serializar(t, inventariados, sem_saldo) for t in tarefas], contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
 
@@ -321,8 +335,20 @@ def saldos():
     total = len(registros)
     visiveis = registros[(pagina-1)*40:pagina*40]
     inventariados = modulo_svc.skus_em_inventario(r[1] for r in visiveis)
+    # Com 2+ endereços a quantidade de cada um vem do Sync; com um só, é o saldo do GRV.
+    por_codigo = estoque.get('por_codigo') or {}
+    n_enderecos = {s: len(modulo_svc.enderecos_do_agregado(por_codigo.get(s) or {})) for _, s, *_ in visiveis}
+    quantidades = modulo_svc.quantidades_por_endereco([s for s, n in n_enderecos.items() if n >= 2])
+
+    def no_endereco(endereco, sku):
+        if n_enderecos.get(sku, 0) < 2 or not endereco:
+            return {}
+        linha = quantidades.get((str(sku).strip().upper(), modulo_svc.normalizar(endereco)))
+        return dict(multi=True, qtd_endereco=float(linha.quantidade) if linha else None,
+                    conferido=bool(linha and linha.conferido))
+
     return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s),
-                               em_inventario=str(s).strip().upper() in inventariados)
+                               em_inventario=str(s).strip().upper() in inventariados, **no_endereco(e, s))
                           for e, s, d, u, saldo in visiveis],
                    total=total, pagina=pagina,
                    metricas=dict(materiais=materiais, enderecos=enderecos,
@@ -424,6 +450,57 @@ def inventariar():
         except Exception:
             current_app.logger.exception('Inventário aberto; o aviso ao gestor falhou')
     return jsonify(inventario=inventario)
+
+
+@recebimento_enderecamento_bp.get('/api/enderecamento/saidas')
+@permission_required(PERMISSION)
+def saidas_a_corrigir():
+    """Saídas do GRV de material com 2+ endereços que não disseram de qual saiu."""
+    from ..services import enderecamento_service as modulo_svc
+    pagina = max(1, request.args.get('pagina', 1, type=int))
+    busca = str(request.args.get('busca') or '').strip()[:100]
+    total, itens = modulo_svc.saidas_a_corrigir(pagina, busca)
+    return jsonify(itens=[movimento_json(m) for m in itens], total=total, pagina=pagina)
+
+
+@recebimento_enderecamento_bp.post('/api/enderecamento/saidas/<int:mov_id>/resolver')
+@permission_required(PERMISSION)
+def resolver_saida(mov_id):
+    from ..services import enderecamento_service as modulo_svc
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro='Dados inválidos.'), 400
+    try:
+        modulo_svc.resolver_saida(mov_id, dados.get('endereco'), session['username'])
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 409
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Falha ao resolver a saída %s', mov_id)
+        return jsonify(erro='Não foi possível consultar o GRV. Tente novamente em instantes.'), 502
+    return jsonify(ok=True)
+
+
+@recebimento_enderecamento_bp.post('/api/enderecamento/contar')
+@permission_required(MANAGE)
+def contar_endereco():
+    """Contagem de um endereço de material com 2+ endereços."""
+    from ..services import enderecamento_service as modulo_svc
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro='Dados inválidos.'), 400
+    try:
+        modulo_svc.contar_endereco(dados.get('sku'), dados.get('endereco'), dados.get('quantidade'),
+                                   session['username'])
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(erro=str(exc)), 409
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('Falha na contagem do endereço')
+        return jsonify(erro='Não foi possível consultar o GRV. Tente novamente em instantes.'), 502
+    return jsonify(ok=True)
 
 
 @recebimento_enderecamento_bp.post('/api/enderecamento/sincronizar')

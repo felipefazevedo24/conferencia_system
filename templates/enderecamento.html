@@ -18,6 +18,7 @@
   <button type="button" data-panel="saldos" aria-pressed="true" class="active"><i class="fas fa-th-large"></i> Materiais e endereços</button>
   <button type="button" data-panel="locais" aria-pressed="false"><i class="fas fa-map-signs"></i> Endereços</button>
   <button type="button" data-panel="receber" aria-pressed="false"><i class="fas fa-inbox"></i> A endereçar</button>
+  <button type="button" data-panel="saidas" aria-pressed="false"><i class="fas fa-dolly"></i> Saídas a corrigir <span id="end-saidas-total" class="end-badge warn" hidden></span></button>
   {% if session.get('role') == 'Admin' %}<button type="button" data-panel="historico" aria-pressed="false"><i class="fas fa-history"></i> Histórico e sincronização</button>{% endif %}
  </nav>
  <div id="end-feedback" class="end-feedback" role="status" aria-live="polite"></div>
@@ -66,6 +67,10 @@
   <div class="end-table-wrap"><table class="erp-table end-table"><thead><tr><th>Endereço</th><th>Materiais agora</th><th>Situação</th><th data-nosort>Ações</th></tr></thead><tbody id="end-places"></tbody></table></div>
  </section>
  <section id="end-panel-receber" class="end-panel" hidden><div class="end-section-head"><h2>Endereçar o que chegou</h2><p>A mesma fila do recebimento, com os materiais mais antigos primeiro.</p></div>{% include 'recebimento_enderecamento_painel.html' %}</section>
+ <section id="end-panel-saidas" class="end-panel" hidden>
+  <p class="end-note"><i class="fas fa-info-circle"></i> Saídas do GRV de material com mais de um endereço que não disseram de qual endereço saíram. Escolha o endereço para baixar a quantidade dele.</p>
+  <div id="end-saidas" class="end-history"></div><div class="end-pages"><button id="end-saidas-prev" class="eui-btn eui-btn--secondary">Anterior</button><span id="end-saidas-page"></span><button id="end-saidas-next" class="eui-btn eui-btn--secondary">Próxima</button></div>
+ </section>
  <section id="end-panel-historico" class="end-panel" hidden>
   <div class="end-toolbar">
    <div class="end-searchbar"><div class="end-search"><i class="fas fa-search" aria-hidden="true"></i><input id="end-history-search" type="search" autocomplete="off" placeholder="SKU ou endereço" aria-label="Buscar no histórico"></div></div>
@@ -88,10 +93,10 @@
     <div id="end-current" class="end-current end-full"></div>
     <label id="end-origin-label"><span>2 · Endereço de origem</span><div class="end-input-action"><input id="end-origin" maxlength="80" autocomplete="off" placeholder="Bipe a origem"><button type="button" data-scan="end-origin" aria-label="Ler origem pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
     <label><span id="end-destination-label">3 · Endereço de destino</span><div class="end-input-action"><input id="end-destination" required maxlength="80" autocomplete="off" placeholder="Bipe o endereço"><button type="button" data-scan="end-destination" aria-label="Ler destino pela câmera"><i class="fas fa-qrcode"></i></button></div></label>
-    <label><span id="end-quantity-label">Quantidade movimentada <small>(anotação)</small></span><input id="end-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+    <label><span id="end-quantity-label">Quantidade movimentada</span><input id="end-quantity" required inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
     <label><span>Unidade</span><input id="end-unit" required maxlength="20" placeholder="UN, KG, M…" autocomplete="off"></label>
     <label class="end-full"><span>Motivo <small>(opcional)</small></span><textarea id="end-reason" maxlength="500" rows="2" placeholder="Ex.: reorganização da prateleira"></textarea></label>
-   </div><div id="end-preview" class="end-preview"></div><p class="end-note">Quantidade e unidade ficam só no histórico desta operação: o saldo continua sendo o do GRV. O que o Sync envia é o endereço do material.</p>
+   </div><div id="end-preview" class="end-preview"></div><p class="end-note">Material com mais de um endereço: a quantidade muda o que fica em cada endereço. Com um endereço só, fica no histórico.</p>
   </div><div class="end-dialog-foot"><button type="button" id="end-cancel" class="eui-btn eui-btn--secondary">Cancelar</button><button type="submit" id="end-submit" class="eui-btn eui-btn--primary">Confirmar movimentação</button></div>
  </form></dialog>
  <dialog id="end-count" class="end-dialog end-dialog--sm" aria-labelledby="end-count-title"><form id="end-count-form">
