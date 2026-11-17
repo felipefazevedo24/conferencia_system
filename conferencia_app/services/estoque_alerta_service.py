@@ -147,7 +147,7 @@ def sugestao_reposicao(plano: dict[str, Any] | None, saldo_livre: float) -> dict
     novo na semana seguinte. `saldo_livre` negativo (reserva maior que o
     físico) entra na conta, então a compra cobre a reserva também.
     Item sem giro não tem sugestão: não é pra estocar."""
-    if not plano or plano["tipo_demanda"] == "sem_giro":
+    if not plano or plano["tipo_demanda"] == "sem_giro" or plano.get("nao_comprar"):
         return None
     manter = float(plano["estoque_minimo_sugerido"] or 0)
     comprar = max(float(plano["lote_economico_sugerido"] or 0), manter - saldo_livre)
@@ -474,7 +474,8 @@ def itens_curva_a_em_alerta(estoque: dict[str, Any]) -> tuple[dict[str, list[dic
             continue
         linhas = []
         for chave, plano in planos.items():
-            if plano["classe_abc"] != "A":
+            # Item que nao vai mais ser comprado nao pede reposicao.
+            if plano["classe_abc"] != "A" or plano.get("nao_comprar"):
                 continue
             saldo = familia_itens[chave]["saldo_disponivel"]
             if saldo <= TOLERANCIA:

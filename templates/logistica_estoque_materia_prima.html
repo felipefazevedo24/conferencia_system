@@ -47,6 +47,7 @@
     .mp-bola.normal { background: var(--eui-success); }
     .mp-bola.esporadico { background: transparent; border: 1.5px solid var(--eui-muted); }
     .mp-bola.sem_consumo { background: var(--eui-border-strong, var(--eui-border)); }
+    .mp-bola.descontinuado { background: transparent; border: 1.5px dashed var(--eui-muted); }
     .mp-oc-ico { color: var(--eui-muted); font-size: 11px; margin-left: 2px; }
     .mp-curva { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid var(--eui-border); color: var(--eui-muted); }
     .mp-curva.a { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
@@ -192,15 +193,18 @@
     .mp-dialog--lista { width: min(1120px, calc(100% - 24px)); max-height: calc(100vh - 40px); }
     .mp-dialog--lista form { display: flex; flex-direction: column; max-height: calc(100vh - 42px); }
     .mp-dialog--lista .mp-dialog__body { overflow: auto; }
-    /* Saúde: legenda em blocos clicáveis - fatia pequena (11 de 2.900) quase some no gráfico. */
-    .mp-saude-leg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .mp-saude-leg button { display: grid; gap: 4px; text-align: left; border: 1px solid var(--eui-border); border-radius: 12px; background: var(--eui-surface); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--eui-text-soft); transition: border-color .15s, background .15s; }
-    .mp-saude-leg button:hover { border-color: var(--mp-cor); background: var(--eui-surface-2); }
-    .mp-saude-leg__nome { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+    /* Saúde: fatia pequena (11 de 2.900) some na pizza, então cada fatia tem tamanho mínimo e a legenda fica ao lado. */
+    .mp-saude { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: center; }
+    .mp-saude__pizza { position: relative; height: 170px; flex: 0 0 170px; }
+    .mp-saude-leg { display: grid; gap: 2px; flex: 1 1 200px; }
+    .mp-saude-leg__nome { white-space: nowrap; }
+    .mp-saude-leg button { display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 9px 12px; cursor: pointer; font: inherit; color: var(--eui-text-soft); transition: border-color .15s, background .15s; }
+    .mp-saude-leg button:hover { border-color: var(--eui-border); background: var(--eui-surface-2); }
+    .mp-saude-leg__nome { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 13px; font-weight: 600; color: var(--eui-text); }
     .mp-saude-leg__nome i { width: 10px; height: 10px; border-radius: 50%; background: var(--mp-cor); flex: none; }
-    .mp-saude-leg__num { display: flex; align-items: baseline; gap: 6px; }
-    .mp-saude-leg__num b { font-size: 18px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
-    .mp-saude-leg__num span { font-size: 12px; color: var(--eui-muted); }
+    .mp-saude-leg__num { display: flex; align-items: baseline; gap: 8px; }
+    .mp-saude-leg__num b { font-size: 15px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .mp-saude-leg__num span { font-size: 12px; color: var(--eui-muted); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
     .mp-legenda button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
     .mp-legenda button:hover { background: var(--eui-surface-2); color: var(--eui-text); }
     .mp-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; }
@@ -216,10 +220,10 @@
     .mp-dc h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
     .mp-dc__sub { margin: -6px 0 0; font-size: 12px; color: var(--eui-muted); }
     .mp-chart { position: relative; height: 260px; }
-    .mp-chart--alto { height: 300px; }
     .mp-donut-centro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
     .mp-donut-centro b { font-size: 28px; color: var(--eui-text); }
     .mp-donut-centro span { font-size: 11px; color: var(--eui-muted); }
+    .mp-chart--alto { height: 300px; }
     .mp-legenda { display: flex; gap: 6px 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--eui-text-soft); }
     .mp-legenda span { display: inline-flex; align-items: center; gap: 6px; }
     .mp-legenda i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -296,8 +300,10 @@
             <div class="mp-dc">
                 <h3>Saúde do estoque</h3>
                 <p class="mp-dc__sub">Itens comprados pela situação de hoje. Clique para ver os itens e o porquê.</p>
-                <div class="mp-chart" style="height:200px;"><canvas id="mp-ch-saude" role="img" aria-label="Itens por situação"></canvas><div class="mp-donut-centro"><b id="mp-d-saude-pct">—</b><span>saudáveis</span></div></div>
-                <div class="mp-saude-leg" id="mp-d-saude-leg"></div>
+                <div class="mp-saude">
+                    <div class="mp-saude__pizza"><canvas id="mp-ch-saude" role="img" aria-label="Itens por situação"></canvas><div class="mp-donut-centro"><b id="mp-d-saude-pct">—</b><span>saudáveis</span></div></div>
+                    <div class="mp-saude-leg" id="mp-d-saude-leg"></div>
+                </div>
             </div>
         </div>
         <div class="mp-dg mp-dg--meio">
@@ -385,6 +391,7 @@
         <label><input type="radio" name="mp-nivel" value="esporadico"> Demanda esporádica</label>
         <label><input type="radio" name="mp-nivel" value="sem_consumo"> Sem consumo</label>
         <label><input type="radio" name="mp-nivel" value="novo"> Item novo</label>
+        <label><input type="radio" name="mp-nivel" value="descontinuado"> Não comprar mais</label>
         <label><input type="radio" name="mp-nivel" value="sem_controle"> Não controla estoque</label>
     </div>
     <div>
@@ -540,6 +547,7 @@
             esporadico: 'Esporádica',
             sem_consumo: 'Sem consumo',
             sem_estoque: 'Sem registro',
+            descontinuado: 'Não comprar mais',
         };
         return rotulos[nivel] || item.nivel_label || '-';
     }
@@ -641,7 +649,7 @@
     // Filtro e ordenação no cabeçalho, como no Excel. `texto` é o valor que
     // aparece na célula e na lista do filtro; `num` é a chave de ordenação
     // (null = sem valor, vai pro fim nas duas direções).
-    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5, novo: 6, sem_controle: 7 };
+    const ORDEM_STATUS = { critico: 0, atencao: 1, esporadico: 2, sem_consumo: 3, sem_estoque: 4, normal: 5, novo: 6, descontinuado: 7, sem_controle: 8 };
     const COLUNAS = {
         codigo: { texto: (i) => i.codigo || '-' },
         descricao: { texto: (i) => i.descricao || '-' },
@@ -973,6 +981,7 @@
             <form id="mp-ajuste-form" data-codigo="${esc(item.codigo)}" style="display:grid;gap:10px;">
                 <div><label class="mp-secao__titulo" for="mp-aj-cob" style="display:block;margin-bottom:4px;">Cobertura máxima do lote (meses)</label>
                     <input class="eui-input" id="mp-aj-cob" type="number" step="0.5" min="0.5" max="24" value="${a.cobertura_lote_meses ?? ''}" placeholder="Geral: ${fmt(geral, 1)}"></div>
+                <label class="mp-check-linha"><input type="checkbox" id="mp-aj-nao-comprar"${a.nao_comprar ? ' checked' : ''}> Não comprar mais (descontinuado: nunca pede compra; o saldo que restar é excedente)</label>
                 <label class="mp-check-linha"><input type="checkbox" id="mp-aj-fora"${a.fora_analise ? ' checked' : ''}> Fora da análise (ativo da empresa: sai do slow mover e do excedente)</label>
                 <div><label class="mp-secao__titulo" for="mp-aj-obs" style="display:block;margin-bottom:4px;">Observação</label>
                     <input class="eui-input" id="mp-aj-obs" type="text" maxlength="300" value="${esc(a.observacao || '')}"></div>
@@ -1051,6 +1060,9 @@
     // Mostra a conta inteira: a sugestão só vale se der pra conferir de onde veio.
     function abaCalculo(item) {
         const p = item.planejamento;
+        if (p.nao_comprar) {
+            return `<div class="mp-secao"><div class="mp-caixa"><b>Não comprar mais.</b> Item marcado como descontinuado: mínimo, lote e máximo são zero e ele não pede compra nem entra no aviso por e-mail.${Number(item.saldo_disponivel) > 0 ? ` O saldo de ${fmt(item.saldo_disponivel)} ${esc(item.unidade || '')}${p.excedente_valor != null ? ` (${brl(p.excedente_valor)})` : ''} conta como excedente.` : ''}</div></div>`;
+        }
         const un = esc(item.unidade || '');
         const ltMeses = Number(p.lead_time_dias || 0) / 30.4;
         const janela = p.janela_meses;
@@ -1451,7 +1463,7 @@
         timer = setTimeout(() => carregar(), 260);
     });
     // ------------------------------------------------- barra de filtro
-    const ROTULO_NIVEL = { critico: 'Crítico', atencao: 'Abaixo do mínimo', normal: 'Adequado', esporadico: 'Demanda esporádica', sem_consumo: 'Sem consumo', novo: 'Item novo', sem_controle: 'Não controla estoque' };
+    const ROTULO_NIVEL = { critico: 'Crítico', atencao: 'Abaixo do mínimo', normal: 'Adequado', esporadico: 'Demanda esporádica', sem_consumo: 'Sem consumo', novo: 'Item novo', descontinuado: 'Não comprar mais', sem_controle: 'Não controla estoque' };
     const CAIXAS = { 'mp-excedente': 'Só com excedente', 'mp-slow': 'Só slow mover', 'mp-estoque-minimo': 'Com estoque mínimo no GRV', 'mp-sem-saldo': 'Incluir itens sem saldo' };
 
     function nivelAtual() {
@@ -1540,6 +1552,7 @@
                     codigo: form.dataset.codigo,
                     cobertura_lote_meses: $('mp-aj-cob').value,
                     fora_analise: $('mp-aj-fora').checked,
+                    nao_comprar: $('mp-aj-nao-comprar').checked,
                     observacao: $('mp-aj-obs').value,
                 }),
             });
@@ -1589,9 +1602,10 @@
     };
     function renderAjustesItens(ajustes) {
         $('mp-param-ajustes').innerHTML = (ajustes || []).length
-            ? `<table class="mp-tab"><thead><tr><th>Item</th><th class="num">Cobertura do lote</th><th>Fora da análise</th><th>Observação</th></tr></thead><tbody>${ajustes.map((a) => `<tr>
+            ? `<table class="mp-tab"><thead><tr><th>Item</th><th class="num">Cobertura do lote</th><th>Não comprar</th><th>Fora da análise</th><th>Observação</th></tr></thead><tbody>${ajustes.map((a) => `<tr>
                 <td><b>${esc(a.codigo)}</b></td>
                 <td class="num">${a.cobertura_lote_meses != null ? `${fmt(a.cobertura_lote_meses, 1)} meses` : 'geral'}</td>
+                <td>${a.nao_comprar ? 'Sim' : '—'}</td>
                 <td>${a.fora_analise ? 'Sim' : '—'}</td>
                 <td>${esc(a.observacao || '')}</td></tr>`).join('')}</tbody></table>`
             : 'Nenhum. Para ajustar um item, abra o item na lista.';
@@ -1729,18 +1743,29 @@
         ];
         const totalSaude = fatias.reduce((t, f) => t + f[1], 0);
         $('mp-d-saude-pct').textContent = totalSaude ? `${fmt((saude.saudavel / totalSaude) * 100, 0)}%` : '—';
-        $('mp-d-saude-leg').innerHTML = fatias.map(([r, n, c, g]) => `<button type="button" data-grupo="${g}" style="--mp-cor:${c};" title="Ver os itens">
+        $('mp-d-saude-leg').innerHTML = fatias.map(([r, n, c, g]) => {
+            const pct = totalSaude ? (n / totalSaude) * 100 : 0;
+            return `<button type="button" data-grupo="${g}" style="--mp-cor:${c};" title="Ver os itens">
             <span class="mp-saude-leg__nome"><i></i>${r}</span>
-            <span class="mp-saude-leg__num"><b>${fmt(n, 0)}</b><span>${totalSaude ? `${fmt((n / totalSaude) * 100, n && n / totalSaude < 0.01 ? 1 : 0)}%` : ''}</span></span>
-        </button>`).join('');
+            <span class="mp-saude-leg__num"><b>${fmt(n, 0)}</b><span>${totalSaude ? `${fmt(pct, n && pct < 1 ? 1 : 0)}%` : ''}</span></span>
+        </button>`;
+        }).join('');
+        // Fatia desenhada com no mínimo 4% do círculo para não sumir; o número real fica no tooltip e na legenda.
+        const desenho = fatias.map((f) => (f[1] ? Math.max(f[1], totalSaude * 0.04) : 0));
         grafico('mp-ch-saude', {
             type: 'doughnut',
-            data: { labels: fatias.map((f) => f[0]), datasets: [{ data: fatias.map((f) => f[1]), backgroundColor: fatias.map((f) => f[2]), borderWidth: 0, spacing: 3, hoverOffset: 8 }] },
+            data: { labels: fatias.map((f) => f[0]), datasets: [{ data: desenho, backgroundColor: fatias.map((f) => f[2]), borderWidth: 2, borderColor: corVar('--eui-surface', '#fff'), hoverOffset: 6 }] },
             options: {
                 maintainAspectRatio: false,
-                cutout: '70%',
-                layout: { padding: 8 },
-                plugins: { legend: { display: false } },
+                cutout: '68%',
+                layout: { padding: 6 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (c) => {
+                        const n = fatias[c.dataIndex][1];
+                        return ` ${fmt(n, 0)} itens (${fmt(totalSaude ? (n / totalSaude) * 100 : 0, 1)}%)`;
+                    } } },
+                },
                 onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
                 onClick: (e, el) => { if (el.length) abrirGrupo(fatias[el[0].index][3]); },
             },

@@ -175,6 +175,7 @@ def obter_ajustes() -> dict[str, dict[str, Any]]:
             "codigo": linha.codigo_exibicao or linha.codigo,
             "cobertura_lote_meses": linha.cobertura_lote_meses,
             "fora_analise": bool(linha.fora_analise),
+            "nao_comprar": bool(linha.nao_comprar),
             "observacao": linha.observacao or "",
             "atualizado_por": linha.atualizado_por,
             "atualizado_em": linha.atualizado_em.isoformat() if linha.atualizado_em else None,
@@ -200,10 +201,11 @@ def salvar_ajuste(codigo: str, dados: dict[str, Any], usuario: str) -> dict[str,
         if not math.isfinite(cobertura) or cobertura < minimo or cobertura > maximo:
             raise ValueError(f"{rotulo}: use um valor entre {minimo:g} e {maximo:g}.")
     fora = bool(dados.get("fora_analise"))
+    nao_comprar = bool(dados.get("nao_comprar"))
     observacao = str(dados.get("observacao") or "").strip()[:300]
 
     linha = EstoqueParametroItem.query.filter_by(codigo=chave).first()
-    if cobertura is None and not fora and not observacao:
+    if cobertura is None and not fora and not nao_comprar and not observacao:
         if linha:
             db.session.delete(linha)
             db.session.commit()
@@ -214,6 +216,7 @@ def salvar_ajuste(codigo: str, dados: dict[str, Any], usuario: str) -> dict[str,
     linha.codigo_exibicao = str(codigo).strip()[:60]
     linha.cobertura_lote_meses = cobertura
     linha.fora_analise = fora
+    linha.nao_comprar = nao_comprar
     linha.observacao = observacao or None
     linha.atualizado_por = usuario
     linha.atualizado_em = agora_br()
@@ -539,6 +542,7 @@ def calcular_item(
         "estoque_alvo_medio_valor": rs(estoque_alvo_medio),
         "estoque_maximo_valor": rs(estoque_maximo),
         "fora_analise": bool(ajuste.get("fora_analise")),
+        "nao_comprar": bool(ajuste.get("nao_comprar")),
         "consumo_os_pct": consumo_os_pct,
         "oc_para_os": oc_para_os,
         "oc_estoque": int(historico.get("oc_estoque_12m") or 0),
@@ -549,9 +553,6 @@ def calcular_item(
         "nivel": nivel,
         "nivel_label": nivel_label,
     }
-    if resultado["fora_analise"]:
-        # Ativo da empresa cadastrado como produto: não é estoque a girar.
-        resultado.update({"excedente": 0.0, "excedente_valor": None, "slow_mover": False, "parado": False})
     if len(meses) < MESES_ITEM_NOVO:
         # Consumo dos meses que já tem fica; o que depende de classificar, não.
         resultado.update({
@@ -586,6 +587,21 @@ def calcular_item(
             "nivel": "novo",
             "nivel_label": "Item novo",
         })
+    if resultado["nao_comprar"]:
+        # Descontinuado: nada a repor e o saldo que restar sobra inteiro -
+        # é o dinheiro parado que falta consumir ou vender.
+        resultado.update({
+            "estoque_seguranca": None, "ponto_pedido": None,
+            "estoque_minimo_sugerido": 0.0, "lote_economico_sugerido": 0.0, "lote_origem": None,
+            "estoque_maximo": 0.0, "estoque_maximo_valor": 0.0 if tem_custo else None,
+            "excedente": r(saldo), "excedente_valor": rs(saldo),
+            "estoque_alvo_medio": 0.0, "estoque_alvo_medio_valor": 0.0 if tem_custo else None,
+            "slow_mover": saldo > 0, "candidato_estoque": False,
+            "nivel": "descontinuado", "nivel_label": "Não comprar mais",
+        })
+    if resultado["fora_analise"]:
+        # Ativo da empresa cadastrado como produto: não é estoque a girar.
+        resultado.update({"excedente": 0.0, "excedente_valor": None, "slow_mover": False, "parado": False})
     return resultado
 
 
