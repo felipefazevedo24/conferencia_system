@@ -53,6 +53,7 @@ from ..services.erp_estoque_service import (
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
 from ..services import inventario_ciclico_service as ciclico_svc
 from ..services import estoque_planejamento_service as planejamento_svc
+from ..services import estoque_foto_service as foto_svc
 from ..services.estoque_analise_export import gerar_excel_analise
 from ..tempo import agora_br
 
@@ -87,10 +88,16 @@ ESTOQUE_VISOES = {
     "revenda": {"label": "Material para revenda", "familia": "N - 00 - MERCADORIA PARA REVENDA"},
     "produto_acabado": {"label": "Produto acabado", "familia": "N - 04 - PRODUTOS"},
     "insumos": {"label": "Insumos da produção", "familia": "N - 06 - INSUMOS DA PRODUÇÃO"},
+    # So' EPI (grupo 3) e uniformes (grupo 9), os mesmos do Facilities: o resto
+    # da N-39 fica de fora (pedido da logistica em 17/11/2026).
+    "uso_consumo": {"label": "EPI e uniformes", "familia": "N - 39 - USO E CONSUMO (C/ ESTOQUE)", "grupos": ["3", "9"]},
 }
 # Visoes de material comprado e consumido: tem planejamento (minimo/lote) e OC.
 # Produto acabado fica de fora - e' fabricado, nao comprado.
-VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos"}
+VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos", "uso_consumo"}
+# A foto da tela guarda a serie dos ultimos 37 meses: a maior janela aceita
+# (36) mais o mes corrente.
+ESTOQUE_FOTO_MESES_SERIE = 37
 # Gases da producao em N-41 (uso e consumo sem estoque): o GRV baixa na propria
 # entrada da NF e a compra e' feita conforme a producao pede. Aparecem nos
 # insumos so pra consulta - sem saldo, cobertura, curva ABC nem minimo
@@ -361,89 +368,185 @@ def estoque_page():
     )
 
 
-@logistica_inventario_bp.route("/api/logistica/estoque-materia-prima", methods=["GET"])
-@logistica_inventario_bp.route("/api/logistica/estoque", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
-def estoque_materia_prima_api():
-    visao = str(request.args.get("visao") or "materia_prima").strip()
-    if visao not in ESTOQUE_VISOES:
-        visao = "materia_prima"
-    visao_cfg = ESTOQUE_VISOES[visao]
-    termo = _normalizar_busca(request.args.get("q"))
-    incluir_sem_saldo = str(request.args.get("incluir_sem_saldo") or "").strip().lower() in {"1", "true", "sim", "yes"}
-    refresh = str(request.args.get("refresh") or "").strip() == "1"
-    try:
-        limite = max(1, min(int(request.args.get("limit") or 300), 800))
-    except (TypeError, ValueError):
-        limite = 300
+def _sim(nome: str) -> bool:
+    return str(request.args.get(nome) or "").strip().lower() in {"1", "true", "sim", "yes"}
 
-    nivel_filtro = str(request.args.get("nivel") or "").strip().lower()
-    somente_estoque_minimo = str(request.args.get("estoque_minimo") or "").strip().lower() in {"1", "true", "sim", "yes"}
-    somente_excedente = str(request.args.get("excedente") or "").strip().lower() in {"1", "true", "sim", "yes"}
-    estoque = buscar_estoque_grv(forcar_atualizacao=refresh)
-    familia_alvo = _normalizar_busca(visao_cfg["familia"])
-    candidatos = []
-    # Familia inteira, antes da busca e do filtro de saldo: a curva ABC do
-    # planejamento e' relativa ao conjunto e nao pode mudar a cada busca.
-    familia_itens = {}
-    for codigo, item in (estoque.get("por_codigo") or {}).items():
+
+def _itens_da_visao(visao: str, por_codigo: dict):
+    """(codigo, item do GRV, sem_controle) de tudo o que a visao mostra."""
+    cfg = ESTOQUE_VISOES[visao]
+    familia_alvo = _normalizar_busca(cfg["familia"])
+    grupos = set(cfg.get("grupos") or [])
+    for codigo, item in por_codigo.items():
         sem_controle = visao == "insumos" and codigo in INSUMOS_SEM_CONTROLE_ESTOQUE
-        if not sem_controle and _normalizar_busca(item.get("familia")) != familia_alvo:
-            continue
         if not sem_controle:
-            familia_itens[re.sub(r"[^A-Z0-9]", "", codigo.upper())] = {
-                "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
-                "custo_medio": item.get("custo_medio"),
-            }
-        saldo_total = float(item.get("qtde_total") or 0)
-        saldo_disponivel = float(item.get("qtde_disponivel") or 0)
-        saldo_reservado = float(item.get("qtde_reservada") or 0)
-        estoque_minimo = float(item.get("estoque_minimo") or 0)
-        lote_economico = float(item.get("lote_economico") or 0)
-        haystack = _normalizar_busca(" ".join([codigo, str(item.get("item") or ""), str(item.get("localizacoes") or "")]))
-        if termo and termo not in haystack:
-            continue
-        if not sem_controle and not incluir_sem_saldo and saldo_total <= 0 and saldo_disponivel <= 0 and saldo_reservado <= 0:
-            continue
-        candidatos.append({
+            if _normalizar_busca(item.get("familia")) != familia_alvo:
+                continue
+            if grupos and str(item.get("grupo") or "").strip() not in grupos:
+                continue
+        yield codigo, item, sem_controle
+
+
+def _aparar_historicos(historicos: dict) -> dict:
+    """So' os meses que a maior janela aceita usa: a serie vem desde 2019 e
+    deixaria a foto varias vezes maior."""
+    corte = planejamento_svc._meses_fechados(agora_br().date(), ESTOQUE_FOTO_MESES_SERIE)[0]
+    return {
+        codigo: {**hist, "serie_mensal": [m for m in hist.get("serie_mensal") or [] if str(m.get("mes") or "") >= corte]}
+        for codigo, hist in (historicos or {}).items()
+    }
+
+
+def _coletar_visao(visao: str, anterior: dict | None, janela_meses: int) -> dict:
+    """Tudo o que a tela da visao precisa do GRV, cru, para a foto. Sem o
+    saldo a atualizacao falha (a foto anterior continua valendo); se outra
+    consulta falhar, fica a parte da foto anterior e a foto sai "parcial"."""
+    anterior = anterior or {}
+    estoque = buscar_estoque_grv(forcar_atualizacao=True)
+    if not estoque.get("por_codigo"):
+        # Estoque vazio e' bridge respondendo errado: gravar zeraria a tela.
+        raise RuntimeError("O GRV devolveu o estoque vazio.")
+    linhas = []
+    for codigo, item, sem_controle in _itens_da_visao(visao, estoque["por_codigo"]):
+        linhas.append({
             "codigo": codigo,
             "descricao": str(item.get("item") or "").strip(),
             "familia": str(item.get("familia") or "").strip(),
             "grupo": str(item.get("grupo") or "").strip(),
             "unidade": str(item.get("unidade") or "UN").strip() or "UN",
-            "saldo_disponivel": saldo_disponivel,
-            "saldo_reservado": saldo_reservado,
-            "saldo_total": saldo_total,
-            "estoque_minimo": estoque_minimo,
-            "lote_economico": lote_economico,
+            "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
+            "saldo_reservado": float(item.get("qtde_reservada") or 0),
+            "saldo_total": float(item.get("qtde_total") or 0),
+            "estoque_minimo": float(item.get("estoque_minimo") or 0),
+            "lote_economico": float(item.get("lote_economico") or 0),
             "localizacoes": sorted(set(str(x or "").strip() for x in item.get("localizacoes") or [] if str(x or "").strip())),
             "sem_controle_estoque": sem_controle,
+            "custo_medio": item.get("custo_medio"),
         })
+    codigos = [linha["codigo"] for linha in linhas]
+    parcial = []
 
-    rows = candidatos
-    codigos = [row["codigo"] for row in rows]
-    consumo_por_codigo = {}
-    # 90 dias (decisao da logistica em 25/09/2026): materia-prima baixa em
-    # lotes e 30 dias oscilava demais e marcava "sem consumo" item de giro lento.
-    janela_consumo_dias = 90
-    reservas_por_codigo = {}
-    ordens_compra_por_codigo = {}
+    def consultar(nome, consulta):
+        try:
+            return consulta()
+        except Exception:
+            current_app.logger.warning("Foto do estoque (%s): %s nao respondeu.", visao, nome, exc_info=True)
+            parcial.append(nome)
+            return None
+
+    consumo = None
+    reservas = None
     if codigos:
-        try:
-            consumo = buscar_consumo_kardex_grv(codigos=codigos, janela_dias=janela_consumo_dias, forcar_atualizacao=refresh)
-            consumo_por_codigo = consumo.get("por_codigo") or {}
-            janela_consumo_dias = int(consumo.get("janela_dias") or janela_consumo_dias)
-        except Exception:
-            current_app.logger.warning("Nao foi possivel consultar consumo de materia-prima.", exc_info=True)
-            consumo_por_codigo = {}
-        try:
-            reservas_por_codigo = buscar_reservas_produto_acabado_grv(codigos=codigos, forcar_atualizacao=refresh)
-        except Exception:
-            current_app.logger.warning("Nao foi possivel consultar reservas de estoque.", exc_info=True)
-            reservas_por_codigo = {}
+        # 90 dias (decisao da logistica em 25/09/2026): materia-prima baixa em
+        # lotes e 30 dias oscilava demais e marcava "sem consumo" item de giro lento.
+        consumo = consultar("consumo", lambda: buscar_consumo_kardex_grv(codigos=codigos, janela_dias=90, forcar_atualizacao=True))
+        reservas = consultar("reservas", lambda: buscar_reservas_produto_acabado_grv(codigos=codigos, forcar_atualizacao=True))
+    consumo = {"por_codigo": consumo.get("por_codigo") or {}, "janela_dias": int(consumo.get("janela_dias") or 90)} if consumo is not None else anterior.get("consumo")
+    reservas = reservas if reservas is not None else anterior.get("reservas")
+
+    historicos = None
+    historicos_em = None
+    janela_pedida = None
+    if visao in VISOES_PLANEJAMENTO:
+        planejaveis = [planejamento_svc.chave_codigo(linha["codigo"]) for linha in linhas if not linha["sem_controle_estoque"]]
+        base = anterior.get("historicos") if foto_svc.historico_reaproveitavel(anterior, janela_meses) else None
+        faltando = [c for c in planejaveis if c not in (base or {})]
+        if base is not None and not faltando:
+            novos = {}
+        else:
+            novos = consultar("historico", lambda: buscar_planejamento_grv(
+                codigos=faltando if base is not None else planejaveis, meses=janela_meses,
+            ))
+        if novos is not None:
+            historicos = {**(base or {}), **_aparar_historicos(novos)}
+            historicos = {c: historicos[c] for c in planejaveis if c in historicos}
+            historicos_em = anterior["historicos_em"] if base is not None else agora_br().isoformat(timespec="seconds")
+            janela_pedida = janela_meses
+        else:
+            historicos = anterior.get("historicos")
+            historicos_em = anterior.get("historicos_em")
+            janela_pedida = anterior.get("historicos_janela_pedida")
+
+    ocs = None
+    if visao in VISOES_PLANEJAMENTO:
+        # OC aberta so' interessa a item com consumo (a cobertura projetada).
+        com_consumo = {c for c, d in ((consumo or {}).get("por_codigo") or {}).items() if float(d.get("consumo_medio_diario") or 0) > 0}
+        com_consumo |= {c for c, h in (historicos or {}).items() if any(float(m.get("saida") or 0) > 0 for m in h.get("serie_mensal") or [])}
+        codigos_oc = [linha["codigo"] for linha in linhas if planejamento_svc.chave_codigo(linha["codigo"]) in com_consumo]
+        if codigos_oc:
+            ocs = consultar("ocs", lambda: buscar_ordens_compra_abertas_grv(codigos=codigos_oc, forcar_atualizacao=True))
+        ocs = ocs if ocs is not None else anterior.get("ocs") if "ocs" in parcial else {}
+    return {
+        "linhas": linhas,
+        "consumo": consumo,
+        "reservas": reservas or {},
+        "ocs": ocs or {},
+        "historicos": historicos,
+        "historicos_em": historicos_em,
+        "historicos_janela_pedida": janela_pedida,
+        "parcial": parcial,
+    }
+
+
+# Contas da familia inteira por (foto, parametros, ajustes): ~0,5 s pra 2.500
+# itens, e a busca da tela chama a rota a cada tecla.
+_PLANEJAMENTO_CACHE: dict[str, dict] = {}
+
+
+def _planejamento_da_foto(visao: str, versao: str | None, familia_itens: dict, historicos: dict, parametros: dict, ajustes: dict) -> dict:
+    chave = json.dumps([visao, versao, parametros, ajustes, agora_br().date().isoformat()], sort_keys=True, default=str)
+    if versao and chave in _PLANEJAMENTO_CACHE:
+        return _PLANEJAMENTO_CACHE[chave]
+    planejamento = planejamento_svc.calcular_planejamento(familia_itens, historicos, parametros, ajustes=ajustes)
+    if versao:
+        if len(_PLANEJAMENTO_CACHE) >= 8:
+            _PLANEJAMENTO_CACHE.clear()
+        _PLANEJAMENTO_CACHE[chave] = planejamento
+    return planejamento
+
+
+def _montar_estoque(visao: str, dados: dict, parametros: dict, versao: str | None = None) -> dict:
+    """A resposta da tela a partir da foto: filtros, contas e resumo."""
+    visao_cfg = ESTOQUE_VISOES[visao]
+    termo = _normalizar_busca(request.args.get("q"))
+    incluir_sem_saldo = _sim("incluir_sem_saldo")
+    try:
+        limite = max(1, min(int(request.args.get("limit") or 300), 800))
+    except (TypeError, ValueError):
+        limite = 300
+    nivel_filtro = str(request.args.get("nivel") or "").strip().lower()
+    somente_estoque_minimo = _sim("estoque_minimo")
+    somente_excedente = _sim("excedente")
+    somente_slow = _sim("slow_mover")
+
+    consumo = dados.get("consumo") or {}
+    consumo_por_codigo = consumo.get("por_codigo") or {}
+    janela_consumo_dias = int(consumo.get("janela_dias") or 90)
+    reservas_por_codigo = dados.get("reservas") or {}
+    ordens_compra_por_codigo = dados.get("ocs") or {}
+    ajustes = planejamento_svc.obter_ajustes()
+
+    # Familia inteira, antes da busca e do filtro de saldo: o prazo do ultimo
+    # fornecedor sai das entregas da familia toda e nao pode mudar a cada busca.
+    familia_itens = {}
+    rows = []
+    for linha in dados.get("linhas") or []:
+        sem_controle = bool(linha.get("sem_controle_estoque"))
+        if not sem_controle:
+            familia_itens[planejamento_svc.chave_codigo(linha["codigo"])] = {
+                "saldo_disponivel": float(linha.get("saldo_disponivel") or 0),
+                "custo_medio": linha.get("custo_medio"),
+                "unidade": linha.get("unidade"),
+            }
+        haystack = _normalizar_busca(" ".join([linha["codigo"], linha.get("descricao") or "", str(linha.get("localizacoes") or "")]))
+        if termo and termo not in haystack:
+            continue
+        if not sem_controle and not incluir_sem_saldo and linha["saldo_total"] <= 0 and linha["saldo_disponivel"] <= 0 and linha["saldo_reservado"] <= 0:
+            continue
+        rows.append({k: v for k, v in linha.items() if k != "custo_medio"})
 
     for row in rows:
-        codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
+        codigo_key = planejamento_svc.chave_codigo(row["codigo"])
         consumo_item = consumo_por_codigo.get(codigo_key) or {}
         # Sem arredondar o consumo de item em UN pra cima: 3 pecas em 30 dias
         # (0,1/dia) virava 1/dia e a cobertura ficava 10x menor que a real.
@@ -463,6 +566,7 @@ def estoque_materia_prima_api():
         row["cobertura_dias"] = cobertura_dias
         row["nivel"] = nivel
         row["nivel_label"] = nivel_label
+        row["ajuste"] = ajustes.get(codigo_key)
         row["reservas"] = [
             {
                 "quantidade": float(reserva.get("qtde") or 0),
@@ -477,22 +581,20 @@ def estoque_materia_prima_api():
             for reserva in reservas[:20]
         ]
 
-    # Planejamento (historico desde 2019): quando responde, substitui a
-    # cobertura pela media de 90 dias, que marcava item esporadico como
-    # critico. Bridge antiga ou fora do ar: a tela segue no calculo de 90 dias.
+    # Planejamento (historico do GRV): quando ha, substitui a cobertura pela
+    # media de 90 dias, que marcava item esporadico como critico. Sem
+    # historico na foto, a tela segue no calculo de 90 dias e avisa.
     planejamento_ativo = False
-    parametros_planejamento = None
-    if visao in VISOES_PLANEJAMENTO and familia_itens:
+    historicos = dados.get("historicos")
+    if visao in VISOES_PLANEJAMENTO and familia_itens and historicos is not None:
         try:
-            historicos = buscar_planejamento_grv(codigos=list(familia_itens))
-            parametros_planejamento = planejamento_svc.obter_parametros()
-            planejamento = planejamento_svc.calcular_planejamento(familia_itens, historicos, parametros_planejamento)
+            planejamento = _planejamento_da_foto(visao, versao, familia_itens, historicos, parametros, ajustes)
             planejamento_ativo = True
         except Exception:
             current_app.logger.warning("Nao foi possivel calcular o planejamento de estoque.", exc_info=True)
             planejamento = {}
         for row in rows:
-            plano = planejamento.get(re.sub(r"[^A-Z0-9]", "", row["codigo"].upper()))
+            plano = planejamento.get(planejamento_svc.chave_codigo(row["codigo"]))
             if not plano:
                 continue
             row["planejamento"] = plano
@@ -501,18 +603,11 @@ def estoque_materia_prima_api():
             row["nivel"] = plano["nivel"]
             row["nivel_label"] = plano["nivel_label"]
 
-    if visao in VISOES_PLANEJAMENTO:
+    for row in rows:
+        codigo_key = planejamento_svc.chave_codigo(row["codigo"])
         # Todo item com consumo, nao so critico/atencao: a cobertura projetada
         # com OC precisa valer pra lista inteira.
-        codigos_reposicao = [row["codigo"] for row in rows if row["consumo_diario"] > 0]
-        if codigos_reposicao:
-            try:
-                ordens_compra_por_codigo = buscar_ordens_compra_abertas_grv(codigos=codigos_reposicao, forcar_atualizacao=refresh)
-            except Exception:
-                current_app.logger.warning("Nao foi possivel consultar OCs abertas para estoque em reposicao.", exc_info=True)
-    for row in rows:
-        codigo_key = re.sub(r"[^A-Z0-9]", "", row["codigo"].upper())
-        row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, [])
+        row["ordens_compra_abertas"] = ordens_compra_por_codigo.get(codigo_key, []) if visao in VISOES_PLANEJAMENTO and row["consumo_diario"] > 0 else []
         # Projetada = disponivel + pendente das OCs abertas. O nivel continua no
         # fisico: OC em aberto nao impede faltar material antes da entrega.
         pendente_oc = sum(float(oc.get("quantidade_pendente") or 0) for oc in row["ordens_compra_abertas"])
@@ -529,6 +624,8 @@ def estoque_materia_prima_api():
         rows = [row for row in rows if float(row.get("estoque_minimo") or 0) > 0]
     if somente_excedente:
         rows = [row for row in rows if float((row.get("planejamento") or {}).get("excedente") or 0) > 0]
+    if somente_slow:
+        rows = [row for row in rows if (row.get("planejamento") or {}).get("slow_mover")]
 
     prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "novo": 6, "sem_controle": 7}
     rows.sort(key=lambda row: (
@@ -552,9 +649,10 @@ def estoque_materia_prima_api():
         "saldo_total": sum(float(row.get("saldo_total") or 0) for row in rows),
         "com_excedente": sum(1 for row in rows if float((row.get("planejamento") or {}).get("excedente") or 0) > 0),
         "excedente_valor": round(sum(float((row.get("planejamento") or {}).get("excedente_valor") or 0) for row in rows), 2),
+        "slow": planejamento_svc.resumir_slow_mover([row["planejamento"] for row in rows if row.get("planejamento")]) if planejamento_ativo else None,
     }
     rows = rows[:limite]
-    return jsonify({
+    return {
         "visao": visao,
         "visao_label": visao_cfg["label"],
         "familia": visao_cfg["familia"],
@@ -566,11 +664,66 @@ def estoque_materia_prima_api():
         "dias_critico": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_CRITICOS", 7)),
         "dias_atencao": int(current_app.config.get("ESTOQUE_MATERIA_PRIMA_DIAS_ATENCAO", 15)),
         "planejamento_ativo": planejamento_ativo,
-        # Aviso na tela quando a visao tem planejamento mas a bridge nao respondeu.
+        # Aviso na tela quando a visao tem planejamento mas o historico nao veio.
         "planejamento_indisponivel": visao in VISOES_PLANEJAMENTO and bool(familia_itens) and not planejamento_ativo,
-        "parametros_planejamento": parametros_planejamento,
+        "parametros_planejamento": parametros,
         "pode_editar_parametros": is_admin_session(),
-    })
+        "foto_parcial": dados.get("parcial") or [],
+    }
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque-materia-prima", methods=["GET"])
+@logistica_inventario_bp.route("/api/logistica/estoque", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_materia_prima_api():
+    visao = str(request.args.get("visao") or "materia_prima").strip()
+    if visao not in ESTOQUE_VISOES:
+        visao = "materia_prima"
+    parametros = planejamento_svc.obter_parametros()
+    dados, foto = foto_svc.ler(visao)
+    # Janela mudou: o historico da foto (retiradas, OCs) foi pedido com a
+    # antiga. A tela segue com ele e pede outra foto.
+    if dados and dados.get("historicos_janela_pedida") not in (None, int(parametros["janela_meses"])):
+        foto["desatualizado"] = True
+    return jsonify({**_montar_estoque(visao, dados or {}, parametros, foto["versao"]), "foto": foto})
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/atualizar", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_atualizar_foto():
+    payload = request.get_json(silent=True) or {}
+    visao = str(payload.get("visao") or "").strip()
+    if visao not in ESTOQUE_VISOES:
+        return jsonify({"error": "Visão inválida."}), 400
+    usuario = session.get("username") or ""
+    if not foto_svc.iniciar(visao, usuario):
+        return jsonify({"ja_em_andamento": True, "foto": foto_svc.ler(visao)[1]})
+    try:
+        anterior, _ = foto_svc.ler(visao)
+        dados = _coletar_visao(visao, anterior, int(planejamento_svc.obter_parametros()["janela_meses"]))
+        foto_svc.concluir(visao, dados, usuario)
+    except Exception as exc:  # noqa: BLE001 - GRV fora nao pode deixar a foto travada "atualizando"
+        current_app.logger.warning("Nao foi possivel atualizar a foto do estoque (%s).", visao, exc_info=True)
+        foto_svc.falhar(visao, str(exc))
+        return jsonify({
+            "error": "Não deu para atualizar o estoque do GRV agora. Tente de novo em instantes.",
+            "foto": foto_svc.ler(visao)[1],
+        }), 400
+    return jsonify({"sucesso": True, "parcial": dados["parcial"], "foto": foto_svc.ler(visao)[1]})
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/ajuste-item", methods=["PUT"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_ajuste_item_salvar():
+    # Mesma regra dos parametros gerais: muda a sugestao de compra de todo mundo.
+    if not is_admin_session():
+        return jsonify({"error": "Apenas administradores podem ajustar o planejamento do item."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = planejamento_svc.salvar_ajuste(payload.get("codigo"), payload, session.get("username") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"sucesso": True, "ajuste": ajuste})
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/fornecimentos", methods=["GET"])
@@ -595,10 +748,11 @@ def estoque_fornecimentos():
         else:
             motivo = "erro"
         return jsonify({"disponivel": False, "motivo": motivo, "fornecedores": [], "fornecimentos": []})
-    return jsonify({"disponivel": True, **planejamento_svc.resumir_fornecimentos(linhas)})
+    meses = int(planejamento_svc.obter_parametros()["janela_meses"])
+    return jsonify({"disponivel": True, **planejamento_svc.resumir_fornecimentos(linhas, meses=meses)})
 
 
-def _fornecimentos_para_exportar(codigos: list[str]) -> dict[str, dict | None]:
+def _fornecimentos_para_exportar(codigos: list[str], meses: int) -> dict[str, dict | None]:
     """1 consulta ao GRV por item (~1,5 s cada): 4 por vez pra exportacao nao
     levar minutos sem afogar a bridge. Item que falhar volta None e a planilha
     avisa - nao derruba o arquivo."""
@@ -607,7 +761,7 @@ def _fornecimentos_para_exportar(codigos: list[str]) -> dict[str, dict | None]:
     def consultar(codigo: str) -> dict | None:
         with app.app_context():
             try:
-                return planejamento_svc.resumir_fornecimentos(buscar_fornecimentos_grv(codigo))
+                return planejamento_svc.resumir_fornecimentos(buscar_fornecimentos_grv(codigo), meses=meses)
             except Exception:
                 app.logger.warning("Nao foi possivel consultar fornecimentos de %s para exportar.", codigo, exc_info=True)
                 return None
@@ -632,13 +786,14 @@ def estoque_exportar_excel():
     except (TypeError, ValueError):
         janela_dias = 90
     codigos = [str(i["codigo"]).strip() for i in itens]
+    meses = int(planejamento_svc.obter_parametros()["janela_meses"])
     try:
-        series = buscar_planejamento_grv(codigos=codigos)
+        series = buscar_planejamento_grv(codigos=codigos, meses=meses)
     except Exception:
         current_app.logger.warning("Nao foi possivel consultar o consumo mensal para exportar.", exc_info=True)
         series = None
     stream = gerar_excel_analise(
-        itens, series, _fornecimentos_para_exportar(codigos), janela_dias=janela_dias, hoje=agora_br().date(),
+        itens, series, _fornecimentos_para_exportar(codigos, meses), janela_dias=janela_dias, hoje=agora_br().date(), meses=meses,
     )
     return send_file(
         stream,
@@ -651,7 +806,11 @@ def estoque_exportar_excel():
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["GET"])
 @permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
 def estoque_planejamento_parametros():
-    return jsonify({"parametros": planejamento_svc.obter_parametros(), "pode_editar": is_admin_session()})
+    return jsonify({
+        "parametros": planejamento_svc.obter_parametros(),
+        "ajustes": sorted(planejamento_svc.obter_ajustes().values(), key=lambda a: a["codigo"]),
+        "pode_editar": is_admin_session(),
+    })
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/planejamento/parametros", methods=["PUT"])

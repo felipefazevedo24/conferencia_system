@@ -326,18 +326,22 @@ def buscar_consumo_kardex_grv(
     return {"por_codigo": por_codigo, "fonte": meta["fonte"], "janela_dias": meta["janela_dias"]}
 
 
-def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, dict[str, Any]]:
+def buscar_planejamento_grv(codigos: list[str], empresa: int = 1, meses: int = 12) -> dict[str, dict[str, Any]]:
     """Historico por codigo pro planejamento (serie mensal de consumo, tamanho
     das retiradas, lead times OC -> entrada, custo). Chave = codigo sem
     pontuacao, igual ao kardex. Levanta excecao se a bridge nao responder -
-    quem chama decide o fallback."""
+    quem chama decide o fallback.
+
+    `meses` e' a janela das retiradas e das OCs. Cada item volta com
+    `meses_retiradas`, a janela que a bridge usou de fato: bridge antiga
+    ignora o pedido e usa 12."""
     codigos_norm = sorted({
         re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper()) for codigo in codigos or []
     } - {""})
     if not codigos_norm:
         return {}
 
-    cache_key = f"{empresa}:{'|'.join(codigos_norm)}"
+    cache_key = f"{empresa}:{meses}:{'|'.join(codigos_norm)}"
     agora = time.monotonic()
     em_cache = _PLANEJAMENTO_CACHE.get(cache_key)
     if em_cache and agora < em_cache["expira_em"]:
@@ -350,7 +354,7 @@ def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, d
     resp = requests.post(
         f"{cfg['api_url']}/api/erp/estoque/planejamento",
         headers=_headers(cfg),
-        json={"empresa": empresa, "codigos": codigos_norm},
+        json={"empresa": empresa, "codigos": codigos_norm, "meses": meses},
         # A consulta desde 2019 leva ~5 s no GRV; o timeout padrao da bridge e' curto pra ela.
         timeout=max(float(cfg["timeout"] or 0), 60.0),
     )
@@ -360,6 +364,10 @@ def buscar_planejamento_grv(codigos: list[str], empresa: int = 1) -> dict[str, d
         raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de planejamento."))
 
     dados = data.get("itens") or {}
+    meses_usados = int(data.get("meses") or 12)
+    for item in dados.values():
+        if isinstance(item, dict):
+            item["meses_retiradas"] = meses_usados
     # A rota sempre pede a familia inteira (1 chave por visao); o limite so'
     # evita acumular memoria se um dia vier outra combinacao de codigos.
     if len(_PLANEJAMENTO_CACHE) > 4:

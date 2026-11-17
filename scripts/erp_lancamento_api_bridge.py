@@ -1401,13 +1401,14 @@ SQL_PLANEJAMENTO_MENSAL = _SQL_PLANEJAMENTO_BASE + """
 """
 
 SQL_PLANEJAMENTO_RETIRADAS = _SQL_PLANEJAMENTO_BASE + """
-    -- Tamanho de uma retirada nos ultimos 12 meses: e' o que dimensiona o
-    -- minimo de item esporadico, onde media diaria nao significa nada.
+    -- Tamanho de uma retirada na janela do Sync (12 meses por padrao): e' o
+    -- que dimensiona o minimo de item esporadico, onde media diaria nao
+    -- significa nada.
     select codigo, count(*) as retiradas,
            percentile_cont(0.5) within group (order by -liquido) as p50,
            percentile_cont(0.8) within group (order by -liquido) as p80
     from doc
-    where liquido < 0 and dia >= (current_date - 365)
+    where liquido < 0 and dia >= (current_date - make_interval(months => %(meses)s::int))
     group by codigo
 """
 
@@ -1490,7 +1491,7 @@ SQL_PLANEJAMENTO_CADASTRO = """
         join public.tord_com o on o.cod_empresa = a.cod_empresa and o.codigo = a.cod_ord_compra
         where a.cod_empresa = %(empresa)s
           and coalesce(o.cancelado, 0) = 0
-          and o.data >= (current_date - 365)
+          and o.data >= (current_date - make_interval(months => %(meses)s::int))
         group by a.cod_produto, o.codigo, o.cod_empresa
     ),
     primeiro as (
@@ -1958,10 +1959,12 @@ def _trilha_ordem_fat(cur, empresa: int, cod_ordem_fat: int) -> dict[str, Any] |
     }
 
 
-def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date) -> dict[str, dict[str, Any]]:
+def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date, meses: int = 12) -> dict[str, dict[str, Any]]:
     """Historico cru por codigo; as contas (classificacao, minimo, lote) ficam
-    no Sync, que tem os parametros e pode mudar sem redeploy da VM."""
-    params = {"empresa": empresa, "codigos": codigos, "inicio": inicio}
+    no Sync, que tem os parametros e pode mudar sem redeploy da VM. `meses` e'
+    a janela das retiradas e das OCs; os nomes "_12m" ficaram por
+    compatibilidade com o Sync antigo."""
+    params = {"empresa": empresa, "codigos": codigos, "inicio": inicio, "meses": meses}
     por_codigo: dict[str, dict[str, Any]] = {
         codigo: {
             "serie_mensal": [],
@@ -3206,6 +3209,11 @@ def create_app() -> Flask:
                     codigos.append(chave)
             if not codigos:
                 return jsonify({"sucesso": True, "itens": {}})
+            # Janela configuravel no Sync (17/11/2026). Sync antigo nao manda: 12.
+            try:
+                meses = min(max(int(payload.get("meses") or 12), 1), 120)
+            except (TypeError, ValueError):
+                meses = 12
 
             # Historico inteiro do kardex (comeca em 18/06/2019). As contas no
             # Sync usam so' os ultimos 12 meses (22/10/2026), mas precisam da
@@ -3214,10 +3222,11 @@ def create_app() -> Flask:
             inicio = date(2019, 1, 1)
             with _conectar(cfg, readonly=True) as conn:
                 with conn.cursor() as cur:
-                    itens = _planejamento_estoque(cur, empresa=empresa, codigos=codigos, inicio=inicio)
+                    itens = _planejamento_estoque(cur, empresa=empresa, codigos=codigos, inicio=inicio, meses=meses)
             return jsonify({
                 "sucesso": True,
                 "empresa": empresa,
+                "meses": meses,
                 "inicio": inicio.isoformat(),
                 "gerado_em": date.today().isoformat(),
                 "itens": itens,
