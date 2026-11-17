@@ -2012,15 +2012,23 @@ def _ensure_spend_entrada_oc_columns() -> None:
     try:
         cols = _get_column_names("spend_entrada_grv")
         missing_columns = [
-            ("ordem_compra", "ALTER TABLE spend_entrada_grv ADD COLUMN ordem_compra VARCHAR(30)"),
+            ("ordem_compra", "ALTER TABLE spend_entrada_grv ADD COLUMN ordem_compra VARCHAR(200)"),
             ("comprador", "ALTER TABLE spend_entrada_grv ADD COLUMN comprador VARCHAR(100)"),
             ("solicitacao", "ALTER TABLE spend_entrada_grv ADD COLUMN solicitacao VARCHAR(200)"),
             ("requisitante", "ALTER TABLE spend_entrada_grv ADD COLUMN requisitante VARCHAR(300)"),
+            ("cnpj_fornecedor", "ALTER TABLE spend_entrada_grv ADD COLUMN cnpj_fornecedor VARCHAR(14)"),
         ]
         for column_name, ddl in missing_columns:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+        # ordem_compra nasceu VARCHAR(30) em 16/11; com mais de uma OC por item
+        # (vinculo da conferencia) precisa de 200. SQLite nao limita tamanho.
+        coluna = _get_column_details("spend_entrada_grv", "ordem_compra")
+        tamanho = getattr((coluna or {}).get("type"), "length", None)
+        if db.engine.dialect.name == "mysql" and tamanho and tamanho < 200:
+            conn.execute(db.text("ALTER TABLE spend_entrada_grv MODIFY COLUMN ordem_compra VARCHAR(200)"))
+            conn.commit()
     finally:
         conn.close()
 

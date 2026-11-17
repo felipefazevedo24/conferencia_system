@@ -5501,10 +5501,13 @@ class SpendEntradaGrv(db.Model):
     nome_conta = db.Column(db.String(200))
     familia = db.Column(db.String(160))
     grupo = db.Column(db.String(160))
-    # OC e comprador do cabecalho da NF; SC e requisitante da OC (ver
-    # SQL_SPEND_REQUISITANTES). NULL = linha gravada antes de buscar isso;
-    # "" = buscou e nao tem.
-    ordem_compra = db.Column(db.String(30))
+    # OC: vinculo da conferencia do Sync (ItemNota.pedido_compra, pode ser
+    # mais de uma, "123, 456"); sem ele, a do cabecalho da NF no GRV.
+    # Comprador do cabecalho da NF; SC e requisitante da OC (ver
+    # SQL_SPEND_REQUISITANTES). cnpj_fornecedor NULL = linha gravada antes
+    # desse vinculo; "" = buscou e nao tem.
+    cnpj_fornecedor = db.Column(db.String(14))
+    ordem_compra = db.Column(db.String(200))
     comprador = db.Column(db.String(100))
     solicitacao = db.Column(db.String(200))
     requisitante = db.Column(db.String(300))

@@ -2007,7 +2007,8 @@ SELECT c.dt_lancamento::date AS data_lancamento,
        NULLIF(TRIM(fam.nome), '') AS familia,
        NULLIF(TRIM(g.nome), '') AS grupo,
        NULLIF(c.cod_ordem_compra, 0)::text AS ordem_compra,
-       NULLIF(TRIM(c.comprador::text), '') AS comprador
+       NULLIF(TRIM(c.comprador::text), '') AS comprador,
+       regexp_replace(COALESCE(f.cgc, ''), '[^0-9]', '', 'g') AS cnpj_fornecedor
 FROM public.tcompras c
 JOIN public.ttp_move tm
   ON tm.cod_empresa = c.cod_empresa AND tm.codigo = c.cod_tp_mov

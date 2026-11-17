@@ -193,18 +193,67 @@ def _linha(r: dict) -> dict | None:
         "nome_conta": _texto(r.get("nome_conta"), 200),
         "familia": _texto(r.get("familia"), 160),
         "grupo": _texto(r.get("grupo"), 160),
-        "ordem_compra": _digitos(r.get("ordem_compra"))[:30],
+        "cnpj_fornecedor": _digitos(r.get("cnpj_fornecedor"))[:14],
+        "ordem_compra": _digitos(r.get("ordem_compra"))[:200],
         "comprador": _texto(r.get("comprador"), 100),
         "solicitacao": "",
         "requisitante": "",
     }
 
 
+def _numero_nf(valor) -> str:
+    return _digitos(valor).lstrip("0")
+
+
+def _lista_ocs(texto) -> list[str]:
+    """'123; 456' -> ['123', '456'] (o auditor digita mais de uma OC por item)."""
+    ocs = []
+    for parte in re.split(r"[;,\n/]+", str(texto or "")):
+        oc = _digitos(parte).lstrip("0")
+        if oc and oc not in ocs:
+            ocs.append(oc)
+    return ocs
+
+
+def _preencher_ocs_da_conferencia(linhas: list[dict]) -> None:
+    """OC de cada linha pelo vínculo feito na conferência do Sync
+    (ItemNota.pedido_compra), casando NF + CNPJ do emitente e, dentro da NF,
+    o código interno do item (codigo_grv). Item sem casamento leva as OCs da
+    NF inteira. Sem vínculo no Sync fica a OC do cabeçalho da NF no GRV,
+    que quase nunca vem preenchida."""
+    from ..models import ItemNota
+
+    chaves = {(_numero_nf(l["nota_fiscal"]), l["cnpj_fornecedor"]) for l in linhas if l["cnpj_fornecedor"]}
+    if not chaves:
+        return
+    cnpjs = sorted({c for _, c in chaves})
+    por_nf: dict = defaultdict(lambda: defaultdict(list))
+    for i in range(0, len(cnpjs), 500):
+        # Filtra pelo CNPJ (indexado); o numero da NF pode ter zero a esquerda
+        # de um lado e nao do outro, entao casa normalizado aqui.
+        for numero, cnpj, codigo, pedido in db.session.query(
+            ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.codigo_grv, ItemNota.pedido_compra,
+        ).filter(ItemNota.pedido_compra.isnot(None), ItemNota.pedido_compra != "",
+                 ItemNota.cnpj_emitente.in_(cnpjs[i:i + 500])):
+            chave = (_numero_nf(numero), _digitos(cnpj))
+            if chave not in chaves:
+                continue
+            for oc in _lista_ocs(pedido):
+                for k in ((codigo or "").strip().upper(), None):
+                    if oc not in por_nf[chave][k]:
+                        por_nf[chave][k].append(oc)
+    for l in linhas:
+        nf = por_nf.get((_numero_nf(l["nota_fiscal"]), l["cnpj_fornecedor"]))
+        if nf:
+            ocs = nf.get(l["codigo_item"]) if l["codigo_item"] else None
+            l["ordem_compra"] = ", ".join(ocs or nf[None])[:200]
+
+
 def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
     """SC e requisitante de cada linha pela OC. Casa pelo código do item; sem
     casamento (serviço, item trocado na NF) usa todos os da OC. Falhou a
     consulta: segue sem requisitante (False) em vez de derrubar o Spend."""
-    ocs = sorted({int(l["ordem_compra"]) for l in linhas if l["ordem_compra"]})
+    ocs = sorted({int(oc) for l in linhas for oc in _lista_ocs(l["ordem_compra"])})
     por_item: dict = {}
     por_oc: dict = defaultdict(lambda: (set(), set()))
     try:
@@ -221,10 +270,13 @@ def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
         logging.getLogger(__name__).exception("Spend: falha ao buscar requisitantes das OCs")
         return False
     for l in linhas:
-        oc = l["ordem_compra"]
-        if not oc or oc not in por_oc:
-            continue
-        sols, reqs = por_item.get((oc, l["codigo_item"])) or (sorted(por_oc[oc][0]), sorted(por_oc[oc][1]))
+        sols, reqs = [], []
+        for oc in _lista_ocs(l["ordem_compra"]):
+            if oc not in por_oc:
+                continue
+            s, r = por_item.get((oc, l["codigo_item"])) or (sorted(por_oc[oc][0]), sorted(por_oc[oc][1]))
+            sols += [x for x in s if x not in sols]
+            reqs += [x for x in r if x not in reqs]
         l["solicitacao"] = ", ".join(sols)[:200]
         l["requisitante"] = ", ".join(reqs)[:300]
     return True
@@ -259,9 +311,9 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
-    # Linha gravada antes de existir OC/requisitante no espelho (NULL):
-    # rebusca o ano inteiro uma vez para preencher.
-    if Entrada.query.filter(Entrada.ordem_compra.is_(None)).first() is not None:
+    # Linha gravada antes do vínculo NF -> OC da conferência (cnpj_fornecedor
+    # NULL): rebusca o ano inteiro uma vez para preencher.
+    if Entrada.query.filter(Entrada.cnpj_fornecedor.is_(None)).first() is not None:
         desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
@@ -277,6 +329,7 @@ def atualizar(usuario: str) -> dict:
                 linha = _linha(r)
                 if linha:
                     linhas.append(linha)
+        _preencher_ocs_da_conferencia(linhas)
         _preencher_requisitantes(linhas, empresa)
         Entrada.query.filter(Entrada.data_lancamento >= desde).delete(synchronize_session=False)
         for i in range(0, len(linhas), 1000):
