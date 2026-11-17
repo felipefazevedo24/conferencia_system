@@ -118,22 +118,21 @@
     .mp-erro { color: var(--eui-danger); font-size: 12.5px; font-weight: 600; }
     .mp-dialog--largo { width: min(680px, calc(100% - 24px)); }
     .mp-dialog__secao { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin: 4px 0 -4px; }
-    .mp-check-linha { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--eui-text); margin: 0; }
+    .mp-check-linha { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 500; color: var(--eui-text); margin: 0; text-transform: none; letter-spacing: normal; }
     .mp-check-linha input { width: auto; }
-    /* Faixas de cobertura: clicar filtra a coluna "Saldo dura". */
-    .mp-faixas { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-    .mp-faixa { border: 1px solid var(--eui-border); border-radius: 8px; padding: 8px 10px; background: var(--eui-surface); text-align: left; cursor: pointer; color: var(--eui-text-soft); font-size: 12px; }
-    .mp-faixa:hover, .mp-faixa.ativa { border-color: var(--eui-primary); background: var(--eui-primary-soft); }
-    .mp-faixa b { display: block; font-size: 14px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
-    .mp-faixa.slow b { color: var(--eui-warning-soft-text, var(--eui-text)); }
     .mp-foto { font-size: 12px; color: var(--eui-muted); }
     .mp-foto.erro { color: var(--eui-danger); }
 
-    /* Abas das visões: Painel primeiro. Sublinhado em vez de caixa. */
-    .mp-tabs { display: flex; gap: 4px 26px; flex-wrap: wrap; border-bottom: 1px solid var(--eui-border); }
-    .mp-tabs .mp-view-btn { border: 0; background: transparent; padding: 10px 0 12px; border-radius: 0; font-size: 13.5px; font-weight: 600; color: var(--eui-muted); box-shadow: none; margin-bottom: -1px; border-bottom: 2px solid transparent; }
-    .mp-tabs .mp-view-btn:hover { color: var(--eui-text); }
-    .mp-tabs .mp-view-btn.active { color: var(--eui-text); background: transparent; box-shadow: none; border-bottom-color: var(--eui-primary); }
+    /* Abas das visões: botões arredondados com ícone; a ativa preenchida.
+       Chapas abre outra tela: fica à direita, separada. */
+    .mp-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; border: 1px solid var(--eui-border); border-radius: 16px; background: var(--eui-surface); box-shadow: var(--eui-shadow-sm); }
+    .mp-tabs .mp-view-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 11px; background: transparent; color: var(--eui-text-soft); font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .15s, color .15s; }
+    .mp-tabs .mp-view-btn i { font-size: 13px; color: var(--eui-muted); transition: color .15s; }
+    .mp-tabs .mp-view-btn:hover { background: var(--eui-surface-2); color: var(--eui-text); }
+    .mp-tabs .mp-view-btn.active { background: var(--eui-primary); color: #fff; box-shadow: 0 4px 12px rgba(15, 98, 201, .25); }
+    .mp-tabs .mp-view-btn.active i { color: #fff; }
+    .mp-tabs__sep { flex: 1 1 auto; }
+    .mp-tabs .mp-view-btn--fora { border: 1px dashed var(--eui-border); }
 
     /* Barra de filtro única: um botão abre o painel; os filtros ativos viram etiquetas. */
     .mp-fbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -158,6 +157,52 @@
     .mp-dash[hidden], #mp-area-visao[hidden] { display: none; }
     .mp-dash__topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
     .mp-dk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .mp-dk-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    button.mp-dk { text-align: left; font: inherit; cursor: pointer; transition: border-color .15s, transform .15s; }
+    button.mp-dk:hover { border-color: var(--mp-cor, var(--eui-primary)); transform: translateY(-1px); }
+    .mp-dk__abrir { position: absolute; right: 14px; top: 14px; font-size: 11px; color: var(--eui-muted); }
+
+    /* Filtro do painel: botões que acendem. */
+    .mp-pfiltro { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; }
+    .mp-pfiltro__grupo { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .mp-pfiltro__rotulo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin-right: 2px; }
+    .mp-toggle { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .mp-toggle:hover { border-color: var(--eui-primary); color: var(--eui-text); }
+    .mp-toggle[aria-pressed="true"] { background: var(--eui-primary-soft); border-color: var(--eui-primary); color: var(--eui-primary); }
+    .mp-limpar { border: 0; background: transparent; color: var(--eui-primary); font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0 4px; }
+
+    /* Saldo por cobertura: uma barra só, clicável. */
+    .mp-cob { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px; display: grid; gap: 10px; }
+    .mp-cob__topo { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--eui-muted); }
+    .mp-cob__topo b { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .mp-cob__barra { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--eui-surface-2); }
+    .mp-cob__barra button { border: 0; padding: 0; cursor: pointer; min-width: 3px; }
+    .mp-cob__barra button:hover, .mp-cob__barra button.ativa { filter: brightness(1.15); outline: 2px solid var(--eui-text); outline-offset: -2px; }
+    .mp-cob__leg { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+    .mp-cob__leg button { display: grid; gap: 2px; text-align: left; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 6px 8px; cursor: pointer; font-size: 11.5px; color: var(--eui-text-soft); }
+    .mp-cob__leg button:hover, .mp-cob__leg button.ativa { border-color: var(--eui-border); background: var(--eui-surface-2); }
+    .mp-cob__leg span { display: inline-flex; align-items: center; gap: 6px; }
+    .mp-cob__leg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+    .mp-cob__leg b { font-size: 13.5px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .mp-fbar .mp-search { flex: 1 1 340px; }
+    .mp-contagem { font-size: 12.5px; color: var(--eui-muted); white-space: nowrap; }
+    .mp-contagem b { color: var(--eui-text); }
+
+    /* Lista de itens de um grupo do painel. */
+    .mp-dialog--lista { width: min(1120px, calc(100% - 24px)); max-height: calc(100vh - 40px); }
+    .mp-dialog--lista form { display: flex; flex-direction: column; max-height: calc(100vh - 42px); }
+    .mp-dialog--lista .mp-dialog__body { overflow: auto; }
+    /* Saúde: legenda em blocos clicáveis - fatia pequena (11 de 2.900) quase some no gráfico. */
+    .mp-saude-leg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mp-saude-leg button { display: grid; gap: 4px; text-align: left; border: 1px solid var(--eui-border); border-radius: 12px; background: var(--eui-surface); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--eui-text-soft); transition: border-color .15s, background .15s; }
+    .mp-saude-leg button:hover { border-color: var(--mp-cor); background: var(--eui-surface-2); }
+    .mp-saude-leg__nome { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+    .mp-saude-leg__nome i { width: 10px; height: 10px; border-radius: 50%; background: var(--mp-cor); flex: none; }
+    .mp-saude-leg__num { display: flex; align-items: baseline; gap: 6px; }
+    .mp-saude-leg__num b { font-size: 18px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .mp-saude-leg__num span { font-size: 12px; color: var(--eui-muted); }
+    .mp-legenda button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+    .mp-legenda button:hover { background: var(--eui-surface-2); color: var(--eui-text); }
     .mp-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; }
     .mp-dk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--mp-cor, var(--eui-primary)); }
     .mp-dk__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
@@ -188,18 +233,18 @@
     .mp-tag { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
     .mp-tag.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     .mp-tag.atencao { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
-    .mp-formulas { columns: 2 320px; column-gap: 32px; margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--eui-surface-2); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.8; color: var(--eui-text-soft); white-space: pre-wrap; }
-    .mp-formulas b { color: var(--eui-primary); font-weight: 600; }
+
     @media (max-width: 820px) {
         .mp-search { width: 100%; }
         .mp-filters__end { margin-left: 0; width: 100%; }
         .mp-filters__end .eui-btn { flex: 1; justify-content: center; }
         .mp-dialog__grid { grid-template-columns: 1fr; }
-        .mp-faixas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .mp-acoes { margin-left: 0; }
     }
     @media (max-width: 1100px) {
-        .mp-dk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mp-dk-grid, .mp-dk-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mp-cob__leg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .mp-tabs__sep { display: none; }
         .mp-dg, .mp-dg--meio { grid-template-columns: minmax(0, 1fr); }
     }
 </style>
@@ -218,13 +263,14 @@
 
     <nav class="mp-tabs" aria-label="Visão do estoque">
         <button class="mp-view-btn active" type="button" data-visao="painel"><i class="fas fa-chart-pie"></i> Painel</button>
-        <button class="mp-view-btn" type="button" data-visao="materia_prima">Matéria-prima</button>
-        <button class="mp-view-btn" type="button" data-visao="revenda">Revenda</button>
-        <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
-        <button class="mp-view-btn" type="button" data-visao="insumos">Insumos da produção</button>
-        <button class="mp-view-btn" type="button" data-visao="uso_consumo">EPI e uniformes</button>
+        <button class="mp-view-btn" type="button" data-visao="materia_prima"><i class="fas fa-cubes"></i> Matéria-prima</button>
+        <button class="mp-view-btn" type="button" data-visao="revenda"><i class="fas fa-tags"></i> Revenda</button>
+        <button class="mp-view-btn" type="button" data-visao="produto_acabado"><i class="fas fa-box"></i> Produto acabado</button>
+        <button class="mp-view-btn" type="button" data-visao="insumos"><i class="fas fa-flask"></i> Insumos</button>
+        <button class="mp-view-btn" type="button" data-visao="uso_consumo"><i class="fas fa-helmet-safety"></i> EPI e uniformes</button>
+        <span class="mp-tabs__sep" aria-hidden="true"></span>
         {# Controle de Chapas edita cálculo: só com a permissão de inventário, não com a de consulta. #}
-        {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>{% endif %}
+        {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn mp-view-btn--fora" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas <i class="fas fa-arrow-up-right-from-square" style="font-size:10px;"></i></a>{% endif %}
     </nav>
 
     <section class="mp-dash" id="mp-dash" aria-label="Painel do estoque">
@@ -232,12 +278,13 @@
             <span class="mp-foto" id="mp-dash-foto">Carregando...</span>
             <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-dash-refresh" type="button" style="border-radius:999px;"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
+        <div class="mp-pfiltro" id="mp-pfiltro" aria-label="Filtrar o painel"></div>
         <div class="mp-dk-grid">
             <div class="mp-dk" style="--mp-cor: var(--eui-primary);"><span class="mp-dk__label">Valor em estoque</span><span class="mp-dk__valor" id="mp-d-valor">—</span><span class="mp-dk__dica" id="mp-d-valor-dica"></span></div>
             <div class="mp-dk" style="--mp-cor: var(--eui-info, var(--eui-primary));"><span class="mp-dk__label">Giro anual</span><span class="mp-dk__valor" id="mp-d-giro">—</span><span class="mp-dk__dica">consumo do ano ÷ estoque</span></div>
             <div class="mp-dk" style="--mp-cor: var(--eui-violet, var(--eui-primary));"><span class="mp-dk__label">Cobertura média</span><span class="mp-dk__valor" id="mp-d-cob">—</span><span class="mp-dk__dica">quanto o estoque dura no consumo médio</span></div>
-            <div class="mp-dk" style="--mp-cor: var(--eui-warning);"><span class="mp-dk__label">Itens para comprar</span><span class="mp-dk__valor" id="mp-d-comprar">—</span><span class="mp-dk__dica" id="mp-d-comprar-dica"></span></div>
-            <div class="mp-dk" style="--mp-cor: var(--eui-danger);"><span class="mp-dk__label">Capital parado</span><span class="mp-dk__valor" id="mp-d-parado">—</span><span class="mp-dk__dica" id="mp-d-parado-dica"></span></div>
+            <button type="button" class="mp-dk" data-grupo="para_comprar" style="--mp-cor: var(--eui-warning);" title="Ver os itens"><i class="fas fa-list mp-dk__abrir" aria-hidden="true"></i><span class="mp-dk__label">Itens para comprar</span><span class="mp-dk__valor" id="mp-d-comprar">—</span><span class="mp-dk__dica" id="mp-d-comprar-dica"></span></button>
+            <button type="button" class="mp-dk" data-grupo="slow" style="--mp-cor: var(--eui-danger);" title="Ver os itens"><i class="fas fa-list mp-dk__abrir" aria-hidden="true"></i><span class="mp-dk__label">Capital parado</span><span class="mp-dk__valor" id="mp-d-parado">—</span><span class="mp-dk__dica" id="mp-d-parado-dica"></span></button>
         </div>
         <div class="mp-dg">
             <div class="mp-dc">
@@ -248,9 +295,9 @@
             </div>
             <div class="mp-dc">
                 <h3>Saúde do estoque</h3>
-                <p class="mp-dc__sub">Itens comprados pela situação de hoje</p>
-                <div class="mp-chart" style="height:220px;"><canvas id="mp-ch-saude" role="img" aria-label="Itens por situação"></canvas><div class="mp-donut-centro"><b id="mp-d-saude-pct">—</b><span>saudáveis</span></div></div>
-                <div class="mp-legenda" id="mp-d-saude-leg"></div>
+                <p class="mp-dc__sub">Itens comprados pela situação de hoje. Clique para ver os itens e o porquê.</p>
+                <div class="mp-chart" style="height:200px;"><canvas id="mp-ch-saude" role="img" aria-label="Itens por situação"></canvas><div class="mp-donut-centro"><b id="mp-d-saude-pct">—</b><span>saudáveis</span></div></div>
+                <div class="mp-saude-leg" id="mp-d-saude-leg"></div>
             </div>
         </div>
         <div class="mp-dg mp-dg--meio">
@@ -278,25 +325,21 @@
                 </div>
             </div>
         </div>
-        <div class="mp-dc">
-            <h3>Como o painel calcula</h3>
-            <p class="mp-dc__sub">As mesmas contas da lista de cada visão</p>
-            <pre class="mp-formulas" id="mp-d-formulas"></pre>
-        </div>
     </section>
 
     <div id="mp-area-visao" class="mp-wrap" hidden>
-    <div class="eui-stats" id="mp-kpis">
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens listados</span><span class="eui-stat__value" id="mp-k-itens">0</span><span class="eui-stat__hint" id="mp-k-itens-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos</span><span class="eui-stat__value" id="mp-k-criticos">0</span><span class="eui-stat__hint" id="mp-k-criticos-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Monitorar</span><span class="eui-stat__value" id="mp-k-atencao">0</span><span class="eui-stat__hint" id="mp-k-atencao-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-cart-shopping"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos sem OC</span><span class="eui-stat__value" id="mp-k-sem-oc">0</span><span class="eui-stat__hint">Sem reposição em aberto</span></div></div>
-        <div class="eui-stat" id="mp-k-exc-card" style="display:none;"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-warehouse"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Excedente</span><span class="eui-stat__value" id="mp-k-exc">R$ 0</span><span class="eui-stat__hint" id="mp-k-exc-hint"></span></div></div>
-        <div class="eui-stat" id="mp-k-slow-card" style="display:none;"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-hourglass-half"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Slow mover</span><span class="eui-stat__value" id="mp-k-slow">R$ 0</span><span class="eui-stat__hint" id="mp-k-slow-hint"></span></div></div>
-        <div class="eui-stat" id="mp-k-nec-card" style="display:none;"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-scale-balanced"></i></div><div class="eui-stat__body"><span class="eui-stat__label" id="mp-k-nec-label">Estoque necessário</span><span class="eui-stat__value" id="mp-k-nec">R$ 0</span><span class="eui-stat__hint" id="mp-k-nec-hint"></span></div></div>
+    <div class="mp-dk-grid mp-dk-grid--4" id="mp-kpis">
+        <div class="mp-dk" style="--mp-cor: var(--eui-danger);"><span class="mp-dk__label">Críticos</span><span class="mp-dk__valor" id="mp-k-criticos">0</span><span class="mp-dk__dica" id="mp-k-criticos-hint"></span></div>
+        <div class="mp-dk" style="--mp-cor: var(--eui-warning);"><span class="mp-dk__label" id="mp-k-atencao-label">Abaixo do mínimo</span><span class="mp-dk__valor" id="mp-k-atencao">0</span><span class="mp-dk__dica" id="mp-k-atencao-hint"></span></div>
+        <div class="mp-dk" id="mp-k-exc-card" style="--mp-cor: var(--eui-violet, var(--eui-primary)); display:none;"><span class="mp-dk__label">Excedente</span><span class="mp-dk__valor" id="mp-k-exc">R$ 0</span><span class="mp-dk__dica" id="mp-k-exc-hint"></span></div>
+        <div class="mp-dk" id="mp-k-slow-card" style="--mp-cor: var(--eui-primary); display:none;"><span class="mp-dk__label">Slow mover</span><span class="mp-dk__valor" id="mp-k-slow">R$ 0</span><span class="mp-dk__dica" id="mp-k-slow-hint"></span></div>
     </div>
 
-    <div class="mp-faixas" id="mp-faixas" style="display:none;" role="group" aria-label="Saldo por cobertura"></div>
+    <div class="mp-cob" id="mp-cob" style="display:none;">
+        <div class="mp-cob__topo"><b>Quanto tempo o saldo dura</b><span>Clique numa faixa para filtrar a lista</span></div>
+        <div class="mp-cob__barra" id="mp-cob-barra" role="group" aria-label="Saldo por cobertura"></div>
+        <div class="mp-cob__leg" id="mp-faixas" role="group" aria-label="Faixas de cobertura"></div>
+    </div>
 
     <div class="eui-card">
         <div class="eui-card__head mp-head">
@@ -307,6 +350,7 @@
                 </div>
                 <button type="button" class="mp-fbtn" id="mp-fbtn" aria-expanded="false" aria-controls="mp-fpop"><i class="fas fa-sliders"></i> Filtros <span class="mp-fcount" id="mp-fcount" hidden>0</span></button>
                 <div class="mp-fchips" id="mp-fchips"></div>
+                <span class="mp-contagem"><b id="mp-k-itens">0</b> itens <span id="mp-k-itens-hint"></span></span>
                 <div class="mp-acoes">
                     <span class="mp-foto" id="mp-updated"></span>
                     <span class="mp-erro" id="mp-export-erro" role="alert"></span>
@@ -379,6 +423,21 @@
         <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="mp-filtro-ok">Aplicar</button>
     </div>
 </div>
+
+<dialog id="mp-grupo-dialog" class="mp-dialog mp-dialog--lista" aria-labelledby="mp-grupo-titulo">
+    <form method="dialog">
+        <div class="mp-dialog__head"><span id="mp-grupo-titulo"></span><button type="submit" class="eui-btn eui-btn--ghost eui-btn--sm" aria-label="Fechar">&times;</button></div>
+        <div class="mp-dialog__body">
+            <p class="mp-muted" id="mp-grupo-sub" style="margin:0;"></p>
+            <div class="mp-table-wrap">
+                <table class="mp-acao-tab">
+                    <thead><tr><th>Item</th><th>Curva</th><th class="num">Saldo</th><th class="num">Mínimo</th><th class="num">Máximo</th><th class="num" id="mp-grupo-col-valor">Valor</th><th>Por quê</th></tr></thead>
+                    <tbody id="mp-grupo-itens"></tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+</dialog>
 
 <dialog id="mp-param-dialog" class="mp-dialog mp-dialog--largo" aria-labelledby="mp-param-title">
     <form method="dialog" id="mp-param-form">
@@ -794,16 +853,16 @@
         $('mp-metodo').textContent = planejamentoAtivo
             ? `Saldos do depósito 1 no GRV. Mínimo, lote e máximo pelo kardex dos últimos ${pr.janela_meses || 12} meses${crescimento ? `, com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 1)}% de vendas` : ''}.`
             : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
-        $('mp-k-criticos-hint').textContent = planejamentoAtivo ? 'Acabam antes da reposição chegar' : `Até ${diasCritico} dias de cobertura`;
-        $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'Abaixo do mínimo sugerido' : `Até ${diasAtencao} dias de cobertura`;
+        $('mp-k-criticos-hint').textContent = `${resumo.criticos_sem_oc || 0} sem OC · ` + (planejamentoAtivo ? 'acabam antes da reposição' : `até ${diasCritico} dias de cobertura`);
+        $('mp-k-atencao-label').textContent = planejamentoAtivo ? 'Abaixo do mínimo' : 'Monitorar';
+        $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'já passaram do ponto de pedido' : `até ${diasAtencao} dias de cobertura`;
         totalEncontrado = Number(resumo.total_filtrado || 0);
         $('mp-k-criticos').textContent = resumo.criticos || 0;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
-        $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
         $('mp-k-exc-card').style.display = planejamentoAtivo ? '' : 'none';
         $('mp-k-exc').textContent = brl(resumo.excedente_valor, 0);
-        $('mp-k-exc-hint').textContent = `${resumo.com_excedente || 0} itens acima do máximo`;
-        renderSlow(resumo.slow, crescimento);
+        $('mp-k-exc-hint').textContent = `${resumo.com_excedente || 0} itens acima do máximo (mínimo + lote)`;
+        renderSlow(resumo.slow);
         foto = data.foto || null;
         renderFoto();
 
@@ -831,29 +890,27 @@
         }
     }
 
-    function renderSlow(slow, crescimento) {
+    // Cores das faixas, do mais parado ao que mais gira.
+    const FAIXAS = [
+        ['parado', '#7f1d1d'], ['mais_12', '#dc2626'], ['6_12', '#f97316'], ['3_6', '#eab308'], ['1_3', '#16a34a'], ['ate_1', '#0ea5e9'],
+    ];
+
+    function renderSlow(slow) {
         resumoSlow = slow || null;
         const ativo = planejamentoAtivo && !!slow;
-        ['mp-k-slow-card', 'mp-k-nec-card', 'mp-faixas'].forEach((id) => { $(id).style.display = ativo ? '' : 'none'; });
+        ['mp-k-slow-card', 'mp-cob'].forEach((id) => { $(id).style.display = ativo ? '' : 'none'; });
         if (!ativo) return;
-        const pct = (v) => (slow.valor_estoque > 0 ? ` (${fmt((v / slow.valor_estoque) * 100, 1)}% do estoque)` : '');
+        const pct = slow.valor_estoque > 0 ? `${fmt((slow.slow_mover_valor / slow.valor_estoque) * 100, 0)}% do estoque · ` : '';
         $('mp-k-slow').textContent = brl(slow.slow_mover_valor, 0);
-        $('mp-k-slow-hint').textContent = `${slow.slow_mover_itens} itens${pct(slow.slow_mover_valor)} · parado ${brl(slow.parado_valor, 0)}`;
-        // Estoque médio de quem segue a política (segurança + meio lote) x o que tem hoje.
-        $('mp-k-nec-label').textContent = crescimento ? `Necessário com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 1)}% de vendas` : 'Estoque necessário';
-        $('mp-k-nec').textContent = brl(slow.necessario_medio_valor, 0);
-        $('mp-k-nec-hint').textContent = (crescimento ? `hoje ${brl(slow.necessario_medio_valor_base, 0)} · ` : '') + `tem ${brl(slow.valor_estoque, 0)}`;
-        $('mp-k-nec-card').title = `Estoque médio de quem segue a política (segurança + meio lote). Máximo: ${brl(slow.necessario_maximo_valor, 0)}.`
-            + (slow.sem_custo_itens ? ` ${slow.sem_custo_itens} itens sem custo no GRV ficam fora dos valores.` : '');
-        const limite = Number((parametros || {}).slow_mover_meses || 6);
+        $('mp-k-slow-hint').textContent = `${slow.slow_mover_itens} itens · ${pct}parado ${brl(slow.parado_valor, 0)}`;
         const filtroFaixa = filtros.faixa;
         // O jsonify ordena as chaves por nome: a ordem das faixas vem daqui.
-        const ordemFaixas = ['parado', 'mais_12', '6_12', '3_6', '1_3', 'ate_1'];
-        $('mp-faixas').innerHTML = ordemFaixas.map((chave) => (slow.faixas || {})[chave]).filter(Boolean).map((f) => {
-            const ativa = filtroFaixa && filtroFaixa.size === 1 && filtroFaixa.has(f.label);
-            const ehSlow = f.label === 'Parado' || f.label === 'Mais de 12 meses' || (f.label === '6 a 12 meses' && limite < 12) || (f.label === '3 a 6 meses' && limite < 6) || (f.label === '1 a 3 meses' && limite < 3);
-            return `<button type="button" class="mp-faixa${ativa ? ' ativa' : ''}${ehSlow ? ' slow' : ''}" data-faixa="${esc(f.label)}" title="Filtrar a lista">${esc(f.label)}<b>${brl(f.valor, 0)}</b>${f.itens} itens</button>`;
-        }).join('');
+        const faixas = FAIXAS.map(([chave, cor]) => ({ ...(slow.faixas || {})[chave], cor })).filter((f) => f.label);
+        const total = faixas.reduce((t, f) => t + Number(f.valor || 0), 0);
+        const ativa = (f) => filtroFaixa && filtroFaixa.size === 1 && filtroFaixa.has(f.label);
+        $('mp-cob-barra').innerHTML = faixas.filter((f) => f.valor > 0).map((f) => `<button type="button" data-faixa="${esc(f.label)}" class="${ativa(f) ? 'ativa' : ''}" style="background:${f.cor};width:${(f.valor / total) * 100}%;" title="${esc(f.label)}: ${esc(brl(f.valor, 0))} · ${f.itens} itens" aria-label="Filtrar ${esc(f.label)}"></button>`).join('');
+        $('mp-faixas').innerHTML = faixas.map((f) => `<button type="button" data-faixa="${esc(f.label)}" class="${ativa(f) ? 'ativa' : ''}">
+            <span><i style="background:${f.cor}"></i>${esc(f.label)}</span><b>${brl(f.valor, 0)}</b><span>${f.itens} ${f.itens === 1 ? 'item' : 'itens'}${total ? ` · ${fmt((f.valor / total) * 100, 0)}%` : ''}</span></button>`).join('');
     }
 
     function renderFoto() {
@@ -1460,7 +1517,7 @@
     }, true);
     window.addEventListener('resize', fecharFiltros);
     $('mp-refresh').addEventListener('click', () => atualizarFoto());
-    $('mp-faixas').addEventListener('click', (event) => {
+    $('mp-cob').addEventListener('click', (event) => {
         const btn = event.target.closest('[data-faixa]');
         if (!btn) return;
         const faixa = btn.dataset.faixa;
@@ -1468,7 +1525,7 @@
         if (filtros.faixa && filtros.faixa.size === 1 && filtros.faixa.has(faixa)) delete filtros.faixa;
         else filtros.faixa = new Set([faixa]);
         renderLista();
-        renderSlow(resumoSlow, Number((parametros || {}).crescimento_vendas_pct || 0));
+        renderSlow(resumoSlow);
     });
     $('mp-painel-corpo').addEventListener('submit', async (event) => {
         if (event.target.id !== 'mp-ajuste-form') return;
@@ -1606,15 +1663,18 @@
         graficos[id] = new Chart($(id), config);
     }
 
-    function renderPainel(d) {
+    // Não chamar de renderPainel: esse nome é do painel lateral do item, e a
+    // segunda declaração substituía a primeira (o item abria em branco).
+    function renderDashboard(d) {
         const k = d.kpis || {};
         const pr = d.parametros || {};
         parametros = pr;
         $('mp-d-valor').textContent = brlCurto(k.valor_estoque);
         $('mp-d-valor').title = brl(k.valor_estoque);
-        $('mp-d-valor-dica').innerHTML = k.valor_variacao_pct == null
-            ? 'histórico mensal começa em nov/2026'
-            : `<b>${k.valor_variacao_pct >= 0 ? '▲' : '▼'} ${fmt(Math.abs(k.valor_variacao_pct), 1)}%</b> vs mês anterior`;
+        const crescimento = Number(pr.crescimento_vendas_pct || 0);
+        const variacao = k.valor_variacao_pct == null ? '' : `<b>${k.valor_variacao_pct >= 0 ? '▲' : '▼'} ${fmt(Math.abs(k.valor_variacao_pct), 1)}%</b> vs mês anterior · `;
+        // Estoque médio de quem segue a política (segurança + meio lote).
+        $('mp-d-valor-dica').innerHTML = `${variacao}necessário ${brlCurto(k.necessario_medio_valor)}${crescimento ? ` com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 0)}% de vendas` : ''}`;
         $('mp-d-giro').textContent = k.giro_anual == null ? '—' : `${fmt(k.giro_anual, 1)}x`;
         $('mp-d-cob').textContent = k.cobertura_dias == null ? '—' : `${fmt(k.cobertura_dias, 0)} dias`;
         $('mp-d-comprar').textContent = k.para_comprar ?? '—';
@@ -1662,18 +1722,28 @@
 
         const saude = d.saude || {};
         const fatias = [
-            ['Saudável', saude.saudavel || 0, verde],
-            ['Comprar agora', saude.comprar || 0, amarelo],
-            ['Ruptura iminente', saude.ruptura || 0, vermelho],
-            ['Excesso', saude.excesso || 0, roxo],
+            ['Saudável', saude.saudavel || 0, verde, 'saudavel'],
+            ['Comprar agora', saude.comprar || 0, amarelo, 'comprar'],
+            ['Ruptura iminente', saude.ruptura || 0, vermelho, 'ruptura'],
+            ['Excesso', saude.excesso || 0, roxo, 'excesso'],
         ];
         const totalSaude = fatias.reduce((t, f) => t + f[1], 0);
         $('mp-d-saude-pct').textContent = totalSaude ? `${fmt((saude.saudavel / totalSaude) * 100, 0)}%` : '—';
-        $('mp-d-saude-leg').innerHTML = fatias.map(([r, n, c]) => `<span><i style="background:${c}"></i>${r} (${n})</span>`).join('');
+        $('mp-d-saude-leg').innerHTML = fatias.map(([r, n, c, g]) => `<button type="button" data-grupo="${g}" style="--mp-cor:${c};" title="Ver os itens">
+            <span class="mp-saude-leg__nome"><i></i>${r}</span>
+            <span class="mp-saude-leg__num"><b>${fmt(n, 0)}</b><span>${totalSaude ? `${fmt((n / totalSaude) * 100, n && n / totalSaude < 0.01 ? 1 : 0)}%` : ''}</span></span>
+        </button>`).join('');
         grafico('mp-ch-saude', {
             type: 'doughnut',
-            data: { labels: fatias.map((f) => f[0]), datasets: [{ data: fatias.map((f) => f[1]), backgroundColor: fatias.map((f) => f[2]), borderWidth: 0 }] },
-            options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false } } },
+            data: { labels: fatias.map((f) => f[0]), datasets: [{ data: fatias.map((f) => f[1]), backgroundColor: fatias.map((f) => f[2]), borderWidth: 0, spacing: 3, hoverOffset: 8 }] },
+            options: {
+                maintainAspectRatio: false,
+                cutout: '70%',
+                layout: { padding: 8 },
+                plugins: { legend: { display: false } },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirGrupo(fatias[el[0].index][3]); },
+            },
         });
 
         const pareto = d.pareto || [];
@@ -1701,6 +1771,8 @@
                     y2: { position: 'right', min: 0, max: 100, ticks: { callback: (v) => `${v}%` }, grid: { display: false } },
                     x: { ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } }, grid: { display: false } },
                 },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirVisao(pareto[el[0].index].visao, pareto[el[0].index].codigo); },
             },
         });
 
@@ -1715,17 +1787,17 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${fmt(c.parsed.x, 0)} dias · estoque ${brl(cob[c.dataIndex].valor, 0)}` } } },
                 scales: { x: { grid: { color: grade }, ticks: { callback: (v) => `${v} d` } }, y: { grid: { display: false } } },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirVisao(cob[el[0].index].visao); },
             },
         });
 
-        const visaoPorRotulo = {};
-        Object.entries(d.fotos || {}).forEach(([chave, f]) => { visaoPorRotulo[f.label] = chave; });
         const acoes = d.acoes || [];
         $('mp-d-acoes-sub').textContent = `Críticos e abaixo do mínimo${d.acoes_total > acoes.length ? ` (os ${acoes.length} mais urgentes de ${d.acoes_total})` : ''}. Comprar = máximo − saldo − OC aberta.`;
         $('mp-d-acoes').innerHTML = acoes.length ? acoes.map((a) => {
             const un = esc(a.unidade || '');
             return `<tr>
-                <td class="c-desc"><a href="#" data-ir="${esc(visaoPorRotulo[a.visao] || '')}" data-codigo="${esc(a.codigo)}">${esc(a.descricao)}</a><small style="display:block;font-weight:400;color:var(--eui-muted);">${esc(a.codigo)} · ${esc(a.visao)}</small></td>
+                <td class="c-desc"><a href="#" data-ir="${esc(a.visao)}" data-codigo="${esc(a.codigo)}">${esc(a.descricao)}</a><small style="display:block;font-weight:400;color:var(--eui-muted);">${esc(a.codigo)} · ${esc(a.visao_label)}</small></td>
                 <td>${a.curva ? `<span class="mp-curva ${esc(String(a.curva).toLowerCase())}">${esc(a.curva)}</span>` : '—'}</td>
                 <td class="num">${fmt(a.saldo)} ${un}</td>
                 <td class="num">${fmt(a.consumo_mensal)}</td>
@@ -1739,20 +1811,85 @@
             </tr>`;
         }).join('') : '<tr><td colspan="11" class="mp-muted">Nenhum item crítico ou abaixo do mínimo.</td></tr>';
 
-        const janela = pr.janela_meses || 12;
-        $('mp-d-formulas').innerHTML = [
-            `<b>Valor em estoque</b> = saldo total × custo do GRV`,
-            `<b>Consumo</b> = saídas dos últimos ${janela} meses fechados`,
-            `<b>Giro anual</b> = consumo do ano em R$ ÷ estoque`,
-            `<b>Cobertura</b> = estoque ÷ consumo diário em R$`,
-            `<b>Segurança</b> = z × variação do consumo e do prazo`,
-            `<b>Mínimo</b> = consumo no prazo + segurança`,
-            `<b>Lote</b> = lote econômico, até ${fmt(pr.cobertura_lote_meses, 1)} meses de consumo`,
-            `<b>Máximo</b> = mínimo + lote`,
-            `<b>Comprar</b> = máximo − saldo − OC aberta`,
-            `<b>Capital parado</b> = saldo para mais de ${fmt(pr.slow_mover_meses, 0)} meses ou sem saída`,
-        ].join('\n') + (Number(pr.crescimento_vendas_pct) ? `\n\nConsumo projetado com ${pr.crescimento_vendas_pct > 0 ? '+' : ''}${fmt(pr.crescimento_vendas_pct, 1)}% de vendas.` : '');
+        renderFiltroPainel(d.visoes_disponiveis || {});
     }
+
+    // Filtro do painel: visões e curvas escolhidas (vazio = todas).
+    const painelFiltro = { visoes: new Set(), curvas: new Set() };
+
+    function paramsPainel(extra = {}) {
+        const params = new URLSearchParams(extra);
+        if (painelFiltro.visoes.size) params.set('visoes', [...painelFiltro.visoes].join(','));
+        if (painelFiltro.curvas.size) params.set('curvas', [...painelFiltro.curvas].join(','));
+        return params.toString();
+    }
+
+    function renderFiltroPainel(visoes) {
+        const botao = (tipo, valor, rotulo, marcado) => `<button type="button" class="mp-toggle" data-pf="${tipo}" data-valor="${esc(valor)}" aria-pressed="${marcado}">${esc(rotulo)}</button>`;
+        const algum = painelFiltro.visoes.size || painelFiltro.curvas.size;
+        // Mesma ordem e nomes das abas (o jsonify ordena as chaves por nome).
+        const abas = [...document.querySelectorAll('.mp-tabs .mp-view-btn[data-visao]')].filter((b) => b.dataset.visao in visoes);
+        $('mp-pfiltro').innerHTML = `<div class="mp-pfiltro__grupo"><span class="mp-pfiltro__rotulo">Visão</span>${abas.map((b) => botao('visoes', b.dataset.visao, b.textContent.trim(), painelFiltro.visoes.has(b.dataset.visao))).join('')}</div>
+            <div class="mp-pfiltro__grupo"><span class="mp-pfiltro__rotulo">Curva</span>${['A', 'B', 'C'].map((c) => botao('curvas', c, c, painelFiltro.curvas.has(c))).join('')}</div>
+            ${algum ? '<button type="button" class="mp-limpar" data-pf="limpar">Limpar filtros</button>' : ''}`;
+    }
+
+    $('mp-pfiltro').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-pf]');
+        if (!btn) return;
+        if (btn.dataset.pf === 'limpar') {
+            painelFiltro.visoes.clear();
+            painelFiltro.curvas.clear();
+        } else {
+            const conjunto = painelFiltro[btn.dataset.pf];
+            if (conjunto.has(btn.dataset.valor)) conjunto.delete(btn.dataset.valor); else conjunto.add(btn.dataset.valor);
+        }
+        carregarPainel();
+    });
+
+    // Lista dos itens de um grupo (fatia da saúde, itens para comprar, capital parado) e o porquê.
+    async function abrirGrupo(grupo) {
+        const dialogo = $('mp-grupo-dialog');
+        $('mp-grupo-titulo').textContent = 'Carregando...';
+        $('mp-grupo-sub').textContent = '';
+        $('mp-grupo-itens').innerHTML = '';
+        if (!dialogo.open) dialogo.showModal();
+        let data;
+        try {
+            const resp = await fetch('/api/logistica/estoque/painel/itens?' + paramsPainel({ grupo }));
+            data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar os itens.');
+        } catch (err) {
+            $('mp-grupo-titulo').textContent = 'Itens';
+            $('mp-grupo-sub').textContent = err.message;
+            return;
+        }
+        const itens = data.itens || [];
+        $('mp-grupo-titulo').textContent = `${data.titulo} · ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`;
+        $('mp-grupo-sub').textContent = data.total_valor ? `${data.rotulo_valor}: ${brl(data.total_valor, 0)} no total. Clique no item para abrir na visão dele.` : 'Clique no item para abrir na visão dele.';
+        $('mp-grupo-col-valor').textContent = data.rotulo_valor;
+        $('mp-grupo-itens').innerHTML = itens.length ? itens.map((i) => `<tr>
+            <td class="c-desc"><a href="#" data-ir="${esc(i.visao)}" data-codigo="${esc(i.codigo)}">${esc(i.descricao)}</a><small style="display:block;font-weight:400;color:var(--eui-muted);">${esc(i.codigo)} · ${esc(i.visao_label)}</small></td>
+            <td>${i.curva ? `<span class="mp-curva ${esc(String(i.curva).toLowerCase())}">${esc(i.curva)}</span>` : '—'}</td>
+            <td class="num">${fmt(i.saldo)} ${esc(i.unidade)}</td>
+            <td class="num">${i.minimo != null ? fmt(i.minimo) : '—'}</td>
+            <td class="num">${i.maximo != null ? fmt(i.maximo) : '—'}</td>
+            <td class="num" style="font-weight:700;color:var(--eui-text);">${i.valor != null ? brl(i.valor, 0) : '—'}</td>
+            <td style="white-space:normal;min-width:280px;">${esc(i.motivo)}</td>
+        </tr>`).join('') : '<tr><td colspan="7" class="mp-muted">Nenhum item neste grupo.</td></tr>';
+    }
+
+    $('mp-grupo-itens').addEventListener('click', (event) => {
+        const link = event.target.closest('[data-ir]');
+        if (!link) return;
+        event.preventDefault();
+        $('mp-grupo-dialog').close();
+        abrirVisao(link.dataset.ir, link.dataset.codigo);
+    });
+    $('mp-dash').addEventListener('click', (event) => {
+        const alvo = event.target.closest('[data-grupo]');
+        if (alvo) abrirGrupo(alvo.dataset.grupo);
+    });
 
     function renderFotosPainel(fotos, andamento = '') {
         const lista = Object.values(fotos || {});
@@ -1768,7 +1905,7 @@
     async function carregarPainel(silencioso = false) {
         let data;
         try {
-            const resp = await fetch('/api/logistica/estoque/painel');
+            const resp = await fetch('/api/logistica/estoque/painel?' + paramsPainel());
             data = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(data.error || 'Falha ao carregar o painel.');
         } catch (err) {
@@ -1776,7 +1913,7 @@
             return;
         }
         if (visaoAtual !== 'painel') return;
-        renderPainel(data);
+        renderDashboard(data);
         renderFotosPainel(data.fotos);
         if (painelAtualizando) return;
         // Visões sem foto ou velhas: atualiza uma de cada vez (no máximo 1

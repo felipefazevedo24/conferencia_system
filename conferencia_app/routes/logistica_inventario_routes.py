@@ -733,26 +733,51 @@ def estoque_atualizar_foto():
     return jsonify({"sucesso": True, "parcial": dados["parcial"], "foto": foto_svc.ler(visao)[1]})
 
 
-@logistica_inventario_bp.route("/api/logistica/estoque/painel", methods=["GET"])
-@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
-def estoque_painel():
-    """Painel inicial do Estoque (pedido da logistica em 17/11/2026), das fotos
-    de todas as visoes. Produto acabado entra so' no valor em estoque: e'
-    fabricado, nao tem minimo, lote nem consumo de compra."""
-    parametros = planejamento_svc.obter_parametros()
-    hoje = agora_br().date()
-    meses = planejamento_svc._meses_fechados(hoje, 12)
-    mes_atual = hoje.strftime("%Y-%m")
+def _n(valor, casas: int = 2) -> str:
+    """Número no formato brasileiro, sem casas quando é inteiro."""
+    v = float(valor or 0)
+    casas = 0 if abs(v - round(v)) < 1e-9 else casas
+    return f"{v:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _filtros_painel(args) -> tuple[list[str], set[str]]:
+    """Visoes e curvas escolhidas no painel. Nada escolhido = tudo."""
+    visoes = [v for v in str(args.get("visoes") or "").split(",") if v in ESTOQUE_VISOES] or list(ESTOQUE_VISOES)
+    curvas = {c for c in str(args.get("curvas") or "").upper().split(",") if c in {"A", "B", "C"}}
+    return visoes, curvas
+
+
+def _situacao_painel(row: dict, plano: dict) -> str | None:
+    """Fatia da 'Saude do estoque'. None = fica de fora (item novo, ainda sem
+    classificacao, ou sem saldo e sem giro)."""
+    if plano["tipo_demanda"] == "novo":
+        return None
+    if plano["tipo_demanda"] == "sem_giro" and float(row.get("saldo_disponivel") or 0) <= 0:
+        return None
+    if plano["nivel"] == "critico":
+        return "ruptura"
+    if plano["nivel"] == "atencao":
+        return "comprar"
+    if float(plano.get("excedente") or 0) > 0:
+        return "excesso"
+    return "saudavel"
+
+
+def _base_painel(visoes: list[str], curvas: set[str], parametros: dict, meses: list[str]) -> dict:
+    """Linhas de todas as visoes escolhidas, das fotos, com as contas. Produto
+    acabado entra so' no valor: e' fabricado, nao tem minimo, lote nem
+    consumo de compra. Com filtro de curva ele sai (nao tem curva)."""
+    mes_atual = agora_br().date().strftime("%Y-%m")
     tudo = _filtros_estoque({"incluir_sem_saldo": "1"}, None)
-    fotos = {}
-    valor_por_visao = {}
-    consumo_anual_por_visao = {}
-    consumo_mes = {m: 0.0 for m in meses + [mes_atual]}
-    planos = []  # (rotulo da visao, linha da tela, plano, custo)
-    for visao, cfg in ESTOQUE_VISOES.items():
+    base = {
+        "fotos": {}, "valor_por_visao": {}, "consumo_anual_por_visao": {},
+        "consumo_mes": {m: 0.0 for m in meses + [mes_atual]}, "planos": [],
+    }
+    for visao in visoes:
+        cfg = ESTOQUE_VISOES[visao]
         dados, foto = foto_svc.ler(visao)
-        fotos[visao] = {**foto, "label": cfg["label"]}
-        if not dados:
+        base["fotos"][visao] = {**foto, "label": cfg["label"]}
+        if not dados or (curvas and visao not in VISOES_PLANEJAMENTO):
             continue
         resposta = _montar_estoque(visao, dados, parametros, foto["versao"], tudo)
         historicos = dados.get("historicos") or {}
@@ -764,72 +789,127 @@ def estoque_painel():
             # planilha de outubro tambem tirava do total).
             if (row.get("ajuste") or {}).get("fora_analise"):
                 continue
+            if curvas and (not plano or plano.get("classe_abc") not in curvas):
+                continue
             custo = float((plano or {}).get("custo_unitario") or row.get("custo_medio") or 0)
             valor += max(0.0, float(row.get("saldo_total") or 0)) * custo
             if not plano or visao not in VISOES_PLANEJAMENTO:
                 continue
-            planos.append((cfg["label"], row, plano, custo))
+            base["planos"].append({"visao": visao, "rotulo": cfg["label"], "row": row, "plano": plano, "custo": custo})
             # Consumo real (sem o crescimento previsto): giro e cobertura de hoje.
             if plano.get("meses_analisados"):
                 consumo_anual += float(plano.get("consumo_janela") or 0) / plano["meses_analisados"] * 12 * custo
             serie = (historicos.get(planejamento_svc.chave_codigo(row["codigo"])) or {}).get("serie_mensal") or []
             for ponto in serie:
-                if ponto.get("mes") in consumo_mes:
-                    consumo_mes[ponto["mes"]] += float(ponto.get("saida") or 0) * custo
-        valor_por_visao[visao] = valor
+                if ponto.get("mes") in base["consumo_mes"]:
+                    base["consumo_mes"][ponto["mes"]] += float(ponto.get("saida") or 0) * custo
+        base["valor_por_visao"][visao] = valor
         if visao in VISOES_PLANEJAMENTO:
-            consumo_anual_por_visao[visao] = consumo_anual
+            base["consumo_anual_por_visao"][visao] = consumo_anual
+    return base
+
+
+def _comprar(item: dict) -> float:
+    """Politica minimo/maximo: o que leva o saldo (com o que ja' esta' em OC)
+    de volta ao maximo."""
+    row, plano = item["row"], item["plano"]
+    return max(0.0, float(plano.get("estoque_maximo") or 0) - float(row.get("saldo_disponivel") or 0) - float(row.get("quantidade_pendente_oc") or 0))
+
+
+def _motivo_painel(grupo: str, item: dict, parametros: dict) -> str:
+    """Por que o item caiu naquele grupo, em uma frase."""
+    row, plano = item["row"], item["plano"]
+    un = row.get("unidade") or ""
+    saldo = f"{_n(row.get('saldo_disponivel'))} {un}"
+    minimo = _n(plano.get("estoque_minimo_sugerido"))
+    maximo = _n(plano.get("estoque_maximo"))
+    pendente = float(row.get("quantidade_pendente_oc") or 0)
+    oc = f" Já há {_n(pendente)} {un} em OC aberta." if pendente > 0 else ""
+    if grupo == "ruptura":
+        return f"O saldo de {saldo} dura {plano.get('cobertura_dias')} dias e a reposição leva {_n(plano.get('lead_time_dias'), 0)} dias.{oc}"
+    if grupo == "comprar":
+        comprar = _comprar(item)
+        sugestao = f" Comprar {_n(comprar)} {un} leva ao máximo de {maximo}." if comprar > 0 else " A OC aberta já cobre até o máximo."
+        return f"Saldo de {saldo} abaixo do mínimo de {minimo}.{sugestao}{oc if comprar > 0 else ''}"
+    if grupo == "excesso":
+        if plano["tipo_demanda"] == "sem_giro":
+            return f"Sem saída em {plano['janela_meses']} meses: o saldo inteiro ({saldo}) sobra."
+        lote = _n(plano.get("lote_economico_sugerido"))
+        return f"Saldo de {saldo} acima do máximo de {maximo} (mínimo {minimo} + lote {lote}): sobram {_n(plano.get('excedente'))} {un}."
+    if grupo == "slow":
+        if plano.get("parado"):
+            return f"Parado: sem saída em {plano['janela_meses']} meses."
+        return f"O saldo de {saldo} dura {_n(plano.get('cobertura_meses'), 1)} meses no consumo médio (slow mover acima de {_n(parametros.get('slow_mover_meses'), 1)})."
+    # saudavel
+    if plano["tipo_demanda"] in ("intermitente", "esporadico"):
+        return f"Demanda esporádica: o saldo de {saldo} está dentro do máximo de {maximo} e cobre {_n(plano.get('cobre_retirada_pct') or 0, 0)}% de uma retirada típica."
+    return f"Saldo de {saldo} entre o mínimo de {minimo} e o máximo de {maximo}."
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/painel", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_painel():
+    """Painel inicial do Estoque (pedido da logistica em 17/11/2026), das fotos
+    de todas as visoes, filtravel por visao e curva."""
+    parametros = planejamento_svc.obter_parametros()
+    hoje = agora_br().date()
+    meses = planejamento_svc._meses_fechados(hoje, 12)
+    mes_atual = hoje.strftime("%Y-%m")
+    visoes, curvas = _filtros_painel(request.args)
+    base = _base_painel(visoes, curvas, parametros, meses)
+    valor_por_visao = base["valor_por_visao"]
+    consumo_anual_por_visao = base["consumo_anual_por_visao"]
+    planos = base["planos"]
 
     valor_total = sum(valor_por_visao.values())
     valor_comprado = sum(v for k, v in valor_por_visao.items() if k in VISOES_PLANEJAMENTO)
     consumo_anual = sum(consumo_anual_por_visao.values())
 
     # Valor em estoque mes a mes: o ultimo dia gravado de cada visao no mes
-    # (gravado desde 17/11/2026). O mes corrente e' o de agora.
-    historico_valor = foto_svc.valores_por_mes(list(ESTOQUE_VISOES), meses)
-    serie_valor = [round(sum(historico_valor[m].values()), 2) if historico_valor.get(m) else None for m in meses]
-    serie_valor.append(round(valor_total, 2) if valor_por_visao else None)
-    anterior = historico_valor.get(meses[-1]) or {}
+    # (gravado desde 17/11/2026), por visao - com filtro de curva nao da'
+    # pra separar o passado. O mes corrente e' o de agora.
+    serie_valor = [None] * len(meses)
     variacao_pct = None
-    if anterior and sum(anterior.values()) > 0:
-        # So' as visoes que existem nos dois meses, senao uma visao sem
-        # registro no mes passado pareceria crescimento.
-        agora_comparavel = sum(valor_por_visao.get(v, 0.0) for v in anterior)
-        variacao_pct = round((agora_comparavel / sum(anterior.values()) - 1) * 100, 1)
+    if not curvas:
+        historico_valor = foto_svc.valores_por_mes(visoes, meses)
+        serie_valor = [round(sum(historico_valor[m].values()), 2) if historico_valor.get(m) else None for m in meses]
+        anterior = historico_valor.get(meses[-1]) or {}
+        if anterior and sum(anterior.values()) > 0:
+            # So' as visoes que existem nos dois meses, senao uma visao sem
+            # registro no mes passado pareceria crescimento.
+            agora_comparavel = sum(valor_por_visao.get(v, 0.0) for v in anterior)
+            variacao_pct = round((agora_comparavel / sum(anterior.values()) - 1) * 100, 1)
+    serie_valor.append(round(valor_total, 2) if valor_por_visao else None)
 
-    analisados = [(r, row, p, c) for r, row, p, c in planos if not p.get("fora_analise") and p.get("tipo_demanda") != "novo"]
     saude = {"saudavel": 0, "comprar": 0, "ruptura": 0, "excesso": 0}
-    for _, row, plano, _ in analisados:
-        if plano["tipo_demanda"] == "sem_giro" and float(row.get("saldo_disponivel") or 0) <= 0:
-            continue
-        if plano["nivel"] == "critico":
-            saude["ruptura"] += 1
-        elif plano["nivel"] == "atencao":
-            saude["comprar"] += 1
-        elif float(plano.get("excedente") or 0) > 0:
-            saude["excesso"] += 1
-        else:
-            saude["saudavel"] += 1
+    for item in planos:
+        grupo = _situacao_painel(item["row"], item["plano"])
+        if grupo:
+            saude[grupo] += 1
 
     # Curva ABC pelo valor consumido no ano (a da tabela e' pelo giro).
     por_valor = []
-    for _, row, plano, custo in analisados:
-        if plano.get("meses_analisados") and custo > 0:
+    for item in planos:
+        plano, custo = item["plano"], item["custo"]
+        if plano.get("tipo_demanda") != "novo" and plano.get("meses_analisados") and custo > 0:
             anual = float(plano.get("consumo_janela") or 0) / plano["meses_analisados"] * 12 * custo
             if anual > 0:
-                por_valor.append((anual, row))
+                por_valor.append((anual, item))
     por_valor.sort(key=lambda x: -x[0])
     total_valor = sum(v for v, _ in por_valor) or 1.0
     acumulado = 0.0
     pareto = []
     classes = {"A": 0, "B": 0, "C": 0}
-    for anual, row in por_valor:
+    for anual, item in por_valor:
+        antes = acumulado / total_valor * 100
         acumulado += anual
-        pct = acumulado / total_valor * 100
-        classe = "A" if pct - anual / total_valor * 100 < 80 else ("B" if pct - anual / total_valor * 100 < 95 else "C")
-        classes[classe] += 1
+        classes["A" if antes < 80 else ("B" if antes < 95 else "C")] += 1
         if len(pareto) < 20:
-            pareto.append({"codigo": row["codigo"], "descricao": row.get("descricao") or "", "valor": round(anual, 2), "acumulado_pct": round(pct, 1)})
+            row = item["row"]
+            pareto.append({
+                "codigo": row["codigo"], "descricao": row.get("descricao") or "", "visao": item["visao"],
+                "valor": round(anual, 2), "acumulado_pct": round(acumulado / total_valor * 100, 1),
+            })
 
     cobertura_por_visao = [
         {
@@ -838,40 +918,44 @@ def estoque_painel():
             "dias": round(valor_por_visao[visao] / (consumo_anual_por_visao[visao] / 365), 0) if consumo_anual_por_visao.get(visao) else None,
             "valor": round(valor_por_visao[visao], 2),
         }
-        for visao in ESTOQUE_VISOES if visao in consumo_anual_por_visao
+        for visao in visoes if visao in consumo_anual_por_visao
     ]
 
     prioridade = {"critico": 0, "atencao": 1}
+    em_acao = [i for i in planos if i["plano"]["nivel"] in prioridade]
     acoes = []
-    for rotulo, row, plano, custo in sorted(
-        (x for x in analisados if x[2]["nivel"] in prioridade),
-        key=lambda x: (prioridade[x[2]["nivel"]], x[2].get("cobertura_dias") if x[2].get("cobertura_dias") is not None else 999999),
-    )[:20]:
-        pendente = float(row.get("quantidade_pendente_oc") or 0)
-        # Politica minimo/maximo: compra o que leva o saldo (com o que ja
-        # esta em OC) de volta ao maximo.
-        comprar = max(0.0, float(plano.get("estoque_maximo") or 0) - float(row.get("saldo_disponivel") or 0) - pendente)
+    for item in sorted(em_acao, key=lambda i: (
+        prioridade[i["plano"]["nivel"]],
+        i["plano"].get("cobertura_dias") if i["plano"].get("cobertura_dias") is not None else 999999,
+    ))[:20]:
+        row, plano, custo = item["row"], item["plano"], item["custo"]
+        comprar = _comprar(item)
         acoes.append({
-            "codigo": row["codigo"], "descricao": row.get("descricao") or "", "visao": rotulo, "unidade": row.get("unidade") or "",
-            "curva": plano.get("classe_abc"), "saldo": row.get("saldo_disponivel"), "consumo_mensal": plano.get("consumo_mensal"),
-            "lead_time_dias": plano.get("lead_time_dias"), "estoque_seguranca": plano.get("estoque_seguranca"),
-            "minimo": plano.get("estoque_minimo_sugerido"), "maximo": plano.get("estoque_maximo"),
-            "cobertura_dias": plano.get("cobertura_dias"), "pendente_oc": pendente, "comprar": round(comprar, 3),
+            "codigo": row["codigo"], "descricao": row.get("descricao") or "", "visao": item["visao"], "visao_label": item["rotulo"],
+            "unidade": row.get("unidade") or "", "curva": plano.get("classe_abc"), "saldo": row.get("saldo_disponivel"),
+            "consumo_mensal": plano.get("consumo_mensal"), "lead_time_dias": plano.get("lead_time_dias"),
+            "estoque_seguranca": plano.get("estoque_seguranca"), "minimo": plano.get("estoque_minimo_sugerido"),
+            "maximo": plano.get("estoque_maximo"), "cobertura_dias": plano.get("cobertura_dias"),
+            "pendente_oc": float(row.get("quantidade_pendente_oc") or 0), "comprar": round(comprar, 3),
             "comprar_valor": round(comprar * custo, 2) if custo else None, "nivel": plano["nivel"],
         })
 
-    slow = planejamento_svc.resumir_slow_mover([p for _, _, p, _ in planos])
+    slow = planejamento_svc.resumir_slow_mover([i["plano"] for i in planos])
     return jsonify({
-        "fotos": fotos,
+        "fotos": base["fotos"],
+        "visoes_disponiveis": {v: cfg["label"] for v, cfg in ESTOQUE_VISOES.items()},
+        "filtro": {"visoes": visoes, "curvas": sorted(curvas)},
         "parametros": parametros,
         "kpis": {
             "valor_estoque": round(valor_total, 2),
             "valor_variacao_pct": variacao_pct,
+            "necessario_medio_valor": slow["necessario_medio_valor"],
+            "necessario_medio_valor_base": slow["necessario_medio_valor_base"],
             "giro_anual": round(consumo_anual / valor_comprado, 1) if valor_comprado else None,
             "cobertura_dias": round(valor_comprado / (consumo_anual / 365)) if consumo_anual else None,
             "para_comprar": saude["comprar"] + saude["ruptura"],
             "criticos": saude["ruptura"],
-            "criticos_sem_oc": sum(1 for _, row, p, _ in analisados if p["nivel"] == "critico" and not row.get("ordens_compra_abertas")),
+            "criticos_sem_oc": sum(1 for i in planos if i["plano"]["nivel"] == "critico" and not i["row"].get("ordens_compra_abertas")),
             "slow_mover_valor": slow["slow_mover_valor"],
             "slow_mover_itens": slow["slow_mover_itens"],
             "parado_valor": slow["parado_valor"],
@@ -879,14 +963,69 @@ def estoque_painel():
         },
         "meses": meses + [mes_atual],
         "serie_valor": serie_valor,
-        "serie_consumo": [round(consumo_mes[m], 2) for m in meses + [mes_atual]],
+        "serie_consumo": [round(base["consumo_mes"][m], 2) for m in meses + [mes_atual]],
         "saude": saude,
         "pareto": pareto,
         "pareto_classes": classes,
         "pareto_total_itens": len(por_valor),
         "cobertura_por_visao": cobertura_por_visao,
         "acoes": acoes,
-        "acoes_total": sum(1 for x in analisados if x[2]["nivel"] in prioridade),
+        "acoes_total": len(em_acao),
+    })
+
+
+# Grupos que o painel abre em lista ao clicar: as fatias da saude, "itens para
+# comprar" (ruptura + comprar) e "capital parado" (slow mover).
+GRUPOS_PAINEL = {
+    "saudavel": "Saudável", "comprar": "Comprar agora", "ruptura": "Ruptura iminente", "excesso": "Excesso",
+    "para_comprar": "Itens para comprar", "slow": "Capital parado (slow mover)",
+}
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/painel/itens", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_painel_itens():
+    """Os itens de um grupo do painel, com o motivo de cada um."""
+    grupo = str(request.args.get("grupo") or "").strip()
+    if grupo not in GRUPOS_PAINEL:
+        return jsonify({"error": "Grupo inválido."}), 400
+    parametros = planejamento_svc.obter_parametros()
+    visoes, curvas = _filtros_painel(request.args)
+    base = _base_painel(visoes, curvas, parametros, planejamento_svc._meses_fechados(agora_br().date(), 12))
+    itens = []
+    for item in base["planos"]:
+        row, plano = item["row"], item["plano"]
+        situacao = _situacao_painel(row, plano)
+        if grupo == "slow":
+            dentro, motivo_grupo = bool(plano.get("slow_mover")), "slow"
+        elif grupo == "para_comprar":
+            dentro, motivo_grupo = situacao in ("ruptura", "comprar"), situacao
+        else:
+            dentro, motivo_grupo = situacao == grupo, grupo
+        if not dentro:
+            continue
+        custo = item["custo"]
+        valor = plano.get("excedente_valor") if motivo_grupo == "excesso" else (
+            round(_comprar(item) * custo, 2) if motivo_grupo in ("ruptura", "comprar") and custo else plano.get("valor_saldo")
+        )
+        itens.append({
+            "codigo": row["codigo"], "descricao": row.get("descricao") or "", "visao": item["visao"], "visao_label": item["rotulo"],
+            "unidade": row.get("unidade") or "", "curva": plano.get("classe_abc"), "saldo": row.get("saldo_disponivel"),
+            "minimo": plano.get("estoque_minimo_sugerido"), "maximo": plano.get("estoque_maximo"),
+            "valor": valor, "situacao": motivo_grupo, "motivo": _motivo_painel(motivo_grupo, item, parametros),
+            "cobertura_dias": plano.get("cobertura_dias"),
+        })
+    if grupo in ("ruptura", "comprar", "para_comprar"):
+        ordem = {"ruptura": 0, "comprar": 1}
+        itens.sort(key=lambda i: (ordem.get(i["situacao"], 9), i["cobertura_dias"] if i["cobertura_dias"] is not None else 999999))
+    elif grupo == "saudavel":
+        itens.sort(key=lambda i: i["codigo"])
+    else:
+        itens.sort(key=lambda i: -(i["valor"] or 0))
+    rotulo_valor = {"excesso": "Excedente", "ruptura": "Para comprar", "comprar": "Para comprar", "para_comprar": "Para comprar"}.get(grupo, "Valor do saldo")
+    return jsonify({
+        "grupo": grupo, "titulo": GRUPOS_PAINEL[grupo], "rotulo_valor": rotulo_valor,
+        "itens": itens, "total_valor": round(sum(float(i["valor"] or 0) for i in itens), 2),
     })
 
 
