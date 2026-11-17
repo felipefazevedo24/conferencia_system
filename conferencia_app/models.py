@@ -4827,6 +4827,9 @@ class EstoqueParametroItem(db.Model):
     codigo_exibicao = db.Column(db.String(60))
     cobertura_lote_meses = db.Column(db.Float)
     fora_analise = db.Column(db.Boolean, nullable=False, default=False)
+    # Descontinuado (17/11/2026): minimo, lote e maximo zero - nunca mais
+    # pede compra nem alerta, e o saldo que restar e' todo excedente.
+    nao_comprar = db.Column(db.Boolean, nullable=False, default=False)
     observacao = db.Column(db.String(300))
     atualizado_por = db.Column(db.String(100))
     atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)

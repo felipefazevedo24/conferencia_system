@@ -646,7 +646,7 @@ def _montar_estoque(visao: str, dados: dict, parametros: dict, versao: str | Non
     if somente_slow:
         rows = [row for row in rows if (row.get("planejamento") or {}).get("slow_mover")]
 
-    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "novo": 6, "sem_controle": 7}
+    prioridade_nivel = {"critico": 0, "atencao": 1, "esporadico": 2, "sem_consumo": 3, "sem_estoque": 4, "normal": 5, "novo": 6, "descontinuado": 7, "sem_controle": 8}
     rows.sort(key=lambda row: (
         0 if visao == "produto_acabado" and float(row.get("saldo_reservado") or 0) > 0 else 1,
         prioridade_nivel.get(str(row.get("nivel") or ""), 9),
@@ -752,7 +752,9 @@ def _situacao_painel(row: dict, plano: dict) -> str | None:
     classificacao, ou sem saldo e sem giro)."""
     if plano["tipo_demanda"] == "novo":
         return None
-    if plano["tipo_demanda"] == "sem_giro" and float(row.get("saldo_disponivel") or 0) <= 0:
+    sem_saldo = float(row.get("saldo_disponivel") or 0) <= 0
+    # Descontinuado sem saldo nao tem mais o que analisar; com saldo, e' excesso.
+    if sem_saldo and (plano["tipo_demanda"] == "sem_giro" or plano.get("nao_comprar")):
         return None
     if plano["nivel"] == "critico":
         return "ruptura"
@@ -832,11 +834,15 @@ def _motivo_painel(grupo: str, item: dict, parametros: dict) -> str:
         sugestao = f" Comprar {_n(comprar)} {un} leva ao máximo de {maximo}." if comprar > 0 else " A OC aberta já cobre até o máximo."
         return f"Saldo de {saldo} abaixo do mínimo de {minimo}.{sugestao}{oc if comprar > 0 else ''}"
     if grupo == "excesso":
+        if plano.get("nao_comprar"):
+            return f"Não comprar mais: o saldo inteiro ({saldo}) sobra para consumir ou vender."
         if plano["tipo_demanda"] == "sem_giro":
             return f"Sem saída em {plano['janela_meses']} meses: o saldo inteiro ({saldo}) sobra."
         lote = _n(plano.get("lote_economico_sugerido"))
         return f"Saldo de {saldo} acima do máximo de {maximo} (mínimo {minimo} + lote {lote}): sobram {_n(plano.get('excedente'))} {un}."
     if grupo == "slow":
+        if plano.get("nao_comprar"):
+            return f"Não comprar mais: o saldo de {saldo} não será reposto."
         if plano.get("parado"):
             return f"Parado: sem saída em {plano['janela_meses']} meses."
         return f"O saldo de {saldo} dura {_n(plano.get('cobertura_meses'), 1)} meses no consumo médio (slow mover acima de {_n(parametros.get('slow_mover_meses'), 1)})."

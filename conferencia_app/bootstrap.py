@@ -1363,6 +1363,11 @@ def initialize_database(app: Flask) -> None:
             app.logger.exception("Bootstrap: falha ao criar colunas novas de estoque_planejamento_parametro")
 
         try:
+            _ensure_estoque_parametro_item_columns()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao criar colunas novas de estoque_parametro_item")
+
+        try:
             _ensure_compra_st_fornecedor_sem_homologacao()
         except Exception:
             app.logger.exception("Bootstrap: falha ao ajustar compra_st_fornecedor (fornecedor sem homologacao)")
@@ -2023,6 +2028,19 @@ def _ensure_estoque_planejamento_parametro_columns() -> None:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_estoque_parametro_item_columns() -> None:
+    if not _has_table("estoque_parametro_item"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("estoque_parametro_item")
+        if "nao_comprar" not in cols:
+            conn.execute(db.text("ALTER TABLE estoque_parametro_item ADD COLUMN nao_comprar BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
     finally:
         conn.close()
 
