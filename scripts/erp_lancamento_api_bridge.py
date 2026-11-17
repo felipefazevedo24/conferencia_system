@@ -1515,14 +1515,18 @@ SQL_PLANEJAMENTO_CADASTRO = """
 # deposito 1 de cada OC. preco_unitario e' da UNIDADE DE COMPRA (PC de 6 m,
 # CX com 12): o Sync converte por qtde_compra/qtde pra comparar fornecedores.
 # Entrada estornada inteira (liquido <= 0 no documento) nao conta.
-SQL_FORNECIMENTOS_PRODUTO = """
+# A mesma consulta em lote (Excel da tela de Estoque com todos os itens, 17/11/2026):
+# 1 consulta por item levava ~1,5 s e 1.300 itens passavam do limite do
+# PythonAnywhere. `filtro` escolhe 1 codigo ou a lista.
+_SQL_FORNECIMENTOS_BASE = """
     with prod as (
-        select p.codigo as cod_produto
+        select p.codigo as cod_produto,
+               regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') as codigo
         from public.tproduto p
         where p.cod_empresa = %(empresa)s
-          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') = %(codigo)s
+          and regexp_replace(upper(trim(p.codigo_interno::text)), '[^A-Z0-9]', '', 'g') {filtro}
     )
-    select o.codigo as ordem_compra, o.data::date as dt_oc, o.cod_fornecedor,
+    select pr.codigo as codigo_produto, o.codigo as ordem_compra, o.data::date as dt_oc, o.cod_fornecedor,
            coalesce(nullif(trim(f.razao_social), ''), nullif(trim(f.nome), ''), nullif(trim(o.fornecedor), ''), 'Fornecedor nao informado') as fornecedor,
            regexp_replace(coalesce(f.cgc, ''), '[^0-9]', '', 'g') as cnpj,
            a.qtde, a.qtde_compra, a.unidade as unidade_compra, a.unidade_est, a.preco_unitario, a.qtde_entregue,
@@ -1560,6 +1564,8 @@ SQL_FORNECIMENTOS_PRODUTO = """
       and o.data >= %(inicio)s::date
     order by o.data desc, o.codigo desc
 """
+SQL_FORNECIMENTOS_PRODUTO = _SQL_FORNECIMENTOS_BASE.format(filtro="= %(codigo)s")
+SQL_FORNECIMENTOS_PRODUTOS = _SQL_FORNECIMENTOS_BASE.format(filtro="= any(%(codigos)s::text[])")
 
 
 # Cardex (Logistica > Inventario > Cardex). A bridge so' devolve o movimento
@@ -3301,6 +3307,48 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "codigo": codigo, "fornecimentos": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar fornecimentos do produto no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque/fornecimentos-lote")
+    def consultar_estoque_fornecimentos_lote():
+        """Fornecimentos de varios produtos de uma vez, so' da janela pedida
+        (o Sync so' mostra OC dos ultimos `meses`)."""
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+            try:
+                meses = min(max(int(payload.get("meses") or 12), 1), 120)
+            except (TypeError, ValueError):
+                meses = 12
+            codigos_raw = payload.get("codigos") or []
+            if not isinstance(codigos_raw, list):
+                return jsonify({"sucesso": False, "erro": "codigos_deve_ser_lista"}), 400
+            codigos = sorted({re.sub(r"[^A-Z0-9]", "", str(c or "").strip().upper()) for c in codigos_raw} - {""})
+            if not codigos:
+                return jsonify({"sucesso": True, "fornecimentos": {}})
+            hoje = date.today()
+            ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - meses, 12)
+            inicio = date(ano, mes + 1, 1)
+            por_codigo: dict[str, list] = {c: [] for c in codigos}
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(SQL_FORNECIMENTOS_PRODUTOS, {"empresa": empresa, "codigos": codigos, "inicio": inicio})
+                    cols = [desc[0] for desc in cur.description]
+                    for row in cur.fetchall():
+                        linha = _json_safe(dict(zip(cols, row)))
+                        por_codigo.setdefault(linha.get("codigo_produto") or "", []).append(linha)
+            return jsonify({"sucesso": True, "inicio": inicio.isoformat(), "fornecimentos": por_codigo})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar fornecimentos em lote no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/fiscal/mascaras-sugestao")

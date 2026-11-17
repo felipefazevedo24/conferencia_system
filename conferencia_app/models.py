@@ -4855,6 +4855,24 @@ class EstoqueTelaFoto(db.Model):
     erro_em = db.Column(db.DateTime)
 
 
+class EstoqueValorDiario(db.Model):
+    """Valor do estoque de cada visão, um por dia: a linha "valor em estoque"
+    do painel. O GRV não guarda o saldo de meses passados; aqui ele começa a
+    ser gravado em 17/11/2026, sempre que a foto da visão é atualizada (o
+    último do dia vale). Dia em que ninguém abre a tela fica sem registro.
+    """
+
+    __tablename__ = "estoque_valor_diario"
+    __table_args__ = (db.UniqueConstraint("data", "visao", name="ux_estoque_valor_diario_data_visao"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    data = db.Column(db.Date, nullable=False)
+    visao = db.Column(db.String(40), nullable=False)
+    valor = db.Column(db.Float, nullable=False)  # saldo total x custo do GRV
+    itens = db.Column(db.Integer, nullable=False, default=0)  # itens com saldo
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
 class EstoqueAlertaEstado(db.Model):
     """O que o aviso de estoque por e-mail já comunicou: 1 linha por item em alerta.
 

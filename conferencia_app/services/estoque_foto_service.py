@@ -13,15 +13,16 @@ from __future__ import annotations
 
 import json
 import zlib
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
-from ..models import EstoqueTelaFoto as Foto
+from ..models import EstoqueTelaFoto as Foto, EstoqueValorDiario as ValorDiario
 from ..tempo import agora_br
+from . import estoque_planejamento_service as planejamento_svc
 
 IDADE_MAXIMA_MIN = 15
 # Atualização "em andamento" há mais tempo que isso caiu no meio (worker
@@ -129,3 +130,47 @@ def falhar(visao: str, erro: str) -> None:
     linha.erro = str(erro)[:500]
     linha.erro_em = agora_br()
     db.session.commit()
+
+
+def registrar_valor(visao: str, dados: dict[str, Any]) -> None:
+    """Grava o valor do estoque da visão no dia (EstoqueValorDiario). Item
+    fora da análise (ativo da empresa) não entra, igual ao painel."""
+    fora = {c for c, a in planejamento_svc.obter_ajustes().items() if a.get("fora_analise")}
+    valor = 0.0
+    itens = 0
+    for linha in dados.get("linhas") or []:
+        if planejamento_svc.chave_codigo(linha.get("codigo")) in fora:
+            continue
+        saldo = float(linha.get("saldo_total") or 0)
+        if saldo > 0:
+            itens += 1
+            valor += saldo * float(linha.get("custo_medio") or 0)
+    hoje = agora_br().date()
+    registro = ValorDiario.query.filter_by(data=hoje, visao=visao).first()
+    if not registro:
+        registro = ValorDiario(data=hoje, visao=visao)
+        db.session.add(registro)
+    registro.valor = round(valor, 2)
+    registro.itens = itens
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Outro worker gravou o mesmo dia ao mesmo tempo: o dele vale.
+        db.session.rollback()
+
+
+def valores_por_mes(visoes: list[str], meses: list[str]) -> dict[str, dict[str, float]]:
+    """{mes 'AAAA-MM': {visao: valor do último dia gravado no mês}}."""
+    if not meses:
+        return {}
+    inicio = date.fromisoformat(meses[0] + "-01")
+    resultado: dict[str, dict[str, float]] = {}
+    linhas = (
+        ValorDiario.query.filter(ValorDiario.data >= inicio, ValorDiario.visao.in_(visoes))
+        .order_by(ValorDiario.data).all()
+    )
+    for linha in linhas:
+        mes = linha.data.strftime("%Y-%m")
+        if mes in meses:
+            resultado.setdefault(mes, {})[linha.visao] = float(linha.valor or 0)
+    return resultado

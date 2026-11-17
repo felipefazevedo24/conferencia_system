@@ -448,6 +448,29 @@ def buscar_fornecimentos_grv(codigo: str, empresa: int = 1) -> list[dict[str, An
     return data.get("fornecimentos") or []
 
 
+def buscar_fornecimentos_lote_grv(codigos: list[str], meses: int = 12, empresa: int = 1) -> dict[str, list[dict[str, Any]]]:
+    """codigo (sem pontuacao) -> itens de OC dos ultimos `meses`, numa
+    consulta so'. Bridge antiga (sem o endpoint) devolve 404: levanta, e
+    quem chama decide o fallback."""
+    chaves = sorted({re.sub(r"[^A-Z0-9]", "", str(c or "").strip().upper()) for c in codigos or []} - {""})
+    if not chaves:
+        return {}
+    cfg = _bridge_config()
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada para consultar fornecimentos no GRV.")
+    resp = requests.post(
+        f"{cfg['api_url']}/api/erp/estoque/fornecimentos-lote",
+        headers=_headers(cfg),
+        json={"empresa": empresa, "codigos": chaves, "meses": meses},
+        timeout=max(float(cfg["timeout"] or 0), 120.0),
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API de fornecimentos em lote."))
+    return data.get("fornecimentos") or {}
+
+
 def buscar_reservas_produto_acabado_grv(
     codigos: list[str],
     empresa: int = 1,
