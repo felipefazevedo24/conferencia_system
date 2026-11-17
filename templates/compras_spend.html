@@ -208,12 +208,12 @@
                     <div data-pane="notas" hidden>
                         <div class="sp-pane-tools">
                             <div class="sp-toggle" id="sp-nf-modo"><button type="button" class="is-active" data-modo="">Todas</button><button type="button" data-modo="spend">No Spend</button><button type="button" data-modo="fora">Fora do Spend</button></div>
-                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-nf" placeholder="Buscar fornecedor, NF, item, descrição, CFOP ou família" autocomplete="off"></div>
+                            <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sp-busca-nf" placeholder="Buscar fornecedor, NF, OC, requisitante, item, CFOP ou família" autocomplete="off"></div>
                             <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-nf-excel" style="margin-left:auto"><i class="fas fa-file-excel"></i> Exportar Excel</button>
                         </div>
                         <div class="sp-nf-totais" id="sp-nf-totais"></div>
                         <div class="sp-tabela-wrap"><table class="erp-table">
-                            <thead><tr><th>Lançamento</th><th>NF</th><th>Fornecedor</th><th>CFOP</th><th>Item</th><th class="sp-num">Valor</th><th>Situação</th><th>Classificação</th><th></th></tr></thead>
+                            <thead><tr><th>Lançamento</th><th>NF</th><th>Fornecedor</th><th>CFOP</th><th>Item</th><th class="sp-num">Valor</th><th>OC</th><th>Requisitante</th><th>Situação</th><th>Classificação</th><th></th></tr></thead>
                             <tbody id="sp-tb-nf"></tbody>
                         </table></div>
                         <div class="sp-mais"><span id="sp-nf-info"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-nf-mais" hidden>Mostrar mais</button></div>
@@ -739,10 +739,12 @@
                 <td class="sp-cod" title="${esc(l.cfop_descricao)}">${esc(l.cfop)}${l.cfop_descricao ? `<div class="sp-muted sp-desc" style="max-width:180px;font-size:11.5px">${esc(l.cfop_descricao)}</div>` : ""}</td>
                 <td><div class="sp-desc sp-rev-desc" title="${esc(l.descricao)}">${esc(l.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(l.codigo_item) || "(sem código)"}${l.familia ? " · " + esc(l.familia) : ""}</div></td>
                 <td class="sp-num">${fmtR(l.valor)}</td>
+                <td class="sp-cod" title="${esc([l.oc_origem, l.solicitacao ? "SC " + l.solicitacao : ""].filter(Boolean).join(" · "))}">${esc(l.ordem_compra) || '<span class="sp-muted">—</span>'}</td>
+                <td>${esc(l.requisitante) || '<span class="sp-muted">—</span>'}</td>
                 <td>${sit}</td>
                 <td>${editavel ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" data-i="${i}" value="${esc(semCls ? "" : l.classificacao)}" placeholder="Sem classificação" title="${l.classificacao_manual ? "Confirmado" : (l.palpite ? "Palpite" : "Planilha do Custos")}">` : esc(l.classificacao)}</td>
                 <td class="sp-nf-acao">${acao}</td></tr>`;
-        }).join("") || `<tr><td colspan="9" class="sp-linha-vazia">Nenhuma nota no filtro.</td></tr>`;
+        }).join("") || `<tr><td colspan="11" class="sp-linha-vazia">Nenhuma nota no filtro.</td></tr>`;
         $("sp-nf-info").textContent = nf.total
             ? `Mostrando ${inteiro.format(nf.linhas.length)} de ${inteiro.format(nf.total)} linhas · ${fmtR(nf.valor)} no filtro · decisões valem para o fornecedor + item`
             : "";

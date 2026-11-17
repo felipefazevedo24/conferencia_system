@@ -2005,7 +2005,10 @@ SELECT c.dt_lancamento::date AS data_lancamento,
        NULLIF(TRIM(a.numero_plano_contas), '') AS conta,
        NULLIF(TRIM(a.plano_contas), '') AS nome_conta,
        NULLIF(TRIM(fam.nome), '') AS familia,
-       NULLIF(TRIM(g.nome), '') AS grupo
+       NULLIF(TRIM(g.nome), '') AS grupo,
+       COALESCE(oc_item.ocs, oc_nf.ocs, NULLIF(c.cod_ordem_compra, 0)::text) AS ordem_compra,
+       NULLIF(TRIM(c.comprador::text), '') AS comprador,
+       regexp_replace(COALESCE(f.cgc, ''), '[^0-9]', '', 'g') AS cnpj_fornecedor
 FROM public.tcompras c
 JOIN public.ttp_move tm
   ON tm.cod_empresa = c.cod_empresa AND tm.codigo = c.cod_tp_mov
@@ -2019,9 +2022,73 @@ LEFT JOIN public.tfamilia fam
   ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
 LEFT JOIN public.tfamgrp g
   ON g.cod_empresa = p.cod_empresa AND g.cod_familia = p.cod_familia AND g.codigo = p.cod_grupo
+-- OC vinculada no recebimento (tcom_ordem_compra; tcompras.cod_ordem_compra
+-- quase nunca vem preenchido). Do item: as OCs da NF que tem o produto dele;
+-- sem casamento (servico, produto trocado), todas as OCs da NF.
+LEFT JOIN LATERAL (
+    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
+    FROM public.tcom_ordem_compra co
+    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
+      AND COALESCE(co.cod_ordem_compra, 0) <> 0
+      AND EXISTS (SELECT 1 FROM public.tord_aux oa
+                  WHERE oa.cod_empresa = co.cod_empresa AND oa.cod_ord_compra = co.cod_ordem_compra
+                    AND oa.cod_produto = a.cod_produto)
+) oc_item ON true
+LEFT JOIN LATERAL (
+    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
+    FROM public.tcom_ordem_compra co
+    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
+      AND COALESCE(co.cod_ordem_compra, 0) <> 0
+) oc_nf ON true
 WHERE c.cod_empresa = %(cod_empresa)s
   AND c.dt_lancamento >= %(data_de)s::date
   AND c.dt_lancamento <  %(data_ate)s::date
   AND COALESCE(tm.lancar_fincanceiro, 0) = 1
 ORDER BY c.codigo, a.numero_item;
+"""
+
+# -------------------------------------------------------------------
+# Spend: requisitante das OCs que as NFs atenderam. Mesmo caminho do
+# relatorio de OC (SQL_OC_ITENS_RELATORIO_PERIODO): linha da OC ->
+# tcom_aux_os -> tsol_max (solicitante; vazio = quem criou a SC). Servico
+# vem de tord_serv/tsol_aux_serv. Uma linha por OC + codigo do item
+# (servico sai com codigo NULL); o Sync casa com o item da NF pelo codigo
+# e, sem casamento, usa todos os requisitantes da OC.
+# -------------------------------------------------------------------
+SQL_SPEND_REQUISITANTES = """
+WITH linhas AS (
+    SELECT a.cod_ord_compra                                   AS oc,
+           UPPER(NULLIF(TRIM(a.cod_interno), ''))             AS codigo_item,
+           x.cod_solicitacao                                  AS solicitacao,
+           COALESCE(NULLIF(TRIM(s.solicitante), ''), NULLIF(TRIM(s.usuario), '')) AS requisitante
+    FROM   public.tord_aux a
+    JOIN   public.tcom_aux_os x
+           ON x.cod_empresa       = a.cod_empresa
+          AND x.cod_ord_compra    = a.cod_ord_compra
+          AND x.guid_ordem_compra = a.guid_linha
+    LEFT   JOIN public.tsol_max s
+           ON s.cod_empresa     = x.cod_empresa
+          AND s.cod_solicitacao = x.cod_solicitacao
+          AND s.guid_linha      = x.guid_solicitacao
+    WHERE  a.cod_empresa = %(cod_empresa)s
+      AND  a.cod_ord_compra = ANY(%(ocs)s::int[])
+      AND  COALESCE(x.cancelado, 0) = 0
+      AND  COALESCE(x.cod_solicitacao, 0) <> 0
+    UNION ALL
+    SELECT s.cod_ordem_compra, NULL, NULLIF(s.cod_solicitacao, 0), NULLIF(TRIM(t.usuario), '')
+    FROM   public.tord_serv s
+    LEFT   JOIN public.tsol_aux_serv t
+           ON t.cod_empresa     = s.cod_empresa
+          AND t.cod_solicitacao = s.cod_solicitacao
+          AND t.codigo          = s.cod_sol_serv_codigo
+    WHERE  s.cod_empresa = %(cod_empresa)s
+      AND  s.cod_ordem_compra = ANY(%(ocs)s::int[])
+      AND  COALESCE(s.cancelado, 0) = 0
+)
+SELECT oc::text AS ordem_compra,
+       codigo_item,
+       STRING_AGG(DISTINCT solicitacao::text, ', ' ORDER BY solicitacao::text) AS solicitacao,
+       STRING_AGG(DISTINCT requisitante, ', ' ORDER BY requisitante)           AS requisitante
+FROM   linhas
+GROUP  BY oc, codigo_item;
 """

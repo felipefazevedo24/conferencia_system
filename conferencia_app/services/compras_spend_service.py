@@ -22,6 +22,7 @@ vira exemplo manual, que ganha de tudo para aquele fornecedor + item.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -192,7 +193,95 @@ def _linha(r: dict) -> dict | None:
         "nome_conta": _texto(r.get("nome_conta"), 200),
         "familia": _texto(r.get("familia"), 160),
         "grupo": _texto(r.get("grupo"), 160),
+        "cnpj_fornecedor": _digitos(r.get("cnpj_fornecedor"))[:14],
+        "ordem_compra": ", ".join(_lista_ocs(r.get("ordem_compra")))[:200],
+        "oc_origem": "recebimento" if _lista_ocs(r.get("ordem_compra")) else "",
+        "comprador": _texto(r.get("comprador"), 100),
+        "solicitacao": "",
+        "requisitante": "",
     }
+
+
+def _numero_nf(valor) -> str:
+    return _digitos(valor).lstrip("0")
+
+
+def _lista_ocs(texto) -> list[str]:
+    """'123; 456' -> ['123', '456'] (o auditor digita mais de uma OC por item)."""
+    ocs = []
+    for parte in re.split(r"[;,\n/]+", str(texto or "")):
+        oc = _digitos(parte).lstrip("0")
+        if oc and oc not in ocs:
+            ocs.append(oc)
+    return ocs
+
+
+def _preencher_ocs_da_conferencia(linhas: list[dict]) -> None:
+    """Reserva para a linha que o GRV devolveu sem OC do recebimento: o
+    vínculo feito na conferência do Sync (ItemNota.pedido_compra), casando
+    NF + CNPJ do emitente e, dentro da NF, o código interno do item
+    (codigo_grv). Item sem casamento leva as OCs da NF inteira."""
+    from ..models import ItemNota
+
+    linhas = [l for l in linhas if not l["ordem_compra"]]
+    chaves = {(_numero_nf(l["nota_fiscal"]), l["cnpj_fornecedor"]) for l in linhas if l["cnpj_fornecedor"]}
+    if not chaves:
+        return
+    cnpjs = sorted({c for _, c in chaves})
+    por_nf: dict = defaultdict(lambda: defaultdict(list))
+    for i in range(0, len(cnpjs), 500):
+        # Filtra pelo CNPJ (indexado); o numero da NF pode ter zero a esquerda
+        # de um lado e nao do outro, entao casa normalizado aqui.
+        for numero, cnpj, codigo, pedido in db.session.query(
+            ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.codigo_grv, ItemNota.pedido_compra,
+        ).filter(ItemNota.pedido_compra.isnot(None), ItemNota.pedido_compra != "",
+                 ItemNota.cnpj_emitente.in_(cnpjs[i:i + 500])):
+            chave = (_numero_nf(numero), _digitos(cnpj))
+            if chave not in chaves:
+                continue
+            for oc in _lista_ocs(pedido):
+                for k in ((codigo or "").strip().upper(), None):
+                    if oc not in por_nf[chave][k]:
+                        por_nf[chave][k].append(oc)
+    for l in linhas:
+        nf = por_nf.get((_numero_nf(l["nota_fiscal"]), l["cnpj_fornecedor"]))
+        if nf:
+            ocs = nf.get(l["codigo_item"]) if l["codigo_item"] else None
+            l["ordem_compra"] = ", ".join(ocs or nf[None])[:200]
+            l["oc_origem"] = "conferencia"
+
+
+def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
+    """SC e requisitante de cada linha pela OC. Casa pelo código do item; sem
+    casamento (serviço, item trocado na NF) usa todos os da OC. Falhou a
+    consulta: segue sem requisitante (False) em vez de derrubar o Spend."""
+    ocs = sorted({int(oc) for l in linhas for oc in _lista_ocs(l["ordem_compra"])})
+    por_item: dict = {}
+    por_oc: dict = defaultdict(lambda: (set(), set()))
+    try:
+        for i in range(0, len(ocs), 500):
+            for r in grv.fetch_all(queries.SQL_SPEND_REQUISITANTES, {"cod_empresa": empresa, "ocs": ocs[i:i + 500]}):
+                oc = _digitos(r.get("ordem_compra"))
+                sols = [s.strip() for s in str(r.get("solicitacao") or "").split(",") if s.strip()]
+                reqs = [s.strip() for s in str(r.get("requisitante") or "").split(",") if s.strip()]
+                if r.get("codigo_item"):
+                    por_item[(oc, str(r["codigo_item"]).upper())] = (sols, reqs)
+                por_oc[oc][0].update(sols)
+                por_oc[oc][1].update(reqs)
+    except Exception:  # noqa: BLE001 - requisitante e' complemento; o Spend tem que atualizar mesmo sem ele
+        logging.getLogger(__name__).exception("Spend: falha ao buscar requisitantes das OCs")
+        return False
+    for l in linhas:
+        sols, reqs = [], []
+        for oc in _lista_ocs(l["ordem_compra"]):
+            if oc not in por_oc:
+                continue
+            s, r = por_item.get((oc, l["codigo_item"])) or (sorted(por_oc[oc][0]), sorted(por_oc[oc][1]))
+            sols += [x for x in s if x not in sols]
+            reqs += [x for x in r if x not in reqs]
+        l["solicitacao"] = ", ".join(sols)[:200]
+        l["requisitante"] = ", ".join(reqs)[:300]
+    return True
 
 
 def _semear() -> int:
@@ -224,6 +313,10 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
+    # Linha gravada antes da OC do recebimento (oc_origem NULL): rebusca o ano
+    # inteiro uma vez para preencher.
+    if Entrada.query.filter(Entrada.oc_origem.is_(None)).first() is not None:
+        desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
     db.session.commit()
@@ -238,6 +331,8 @@ def atualizar(usuario: str) -> dict:
                 linha = _linha(r)
                 if linha:
                     linhas.append(linha)
+        _preencher_ocs_da_conferencia(linhas)
+        _preencher_requisitantes(linhas, empresa)
         Entrada.query.filter(Entrada.data_lancamento >= desde).delete(synchronize_session=False)
         for i in range(0, len(linhas), 1000):
             db.session.bulk_insert_mappings(Entrada, linhas[i:i + 1000])
@@ -527,7 +622,8 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
     )
     for r in linhas:
         if termo and termo not in " ".join(
-            str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia)
+            str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia,
+                                   r.ordem_compra, r.solicitacao, r.requisitante, r.comprador)
         ).upper():
             continue
         sit = situacao(r, regras)
@@ -557,6 +653,11 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             "familia": r.familia or "",
             "conta": " - ".join(x for x in (r.conta, r.nome_conta) if x),
             "valor": round(r.valor or 0, 2),
+            "ordem_compra": r.ordem_compra or "",
+            "oc_origem": {"recebimento": "Recebimento (GRV)", "conferencia": "Conferência do Sync"}.get(r.oc_origem or "", ""),
+            "solicitacao": r.solicitacao or "",
+            "requisitante": r.requisitante or "",
+            "comprador": r.comprador or "",
             "situacao": sit,
             "situacao_texto": SITUACOES[sit],
             "no_spend": entra_no_spend(sit),

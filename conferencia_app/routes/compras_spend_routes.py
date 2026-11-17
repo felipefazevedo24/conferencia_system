@@ -72,7 +72,9 @@ _COLUNAS_XLSX = (
     ("Lançamento", "data_lancamento", 12), ("NF", "nota_fiscal", 12), ("Cód. fornecedor", "cod_fornecedor", 10),
     ("Fornecedor", "fornecedor", 36), ("CFOP", "cfop", 8), ("Descrição do CFOP", "cfop_descricao", 40),
     ("Código do item", "codigo_item", 16), ("Descrição", "descricao", 45), ("Família", "familia", 28),
-    ("Conta", "conta", 30), ("Valor (R$)", "valor", 14), ("Situação", "situacao_texto", 26),
+    ("Conta", "conta", 30), ("Valor (R$)", "valor", 14),
+    ("OC", "ordem_compra", 10), ("Origem da OC", "oc_origem", 18),("Solicitação", "solicitacao", 14), ("Requisitante", "requisitante", 26),
+    ("Comprador", "comprador", 18), ("Situação", "situacao_texto", 26),
     ("Motivo da decisão manual", "motivo_manual", 36), ("Decidido por", "manual_por", 14),
     ("Classificação", "classificacao", 28), ("Origem da classificação", "origem_cls", 18),
 )
