@@ -2006,7 +2006,10 @@ SELECT c.dt_lancamento::date AS data_lancamento,
        NULLIF(TRIM(a.plano_contas), '') AS nome_conta,
        NULLIF(TRIM(fam.nome), '') AS familia,
        NULLIF(TRIM(g.nome), '') AS grupo,
-       COALESCE(oc_item.ocs, oc_nf.ocs, NULLIF(c.cod_ordem_compra, 0)::text) AS ordem_compra,
+       ARRAY_TO_STRING(oc.ocs, ', ') AS ordem_compra,
+       oc.origem AS oc_origem,
+       sc.solicitacao,
+       sc.requisitante,
        NULLIF(TRIM(c.comprador::text), '') AS comprador,
        regexp_replace(COALESCE(f.cgc, ''), '[^0-9]', '', 'g') AS cnpj_fornecedor
 FROM public.tcompras c
@@ -2022,24 +2025,82 @@ LEFT JOIN public.tfamilia fam
   ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
 LEFT JOIN public.tfamgrp g
   ON g.cod_empresa = p.cod_empresa AND g.cod_familia = p.cod_familia AND g.codigo = p.cod_grupo
--- OC vinculada no recebimento (tcom_ordem_compra; tcompras.cod_ordem_compra
--- quase nunca vem preenchido). Do item: as OCs da NF que tem o produto dele;
--- sem casamento (servico, produto trocado), todas as OCs da NF.
+-- OC do item, da fonte mais confiavel que tiver (validado no ERP em
+-- 17/11/2026; tcompras.cod_ordem_compra quase nunca vem preenchido):
+--   1) OC do XML da NF (xPed do item) que existe no ERP
+--   2) OC vinculada no recebimento (tcom_ordem_compra) que tem o produto
+--   3) OC vinculada no recebimento (NF inteira)
+--   4) OC do cabecalho da NF
+-- Empate na melhor fonte (item em mais de uma OC) vira lista, sem duplicar
+-- a linha da NF.
 LEFT JOIN LATERAL (
-    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
-    FROM public.tcom_ordem_compra co
-    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
-      AND COALESCE(co.cod_ordem_compra, 0) <> 0
-      AND EXISTS (SELECT 1 FROM public.tord_aux oa
-                  WHERE oa.cod_empresa = co.cod_empresa AND oa.cod_ord_compra = co.cod_ordem_compra
-                    AND oa.cod_produto = a.cod_produto)
-) oc_item ON true
+    SELECT ARRAY_AGG(DISTINCT r.ordem_compra ORDER BY r.ordem_compra) AS ocs, MIN(r.origem) AS origem
+    FROM (
+        SELECT t.*, RANK() OVER (ORDER BY t.prio) AS rk
+        FROM (
+            SELECT o.codigo AS ordem_compra, 'xml' AS origem, 1 AS prio
+            FROM public.tord_com o
+            WHERE o.cod_empresa = c.cod_empresa
+              AND o.codigo = CASE WHEN regexp_replace(COALESCE(a.xped_i60, ''), '[^0-9]', '', 'g') ~ '^[0-9]{1,9}$'
+                                  THEN regexp_replace(a.xped_i60, '[^0-9]', '', 'g')::int END
+            UNION ALL
+            SELECT co.cod_ordem_compra, 'recebimento',
+                   CASE WHEN EXISTS (SELECT 1 FROM public.tord_aux oa
+                                     WHERE oa.cod_empresa = co.cod_empresa
+                                       AND oa.cod_ord_compra = co.cod_ordem_compra
+                                       AND oa.cod_produto = a.cod_produto) THEN 2 ELSE 3 END
+            FROM public.tcom_ordem_compra co
+            WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
+              AND COALESCE(co.cod_ordem_compra, 0) <> 0
+            UNION ALL
+            SELECT c.cod_ordem_compra, 'cabecalho', 4
+            WHERE COALESCE(c.cod_ordem_compra, 0) <> 0
+        ) t
+    ) r
+    WHERE r.rk = 1
+) oc ON true
+-- Solicitacao e requisitante da linha da OC que corresponde ao item:
+--   1) mesmo n. de item do pedido do XML (nItemPed)  2) mesmo produto
+--   3) a OC toda. Requisitante = solicitante da SC; vazio = quem criou.
+--   Servico: tord_serv / tsol_aux_serv.
 LEFT JOIN LATERAL (
-    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
-    FROM public.tcom_ordem_compra co
-    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
-      AND COALESCE(co.cod_ordem_compra, 0) <> 0
-) oc_nf ON true
+    SELECT STRING_AGG(DISTINCT l.solicitacao::text, ', ') AS solicitacao,
+           STRING_AGG(DISTINCT l.requisitante, ', ')      AS requisitante
+    FROM (
+        SELECT q.*, RANK() OVER (ORDER BY q.prio) AS rk
+        FROM (
+            SELECT x.cod_solicitacao AS solicitacao,
+                   COALESCE(NULLIF(TRIM(s.solicitante), ''), NULLIF(TRIM(s.usuario), '')) AS requisitante,
+                   CASE WHEN oc.origem = 'xml'
+                             AND oa.numero_item = CASE WHEN regexp_replace(COALESCE(a.nitemped_i61, ''), '[^0-9]', '', 'g') ~ '^[0-9]{1,6}$'
+                                                       THEN regexp_replace(a.nitemped_i61, '[^0-9]', '', 'g')::int END THEN 1
+                        WHEN oa.cod_produto = a.cod_produto THEN 2
+                        ELSE 3 END AS prio
+            FROM public.tord_aux oa
+            LEFT JOIN public.tcom_aux_os x
+                   ON x.cod_empresa       = oa.cod_empresa
+                  AND x.cod_ord_compra    = oa.cod_ord_compra
+                  AND x.guid_ordem_compra = oa.guid_linha
+                  AND COALESCE(x.cancelado, 0) = 0
+                  AND COALESCE(x.cod_solicitacao, 0) <> 0
+            LEFT JOIN public.tsol_max s
+                   ON s.cod_empresa     = x.cod_empresa
+                  AND s.cod_solicitacao = x.cod_solicitacao
+                  AND s.guid_linha      = x.guid_solicitacao
+            WHERE oa.cod_empresa = c.cod_empresa AND oa.cod_ord_compra = ANY(oc.ocs)
+            UNION ALL
+            SELECT NULLIF(sv.cod_solicitacao, 0), NULLIF(TRIM(t.usuario), ''), 3
+            FROM public.tord_serv sv
+            LEFT JOIN public.tsol_aux_serv t
+                   ON t.cod_empresa     = sv.cod_empresa
+                  AND t.cod_solicitacao = sv.cod_solicitacao
+                  AND t.codigo          = sv.cod_sol_serv_codigo
+            WHERE sv.cod_empresa = c.cod_empresa AND sv.cod_ordem_compra = ANY(oc.ocs)
+              AND COALESCE(sv.cancelado, 0) = 0
+        ) q
+    ) l
+    WHERE l.rk = 1
+) sc ON true
 WHERE c.cod_empresa = %(cod_empresa)s
   AND c.dt_lancamento >= %(data_de)s::date
   AND c.dt_lancamento <  %(data_ate)s::date

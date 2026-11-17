@@ -42,6 +42,9 @@ from ..tempo import agora_br
 SEM_CLASSIFICACAO = "(sem classificação)"
 SEM_FAMILIA = "(sem família)"
 INICIO = date(2026, 1, 1)
+# Mudou o que a SQL_SPEND_ENTRADAS traz? Avance esta data: a próxima
+# atualização rebusca o ano inteiro (o normal é só o mês anterior em diante).
+ESPELHO_VERSAO = datetime(2026, 11, 17, 12, 0)
 IDADE_MAXIMA_MIN = 60
 # Atualização "em andamento" há mais tempo que isso caiu no meio (worker
 # reiniciado): deixa outra começar.
@@ -195,10 +198,10 @@ def _linha(r: dict) -> dict | None:
         "grupo": _texto(r.get("grupo"), 160),
         "cnpj_fornecedor": _digitos(r.get("cnpj_fornecedor"))[:14],
         "ordem_compra": ", ".join(_lista_ocs(r.get("ordem_compra")))[:200],
-        "oc_origem": "recebimento" if _lista_ocs(r.get("ordem_compra")) else "",
+        "oc_origem": _texto(r.get("oc_origem"), 20) if _lista_ocs(r.get("ordem_compra")) else "",
         "comprador": _texto(r.get("comprador"), 100),
-        "solicitacao": "",
-        "requisitante": "",
+        "solicitacao": _texto(r.get("solicitacao"), 200),
+        "requisitante": _texto(r.get("requisitante"), 300),
     }
 
 
@@ -252,9 +255,11 @@ def _preencher_ocs_da_conferencia(linhas: list[dict]) -> None:
 
 
 def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
-    """SC e requisitante de cada linha pela OC. Casa pelo código do item; sem
-    casamento (serviço, item trocado na NF) usa todos os da OC. Falhou a
-    consulta: segue sem requisitante (False) em vez de derrubar o Spend."""
+    """SC e requisitante das linhas cuja OC veio da conferência do Sync (as do
+    GRV já vêm com eles na SQL_SPEND_ENTRADAS). Casa pelo código do item; sem
+    casamento usa todos os da OC. Falhou a consulta: segue sem requisitante
+    (False) em vez de derrubar o Spend."""
+    linhas = [l for l in linhas if l["oc_origem"] == "conferencia"]
     ocs = sorted({int(oc) for l in linhas for oc in _lista_ocs(l["ordem_compra"])})
     por_item: dict = {}
     por_oc: dict = defaultdict(lambda: (set(), set()))
@@ -313,9 +318,11 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
-    # Linha gravada antes da OC do recebimento (oc_origem NULL): rebusca o ano
-    # inteiro uma vez para preencher.
-    if Entrada.query.filter(Entrada.oc_origem.is_(None)).first() is not None:
+    # Espelho gravado antes da versão atual da consulta (OC/requisitante):
+    # rebusca o ano inteiro uma vez para preencher.
+    rebuscou = Sync.query.filter(Sync.status == Sync.STATUS_OK, Sync.desde == INICIO,
+                                 Sync.iniciado_em >= ESPELHO_VERSAO).first()
+    if rebuscou is None or Entrada.query.filter(Entrada.oc_origem.is_(None)).first() is not None:
         desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
@@ -599,6 +606,12 @@ def revisao(de=None, ate=None) -> dict:
 
 
 NOTAS_POR_PAGINA = 200
+ORIGENS_OC = {
+    "xml": "XML da NF (GRV)",
+    "recebimento": "Recebimento (GRV)",
+    "cabecalho": "Cabeçalho da NF (GRV)",
+    "conferencia": "Conferência do Sync",
+}
 
 
 def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, todas=False) -> dict:
@@ -654,7 +667,7 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             "conta": " - ".join(x for x in (r.conta, r.nome_conta) if x),
             "valor": round(r.valor or 0, 2),
             "ordem_compra": r.ordem_compra or "",
-            "oc_origem": {"recebimento": "Recebimento (GRV)", "conferencia": "Conferência do Sync"}.get(r.oc_origem or "", ""),
+            "oc_origem": ORIGENS_OC.get(r.oc_origem or "", ""),
             "solicitacao": r.solicitacao or "",
             "requisitante": r.requisitante or "",
             "comprador": r.comprador or "",
