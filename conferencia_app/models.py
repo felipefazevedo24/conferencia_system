@@ -4799,7 +4799,77 @@ class EstoquePlanejamentoParametro(db.Model):
     nivel_servico_b_pct = db.Column(db.Float, nullable=False, default=95.0)
     nivel_servico_c_pct = db.Column(db.Float, nullable=False, default=90.0)
     lead_time_padrao_dias = db.Column(db.Integer, nullable=False, default=15)
+    # Pedido da logística em 17/11/2026 (colunas criadas no bootstrap):
+    # janela de meses fechados de todas as contas; lote limitado a N meses de
+    # consumo (o teto é mínimo + lote); slow mover = saldo para mais de N
+    # meses; crescimento de vendas previsto, que escala o consumo.
+    janela_meses = db.Column(db.Integer, nullable=False, default=12)
+    cobertura_lote_meses = db.Column(db.Float, nullable=False, default=3.0)
+    slow_mover_meses = db.Column(db.Float, nullable=False, default=6.0)
+    crescimento_vendas_pct = db.Column(db.Float, nullable=False, default=0.0)
     atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
+class EstoqueParametroItem(db.Model):
+    """Ajuste do planejamento de um item, por cima do parâmetro geral (só Admin).
+
+    `cobertura_lote_meses` vazio = vale o geral. `fora_analise` tira o item do
+    slow mover e do excedente: é ativo da empresa cadastrado como produto
+    (o misturador planetário somava R$ 219 mil de "excesso" na análise de
+    outubro/2026).
+    """
+
+    __tablename__ = "estoque_parametro_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(60), nullable=False, unique=True)  # sem pontuação, igual ao kardex
+    codigo_exibicao = db.Column(db.String(60))
+    cobertura_lote_meses = db.Column(db.Float)
+    fora_analise = db.Column(db.Boolean, nullable=False, default=False)
+    observacao = db.Column(db.String(300))
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
+class EstoqueTelaFoto(db.Model):
+    """Foto do que a tela de Estoque busca no GRV, uma linha por visão.
+
+    Saldo, consumo, reservas, OCs e histórico atravessam a bridge e levavam
+    minutos; a tela abre com a foto e pede a atualização por trás quando ela
+    envelhece. Guarda o dado cru, não o resultado: as contas (parâmetros e
+    ajustes por item) rodam na leitura e mudam na hora.
+    """
+
+    __tablename__ = "estoque_tela_foto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    visao = db.Column(db.String(40), nullable=False, unique=True)
+    dados = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))  # JSON comprimido (zlib)
+    gerado_em = db.Column(db.DateTime)
+    gerado_por = db.Column(db.String(100))
+    # Trava da atualização: preenchido enquanto alguém atualiza.
+    atualizando_desde = db.Column(db.DateTime)
+    atualizando_por = db.Column(db.String(100))
+    erro = db.Column(db.String(500))
+    erro_em = db.Column(db.DateTime)
+
+
+class EstoqueValorDiario(db.Model):
+    """Valor do estoque de cada visão, um por dia: a linha "valor em estoque"
+    do painel. O GRV não guarda o saldo de meses passados; aqui ele começa a
+    ser gravado em 17/11/2026, sempre que a foto da visão é atualizada (o
+    último do dia vale). Dia em que ninguém abre a tela fica sem registro.
+    """
+
+    __tablename__ = "estoque_valor_diario"
+    __table_args__ = (db.UniqueConstraint("data", "visao", name="ux_estoque_valor_diario_data_visao"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    data = db.Column(db.Date, nullable=False)
+    visao = db.Column(db.String(40), nullable=False)
+    valor = db.Column(db.Float, nullable=False)  # saldo total x custo do GRV
+    itens = db.Column(db.Integer, nullable=False, default=0)  # itens com saldo
     atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
 

@@ -1358,6 +1358,11 @@ def initialize_database(app: Flask) -> None:
             pass
 
         try:
+            _ensure_estoque_planejamento_parametro_columns()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao criar colunas novas de estoque_planejamento_parametro")
+
+        try:
             _ensure_compra_st_fornecedor_sem_homologacao()
         except Exception:
             app.logger.exception("Bootstrap: falha ao ajustar compra_st_fornecedor (fornecedor sem homologacao)")
@@ -1998,6 +2003,26 @@ def _ensure_compra_st_fornecedor_sem_homologacao() -> None:
         if db.engine.dialect.name == "mysql" and coluna and not coluna.get("nullable", True):
             conn.execute(db.text("ALTER TABLE compra_st_fornecedor MODIFY COLUMN homologacao_id INTEGER NULL"))
             conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_estoque_planejamento_parametro_columns() -> None:
+    if not _has_table("estoque_planejamento_parametro"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("estoque_planejamento_parametro")
+        missing_columns = [
+            ("janela_meses", "ALTER TABLE estoque_planejamento_parametro ADD COLUMN janela_meses INTEGER NOT NULL DEFAULT 12"),
+            ("cobertura_lote_meses", "ALTER TABLE estoque_planejamento_parametro ADD COLUMN cobertura_lote_meses FLOAT NOT NULL DEFAULT 3"),
+            ("slow_mover_meses", "ALTER TABLE estoque_planejamento_parametro ADD COLUMN slow_mover_meses FLOAT NOT NULL DEFAULT 6"),
+            ("crescimento_vendas_pct", "ALTER TABLE estoque_planejamento_parametro ADD COLUMN crescimento_vendas_pct FLOAT NOT NULL DEFAULT 0"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols:
+                conn.execute(db.text(ddl))
+                conn.commit()
     finally:
         conn.close()
 

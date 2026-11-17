@@ -116,11 +116,136 @@
     .mp-dialog label { display: block; font-size: 11px; font-weight: 700; color: var(--eui-text-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
     .mp-dialog input { width: 100%; }
     .mp-erro { color: var(--eui-danger); font-size: 12.5px; font-weight: 600; }
+    .mp-dialog--largo { width: min(680px, calc(100% - 24px)); }
+    .mp-dialog__secao { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin: 4px 0 -4px; }
+    .mp-check-linha { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 500; color: var(--eui-text); margin: 0; text-transform: none; letter-spacing: normal; }
+    .mp-check-linha input { width: auto; }
+    .mp-foto { font-size: 12px; color: var(--eui-muted); }
+    .mp-foto.erro { color: var(--eui-danger); }
+
+    /* Abas das visões: botões arredondados com ícone; a ativa preenchida.
+       Chapas abre outra tela: fica à direita, separada. */
+    .mp-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; border: 1px solid var(--eui-border); border-radius: 16px; background: var(--eui-surface); box-shadow: var(--eui-shadow-sm); }
+    .mp-tabs .mp-view-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 0; border-radius: 11px; background: transparent; color: var(--eui-text-soft); font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .15s, color .15s; }
+    .mp-tabs .mp-view-btn i { font-size: 13px; color: var(--eui-muted); transition: color .15s; }
+    .mp-tabs .mp-view-btn:hover { background: var(--eui-surface-2); color: var(--eui-text); }
+    .mp-tabs .mp-view-btn.active { background: var(--eui-primary); color: #fff; box-shadow: 0 4px 12px rgba(15, 98, 201, .25); }
+    .mp-tabs .mp-view-btn.active i { color: #fff; }
+    .mp-tabs__sep { flex: 1 1 auto; }
+    .mp-tabs .mp-view-btn--fora { border: 1px dashed var(--eui-border); }
+
+    /* Barra de filtro única: um botão abre o painel; os filtros ativos viram etiquetas. */
+    .mp-fbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .mp-fbtn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text); font-size: 13px; font-weight: 600; cursor: pointer; }
+    .mp-fbtn:hover, .mp-fbtn[aria-expanded="true"] { border-color: var(--eui-primary); color: var(--eui-primary); }
+    .mp-fbtn .mp-fcount { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--eui-primary); color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+    .mp-fchips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mp-fchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 12px; border-radius: 999px; background: var(--eui-primary-soft); color: var(--eui-text); font-size: 12.5px; font-weight: 600; border: 0; cursor: pointer; }
+    .mp-fchip i { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--eui-muted); }
+    .mp-fchip:hover i { background: var(--eui-surface); color: var(--eui-text); }
+    .mp-fpop { position: fixed; z-index: 2250; width: 300px; padding: 14px; display: grid; gap: 14px; background: var(--eui-surface); color: var(--eui-text); border: 1px solid var(--eui-border); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .22); }
+    .mp-fpop[hidden] { display: none; }
+    .mp-fpop__titulo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin: 0 0 6px; }
+    .mp-fpop label { display: flex; gap: 10px; align-items: center; margin: 0; padding: 6px 8px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--eui-text); text-transform: none; letter-spacing: normal; cursor: pointer; }
+    .mp-fpop label:hover { background: var(--eui-surface-2); }
+    .mp-fpop input { margin: 0; }
+    .mp-acoes { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .mp-acoes .eui-btn { border-radius: 999px; }
+
+    /* Painel inicial */
+    .mp-dash { display: grid; gap: 16px; }
+    .mp-dash[hidden], #mp-area-visao[hidden] { display: none; }
+    .mp-dash__topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .mp-dk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .mp-dk-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    button.mp-dk { text-align: left; font: inherit; cursor: pointer; transition: border-color .15s, transform .15s; }
+    button.mp-dk:hover { border-color: var(--mp-cor, var(--eui-primary)); transform: translateY(-1px); }
+    .mp-dk__abrir { position: absolute; right: 14px; top: 14px; font-size: 11px; color: var(--eui-muted); }
+
+    /* Filtro do painel: botões que acendem. */
+    .mp-pfiltro { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; }
+    .mp-pfiltro__grupo { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .mp-pfiltro__rotulo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); margin-right: 2px; }
+    .mp-toggle { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .mp-toggle:hover { border-color: var(--eui-primary); color: var(--eui-text); }
+    .mp-toggle[aria-pressed="true"] { background: var(--eui-primary-soft); border-color: var(--eui-primary); color: var(--eui-primary); }
+    .mp-limpar { border: 0; background: transparent; color: var(--eui-primary); font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0 4px; }
+
+    /* Saldo por cobertura: uma barra só, clicável. */
+    .mp-cob { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px; display: grid; gap: 10px; }
+    .mp-cob__topo { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--eui-muted); }
+    .mp-cob__topo b { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .mp-cob__barra { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--eui-surface-2); }
+    .mp-cob__barra button { border: 0; padding: 0; cursor: pointer; min-width: 3px; }
+    .mp-cob__barra button:hover, .mp-cob__barra button.ativa { filter: brightness(1.15); outline: 2px solid var(--eui-text); outline-offset: -2px; }
+    .mp-cob__leg { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+    .mp-cob__leg button { display: grid; gap: 2px; text-align: left; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 6px 8px; cursor: pointer; font-size: 11.5px; color: var(--eui-text-soft); }
+    .mp-cob__leg button:hover, .mp-cob__leg button.ativa { border-color: var(--eui-border); background: var(--eui-surface-2); }
+    .mp-cob__leg span { display: inline-flex; align-items: center; gap: 6px; }
+    .mp-cob__leg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+    .mp-cob__leg b { font-size: 13.5px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .mp-fbar .mp-search { flex: 1 1 340px; }
+    .mp-contagem { font-size: 12.5px; color: var(--eui-muted); white-space: nowrap; }
+    .mp-contagem b { color: var(--eui-text); }
+
+    /* Lista de itens de um grupo do painel. */
+    .mp-dialog--lista { width: min(1120px, calc(100% - 24px)); max-height: calc(100vh - 40px); }
+    .mp-dialog--lista form { display: flex; flex-direction: column; max-height: calc(100vh - 42px); }
+    .mp-dialog--lista .mp-dialog__body { overflow: auto; }
+    /* Saúde: legenda em blocos clicáveis - fatia pequena (11 de 2.900) quase some no gráfico. */
+    .mp-saude-leg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mp-saude-leg button { display: grid; gap: 4px; text-align: left; border: 1px solid var(--eui-border); border-radius: 12px; background: var(--eui-surface); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--eui-text-soft); transition: border-color .15s, background .15s; }
+    .mp-saude-leg button:hover { border-color: var(--mp-cor); background: var(--eui-surface-2); }
+    .mp-saude-leg__nome { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+    .mp-saude-leg__nome i { width: 10px; height: 10px; border-radius: 50%; background: var(--mp-cor); flex: none; }
+    .mp-saude-leg__num { display: flex; align-items: baseline; gap: 6px; }
+    .mp-saude-leg__num b { font-size: 18px; color: var(--eui-text); font-variant-numeric: tabular-nums; }
+    .mp-saude-leg__num span { font-size: 12px; color: var(--eui-muted); }
+    .mp-legenda button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+    .mp-legenda button:hover { background: var(--eui-surface-2); color: var(--eui-text); }
+    .mp-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; }
+    .mp-dk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--mp-cor, var(--eui-primary)); }
+    .mp-dk__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
+    .mp-dk__valor { font-size: 24px; font-weight: 700; color: var(--eui-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .mp-dk__dica { font-size: 12px; color: var(--eui-text-soft); }
+    .mp-dk__dica b { color: var(--mp-cor, var(--eui-text)); }
+    .mp-dg { display: grid; gap: 16px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    .mp-dg--meio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mp-dg--cheio { grid-template-columns: minmax(0, 1fr); }
+    .mp-dc { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .mp-dc h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
+    .mp-dc__sub { margin: -6px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .mp-chart { position: relative; height: 260px; }
+    .mp-chart--alto { height: 300px; }
+    .mp-donut-centro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+    .mp-donut-centro b { font-size: 28px; color: var(--eui-text); }
+    .mp-donut-centro span { font-size: 11px; color: var(--eui-muted); }
+    .mp-legenda { display: flex; gap: 6px 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--eui-text-soft); }
+    .mp-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+    .mp-legenda i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .mp-acao-tab { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .mp-acao-tab th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); padding: 6px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .mp-acao-tab td { padding: 8px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); white-space: nowrap; }
+    .mp-acao-tab .num { text-align: right; }
+    .mp-acao-tab td.c-desc { white-space: normal; min-width: 180px; color: var(--eui-text); font-weight: 600; }
+    .mp-acao-tab a { color: inherit; text-decoration: none; }
+    .mp-acao-tab a:hover { color: var(--eui-primary); text-decoration: underline; }
+    .mp-tag { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .mp-tag.critico { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .mp-tag.atencao { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+
     @media (max-width: 820px) {
         .mp-search { width: 100%; }
         .mp-filters__end { margin-left: 0; width: 100%; }
         .mp-filters__end .eui-btn { flex: 1; justify-content: center; }
         .mp-dialog__grid { grid-template-columns: 1fr; }
+        .mp-acoes { margin-left: 0; }
+    }
+    @media (max-width: 1100px) {
+        .mp-dk-grid, .mp-dk-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mp-cob__leg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .mp-tabs__sep { display: none; }
+        .mp-dg, .mp-dg--meio { grid-template-columns: minmax(0, 1fr); }
     }
 </style>
 {% endblock %}
@@ -136,56 +261,108 @@
         <button class="eui-btn eui-btn--ghost" id="mp-param-open" type="button" style="display:none;"><i class="fas fa-sliders"></i> Parâmetros do planejamento</button>
     </header>
 
-    <div class="eui-stats" id="mp-kpis">
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens listados</span><span class="eui-stat__value" id="mp-k-itens">0</span><span class="eui-stat__hint" id="mp-k-itens-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos</span><span class="eui-stat__value" id="mp-k-criticos">0</span><span class="eui-stat__hint" id="mp-k-criticos-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Monitorar</span><span class="eui-stat__value" id="mp-k-atencao">0</span><span class="eui-stat__hint" id="mp-k-atencao-hint"></span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-cart-shopping"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Críticos sem OC</span><span class="eui-stat__value" id="mp-k-sem-oc">0</span><span class="eui-stat__hint">Sem reposição em aberto</span></div></div>
-        <div class="eui-stat" id="mp-k-exc-card" style="display:none;"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-warehouse"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Excedente</span><span class="eui-stat__value" id="mp-k-exc">R$ 0</span><span class="eui-stat__hint" id="mp-k-exc-hint"></span></div></div>
+    <nav class="mp-tabs" aria-label="Visão do estoque">
+        <button class="mp-view-btn active" type="button" data-visao="painel"><i class="fas fa-chart-pie"></i> Painel</button>
+        <button class="mp-view-btn" type="button" data-visao="materia_prima"><i class="fas fa-cubes"></i> Matéria-prima</button>
+        <button class="mp-view-btn" type="button" data-visao="revenda"><i class="fas fa-tags"></i> Revenda</button>
+        <button class="mp-view-btn" type="button" data-visao="produto_acabado"><i class="fas fa-box"></i> Produto acabado</button>
+        <button class="mp-view-btn" type="button" data-visao="insumos"><i class="fas fa-flask"></i> Insumos</button>
+        <button class="mp-view-btn" type="button" data-visao="uso_consumo"><i class="fas fa-helmet-safety"></i> EPI e uniformes</button>
+        <span class="mp-tabs__sep" aria-hidden="true"></span>
+        {# Controle de Chapas edita cálculo: só com a permissão de inventário, não com a de consulta. #}
+        {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn mp-view-btn--fora" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas <i class="fas fa-arrow-up-right-from-square" style="font-size:10px;"></i></a>{% endif %}
+    </nav>
+
+    <section class="mp-dash" id="mp-dash" aria-label="Painel do estoque">
+        <div class="mp-dash__topo">
+            <span class="mp-foto" id="mp-dash-foto">Carregando...</span>
+            <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-dash-refresh" type="button" style="border-radius:999px;"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+        <div class="mp-pfiltro" id="mp-pfiltro" aria-label="Filtrar o painel"></div>
+        <div class="mp-dk-grid">
+            <div class="mp-dk" style="--mp-cor: var(--eui-primary);"><span class="mp-dk__label">Valor em estoque</span><span class="mp-dk__valor" id="mp-d-valor">—</span><span class="mp-dk__dica" id="mp-d-valor-dica"></span></div>
+            <div class="mp-dk" style="--mp-cor: var(--eui-info, var(--eui-primary));"><span class="mp-dk__label">Giro anual</span><span class="mp-dk__valor" id="mp-d-giro">—</span><span class="mp-dk__dica">consumo do ano ÷ estoque</span></div>
+            <div class="mp-dk" style="--mp-cor: var(--eui-violet, var(--eui-primary));"><span class="mp-dk__label">Cobertura média</span><span class="mp-dk__valor" id="mp-d-cob">—</span><span class="mp-dk__dica">quanto o estoque dura no consumo médio</span></div>
+            <button type="button" class="mp-dk" data-grupo="para_comprar" style="--mp-cor: var(--eui-warning);" title="Ver os itens"><i class="fas fa-list mp-dk__abrir" aria-hidden="true"></i><span class="mp-dk__label">Itens para comprar</span><span class="mp-dk__valor" id="mp-d-comprar">—</span><span class="mp-dk__dica" id="mp-d-comprar-dica"></span></button>
+            <button type="button" class="mp-dk" data-grupo="slow" style="--mp-cor: var(--eui-danger);" title="Ver os itens"><i class="fas fa-list mp-dk__abrir" aria-hidden="true"></i><span class="mp-dk__label">Capital parado</span><span class="mp-dk__valor" id="mp-d-parado">—</span><span class="mp-dk__dica" id="mp-d-parado-dica"></span></button>
+        </div>
+        <div class="mp-dg">
+            <div class="mp-dc">
+                <h3>Valor em estoque × consumo mensal</h3>
+                <p class="mp-dc__sub" id="mp-d-valor-sub">Consumo em R$ pelo custo do GRV. O valor em estoque é gravado desde 17/11/2026.</p>
+                <div class="mp-legenda" id="mp-leg-valor" style="justify-content:flex-end;"></div>
+                <div class="mp-chart"><canvas id="mp-ch-valor" role="img" aria-label="Valor em estoque e consumo por mês"></canvas></div>
+            </div>
+            <div class="mp-dc">
+                <h3>Saúde do estoque</h3>
+                <p class="mp-dc__sub">Itens comprados pela situação de hoje. Clique para ver os itens e o porquê.</p>
+                <div class="mp-chart" style="height:200px;"><canvas id="mp-ch-saude" role="img" aria-label="Itens por situação"></canvas><div class="mp-donut-centro"><b id="mp-d-saude-pct">—</b><span>saudáveis</span></div></div>
+                <div class="mp-saude-leg" id="mp-d-saude-leg"></div>
+            </div>
+        </div>
+        <div class="mp-dg mp-dg--meio">
+            <div class="mp-dc">
+                <h3>Curva ABC por valor consumido</h3>
+                <p class="mp-dc__sub" id="mp-d-pareto-sub">Os 20 itens que mais consomem em R$ no ano e o % acumulado. A até 80%, B até 95%.</p>
+                <div class="mp-legenda" id="mp-leg-pareto" style="justify-content:flex-end;"></div>
+                <div class="mp-chart mp-chart--alto"><canvas id="mp-ch-pareto" role="img" aria-label="Curva ABC por valor consumido"></canvas></div>
+            </div>
+            <div class="mp-dc">
+                <h3>Cobertura por visão</h3>
+                <p class="mp-dc__sub" id="mp-d-cob-sub">Dias de estoque = valor ÷ consumo diário em R$</p>
+                <div class="mp-chart mp-chart--alto"><canvas id="mp-ch-cobertura" role="img" aria-label="Dias de cobertura por visão"></canvas></div>
+            </div>
+        </div>
+        <div class="mp-dg mp-dg--cheio">
+            <div class="mp-dc">
+                <h3>Itens que pedem ação</h3>
+                <p class="mp-dc__sub" id="mp-d-acoes-sub">Críticos e abaixo do mínimo. Comprar = máximo − saldo − OC aberta.</p>
+                <div class="mp-table-wrap">
+                    <table class="mp-acao-tab">
+                        <thead><tr><th>Item</th><th>Curva</th><th class="num">Saldo</th><th class="num">Consumo/mês</th><th class="num">Prazo</th><th class="num">Segurança</th><th class="num">Mínimo</th><th class="num">Cobertura</th><th class="num">Em OC</th><th class="num">Comprar</th><th>Situação</th></tr></thead>
+                        <tbody id="mp-d-acoes"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="mp-area-visao" class="mp-wrap" hidden>
+    <div class="mp-dk-grid mp-dk-grid--4" id="mp-kpis">
+        <div class="mp-dk" style="--mp-cor: var(--eui-danger);"><span class="mp-dk__label">Críticos</span><span class="mp-dk__valor" id="mp-k-criticos">0</span><span class="mp-dk__dica" id="mp-k-criticos-hint"></span></div>
+        <div class="mp-dk" style="--mp-cor: var(--eui-warning);"><span class="mp-dk__label" id="mp-k-atencao-label">Abaixo do mínimo</span><span class="mp-dk__valor" id="mp-k-atencao">0</span><span class="mp-dk__dica" id="mp-k-atencao-hint"></span></div>
+        <div class="mp-dk" id="mp-k-exc-card" style="--mp-cor: var(--eui-violet, var(--eui-primary)); display:none;"><span class="mp-dk__label">Excedente</span><span class="mp-dk__valor" id="mp-k-exc">R$ 0</span><span class="mp-dk__dica" id="mp-k-exc-hint"></span></div>
+        <div class="mp-dk" id="mp-k-slow-card" style="--mp-cor: var(--eui-primary); display:none;"><span class="mp-dk__label">Slow mover</span><span class="mp-dk__valor" id="mp-k-slow">R$ 0</span><span class="mp-dk__dica" id="mp-k-slow-hint"></span></div>
+    </div>
+
+    <div class="mp-cob" id="mp-cob" style="display:none;">
+        <div class="mp-cob__topo"><b>Quanto tempo o saldo dura</b><span>Clique numa faixa para filtrar a lista</span></div>
+        <div class="mp-cob__barra" id="mp-cob-barra" role="group" aria-label="Saldo por cobertura"></div>
+        <div class="mp-cob__leg" id="mp-faixas" role="group" aria-label="Faixas de cobertura"></div>
     </div>
 
     <div class="eui-card">
         <div class="eui-card__head mp-head">
-            <div class="mp-toolbar">
-                <div class="mp-views" role="group" aria-label="Visão do estoque">
-                    <button class="mp-view-btn active" type="button" data-visao="materia_prima">Matéria-prima</button>
-                    <button class="mp-view-btn" type="button" data-visao="revenda">Revenda</button>
-                    <button class="mp-view-btn" type="button" data-visao="produto_acabado">Produto acabado</button>
-                    <button class="mp-view-btn" type="button" data-visao="insumos">Insumos da produção</button>
-                    {# Controle de Chapas edita cálculo: só com a permissão de inventário, não com a de consulta. #}
-                    {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas</a>{% endif %}
-                </div>
+            <div class="mp-fbar">
                 <div class="mp-search">
                     <i class="fas fa-magnifying-glass"></i>
                     <input class="eui-input" id="mp-busca" type="search" placeholder="Buscar por código, descrição ou localização...">
                 </div>
-            </div>
-            <div class="mp-filters">
-                <select class="eui-select" id="mp-nivel" aria-label="Status">
-                    <option value="">Todos os status</option>
-                    <option value="critico">Crítico</option>
-                    <option value="atencao">Monitorar / abaixo do mínimo</option>
-                    <option value="normal">Adequado</option>
-                    <option value="esporadico">Demanda esporádica</option>
-                    <option value="sem_consumo">Sem consumo</option>
-                    <option value="novo">Item novo</option>
-                    <option value="sem_controle">Não controla estoque</option>
-                </select>
-                <label class="mp-check"><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo no GRV</label>
-                <label class="mp-check"><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
-                <label class="mp-check" id="mp-excedente-wrap"><input type="checkbox" id="mp-excedente"> Só com excedente</label>
-                <div class="mp-filters__end">
-                    <span class="mp-muted" id="mp-updated"></span>
+                <button type="button" class="mp-fbtn" id="mp-fbtn" aria-expanded="false" aria-controls="mp-fpop"><i class="fas fa-sliders"></i> Filtros <span class="mp-fcount" id="mp-fcount" hidden>0</span></button>
+                <div class="mp-fchips" id="mp-fchips"></div>
+                <span class="mp-contagem"><b id="mp-k-itens">0</b> itens <span id="mp-k-itens-hint"></span></span>
+                <div class="mp-acoes">
+                    <span class="mp-foto" id="mp-updated"></span>
                     <span class="mp-erro" id="mp-export-erro" role="alert"></span>
-                    <button class="eui-btn eui-btn--ghost" id="mp-limpar-filtros" type="button" style="display:none;"><i class="fas fa-filter-circle-xmark"></i> Limpar filtros das colunas</button>
-                    <button class="eui-btn eui-btn--ghost" id="mp-sel-limpar" type="button" style="display:none;"><i class="fas fa-xmark"></i> Limpar seleção</button>
-                    <button class="eui-btn eui-btn--ghost" id="mp-exportar" type="button" disabled><i class="fas fa-file-excel"></i> Exportar Excel</button>
-                    <button class="eui-btn eui-btn--ghost" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-limpar-filtros" type="button" style="display:none;"><i class="fas fa-filter-circle-xmark"></i> Limpar colunas</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-sel-limpar" type="button" style="display:none;"><i class="fas fa-xmark"></i> Limpar seleção</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-exportar" type="button"><i class="fas fa-file-excel"></i> Exportar</button>
+                    <button class="eui-btn eui-btn--primary eui-btn--sm" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
-            <div class="mp-aviso" id="mp-plan-aviso" style="display:none;"><i class="fas fa-triangle-exclamation"></i> O histórico do GRV não respondeu agora: mínimo e lote sugeridos indisponíveis, e a cobertura voltou ao cálculo simples dos últimos 90 dias.</div>
+            <div class="mp-aviso" id="mp-plan-aviso" style="display:none;"><i class="fas fa-triangle-exclamation"></i> O histórico do GRV não respondeu: mínimo e lote sugeridos indisponíveis, e a cobertura voltou ao cálculo simples dos últimos 90 dias.</div>
             <div class="mp-state" id="mp-state">Carregando estoque...</div>
             <div class="mp-table-wrap">
                 <table class="mp-grid" id="mp-table" style="display:none;">
@@ -195,6 +372,29 @@
             </div>
         </div>
     </div>
+    </div>
+</div>
+
+<div class="mp-fpop" id="mp-fpop" role="dialog" aria-label="Filtros" hidden>
+    <div>
+        <p class="mp-fpop__titulo">Status</p>
+        <label><input type="radio" name="mp-nivel" value="" checked> Todos</label>
+        <label><input type="radio" name="mp-nivel" value="critico"> Crítico</label>
+        <label><input type="radio" name="mp-nivel" value="atencao"> Abaixo do mínimo</label>
+        <label><input type="radio" name="mp-nivel" value="normal"> Adequado</label>
+        <label><input type="radio" name="mp-nivel" value="esporadico"> Demanda esporádica</label>
+        <label><input type="radio" name="mp-nivel" value="sem_consumo"> Sem consumo</label>
+        <label><input type="radio" name="mp-nivel" value="novo"> Item novo</label>
+        <label><input type="radio" name="mp-nivel" value="sem_controle"> Não controla estoque</label>
+    </div>
+    <div>
+        <p class="mp-fpop__titulo">Itens</p>
+        <label id="mp-excedente-wrap"><input type="checkbox" id="mp-excedente"> Só com excedente</label>
+        <label id="mp-slow-wrap"><input type="checkbox" id="mp-slow"> Só slow mover</label>
+        <label><input type="checkbox" id="mp-estoque-minimo"> Com estoque mínimo no GRV</label>
+        <label><input type="checkbox" id="mp-sem-saldo"> Incluir itens sem saldo</label>
+    </div>
+    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-fpop-limpar">Limpar filtros</button>
 </div>
 
 <aside class="mp-painel" id="mp-painel" aria-labelledby="mp-painel-titulo" aria-hidden="true">
@@ -224,10 +424,33 @@
     </div>
 </div>
 
-<dialog id="mp-param-dialog" class="mp-dialog" aria-labelledby="mp-param-title">
+<dialog id="mp-grupo-dialog" class="mp-dialog mp-dialog--lista" aria-labelledby="mp-grupo-titulo">
+    <form method="dialog">
+        <div class="mp-dialog__head"><span id="mp-grupo-titulo"></span><button type="submit" class="eui-btn eui-btn--ghost eui-btn--sm" aria-label="Fechar">&times;</button></div>
+        <div class="mp-dialog__body">
+            <p class="mp-muted" id="mp-grupo-sub" style="margin:0;"></p>
+            <div class="mp-table-wrap">
+                <table class="mp-acao-tab">
+                    <thead><tr><th>Item</th><th>Curva</th><th class="num">Saldo</th><th class="num">Mínimo</th><th class="num">Máximo</th><th class="num" id="mp-grupo-col-valor">Valor</th><th>Por quê</th></tr></thead>
+                    <tbody id="mp-grupo-itens"></tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="mp-param-dialog" class="mp-dialog mp-dialog--largo" aria-labelledby="mp-param-title">
     <form method="dialog" id="mp-param-form">
         <div class="mp-dialog__head"><span id="mp-param-title"><i class="fas fa-sliders"></i> Parâmetros do planejamento</span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-param-close" aria-label="Fechar">&times;</button></div>
         <div class="mp-dialog__body">
+            <p class="mp-dialog__secao">Análise</p>
+            <div class="mp-dialog__grid">
+                <div><label for="mp-p-janela">Janela de análise (meses fechados)</label><input class="eui-input" id="mp-p-janela" name="janela_meses" type="number" step="1" min="3" max="36"></div>
+                <div><label for="mp-p-cresc">Crescimento de vendas previsto (%)</label><input class="eui-input" id="mp-p-cresc" name="crescimento_vendas_pct" type="number" step="1" min="-90" max="300"></div>
+                <div><label for="mp-p-cob">Cobertura máxima do lote (meses)</label><input class="eui-input" id="mp-p-cob" name="cobertura_lote_meses" type="number" step="0.5" min="0.5" max="24"></div>
+                <div><label for="mp-p-slow">Slow mover acima de (meses)</label><input class="eui-input" id="mp-p-slow" name="slow_mover_meses" type="number" step="0.5" min="1" max="60"></div>
+            </div>
+            <p class="mp-dialog__secao">Mínimo e lote</p>
             <div class="mp-dialog__grid">
                 <div><label for="mp-p-custo">Custo de emitir um pedido (R$)</label><input class="eui-input" id="mp-p-custo" name="custo_pedido" type="number" step="0.01" min="0.01"></div>
                 <div><label for="mp-p-taxa">Custo de manter estoque (% a.a.)</label><input class="eui-input" id="mp-p-taxa" name="taxa_manutencao_pct" type="number" step="0.1" min="1" max="100"></div>
@@ -236,7 +459,9 @@
                 <div><label for="mp-p-c">Nível de serviço curva C (%)</label><input class="eui-input" id="mp-p-c" name="nivel_servico_c_pct" type="number" step="0.1" min="50" max="99.9"></div>
                 <div><label for="mp-p-lt">Lead time padrão (dias)</label><input class="eui-input" id="mp-p-lt" name="lead_time_padrao_dias" type="number" step="1" min="1" max="365"></div>
             </div>
-            <p class="mp-muted" style="margin:0;">Custo do pedido e custo de manter entram no lote econômico. O nível de serviço define a margem de segurança do mínimo de cada curva ABC. O lead time padrão só vale para item sem nenhuma entrega com OC nos últimos 12 meses.</p>
+            <p class="mp-muted" style="margin:0;">Máximo = mínimo + lote. Acima do máximo é excedente. O lote é o econômico, limitado à cobertura máxima. Slow mover inclui o parado (sem saída na janela). O crescimento aumenta o consumo de todos os itens na mesma proporção. O lead time padrão só vale para item sem entrega na janela, nem do próprio item nem do último fornecedor.</p>
+            <p class="mp-dialog__secao">Ajustes por item</p>
+            <div id="mp-param-ajustes" class="mp-muted"></div>
             <p class="mp-muted" id="mp-param-meta" style="margin:0;"></p>
             <p class="mp-erro" id="mp-param-erro" role="alert" style="margin:0;"></p>
         </div>
@@ -249,9 +474,10 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
-    const VISOES_COMPRA = ['materia_prima', 'revenda', 'insumos'];
+    const VISOES_COMPRA = ['materia_prima', 'revenda', 'insumos', 'uso_consumo'];
     let timer = null;
-    let visaoAtual = 'materia_prima';
+    // Abre no painel; as visões (matéria-prima...) ficam nas abas.
+    let visaoAtual = 'painel';
     let janelaDias = 90;
     let diasAtencao = 15;
     let diasCritico = 7;
@@ -270,9 +496,15 @@
     // Itens marcados pra exportar (código -> item como a tela mostrou). Fica
     // entre buscas e trocas de visão até limpar.
     const selecao = new Map();
-    const MAX_EXPORTAR = 200;
     let visaoLabel = '';
     let exportando = false;
+    let podeEditar = false;
+    let resumoSlow = null;
+    // Foto do estoque: a tela abre com ela e pede a atualização por trás.
+    let foto = null;
+    let atualizandoFoto = false;
+    let esperaFoto = null;
+    const ultimoPedidoFoto = {};
 
     function fmt(valor, casas = 2) {
         return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
@@ -338,7 +570,7 @@
 
     function consumoTexto(item) {
         const p = item.planejamento;
-        if (p) return p.tipo_demanda === 'sem_giro' || !p.meses_analisados_12m ? '—' : fmt(p.consumo_mensal);
+        if (p) return p.tipo_demanda === 'sem_giro' || !p.meses_analisados ? '—' : fmt(p.consumo_mensal);
         if (!item.consumo_diario) return '—';
         return item.sem_controle_estoque && planejamentoAtivo ? fmt(consumoNumero(item)) : fmt(item.consumo_diario, 3);
     }
@@ -385,8 +617,24 @@
 
     function excedenteTexto(item) {
         const p = item.planejamento;
+        if (p && p.fora_analise) return 'fora';
         return p && Number(p.excedente) > 0 ? fmt(p.excedente) : '—';
     }
+
+    function maximoTexto(item) {
+        const p = item.planejamento;
+        if (!p || p.estoque_maximo == null) return '—';
+        return p.tipo_demanda === 'sem_giro' ? '0' : fmt(p.estoque_maximo);
+    }
+
+    // Quanto tempo o saldo dura no consumo médio, em faixas (Parado, 6 a 12 meses...).
+    function faixaTexto(item) {
+        const p = item.planejamento;
+        if (p && p.fora_analise) return 'Fora da análise';
+        return (p && p.faixa_cobertura_label) || '—';
+    }
+
+    const ORDEM_FAIXA = { 'Parado': 0, 'Mais de 12 meses': 1, '6 a 12 meses': 2, '3 a 6 meses': 3, '1 a 3 meses': 4, 'Até 1 mês': 5, 'Fora da análise': 6 };
 
     // ------------------------------------------------- filtro e ordenação
 
@@ -425,7 +673,12 @@
             texto: loteTexto,
             num: (i) => (i.planejamento && i.planejamento.lote_economico_sugerido != null ? Number(i.planejamento.lote_economico_sugerido) : null),
         },
-        excedente: { texto: excedenteTexto, num: (i) => (i.planejamento ? Number(i.planejamento.excedente || 0) : null) },
+        maximo: {
+            texto: maximoTexto,
+            num: (i) => (i.planejamento && i.planejamento.estoque_maximo != null ? Number(i.planejamento.estoque_maximo) : null),
+        },
+        excedente: { texto: excedenteTexto, num: (i) => (i.planejamento && !i.planejamento.fora_analise ? Number(i.planejamento.excedente || 0) : null) },
+        faixa: { texto: faixaTexto, num: (i) => (faixaTexto(i) === '—' ? null : ORDEM_FAIXA[faixaTexto(i)]) },
         reservas: { texto: (i) => String((i.reservas || []).length || '—'), num: (i) => (i.reservas || []).length },
         status: { texto: statusCurto, num: (i) => ORDEM_STATUS[i.nivel || 'normal'] ?? 9 },
     };
@@ -434,7 +687,7 @@
         const plano = planejamentoAtivo;
         return [
             'codigo', 'descricao', 'unidade', ...(plano ? ['curva'] : []), 'disponivel', 'consumo', 'cobertura',
-            ...(plano ? ['minimo', 'lote', 'excedente'] : []), ...(visaoAtual === 'produto_acabado' ? ['reservas'] : []), 'status',
+            ...(plano ? ['minimo', 'lote', 'maximo', 'excedente', 'faixa'] : []), ...(visaoAtual === 'produto_acabado' ? ['reservas'] : []), 'status',
         ];
     }
 
@@ -488,8 +741,13 @@
             todos.indeterminate = marcados > 0 && marcados < lista.length;
         }
         const n = selecao.size;
-        $('mp-exportar').disabled = !n || exportando;
-        if (!exportando) $('mp-exportar').innerHTML = `<i class="fas fa-file-excel"></i> Exportar Excel${n ? ` (${n})` : ''}`;
+        $('mp-exportar').disabled = exportando || !itens.length;
+        if (!exportando) {
+            // Diz quantos vão: "tudo" enganava com filtro ativo.
+            const total = Object.keys(filtros).length ? visiveis().length : totalEncontrado;
+            const rotulo = n ? `Exportar seleção (${n})` : `Exportar ${fmt(total, 0)} ${total === 1 ? 'item' : 'itens'}`;
+            $('mp-exportar').innerHTML = `<i class="fas fa-file-excel"></i> ${rotulo}`;
+        }
         $('mp-sel-limpar').style.display = n ? '' : 'none';
     }
 
@@ -545,8 +803,10 @@
             consumo: [plano ? 'Consumo/mês' : 'Consumo/dia', ' class="num" id="mp-th-consumo"'],
             cobertura: ['Cobertura', ' class="num"', plano ? 'Dias de saldo; em demanda esporádica, % de uma retirada típica' : `Saldo ÷ consumo médio de ${janelaDias} dias`],
             minimo: ['Mín. sugerido', ' class="num" id="mp-th-sugestao"'],
-            lote: ['Lote sugerido', ' class="num"'],
-            excedente: ['Excedente', ' class="num"', 'Saldo acima de 1 mês de consumo ou do mínimo sugerido (o maior)'],
+            lote: ['Lote sugerido', ' class="num"', 'Lote econômico, limitado à cobertura máxima do lote'],
+            maximo: ['Máximo', ' class="num"', 'Mínimo + lote: o estoque de quem compra o lote quando chega no mínimo'],
+            excedente: ['Excedente', ' class="num"', 'Saldo acima do máximo'],
+            faixa: ['Saldo dura', '', 'Quanto tempo o saldo dura no consumo médio. Parado = sem saída na janela'],
             reservas: ['Reservas', ' class="num"'],
             status: ['Status', '', statusAjuda],
         };
@@ -571,7 +831,7 @@
             <td class="num c-forte">${COLUNAS.disponivel.texto(item)}</td>
             <td class="num">${consumoTexto(item)}</td>
             <td class="num" title="${esc(coberturaTitulo(item))}">${coberturaTexto(item)}</td>
-            ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td><td class="num"${p && p.excedente_valor ? ` title="${esc(brl(p.excedente_valor))}"` : ''}>${excedenteTexto(item)}</td>` : ''}
+            ${planejamentoAtivo ? `<td class="num">${minimoTexto(item)}</td><td class="num">${loteTexto(item)}</td><td class="num">${maximoTexto(item)}</td><td class="num"${p && p.excedente_valor ? ` title="${esc(brl(p.excedente_valor))}"` : ''}>${excedenteTexto(item)}</td><td${p && p.slow_mover ? ' class="c-forte"' : ''}>${esc(faixaTexto(item))}</td>` : ''}
             ${visaoAtual === 'produto_acabado' ? `<td class="num">${(item.reservas || []).length || '—'}</td>` : ''}
             <td>${statusCell(item)}</td>
             <td class="c-seta"><i class="fas fa-chevron-right"></i></td>
@@ -585,20 +845,26 @@
         diasCritico = Number(data.dias_critico || 7);
         planejamentoAtivo = !!data.planejamento_ativo;
         parametros = data.parametros_planejamento || parametros;
-        $('mp-param-open').style.display = data.pode_editar_parametros ? '' : 'none';
+        podeEditar = !!data.pode_editar_parametros;
+        $('mp-param-open').style.display = podeEditar ? '' : 'none';
         $('mp-plan-aviso').style.display = data.planejamento_indisponivel ? '' : 'none';
+        const pr = parametros || {};
+        const crescimento = Number(pr.crescimento_vendas_pct || 0);
         $('mp-metodo').textContent = planejamentoAtivo
-            ? 'Saldos do depósito 1 no GRV. Mínimo e lote sugeridos pelo kardex dos últimos 12 meses.'
+            ? `Saldos do depósito 1 no GRV. Mínimo, lote e máximo pelo kardex dos últimos ${pr.janela_meses || 12} meses${crescimento ? `, com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 1)}% de vendas` : ''}.`
             : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
-        $('mp-k-criticos-hint').textContent = planejamentoAtivo ? 'Acabam antes da reposição chegar' : `Até ${diasCritico} dias de cobertura`;
-        $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'Abaixo do mínimo sugerido' : `Até ${diasAtencao} dias de cobertura`;
+        $('mp-k-criticos-hint').textContent = `${resumo.criticos_sem_oc || 0} sem OC · ` + (planejamentoAtivo ? 'acabam antes da reposição' : `até ${diasCritico} dias de cobertura`);
+        $('mp-k-atencao-label').textContent = planejamentoAtivo ? 'Abaixo do mínimo' : 'Monitorar';
+        $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'já passaram do ponto de pedido' : `até ${diasAtencao} dias de cobertura`;
         totalEncontrado = Number(resumo.total_filtrado || 0);
         $('mp-k-criticos').textContent = resumo.criticos || 0;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
-        $('mp-k-sem-oc').textContent = resumo.criticos_sem_oc || 0;
         $('mp-k-exc-card').style.display = planejamentoAtivo ? '' : 'none';
         $('mp-k-exc').textContent = brl(resumo.excedente_valor, 0);
-        $('mp-k-exc-hint').textContent = `${resumo.com_excedente || 0} itens acima do permitido`;
+        $('mp-k-exc-hint').textContent = `${resumo.com_excedente || 0} itens acima do máximo (mínimo + lote)`;
+        renderSlow(resumo.slow);
+        foto = data.foto || null;
+        renderFoto();
 
         itens = data.items || [];
         visaoLabel = data.visao_label || visaoLabel;
@@ -622,6 +888,42 @@
             const atual = itens.find((i) => i.codigo === selecionado);
             if (atual) renderPainel(atual, false); else fecharPainel();
         }
+    }
+
+    // Cores das faixas, do mais parado ao que mais gira.
+    const FAIXAS = [
+        ['parado', '#7f1d1d'], ['mais_12', '#dc2626'], ['6_12', '#f97316'], ['3_6', '#eab308'], ['1_3', '#16a34a'], ['ate_1', '#0ea5e9'],
+    ];
+
+    function renderSlow(slow) {
+        resumoSlow = slow || null;
+        const ativo = planejamentoAtivo && !!slow;
+        ['mp-k-slow-card', 'mp-cob'].forEach((id) => { $(id).style.display = ativo ? '' : 'none'; });
+        if (!ativo) return;
+        const pct = slow.valor_estoque > 0 ? `${fmt((slow.slow_mover_valor / slow.valor_estoque) * 100, 0)}% do estoque · ` : '';
+        $('mp-k-slow').textContent = brl(slow.slow_mover_valor, 0);
+        $('mp-k-slow-hint').textContent = `${slow.slow_mover_itens} itens · ${pct}parado ${brl(slow.parado_valor, 0)}`;
+        const filtroFaixa = filtros.faixa;
+        // O jsonify ordena as chaves por nome: a ordem das faixas vem daqui.
+        const faixas = FAIXAS.map(([chave, cor]) => ({ ...(slow.faixas || {})[chave], cor })).filter((f) => f.label);
+        const total = faixas.reduce((t, f) => t + Number(f.valor || 0), 0);
+        const ativa = (f) => filtroFaixa && filtroFaixa.size === 1 && filtroFaixa.has(f.label);
+        $('mp-cob-barra').innerHTML = faixas.filter((f) => f.valor > 0).map((f) => `<button type="button" data-faixa="${esc(f.label)}" class="${ativa(f) ? 'ativa' : ''}" style="background:${f.cor};width:${(f.valor / total) * 100}%;" title="${esc(f.label)}: ${esc(brl(f.valor, 0))} · ${f.itens} itens" aria-label="Filtrar ${esc(f.label)}"></button>`).join('');
+        $('mp-faixas').innerHTML = faixas.map((f) => `<button type="button" data-faixa="${esc(f.label)}" class="${ativa(f) ? 'ativa' : ''}">
+            <span><i style="background:${f.cor}"></i>${esc(f.label)}</span><b>${brl(f.valor, 0)}</b><span>${f.itens} ${f.itens === 1 ? 'item' : 'itens'}${total ? ` · ${fmt((f.valor / total) * 100, 0)}%` : ''}</span></button>`).join('');
+    }
+
+    function renderFoto() {
+        const el = $('mp-updated');
+        el.classList.toggle('erro', !!(foto && foto.erro && !atualizandoFoto));
+        if (!foto || foto.vazio) {
+            el.textContent = atualizandoFoto || (foto && foto.em_andamento) ? 'Buscando o estoque no GRV...' : '';
+            return;
+        }
+        const quando = `Foto de ${foto.atualizado_em}`;
+        if (atualizandoFoto || foto.em_andamento) el.textContent = `${quando} · atualizando...`;
+        else if (foto.erro) el.textContent = `${quando} · o GRV não respondeu na última atualização`;
+        else el.textContent = quando;
     }
 
     // ------------------------------------------------------------ painel
@@ -660,6 +962,28 @@
             </tr>`).join('')}</tbody></table></div>`;
     }
 
+    const LOTE_ORIGEM = { economico: 'lote econômico', limitado: 'limitado à cobertura', cobertura: 'pela cobertura (sem custo)' };
+
+    // Ajuste do item por cima do geral: só Admin vê (a rota confere de novo).
+    function ajusteHtml(item) {
+        if (!podeEditar || !item.planejamento) return '';
+        const a = item.ajuste || {};
+        const geral = (parametros || {}).cobertura_lote_meses;
+        return `<div class="mp-secao"><p class="mp-secao__titulo">Ajuste do item (Admin)</p>
+            <form id="mp-ajuste-form" data-codigo="${esc(item.codigo)}" style="display:grid;gap:10px;">
+                <div><label class="mp-secao__titulo" for="mp-aj-cob" style="display:block;margin-bottom:4px;">Cobertura máxima do lote (meses)</label>
+                    <input class="eui-input" id="mp-aj-cob" type="number" step="0.5" min="0.5" max="24" value="${a.cobertura_lote_meses ?? ''}" placeholder="Geral: ${fmt(geral, 1)}"></div>
+                <label class="mp-check-linha"><input type="checkbox" id="mp-aj-fora"${a.fora_analise ? ' checked' : ''}> Fora da análise (ativo da empresa: sai do slow mover e do excedente)</label>
+                <div><label class="mp-secao__titulo" for="mp-aj-obs" style="display:block;margin-bottom:4px;">Observação</label>
+                    <input class="eui-input" id="mp-aj-obs" type="text" maxlength="300" value="${esc(a.observacao || '')}"></div>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <button type="submit" class="eui-btn eui-btn--primary eui-btn--sm" id="mp-aj-salvar"><i class="fas fa-check"></i> Salvar ajuste</button>
+                    <span class="mp-erro" id="mp-aj-erro" role="alert"></span>
+                </div>
+                ${a.atualizado_por ? `<p class="mp-muted" style="margin:0;">Ajustado por ${esc(a.atualizado_por)} em ${new Date(a.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}. Apague tudo e salve para voltar ao geral.</p>` : ''}
+            </form></div>`;
+    }
+
     function abaResumo(item) {
         const p = item.planejamento;
         const un = esc(item.unidade || '');
@@ -685,7 +1009,7 @@
         if (p) {
             situacao = kv([
                 ['Status', esc(item.nivel_label || '')],
-                ['Consumo', p.tipo_demanda === 'sem_giro' ? 'sem saída em 12 meses' : (p.meses_analisados_12m ? `${fmt(p.consumo_mensal)} ${un}/mês<small>${p.meses_com_saida_12m} de ${p.meses_analisados_12m} meses com saída</small>` : '—')],
+                ['Consumo', p.tipo_demanda === 'sem_giro' ? `sem saída em ${p.janela_meses} meses` : (p.meses_analisados ? `${fmt(p.consumo_mensal)} ${un}/mês<small>${p.meses_com_saida} de ${p.meses_analisados} meses com saída${p.crescimento_vendas_pct ? ` · com ${p.crescimento_vendas_pct > 0 ? '+' : ''}${fmt(p.crescimento_vendas_pct, 1)}% de vendas` : ''}</small>` : '—')],
                 ['Cobertura', p.cobertura_dias != null ? `${p.cobertura_dias} dia(s)<small>lead time ${fmt(p.lead_time_dias, 0)} dia(s)</small>` : (p.retirada_tipica ? `${fmt(p.cobre_retirada_pct, 1)}% de 1 retirada<small>retirada típica ${q(p.retirada_tipica)}</small>` : '—')],
                 item.cobertura_projetada_dias != null ? ['Cobertura com OC', `${item.cobertura_projetada_dias} dia(s)`] : null,
             ]);
@@ -695,18 +1019,20 @@
                 ['Lote no GRV', grv(item.lote_economico)],
             ]) : kv([
                 ['Mínimo sugerido', p.tipo_demanda === 'sem_giro' ? 'não estocar' : `${q(p.estoque_minimo_sugerido)}<small>GRV: ${grv(item.estoque_minimo)}</small>`],
-                ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
-                ['Estoque permitido', `${q(p.estoque_permitido)}<small>1 mês de consumo ou mín. sugerido</small>`],
-                ['Excedente', Number(p.excedente) > 0 ? `${q(p.excedente)}${p.excedente_valor != null ? `<small>${brl(p.excedente_valor)}</small>` : ''}` : '—'],
+                ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>${LOTE_ORIGEM[p.lote_origem] || ''} · GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
+                ['Máximo', `${q(p.estoque_maximo)}<small>mínimo + lote</small>`],
+                ['Excedente', p.fora_analise ? 'fora da análise' : (Number(p.excedente) > 0 ? `${q(p.excedente)}${p.excedente_valor != null ? `<small>${brl(p.excedente_valor)}</small>` : ''}` : '—')],
+                ['Saldo dura', p.fora_analise ? 'fora da análise' : (p.faixa_cobertura_label ? `${esc(p.faixa_cobertura_label)}${p.cobertura_meses != null ? `<small>${fmt(p.cobertura_meses, 1)} meses de consumo${p.slow_mover ? ' · slow mover' : ''}</small>` : (p.slow_mover ? '<small>slow mover</small>' : '')}` : '—')],
                 ['Curva ABC', `${esc(p.classe_abc)}<small>nível de serviço ${fmt(p.nivel_servico_pct, 1)}%</small>`],
                 ['Tipo de demanda', esc(p.tipo_demanda_label)],
                 ['Confiança da sugestão', `${CONFIANCA[p.confianca] || '-'}<small>${esc((p.confianca_motivos || []).join(' · '))}</small>`],
-                p.consumo_os_pct_12m > 0 ? ['Comprado para OS (12 meses)', `${fmt(p.consumo_os_pct_12m, 1)}% do consumo${p.candidato_estoque ? '<small>candidato a item de estoque</small>' : ''}`] : null,
+                p.consumo_os_pct > 0 ? [`Comprado para OS (${p.janela_meses} meses)`, `${fmt(p.consumo_os_pct, 1)}% do consumo${p.candidato_estoque ? '<small>candidato a item de estoque</small>' : ''}`] : null,
             ]);
             return `<div class="mp-secao"><p class="mp-secao__titulo">Saldo</p>${saldo}</div>
                 <div class="mp-secao"><p class="mp-secao__titulo">Situação</p>${situacao}</div>
                 ${ocHtml(item)}
-                <div class="mp-secao"><p class="mp-secao__titulo">Planejamento</p>${planejamento}</div>`;
+                <div class="mp-secao"><p class="mp-secao__titulo">Planejamento</p>${planejamento}</div>
+                ${ajusteHtml(item)}`;
         }
         situacao = kv([
             ['Status', esc(item.nivel_label || '')],
@@ -727,46 +1053,61 @@
         const p = item.planejamento;
         const un = esc(item.unidade || '');
         const ltMeses = Number(p.lead_time_dias || 0) / 30.4;
+        const janela = p.janela_meses;
         const demanda = kv([
-            ['Meses com saída (12 meses)', `${p.meses_com_saida_12m} de ${p.meses_analisados_12m}`],
-            ['Consumo 12 meses', `${fmt(p.consumo_12m)} ${un}<small>${fmt(p.consumo_mensal)}/mês</small>`],
+            [`Meses com saída (${janela} meses)`, `${p.meses_com_saida} de ${p.meses_analisados}`],
+            [`Consumo ${janela} meses`, `${fmt(p.consumo_janela)} ${un}<small>${fmt(p.consumo_mensal)}/mês${p.crescimento_vendas_pct ? ` já com ${p.crescimento_vendas_pct > 0 ? '+' : ''}${fmt(p.crescimento_vendas_pct, 1)}% de vendas` : ''}</small>`],
             p.adi != null ? ['Intervalo médio · variação (CV²)', `${fmt(p.adi)} mês · ${fmt(p.cv2)}`] : null,
             ['Classificação', esc(p.tipo_demanda_label)],
         ]);
-        const lead = kv([
-            ['Lead time médio (OC → entrada)', p.lead_time_fonte === 'historico' ? `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) · desvio ${fmt(p.lead_time_desvio, 1)}</small>` : `${fmt(p.lead_time_dias, 0)} dia(s)<small>padrão: nenhuma entrega com OC em 12 meses</small>`],
-        ]);
-        let minimo;
+        const ltTexto = {
+            historico: `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) do item · desvio ${fmt(p.lead_time_desvio, 1)}</small>`,
+            fornecedor: `${fmt(p.lead_time_dias, 1)} dia(s)<small>sem entrega do item na janela: ${p.lead_time_amostras} entrega(s) do último fornecedor${p.lead_time_fornecedor ? ` (${esc(p.lead_time_fornecedor)})` : ''}</small>`,
+            padrao: `${fmt(p.lead_time_dias, 0)} dia(s)<small>padrão: nenhuma entrega do item nem do último fornecedor na janela</small>`,
+        };
+        const lead = kv([['Lead time (OC → entrada)', ltTexto[p.lead_time_fonte] || ltTexto.padrao]]);
+        const pr = parametros || {};
         if (p.tipo_demanda === 'sem_giro') {
-            minimo = '<p class="mp-nota">Nada saiu em 12 meses: não há o que repor.</p>';
-        } else if (p.estoque_seguranca != null) {
-            minimo = `<div class="mp-conta">
+            return `<div class="mp-secao"><p class="mp-secao__titulo">Demanda</p>${demanda}</div>
+                <div class="mp-secao"><p class="mp-secao__titulo">Excedente</p><p class="mp-nota">Nada saiu em ${janela} meses: não há o que repor e o máximo é zero. ${p.fora_analise ? 'Item fora da análise.' : `O saldo inteiro, ${fmt(item.saldo_disponivel)} ${un}${p.excedente_valor != null ? ` (${brl(p.excedente_valor)})` : ''}, é excedente e o item está parado.`}</p></div>`;
+        }
+        const esporadico = p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico';
+        const minimo = `<div class="mp-conta">
                 ${fmt(p.consumo_mensal)} ${un}/mês × ${fmt(ltMeses)} mês de lead time<br>
                 + segurança <b>${fmt(p.estoque_seguranca)} ${un}</b> (curva ${esc(p.classe_abc)}, ${fmt(p.nivel_servico_pct, 1)}%)<br>
-                = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>`;
-        } else {
-            minimo = `<div class="mp-conta">1 retirada típica = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>
-                <p class="mp-nota">80% das ${p.retiradas_12m} retiradas de 12 meses foram até esse tamanho. Média diária não serve para demanda esporádica.</p>`;
-        }
-        const pr = parametros || {};
-        const lote = p.lote_economico_sugerido == null
-            ? `<p class="mp-nota">${p.custo_unitario == null ? 'Sem custo no GRV: não dá para calcular.' : '—'}</p>`
+                = ponto de pedido <b>${fmt(p.ponto_pedido)} ${un}</b></div>
+            ${esporadico ? `<p class="mp-nota" style="margin-top:6px">Demanda esporádica: o mínimo é o maior entre o ponto de pedido e 1 retirada típica (${fmt(p.retirada_tipica)} ${un}; 80% das ${p.retiradas_janela} retiradas foram até esse tamanho).</p>` : ''}
+            <div class="mp-conta" style="margin-top:6px">Mínimo = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>`;
+        const teto = `${fmt(p.cobertura_lote_meses, 1)} ${Number(p.cobertura_lote_meses) === 1 ? 'mês' : 'meses'} de consumo${p.cobertura_lote_ajustada ? ' (ajuste do item)' : ''} = ${fmt(p.consumo_mensal * p.cobertura_lote_meses)} ${un}`;
+        const lote = p.lote_economico == null
+            ? `<p class="mp-nota">Sem custo no GRV: sem lote econômico. Lote = cobertura máxima, ${teto}.</p>`
             : `<div class="mp-conta">√(2 × ${fmt(p.consumo_mensal * 12)} ${un}/ano × R$ ${fmt(pr.custo_pedido)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))<br>
-                = <b>${fmt(p.lote_economico_sugerido)} ${un}</b>${p.tipo_demanda === 'intermitente' || p.tipo_demanda === 'esporadico' ? ' (nunca menor que 1 retirada comum)' : ''}</div>`;
-        const excedente = Number(p.excedente) > 0
-            ? `<div class="mp-conta">Saldo disponível ${fmt(item.saldo_disponivel)} ${un}<br>
-                − permitido <b>${fmt(p.estoque_permitido)} ${un}</b> (maior entre 1 mês de consumo, ${fmt(p.consumo_mensal)}, e o mínimo sugerido, ${fmt(p.estoque_minimo_sugerido)})<br>
-                = <b>${fmt(p.excedente)} ${un}</b>${p.excedente_valor != null ? ` × R$ ${fmt(p.custo_unitario, 4)} = <b>${brl(p.excedente_valor)}</b>` : ''}</div>`
-            : `<p class="mp-nota">Saldo disponível ${fmt(item.saldo_disponivel)} ${un} dentro do permitido (${fmt(p.estoque_permitido)} ${un}).</p>`;
+                = lote econômico ${fmt(p.lote_economico)} ${un}${esporadico ? ' (nunca menor que 1 retirada comum)' : ''}<br>
+                limite: ${teto}<br>
+                Lote sugerido = <b>${fmt(p.lote_economico_sugerido)} ${un}</b></div>`;
+        const maximo = `<div class="mp-conta">Mínimo ${fmt(p.estoque_minimo_sugerido)} + lote ${fmt(p.lote_economico_sugerido)} = máximo <b>${fmt(p.estoque_maximo)} ${un}</b></div>
+            <p class="mp-nota" style="margin-top:6px">Quem compra o lote quando o saldo chega no mínimo nunca passa disso.</p>`;
+        const excedente = p.fora_analise
+            ? '<p class="mp-nota">Item fora da análise (ajuste do Admin): não entra no excedente nem no slow mover.</p>'
+            : (Number(p.excedente) > 0
+                ? `<div class="mp-conta">Saldo disponível ${fmt(item.saldo_disponivel)} ${un}<br>
+                    − máximo <b>${fmt(p.estoque_maximo)} ${un}</b><br>
+                    = <b>${fmt(p.excedente)} ${un}</b>${p.excedente_valor != null ? ` × R$ ${fmt(p.custo_unitario, 4)} = <b>${brl(p.excedente_valor)}</b>` : ''}</div>`
+                : `<p class="mp-nota">Saldo disponível ${fmt(item.saldo_disponivel)} ${un} dentro do máximo (${fmt(p.estoque_maximo)} ${un}).</p>`);
+        const slow = p.cobertura_meses != null
+            ? `<p class="mp-nota">O saldo dura <b>${fmt(p.cobertura_meses, 1)} meses</b> no consumo médio. Slow mover acima de ${fmt(pr.slow_mover_meses, 1)} meses: <b>${p.slow_mover ? 'sim' : 'não'}</b>.</p>`
+            : '<p class="mp-nota">Sem saldo.</p>';
         const os = kv([
-            ['Consumo comprado para a própria OS', `${fmt(p.consumo_os_pct_12m, 1)}%`],
-            ['OCs em 12 meses', `${p.oc_para_os_12m} para OS · ${p.oc_estoque_12m} para estoque`],
+            ['Consumo comprado para a própria OS', `${fmt(p.consumo_os_pct, 1)}%`],
+            [`OCs em ${janela} meses`, `${p.oc_para_os} para OS · ${p.oc_estoque} para estoque`],
         ]);
         return `<div class="mp-secao"><p class="mp-secao__titulo">Demanda</p>${demanda}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Reposição</p>${lead}</div>
-            <div class="mp-secao"><p class="mp-secao__titulo">Estoque mínimo sugerido</p>${minimo}</div>
-            <div class="mp-secao"><p class="mp-secao__titulo">Lote econômico sugerido</p>${lote}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Estoque mínimo</p>${minimo}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Lote sugerido</p>${lote}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Máximo</p>${maximo}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Excedente</p>${excedente}</div>
+            <div class="mp-secao"><p class="mp-secao__titulo">Slow mover</p>${slow}</div>
             <div class="mp-secao"><p class="mp-secao__titulo">Compra para OS</p>${os}${p.candidato_estoque ? '<p class="mp-nota" style="margin-top:8px"><b>Candidato a item de estoque:</b> comprado para OS com frequência.</p>' : ''}</div>`;
     }
 
@@ -809,7 +1150,7 @@
             return;
         }
         if (!data.fornecimentos.length) {
-            corpo.innerHTML = '<p class="mp-nota">Nenhuma OC deste item nos últimos 12 meses.</p>';
+            corpo.innerHTML = `<p class="mp-nota">Nenhuma OC deste item nos últimos ${data.meses_historico} meses.</p>`;
             return;
         }
         const unidade = item.unidade || '';
@@ -927,12 +1268,17 @@
         renderLista();
     });
 
+    // Sem seleção: a visão inteira com os filtros da tela, montada no servidor
+    // (sem o limite de linhas da lista). Com filtro de coluna ativo, o que está
+    // na lista. Com seleção, os marcados.
+    function corpoExportar() {
+        if (selecao.size) return { itens: [...selecao.values()], janela_dias: janelaDias };
+        if (Object.keys(filtros).length) return { itens: visiveis().map((i) => ({ ...i, visao: visaoLabel })), janela_dias: janelaDias };
+        return { tudo: true, visao: visaoAtual, filtros: filtrosAtuais(), janela_dias: janelaDias };
+    }
+
     async function exportar() {
         $('mp-export-erro').textContent = '';
-        if (selecao.size > MAX_EXPORTAR) {
-            $('mp-export-erro').textContent = `Máximo de ${MAX_EXPORTAR} itens por vez.`;
-            return;
-        }
         exportando = true;
         $('mp-exportar').disabled = true;
         $('mp-exportar').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exportando...';
@@ -940,7 +1286,7 @@
             const resp = await fetch('/api/logistica/estoque/exportar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itens: [...selecao.values()], janela_dias: janelaDias }),
+                body: JSON.stringify(corpoExportar()),
             });
             if (!resp.ok) {
                 const data = await resp.json().catch(() => ({}));
@@ -1027,21 +1373,14 @@
 
     // ------------------------------------------------------------ carga
 
-    async function carregar(refresh = false, silencioso = false) {
+    async function carregar(silencioso = false) {
         if (!silencioso) {
             $('mp-state').style.display = 'block';
             $('mp-state').textContent = 'Carregando estoque...';
         }
         const params = new URLSearchParams();
         params.set('visao', visaoAtual);
-        const q = $('mp-busca').value.trim();
-        if (q) params.set('q', q);
-        const nivel = $('mp-nivel').value;
-        if (nivel) params.set('nivel', nivel);
-        if ($('mp-estoque-minimo').checked) params.set('estoque_minimo', '1');
-        if ($('mp-sem-saldo').checked) params.set('incluir_sem_saldo', '1');
-        if ($('mp-excedente').checked) params.set('excedente', '1');
-        if (refresh) params.set('refresh', '1');
+        Object.entries(filtrosAtuais()).forEach(([chave, valor]) => params.set(chave, valor));
         // Máximo da API: filtro de coluna só enxerga o que foi carregado.
         params.set('limit', '800');
         try {
@@ -1049,7 +1388,18 @@
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) throw new Error(data.error || data.msg || 'Falha ao carregar estoque.');
             render(data);
-            $('mp-updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            if (foto && foto.vazio && !foto.em_andamento && !atualizandoFoto) {
+                $('mp-state').style.display = 'block';
+                $('mp-state').textContent = 'Buscando o estoque no GRV pela primeira vez. Pode levar alguns minutos.';
+            }
+            // No máximo 1 pedido automático a cada 2 min por visão: com o GRV fora a
+            // foto continua velha e cada leitura pediria outra.
+            const agora = Date.now();
+            if (foto && (foto.vazio || foto.desatualizado) && !foto.em_andamento && agora - (ultimoPedidoFoto[visaoAtual] || 0) > 120000) {
+                ultimoPedidoFoto[visaoAtual] = agora;
+                atualizarFoto();
+            }
+            else if (foto && foto.em_andamento && !atualizandoFoto) esperarFoto();
         } catch (err) {
             // Falha em atualizacao silenciosa (em segundo plano) mantem os dados
             // ja exibidos, sem apagar a tabela com uma mensagem de erro.
@@ -1060,34 +1410,192 @@
         }
     }
 
+    // Busca no GRV e grava a foto da visão; a tela segue com a foto atual até terminar.
+    async function atualizarFoto() {
+        if (atualizandoFoto) return;
+        atualizandoFoto = true;
+        const visao = visaoAtual;
+        renderFoto();
+        $('mp-refresh').disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/estoque/atualizar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visao }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (data.ja_em_andamento) {
+                atualizandoFoto = false;
+                $('mp-refresh').disabled = false;
+                esperarFoto();
+                return;
+            }
+            if (!resp.ok && visao === visaoAtual) {
+                foto = data.foto || foto;
+                if (!foto || foto.vazio) $('mp-state').textContent = data.error || 'Não deu para buscar o estoque no GRV.';
+            }
+        } catch (err) {
+            // A foto atual continua na tela.
+        }
+        atualizandoFoto = false;
+        $('mp-refresh').disabled = false;
+        if (visao === visaoAtual) carregar(true);
+    }
+
+    // Outra pessoa já está atualizando: confere de novo em instantes.
+    function esperarFoto() {
+        clearTimeout(esperaFoto);
+        esperaFoto = setTimeout(() => carregar(true), 15000);
+    }
+
     $('mp-busca').addEventListener('input', () => {
         clearTimeout(timer);
-        timer = setTimeout(() => carregar(false), 260);
+        timer = setTimeout(() => carregar(), 260);
     });
-    $('mp-nivel').addEventListener('change', () => carregar(false));
-    $('mp-estoque-minimo').addEventListener('change', () => carregar(false));
-    $('mp-sem-saldo').addEventListener('change', () => carregar(false));
-    $('mp-excedente').addEventListener('change', () => carregar(false));
-    $('mp-refresh').addEventListener('click', () => carregar(true));
+    // ------------------------------------------------- barra de filtro
+    const ROTULO_NIVEL = { critico: 'Crítico', atencao: 'Abaixo do mínimo', normal: 'Adequado', esporadico: 'Demanda esporádica', sem_consumo: 'Sem consumo', novo: 'Item novo', sem_controle: 'Não controla estoque' };
+    const CAIXAS = { 'mp-excedente': 'Só com excedente', 'mp-slow': 'Só slow mover', 'mp-estoque-minimo': 'Com estoque mínimo no GRV', 'mp-sem-saldo': 'Incluir itens sem saldo' };
+
+    function nivelAtual() {
+        const marcado = document.querySelector('input[name="mp-nivel"]:checked');
+        return marcado ? marcado.value : '';
+    }
+
+    function filtrosAtuais() {
+        const f = {};
+        const q = $('mp-busca').value.trim();
+        if (q) f.q = q;
+        if (nivelAtual()) f.nivel = nivelAtual();
+        if ($('mp-estoque-minimo').checked) f.estoque_minimo = '1';
+        if ($('mp-sem-saldo').checked) f.incluir_sem_saldo = '1';
+        if ($('mp-excedente').checked) f.excedente = '1';
+        if ($('mp-slow').checked) f.slow_mover = '1';
+        return f;
+    }
+
+    function renderChips() {
+        const chips = [];
+        if (nivelAtual()) chips.push(['nivel', ROTULO_NIVEL[nivelAtual()] || nivelAtual()]);
+        Object.entries(CAIXAS).forEach(([id, rotulo]) => { if ($(id).checked) chips.push([id, rotulo]); });
+        $('mp-fchips').innerHTML = chips.map(([chave, rotulo]) => `<button type="button" class="mp-fchip" data-tirar="${chave}" aria-label="Tirar o filtro ${esc(rotulo)}">${esc(rotulo)}<i class="fas fa-xmark" aria-hidden="true"></i></button>`).join('');
+        $('mp-fcount').hidden = !chips.length;
+        $('mp-fcount').textContent = chips.length;
+    }
+
+    function fecharFiltros() {
+        $('mp-fpop').hidden = true;
+        $('mp-fbtn').setAttribute('aria-expanded', 'false');
+    }
+
+    $('mp-fbtn').addEventListener('click', () => {
+        const pop = $('mp-fpop');
+        if (!pop.hidden) { fecharFiltros(); return; }
+        pop.hidden = false;
+        $('mp-fbtn').setAttribute('aria-expanded', 'true');
+        const alvo = $('mp-fbtn').getBoundingClientRect();
+        pop.style.left = Math.max(8, Math.min(alvo.left, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+        pop.style.top = Math.max(8, Math.min(alvo.bottom + 6, window.innerHeight - pop.offsetHeight - 8)) + 'px';
+    });
+    $('mp-fpop').addEventListener('change', () => { renderChips(); carregar(); });
+    $('mp-fpop-limpar').addEventListener('click', () => {
+        document.querySelector('input[name="mp-nivel"][value=""]').checked = true;
+        Object.keys(CAIXAS).forEach((id) => { $(id).checked = false; });
+        renderChips();
+        carregar();
+    });
+    $('mp-fchips').addEventListener('click', (event) => {
+        const chip = event.target.closest('[data-tirar]');
+        if (!chip) return;
+        if (chip.dataset.tirar === 'nivel') document.querySelector('input[name="mp-nivel"][value=""]').checked = true;
+        else $(chip.dataset.tirar).checked = false;
+        renderChips();
+        carregar();
+    });
+    document.addEventListener('mousedown', (event) => {
+        if (!$('mp-fpop').hidden && !event.target.closest('#mp-fpop, #mp-fbtn')) fecharFiltros();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !$('mp-fpop').hidden) { event.stopPropagation(); fecharFiltros(); $('mp-fbtn').focus(); }
+    }, true);
+    window.addEventListener('resize', fecharFiltros);
+    $('mp-refresh').addEventListener('click', () => atualizarFoto());
+    $('mp-cob').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-faixa]');
+        if (!btn) return;
+        const faixa = btn.dataset.faixa;
+        // Clicar de novo na faixa ativa tira o filtro.
+        if (filtros.faixa && filtros.faixa.size === 1 && filtros.faixa.has(faixa)) delete filtros.faixa;
+        else filtros.faixa = new Set([faixa]);
+        renderLista();
+        renderSlow(resumoSlow);
+    });
+    $('mp-painel-corpo').addEventListener('submit', async (event) => {
+        if (event.target.id !== 'mp-ajuste-form') return;
+        event.preventDefault();
+        const form = event.target;
+        $('mp-aj-erro').textContent = '';
+        $('mp-aj-salvar').disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/estoque/ajuste-item', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    codigo: form.dataset.codigo,
+                    cobertura_lote_meses: $('mp-aj-cob').value,
+                    fora_analise: $('mp-aj-fora').checked,
+                    observacao: $('mp-aj-obs').value,
+                }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar.');
+            carregar(true);
+        } catch (err) {
+            $('mp-aj-erro').textContent = err.message;
+            $('mp-aj-salvar').disabled = false;
+        }
+    });
+    function abrirVisao(visao, busca = null) {
+        document.querySelectorAll('.mp-view-btn[data-visao]').forEach((item) => item.classList.toggle('active', item.dataset.visao === visao));
+        visaoAtual = visao;
+        const painel = visao === 'painel';
+        $('mp-dash').hidden = !painel;
+        $('mp-area-visao').hidden = painel;
+        fecharFiltro();
+        fecharFiltros();
+        fecharPainel();
+        clearTimeout(esperaFoto);
+        if (painel) { carregarPainel(); return; }
+        // Excedente e slow mover só existem nas visões com planejamento (produto acabado não tem).
+        const temExcedente = VISOES_COMPRA.includes(visao);
+        $('mp-excedente-wrap').style.display = temExcedente ? '' : 'none';
+        $('mp-slow-wrap').style.display = temExcedente ? '' : 'none';
+        if (!temExcedente) {
+            $('mp-excedente').checked = false;
+            $('mp-slow').checked = false;
+        }
+        if (busca != null) $('mp-busca').value = busca;
+        renderChips();
+        filtros = {};
+        ordem = null;
+        foto = null;
+        carregar();
+    }
     document.querySelectorAll('.mp-view-btn[data-visao]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.mp-view-btn').forEach((item) => item.classList.remove('active'));
-            btn.classList.add('active');
-            visaoAtual = btn.dataset.visao || 'materia_prima';
-            // Excedente só existe nas visões com planejamento (produto acabado não tem).
-            const temExcedente = VISOES_COMPRA.includes(visaoAtual);
-            $('mp-excedente-wrap').style.display = temExcedente ? '' : 'none';
-            if (!temExcedente) $('mp-excedente').checked = false;
-            filtros = {};
-            ordem = null;
-            fecharFiltro();
-            fecharPainel();
-            carregar(false);
-        });
+        btn.addEventListener('click', () => abrirVisao(btn.dataset.visao || 'painel'));
     });
 
     // Parâmetros do planejamento: o botão só aparece pra Admin e a rota confere de novo.
-    const CAMPOS_PARAM = { 'mp-p-custo': 'custo_pedido', 'mp-p-taxa': 'taxa_manutencao_pct', 'mp-p-a': 'nivel_servico_a_pct', 'mp-p-b': 'nivel_servico_b_pct', 'mp-p-c': 'nivel_servico_c_pct', 'mp-p-lt': 'lead_time_padrao_dias' };
+    const CAMPOS_PARAM = {
+        'mp-p-custo': 'custo_pedido', 'mp-p-taxa': 'taxa_manutencao_pct', 'mp-p-a': 'nivel_servico_a_pct', 'mp-p-b': 'nivel_servico_b_pct',
+        'mp-p-c': 'nivel_servico_c_pct', 'mp-p-lt': 'lead_time_padrao_dias', 'mp-p-janela': 'janela_meses', 'mp-p-cresc': 'crescimento_vendas_pct',
+        'mp-p-cob': 'cobertura_lote_meses', 'mp-p-slow': 'slow_mover_meses',
+    };
+    function renderAjustesItens(ajustes) {
+        $('mp-param-ajustes').innerHTML = (ajustes || []).length
+            ? `<table class="mp-tab"><thead><tr><th>Item</th><th class="num">Cobertura do lote</th><th>Fora da análise</th><th>Observação</th></tr></thead><tbody>${ajustes.map((a) => `<tr>
+                <td><b>${esc(a.codigo)}</b></td>
+                <td class="num">${a.cobertura_lote_meses != null ? `${fmt(a.cobertura_lote_meses, 1)} meses` : 'geral'}</td>
+                <td>${a.fora_analise ? 'Sim' : '—'}</td>
+                <td>${esc(a.observacao || '')}</td></tr>`).join('')}</tbody></table>`
+            : 'Nenhum. Para ajustar um item, abra o item na lista.';
+    }
     async function abrirParametros() {
         $('mp-param-erro').textContent = '';
         try {
@@ -1095,6 +1603,7 @@
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Falha ao carregar os parâmetros.');
             parametros = data.parametros;
+            renderAjustesItens(data.ajustes);
         } catch (err) {
             $('mp-param-erro').textContent = err.message;
         }
@@ -1122,7 +1631,7 @@
             if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar.');
             parametros = data.parametros;
             $('mp-param-dialog').close();
-            carregar(false);
+            if (visaoAtual === 'painel') carregarPainel(); else carregar();
         } catch (err) {
             $('mp-param-erro').textContent = err.message;
         } finally {
@@ -1130,11 +1639,335 @@
         }
     });
 
-    // Recalcula a cobertura automaticamente: a cada 5 min com a aba visivel e
-    // ao voltar pra aba (cobre a tela deixada aberta por dias com numero congelado).
-    setInterval(() => { if (!document.hidden) carregar(false, true); }, 300000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar(false, true); });
-    carregar(false);
+    // ------------------------------------------------------------ painel inicial
+    const graficos = {};
+    let painelAtualizando = false;
+    let esperaPainel = null;
+    const MESES_NOME = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+    function corVar(nome, padrao) {
+        const valor = getComputedStyle($('mp-dash')).getPropertyValue(nome).trim();
+        return valor || padrao;
+    }
+
+    function brlCurto(valor) {
+        const v = Number(valor || 0);
+        if (Math.abs(v) >= 1e6) return `R$ ${fmt(v / 1e6, 2)} mi`;
+        if (Math.abs(v) >= 1e3) return `R$ ${fmt(v / 1e3, 1)} mil`;
+        return brl(v, 0);
+    }
+
+    function grafico(id, config) {
+        if (!window.Chart) return;
+        if (graficos[id]) graficos[id].destroy();
+        graficos[id] = new Chart($(id), config);
+    }
+
+    // Não chamar de renderPainel: esse nome é do painel lateral do item, e a
+    // segunda declaração substituía a primeira (o item abria em branco).
+    function renderDashboard(d) {
+        const k = d.kpis || {};
+        const pr = d.parametros || {};
+        parametros = pr;
+        $('mp-d-valor').textContent = brlCurto(k.valor_estoque);
+        $('mp-d-valor').title = brl(k.valor_estoque);
+        const crescimento = Number(pr.crescimento_vendas_pct || 0);
+        const variacao = k.valor_variacao_pct == null ? '' : `<b>${k.valor_variacao_pct >= 0 ? '▲' : '▼'} ${fmt(Math.abs(k.valor_variacao_pct), 1)}%</b> vs mês anterior · `;
+        // Estoque médio de quem segue a política (segurança + meio lote).
+        $('mp-d-valor-dica').innerHTML = `${variacao}necessário ${brlCurto(k.necessario_medio_valor)}${crescimento ? ` com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 0)}% de vendas` : ''}`;
+        $('mp-d-giro').textContent = k.giro_anual == null ? '—' : `${fmt(k.giro_anual, 1)}x`;
+        $('mp-d-cob').textContent = k.cobertura_dias == null ? '—' : `${fmt(k.cobertura_dias, 0)} dias`;
+        $('mp-d-comprar').textContent = k.para_comprar ?? '—';
+        $('mp-d-comprar-dica').innerHTML = `<b>${k.criticos || 0} críticos</b> · ${k.criticos_sem_oc || 0} sem OC`;
+        $('mp-d-parado').textContent = brlCurto(k.slow_mover_valor);
+        $('mp-d-parado-dica').textContent = `${k.slow_mover_itens || 0} itens com saldo para mais de ${fmt(pr.slow_mover_meses, 0)} meses · parado ${brlCurto(k.parado_valor)}`;
+
+        const texto = corVar('--eui-text-soft', '#475569');
+        const grade = corVar('--eui-border', '#e2e8f0');
+        const azul = corVar('--eui-primary', '#2563eb');
+        const verde = corVar('--eui-success', '#16a34a');
+        const amarelo = corVar('--eui-warning', '#d97706');
+        const vermelho = corVar('--eui-danger', '#dc2626');
+        const roxo = corVar('--eui-violet', '#7c3aed');
+        // --eui-info é quase o mesmo azul do primário: as classes B e C da curva usam um azul claro.
+        const azulClaro = '#60a5fa';
+        if (window.Chart) {
+            Chart.defaults.color = texto;
+            Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+        }
+        const eixoBrl = { ticks: { callback: (v) => brlCurto(v) }, grid: { color: grade } };
+
+        const rotulos = (d.meses || []).map((m, i, l) => `${MESES_NOME[Number(m.slice(5)) - 1]}/${m.slice(2, 4)}${i === l.length - 1 ? '*' : ''}`);
+        grafico('mp-ch-valor', {
+            type: 'line',
+            data: {
+                labels: rotulos,
+                datasets: [
+                    { label: 'Valor em estoque', data: d.serie_valor, borderColor: azul, backgroundColor: azul, tension: .3, spanGaps: false, pointRadius: 4 },
+                    // Linha cheia: no Chart.js 4.6 a série tracejada apagava o texto da legenda.
+                    { label: 'Consumo do mês', data: d.serie_consumo, borderColor: roxo, backgroundColor: roxo, tension: .3, pointRadius: 3 },
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                // Legenda em HTML: a do Chart.js só desenhava a 1ª série no primeiro render.
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? 'sem registro' : brl(c.parsed.y, 0)}` } } },
+                scales: { y: eixoBrl, x: { grid: { display: false } } },
+            },
+        });
+
+        $('mp-leg-valor').innerHTML = `<span><i style="background:${azul}"></i>Valor em estoque</span><span><i style="background:${roxo}"></i>Consumo do mês</span>`;
+        $('mp-leg-pareto').innerHTML = `<span><i style="background:${azul}"></i>Classe A</span><span><i style="background:${azulClaro}"></i>B e C</span><span><i style="background:${amarelo}"></i>% acumulado</span>`;
+
+        const saude = d.saude || {};
+        const fatias = [
+            ['Saudável', saude.saudavel || 0, verde, 'saudavel'],
+            ['Comprar agora', saude.comprar || 0, amarelo, 'comprar'],
+            ['Ruptura iminente', saude.ruptura || 0, vermelho, 'ruptura'],
+            ['Excesso', saude.excesso || 0, roxo, 'excesso'],
+        ];
+        const totalSaude = fatias.reduce((t, f) => t + f[1], 0);
+        $('mp-d-saude-pct').textContent = totalSaude ? `${fmt((saude.saudavel / totalSaude) * 100, 0)}%` : '—';
+        $('mp-d-saude-leg').innerHTML = fatias.map(([r, n, c, g]) => `<button type="button" data-grupo="${g}" style="--mp-cor:${c};" title="Ver os itens">
+            <span class="mp-saude-leg__nome"><i></i>${r}</span>
+            <span class="mp-saude-leg__num"><b>${fmt(n, 0)}</b><span>${totalSaude ? `${fmt((n / totalSaude) * 100, n && n / totalSaude < 0.01 ? 1 : 0)}%` : ''}</span></span>
+        </button>`).join('');
+        grafico('mp-ch-saude', {
+            type: 'doughnut',
+            data: { labels: fatias.map((f) => f[0]), datasets: [{ data: fatias.map((f) => f[1]), backgroundColor: fatias.map((f) => f[2]), borderWidth: 0, spacing: 3, hoverOffset: 8 }] },
+            options: {
+                maintainAspectRatio: false,
+                cutout: '70%',
+                layout: { padding: 8 },
+                plugins: { legend: { display: false } },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirGrupo(fatias[el[0].index][3]); },
+            },
+        });
+
+        const pareto = d.pareto || [];
+        const cl = d.pareto_classes || {};
+        $('mp-d-pareto-sub').textContent = `Os ${pareto.length} itens que mais consomem em R$ no ano e o % acumulado. De ${d.pareto_total_itens || 0} itens com consumo: ${cl.A || 0} A (até 80%), ${cl.B || 0} B (até 95%), ${cl.C || 0} C.`;
+        grafico('mp-ch-pareto', {
+            data: {
+                labels: pareto.map((p) => p.codigo),
+                datasets: [
+                    { type: 'bar', label: 'Valor no ano', data: pareto.map((p) => p.valor), backgroundColor: pareto.map((p) => (p.acumulado_pct - 0.0001 <= 80 ? azul : azulClaro)), borderRadius: 4, yAxisID: 'y' },
+                    { type: 'line', label: '% acumulado', data: pareto.map((p) => p.acumulado_pct), borderColor: amarelo, backgroundColor: amarelo, pointRadius: 3, tension: .2, yAxisID: 'y2' },
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: {
+                        title: (c) => `${pareto[c[0].dataIndex].codigo} · ${pareto[c[0].dataIndex].descricao}`,
+                        label: (c) => (c.dataset.yAxisID === 'y2' ? `${fmt(c.parsed.y, 1)}% acumulado` : brl(c.parsed.y, 0)),
+                    } },
+                },
+                scales: {
+                    y: eixoBrl,
+                    y2: { position: 'right', min: 0, max: 100, ticks: { callback: (v) => `${v}%` }, grid: { display: false } },
+                    x: { ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } }, grid: { display: false } },
+                },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirVisao(pareto[el[0].index].visao, pareto[el[0].index].codigo); },
+            },
+        });
+
+        const cob = d.cobertura_por_visao || [];
+        const limiteDias = Number(pr.slow_mover_meses || 6) * 30.4;
+        $('mp-d-cob-sub').textContent = `Dias de estoque = valor ÷ consumo diário em R$. Acima de ${fmt(limiteDias, 0)} dias (${fmt(pr.slow_mover_meses, 0)} meses) fica em vermelho.`;
+        grafico('mp-ch-cobertura', {
+            type: 'bar',
+            data: { labels: cob.map((c) => c.label), datasets: [{ label: 'Dias', data: cob.map((c) => c.dias), backgroundColor: cob.map((c) => ((c.dias || 0) > limiteDias ? vermelho : verde)), borderRadius: 4 }] },
+            options: {
+                indexAxis: 'y',
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${fmt(c.parsed.x, 0)} dias · estoque ${brl(cob[c.dataIndex].valor, 0)}` } } },
+                scales: { x: { grid: { color: grade }, ticks: { callback: (v) => `${v} d` } }, y: { grid: { display: false } } },
+                onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; },
+                onClick: (e, el) => { if (el.length) abrirVisao(cob[el[0].index].visao); },
+            },
+        });
+
+        const acoes = d.acoes || [];
+        $('mp-d-acoes-sub').textContent = `Críticos e abaixo do mínimo${d.acoes_total > acoes.length ? ` (os ${acoes.length} mais urgentes de ${d.acoes_total})` : ''}. Comprar = máximo − saldo − OC aberta.`;
+        $('mp-d-acoes').innerHTML = acoes.length ? acoes.map((a) => {
+            const un = esc(a.unidade || '');
+            return `<tr>
+                <td class="c-desc"><a href="#" data-ir="${esc(a.visao)}" data-codigo="${esc(a.codigo)}">${esc(a.descricao)}</a><small style="display:block;font-weight:400;color:var(--eui-muted);">${esc(a.codigo)} · ${esc(a.visao_label)}</small></td>
+                <td>${a.curva ? `<span class="mp-curva ${esc(String(a.curva).toLowerCase())}">${esc(a.curva)}</span>` : '—'}</td>
+                <td class="num">${fmt(a.saldo)} ${un}</td>
+                <td class="num">${fmt(a.consumo_mensal)}</td>
+                <td class="num">${fmt(a.lead_time_dias, 0)} d</td>
+                <td class="num">${a.estoque_seguranca != null ? fmt(a.estoque_seguranca) : '—'}</td>
+                <td class="num">${fmt(a.minimo)}</td>
+                <td class="num">${a.cobertura_dias != null ? `${a.cobertura_dias} d` : '—'}</td>
+                <td class="num">${a.pendente_oc ? fmt(a.pendente_oc) : '—'}</td>
+                <td class="num" style="font-weight:700;color:var(--eui-text);"${a.comprar_valor ? ` title="${esc(brl(a.comprar_valor))}"` : ''}>${a.comprar > 0 ? fmt(a.comprar) : 'OC cobre'}</td>
+                <td><span class="mp-tag ${esc(a.nivel)}">${a.nivel === 'critico' ? 'Ruptura iminente' : 'Comprar agora'}</span></td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="11" class="mp-muted">Nenhum item crítico ou abaixo do mínimo.</td></tr>';
+
+        renderFiltroPainel(d.visoes_disponiveis || {});
+    }
+
+    // Filtro do painel: visões e curvas escolhidas (vazio = todas).
+    const painelFiltro = { visoes: new Set(), curvas: new Set() };
+
+    function paramsPainel(extra = {}) {
+        const params = new URLSearchParams(extra);
+        if (painelFiltro.visoes.size) params.set('visoes', [...painelFiltro.visoes].join(','));
+        if (painelFiltro.curvas.size) params.set('curvas', [...painelFiltro.curvas].join(','));
+        return params.toString();
+    }
+
+    function renderFiltroPainel(visoes) {
+        const botao = (tipo, valor, rotulo, marcado) => `<button type="button" class="mp-toggle" data-pf="${tipo}" data-valor="${esc(valor)}" aria-pressed="${marcado}">${esc(rotulo)}</button>`;
+        const algum = painelFiltro.visoes.size || painelFiltro.curvas.size;
+        // Mesma ordem e nomes das abas (o jsonify ordena as chaves por nome).
+        const abas = [...document.querySelectorAll('.mp-tabs .mp-view-btn[data-visao]')].filter((b) => b.dataset.visao in visoes);
+        $('mp-pfiltro').innerHTML = `<div class="mp-pfiltro__grupo"><span class="mp-pfiltro__rotulo">Visão</span>${abas.map((b) => botao('visoes', b.dataset.visao, b.textContent.trim(), painelFiltro.visoes.has(b.dataset.visao))).join('')}</div>
+            <div class="mp-pfiltro__grupo"><span class="mp-pfiltro__rotulo">Curva</span>${['A', 'B', 'C'].map((c) => botao('curvas', c, c, painelFiltro.curvas.has(c))).join('')}</div>
+            ${algum ? '<button type="button" class="mp-limpar" data-pf="limpar">Limpar filtros</button>' : ''}`;
+    }
+
+    $('mp-pfiltro').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-pf]');
+        if (!btn) return;
+        if (btn.dataset.pf === 'limpar') {
+            painelFiltro.visoes.clear();
+            painelFiltro.curvas.clear();
+        } else {
+            const conjunto = painelFiltro[btn.dataset.pf];
+            if (conjunto.has(btn.dataset.valor)) conjunto.delete(btn.dataset.valor); else conjunto.add(btn.dataset.valor);
+        }
+        carregarPainel();
+    });
+
+    // Lista dos itens de um grupo (fatia da saúde, itens para comprar, capital parado) e o porquê.
+    async function abrirGrupo(grupo) {
+        const dialogo = $('mp-grupo-dialog');
+        $('mp-grupo-titulo').textContent = 'Carregando...';
+        $('mp-grupo-sub').textContent = '';
+        $('mp-grupo-itens').innerHTML = '';
+        if (!dialogo.open) dialogo.showModal();
+        let data;
+        try {
+            const resp = await fetch('/api/logistica/estoque/painel/itens?' + paramsPainel({ grupo }));
+            data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar os itens.');
+        } catch (err) {
+            $('mp-grupo-titulo').textContent = 'Itens';
+            $('mp-grupo-sub').textContent = err.message;
+            return;
+        }
+        const itens = data.itens || [];
+        $('mp-grupo-titulo').textContent = `${data.titulo} · ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`;
+        $('mp-grupo-sub').textContent = data.total_valor ? `${data.rotulo_valor}: ${brl(data.total_valor, 0)} no total. Clique no item para abrir na visão dele.` : 'Clique no item para abrir na visão dele.';
+        $('mp-grupo-col-valor').textContent = data.rotulo_valor;
+        $('mp-grupo-itens').innerHTML = itens.length ? itens.map((i) => `<tr>
+            <td class="c-desc"><a href="#" data-ir="${esc(i.visao)}" data-codigo="${esc(i.codigo)}">${esc(i.descricao)}</a><small style="display:block;font-weight:400;color:var(--eui-muted);">${esc(i.codigo)} · ${esc(i.visao_label)}</small></td>
+            <td>${i.curva ? `<span class="mp-curva ${esc(String(i.curva).toLowerCase())}">${esc(i.curva)}</span>` : '—'}</td>
+            <td class="num">${fmt(i.saldo)} ${esc(i.unidade)}</td>
+            <td class="num">${i.minimo != null ? fmt(i.minimo) : '—'}</td>
+            <td class="num">${i.maximo != null ? fmt(i.maximo) : '—'}</td>
+            <td class="num" style="font-weight:700;color:var(--eui-text);">${i.valor != null ? brl(i.valor, 0) : '—'}</td>
+            <td style="white-space:normal;min-width:280px;">${esc(i.motivo)}</td>
+        </tr>`).join('') : '<tr><td colspan="7" class="mp-muted">Nenhum item neste grupo.</td></tr>';
+    }
+
+    $('mp-grupo-itens').addEventListener('click', (event) => {
+        const link = event.target.closest('[data-ir]');
+        if (!link) return;
+        event.preventDefault();
+        $('mp-grupo-dialog').close();
+        abrirVisao(link.dataset.ir, link.dataset.codigo);
+    });
+    $('mp-dash').addEventListener('click', (event) => {
+        const alvo = event.target.closest('[data-grupo]');
+        if (alvo) abrirGrupo(alvo.dataset.grupo);
+    });
+
+    function renderFotosPainel(fotos, andamento = '') {
+        const lista = Object.values(fotos || {});
+        const comFoto = lista.filter((f) => !f.vazio);
+        const el = $('mp-dash-foto');
+        if (andamento) { el.textContent = andamento; return; }
+        if (!comFoto.length) { el.textContent = 'Buscando o estoque no GRV pela primeira vez. Pode levar alguns minutos.'; return; }
+        const maisVelha = comFoto.reduce((a, f) => ((f.idade_min ?? 0) > (a.idade_min ?? 0) ? f : a));
+        const faltam = lista.length - comFoto.length;
+        el.textContent = `Fotos do GRV · a mais antiga de ${maisVelha.atualizado_em}${faltam ? ` · ${faltam} visão(ões) ainda sem foto` : ''}`;
+    }
+
+    async function carregarPainel(silencioso = false) {
+        let data;
+        try {
+            const resp = await fetch('/api/logistica/estoque/painel?' + paramsPainel());
+            data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar o painel.');
+        } catch (err) {
+            if (!silencioso) $('mp-dash-foto').textContent = err.message || 'Falha ao carregar o painel.';
+            return;
+        }
+        if (visaoAtual !== 'painel') return;
+        renderDashboard(data);
+        renderFotosPainel(data.fotos);
+        if (painelAtualizando) return;
+        // Visões sem foto ou velhas: atualiza uma de cada vez (no máximo 1
+        // pedido automático a cada 2 min por visão, como na lista).
+        const agora = Date.now();
+        const pendentes = Object.entries(data.fotos || {})
+            .filter(([v, f]) => (f.vazio || f.desatualizado) && !f.em_andamento && agora - (ultimoPedidoFoto[v] || 0) > 120000)
+            .map(([v]) => v);
+        if (pendentes.length) atualizarFotosPainel(pendentes, data.fotos);
+        else if (Object.values(data.fotos || {}).some((f) => f.em_andamento)) {
+            clearTimeout(esperaPainel);
+            esperaPainel = setTimeout(() => { if (visaoAtual === 'painel') carregarPainel(true); }, 15000);
+        }
+    }
+
+    async function atualizarFotosPainel(lista, fotos) {
+        painelAtualizando = true;
+        $('mp-dash-refresh').disabled = true;
+        for (let i = 0; i < lista.length; i += 1) {
+            const visao = lista[i];
+            ultimoPedidoFoto[visao] = Date.now();
+            renderFotosPainel(fotos, `Atualizando ${(fotos[visao] || {}).label || visao} (${i + 1} de ${lista.length})...`);
+            try {
+                await fetch('/api/logistica/estoque/atualizar', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visao }),
+                });
+            } catch (err) {
+                // A foto anterior continua; segue para a próxima visão.
+            }
+        }
+        painelAtualizando = false;
+        $('mp-dash-refresh').disabled = false;
+        if (visaoAtual === 'painel') carregarPainel(true);
+    }
+
+    $('mp-dash-refresh').addEventListener('click', async () => {
+        const resp = await fetch('/api/logistica/estoque/painel').catch(() => null);
+        const data = resp && resp.ok ? await resp.json() : { fotos: {} };
+        atualizarFotosPainel(Object.keys(data.fotos || {}), data.fotos || {});
+    });
+    $('mp-d-acoes').addEventListener('click', (event) => {
+        const link = event.target.closest('[data-ir]');
+        if (!link) return;
+        event.preventDefault();
+        if (link.dataset.ir) abrirVisao(link.dataset.ir, link.dataset.codigo);
+    });
+
+    // A cada 5 min com a aba visivel e ao voltar pra aba relê a foto (barato);
+    // se ela envelheceu, pede outra por trás.
+    const releitura = () => { if (document.hidden) return; if (visaoAtual === 'painel') carregarPainel(true); else carregar(true); };
+    setInterval(releitura, 300000);
+    document.addEventListener('visibilitychange', releitura);
+    renderChips();
+    abrirVisao('painel');
 })();
 </script>
 {% endblock %}

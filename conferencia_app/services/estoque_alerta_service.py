@@ -50,7 +50,12 @@ from .smtp_service import enviar_mensagem_smtp
 
 # Famílias e visões são as da tela: o aviso tem que falar dos mesmos itens que
 # ela mostra. Ficam definidas na rota, por isso o import no sentido inverso.
-from ..routes.logistica_inventario_routes import ESTOQUE_VISOES, VISOES_PLANEJAMENTO, _normalizar_busca
+from ..routes.logistica_inventario_routes import ESTOQUE_VISOES as _TODAS_VISOES, VISOES_PLANEJAMENTO, _normalizar_busca
+
+# EPI e uniformes (17/11/2026) entraram só na tela: o aviso por e-mail
+# continua nas visões que já tinha. Para incluir, é só tirar este filtro (e
+# levar o filtro de grupo de _itens_da_visao para _planos_da_visao).
+ESTOQUE_VISOES = {v: cfg for v, cfg in _TODAS_VISOES.items() if v != "uso_consumo"}
 
 TIPO_RESERVA = "reserva"
 TIPO_CURVA_A = "curva_a"
@@ -122,12 +127,15 @@ def _planos_da_visao(por_codigo: dict[str, Any], visao: str, parametros: dict[st
         familia_itens[chave] = {
             "saldo_disponivel": float(item.get("qtde_disponivel") or 0),
             "custo_medio": item.get("custo_medio"),
+            "unidade": item.get("unidade"),
         }
         cadastro[chave] = (codigo, item)
     if not familia_itens:
         return {}, {}, {}
-    historicos = buscar_planejamento_grv(codigos=list(familia_itens))
-    return familia_itens, cadastro, planejamento_svc.calcular_planejamento(familia_itens, historicos, parametros)
+    historicos = buscar_planejamento_grv(codigos=list(familia_itens), meses=int(parametros["janela_meses"]))
+    return familia_itens, cadastro, planejamento_svc.calcular_planejamento(
+        familia_itens, historicos, parametros, ajustes=planejamento_svc.obter_ajustes(),
+    )
 
 
 def sugestao_reposicao(plano: dict[str, Any] | None, saldo_livre: float) -> dict[str, Any] | None:
