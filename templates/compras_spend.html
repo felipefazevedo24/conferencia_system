@@ -739,7 +739,7 @@
                 <td class="sp-cod" title="${esc(l.cfop_descricao)}">${esc(l.cfop)}${l.cfop_descricao ? `<div class="sp-muted sp-desc" style="max-width:180px;font-size:11.5px">${esc(l.cfop_descricao)}</div>` : ""}</td>
                 <td><div class="sp-desc sp-rev-desc" title="${esc(l.descricao)}">${esc(l.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(l.codigo_item) || "(sem código)"}${l.familia ? " · " + esc(l.familia) : ""}</div></td>
                 <td class="sp-num">${fmtR(l.valor)}</td>
-                <td class="sp-cod" title="${l.solicitacao ? "SC " + esc(l.solicitacao) : ""}">${esc(l.ordem_compra) || '<span class="sp-muted">—</span>'}</td>
+                <td class="sp-cod" title="${esc([l.oc_origem, l.solicitacao ? "SC " + l.solicitacao : ""].filter(Boolean).join(" · "))}">${esc(l.ordem_compra) || '<span class="sp-muted">—</span>'}</td>
                 <td>${esc(l.requisitante) || '<span class="sp-muted">—</span>'}</td>
                 <td>${sit}</td>
                 <td>${editavel ? `<input class="eui-input sp-cls-input" list="sp-lista-cls" data-i="${i}" value="${esc(semCls ? "" : l.classificacao)}" placeholder="Sem classificação" title="${l.classificacao_manual ? "Confirmado" : (l.palpite ? "Palpite" : "Planilha do Custos")}">` : esc(l.classificacao)}</td>

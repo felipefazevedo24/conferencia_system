@@ -2017,6 +2017,7 @@ def _ensure_spend_entrada_oc_columns() -> None:
             ("solicitacao", "ALTER TABLE spend_entrada_grv ADD COLUMN solicitacao VARCHAR(200)"),
             ("requisitante", "ALTER TABLE spend_entrada_grv ADD COLUMN requisitante VARCHAR(300)"),
             ("cnpj_fornecedor", "ALTER TABLE spend_entrada_grv ADD COLUMN cnpj_fornecedor VARCHAR(14)"),
+            ("oc_origem", "ALTER TABLE spend_entrada_grv ADD COLUMN oc_origem VARCHAR(20)"),
         ]
         for column_name, ddl in missing_columns:
             if column_name not in cols:

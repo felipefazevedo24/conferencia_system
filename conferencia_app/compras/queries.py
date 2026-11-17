@@ -2006,7 +2006,7 @@ SELECT c.dt_lancamento::date AS data_lancamento,
        NULLIF(TRIM(a.plano_contas), '') AS nome_conta,
        NULLIF(TRIM(fam.nome), '') AS familia,
        NULLIF(TRIM(g.nome), '') AS grupo,
-       NULLIF(c.cod_ordem_compra, 0)::text AS ordem_compra,
+       COALESCE(oc_item.ocs, oc_nf.ocs, NULLIF(c.cod_ordem_compra, 0)::text) AS ordem_compra,
        NULLIF(TRIM(c.comprador::text), '') AS comprador,
        regexp_replace(COALESCE(f.cgc, ''), '[^0-9]', '', 'g') AS cnpj_fornecedor
 FROM public.tcompras c
@@ -2022,6 +2022,24 @@ LEFT JOIN public.tfamilia fam
   ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
 LEFT JOIN public.tfamgrp g
   ON g.cod_empresa = p.cod_empresa AND g.cod_familia = p.cod_familia AND g.codigo = p.cod_grupo
+-- OC vinculada no recebimento (tcom_ordem_compra; tcompras.cod_ordem_compra
+-- quase nunca vem preenchido). Do item: as OCs da NF que tem o produto dele;
+-- sem casamento (servico, produto trocado), todas as OCs da NF.
+LEFT JOIN LATERAL (
+    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
+    FROM public.tcom_ordem_compra co
+    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
+      AND COALESCE(co.cod_ordem_compra, 0) <> 0
+      AND EXISTS (SELECT 1 FROM public.tord_aux oa
+                  WHERE oa.cod_empresa = co.cod_empresa AND oa.cod_ord_compra = co.cod_ordem_compra
+                    AND oa.cod_produto = a.cod_produto)
+) oc_item ON true
+LEFT JOIN LATERAL (
+    SELECT STRING_AGG(DISTINCT co.cod_ordem_compra::text, ', ' ORDER BY co.cod_ordem_compra::text) AS ocs
+    FROM public.tcom_ordem_compra co
+    WHERE co.cod_empresa = c.cod_empresa AND co.cod_compra = c.codigo
+      AND COALESCE(co.cod_ordem_compra, 0) <> 0
+) oc_nf ON true
 WHERE c.cod_empresa = %(cod_empresa)s
   AND c.dt_lancamento >= %(data_de)s::date
   AND c.dt_lancamento <  %(data_ate)s::date

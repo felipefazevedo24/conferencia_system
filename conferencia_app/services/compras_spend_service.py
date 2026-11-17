@@ -194,7 +194,8 @@ def _linha(r: dict) -> dict | None:
         "familia": _texto(r.get("familia"), 160),
         "grupo": _texto(r.get("grupo"), 160),
         "cnpj_fornecedor": _digitos(r.get("cnpj_fornecedor"))[:14],
-        "ordem_compra": _digitos(r.get("ordem_compra"))[:200],
+        "ordem_compra": ", ".join(_lista_ocs(r.get("ordem_compra")))[:200],
+        "oc_origem": "recebimento" if _lista_ocs(r.get("ordem_compra")) else "",
         "comprador": _texto(r.get("comprador"), 100),
         "solicitacao": "",
         "requisitante": "",
@@ -216,13 +217,13 @@ def _lista_ocs(texto) -> list[str]:
 
 
 def _preencher_ocs_da_conferencia(linhas: list[dict]) -> None:
-    """OC de cada linha pelo vínculo feito na conferência do Sync
-    (ItemNota.pedido_compra), casando NF + CNPJ do emitente e, dentro da NF,
-    o código interno do item (codigo_grv). Item sem casamento leva as OCs da
-    NF inteira. Sem vínculo no Sync fica a OC do cabeçalho da NF no GRV,
-    que quase nunca vem preenchida."""
+    """Reserva para a linha que o GRV devolveu sem OC do recebimento: o
+    vínculo feito na conferência do Sync (ItemNota.pedido_compra), casando
+    NF + CNPJ do emitente e, dentro da NF, o código interno do item
+    (codigo_grv). Item sem casamento leva as OCs da NF inteira."""
     from ..models import ItemNota
 
+    linhas = [l for l in linhas if not l["ordem_compra"]]
     chaves = {(_numero_nf(l["nota_fiscal"]), l["cnpj_fornecedor"]) for l in linhas if l["cnpj_fornecedor"]}
     if not chaves:
         return
@@ -247,6 +248,7 @@ def _preencher_ocs_da_conferencia(linhas: list[dict]) -> None:
         if nf:
             ocs = nf.get(l["codigo_item"]) if l["codigo_item"] else None
             l["ordem_compra"] = ", ".join(ocs or nf[None])[:200]
+            l["oc_origem"] = "conferencia"
 
 
 def _preencher_requisitantes(linhas: list[dict], empresa) -> bool:
@@ -311,9 +313,9 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
-    # Linha gravada antes do vínculo NF -> OC da conferência (cnpj_fornecedor
-    # NULL): rebusca o ano inteiro uma vez para preencher.
-    if Entrada.query.filter(Entrada.cnpj_fornecedor.is_(None)).first() is not None:
+    # Linha gravada antes da OC do recebimento (oc_origem NULL): rebusca o ano
+    # inteiro uma vez para preencher.
+    if Entrada.query.filter(Entrada.oc_origem.is_(None)).first() is not None:
         desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
@@ -652,6 +654,7 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             "conta": " - ".join(x for x in (r.conta, r.nome_conta) if x),
             "valor": round(r.valor or 0, 2),
             "ordem_compra": r.ordem_compra or "",
+            "oc_origem": {"recebimento": "Recebimento (GRV)", "conferencia": "Conferência do Sync"}.get(r.oc_origem or "", ""),
             "solicitacao": r.solicitacao or "",
             "requisitante": r.requisitante or "",
             "comprador": r.comprador or "",
