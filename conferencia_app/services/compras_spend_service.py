@@ -42,9 +42,13 @@ from ..tempo import agora_br
 SEM_CLASSIFICACAO = "(sem classificação)"
 SEM_FAMILIA = "(sem família)"
 INICIO = date(2026, 1, 1)
-# Mudou o que a SQL_SPEND_ENTRADAS traz? Avance esta data: a próxima
-# atualização rebusca o ano inteiro (o normal é só o mês anterior em diante).
-ESPELHO_VERSAO = datetime(2026, 11, 17, 12, 0)
+# Origem de OC que só a versão nova da SQL_SPEND_ENTRADAS devolve.
+_ORIGENS_GRV = ("xml", "recebimento", "cabecalho")
+BRIDGE_DESATUALIZADA = (
+    "A bridge do ERP está com a consulta antiga do Spend (sem OC/requisitante). "
+    "Atualize conferencia_app/compras/queries.py na VM da bridge e reinicie-a "
+    "(docs/BRIDGE_ERP_ATUALIZACAO.md)."
+)
 IDADE_MAXIMA_MIN = 60
 # Atualização "em andamento" há mais tempo que isso caiu no meio (worker
 # reiniciado): deixa outra começar.
@@ -318,11 +322,9 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
-    # Espelho gravado antes da versão atual da consulta (OC/requisitante):
-    # rebusca o ano inteiro uma vez para preencher.
-    rebuscou = Sync.query.filter(Sync.status == Sync.STATUS_OK, Sync.desde == INICIO,
-                                 Sync.iniciado_em >= ESPELHO_VERSAO).first()
-    if rebuscou is None or Entrada.query.filter(Entrada.oc_origem.is_(None)).first() is not None:
+    # Enquanto nenhuma linha tiver OC vinda do GRV, o espelho é de antes da
+    # consulta com OC/requisitante: rebusca o ano inteiro para preencher.
+    if Entrada.query.filter(Entrada.oc_origem.in_(_ORIGENS_GRV)).first() is None:
         desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
@@ -335,6 +337,10 @@ def atualizar(usuario: str) -> dict:
             for r in grv.fetch_all(queries.SQL_SPEND_ENTRADAS, {
                 "cod_empresa": empresa, "data_de": ini.isoformat(), "data_ate": fim.isoformat(),
             }):
+                # A bridge roda a SQL da cópia do repo que está na VM: sem a
+                # coluna nova ela está antiga e o Spend sairia sem OC calado.
+                if "oc_origem" not in r:
+                    raise _BridgeDesatualizada(BRIDGE_DESATUALIZADA)
                 linha = _linha(r)
                 if linha:
                     linhas.append(linha)
@@ -356,7 +362,13 @@ def atualizar(usuario: str) -> dict:
         sync.erro = str(exc)[:500]
         sync.concluido_em = agora_br()
         db.session.commit()
+        if isinstance(exc, _BridgeDesatualizada):
+            raise ValueError(BRIDGE_DESATUALIZADA) from exc
         raise ValueError("Não deu para buscar as entradas do GRV agora. Tente de novo em instantes.") from exc
+
+
+class _BridgeDesatualizada(RuntimeError):
+    pass
 
 
 # ---------------------------------------------------------------------------
