@@ -916,6 +916,32 @@ WHERE os.cod_empresa = %(cod_empresa)s
 LIMIT 5;
 """
 
+# -------------------------------------------------------------------
+# Endereçamento: saídas concluídas do depósito 1 (prateleira), para baixar a
+# quantidade por endereço. Mapeado nos dados reais em 17/11/2026:
+# guid_linha é único por linha (103 mil linhas, nenhum repetido) e é a chave
+# da baixa; tsaida_e.estoque_baixado = 1 é a saída concluída (a digitação
+# fica nula). A data não tem hora. localizacao_estoque vem COPIADA do
+# cadastro do produto - com 2+ endereços chega a lista inteira.
+# -------------------------------------------------------------------
+SQL_ENDERECAMENTO_SAIDAS = """
+SELECT i.guid_linha, UPPER(TRIM(p.codigo_interno)) AS codigo, i.cod_rel AS saida,
+       COALESCE(h.dt_efetiva, h.data)::date AS data,
+       COALESCE(i.qtde, 0)::double precision AS qtde,
+       COALESCE(TRIM(i.unidade), '') AS unidade,
+       COALESCE(TRIM(i.localizacao_estoque), '') AS localizacao
+FROM public.tsaidaax i
+JOIN public.tsaida_e h ON h.cod_empresa = i.cod_empresa AND h.codigo = i.cod_rel
+JOIN public.tproduto p ON p.cod_empresa = i.cod_empresa AND p.codigo = i.cod_produto
+WHERE i.cod_empresa = %(cod_empresa)s
+  AND i.cod_deposito = 1
+  AND COALESCE(h.estoque_baixado, 0) = 1
+  AND COALESCE(h.dt_efetiva, h.data) >= %(desde)s
+  AND UPPER(TRIM(p.codigo_interno)) = ANY(%(codigos)s)
+ORDER BY i.cod_rel, i.guid_linha
+LIMIT 2000;
+"""
+
 SQL_CLASSIFICACOES = """
 SELECT u_classificacao AS classificacao, COUNT(*) AS qtd
 FROM public.tos

@@ -82,6 +82,7 @@ def registrar_leitura(tarefa, tipo, codigo, manual=False):
             raise ValueError("Item sem SKU GRV vinculado. Corrija o vínculo do material no recebimento.")
         if codigo != tarefa.sku:
             raise ValueError("O SKU bipado não corresponde a este item do recebimento.")
+        validar_saldo(tarefa.sku)
         atuais = enderecos(buscar_localizacao_produto_grv(tarefa.sku))
     elif tipo == "local":
         if not codigo or ";" in codigo or len(codigo) > 80:
@@ -121,12 +122,26 @@ def validar_leitura(token, tarefa, tipo):
     return dados
 
 
+SEM_VINCULO = "Item sem código GRV vinculado. Bloqueado até finalizar a entrada da NF no GRV ou corrigir o vínculo no recebimento."
+SEM_SALDO = "Bloqueado até finalizar a entrada da NF no GRV: material sem saldo."
+
+
 def impedimento(tarefa):
     if tarefa.item.status not in ("Concluído", "Lançado"):
         return "O recebimento não está concluído ou foi reaberto. Regularize a conferência antes de endereçar."
     if not str(tarefa.item.codigo_grv or '').strip():
-        return "Item sem SKU GRV vinculado. Corrija o vínculo do material no recebimento."
+        return SEM_VINCULO
     return ""
+
+
+def validar_saldo(sku):
+    """Material sem saldo no GRV não é endereçado até a NF entrar (decisão da
+    Logística em 17/11/2026) - senão a limpeza de material sem saldo apaga o
+    endereço logo em seguida. Consulta indisponível não bloqueia."""
+    from .enderecamento_service import info_grv
+    info = info_grv(sku)
+    if info is not None and float(info.get("qtde_total") or 0) <= 0:
+        raise ValueError(SEM_SALDO)
 
 
 def validar_recebimento(tarefa):
@@ -171,6 +186,7 @@ def confirmar(tarefa, dados, pode_alternar=False):
                           "lote": str(parcela.get("lote") or "").strip()[:80]})
     if abs(total - Decimal(str(tarefa.quantidade))) > Decimal("0.000001"):
         raise ValueError("A soma por endereço deve ser igual à quantidade conferida.")
+    validar_saldo(tarefa.sku)
     atuais = enderecos(buscar_localizacao_produto_grv(tarefa.sku))
     if atuais != sku["atuais"]:
         raise ValueError("O endereço do GRV mudou durante a operação. Bipe o SKU novamente.")

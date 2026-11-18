@@ -3,7 +3,7 @@
 O saldo é do GRV. O que o Sync grava aqui é em qual endereço cada material
 está, mais o histórico de quem mudou o quê."""
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 
@@ -120,20 +120,77 @@ def unidade_canonica(unidade):
     return _UNIDADE_CANONICA.get(texto, texto)
 
 
-def saldo(sku, endereco, unidade, conferido=False):
-    outros = Saldo.query.filter_by(sku=sku).first()
-    if outros and unidade_canonica(outros.unidade) != unidade_canonica(unidade):
-        raise ValueError(f'Este SKU é controlado em {outros.unidade} no endereçamento e a quantidade veio em {unidade}. '
-                         f'Converta para {outros.unidade} antes de registrar.')
-    if outros:
-        unidade = outros.unidade  # mesma grafia em todos os endereços do SKU
-    registro = Saldo.query.filter_by(sku=sku, endereco=endereco).first()
-    if not registro:
-        registro = Saldo(sku=sku, endereco=endereco, unidade=unidade,
-                         quantidade=0, conferido=conferido)
-        db.session.add(registro)
-        db.session.flush()
-    return registro
+# Quantidade por endereço (decisão da Logística em 17/11/2026): material com
+# UM endereço não tem nada gravado - a quantidade do endereço é o saldo do GRV,
+# calculada na hora. Só material com 2+ endereços tem quantidade por endereço
+# no Sync (EnderecoSaldo), na unidade de estoque do GRV, mexida por
+# recebimento, movimentação, contagem e pelas saídas do GRV (TSAIDAAX).
+# `conferido` diz se a quantidade é confiável (partiu de zero conhecido ou de
+# contagem); só endereço conferido que zera sai sozinho do GRV.
+
+def _q(valor):
+    return Decimal(str(valor or 0)).quantize(Decimal('.000001'))
+
+
+def info_grv(sku, fresco=True):
+    """Cadastro e saldo do material no GRV, ou None se a consulta falhar.
+
+    `fresco`: consulta só deste código, na hora (quem chama vai escrever).
+    Bridge antiga sem o endpoint por código cai no snapshot com cache."""
+    from . import erp_estoque_service as erp
+    codigo = str(sku or '').strip().upper()
+    try:
+        try:
+            estoque = erp.buscar_estoque_produtos_grv([codigo]) if fresco else erp.buscar_estoque_grv()
+        except LookupError:
+            estoque = erp.buscar_estoque_grv()
+    except Exception:
+        current_app.logger.warning('Saldo do GRV indisponível para %s', codigo, exc_info=True)
+        return None
+    return (estoque.get('por_codigo') or {}).get(codigo)
+
+
+def _linha(sku, endereco, unidade):
+    """Linha de quantidade do material no endereço, na unidade do GRV. Linha
+    antiga em outra unidade (chapa em KG x UND, unidade do fornecedor) não é
+    comparável: recomeça zerada e a conferir."""
+    reg = Saldo.query.filter_by(sku=sku, endereco=endereco).first()
+    if not reg:
+        reg = Saldo(sku=sku, endereco=endereco, unidade=unidade, quantidade=0, conferido=False)
+        db.session.add(reg)
+    elif unidade_canonica(reg.unidade) != unidade_canonica(unidade):
+        reg.quantidade, reg.conferido = 0, False
+    reg.unidade = unidade
+    reg.atualizado_em = agora_br()
+    return reg
+
+
+def _descontrolar(sku):
+    """Voltou a ter um endereço só (ou nenhum): a quantidade é a do GRV."""
+    Saldo.query.filter_by(sku=sku).delete(synchronize_session=False)
+
+
+def _sem_zerados(sku, lista):
+    """Tira da lista o endereço conferido que zerou. Nunca esvazia a lista:
+    o último endereço só sai quando o saldo inteiro do GRV zerar."""
+    zerados = {r.endereco for r in Saldo.query.filter_by(sku=sku, conferido=True)
+               if r.quantidade <= 0}
+    restantes = [e for e in lista if normalizar(e) not in zerados]
+    return restantes or list(lista)[-1:]
+
+
+def _fechar_controle(sku, depois, podar=True):
+    """`podar=False` quando a lista já foi enviada ao GRV e não pode mudar aqui."""
+    if podar:
+        depois = _sem_zerados(sku, depois)
+    if len(depois) <= 1:
+        _descontrolar(sku)
+    else:
+        vigentes = {normalizar(e) for e in depois}
+        for reg in Saldo.query.filter_by(sku=sku):
+            if reg.endereco not in vigentes:
+                db.session.delete(reg)
+    return depois
 
 
 def chave_recebimento(tarefa):
@@ -142,28 +199,54 @@ def chave_recebimento(tarefa):
 
 
 def creditar_recebimento(tarefa, enderecos_anteriores):
-    """Chamado dentro da transação e trava do recebimento; uma entrada por tarefa."""
+    """Chamado dentro da transação e trava do recebimento, DEPOIS que o GRV já
+    aceitou os endereços: aqui nada de regra pode levantar erro, senão a
+    tarefa fica presa em "Aguardando sincronização" reenviando para sempre.
+    Unidade que não bate só deixa de creditar e o endereço fica a conferir."""
     chave = chave_recebimento(tarefa)
     if Movimento.query.filter_by(chave=chave).first():
         return
+    sku = tarefa.sku
     unidade = str(tarefa.unidade or tarefa.item.unidade_comercial or 'UN').strip().upper()
+    antes = list(dict.fromkeys(normalizar(e) for e in enderecos_anteriores or [] if normalizar(e)))
     parcelas = []
-    total = Decimal(0)
     for parcela in tarefa.alocacoes:
-        # A conferência usa floats (ex.: 0.1 * 3); normalize o resíduo binário no livro físico.
-        q = quantidade(str(Decimal(str(parcela['quantidade'])).quantize(Decimal('.000001'))))
-        reg = saldo(tarefa.sku, parcela['endereco'], unidade,
-                    conferido=parcela['endereco'] not in enderecos_anteriores)
-        reg.quantidade += q
-        reg.atualizado_em = agora_br()
-        total += q
-        parcelas.append({**parcela, 'quantidade': str(q)})
-    db.session.add(Movimento(chave=chave, sku=tarefa.sku, unidade=unidade,
+        # A conferência usa floats (ex.: 0.1 * 3); normalize o resíduo binário.
+        parcelas.append({**parcela, 'endereco': normalizar(parcela['endereco']),
+                         'quantidade': str(_q(parcela['quantidade']))})
+    depois = list(dict.fromkeys(antes + [p['endereco'] for p in parcelas]))
+    total = sum((Decimal(p['quantidade']) for p in parcelas), Decimal(0))
+    detalhes = {'tarefa': tarefa.id, 'nota': tarefa.item.numero_nota, 'alocacoes': parcelas}
+    if len(depois) <= 1:
+        _descontrolar(sku)
+    else:
+        info = info_grv(sku, fresco=False) or {}
+        unidade_grv = str(info.get('unidade') or '').strip().upper()
+        if not unidade_grv or unidade_canonica(unidade) != unidade_canonica(unidade_grv):
+            for endereco in depois:
+                _linha(sku, endereco, unidade_grv or unidade)
+            detalhes['sem_credito'] = (f'Quantidade em {unidade} e o estoque é controlado em {unidade_grv}: '
+                                       'conte os endereços.' if unidade_grv else
+                                       'Saldo do GRV indisponível: conte os endereços.')
+        else:
+            if len(antes) == 1 and not Saldo.query.filter_by(sku=sku, endereco=antes[0]).first():
+                # Era o único endereço, com o saldo todo do GRV. Se a NF já entrou
+                # no GRV, o saldo já inclui esta entrada. Estimativa: a conferir.
+                base = _q(info.get('qtde_total')) - (total if tarefa.item.status == 'Lançado' else 0)
+                reg = _linha(sku, antes[0], unidade_grv)
+                reg.quantidade, reg.conferido = max(base, Decimal(0)), False
+            for p in parcelas:
+                reg = _linha(sku, p['endereco'], unidade_grv)
+                if p['endereco'] not in antes:
+                    reg.quantidade, reg.conferido = Decimal(0), True  # endereço novo: parte do zero
+                reg.quantidade += Decimal(p['quantidade'])
+        db.session.flush()
+        _fechar_controle(sku, depois, podar=False)
+    db.session.add(Movimento(chave=chave, sku=sku, unidade=unidade,
         tipo='Recebimento', quantidade=total,
         usuario=tarefa.confirmado_por or tarefa.criado_por,
         motivo=f'NF {tarefa.item.numero_nota}',
-        detalhes={'tarefa': tarefa.id, 'nota': tarefa.item.numero_nota, 'alocacoes': parcelas},
-        sincronizado_em=agora_br()))
+        detalhes=detalhes, sincronizado_em=agora_br()))
 
 
 def enderecos_atuais(sku):
@@ -192,12 +275,48 @@ def resultado(atuais, origem, destino):
     return depois
 
 
+def _movimentar_quantidade(sku, atuais, origem, destino, q, unidade):
+    """Aplica a quantidade movimentada quando o material tem (ou passa a ter)
+    2+ endereços e devolve a lista de endereços que passa a valer.
+
+    Transferência com sobra conhecida na origem mantém a origem na lista
+    (parcial); sem sobra conhecida, a origem sai, como sempre foi."""
+    vigentes = list(dict.fromkeys(normalizar(e) for e in atuais if normalizar(e)))
+    if len(set(vigentes) | {destino}) < 2:
+        return resultado(atuais, origem, destino)
+    info = info_grv(sku)
+    if info is None:
+        raise ValueError('Saldo do GRV indisponível para conferir a quantidade. Tente novamente em instantes.')
+    unidade_grv = str(info.get('unidade') or '').strip().upper()
+    if unidade_grv and unidade_canonica(unidade) != unidade_canonica(unidade_grv):
+        raise ValueError(f'Informe a quantidade em {unidade_grv}, a unidade de estoque deste material.')
+    unidade_grv = unidade_grv or unidade
+    if len(vigentes) == 1 and not Saldo.query.filter_by(sku=sku, endereco=vigentes[0]).first():
+        # Era o único endereço: tinha o saldo inteiro do GRV, número exato.
+        reg = _linha(sku, vigentes[0], unidade_grv)
+        reg.quantidade, reg.conferido = max(_q(info.get('qtde_total')), Decimal(0)), True
+    # Sem origem e com um endereço só, a quantidade sai dele (divide o material).
+    sai_de = origem or (vigentes[0] if len(vigentes) == 1 else None)
+    if sai_de:
+        reg = _linha(sku, sai_de, unidade_grv)
+        reg.quantidade = max(reg.quantidade - q, Decimal(0))
+    reg_destino = _linha(sku, destino, unidade_grv)
+    if destino not in vigentes:
+        reg_destino.quantidade, reg_destino.conferido = Decimal(0), True
+    reg_destino.quantidade += q
+    db.session.flush()
+    origem_com_sobra = origem and Saldo.query.filter(Saldo.sku == sku, Saldo.endereco == origem,
+                                                     Saldo.conferido.is_(True), Saldo.quantidade > 0).first()
+    depois = resultado(atuais, None if origem_com_sobra else origem, destino)
+    return _fechar_controle(sku, depois)
+
+
 def registrar(dados, usuario):
     """Muda o material de endereço no GRV.
 
-    O Sync não controla saldo — isso é do GRV. O que sai daqui é só a lista de
-    endereços do SKU; a quantidade é anotação do histórico e não entra em
-    cálculo nenhum."""
+    O saldo total é do GRV. Com 2+ endereços, a quantidade movimentada mexe
+    na quantidade por endereço do Sync (ver _movimentar_quantidade); com um
+    endereço só, é anotação do histórico."""
     sku = texto(dados.get('sku'), 'o SKU', 80)
     chave = 'operacao:' + texto(dados.get('chave'), 'a identificação da operação', 64)
     unidade = texto(dados.get('unidade'), 'a unidade', 20).upper()
@@ -228,7 +347,7 @@ def registrar(dados, usuario):
         destino = local(destino)
         if origem:
             local(origem, recebe=False)
-        depois = resultado(atuais, origem, destino)
+        depois = _movimentar_quantidade(sku, atuais, origem, destino, q, unidade)
         mov = Movimento(chave=chave, sku=sku, unidade=unidade, tipo='Movimentação',
             origem=origem, destino=destino, quantidade=q, usuario=usuario, motivo=motivo,
             detalhes={'pedido': assinatura, 'antes': atuais, 'depois': depois})
@@ -366,6 +485,8 @@ def esvaziar(endereco, usuario):
                 continue  # saiu de lá entre a consulta e agora
             if not depois:
                 relatorio['sem_outro_endereco'].append(sku)
+            Saldo.query.filter_by(sku=sku, endereco=endereco).delete(synchronize_session=False)
+            _fechar_controle(sku, depois, podar=False)
             db.session.add(Movimento(
                 chave=f'desativacao:{endereco}:{sku}:{agora_br().isoformat()}',
                 sku=sku, unidade='', tipo='Endereço desativado', origem=endereco,
@@ -404,10 +525,11 @@ def sincronizar(sku):
             if isinstance(mov.detalhes, dict) and 'depois' in mov.detalhes:
                 locais, ultima = list(mov.detalhes['depois'] or []), mov
         # Ficar sem endereço só vale quando a última operação é a desativação
-        # do endereço (feita por admin). Fora disso, lista vazia é engano: não
-        # apagar o endereço do GRV nem registrar sucesso fictício.
-        if not locais and not (ultima is not None and ultima.tipo == 'Endereço desativado'):
-            raise ValueError('Esta operação deixaria o material sem endereço no GRV. Só a desativação de endereço pode fazer isso.')
+        # do endereço (feita por admin) ou a limpeza do material sem saldo.
+        # Fora disso, lista vazia é engano: não apagar o endereço do GRV nem
+        # registrar sucesso fictício.
+        if not locais and not (ultima is not None and ultima.tipo in TIPOS_QUE_ESVAZIAM):
+            raise ValueError('Esta operação deixaria o material sem endereço no GRV. Só a desativação de endereço ou o saldo zerado podem fazer isso.')
         extra = {} if locais else {'permitir_vazio': True}
         resposta = receb.atualizar_localizacao_estoque(sku, ';'.join(locais), **extra)
         if isinstance(resposta, dict) and (resposta.get('sucesso') is False or resposta.get('success') is False):
@@ -425,3 +547,278 @@ def sincronizar(sku):
     finally:
         Trava.query.filter_by(sku=sku, token=token).update({'token': None, 'expira_em': None})
         db.session.commit()
+
+
+TIPO_SALDO_ZERADO = 'Saldo zerado no GRV'
+TIPO_ENDERECO_ZEROU = 'Endereço zerado'
+TIPO_SAIDA = 'Saída GRV'
+TIPO_SAIDA_SEM_ENDERECO = 'Saída sem endereço'
+TIPO_SAIDA_NAO_BAIXADA = 'Saída não baixada'
+TIPO_CONTAGEM = 'Contagem de endereço'
+TIPOS_QUE_ESVAZIAM = ('Endereço desativado', TIPO_SALDO_ZERADO)
+# Saída anterior à implantação não baixa nada: o ponto de partida dos
+# materiais com 2+ endereços é a contagem.
+SAIDAS_DESDE = date(2026, 11, 17)
+LIMITE_LIMPEZA_POR_CICLO = 100
+
+
+def enderecos_do_agregado(agregado):
+    return list(dict.fromkeys(normalizar(e) for bruto in (agregado.get('localizacoes') or [])
+                              for e in str(bruto).split(';') if normalizar(e)))
+
+
+def _ocupado(sku):
+    """Envio ou recebimento em andamento: fica para o próximo ciclo."""
+    return bool(Movimento.query.filter_by(sku=sku, sincronizado_em=None).first()
+                or Tarefa.query.filter_by(sku=sku, status='Aguardando sincronização').first())
+
+
+def _soltar(sku, token):
+    Trava.query.filter_by(sku=sku, token=token).update({'token': None, 'expira_em': None})
+    db.session.commit()
+
+
+def _registrar_poda(sku, atuais, depois, motivo):
+    """Registra o envio ao GRV quando endereços zerados saíram da lista."""
+    if [normalizar(e) for e in depois] == [normalizar(e) for e in atuais]:
+        return False
+    db.session.add(Movimento(chave=f'zerou:{sku}:{agora_br().isoformat()}'[:100], sku=sku, unidade='',
+                             tipo=TIPO_ENDERECO_ZEROU, quantidade=0, usuario='sistema', motivo=motivo[:500],
+                             detalhes={'antes': list(atuais), 'depois': list(depois)}))
+    return True
+
+
+def _sincronizar_sem_erro(skus):
+    for sku in skus:
+        try:
+            sincronizar(sku)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Envio ao GRV pendente (SKU %s)', sku)
+
+
+def limpar_sem_saldo(usuario='sistema'):
+    """Material sem saldo no depósito 1 do GRV fica sem endereço (decisão da
+    Logística em 17/11/2026): endereço de material que acabou só manda gente
+    procurar em prateleira vazia. O endereço antigo fica no histórico.
+
+    Fica de fora o material em análise de inventário (o saldo do GRV pode
+    estar errado e a contagem acabou de gravar o endereço) e o SKU com envio
+    em andamento. No máximo LIMITE_LIMPEZA_POR_CICLO por vez."""
+    from .erp_estoque_service import buscar_estoque_grv
+    por_codigo = buscar_estoque_grv(forcar_atualizacao=True).get('por_codigo') or {}
+    candidatos = [sku for sku, ag in por_codigo.items()
+                  if float(ag.get('qtde_total') or 0) <= 0 and enderecos_do_agregado(ag)]
+    relatorio = {'limpos': [], 'falhas': []}
+    if not candidatos:
+        return relatorio
+    em_inventario = skus_em_inventario(candidatos)
+    candidatos = [s for s in candidatos if s not in em_inventario and not _ocupado(s)]
+    for sku in candidatos[:LIMITE_LIMPEZA_POR_CICLO]:
+        try:
+            token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+        except ValueError:
+            continue  # trava ocupada: próximo ciclo
+        try:
+            atuais = enderecos_atuais(sku)
+            if atuais:
+                _descontrolar(sku)
+                db.session.add(Movimento(
+                    chave=f'sem-saldo:{sku}:{agora_br().isoformat()}'[:100], sku=sku,
+                    unidade=str(por_codigo[sku].get('unidade') or '').strip().upper()[:20],
+                    tipo=TIPO_SALDO_ZERADO, quantidade=0, usuario=usuario,
+                    motivo='Material sem saldo no GRV', detalhes={'antes': atuais, 'depois': []}))
+                db.session.commit()
+                relatorio['limpos'].append(sku)
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.exception('Falha ao limpar o endereço do SKU %s sem saldo', sku)
+            relatorio['falhas'].append({'sku': sku, 'erro': str(exc)[:200]})
+        finally:
+            _soltar(sku, token)
+    _sincronizar_sem_erro(relatorio['limpos'])
+    return relatorio
+
+
+def importar_saidas(skus=None):
+    """Baixa na quantidade por endereço as saídas concluídas do GRV dos
+    materiais com 2+ endereços. Cada linha de saída (guid_linha) entra uma
+    vez só. Saída com mais de um endereço (o GRV copia a lista do cadastro),
+    com endereço que o material não tem ou em outra unidade não baixa: vai
+    para as saídas a corrigir. Devolve quantas linhas entraram."""
+    from ..compras import queries
+    from ..compras.db import fetch_all
+    from .erp_estoque_service import buscar_estoque_grv
+    por_codigo = buscar_estoque_grv().get('por_codigo') or {}
+    alvo = {str(s or '').strip().upper() for s in skus} if skus is not None else None
+    multi = {sku: ag for sku, ag in por_codigo.items()
+             if len(enderecos_do_agregado(ag)) >= 2 and (alvo is None or sku in alvo)}
+    if not multi:
+        return 0
+    desde = max(SAIDAS_DESDE, agora_br().date() - timedelta(days=30))
+    linhas = fetch_all(queries.SQL_ENDERECAMENTO_SAIDAS,
+                       {'cod_empresa': 1, 'desde': desde.isoformat(), 'codigos': sorted(multi)})
+    chaves = [f"saida:{l['guid_linha']}" for l in linhas]
+    feitas = {c for (c,) in db.session.query(Movimento.chave).filter(Movimento.chave.in_(chaves))} if chaves else set()
+    por_sku = {}
+    for l in linhas:
+        if f"saida:{l['guid_linha']}" not in feitas:
+            por_sku.setdefault(str(l['codigo']).strip().upper(), []).append(l)
+    novas, enviar = 0, []
+    for sku, linhas_sku in por_sku.items():
+        try:
+            token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+        except ValueError:
+            continue
+        try:
+            atuais = enderecos_atuais(sku)
+            vigentes = [normalizar(e) for e in atuais]
+            unidade_grv = str(multi[sku].get('unidade') or '').strip().upper()
+            for l in linhas_sku:
+                informados = list(dict.fromkeys(normalizar(e) for e in str(l['localizacao'] or '').split(';') if normalizar(e)))
+                q = _q(l['qtde'])
+                unidade = str(l['unidade'] or unidade_grv).strip().upper()[:20]
+                detalhes = {'saida': l['saida'], 'data': str(l['data']), 'informado': l['localizacao'],
+                            'guid': l['guid_linha']}
+                comparavel = unidade_canonica(unidade) == unidade_canonica(unidade_grv or unidade)
+                if len(informados) == 1 and informados[0] in vigentes and comparavel:
+                    reg = _linha(sku, informados[0], unidade_grv or unidade)
+                    if q > reg.quantidade:
+                        detalhes['faltou'] = str(q - reg.quantidade)
+                    reg.quantidade = max(reg.quantidade - q, Decimal(0))
+                    tipo, origem = TIPO_SAIDA, informados[0]
+                else:
+                    detalhes['opcoes'] = atuais
+                    detalhes['pendencia'] = (f'Saída em {unidade} e o estoque é em {unidade_grv}.' if not comparavel else
+                                             'Saída sem endereço.' if not informados else
+                                             'Saída com mais de um endereço.' if len(informados) > 1 else
+                                             'Endereço da saída não está na lista do material.')
+                    tipo, origem = TIPO_SAIDA_SEM_ENDERECO, None
+                db.session.add(Movimento(chave=f"saida:{l['guid_linha']}", sku=sku, unidade=unidade, tipo=tipo,
+                                         origem=origem, quantidade=q, usuario='sistema',
+                                         motivo=f"Saída {l['saida']} do GRV", detalhes=detalhes,
+                                         sincronizado_em=agora_br()))
+                novas += 1
+            db.session.flush()
+            if _registrar_poda(sku, atuais, _fechar_controle(sku, atuais), 'Endereço zerado pelas saídas do GRV'):
+                enviar.append(sku)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Falha ao baixar as saídas do SKU %s', sku)
+        finally:
+            _soltar(sku, token)
+    _sincronizar_sem_erro(enviar)
+    return novas
+
+
+def resolver_saida(mov_id, endereco, usuario):
+    """Diz de qual endereço saiu uma saída que veio sem endereço definido.
+    Sem endereço: a saída não baixa nada (ex.: anterior à contagem)."""
+    mov = db.session.get(Movimento, mov_id)
+    if not mov or mov.tipo not in (TIPO_SAIDA_SEM_ENDERECO, TIPO_SAIDA, TIPO_SAIDA_NAO_BAIXADA):
+        raise ValueError('Saída não encontrada.')
+    if mov.tipo != TIPO_SAIDA_SEM_ENDERECO:
+        return mov.id  # já resolvida (clique repetido)
+    sku = mov.sku
+    token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+    enviar = False
+    try:
+        db.session.refresh(mov)
+        if mov.tipo != TIPO_SAIDA_SEM_ENDERECO:
+            return mov.id
+        detalhes = dict(mov.detalhes or {})
+        alvo = normalizar(endereco) if str(endereco or '').strip() else None
+        if alvo:
+            atuais = enderecos_atuais(sku)
+            if alvo not in [normalizar(e) for e in atuais]:
+                raise ValueError('Este endereço não está na lista do material. Atualize a tela.')
+            unidade_grv = str((info_grv(sku, fresco=False) or {}).get('unidade') or mov.unidade).strip().upper()
+            if unidade_canonica(mov.unidade) != unidade_canonica(unidade_grv):
+                raise ValueError(f'A saída está em {mov.unidade} e o estoque em {unidade_grv}: conte o endereço em vez de baixar.')
+            reg = _linha(sku, alvo, unidade_grv)
+            if mov.quantidade > reg.quantidade:
+                detalhes['faltou'] = str(mov.quantidade - reg.quantidade)
+            reg.quantidade = max(reg.quantidade - mov.quantidade, Decimal(0))
+            mov.tipo, mov.origem = TIPO_SAIDA, alvo
+            db.session.flush()
+            enviar = _registrar_poda(sku, atuais, _fechar_controle(sku, atuais), 'Endereço zerado pelas saídas do GRV')
+        else:
+            mov.tipo = TIPO_SAIDA_NAO_BAIXADA
+        detalhes['resolvido'] = {'endereco': alvo, 'usuario': usuario, 'em': agora_br().isoformat()}
+        mov.detalhes = detalhes
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    finally:
+        _soltar(sku, token)
+    if enviar:
+        _sincronizar_sem_erro([sku])
+    return mov.id
+
+
+def saidas_a_corrigir(pagina=1, busca=''):
+    query = Movimento.query.filter_by(tipo=TIPO_SAIDA_SEM_ENDERECO)
+    if busca:
+        query = query.filter(Movimento.sku.contains(busca, autoescape=True))
+    return query.count(), query.order_by(Movimento.id).offset((pagina - 1) * 40).limit(40).all()
+
+
+def contar_endereco(sku, endereco, contado, usuario):
+    """Quantidade contada no endereço de material com 2+ endereços: vira a
+    quantidade do endereço, conferida. Zero tira o endereço do GRV.
+    As saídas que já estão no GRV entram antes, para não baixarem de novo a
+    quantidade que acabou de ser contada."""
+    sku = texto(sku, 'o SKU', 80)
+    endereco = normalizar(texto(endereco, 'um endereço', 80))
+    try:
+        contado = Decimal(str(contado).strip().replace(',', '.'))
+        if not contado.is_finite() or contado < 0 or contado >= Decimal('1000000000000'):
+            raise ValueError()
+        contado = _q(contado)
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError('Informe a quantidade contada (zero se o endereço estiver vazio).')
+    try:
+        importar_saidas([sku])
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('Contagem de %s sem importar as saídas antes.', sku, exc_info=True)
+    token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+    enviar = False
+    try:
+        atuais = enderecos_atuais(sku)
+        vigentes = [normalizar(e) for e in atuais]
+        if endereco not in vigentes:
+            raise ValueError('Este endereço não está na lista do material. Atualize a tela.')
+        if len(vigentes) < 2:
+            raise ValueError('Material com um endereço só: a quantidade do endereço é o saldo do GRV. Use "Pedir inventário".')
+        info = info_grv(sku)
+        if info is None:
+            raise ValueError('Saldo do GRV indisponível. Tente novamente em instantes.')
+        unidade = str(info.get('unidade') or 'UN').strip().upper()
+        reg = _linha(sku, endereco, unidade)
+        anterior = str(reg.quantidade) if reg.conferido else None
+        reg.quantidade, reg.conferido = contado, True
+        db.session.add(Movimento(chave=f'contagem:{sku}:{endereco}:{agora_br().isoformat()}'[:100], sku=sku,
+                                 unidade=unidade, tipo=TIPO_CONTAGEM, destino=endereco, quantidade=contado,
+                                 usuario=usuario, motivo='Contagem do endereço',
+                                 detalhes={'anterior': anterior}, sincronizado_em=agora_br()))
+        db.session.flush()
+        enviar = _registrar_poda(sku, atuais, _fechar_controle(sku, atuais), f'Endereço {endereco} contado vazio')
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    finally:
+        _soltar(sku, token)
+    if enviar:
+        _sincronizar_sem_erro([sku])
+
+
+def quantidades_por_endereco(skus):
+    """{(SKU, ENDEREÇO): linha} dos materiais com quantidade por endereço."""
+    alvo = {str(s or '').strip() for s in skus} - {''}
+    if not alvo:
+        return {}
+    return {(r.sku.strip().upper(), r.endereco): r for r in Saldo.query.filter(Saldo.sku.in_(alvo))}

@@ -67,6 +67,16 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                 db.session.rollback()
                 app.logger.exception('Retry movimentação: SKU %s', sku)
 
+        # Quantidade por endereço e limpeza do material sem saldo (17/11/2026).
+        # Cada etapa falha sozinha: GRV fora do ar não derruba o retry acima.
+        from .enderecamento_service import importar_saidas, limpar_sem_saldo
+        for etapa in (importar_saidas, limpar_sem_saldo):
+            try:
+                etapa()
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('Endereçamento: falha em %s', etapa.__name__)
+
         _STATE.update(
             last_run=agora_br(),
             last_status="ok",

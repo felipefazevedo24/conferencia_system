@@ -12,13 +12,17 @@ Acesso: **Logística → Recebimento → Endereçamento e movimentações**, em 
 
 ## Fonte do saldo e entrada em operação
 
-O saldo por endereço é mantido pelo **Sync**. O GRV recebe sua lista de localizações; a operação não movimenta o saldo contábil/agregado do ERP.
+O saldo total é do **GRV** (depósito 1). O Sync envia ao GRV a lista de endereços de cada material (`tproduto.localizacao_estoque`).
 
-Novos recebimentos endereçados alimentam o saldo uma única vez, após confirmação da sincronização. Se o endereço já existia no GRV antes do recebimento e não havia saldo conferido no Sync, fica marcado **Conferir saldo inicial**: as quantidades antigas não são deduzidas de uma lista de endereços. Um responsável deve contar o total físico antes da primeira transferência.
+Quantidade por endereço (desde 17/11/2026):
 
-Recebimentos concluídos antes da implantação não são importados automaticamente. Para esse estoque, registrar a contagem por SKU/endereço, incluindo a unidade. O valor contado substitui o saldo do endereço e a diferença fica no histórico. Use a unidade da conferência/estoque; o módulo bloqueia unidades diferentes para o mesmo SKU.
+- **Material com um endereço:** a quantidade do endereço é o saldo do GRV, calculada na hora. Nada é gravado.
+- **Material com 2+ endereços:** o Sync guarda a quantidade de cada endereço, na unidade de estoque do GRV. Mexem nela o recebimento, a movimentação, a **Contar endereço** (gestão) e as saídas concluídas do GRV (`TSAIDAAX.LOCALIZACAO_ESTOQUE`), lidas a cada ciclo do agendador.
+- Saída que vem com mais de um endereço (o GRV copia a lista do cadastro), sem endereço ou com endereço que o material não tem não baixa nada: vai para **Saídas a corrigir**, onde alguém diz de qual endereço saiu.
+- Endereço **a conferir** tem quantidade estimada. Endereço conferido que zera sai sozinho da lista do GRV. Ao voltar a ter um endereço só, o controle por endereço some.
+- Recebimento em unidade diferente da do estoque não credita: os endereços ficam a conferir e a tarefa conclui normalmente.
 
-Quantidades de localidades sem conferência inicial não devem ser tratadas como saldo total. Não há baixa automática por consumo, picking ou expedição neste módulo: conciliar saídas externas com conferências de saldo antes de movimentar o saldo remanescente.
+Material sem saldo no GRV fica **sem endereço**: o agendador limpa até 100 por ciclo, menos os que estão em análise de inventário. Na fila de endereçamento, material sem saldo ou sem código GRV aparece **bloqueado até finalizar a entrada da NF**.
 
 ## Integridade e falhas
 
