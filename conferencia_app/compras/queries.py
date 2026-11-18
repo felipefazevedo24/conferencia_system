@@ -2179,3 +2179,64 @@ SELECT oc::text AS ordem_compra,
 FROM   linhas
 GROUP  BY oc, codigo_item;
 """
+
+# -------------------------------------------------------------------
+# Solicitacoes de compra abertas (analise de Compras, 18/11/2026):
+# pendentes e aprovadas que ainda nao viraram OC. Item fabricado
+# (metodo_repo_producao=1) e' solicitacao de producao, fica de fora. O GRV
+# nao liga solicitacao de estoque a OC (o tcom_aux_os so' tem as de OS:
+# a 23784 virou a OC 13011 sem vinculo nenhum), entao aprovada conta como
+# atendida se saiu OC do produto na data dela ou depois. Aprovada sem OC
+# mais velha que a janela e' cotacao abandonada.
+# qtde e' na unidade de estoque (qtde_compra e' na de compra).
+# -------------------------------------------------------------------
+SQL_COMPRAS_SOLICITACOES_ABERTAS = """
+WITH abertas AS (
+    SELECT m.*
+    FROM   public.tsol_max m
+    WHERE  m.cod_empresa = %(cod_empresa)s
+      AND  COALESCE(m.cancelado, 0) = 0
+      AND  COALESCE(m.metodo_repo_producao, 0) = 0
+      AND  COALESCE(m.qtde_entregue, 0) < m.qtde
+      AND  (m.situacao = 'PENDENTE'
+            OR (m.situacao = 'APROVADO' AND m.dt_solicitacao >= %(aprovadas_desde)s::date))
+)
+SELECT m.cod_solicitacao,
+       m.guid_linha,
+       m.situacao,
+       m.dt_solicitacao,
+       m.dt_necessidade,
+       COALESCE(NULLIF(TRIM(m.solicitante), ''), NULLIF(TRIM(s.solicitante), ''), m.usuario) AS solicitante,
+       m.cod_interno AS codigo,
+       COALESCE(p.nome, m.produto) AS descricao,
+       COALESCE(NULLIF(TRIM(m.unidade_est), ''), m.unidade) AS unidade,
+       m.qtde,
+       COALESCE(m.qtde_entregue, 0) AS qtde_entregue,
+       COALESCE(m.gerado_cotacao, 0) AS em_cotacao,
+       m.obs,
+       m.obs_sistema,
+       NULLIF(s.cod_os, 0) AS cod_os,
+       p.familia,
+       p.grupo,
+       p.preco_custo
+FROM   abertas m
+JOIN   public.tsol_mat s
+       ON s.cod_empresa = m.cod_empresa
+      AND s.codigo      = m.cod_solicitacao
+LEFT   JOIN public.tproduto p
+       ON p.cod_empresa = m.cod_empresa
+      AND p.codigo      = m.cod_produto
+WHERE  COALESCE(s.cancelado, 0) = 0
+  AND  (m.situacao = 'PENDENTE' OR NOT EXISTS (
+         SELECT 1
+         FROM   public.tord_aux a
+         JOIN   public.tord_com o
+                ON o.cod_empresa = a.cod_empresa
+               AND o.codigo      = a.cod_ord_compra
+         WHERE  a.cod_empresa = m.cod_empresa
+           AND  a.cod_produto = m.cod_produto
+           AND  COALESCE(o.cancelado, 0) = 0
+           AND  o.data >= m.dt_solicitacao::date))
+ORDER  BY m.dt_solicitacao DESC, m.cod_solicitacao DESC
+LIMIT  3000;
+"""

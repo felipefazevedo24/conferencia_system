@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitações de compra - Columbia Sync{% endblock %}
+{% block shell_title %}Solicitações de compra{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sc-wrap { display: grid; gap: 16px; }
+    .sc-wrap [hidden] { display: none !important; }
+    .sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .sc-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sc-head-actions a { text-decoration: none; }
+    .sc-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
+
+    .sc-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 18px; }
+    .sc-tools .eui-toolbar__search { max-width: 380px; flex: 1 1 240px; }
+    .sc-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sc-filtro { border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); border-radius: 999px; font-size: 12px; font-weight: 600; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+    .sc-filtro b { margin-left: 4px; }
+    .sc-filtro.is-active { background: var(--eui-primary-soft); border-color: var(--eui-primary); color: var(--eui-primary-soft-text); }
+    .sc-info { margin-left: auto; font-size: 12px; color: var(--eui-muted); text-align: right; line-height: 1.5; }
+
+    .sc-tabela-wrap { overflow-x: auto; border-top: 1px solid var(--eui-border); }
+    .sc-wrap .erp-table { font-size: 13px; }
+    .sc-wrap .erp-table td, .sc-wrap .erp-table th { padding: 8px 12px; vertical-align: top; }
+    .sc-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; white-space: nowrap; }
+    .sc-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sc-muted { color: var(--eui-muted); font-size: 12px; }
+    .sc-cod { white-space: nowrap; font-weight: 600; }
+    .sc-desc { min-width: 200px; max-width: 280px; }
+    .sc-veredito { min-width: 230px; max-width: 340px; }
+    .sc-motivo { display: block; margin-top: 6px; color: var(--eui-text-soft); font-size: 12.5px; line-height: 1.45; }
+    .sc-vazio { text-align: center; color: var(--eui-muted); padding: 28px 12px !important; }
+    .sc-total td { font-weight: 700; background: var(--eui-surface-2); }
+    .sc-excesso { color: var(--eui-danger); font-weight: 700; }
+    .sc-falta { color: var(--eui-warning-soft-text); font-weight: 700; }
+    .sc-certo { font-weight: 700; }
+
+    .sc-v { display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+    .sc-v--nao_precisa { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .sc-v--acima { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .sc-v--abaixo { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .sc-v--ok { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .sc-v--sem_base { background: var(--eui-surface-3); color: var(--eui-text-soft); }
+    .sc-sit, .sc-un { display: block; margin-top: 3px; }
+    @media (max-width: 720px) {
+        .sc-table.erp-table { min-width: 0; width: 100%; display: block; }
+        .sc-table thead { display: none; }
+        .sc-table tbody, .sc-table tr { display: block; }
+        .sc-table tr { padding: 12px 14px; border-bottom: 1px solid var(--eui-border); }
+        .sc-table td { display: block; padding: 0 !important; border: 0 !important; white-space: normal !important; min-width: 0; max-width: none; }
+        .sc-table td + td { margin-top: 8px; }
+        .sc-table td.sc-num { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+        .sc-table td.sc-num::before { content: attr(data-label); color: var(--eui-muted); font-weight: 600; font-size: 12px; }
+        .sc-table td.sc-num .sc-un { display: inline; margin-left: 6px; }
+        .sc-table .sc-sit { display: inline; }
+        .sc-table .sc-sit::before { content: " · "; }
+        .sc-tools .eui-toolbar__search { max-width: none; }
+        .sc-info { margin-left: 0; text-align: left; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sc-wrap">
+    <header class="eui-page-header sc-head">
+        <div>
+            <div class="eui-page-header__eyebrow">Compras</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-check"></i> Solicitações de compra</h1>
+            <p class="eui-page-header__sub">Solicitações abertas no GRV comparadas com o planejamento do Estoque.</p>
+        </div>
+        <div class="sc-head-actions">
+            <a class="eui-btn eui-btn--ghost" id="sc-btn-excel" href="/api/compras/solicitacoes.xlsx"><i class="fas fa-file-excel"></i> Excel</a>
+            <button type="button" class="eui-btn eui-btn--ghost" id="sc-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+    </header>
+
+    <div class="eui-card" id="sc-vazio">
+        <div class="eui-empty">
+            <i class="fas fa-rotate fa-spin" id="sc-vazio-icone"></i>
+            <strong id="sc-vazio-titulo">Consultando o GRV…</strong>
+            <span id="sc-vazio-texto"></span>
+            <button type="button" class="eui-btn eui-btn--primary" id="sc-vazio-tentar" style="margin-top:8px;" hidden><i class="fas fa-rotate"></i> Tentar de novo</button>
+        </div>
+    </div>
+
+    <div id="sc-conteudo" class="sc-wrap" hidden>
+        <div class="eui-callout eui-callout--warning" id="sc-aviso" hidden>
+            <i class="fas fa-triangle-exclamation"></i>
+            <span id="sc-aviso-texto"></span>
+        </div>
+
+        <div class="eui-stats">
+            <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Solicitações abertas</span><span class="eui-stat__value" id="sc-k-linhas">—</span><span class="eui-stat__hint" id="sc-k-linhas-hint"></span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-cart-shopping"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Valor pedido</span><span class="eui-stat__value" id="sc-k-pedido">—</span><span class="eui-stat__hint" id="sc-k-pedido-hint"></span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-scale-balanced"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Valor certo</span><span class="eui-stat__value" id="sc-k-certo">—</span><span class="eui-stat__hint">das que dá para avaliar</span></div></div>
+            <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-hand-holding-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Pedido a mais</span><span class="eui-stat__value" id="sc-k-excesso">—</span><span class="eui-stat__hint" id="sc-k-excesso-hint"></span></div></div>
+        </div>
+
+        <section class="eui-card">
+            <div class="sc-tools">
+                <div class="sc-filtros" id="sc-filtros"></div>
+                <div class="eui-toolbar__search"><i class="fas fa-magnifying-glass"></i><input type="search" class="eui-input" id="sc-busca" placeholder="Buscar código, descrição, solicitação ou solicitante" autocomplete="off"></div>
+                <div class="sc-info" id="sc-info"></div>
+            </div>
+            <div class="sc-tabela-wrap"><table class="erp-table sc-table">
+                <thead><tr>
+                    <th>Veredito</th><th>Solicitação</th><th>Material</th>
+                    <th class="sc-num">Pedido</th><th class="sc-num">Certo</th>
+                    <th class="sc-num">Valor pedido</th><th class="sc-num">Valor certo</th><th class="sc-num">Diferença</th>
+                </tr></thead>
+                <tbody id="sc-tb"></tbody>
+            </table></div>
+        </section>
+    </div>
+</div>
+
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const FILTROS = [
+        ['todos', 'Todas'], ['nao_precisa', 'Não precisa'], ['acima', 'Acima'],
+        ['abaixo', 'Abaixo'], ['ok', 'Faz sentido'], ['sem_base', 'Sem base'],
+    ];
+    let dados = null;
+    let filtro = 'todos';
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = (v) => {
+        if (v == null) return '—';
+        const n = Number(v);
+        return n.toLocaleString('pt-BR', { maximumFractionDigits: Number.isInteger(n) ? 0 : 2 });
+    };
+    const brl = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const data = (d) => d ? String(d).split('-').reverse().join('/') : '';
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+    function estado(tipo, titulo, texto) {
+        $('sc-vazio').hidden = false;
+        $('sc-conteudo').hidden = true;
+        $('sc-vazio-icone').className = tipo === 'erro' ? 'fas fa-triangle-exclamation' : 'fas fa-rotate fa-spin';
+        $('sc-vazio-titulo').textContent = titulo;
+        $('sc-vazio-texto').textContent = texto || '';
+        $('sc-vazio-tentar').hidden = tipo !== 'erro';
+    }
+
+    function filtrados() {
+        const termo = norm($('sc-busca').value);
+        return dados.itens.filter((x) => {
+            if (filtro !== 'todos' && x.veredito !== filtro) return false;
+            if (!termo) return true;
+            return norm([x.codigo, x.descricao, x.solicitacao, x.solicitante, x.familia].join(' ')).includes(termo);
+        });
+    }
+
+    function desenharFiltros() {
+        const cont = dados.resumo.por_veredito;
+        $('sc-filtros').innerHTML = FILTROS.map(([v, rotulo]) => {
+            const n = v === 'todos' ? dados.resumo.linhas : (cont[v] || 0);
+            if (v !== 'todos' && !n) return '';
+            return `<button type="button" class="sc-filtro${filtro === v ? ' is-active' : ''}" data-v="${v}">${rotulo}<b>${n}</b></button>`;
+        }).join('');
+    }
+
+    function desenharTabela() {
+        const itens = filtrados();
+        if (!itens.length) {
+            $('sc-tb').innerHTML = '<tr><td colspan="8" class="sc-vazio">Nenhuma solicitação aqui.</td></tr>';
+            return;
+        }
+        let pedido = 0, certo = 0, dif = 0;
+        const linhas = itens.map((x) => {
+            const diferenca = x.valor_pedido != null && x.valor_certo != null ? x.valor_pedido - x.valor_certo : null;
+            pedido += x.valor_pedido || 0;
+            certo += x.valor_certo || 0;
+            dif += diferenca || 0;
+            const cls = diferenca > 0.005 ? 'sc-excesso' : (diferenca < -0.005 ? 'sc-falta' : '');
+            const sit = x.situacao === 'APROVADO' ? 'Aprovada, sem OC' : 'Pendente';
+            const un = esc(x.unidade);
+            return `<tr>
+                <td class="sc-veredito"><span class="sc-v sc-v--${x.veredito}">${esc(x.veredito_label)}</span><span class="sc-motivo">${esc(x.motivo)}${x.grv_minimo || x.grv_lote ? `<br><span class="sc-muted">No GRV: mínimo ${num(x.grv_minimo)}, lote ${num(x.grv_lote)}.</span>` : ''}</span></td>
+                <td class="sc-cod">${esc(x.solicitacao)}<span class="sc-muted sc-sit">${sit} · ${data(x.data)}</span><span class="sc-muted sc-sit">${esc(x.solicitante)}</span></td>
+                <td class="sc-desc"><span class="sc-cod">${esc(x.codigo)}</span><br>${esc(x.descricao)}<br><span class="sc-muted">${esc(x.familia)}</span></td>
+                <td class="sc-num" data-label="Pedido"><span>${num(x.pedido)} ${un}${x.custo ? `<span class="sc-muted sc-un">${brl(x.custo)}/${un}</span>` : ''}</span></td>
+                <td class="sc-num sc-certo" data-label="Certo">${x.certo == null ? '—' : `${num(x.certo)} ${un}`}</td>
+                <td class="sc-num" data-label="Valor pedido">${brl(x.valor_pedido)}</td>
+                <td class="sc-num" data-label="Valor certo">${brl(x.valor_certo)}</td>
+                <td class="sc-num ${cls}" data-label="Diferença">${diferenca == null ? '—' : brl(diferenca)}</td>
+            </tr>`;
+        });
+        linhas.push(`<tr class="sc-total"><td colspan="5">Total (${itens.length})</td><td class="sc-num" data-label="Valor pedido">${brl(pedido)}</td><td class="sc-num" data-label="Valor certo">${brl(certo)}</td><td class="sc-num" data-label="Diferença">${brl(dif)}</td></tr>`);
+        $('sc-tb').innerHTML = linhas.join('');
+    }
+
+    function desenhar() {
+        const r = dados.resumo;
+        const pv = r.por_veredito;
+        $('sc-k-linhas').textContent = r.linhas;
+        $('sc-k-linhas-hint').textContent = `${pv.nao_precisa + pv.acima} com pedido a mais`;
+        $('sc-k-pedido').textContent = brl(r.valor_pedido);
+        $('sc-k-pedido-hint').textContent = r.sem_custo ? `${r.sem_custo} sem custo no GRV` : 'pelo custo médio';
+        $('sc-k-certo').textContent = brl(r.valor_certo);
+        $('sc-k-excesso').textContent = brl(r.excesso_valor);
+        $('sc-k-excesso-hint').textContent = r.valor_pedido_avaliado ? `${Math.round(r.excesso_valor / r.valor_pedido_avaliado * 100)}% do pedido avaliado` : '';
+
+        const fotos = Object.values(dados.fotos || {});
+        const sem = fotos.filter((f) => f.vazio).map((f) => f.label);
+        const datas = fotos.filter((f) => !f.vazio).map((f) => f.atualizado_em);
+        const avisos = [];
+        if (sem.length) avisos.push(`Sem foto do Estoque em ${sem.join(', ')}: esses itens ficam sem base. Atualize em Logística > Estoque.`);
+        if (dados.ocs_da_foto) avisos.push('As OCs abertas não vieram do GRV agora; foram usadas as da foto do Estoque.');
+        $('sc-aviso').hidden = !avisos.length;
+        $('sc-aviso-texto').textContent = avisos.join(' ');
+        const maisVelha = datas.sort((a, b) => {
+            const k = (s) => s.replace(/(\d+)\/(\d+)\/(\d+) (.*)/, '$3$2$1$4');
+            return k(a) < k(b) ? -1 : 1;
+        })[0];
+        $('sc-info').innerHTML = `GRV de ${esc(dados.gerado_em)}${maisVelha ? `<br>Mínimo e máximo do Estoque de ${esc(maisVelha)}` : ''}`;
+
+        desenharFiltros();
+        desenharTabela();
+        $('sc-vazio').hidden = true;
+        $('sc-conteudo').hidden = false;
+    }
+
+    async function carregar() {
+        if (dados) $('sc-conteudo').classList.add('sc-carregando');
+        else estado('carregando', 'Consultando o GRV…', 'Leva alguns segundos.');
+        try {
+            const resp = await fetch('/api/compras/solicitacoes', { headers: { Accept: 'application/json' } });
+            const json = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(json.error || 'Não deu para carregar as solicitações.');
+            dados = json;
+            desenhar();
+        } catch (err) {
+            if (!dados) estado('erro', 'Não deu para carregar', err.message);
+            else {
+                $('sc-aviso').hidden = false;
+                $('sc-aviso-texto').textContent = err.message;
+            }
+        } finally {
+            $('sc-conteudo').classList.remove('sc-carregando');
+        }
+    }
+
+    $('sc-filtros').addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-v]');
+        if (!b) return;
+        filtro = b.dataset.v;
+        desenharFiltros();
+        desenharTabela();
+    });
+    $('sc-busca').addEventListener('input', desenharTabela);
+    $('sc-btn-atualizar').addEventListener('click', carregar);
+    $('sc-vazio-tentar').addEventListener('click', carregar);
+    carregar();
+})();
+</script>
+{% endblock %}
