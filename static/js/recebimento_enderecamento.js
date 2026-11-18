@@ -85,14 +85,22 @@
      $('pa-list').append(row);
     }
    items.forEach(item => {
-     const card = el('tr', null, item.em_inventario ? 'pa-row pa-row--inventario' : 'pa-row');
+     // Bloqueado (sem saldo, sem vínculo, recebimento reaberto): o aviso vai
+     // debaixo do material, que quebra linha - na coluna de ação, texto longo
+     // alargava a tabela e empurrava o botão das outras linhas para fora da tela.
+     const bloqueado = item.status === 'Pendente' && !!item.impedimento;
+     const card = el('tr', null, 'pa-row' + (item.em_inventario ? ' pa-row--inventario' : '') + (bloqueado ? ' pa-row--bloqueado' : ''));
      const skuCell = el('td', item.sku || 'Sem vínculo', item.sku ? 'pa-sku' : 'pa-sku pa-sku--pendente');
      const materialCell = el('td', null, 'pa-description');
      materialCell.append(el('div', item.descricao || 'Material sem descrição', 'pa-desc'), el('div', item.fornecedor || '', 'pa-meta'));
      if (item.em_inventario) materialCell.append(el('span', 'Em análise de inventário', 'pa-badge pa-badge--inventario'));
+     if (bloqueado) {
+      const aviso = el('div', null, 'pa-bloqueio'); const ic = el('i', null, 'fas fa-lock'); ic.setAttribute('aria-hidden', 'true');
+      aviso.append(ic, el('span', item.impedimento)); materialCell.append(aviso);
+     }
      const badgeCls = {'Pendente': 'pa-badge--pendente', 'Aguardando sincronização': 'pa-badge--aguardando', 'Concluído': 'pa-badge--concluido'}[item.status] || '';
      const statusCell = el('td');
-     statusCell.append(el('span', item.status, `pa-badge ${item.erro ? 'pa-badge--erro' : badgeCls}`));
+     statusCell.append(el('span', bloqueado ? 'Bloqueado' : item.status, `pa-badge ${item.erro ? 'pa-badge--erro' : bloqueado ? 'pa-badge--bloqueado' : badgeCls}`));
      const qtdCell = el('td', null); qtdCell.dataset.label = 'Quantidade';
      qtdCell.append(el('div', `${item.quantidade} ${item.unidade || ''}`));
      // Conversão feita na conferência (4 PÇ na NF -> 24.000 MM no estoque): mostra a origem.
@@ -108,7 +116,6 @@
     const actions = el('div', null, 'pa-tools');
     if (item.status === 'Pendente') {
      if (item.impedimento) {
-      actions.append(el('span', item.impedimento, 'pa-meta'));
       if (item.corrigir_no_recebimento) {
        const corrigir = el('a', null, 'pa-act'); corrigir.href = '/conferencia';
        corrigir.append(el('i', null, 'fas fa-arrow-up-right-from-square'), document.createTextNode(' Corrigir no recebimento'));

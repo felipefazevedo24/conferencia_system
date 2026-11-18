@@ -101,3 +101,15 @@
 .putaway .pa-icon-btn{width:42px!important;padding:0!important;justify-content:center}
 @media(max-width:700px){.putaway .pa-search{flex-basis:100%}.putaway #pa-clear-filter{flex:1}}
 
+
+/* Bloqueado (sem saldo, sem vínculo): cinza - não é pendência do operador nem
+   erro. O aviso fica sob o material, que quebra linha. */
+.pa-badge--bloqueado{background:var(--eui-surface-3,#e2e8f0);color:var(--eui-text-soft,#475569)}
+.pa-bloqueio{display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:11.5px;font-weight:500;line-height:1.4;color:var(--eui-warning-soft-text,#84550d);white-space:normal}
+.pa-bloqueio i{margin-top:3px;font-size:10px}
+.pa-table tr.pa-row--bloqueado td{background:var(--eui-surface-2,#f8fafc)}
+.pa-table tr.pa-row--bloqueado td:first-child{box-shadow:inset 4px 0 0 var(--eui-border-strong,#cbd5e1)}
+/* Celular: a regra global .erp-table{min-width:620px} (ui_erp.css) vencia o
+   min-width:0 dos cartões e cortava botão e textos na lateral. */
+@media(max-width:700px){.pa-table.erp-table{min-width:0;width:100%;display:block}.pa-table tr,.pa-table td{box-sizing:border-box}.pa-table td.pa-description{white-space:normal}.pa-table .pa-desc{overflow-wrap:anywhere}}
+@media(max-width:700px){.pa-table tr.pa-row--bloqueado{background:var(--eui-surface-2,#f8fafc);box-shadow:inset 4px 0 0 var(--eui-border-strong,#cbd5e1)}.pa-table tr.pa-row--bloqueado td,.pa-table tr.pa-row--bloqueado td:first-child{background:transparent;box-shadow:none}}

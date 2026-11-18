@@ -71,3 +71,6 @@ button.end-chip{cursor:pointer}button.end-chip:hover{border-color:var(--eui-prim
 .end-table tr.end-row--inventario .end-badge--inventario{margin-top:6px;border:1px solid var(--eui-violet,#6d28d9)}
 .end-material--inventario{border-color:var(--eui-violet,#6d28d9);background:var(--eui-violet-soft,#ede9fe)}
 .end-material--inventario .end-badge--inventario{justify-self:start;border:1px solid var(--eui-violet,#6d28d9)}
+
+/* Painel sem barra de busca (Saídas a corrigir): a nota abre o painel. */
+.end-panel>.end-note:first-child{margin-top:16px}

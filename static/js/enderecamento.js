@@ -109,7 +109,8 @@
    for(const m of data.itens){
     const d=m.detalhes||{},card=node('article'),head=node('div',null,'end-history-head');
     head.append(node('strong',`${m.sku} · saída ${d.saida??''}`),node('span',d.pendencia||'Sem endereço','end-badge warn'));card.append(head);
-    card.append(node('p',`${number(m.quantidade)} ${m.unidade} · ${d.data||''} · endereço na saída: ${d.informado||'nenhum'}`));
+    const dataBr=d.data?String(d.data).split('-').reverse().join('/'):'';
+    card.append(node('p',`${number(m.quantidade)} ${m.unidade} · ${dataBr} · endereço na saída: ${d.informado||'nenhum'}`));
     const acoes=node('div',null,'end-actions');
     for(const e of d.opcoes||[])acoes.append(button(`Saiu de ${e}`,()=>resolverSaida(m,e),'eui-btn--primary'));
     acoes.append(button('Não baixar',()=>resolverSaida(m,null)));
