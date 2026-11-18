@@ -35,7 +35,7 @@
     .sp-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
     .sp-callout-acao { margin-left: auto; }
 
-    /* Os dois gráficos do mesmo tamanho: classificação à esquerda, mês à direita. */
+    /* Os dois gráficos do mesmo tamanho: mês à esquerda, classificação à direita. */
     .sp-graficos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     @media (max-width: 1100px) { .sp-graficos { grid-template-columns: minmax(0, 1fr); } }
     .sp-canvas { position: relative; width: 100%; height: 400px; }
@@ -151,19 +151,19 @@
                 <div class="sp-graficos">
                     <section class="sp-dc">
                         <div class="sp-dc__topo">
-                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para filtrar a tela.</p></div>
-                            <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
-                        </div>
-                        <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
-                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
-                    </section>
-                    <section class="sp-dc">
-                        <div class="sp-dc__topo">
                             <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Valor das entradas de NF que contam no Spend.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
                         <div class="sp-canvas" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
                         <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
+                    </section>
+                    <section class="sp-dc">
+                        <div class="sp-dc__topo">
+                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para filtrar a tela.</p></div>
+                            <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
+                        </div>
+                        <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
+                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
                     </section>
                 </div>
 
