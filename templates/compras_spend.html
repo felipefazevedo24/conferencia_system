@@ -40,6 +40,13 @@
     @media (max-width: 1100px) { .sp-graficos { grid-template-columns: minmax(0, 1fr); } }
     .sp-canvas { position: relative; width: 100%; height: 400px; }
     .sp-graficos .sp-tabela-wrap--solta { max-height: 400px; }
+    /* Gasto por mês: legenda em cima e a área do gráfico ocupa o resto dos 400px. */
+    .sp-canvas--leg { display: flex; flex-direction: column; gap: 6px; }
+    .sp-canvas__area { position: relative; flex: 1; min-height: 0; }
+    .sp-leg { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--eui-muted); }
+    .sp-leg span { display: inline-flex; align-items: center; gap: 6px; color: var(--eui-text-soft); }
+    .sp-leg small { font-size: 11px; color: var(--eui-muted); }
+    .sp-leg i { width: 8px; height: 8px; border-radius: 50%; background: var(--eui-primary); display: inline-block; }
     .sp-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; flex: none; }
     .sp-toggle button { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; }
     .sp-toggle button:hover { border-color: var(--eui-primary); color: var(--eui-text); }
@@ -171,7 +178,10 @@
                             <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Clique num mês para ver as notas.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
-                        <div class="sp-canvas" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
+                        <div class="sp-canvas sp-canvas--leg" id="sp-mes-grafico">
+                            <div class="sp-leg"><span><i></i>Período atual</span><small>Valores em R$</small></div>
+                            <div class="sp-canvas__area"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
+                        </div>
                         <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
                     </section>
                     <section class="sp-dc">
@@ -545,20 +555,43 @@
         estado.charts.mes = new Chart($("sp-chart-mes"), {
             type: "line",
             data: {
-                // ano so' no primeiro mes e em janeiro: com "mmm/aa" em todos, 12 meses nao cabem
-                labels: meses.map((m, i) => { const [a, mm] = m.competencia.split("-"); return i === 0 || mm === "01" ? [MESES[Number(mm) - 1], a] : MESES[Number(mm) - 1]; }),
+                // "Jan", "Fev"...; o ano só quando o período passa de um ano para o outro
+                labels: meses.map((m, i) => {
+                    const [a, mm] = m.competencia.split("-");
+                    const nome = MESES[Number(mm) - 1].replace(/^./, (c) => c.toUpperCase());
+                    const viraAno = meses[0].competencia.slice(0, 4) !== meses[meses.length - 1].competencia.slice(0, 4);
+                    return viraAno && (i === 0 || mm === "01") ? [nome, a] : nome;
+                }),
                 datasets: [{
                     data: meses.map((m) => m.valor),
-                    // linha suavizada, como a do painel do Estoque
-                    borderColor: t.serie, backgroundColor: t.serie, borderWidth: 2.5,
-                    tension: 0.35, pointRadius: 4, pointHoverRadius: 6,
+                    // linha suavizada com degradê embaixo e ponto vazado (modelo enviado em 18/11/2026)
+                    borderColor: t.serie, borderWidth: 2.5, tension: 0.4,
+                    fill: "origin",
+                    backgroundColor: (ctx) => {
+                        const area = ctx.chart.chartArea;
+                        if (!area) return "transparent";
+                        const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+                        g.addColorStop(0, comAlfa(t.serie, 0.18));
+                        g.addColorStop(1, comAlfa(t.serie, 0));
+                        return g;
+                    },
+                    pointRadius: 4, pointHoverRadius: 6, pointBorderWidth: 2,
+                    pointBackgroundColor: t.superficie, pointBorderColor: t.serie,
+                    pointHoverBackgroundColor: t.serie,
                 }],
             },
             options: Object.assign(opcoesBase(t, {
                 title: (ctx) => fmtMes(meses[ctx[0].dataIndex].competencia),
                 label: (ctx) => fmtR(meses[ctx.dataIndex].valor),
             }), {
-                scales: { y: eixoValor(t), x: eixoCategoria(t) },
+                scales: {
+                    y: Object.assign(eixoValor(t), {
+                        grid: { color: t.grade, drawTicks: false },
+                        border: { display: false, dash: [4, 4] },
+                        ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, padding: 8, maxTicksLimit: 6, callback: (v) => compacto.format(v) },
+                    }),
+                    x: Object.assign(eixoCategoria(t), { border: { display: false } }),
+                },
                 // clique em qualquer altura do mês, não só em cima do ponto
                 interaction: { mode: "index", intersect: false },
                 onHover: maozinha,
@@ -573,6 +606,15 @@
         $("sp-cls-tabela").innerHTML = tabelaSimples(["Classificação", "Valor", "%"], cls.map((x) => [esc(x.classificacao), fmtR(x.valor), fmtP(x.pct)]));
         $("sp-mes-tabela").innerHTML = tabelaSimples(["Mês", "Valor"], meses.map((m) => [esc(fmtMes(m.competencia)), fmtR(m.valor)]));
         aplicarModos();
+    }
+
+    // "#0f62c9" ou "rgb(15, 98, 201)" -> mesma cor com transparência (degradê do gráfico do mês)
+    function comAlfa(cor, alfa) {
+        const c = String(cor).trim();
+        let r, g, b;
+        if (/^#[0-9a-f]{6}$/i.test(c)) [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+        else { const m = c.match(/\d+(\.\d+)?/g); if (!m || m.length < 3) return "transparent"; [r, g, b] = m; }
+        return `rgba(${r}, ${g}, ${b}, ${alfa})`;
     }
 
     function maozinha(ev, els) { ev.native.target.style.cursor = els.length ? "pointer" : "default"; }
