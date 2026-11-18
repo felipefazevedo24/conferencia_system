@@ -168,7 +168,7 @@
                 <div class="sp-graficos">
                     <section class="sp-dc">
                         <div class="sp-dc__topo">
-                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Clique numa barra para ver as notas do mês.</p></div>
+                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Clique num mês para ver as notas.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
                         <div class="sp-canvas" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
@@ -543,15 +543,15 @@
 
         const meses = estado.dados.por_mes;
         estado.charts.mes = new Chart($("sp-chart-mes"), {
-            type: "bar",
+            type: "line",
             data: {
                 // ano so' no primeiro mes e em janeiro: com "mmm/aa" em todos, 12 meses nao cabem
                 labels: meses.map((m, i) => { const [a, mm] = m.competencia.split("-"); return i === 0 || mm === "01" ? [MESES[Number(mm) - 1], a] : MESES[Number(mm) - 1]; }),
                 datasets: [{
                     data: meses.map((m) => m.valor),
-                    backgroundColor: t.serie,
-                    borderRadius: 4, borderSkipped: "start",
-                    barPercentage: 0.7, categoryPercentage: 0.9,
+                    // linha suavizada, como a do painel do Estoque
+                    borderColor: t.serie, backgroundColor: t.serie, borderWidth: 2.5,
+                    tension: 0.35, pointRadius: 4, pointHoverRadius: 6,
                 }],
             },
             options: Object.assign(opcoesBase(t, {
@@ -559,6 +559,8 @@
                 label: (ctx) => fmtR(meses[ctx.dataIndex].valor),
             }), {
                 scales: { y: eixoValor(t), x: eixoCategoria(t) },
+                // clique em qualquer altura do mês, não só em cima do ponto
+                interaction: { mode: "index", intersect: false },
                 onHover: maozinha,
                 onClick: (ev, els) => {
                     if (!els.length) return;
