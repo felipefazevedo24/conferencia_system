@@ -41,6 +41,10 @@ from ..tempo import agora_br
 
 SEM_CLASSIFICACAO = "(sem classificação)"
 SEM_FAMILIA = "(sem família)"
+# Item sem requisitante (sem OC, ou OC sem solicitação) é reposição de
+# estoque de segurança - pedido de Compras em 18/11/2026. Só na exibição:
+# o espelho guarda vazio, para não confundir com um requisitante do GRV.
+SEM_REQUISITANTE = "Safety STK"
 INICIO = date(2026, 1, 1)
 BRIDGE_DESATUALIZADA = (
     "A bridge do ERP está com a consulta antiga do Spend (sem OC/requisitante). "
@@ -454,20 +458,26 @@ def _entradas(de: str, ate: str):
         db.session.query(
             Entrada.competencia, Entrada.cod_fornecedor, Entrada.fornecedor, Entrada.nota_fiscal,
             Entrada.cfop, Entrada.codigo_item, Entrada.descricao, Entrada.valor, Entrada.conta,
-            Entrada.familia, Entrada.grupo,
+            Entrada.familia, Entrada.grupo, Entrada.requisitante,
         )
         .filter(Entrada.competencia >= de, Entrada.competencia <= ate)
         .all()
     )
 
 
-def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, anterior=None) -> dict:
+def _requisitantes(valor) -> list[str]:
+    """O GRV junta os requisitantes do item com ", " (item em mais de uma SC)."""
+    return [x.strip() for x in str(valor or "").split(",") if x.strip()] or [SEM_REQUISITANTE]
+
+
+def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, anterior=None, requisitante=None) -> dict:
     base = status()
     competencias, de, ate = _periodo(de, ate)
     if not competencias:
         return {"vazio": True, "competencias": [], "base": base}
     familia = (familia or "").strip() or None
     classificacao = (classificacao or "").strip() or None
+    requisitante = (requisitante or "").strip() or None
     meses = [c for c in competencias if de <= c <= ate]
 
     classificar = _classificador()
@@ -475,7 +485,7 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
     fora = {k: {"valor": 0.0, "itens": 0} for k in ("cfop", "intercompany", "excluida")}
     revisar = {"valor": 0.0, "grupos": set()}
     total_base = 0.0
-    familias, classificacoes = set(), set()
+    familias, classificacoes, requisitantes = set(), set(), set()
     itens = []
     for r in _entradas(de, ate):
         valor = r.valor or 0
@@ -487,8 +497,10 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
         f = _features(r)
         cls, nivel, _ = classificar(f)
         fam = r.familia or SEM_FAMILIA
+        reqs = _requisitantes(r.requisitante)
         familias.add(fam)
         classificacoes.add(cls)
+        requisitantes.update(reqs)
         total_base += valor
         if nivel != 0:
             revisar["valor"] += valor
@@ -496,6 +508,8 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
         if familia and fam != familia:
             continue
         if classificacao and cls != classificacao:
+            continue
+        if requisitante and requisitante not in reqs:
             continue
         itens.append((r, cls, fam))
 
@@ -558,9 +572,11 @@ def painel(de=None, ate=None, familia=None, classificacao=None, atual=None, ante
         "vazio": False,
         "base": base,
         "competencias": competencias,
-        "filtro": {"de": de, "ate": ate, "familia": familia, "classificacao": classificacao, "atual": atual, "anterior": anterior},
+        "filtro": {"de": de, "ate": ate, "familia": familia, "classificacao": classificacao, "atual": atual, "anterior": anterior,
+                   "requisitante": requisitante},
         "familias": sorted(familias),
         "classificacoes": sorted(classificacoes),
+        "requisitantes": sorted(requisitantes, key=lambda x: (x == SEM_REQUISITANTE, x.upper())),
         "kpis": {
             "total": round(total, 2),
             "media_mensal": round(sum(meses_com_valor) / len(meses_com_valor), 2) if meses_com_valor else 0.0,
@@ -649,7 +665,7 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
     for r in linhas:
         if termo and termo not in " ".join(
             str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia,
-                                   r.ordem_compra, r.solicitacao, r.requisitante, r.comprador)
+                                   r.ordem_compra, r.solicitacao, r.requisitante or SEM_REQUISITANTE, r.comprador)
         ).upper():
             continue
         sit = situacao(r, regras)
@@ -682,7 +698,7 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             "ordem_compra": r.ordem_compra or "",
             "oc_origem": ORIGENS_OC.get(r.oc_origem or "", ""),
             "solicitacao": r.solicitacao or "",
-            "requisitante": r.requisitante or "",
+            "requisitante": r.requisitante or SEM_REQUISITANTE,
             "comprador": r.comprador or "",
             "situacao": sit,
             "situacao_texto": SITUACOES[sit],

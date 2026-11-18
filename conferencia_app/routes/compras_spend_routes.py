@@ -33,6 +33,7 @@ def spend_painel():
         classificacao=args.get("classificacao"),
         atual=args.get("atual"),
         anterior=args.get("anterior"),
+        requisitante=args.get("requisitante"),
     ))
 
 

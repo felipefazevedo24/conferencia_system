@@ -10,6 +10,22 @@
     .sp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
     .sp-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .sp-head-actions a { text-decoration: none; }
+    .sp-head-actions .eui-btn { border-radius: 999px; }
+
+    /* Identidade visual do painel do Estoque: cartões de 14px, faixa de cor
+       no topo dos indicadores, abas e alternâncias em pílula. */
+    .sp-wrap .eui-card { border-radius: 14px; box-shadow: none; }
+    .sp-dk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .sp-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; align-content: start; }
+    .sp-dk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--sp-cor, var(--eui-primary)); }
+    .sp-dk__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
+    .sp-dk__valor { font-size: 24px; font-weight: 700; color: var(--eui-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .sp-dk__dica { font-size: 12px; color: var(--eui-text-soft); }
+    @media (max-width: 1100px) { .sp-dk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .sp-dc { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .sp-dc__topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .sp-dc h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
+    .sp-dc__sub { margin: 2px 0 0; font-size: 12px; color: var(--eui-muted); }
 
     .sp-filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px; }
     .sp-filtros .eui-field { min-width: 130px; }
@@ -19,18 +35,20 @@
     .sp-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
     .sp-callout-acao { margin-left: auto; }
 
-    .sp-graficos { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+    /* Os dois gráficos do mesmo tamanho: classificação à esquerda, mês à direita. */
+    .sp-graficos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     @media (max-width: 1100px) { .sp-graficos { grid-template-columns: minmax(0, 1fr); } }
-    .sp-canvas { position: relative; width: 100%; }
-    .sp-canvas--mes { height: 320px; }
-    .sp-toggle { display: inline-flex; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); overflow: hidden; }
-    .sp-toggle button { border: 0; background: transparent; color: var(--eui-muted); font-size: 12px; font-weight: 600; padding: 5px 10px; cursor: pointer; }
-    .sp-toggle button.is-active { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+    .sp-canvas { position: relative; width: 100%; height: 400px; }
+    .sp-graficos .sp-tabela-wrap--solta { max-height: 400px; }
+    .sp-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; flex: none; }
+    .sp-toggle button { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .sp-toggle button:hover { border-color: var(--eui-primary); color: var(--eui-text); }
+    .sp-toggle button.is-active { background: var(--eui-primary-soft); border-color: var(--eui-primary); color: var(--eui-primary); }
 
-    .sp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--eui-border); padding: 0 12px; overflow-x: auto; }
-    .sp-tabs button { border: 0; background: transparent; color: var(--eui-muted); font-size: 13px; font-weight: 600; padding: 12px 14px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
-    .sp-tabs button:hover { color: var(--eui-text); }
-    .sp-tabs button.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .sp-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; margin: 10px 12px 0; border: 1px solid var(--eui-border); border-radius: 16px; background: var(--eui-surface); }
+    .sp-tabs button { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border: 0; border-radius: 11px; background: transparent; color: var(--eui-text-soft); font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+    .sp-tabs button:hover { background: var(--eui-surface-2); color: var(--eui-text); }
+    .sp-tabs button.is-active { background: var(--eui-primary); color: #fff; box-shadow: 0 4px 12px rgba(15, 98, 201, .25); }
     .sp-tabs .sp-tab-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); font-size: 11px; line-height: 18px; text-align: center; }
 
     .sp-pane-tools { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px 0; }
@@ -40,7 +58,9 @@
     .sp-wrap .erp-table { font-size: 13px; }
     .sp-wrap .erp-table td, .sp-wrap .erp-table th { padding: 8px 12px; }
     /* o th global do erp-table e' claro fixo; aqui segue o tema */
-    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; }
+    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+    .sp-wrap .erp-table td { color: var(--eui-text-soft); border-bottom: 1px solid var(--eui-border); }
+    .sp-wrap .erp-table tbody tr:hover td { background: var(--eui-surface-2); }
     .sp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .sp-muted { color: var(--eui-muted); }
     .sp-linha-vazia { text-align: center; color: var(--eui-muted); padding: 28px 12px !important; }
@@ -79,7 +99,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="sp-wrap">
+<div class="eui-scope sp-wrap">
     <header class="eui-page-header sp-head">
         <div>
             <div class="eui-page-header__eyebrow">Compras</div>
@@ -108,6 +128,7 @@
                 <label class="eui-field"><span class="eui-field__label">Até</span><select class="eui-select" id="sp-ate"></select></label>
                 <label class="eui-field eui-field--largo"><span class="eui-field__label">Família</span><select class="eui-select" id="sp-familia"></select></label>
                 <label class="eui-field eui-field--largo"><span class="eui-field__label">Classificação</span><select class="eui-select" id="sp-classificacao"></select></label>
+                <label class="eui-field eui-field--largo"><span class="eui-field__label">Requisitante</span><select class="eui-select" id="sp-requisitante"></select></label>
                 <button type="button" class="eui-btn eui-btn--subtle" id="sp-limpar" hidden><i class="fas fa-filter-circle-xmark"></i> Limpar</button>
                 <div class="sp-base-info" id="sp-base-info"></div>
             </div>
@@ -119,34 +140,30 @@
             </div>
 
             <div id="sp-dados" class="sp-wrap">
-                <div class="eui-stats">
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-sack-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Gasto no período</span><span class="eui-stat__value" id="sp-k-total">—</span><span class="eui-stat__hint" id="sp-k-total-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-calendar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Média mensal</span><span class="eui-stat__value" id="sp-k-media">—</span><span class="eui-stat__hint" id="sp-k-media-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-arrow-right-arrow-left"></i></div><div class="eui-stat__body"><span class="eui-stat__label" id="sp-k-atual-label">Último mês</span><span class="eui-stat__value" id="sp-k-atual">—</span><span class="eui-stat__hint" id="sp-k-atual-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-building"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Fornecedores</span><span class="eui-stat__value" id="sp-k-forn">—</span><span class="eui-stat__hint" id="sp-k-forn-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens</span><span class="eui-stat__value" id="sp-k-itens">—</span><span class="eui-stat__hint" id="sp-k-itens-hint"></span></div></div>
+                <div class="sp-dk-grid">
+                    <div class="sp-dk" style="--sp-cor: var(--eui-primary);"><span class="sp-dk__label">Gasto no período</span><span class="sp-dk__valor" id="sp-k-total">—</span><span class="sp-dk__dica" id="sp-k-total-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-info, var(--eui-primary));"><span class="sp-dk__label">Média mensal</span><span class="sp-dk__valor" id="sp-k-media">—</span><span class="sp-dk__dica" id="sp-k-media-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-violet, var(--eui-primary));"><span class="sp-dk__label" id="sp-k-atual-label">Último mês</span><span class="sp-dk__valor" id="sp-k-atual">—</span><span class="sp-dk__dica" id="sp-k-atual-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-warning);"><span class="sp-dk__label">Fornecedores</span><span class="sp-dk__valor" id="sp-k-forn">—</span><span class="sp-dk__dica" id="sp-k-forn-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-success);"><span class="sp-dk__label">Itens</span><span class="sp-dk__valor" id="sp-k-itens">—</span><span class="sp-dk__dica" id="sp-k-itens-hint"></span></div>
                 </div>
 
                 <div class="sp-graficos">
-                    <section class="eui-card">
-                        <div class="eui-card__head">
-                            <h2 class="eui-card__title"><i class="fas fa-layer-group"></i> Gasto por classificação</h2>
+                    <section class="sp-dc">
+                        <div class="sp-dc__topo">
+                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para filtrar a tela.</p></div>
                             <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
-                        <div class="eui-card__body--tight">
-                            <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
-                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
-                        </div>
+                        <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
+                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
                     </section>
-                    <section class="eui-card">
-                        <div class="eui-card__head">
-                            <h2 class="eui-card__title"><i class="fas fa-chart-column"></i> Gasto por mês</h2>
+                    <section class="sp-dc">
+                        <div class="sp-dc__topo">
+                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Valor das entradas de NF que contam no Spend.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
-                        <div class="eui-card__body--tight">
-                            <div class="sp-canvas sp-canvas--mes" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
-                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
-                        </div>
+                        <div class="sp-canvas" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
+                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
                     </section>
                 </div>
 
@@ -270,7 +287,7 @@
     // ---------- Painel ----------
     function parametros(extra) {
         const qs = new URLSearchParams();
-        const campos = { de: "sp-de", ate: "sp-ate", familia: "sp-familia", classificacao: "sp-classificacao", anterior: "sp-anterior", atual: "sp-atual" };
+        const campos = { de: "sp-de", ate: "sp-ate", familia: "sp-familia", classificacao: "sp-classificacao", requisitante: "sp-requisitante", anterior: "sp-anterior", atual: "sp-atual" };
         Object.entries(campos).forEach(([k, id]) => { const v = $(id).value; if (v) qs.set(k, v); });
         Object.entries(extra || {}).forEach(([k, v]) => { if (v == null || v === "") qs.delete(k); else qs.set(k, v); });
         return qs;
@@ -317,10 +334,13 @@
         const classes = d.classificacoes.slice();
         if (f.classificacao && !classes.includes(f.classificacao)) classes.push(f.classificacao);
         preencherSelect("sp-classificacao", classes.map((x) => ({ valor: x, rotulo: x })), f.classificacao, "Todas");
+        const reqs = (d.requisitantes || []).slice();
+        if (f.requisitante && !reqs.includes(f.requisitante)) reqs.push(f.requisitante);
+        preencherSelect("sp-requisitante", reqs.map((x) => ({ valor: x, rotulo: x })), f.requisitante, "Todos");
         const doPeriodo = meses.filter((m) => m.valor >= f.de && m.valor <= f.ate);
         preencherSelect("sp-anterior", doPeriodo, f.anterior, f.anterior ? null : "—");
         preencherSelect("sp-atual", doPeriodo, f.atual);
-        $("sp-limpar").hidden = !(f.familia || f.classificacao);
+        $("sp-limpar").hidden = !(f.familia || f.classificacao || f.requisitante);
 
         renderInfo(d);
         renderKpis(d);
@@ -399,9 +419,10 @@
     function tema() {
         return {
             serie: cssVar("--eui-primary", "#0f62c9"),
-            texto: cssVar("--eui-muted", "#64748b"),
+            texto: cssVar("--eui-text-soft", "#475569"),
+            claro: "#60a5fa",
             grade: cssVar("--eui-border", "#e3e8ef"),
-            fonte: cssVar("--eui-font", "system-ui, sans-serif"),
+            fonte: getComputedStyle(document.body).fontFamily || cssVar("--eui-font", "system-ui, sans-serif"),
             superficie: cssVar("--eui-surface", "#ffffff"),
             tinta: cssVar("--eui-text", "#0f172a"),
         };
@@ -461,7 +482,6 @@
         estado.charts = {};
 
         const cls = dadosClassificacao();
-        $("sp-cls-grafico").style.height = Math.max(160, cls.length * 30 + 40) + "px";
         const filtroCls = estado.dados.filtro.classificacao;
         estado.charts.cls = new Chart($("sp-chart-cls"), {
             type: "bar",
@@ -469,7 +489,7 @@
                 labels: cls.map((x) => x.classificacao),
                 datasets: [{
                     data: cls.map((x) => x.valor),
-                    backgroundColor: t.serie,
+                    backgroundColor: cls.map((x) => (x.agrupado ? t.claro : t.serie)),
                     borderRadius: 4, borderSkipped: "start",
                     barPercentage: 0.78, categoryPercentage: 0.92,
                 }],
@@ -828,9 +848,9 @@
     $("sp-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) abrirTab(b.dataset.tab); });
     $("sp-alerta-rev-btn").addEventListener("click", () => { abrirTab("classificacao"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });
 
-    ["sp-de", "sp-ate", "sp-familia", "sp-classificacao"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
+    ["sp-de", "sp-ate", "sp-familia", "sp-classificacao", "sp-requisitante"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
     ["sp-anterior", "sp-atual"].forEach((id) => $(id).addEventListener("change", () => carregar()));
-    $("sp-limpar").addEventListener("click", () => carregar({ familia: "", classificacao: "" }));
+    $("sp-limpar").addEventListener("click", () => carregar({ familia: "", classificacao: "", requisitante: "" }));
 
     $("sp-busca-cons").addEventListener("input", () => { estado.consLimite = PAGINA; renderConsolidado(); });
     $("sp-cons-mais").addEventListener("click", () => { estado.consLimite += PAGINA; renderConsolidado(); });
