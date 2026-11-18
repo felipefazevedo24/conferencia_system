@@ -5,7 +5,8 @@ from ..services import compras_spend_service as spend
 
 
 compras_spend_bp = Blueprint("compras_spend", __name__)
-PERM = "PAGE_COMPRAS_CPS"
+# Permissão própria desde 18/11/2026 (antes vinha junto com Compras CPS).
+PERM = "PAGE_COMPRAS_SPEND"
 
 
 def _usuario() -> str:

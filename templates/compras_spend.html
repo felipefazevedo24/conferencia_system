@@ -124,7 +124,7 @@
             <p class="eui-page-header__sub">Gasto por classificação de suprimentos, a partir das entradas de NF do GRV.</p>
         </div>
         <div class="sp-head-actions">
-            <a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>
+            {% if can_access('PAGE_COMPRAS_CPS') %}<a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
             <button type="button" class="eui-btn eui-btn--ghost" id="sp-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </header>
