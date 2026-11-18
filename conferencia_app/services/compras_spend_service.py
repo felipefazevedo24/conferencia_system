@@ -42,8 +42,6 @@ from ..tempo import agora_br
 SEM_CLASSIFICACAO = "(sem classificação)"
 SEM_FAMILIA = "(sem família)"
 INICIO = date(2026, 1, 1)
-# Origem de OC que só a versão nova da SQL_SPEND_ENTRADAS devolve.
-_ORIGENS_GRV = ("xml", "recebimento", "cabecalho")
 BRIDGE_DESATUALIZADA = (
     "A bridge do ERP está com a consulta antiga do Spend (sem OC/requisitante). "
     "Atualize conferencia_app/compras/queries.py na VM da bridge e reinicie-a "
@@ -322,9 +320,12 @@ def atualizar(usuario: str) -> dict:
         desde = max(INICIO, (ok.concluido_em.date().replace(day=1) - timedelta(days=1)).replace(day=1))
     else:
         desde = INICIO
-    # Enquanto nenhuma linha tiver OC vinda do GRV, o espelho é de antes da
-    # consulta com OC/requisitante: rebusca o ano inteiro para preencher.
-    if Entrada.query.filter(Entrada.oc_origem.in_(_ORIGENS_GRV)).first() is None:
+    # Enquanto nenhuma linha tiver OC do XML da NF - origem que só a versão
+    # atual da SQL_SPEND_ENTRADAS (com requisitante) devolve -, o espelho é de
+    # uma versão anterior: rebusca o ano inteiro. Em 18/11/2026 o espelho de
+    # produção tinha OC de "recebimento" gravada sem requisitante e a rebusca
+    # não disparava.
+    if Entrada.query.filter(Entrada.oc_origem == "xml").first() is None:
         desde = INICIO
     sync = Sync(status=Sync.STATUS_ANDAMENTO, iniciado_em=agora_br(), iniciado_por=usuario, desde=desde)
     db.session.add(sync)
