@@ -643,10 +643,14 @@ ORIGENS_OC = {
 }
 
 
-def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, todas=False) -> dict:
+def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, todas=False,
+               familia=None, classificacoes=None, requisitante=None) -> dict:
     """Toda linha de NF do espelho no periodo - inclusive o que o filtro
     tirou do Spend - com CFOP, situacao (e por que) e classificacao.
-    Paginado aqui: o ano inteiro passa de dezenas de milhares de linhas."""
+    Paginado aqui: o ano inteiro passa de dezenas de milhares de linhas.
+
+    familia/classificacoes/requisitante: os mesmos filtros do painel, para o
+    detalhe de uma barra do grafico bater com o valor dela."""
     from .classificacao_contabil_service import descricao_cfop_entrada
 
     competencias, de, ate = _periodo(de, ate)
@@ -655,6 +659,9 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
     classificar = _classificador()
     regras = _regras_inclusao()
     termo = (busca or "").strip().upper()
+    familia = (familia or "").strip() or None
+    classificacoes = {c.strip() for c in (classificacoes or []) if c and c.strip()}
+    requisitante = (requisitante or "").strip() or None
     totais = {k: {"valor": 0.0, "linhas": 0} for k in SITUACOES}
     filtradas = []
     linhas = (
@@ -667,6 +674,12 @@ def base_notas(de=None, ate=None, filtro_situacao=None, busca=None, offset=0, to
             str(v or "") for v in (r.fornecedor, r.nota_fiscal, r.codigo_item, r.descricao, r.cfop, r.familia,
                                    r.ordem_compra, r.solicitacao, r.requisitante or SEM_REQUISITANTE, r.comprador)
         ).upper():
+            continue
+        if familia and (r.familia or SEM_FAMILIA) != familia:
+            continue
+        if requisitante and requisitante not in _requisitantes(r.requisitante):
+            continue
+        if classificacoes and classificar(_features(r))[0] not in classificacoes:
             continue
         sit = situacao(r, regras)
         totais[sit]["valor"] += r.valor or 0

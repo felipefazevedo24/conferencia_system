@@ -92,6 +92,23 @@
     .sp-sit--manual { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
     .sp-nf-acao { white-space: nowrap; }
 
+    /* Detalhe de uma barra do gráfico. */
+    .sp-dialog { width: min(1120px, calc(100% - 24px)); max-height: calc(100vh - 40px); margin: auto; padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .sp-dialog[open] { display: flex; flex-direction: column; }
+    .sp-dialog::backdrop { background: rgba(15,23,42,.55); }
+    .sp-dialog__head, .sp-dialog__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; }
+    .sp-dialog__head { border-bottom: 1px solid var(--eui-border); align-items: flex-start; }
+    .sp-dialog__titulo { margin: 0; font-size: 16px; font-weight: 700; }
+    .sp-dialog__sub { margin: 2px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .sp-dialog__fechar { border: 0; background: transparent; color: var(--eui-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+    .sp-dialog__fechar:hover { color: var(--eui-text); }
+    .sp-dialog__body { flex: 1; min-height: 0; overflow: auto; }
+    .sp-dialog__foot { border-top: 1px solid var(--eui-border); font-size: 12.5px; color: var(--eui-muted); }
+    .sp-dialog__foot b { color: var(--eui-text); }
+    .sp-dialog__acoes { display: flex; gap: 8px; }
+    .sp-dialog__acoes .eui-btn { border-radius: 999px; }
+    .sp-dialog .erp-table th { position: sticky; top: 0; }
+
     .sp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
     .sp-toast.error { border-left-color: var(--eui-danger); }
     .sp-toast.success { border-left-color: var(--eui-success); }
@@ -151,7 +168,7 @@
                 <div class="sp-graficos">
                     <section class="sp-dc">
                         <div class="sp-dc__topo">
-                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Valor das entradas de NF que contam no Spend.</p></div>
+                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Clique numa barra para ver as notas do mês.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
                         <div class="sp-canvas" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
@@ -159,7 +176,7 @@
                     </section>
                     <section class="sp-dc">
                         <div class="sp-dc__topo">
-                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para filtrar a tela.</p></div>
+                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para ver as notas da classificação.</p></div>
                             <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
                         <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
@@ -242,6 +259,24 @@
 </div>
 
 <datalist id="sp-lista-cls"></datalist>
+
+<dialog class="sp-dialog eui-scope" id="sp-pop" aria-labelledby="sp-pop-titulo">
+    <div class="sp-dialog__head">
+        <div><h2 class="sp-dialog__titulo" id="sp-pop-titulo"></h2><p class="sp-dialog__sub" id="sp-pop-sub"></p></div>
+        <button type="button" class="sp-dialog__fechar" id="sp-pop-fechar" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="sp-dialog__body"><table class="erp-table">
+        <thead><tr><th>Lançamento</th><th>NF</th><th>Fornecedor</th><th>Item</th><th>Classificação</th><th>OC</th><th>Requisitante</th><th class="sp-num">Valor</th></tr></thead>
+        <tbody id="sp-pop-tb"></tbody>
+    </table></div>
+    <div class="sp-dialog__foot">
+        <span id="sp-pop-info"></span>
+        <div class="sp-dialog__acoes">
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-pop-mais" hidden>Mostrar mais</button>
+            <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="sp-pop-excel"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+        </div>
+    </div>
+</dialog>
 
 <div class="sp-toast" id="sp-toast"></div>
 {% endblock %}
@@ -438,6 +473,7 @@
             valor: resto.reduce((s, x) => s + x.valor, 0),
             pct: resto.reduce((s, x) => s + x.pct, 0),
             agrupado: true,
+            membros: resto.map((x) => x.classificacao),
         }]);
     }
 
@@ -482,7 +518,6 @@
         estado.charts = {};
 
         const cls = dadosClassificacao();
-        const filtroCls = estado.dados.filtro.classificacao;
         estado.charts.cls = new Chart($("sp-chart-cls"), {
             type: "bar",
             data: {
@@ -497,16 +532,11 @@
             options: Object.assign(opcoesBase(t, { label: (ctx) => `${fmtR(cls[ctx.dataIndex].valor)} · ${fmtP(cls[ctx.dataIndex].pct)}` }), {
                 indexAxis: "y",
                 scales: { x: eixoValor(t), y: eixoCategoria(t) },
-                onHover: (ev, els) => {
-                    const item = els.length ? cls[els[0].index] : null;
-                    ev.native.target.style.cursor = item && !item.agrupado && !filtroCls ? "pointer" : "default";
-                },
+                onHover: maozinha,
                 onClick: (ev, els) => {
-                    if (!els.length || filtroCls) return;
+                    if (!els.length) return;
                     const item = cls[els[0].index];
-                    if (item.agrupado) return;
-                    $("sp-classificacao").value = item.classificacao;
-                    carregar({ classificacao: item.classificacao });
+                    abrirDetalhe({ classificacao: item.membros || [item.classificacao] }, item.classificacao);
                 },
             }),
         });
@@ -529,6 +559,12 @@
                 label: (ctx) => fmtR(meses[ctx.dataIndex].valor),
             }), {
                 scales: { y: eixoValor(t), x: eixoCategoria(t) },
+                onHover: maozinha,
+                onClick: (ev, els) => {
+                    if (!els.length) return;
+                    const m = meses[els[0].index].competencia;
+                    abrirDetalhe({ de: m, ate: m }, "Gasto de " + fmtMes(m));
+                },
             }),
         });
 
@@ -536,6 +572,66 @@
         $("sp-mes-tabela").innerHTML = tabelaSimples(["Mês", "Valor"], meses.map((m) => [esc(fmtMes(m.competencia)), fmtR(m.valor)]));
         aplicarModos();
     }
+
+    function maozinha(ev, els) { ev.native.target.style.cursor = els.length ? "pointer" : "default"; }
+
+    // ---------- Detalhe de uma barra ----------
+    // Mesmos filtros do painel + a barra clicada, só o que entra no Spend:
+    // o total do pop-up bate com o valor da barra.
+    const pop = { qs: null, linhas: [], total: 0, seq: 0 };
+
+    function abrirDetalhe(barra, titulo) {
+        const f = estado.dados.filtro;
+        const qs = new URLSearchParams({ situacao: "spend", de: barra.de || f.de, ate: barra.ate || f.ate });
+        if (f.familia) qs.set("familia", f.familia);
+        if (f.requisitante) qs.set("requisitante", f.requisitante);
+        (barra.classificacao || (f.classificacao ? [f.classificacao] : [])).forEach((c) => qs.append("classificacao", c));
+        pop.qs = qs;
+        const filtros = [qs.get("de") === qs.get("ate") ? fmtMes(qs.get("de")) : `${fmtMes(qs.get("de"))} a ${fmtMes(qs.get("ate"))}`];
+        if (f.familia) filtros.push("Família: " + f.familia);
+        if (!barra.classificacao && f.classificacao) filtros.push("Classificação: " + f.classificacao);
+        if (f.requisitante) filtros.push("Requisitante: " + f.requisitante);
+        $("sp-pop-titulo").textContent = titulo;
+        $("sp-pop-sub").textContent = filtros.join(" · ");
+        $("sp-pop-tb").innerHTML = `<tr><td colspan="8" class="sp-linha-vazia"><i class="fas fa-rotate fa-spin"></i> Carregando…</td></tr>`;
+        $("sp-pop-info").textContent = "";
+        $("sp-pop-mais").hidden = true;
+        if (!$("sp-pop").open) $("sp-pop").showModal();
+        carregarDetalhe(false);
+    }
+
+    async function carregarDetalhe(maisUma) {
+        const qs = new URLSearchParams(pop.qs);
+        qs.set("offset", maisUma ? pop.linhas.length : 0);
+        const seq = ++pop.seq;
+        try {
+            const r = await api("/api/compras/spend/notas?" + qs.toString());
+            if (seq !== pop.seq) return;
+            pop.linhas = maisUma ? pop.linhas.concat(r.linhas) : r.linhas;
+            pop.total = r.total;
+            $("sp-pop-tb").innerHTML = pop.linhas.map((l) => `<tr>
+                <td class="sp-cod">${esc(l.data_lancamento)}</td>
+                <td class="sp-cod">${esc(l.nota_fiscal)}</td>
+                <td class="sp-rev-forn">${esc(l.fornecedor)}</td>
+                <td><div class="sp-desc sp-rev-desc" title="${esc(l.descricao)}">${esc(l.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(l.codigo_item) || "(sem código)"}</div></td>
+                <td>${esc(l.classificacao)}</td>
+                <td class="sp-cod">${esc(l.ordem_compra) || '<span class="sp-muted">—</span>'}</td>
+                <td>${esc(l.requisitante)}</td>
+                <td class="sp-num">${fmtR(l.valor)}</td></tr>`).join("")
+                || `<tr><td colspan="8" class="sp-linha-vazia">Nenhuma nota.</td></tr>`;
+            $("sp-pop-info").innerHTML = `<b>${fmtR(r.valor_filtrado)}</b> em ${inteiro.format(r.total)} ${r.total === 1 ? "linha" : "linhas"}`
+                + (pop.linhas.length < r.total ? ` · mostrando ${inteiro.format(pop.linhas.length)}` : "");
+            $("sp-pop-mais").hidden = pop.linhas.length >= r.total;
+        } catch (err) {
+            // o toast fica atrás do pop-up (camada do dialog): o erro vai na tabela
+            if (seq === pop.seq) $("sp-pop-tb").innerHTML = `<tr><td colspan="8" class="sp-linha-vazia sp-erro-base">${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    $("sp-pop-mais").addEventListener("click", () => carregarDetalhe(true));
+    $("sp-pop-excel").addEventListener("click", () => { window.location.href = "/api/compras/spend/notas.xlsx?" + pop.qs.toString(); });
+    $("sp-pop-fechar").addEventListener("click", () => $("sp-pop").close());
+    $("sp-pop").addEventListener("click", (ev) => { if (ev.target === $("sp-pop")) $("sp-pop").close(); });
 
     function tabelaSimples(cabecalho, linhas) {
         const th = cabecalho.map((c, i) => `<th${i ? ' class="sp-num"' : ""}>${c}</th>`).join("");
