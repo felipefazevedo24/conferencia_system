@@ -16,7 +16,6 @@ solicitação é de hoje."""
 
 from __future__ import annotations
 
-import math
 from datetime import timedelta
 
 from flask import current_app
@@ -118,11 +117,11 @@ def _necessidade(chave: str, plano_item: dict | None, saldo: dict | None, ocs: d
     if posicao >= _f(minimo):
         return {**base, "certo": 0.0,
                 "motivo": f"Posição de {_n(posicao)}{un}{oc_txt} já cobre o mínimo de {_n(minimo)}."}
-    certo = _f(maximo) - posicao
-    if str(unidade or "").strip().upper() in planejamento_svc.UNIDADES_INTEIRAS:
-        certo = float(math.ceil(certo - 1e-9))
-    return {**base, "certo": max(0.0, certo),
-            "motivo": f"Posição de {_n(posicao)}{un}{oc_txt} abaixo do mínimo de {_n(minimo)}: comprar {_n(certo)} leva ao máximo de {_n(maximo)}."}
+    certo = planejamento_svc.quantidade_compra(plano, posicao, unidade)
+    multiplo = plano.get("multiplo_compra")
+    barras = f" ({_n(certo / multiplo)} × {_n(multiplo)})" if multiplo else ""
+    return {**base, "certo": certo,
+            "motivo": f"Posição de {_n(posicao)}{un}{oc_txt} abaixo do mínimo de {_n(minimo)}: comprar {_n(certo)}{barras} sem passar do máximo de {_n(maximo)}."}
 
 
 def analisar() -> dict:

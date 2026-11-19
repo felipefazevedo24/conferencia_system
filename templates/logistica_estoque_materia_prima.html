@@ -362,6 +362,7 @@
                     <span class="mp-erro" id="mp-export-erro" role="alert"></span>
                     <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-limpar-filtros" type="button" style="display:none;"><i class="fas fa-filter-circle-xmark"></i> Limpar colunas</button>
                     <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-sel-limpar" type="button" style="display:none;"><i class="fas fa-xmark"></i> Limpar seleção</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-massa-open" type="button" style="display:none;"><i class="fas fa-pen-to-square"></i> Ajustar seleção</button>
                     <button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-exportar" type="button"><i class="fas fa-file-excel"></i> Exportar</button>
                     <button class="eui-btn eui-btn--primary eui-btn--sm" id="mp-refresh" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
                 </div>
@@ -475,6 +476,26 @@
         <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-param-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-param-save"><i class="fas fa-check"></i> Salvar</button></div>
     </form>
 </dialog>
+
+<dialog id="mp-massa-dialog" class="mp-dialog" aria-labelledby="mp-massa-titulo">
+    <form method="dialog" id="mp-massa-form">
+        <div class="mp-dialog__head"><span id="mp-massa-titulo"></span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-massa-close" aria-label="Fechar">&times;</button></div>
+        <div class="mp-dialog__body">
+            <div class="mp-dialog__grid">
+                <div><label for="mp-m-cob-modo">Cobertura máxima do lote</label>
+                    <select class="eui-input" id="mp-m-cob-modo" style="width:100%;"><option value="">Não alterar</option><option value="definir">Definir (meses)</option><option value="geral">Voltar ao geral</option></select></div>
+                <div><label for="mp-m-cob">Meses</label><input class="eui-input" id="mp-m-cob" type="number" step="0.5" min="0.5" max="24" disabled></div>
+                <div><label for="mp-m-nao-comprar">Não comprar mais</label>
+                    <select class="eui-input" id="mp-m-nao-comprar" style="width:100%;"><option value="">Não alterar</option><option value="1">Marcar</option><option value="0">Desmarcar</option></select></div>
+                <div><label for="mp-m-fora">Fora da análise</label>
+                    <select class="eui-input" id="mp-m-fora" style="width:100%;"><option value="">Não alterar</option><option value="1">Marcar</option><option value="0">Desmarcar</option></select></div>
+            </div>
+            <p class="mp-muted" style="margin:0;">Múltiplo e observação de cada item não mudam.</p>
+            <p class="mp-erro" id="mp-massa-erro" role="alert" style="margin:0;"></p>
+        </div>
+        <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-massa-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-massa-save"><i class="fas fa-check"></i> Aplicar</button></div>
+    </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -500,7 +521,7 @@
     let filtroCol = null;     // coluna com o menu de filtro aberto
     let filtroValores = [];
     let filtroMarcados = new Set();
-    // Itens marcados pra exportar (código -> item como a tela mostrou). Fica
+    // Itens marcados pra exportar ou ajustar em massa (código -> item como a tela mostrou). Fica
     // entre buscas e trocas de visão até limpar.
     const selecao = new Map();
     let visaoLabel = '';
@@ -757,6 +778,8 @@
             $('mp-exportar').innerHTML = `<i class="fas fa-file-excel"></i> ${rotulo}`;
         }
         $('mp-sel-limpar').style.display = n ? '' : 'none';
+        $('mp-massa-open').style.display = n && podeEditar ? '' : 'none';
+        $('mp-massa-open').innerHTML = `<i class="fas fa-pen-to-square"></i> Ajustar seleção (${n})`;
     }
 
     function fecharFiltro() {
@@ -981,6 +1004,8 @@
             <form id="mp-ajuste-form" data-codigo="${esc(item.codigo)}" style="display:grid;gap:10px;">
                 <div><label class="mp-secao__titulo" for="mp-aj-cob" style="display:block;margin-bottom:4px;">Cobertura máxima do lote (meses)</label>
                     <input class="eui-input" id="mp-aj-cob" type="number" step="0.5" min="0.5" max="24" value="${a.cobertura_lote_meses ?? ''}" placeholder="Geral: ${fmt(geral, 1)}"></div>
+                <div><label class="mp-secao__titulo" for="mp-aj-mult" style="display:block;margin-bottom:4px;">Múltiplo de compra (${esc(item.unidade || '')})</label>
+                    <input class="eui-input" id="mp-aj-mult" type="number" step="any" min="0" value="${a.multiplo_compra ?? ''}" placeholder="${item.planejamento.multiplo_origem === 'descricao' ? `Da descrição: ${fmt(item.planejamento.multiplo_compra)}` : 'Ex.: 6000 para barra de 6 m'}"></div>
                 <label class="mp-check-linha"><input type="checkbox" id="mp-aj-nao-comprar"${a.nao_comprar ? ' checked' : ''}> Não comprar mais (descontinuado: nunca pede compra; o saldo que restar é excedente)</label>
                 <label class="mp-check-linha"><input type="checkbox" id="mp-aj-fora"${a.fora_analise ? ' checked' : ''}> Fora da análise (ativo da empresa: sai do slow mover e do excedente)</label>
                 <div><label class="mp-secao__titulo" for="mp-aj-obs" style="display:block;margin-bottom:4px;">Observação</label>
@@ -1028,7 +1053,7 @@
                 ['Lote no GRV', grv(item.lote_economico)],
             ]) : kv([
                 ['Mínimo sugerido', p.tipo_demanda === 'sem_giro' ? 'não estocar' : `${q(p.estoque_minimo_sugerido)}<small>GRV: ${grv(item.estoque_minimo)}</small>`],
-                ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>${LOTE_ORIGEM[p.lote_origem] || ''} · GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
+                ['Lote sugerido', p.lote_economico_sugerido != null ? `${q(p.lote_economico_sugerido)}<small>${p.multiplo_compra ? `múltiplo de ${fmt(p.multiplo_compra)}` : (LOTE_ORIGEM[p.lote_origem] || '')} · GRV: ${grv(item.lote_economico)}</small>` : `—<small>GRV: ${grv(item.lote_economico)}</small>`],
                 ['Máximo', `${q(p.estoque_maximo)}<small>mínimo + lote</small>`],
                 ['Excedente', p.fora_analise ? 'fora da análise' : (Number(p.excedente) > 0 ? `${q(p.excedente)}${p.excedente_valor != null ? `<small>${brl(p.excedente_valor)}</small>` : ''}` : '—')],
                 ['Saldo dura', p.fora_analise ? 'fora da análise' : (p.faixa_cobertura_label ? `${esc(p.faixa_cobertura_label)}${p.cobertura_meses != null ? `<small>${fmt(p.cobertura_meses, 1)} meses de consumo${p.slow_mover ? ' · slow mover' : ''}</small>` : (p.slow_mover ? '<small>slow mover</small>' : '')}` : '—')],
@@ -1091,12 +1116,15 @@
             ${esporadico ? `<p class="mp-nota" style="margin-top:6px">Demanda esporádica: o mínimo é o maior entre o ponto de pedido e 1 retirada típica (${fmt(p.retirada_tipica)} ${un}; 80% das ${p.retiradas_janela} retiradas foram até esse tamanho).</p>` : ''}
             <div class="mp-conta" style="margin-top:6px">Mínimo = <b>${fmt(p.estoque_minimo_sugerido)} ${un}</b></div>`;
         const teto = `${fmt(p.cobertura_lote_meses, 1)} ${Number(p.cobertura_lote_meses) === 1 ? 'mês' : 'meses'} de consumo${p.cobertura_lote_ajustada ? ' (ajuste do item)' : ''} = ${fmt(p.consumo_mensal * p.cobertura_lote_meses)} ${un}`;
+        const multiplo = p.multiplo_compra
+            ? `arredondado para múltiplo de ${fmt(p.multiplo_compra)} ${un} (${p.multiplo_origem === 'ajuste' ? 'ajuste do item' : 'lido da descrição'}): só compra inteiro<br>`
+            : '';
         const lote = p.lote_economico == null
-            ? `<p class="mp-nota">Sem custo no GRV: sem lote econômico. Lote = cobertura máxima, ${teto}.</p>`
+            ? `<p class="mp-nota">Sem custo no GRV: sem lote econômico. Lote = cobertura máxima, ${teto}${p.multiplo_compra ? `, ${multiplo.replace('<br>', '')}` : ''}.</p>`
             : `<div class="mp-conta">√(2 × ${fmt(p.consumo_mensal * 12)} ${un}/ano × R$ ${fmt(pr.custo_pedido)} ÷ (R$ ${fmt(p.custo_unitario, 4)} × ${fmt(pr.taxa_manutencao_pct, 1)}%))<br>
                 = lote econômico ${fmt(p.lote_economico)} ${un}${esporadico ? ' (nunca menor que 1 retirada comum)' : ''}<br>
                 limite: ${teto}<br>
-                Lote sugerido = <b>${fmt(p.lote_economico_sugerido)} ${un}</b></div>`;
+                ${multiplo}Lote sugerido = <b>${fmt(p.lote_economico_sugerido)} ${un}</b></div>`;
         const maximo = `<div class="mp-conta">Mínimo ${fmt(p.estoque_minimo_sugerido)} + lote ${fmt(p.lote_economico_sugerido)} = máximo <b>${fmt(p.estoque_maximo)} ${un}</b></div>
             <p class="mp-nota" style="margin-top:6px">Quem compra o lote quando o saldo chega no mínimo nunca passa disso.</p>`;
         const excedente = p.fora_analise
@@ -1551,6 +1579,7 @@
                 body: JSON.stringify({
                     codigo: form.dataset.codigo,
                     cobertura_lote_meses: $('mp-aj-cob').value,
+                    multiplo_compra: $('mp-aj-mult').value,
                     fora_analise: $('mp-aj-fora').checked,
                     nao_comprar: $('mp-aj-nao-comprar').checked,
                     observacao: $('mp-aj-obs').value,
@@ -1562,6 +1591,53 @@
         } catch (err) {
             $('mp-aj-erro').textContent = err.message;
             $('mp-aj-salvar').disabled = false;
+        }
+    });
+    // Ajuste em massa dos marcados: só Admin vê o botão (a rota confere de novo).
+    $('mp-massa-open').addEventListener('click', () => {
+        const n = selecao.size;
+        if (!n) return;
+        $('mp-massa-titulo').innerHTML = `<i class="fas fa-pen-to-square"></i> Ajustar ${n} ${n === 1 ? 'item' : 'itens'}`;
+        ['mp-m-cob-modo', 'mp-m-nao-comprar', 'mp-m-fora'].forEach((id) => { $(id).value = ''; });
+        $('mp-m-cob').value = '';
+        $('mp-m-cob').disabled = true;
+        $('mp-m-cob').placeholder = `Geral: ${fmt((parametros || {}).cobertura_lote_meses, 1)}`;
+        $('mp-massa-erro').textContent = '';
+        $('mp-massa-save').disabled = false;
+        $('mp-massa-dialog').showModal();
+    });
+    $('mp-m-cob-modo').addEventListener('change', () => {
+        const definir = $('mp-m-cob-modo').value === 'definir';
+        $('mp-m-cob').disabled = !definir;
+        if (definir) $('mp-m-cob').focus();
+    });
+    $('mp-massa-close').addEventListener('click', () => $('mp-massa-dialog').close());
+    $('mp-massa-cancel').addEventListener('click', () => $('mp-massa-dialog').close());
+    $('mp-massa-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const corpo = { codigos: [...selecao.keys()] };
+        const modo = $('mp-m-cob-modo').value;
+        if (modo === 'definir') {
+            if (!$('mp-m-cob').value) { $('mp-massa-erro').textContent = 'Informe os meses de cobertura.'; return; }
+            corpo.cobertura_lote_meses = $('mp-m-cob').value;
+        }
+        if (modo === 'geral') corpo.cobertura_lote_meses = null;
+        if ($('mp-m-nao-comprar').value) corpo.nao_comprar = $('mp-m-nao-comprar').value === '1';
+        if ($('mp-m-fora').value) corpo.fora_analise = $('mp-m-fora').value === '1';
+        $('mp-massa-erro').textContent = '';
+        $('mp-massa-save').disabled = true;
+        try {
+            const resp = await fetch('/api/logistica/estoque/ajuste-itens', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(corpo),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar.');
+            $('mp-massa-dialog').close();
+            carregar(true);
+        } catch (err) {
+            $('mp-massa-erro').textContent = err.message;
+            $('mp-massa-save').disabled = false;
         }
     });
     function abrirVisao(visao, busca = null) {
@@ -1602,9 +1678,10 @@
     };
     function renderAjustesItens(ajustes) {
         $('mp-param-ajustes').innerHTML = (ajustes || []).length
-            ? `<table class="mp-tab"><thead><tr><th>Item</th><th class="num">Cobertura do lote</th><th>Não comprar</th><th>Fora da análise</th><th>Observação</th></tr></thead><tbody>${ajustes.map((a) => `<tr>
+            ? `<table class="mp-tab"><thead><tr><th>Item</th><th class="num">Cobertura do lote</th><th class="num">Múltiplo</th><th>Não comprar</th><th>Fora da análise</th><th>Observação</th></tr></thead><tbody>${ajustes.map((a) => `<tr>
                 <td><b>${esc(a.codigo)}</b></td>
                 <td class="num">${a.cobertura_lote_meses != null ? `${fmt(a.cobertura_lote_meses, 1)} meses` : 'geral'}</td>
+                <td class="num">${a.multiplo_compra != null ? fmt(a.multiplo_compra) : '—'}</td>
                 <td>${a.nao_comprar ? 'Sim' : '—'}</td>
                 <td>${a.fora_analise ? 'Sim' : '—'}</td>
                 <td>${esc(a.observacao || '')}</td></tr>`).join('')}</tbody></table>`

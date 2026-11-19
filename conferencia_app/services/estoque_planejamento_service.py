@@ -102,6 +102,16 @@ CANDIDATO_MIN_PCT_OS = 50.0
 # pra cima (não existe 2,3 peças). Lista da planilha de outubro/2026.
 UNIDADES_INTEIRAS = {"UN", "UND", "UNID", "PÇ", "PÇS", "PC", "PCS", "P", "CJ", "PAR", "JG", "CX", "CT"}
 
+# Múltiplo de compra lido da descrição (18/11/2026: a barra só vem em 6 m e o
+# lote sugerido era 2.458 mm). O GRV não tem o campo (lote_minimo zerado nos
+# 42 mil produtos). Só item em MM: em MT a medida da descrição é largura de
+# manta ou cabo de tocha. Validado nos 327 itens em MM do GRV: 173 com
+# comprimento ("6M", "BARRA 1M", "X 1815MM" de peça cortada), nenhum ambíguo;
+# "X 3MM" de espessura e "Ø50MM" de diâmetro ficam de fora.
+_X_COLADO = re.compile(r"(?<=[\d\"'´’”])X(?=\s*\d)")
+_COMPRIMENTO_M = re.compile(r"(?<![\w.,/])(\d{1,2}(?:[.,]\d{1,2})?)\s*M(?![\wÀ-ÿ²³])")
+_COMPRIMENTO_MM = re.compile(r"(?<![\w.,/])(X\s*)?(\d{3,5})\s*MM(?![\wÀ-ÿ²³])")
+
 # Faixas de quanto tempo o saldo dura no consumo médio (as da coluna
 # "Motivo" da planilha de outubro/2026).
 FAIXAS_COBERTURA = {
@@ -168,6 +178,32 @@ def chave_codigo(codigo: Any) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(codigo or "").strip().upper())
 
 
+def multiplo_da_descricao(descricao: Any, unidade: Any) -> float | None:
+    """Comprimento da barra/peça em mm, quando a descrição traz um só."""
+    if str(unidade or "").strip().upper() != "MM":
+        return None
+    d = _X_COLADO.sub(" X", str(descricao or "").upper())
+    achados = {float(m.replace(",", ".")) * 1000 for m in _COMPRIMENTO_M.findall(d)}
+    achados |= {float(n) for x, n in _COMPRIMENTO_MM.findall(d) if float(n) >= (100 if x else 500)}
+    achados = {a for a in achados if 100 <= a <= 12000}
+    return achados.pop() if len(achados) == 1 else None
+
+
+def quantidade_compra(plano: dict[str, Any], posicao: float, unidade: Any = "") -> float:
+    """O que leva a posição (disponível + OC aberta) ao máximo, sem passar
+    dele: com múltiplo, só barras inteiras. Como o lote é de pelo menos um
+    múltiplo, o que cabe sempre devolve a posição para cima do mínimo."""
+    falta = float(plano.get("estoque_maximo") or 0) - float(posicao or 0)
+    if falta <= 1e-9:
+        return 0.0
+    multiplo = float(plano.get("multiplo_compra") or 0)
+    if multiplo > 0:
+        return math.floor(falta / multiplo + 1e-9) * multiplo
+    if str(unidade or "").strip().upper() in UNIDADES_INTEIRAS:
+        return float(math.ceil(falta - 1e-9))
+    return falta
+
+
 def obter_ajustes() -> dict[str, dict[str, Any]]:
     """codigo (sem pontuação) -> ajuste do item."""
     return {
@@ -176,6 +212,7 @@ def obter_ajustes() -> dict[str, dict[str, Any]]:
             "cobertura_lote_meses": linha.cobertura_lote_meses,
             "fora_analise": bool(linha.fora_analise),
             "nao_comprar": bool(linha.nao_comprar),
+            "multiplo_compra": linha.multiplo_compra,
             "observacao": linha.observacao or "",
             "atualizado_por": linha.atualizado_por,
             "atualizado_em": linha.atualizado_em.isoformat() if linha.atualizado_em else None,
@@ -184,28 +221,43 @@ def obter_ajustes() -> dict[str, dict[str, Any]]:
     }
 
 
+def _ler_cobertura(valor: Any) -> float | None:
+    """Vazio = None (o item segue o geral)."""
+    bruto = str(valor if valor is not None else "").strip()
+    if not bruto:
+        return None
+    minimo, maximo, rotulo = _LIMITES["cobertura_lote_meses"]
+    try:
+        cobertura = float(bruto.replace(",", "."))
+    except ValueError:
+        raise ValueError(f"{rotulo}: informe um número.")
+    if not math.isfinite(cobertura) or cobertura < minimo or cobertura > maximo:
+        raise ValueError(f"{rotulo}: use um valor entre {minimo:g} e {maximo:g}.")
+    return cobertura
+
+
 def salvar_ajuste(codigo: str, dados: dict[str, Any], usuario: str) -> dict[str, Any] | None:
     """Grava o ajuste do item. Tudo vazio apaga: o item volta ao geral."""
     chave = chave_codigo(codigo)
     if not chave:
         raise ValueError("Informe o código do item.")
     dados = dados or {}
-    bruto = str(dados.get("cobertura_lote_meses") if dados.get("cobertura_lote_meses") is not None else "").strip()
-    cobertura = None
+    cobertura = _ler_cobertura(dados.get("cobertura_lote_meses"))
+    bruto = str(dados.get("multiplo_compra") if dados.get("multiplo_compra") is not None else "").strip()
+    multiplo = None
     if bruto:
-        minimo, maximo, rotulo = _LIMITES["cobertura_lote_meses"]
         try:
-            cobertura = float(bruto.replace(",", "."))
+            multiplo = float(bruto.replace(",", "."))
         except ValueError:
-            raise ValueError(f"{rotulo}: informe um número.")
-        if not math.isfinite(cobertura) or cobertura < minimo or cobertura > maximo:
-            raise ValueError(f"{rotulo}: use um valor entre {minimo:g} e {maximo:g}.")
+            raise ValueError("Múltiplo de compra: informe um número.")
+        if not math.isfinite(multiplo) or multiplo <= 0:
+            raise ValueError("Múltiplo de compra: use um valor maior que zero.")
     fora = bool(dados.get("fora_analise"))
     nao_comprar = bool(dados.get("nao_comprar"))
     observacao = str(dados.get("observacao") or "").strip()[:300]
 
     linha = EstoqueParametroItem.query.filter_by(codigo=chave).first()
-    if cobertura is None and not fora and not nao_comprar and not observacao:
+    if cobertura is None and multiplo is None and not fora and not nao_comprar and not observacao:
         if linha:
             db.session.delete(linha)
             db.session.commit()
@@ -217,11 +269,69 @@ def salvar_ajuste(codigo: str, dados: dict[str, Any], usuario: str) -> dict[str,
     linha.cobertura_lote_meses = cobertura
     linha.fora_analise = fora
     linha.nao_comprar = nao_comprar
+    linha.multiplo_compra = multiplo
     linha.observacao = observacao or None
     linha.atualizado_por = usuario
     linha.atualizado_em = agora_br()
     db.session.commit()
     return obter_ajustes().get(chave)
+
+
+def salvar_ajuste_em_massa(codigos: list[Any], dados: dict[str, Any], usuario: str) -> int:
+    """Ação em massa: só os campos que vieram em `dados` mudam (cobertura
+    None = volta ao geral); múltiplo, observação e o que não veio ficam como
+    estavam em cada item. Item que fica sem nada perde a linha, como no
+    ajuste individual. Devolve quantos itens foram gravados."""
+    dados = dados or {}
+    if not isinstance(codigos, list):
+        raise ValueError("Selecione os itens.")
+    chaves: dict[str, str] = {}
+    for codigo in codigos:
+        chave = chave_codigo(codigo)
+        if chave:
+            chaves.setdefault(chave, str(codigo).strip()[:60])
+    if not chaves:
+        raise ValueError("Selecione os itens.")
+    campos = [c for c in ("cobertura_lote_meses", "nao_comprar", "fora_analise") if c in dados]
+    if not campos:
+        raise ValueError("Escolha o que alterar.")
+    cobertura = _ler_cobertura(dados.get("cobertura_lote_meses"))
+
+    existentes = {
+        linha.codigo: linha
+        for linha in EstoqueParametroItem.query.filter(EstoqueParametroItem.codigo.in_(list(chaves))).all()
+    }
+    agora = agora_br()
+    for chave, exibicao in chaves.items():
+        linha = existentes.get(chave)
+        novo = {
+            "cobertura_lote_meses": linha.cobertura_lote_meses if linha else None,
+            "nao_comprar": bool(linha.nao_comprar) if linha else False,
+            "fora_analise": bool(linha.fora_analise) if linha else False,
+        }
+        if "cobertura_lote_meses" in campos:
+            novo["cobertura_lote_meses"] = cobertura
+        for flag in ("nao_comprar", "fora_analise"):
+            if flag in campos:
+                novo[flag] = bool(dados.get(flag))
+        vazio = (
+            novo["cobertura_lote_meses"] is None and not novo["nao_comprar"] and not novo["fora_analise"]
+            and (linha is None or (linha.multiplo_compra is None and not linha.observacao))
+        )
+        if vazio:
+            if linha:
+                db.session.delete(linha)
+            continue
+        if not linha:
+            linha = EstoqueParametroItem(codigo=chave, codigo_exibicao=exibicao)
+            db.session.add(linha)
+        linha.cobertura_lote_meses = novo["cobertura_lote_meses"]
+        linha.nao_comprar = novo["nao_comprar"]
+        linha.fora_analise = novo["fora_analise"]
+        linha.atualizado_por = usuario
+        linha.atualizado_em = agora
+    db.session.commit()
+    return len(chaves)
 
 
 # ------------------------------------------------------------------- cálculo
@@ -374,6 +484,7 @@ def calcular_item(
     lead_time: dict[str, Any] | None = None,
     unidade: str = "",
     ajuste: dict[str, Any] | None = None,
+    descricao: str = "",
 ) -> dict[str, Any]:
     janela = int(parametros.get("janela_meses") or MESES_HISTORICO)
     crescimento_pct = float(parametros.get("crescimento_vendas_pct") or 0)
@@ -475,6 +586,15 @@ def calcular_item(
             lote_origem = "cobertura"
         lote = max(arred(lote), 1.0) if inteiro else lote
 
+    multiplo = (ajuste or {}).get("multiplo_compra") or None
+    multiplo_origem = "ajuste" if multiplo else None
+    if not multiplo:
+        multiplo = multiplo_da_descricao(descricao, unidade or historico.get("unidade"))
+        multiplo_origem = "descricao" if multiplo else None
+    if multiplo and lote:
+        # Só compra barra inteira: o lote vira múltiplo, pelo menos uma barra.
+        lote = max(1, math.ceil(lote / multiplo - 1e-9)) * multiplo
+
     # Sem giro tem mínimo e lote zero: o saldo inteiro é excedente.
     estoque_maximo = estoque_minimo + (lote or 0.0)
     excedente = max(0.0, saldo - estoque_maximo)
@@ -526,6 +646,8 @@ def calcular_item(
         "lote_economico": r(lote_economico),
         "lote_economico_sugerido": r(lote),
         "lote_origem": lote_origem,
+        "multiplo_compra": multiplo,
+        "multiplo_origem": multiplo_origem,
         "cobertura_lote_meses": cobertura_lote,
         "cobertura_lote_ajustada": ajuste.get("cobertura_lote_meses") is not None,
         "estoque_maximo": r(estoque_maximo),
@@ -644,6 +766,7 @@ def calcular_planejamento(
             "lead_time": lead_times[codigo],
             "unidade": item.get("unidade") or "",
             "ajuste": ajustes.get(codigo),
+            "descricao": item.get("descricao") or "",
         }
         plano = calcular_item(historico, parametros=parametros, **argumentos)
         plano["estoque_alvo_medio_valor_base"] = (

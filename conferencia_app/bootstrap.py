@@ -2041,6 +2041,9 @@ def _ensure_estoque_parametro_item_columns() -> None:
         if "nao_comprar" not in cols:
             conn.execute(db.text("ALTER TABLE estoque_parametro_item ADD COLUMN nao_comprar BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
+        if "multiplo_compra" not in cols:
+            conn.execute(db.text("ALTER TABLE estoque_parametro_item ADD COLUMN multiplo_compra FLOAT"))
+            conn.commit()
     finally:
         conn.close()
 

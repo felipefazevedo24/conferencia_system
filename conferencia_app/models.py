@@ -4830,6 +4830,9 @@ class EstoqueParametroItem(db.Model):
     # Descontinuado (17/11/2026): minimo, lote e maximo zero - nunca mais
     # pede compra nem alerta, e o saldo que restar e' todo excedente.
     nao_comprar = db.Column(db.Boolean, nullable=False, default=False)
+    # Múltiplo de compra na unidade do item (18/11/2026): barra só vem em
+    # 6.000 mm. Vazio = o lido da descrição ("6M", "X 1000MM"), se houver.
+    multiplo_compra = db.Column(db.Float)
     observacao = db.Column(db.String(300))
     atualizado_por = db.Column(db.String(100))
     atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)

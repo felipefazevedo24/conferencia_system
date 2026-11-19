@@ -556,6 +556,7 @@ def _montar_estoque(visao: str, dados: dict, parametros: dict, versao: str | Non
                 "saldo_disponivel": float(linha.get("saldo_disponivel") or 0),
                 "custo_medio": linha.get("custo_medio"),
                 "unidade": linha.get("unidade"),
+                "descricao": linha.get("descricao"),
             }
         haystack = _normalizar_busca(" ".join([linha["codigo"], linha.get("descricao") or "", str(linha.get("localizacoes") or "")]))
         if termo and termo not in haystack:
@@ -815,7 +816,8 @@ def _comprar(item: dict) -> float:
     """Politica minimo/maximo: o que leva o saldo (com o que ja' esta' em OC)
     de volta ao maximo."""
     row, plano = item["row"], item["plano"]
-    return max(0.0, float(plano.get("estoque_maximo") or 0) - float(row.get("saldo_disponivel") or 0) - float(row.get("quantidade_pendente_oc") or 0))
+    posicao = float(row.get("saldo_disponivel") or 0) + float(row.get("quantidade_pendente_oc") or 0)
+    return planejamento_svc.quantidade_compra(plano, posicao)
 
 
 def _motivo_painel(grupo: str, item: dict, parametros: dict) -> str:
@@ -831,7 +833,7 @@ def _motivo_painel(grupo: str, item: dict, parametros: dict) -> str:
         return f"O saldo de {saldo} dura {plano.get('cobertura_dias')} dias e a reposição leva {_n(plano.get('lead_time_dias'), 0)} dias.{oc}"
     if grupo == "comprar":
         comprar = _comprar(item)
-        sugestao = f" Comprar {_n(comprar)} {un} leva ao máximo de {maximo}." if comprar > 0 else " A OC aberta já cobre até o máximo."
+        sugestao = f" Comprar {_n(comprar)} {un}, sem passar do máximo de {maximo}." if comprar > 0 else " A OC aberta já cobre até o máximo."
         return f"Saldo de {saldo} abaixo do mínimo de {minimo}.{sugestao}{oc if comprar > 0 else ''}"
     if grupo == "excesso":
         if plano.get("nao_comprar"):
@@ -1047,6 +1049,20 @@ def estoque_ajuste_item_salvar():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"sucesso": True, "ajuste": ajuste})
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/ajuste-itens", methods=["PUT"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_ajuste_itens_salvar():
+    if not is_admin_session():
+        return jsonify({"error": "Apenas administradores podem ajustar o planejamento do item."}), 403
+    payload = request.get_json(silent=True) or {}
+    codigos = payload.pop("codigos", None)
+    try:
+        total = planejamento_svc.salvar_ajuste_em_massa(codigos, payload, session.get("username") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"sucesso": True, "total": total})
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/fornecimentos", methods=["GET"])
