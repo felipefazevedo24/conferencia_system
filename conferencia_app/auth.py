@@ -56,6 +56,8 @@ PERMISSION_CATALOG = {
     "PAGE_DOCUMENTO_ENTRADA_RELATORIO_GERENCIAL": "Compras > Documento de entrada > Baixar relatório gerencial (com comprador, solicitante e quem fez)",
     "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_COMPRAS_SPEND": "Compras > Spend de Compras (gasto por classificação, base de notas e Excel)",
+    # Dado financeiro: fora de qualquer cargo, liberado usuario a usuario (pedido de 19/11/2026).
+    "PAGE_FATURAMENTO": "Faturamento > Faturamento x Custo (bruto e net por mês)",
     "PAGE_COMPRAS_SOLICITACOES": "Compras > Solicitações de compra (se faz sentido comprar, pelo planejamento do Estoque)",
     "PAGE_COMPRAS_HOMOLOGACAO": "Compras > Homologação de fornecedores",
     "PAGE_COMPRAS_HOMOLOGACAO_FINANCEIRO": "Compras > Homologação de fornecedores > Validação financeira (parecer do Financeiro)",

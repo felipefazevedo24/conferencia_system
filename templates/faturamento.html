@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Faturamento - Columbia Sync{% endblock %}
+{% block shell_title %}Faturamento{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ft-wrap { display: grid; gap: 16px; }
+    .ft-wrap [hidden] { display: none !important; }
+    .ft-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .ft-head .eui-btn { border-radius: 999px; }
+
+    /* Mesma identidade do painel do Estoque e do Spend: cartões de 14px e
+       faixa de cor no topo dos indicadores. */
+    .ft-wrap .eui-card { border-radius: 14px; box-shadow: none; }
+    .ft-dk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .ft-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; align-content: start; }
+    .ft-dk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--ft-cor, var(--eui-primary)); }
+    .ft-dk__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
+    .ft-dk__valor { font-size: 24px; font-weight: 700; color: var(--eui-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .ft-dk__dica { font-size: 12px; color: var(--eui-text-soft); }
+    @media (max-width: 1100px) { .ft-dk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    .ft-filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px; }
+    .ft-filtros .eui-field { min-width: 130px; }
+    .ft-base-info { margin-left: auto; font-size: 12px; color: var(--eui-muted); text-align: right; line-height: 1.5; }
+    .ft-erro-base { color: var(--eui-danger); }
+    .ft-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
+
+    .ft-graficos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    @media (max-width: 1100px) { .ft-graficos { grid-template-columns: minmax(0, 1fr); } }
+    .ft-dc { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .ft-dc h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
+    .ft-dc__sub { margin: 2px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .ft-canvas { position: relative; width: 100%; height: 400px; display: flex; flex-direction: column; gap: 6px; }
+    .ft-canvas__area { position: relative; flex: 1; min-height: 0; }
+    .ft-leg { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 11.5px; color: var(--eui-muted); }
+    .ft-leg__series { display: inline-flex; gap: 14px; flex-wrap: wrap; }
+    .ft-leg span { display: inline-flex; align-items: center; gap: 6px; color: var(--eui-text-soft); }
+    .ft-leg small { font-size: 11px; color: var(--eui-muted); }
+    .ft-leg i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .ft-leg .ft-cor-fat { background: var(--eui-primary); }
+    .ft-leg .ft-cor-custo { background: var(--eui-warning, #d97706); }
+
+    .ft-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-danger); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eui-scope ft-wrap">
+    <header class="eui-page-header ft-head">
+        <div>
+            <div class="eui-page-header__eyebrow">Faturamento</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-chart-line"></i> Faturamento x Custo</h1>
+            <p class="eui-page-header__sub">Faturamento e custo de entrada, bruto e net, mês a mês. Valores net com os impostos já deduzidos na origem (ERP).</p>
+        </div>
+        <button type="button" class="eui-btn eui-btn--ghost" id="ft-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+    </header>
+
+    <div class="eui-card" id="ft-vazio" hidden>
+        <div class="eui-empty">
+            <i class="fas fa-rotate fa-spin" id="ft-vazio-icone"></i>
+            <strong id="ft-vazio-titulo">Buscando faturamento e custo no ERP…</strong>
+            <span id="ft-vazio-texto">Na primeira vez leva uns 4 minutos. Pode deixar a página aberta.</span>
+            <button type="button" class="eui-btn eui-btn--primary" id="ft-vazio-tentar" style="margin-top:8px;" hidden><i class="fas fa-rotate"></i> Tentar de novo</button>
+        </div>
+    </div>
+
+    <div id="ft-conteudo" class="ft-wrap" hidden>
+        <div class="eui-card ft-filtros">
+            <label class="eui-field"><span class="eui-field__label">De</span><select class="eui-select" id="ft-de"></select></label>
+            <label class="eui-field"><span class="eui-field__label">Até</span><select class="eui-select" id="ft-ate"></select></label>
+            <div class="ft-base-info" id="ft-base-info"></div>
+        </div>
+
+        <div id="ft-dados" class="ft-wrap">
+            <div class="ft-dk-grid">
+                <div class="ft-dk" style="--ft-cor: var(--eui-primary);"><span class="ft-dk__label">Faturamento bruto</span><span class="ft-dk__valor" id="ft-k-fat-bruto">—</span><span class="ft-dk__dica" id="ft-k-periodo"></span></div>
+                <div class="ft-dk" style="--ft-cor: var(--eui-info, var(--eui-primary));"><span class="ft-dk__label">Faturamento net</span><span class="ft-dk__valor" id="ft-k-fat-net">—</span><span class="ft-dk__dica" id="ft-k-fat-imp"></span></div>
+                <div class="ft-dk" style="--ft-cor: var(--eui-warning);"><span class="ft-dk__label">Custo bruto</span><span class="ft-dk__valor" id="ft-k-custo-bruto">—</span><span class="ft-dk__dica">Valor dos produtos, sem IPI</span></div>
+                <div class="ft-dk" style="--ft-cor: var(--eui-violet, var(--eui-warning));"><span class="ft-dk__label">Custo net (custo total)</span><span class="ft-dk__valor" id="ft-k-custo-net">—</span><span class="ft-dk__dica">Produto + IPI − ICMS − PIS − COFINS</span></div>
+            </div>
+
+            <div class="ft-graficos">
+                <section class="ft-dc">
+                    <div><h3>Evolução do faturamento</h3><p class="ft-dc__sub">Faturamento bruto x custo bruto, mês a mês.</p></div>
+                    <div class="ft-canvas">
+                        <div class="ft-leg"><span class="ft-leg__series"><span><i class="ft-cor-fat"></i>Faturamento bruto</span><span><i class="ft-cor-custo"></i>Custo bruto</span></span><small>Valores em R$</small></div>
+                        <div class="ft-canvas__area"><canvas id="ft-chart-bruto" aria-label="Faturamento bruto x custo bruto por mês"></canvas></div>
+                    </div>
+                </section>
+                <section class="ft-dc">
+                    <div><h3>Faturamento x Compras (net)</h3><p class="ft-dc__sub">Faturamento net x custo net, mês a mês.</p></div>
+                    <div class="ft-canvas">
+                        <div class="ft-leg"><span class="ft-leg__series"><span><i class="ft-cor-fat"></i>Faturamento net</span><span><i class="ft-cor-custo"></i>Compras net</span></span><small>Valores em R$</small></div>
+                        <div class="ft-canvas__area"><canvas id="ft-chart-net" aria-label="Faturamento net x compras net por mês"></canvas></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="ft-toast" id="ft-toast" role="status" aria-live="polite"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+    const pctFmt = new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const fmtR = (v) => brl.format(v || 0);
+    const fmtC = (v) => "R$ " + compacto.format(v || 0);
+    const fmtMes = (c) => { if (!c) return ""; const [a, m] = c.split("-"); return MESES[Number(m) - 1] + "/" + a.slice(2); };
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+    const estado = { dados: null, base: null, atualizando: false, seq: 0, charts: {} };
+
+    function toast(msg) {
+        const el = $("ft-toast");
+        el.textContent = msg;
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 3500);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, options);
+        let corpo = {};
+        try { corpo = await resp.json(); } catch (_) {}
+        if (!resp.ok) throw new Error(corpo.error || "Falha ao consultar o servidor.");
+        return corpo;
+    }
+
+    // ---------- Painel ----------
+    async function carregar() {
+        const qs = new URLSearchParams();
+        if ($("ft-de").value) qs.set("de", $("ft-de").value);
+        if ($("ft-ate").value) qs.set("ate", $("ft-ate").value);
+        const seq = ++estado.seq;
+        $("ft-dados").classList.add("ft-carregando");
+        try {
+            const dados = await api("/api/faturamento/painel?" + qs.toString());
+            if (seq !== estado.seq) return;
+            estado.dados = dados;
+            estado.base = dados.base;
+            render();
+        } catch (err) {
+            if (seq === estado.seq) toast(err.message);
+        } finally {
+            if (seq === estado.seq) $("ft-dados").classList.remove("ft-carregando");
+        }
+    }
+
+    function preencherSelect(id, opcoes, valor) {
+        $(id).innerHTML = opcoes.map((c) => `<option value="${esc(c)}">${esc(fmtMes(c))}</option>`).join("");
+        $(id).value = valor || "";
+    }
+
+    function render() {
+        const d = estado.dados;
+        $("ft-vazio").hidden = !d.vazio;
+        $("ft-conteudo").hidden = !!d.vazio;
+        if (d.vazio) { renderVazio(); return; }
+        preencherSelect("ft-de", d.competencias, d.filtro.de);
+        preencherSelect("ft-ate", d.competencias, d.filtro.ate);
+        renderInfo();
+        const k = d.kpis;
+        const f = d.filtro;
+        $("ft-k-fat-bruto").textContent = fmtC(k.fat_bruto);
+        $("ft-k-periodo").textContent = f.de === f.ate ? fmtMes(f.de) : `${fmtMes(f.de)} a ${fmtMes(f.ate)}`;
+        $("ft-k-fat-net").textContent = fmtC(k.fat_net);
+        $("ft-k-fat-imp").textContent = k.fat_bruto ? `${pctFmt.format((k.fat_bruto - k.fat_net) / k.fat_bruto)} de impostos sobre o bruto` : "";
+        $("ft-k-custo-bruto").textContent = fmtC(k.custo_bruto);
+        $("ft-k-custo-net").textContent = fmtC(k.custo_net);
+        renderGraficos();
+    }
+
+    function renderInfo() {
+        const b = estado.base || {};
+        let html = "";
+        if (estado.atualizando) html = '<i class="fas fa-rotate fa-spin"></i> Atualizando do ERP… (leva uns 4 minutos)';
+        else if (b.erro) html = `<span class="ft-erro-base"><i class="fas fa-triangle-exclamation"></i> A última atualização do ERP falhou${b.atualizado_em ? ". Dados de " + esc(b.atualizado_em) : ""}</span>`;
+        else if (b.atualizado_em) html = `Atualizado do ERP em ${esc(b.atualizado_em)}`;
+        $("ft-base-info").innerHTML = html;
+    }
+
+    function renderVazio() {
+        const erro = !estado.atualizando && !!(estado.base && estado.base.erro);
+        $("ft-vazio-icone").className = erro ? "fas fa-triangle-exclamation" : "fas fa-rotate fa-spin";
+        $("ft-vazio-titulo").textContent = erro ? "Não deu para buscar faturamento e custo no ERP." : "Buscando faturamento e custo no ERP…";
+        $("ft-vazio-texto").textContent = erro ? "Tente de novo em instantes." : "Na primeira vez leva uns 4 minutos. Pode deixar a página aberta.";
+        $("ft-vazio-tentar").hidden = !erro;
+    }
+
+    // ---------- Gráficos ----------
+    function cssVar(nome, padrao) {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+        return v || padrao;
+    }
+
+    function tema() {
+        return {
+            fat: cssVar("--eui-primary", "#0f62c9"),
+            custo: cssVar("--eui-warning", "#d97706"),
+            texto: cssVar("--eui-text-soft", "#475569"),
+            grade: cssVar("--eui-border", "#e3e8ef"),
+            fonte: getComputedStyle(document.body).fontFamily || cssVar("--eui-font", "system-ui, sans-serif"),
+            superficie: cssVar("--eui-surface", "#ffffff"),
+            tinta: cssVar("--eui-text", "#0f172a"),
+        };
+    }
+
+    // "#0f62c9" ou "rgb(15, 98, 201)" -> mesma cor com transparência
+    function comAlfa(cor, alfa) {
+        const c = String(cor).trim();
+        let r, g, b;
+        if (/^#[0-9a-f]{6}$/i.test(c)) [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+        else { const m = c.match(/\d+(\.\d+)?/g); if (!m || m.length < 3) return "transparent"; [r, g, b] = m; }
+        return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+    }
+
+    // Mesmo desenho do "Gasto por mês" do Spend: linha suavizada, ponto
+    // vazado; o degradê só na primeira série, para as duas não se taparem.
+    function serie(rotulo, valores, cor, comDegrade) {
+        return {
+            label: rotulo, data: valores,
+            // monotone: suaviza sem passar do valor real entre um mês e outro
+            // (o faturamento salta de 0,8 mi para 6 mi e a curva comum inventaria vale)
+            borderColor: cor, borderWidth: 2.5, cubicInterpolationMode: "monotone",
+            fill: comDegrade ? "origin" : false,
+            backgroundColor: comDegrade ? (ctx) => {
+                const area = ctx.chart.chartArea;
+                if (!area) return "transparent";
+                const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+                g.addColorStop(0, comAlfa(cor, 0.16));
+                g.addColorStop(1, comAlfa(cor, 0));
+                return g;
+            } : cor,
+            pointRadius: 4, pointHoverRadius: 6, pointBorderWidth: 2,
+            pointBackgroundColor: estado.t.superficie, pointBorderColor: cor, pointHoverBackgroundColor: cor,
+        };
+    }
+
+    function grafico(canvas, meses, series) {
+        const t = estado.t;
+        const viraAno = meses[0].competencia.slice(0, 4) !== meses[meses.length - 1].competencia.slice(0, 4);
+        return new Chart(canvas, {
+            type: "line",
+            data: {
+                // "Jan", "Fev"...; o ano só quando o período passa de um ano para o outro
+                labels: meses.map((m, i) => {
+                    const [a, mm] = m.competencia.split("-");
+                    const nome = MESES[Number(mm) - 1].replace(/^./, (c) => c.toUpperCase());
+                    return viraAno && (i === 0 || mm === "01") ? [nome, a] : nome;
+                }),
+                datasets: series,
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: t.superficie, titleColor: t.tinta, bodyColor: t.tinta,
+                        borderColor: t.grade, borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true,
+                        titleFont: { family: t.fonte, weight: "600" }, bodyFont: { family: t.fonte },
+                        callbacks: {
+                            title: (ctx) => fmtMes(meses[ctx[0].dataIndex].competencia),
+                            label: (ctx) => `${ctx.dataset.label}: ${fmtR(ctx.parsed.y)}`,
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: t.grade, drawTicks: false },
+                        border: { display: false, dash: [4, 4] },
+                        ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, padding: 8, maxTicksLimit: 6, callback: (v) => compacto.format(v) },
+                    },
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, maxRotation: 0, autoSkipPadding: 6 },
+                    },
+                },
+            },
+        });
+    }
+
+    function renderGraficos() {
+        if (!window.Chart) return;
+        estado.t = tema();
+        const t = estado.t;
+        Object.values(estado.charts).forEach((c) => c.destroy());
+        const meses = estado.dados.por_mes;
+        const col = (k) => meses.map((m) => m[k]);
+        estado.charts = {
+            bruto: grafico($("ft-chart-bruto"), meses, [
+                serie("Faturamento bruto", col("fat_bruto"), t.fat, true),
+                serie("Custo bruto", col("custo_bruto"), t.custo, false),
+            ]),
+            net: grafico($("ft-chart-net"), meses, [
+                serie("Faturamento net", col("fat_net"), t.fat, true),
+                serie("Compras net", col("custo_net"), t.custo, false),
+            ]),
+        };
+    }
+
+    ["ft-de", "ft-ate"].forEach((id) => $(id).addEventListener("change", carregar));
+
+    // ---------- Atualização do ERP ----------
+    // A busca leva minutos e roda no servidor por trás: a tela só acompanha
+    // pelo status e recarrega quando termina.
+    function mostrarBase() {
+        $("ft-btn-atualizar").disabled = estado.atualizando;
+        if (estado.dados && !estado.dados.vazio) { renderInfo(); return; }
+        $("ft-vazio").hidden = false;
+        $("ft-conteudo").hidden = true;
+        renderVazio();
+    }
+
+    async function lerStatus() {
+        try { estado.base = await api("/api/faturamento/status"); } catch (_) {}
+    }
+
+    async function acompanhar() {
+        estado.atualizando = true;
+        mostrarBase();
+        // até ~20 min, o mesmo prazo em que o servidor dá a atualização por morta
+        for (let i = 0; i < 240; i++) {
+            await new Promise((ok) => setTimeout(ok, 5000));
+            await lerStatus();
+            if (estado.base && !estado.base.em_andamento) break;
+        }
+        estado.atualizando = false;
+        if (estado.base && estado.base.erro && estado.dados && !estado.dados.vazio) toast("A atualização do ERP falhou. Os dados na tela são da última que deu certo.");
+        if (estado.base && !estado.base.vazio) await carregar();
+        mostrarBase();
+    }
+
+    async function atualizarErp() {
+        if (estado.atualizando) return;
+        try {
+            await api("/api/faturamento/atualizar", { method: "POST" });
+        } catch (err) {
+            toast(err.message);
+            return;
+        }
+        acompanhar();
+    }
+
+    $("ft-btn-atualizar").addEventListener("click", atualizarErp);
+    $("ft-vazio-tentar").addEventListener("click", atualizarErp);
+
+    async function iniciar() {
+        await lerStatus();
+        if (!estado.base) { toast("Falha ao consultar o servidor."); return; }
+        if (!estado.base.vazio) await carregar();
+        mostrarBase();
+        if (estado.base.em_andamento) acompanhar();
+        else if (estado.base.desatualizado) atualizarErp();
+    }
+
+    iniciar();
+})();
+</script>
+{% endblock %}

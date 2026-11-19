@@ -5657,6 +5657,78 @@ class SpendClassificacaoExemplo(db.Model):
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
+# ── Faturamento ───────────────────────────────────────────────────────
+# Espelho dos endpoints /custo_faturamento e /custo_recebimento da API do
+# ERP (faturamento_service). A API devolve o ano inteiro, sem filtro, e o
+# recebimento leva ~3 min: a tela le daqui e a atualizacao regrava do
+# primeiro mes da resposta em diante. Totais por mes sao calculados na leitura.
+class FaturamentoSaida(db.Model):
+    """Item de NF de saida. valor_net = vl_faturado - impostos (vem pronto
+    da API, impostos ja deduzidos na origem)."""
+
+    __tablename__ = "faturamento_saida"
+
+    id = db.Column(db.Integer, primary_key=True)
+    competencia = db.Column(db.String(7), nullable=False, index=True)  # mes da emissao, "2026-10"
+    data_emissao = db.Column(db.Date, nullable=False)
+    nota_fiscal = db.Column(db.String(20))
+    orcamento = db.Column(db.String(40))
+    cliente = db.Column(db.String(200))
+    codigo = db.Column(db.String(80))
+    produto = db.Column(db.String(400))
+    segmento = db.Column(db.String(80))
+    valor_bruto = db.Column(db.Float, nullable=False, default=0)  # vl_faturado
+    impostos = db.Column(db.Float, nullable=False, default=0)
+    valor_net = db.Column(db.Float, nullable=False, default=0)  # faturado_menos_impostos
+
+
+class FaturamentoCustoEntrada(db.Model):
+    """Item de NF de entrada (custo). valor_bruto = vl_produto (sem IPI);
+    custo_net = custo_total da API = vl_produto + IPI - ICMS - PIS - COFINS."""
+
+    __tablename__ = "faturamento_custo_entrada"
+
+    id = db.Column(db.Integer, primary_key=True)
+    competencia = db.Column(db.String(7), nullable=False, index=True)  # mes do lancamento
+    data_lancamento = db.Column(db.Date, nullable=False)
+    nota_fiscal = db.Column(db.String(60))
+    fornecedor = db.Column(db.String(200))
+    familia = db.Column(db.String(160))
+    grupo = db.Column(db.String(160))
+    codigo_interno = db.Column(db.String(80))
+    item = db.Column(db.String(400))
+    unidade = db.Column(db.String(20))
+    quantidade = db.Column(db.Float)
+    valor_bruto = db.Column(db.Float, nullable=False, default=0)  # vl_produto
+    icms = db.Column(db.Float, nullable=False, default=0)
+    pis = db.Column(db.Float, nullable=False, default=0)
+    cofins = db.Column(db.Float, nullable=False, default=0)
+    ipi = db.Column(db.Float, nullable=False, default=0)
+    custo_net = db.Column(db.Float, nullable=False, default=0)  # custo_total
+    os_rastreada = db.Column(db.String(60))
+    segmento = db.Column(db.String(80))
+
+
+class FaturamentoSync(db.Model):
+    """Cada atualizacao do espelho do Faturamento. A ultima OK diz de quando
+    sao os dados da tela."""
+
+    __tablename__ = "faturamento_sync"
+
+    STATUS_ANDAMENTO = "Em andamento"
+    STATUS_OK = "OK"
+    STATUS_ERRO = "Erro"
+
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ANDAMENTO, index=True)
+    iniciado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime)
+    iniciado_por = db.Column(db.String(100))
+    linhas_faturamento = db.Column(db.Integer)
+    linhas_custo = db.Column(db.Integer)
+    erro = db.Column(db.String(500))
+
+
 # ── Compras > Servico terceiro ─────────────────────────────────────────
 # Workflow: a Engenharia cria a cotacao (tipo de servico, itens com
 # desenho tecnico, texto livre) e escolhe fornecedores do cadastro de

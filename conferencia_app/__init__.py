@@ -53,6 +53,7 @@ from .routes.cadastro_workflow_routes import cadastro_workflow_bp
 from .routes.coleta_routes import coleta_bp
 from .routes.compras_routes import compras_bp
 from .routes.compras_spend_routes import compras_spend_bp
+from .routes.faturamento_routes import faturamento_bp
 from .routes.compras_solicitacoes_routes import compras_solicitacoes_bp
 from .routes.expedicao_avulso_routes import expedicao_avulso_bp
 from .routes.assistencia_tecnica_routes import assistencia_tecnica_bp
@@ -124,6 +125,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(coleta_bp)
     app.register_blueprint(compras_bp)
     app.register_blueprint(compras_spend_bp)
+    app.register_blueprint(faturamento_bp)
     app.register_blueprint(compras_solicitacoes_bp)
     app.register_blueprint(expedicao_fat_bp)
     app.register_blueprint(expedicao_st_bp)

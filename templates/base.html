@@ -416,6 +416,18 @@
                 </div>
                 {% endif %}
 
+                {% if can_access('PAGE_FATURAMENTO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-faturamento" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-file-invoice-dollar"></i><span>Faturamento</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-faturamento">
+                        <a href="/faturamento" class="list-group-item list-group-item-action"><i class="fas fa-chart-line"></i> Faturamento x Custo</a>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if can_access('PAGE_ASSISTENCIA_TECNICA') or can_access('PAGE_ASSISTENCIA_PRODUCAO_PECAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-assistencia-tecnica" aria-expanded="true">
