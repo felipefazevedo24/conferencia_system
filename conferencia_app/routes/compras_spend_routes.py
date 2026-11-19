@@ -5,7 +5,8 @@ from ..services import compras_spend_service as spend
 
 
 compras_spend_bp = Blueprint("compras_spend", __name__)
-PERM = "PAGE_COMPRAS_CPS"
+# Permissão própria desde 18/11/2026 (antes vinha junto com Compras CPS).
+PERM = "PAGE_COMPRAS_SPEND"
 
 
 def _usuario() -> str:
@@ -33,6 +34,7 @@ def spend_painel():
         classificacao=args.get("classificacao"),
         atual=args.get("atual"),
         anterior=args.get("anterior"),
+        requisitante=args.get("requisitante"),
     ))
 
 
@@ -58,14 +60,18 @@ def spend_revisao():
     return jsonify(spend.revisao(de=request.args.get("de"), ate=request.args.get("ate")))
 
 
+def _filtros_notas() -> dict:
+    a = request.args
+    return {
+        "de": a.get("de"), "ate": a.get("ate"), "filtro_situacao": a.get("situacao"), "busca": a.get("busca"),
+        "familia": a.get("familia"), "classificacoes": a.getlist("classificacao"), "requisitante": a.get("requisitante"),
+    }
+
+
 @compras_spend_bp.route("/api/compras/spend/notas")
 @permission_required(PERM)
 def spend_notas():
-    a = request.args
-    return jsonify(spend.base_notas(
-        de=a.get("de"), ate=a.get("ate"), filtro_situacao=a.get("situacao"),
-        busca=a.get("busca"), offset=max(0, a.get("offset", 0, type=int)),
-    ))
+    return jsonify(spend.base_notas(offset=max(0, request.args.get("offset", 0, type=int)), **_filtros_notas()))
 
 
 _COLUNAS_XLSX = (
@@ -91,9 +97,7 @@ def spend_notas_xlsx():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
-    a = request.args
-    dados = spend.base_notas(de=a.get("de"), ate=a.get("ate"), filtro_situacao=a.get("situacao"),
-                             busca=a.get("busca"), todas=True)
+    dados = spend.base_notas(todas=True, **_filtros_notas())
     wb = Workbook()
     ws = wb.active
     ws.title = "Base de notas"

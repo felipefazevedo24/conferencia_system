@@ -10,6 +10,22 @@
     .sp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
     .sp-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .sp-head-actions a { text-decoration: none; }
+    .sp-head-actions .eui-btn { border-radius: 999px; }
+
+    /* Identidade visual do painel do Estoque: cartões de 14px, faixa de cor
+       no topo dos indicadores, abas e alternâncias em pílula. */
+    .sp-wrap .eui-card { border-radius: 14px; box-shadow: none; }
+    .sp-dk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .sp-dk { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; align-content: start; }
+    .sp-dk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--sp-cor, var(--eui-primary)); }
+    .sp-dk__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
+    .sp-dk__valor { font-size: 24px; font-weight: 700; color: var(--eui-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .sp-dk__dica { font-size: 12px; color: var(--eui-text-soft); }
+    @media (max-width: 1100px) { .sp-dk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .sp-dc { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .sp-dc__topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .sp-dc h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
+    .sp-dc__sub { margin: 2px 0 0; font-size: 12px; color: var(--eui-muted); }
 
     .sp-filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px; }
     .sp-filtros .eui-field { min-width: 130px; }
@@ -19,18 +35,27 @@
     .sp-carregando { opacity: .55; transition: opacity .15s; pointer-events: none; }
     .sp-callout-acao { margin-left: auto; }
 
-    .sp-graficos { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+    /* Os dois gráficos do mesmo tamanho: mês à esquerda, classificação à direita. */
+    .sp-graficos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     @media (max-width: 1100px) { .sp-graficos { grid-template-columns: minmax(0, 1fr); } }
-    .sp-canvas { position: relative; width: 100%; }
-    .sp-canvas--mes { height: 320px; }
-    .sp-toggle { display: inline-flex; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); overflow: hidden; }
-    .sp-toggle button { border: 0; background: transparent; color: var(--eui-muted); font-size: 12px; font-weight: 600; padding: 5px 10px; cursor: pointer; }
-    .sp-toggle button.is-active { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+    .sp-canvas { position: relative; width: 100%; height: 400px; }
+    .sp-graficos .sp-tabela-wrap--solta { max-height: 400px; }
+    /* Gasto por mês: legenda em cima e a área do gráfico ocupa o resto dos 400px. */
+    .sp-canvas--leg { display: flex; flex-direction: column; gap: 6px; }
+    .sp-canvas__area { position: relative; flex: 1; min-height: 0; }
+    .sp-leg { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--eui-muted); }
+    .sp-leg span { display: inline-flex; align-items: center; gap: 6px; color: var(--eui-text-soft); }
+    .sp-leg small { font-size: 11px; color: var(--eui-muted); }
+    .sp-leg i { width: 8px; height: 8px; border-radius: 50%; background: var(--eui-primary); display: inline-block; }
+    .sp-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; flex: none; }
+    .sp-toggle button { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .sp-toggle button:hover { border-color: var(--eui-primary); color: var(--eui-text); }
+    .sp-toggle button.is-active { background: var(--eui-primary-soft); border-color: var(--eui-primary); color: var(--eui-primary); }
 
-    .sp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--eui-border); padding: 0 12px; overflow-x: auto; }
-    .sp-tabs button { border: 0; background: transparent; color: var(--eui-muted); font-size: 13px; font-weight: 600; padding: 12px 14px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
-    .sp-tabs button:hover { color: var(--eui-text); }
-    .sp-tabs button.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+    .sp-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px; margin: 10px 12px 0; border: 1px solid var(--eui-border); border-radius: 16px; background: var(--eui-surface); }
+    .sp-tabs button { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border: 0; border-radius: 11px; background: transparent; color: var(--eui-text-soft); font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+    .sp-tabs button:hover { background: var(--eui-surface-2); color: var(--eui-text); }
+    .sp-tabs button.is-active { background: var(--eui-primary); color: #fff; box-shadow: 0 4px 12px rgba(15, 98, 201, .25); }
     .sp-tabs .sp-tab-badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); font-size: 11px; line-height: 18px; text-align: center; }
 
     .sp-pane-tools { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 14px 18px 0; }
@@ -40,7 +65,9 @@
     .sp-wrap .erp-table { font-size: 13px; }
     .sp-wrap .erp-table td, .sp-wrap .erp-table th { padding: 8px 12px; }
     /* o th global do erp-table e' claro fixo; aqui segue o tema */
-    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; }
+    .sp-wrap .erp-table th { background: var(--eui-surface-2); color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); z-index: 1; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+    .sp-wrap .erp-table td { color: var(--eui-text-soft); border-bottom: 1px solid var(--eui-border); }
+    .sp-wrap .erp-table tbody tr:hover td { background: var(--eui-surface-2); }
     .sp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .sp-muted { color: var(--eui-muted); }
     .sp-linha-vazia { text-align: center; color: var(--eui-muted); padding: 28px 12px !important; }
@@ -72,6 +99,23 @@
     .sp-sit--manual { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
     .sp-nf-acao { white-space: nowrap; }
 
+    /* Detalhe de uma barra do gráfico. */
+    .sp-dialog { width: min(1120px, calc(100% - 24px)); max-height: calc(100vh - 40px); margin: auto; padding: 0; color: var(--eui-text); background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .sp-dialog[open] { display: flex; flex-direction: column; }
+    .sp-dialog::backdrop { background: rgba(15,23,42,.55); }
+    .sp-dialog__head, .sp-dialog__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; }
+    .sp-dialog__head { border-bottom: 1px solid var(--eui-border); align-items: flex-start; }
+    .sp-dialog__titulo { margin: 0; font-size: 16px; font-weight: 700; }
+    .sp-dialog__sub { margin: 2px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .sp-dialog__fechar { border: 0; background: transparent; color: var(--eui-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+    .sp-dialog__fechar:hover { color: var(--eui-text); }
+    .sp-dialog__body { flex: 1; min-height: 0; overflow: auto; }
+    .sp-dialog__foot { border-top: 1px solid var(--eui-border); font-size: 12.5px; color: var(--eui-muted); }
+    .sp-dialog__foot b { color: var(--eui-text); }
+    .sp-dialog__acoes { display: flex; gap: 8px; }
+    .sp-dialog__acoes .eui-btn { border-radius: 999px; }
+    .sp-dialog .erp-table th { position: sticky; top: 0; }
+
     .sp-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 380px; display: none; }
     .sp-toast.error { border-left-color: var(--eui-danger); }
     .sp-toast.success { border-left-color: var(--eui-success); }
@@ -79,7 +123,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="sp-wrap">
+<div class="eui-scope sp-wrap">
     <header class="eui-page-header sp-head">
         <div>
             <div class="eui-page-header__eyebrow">Compras</div>
@@ -87,7 +131,7 @@
             <p class="eui-page-header__sub">Gasto por classificação de suprimentos, a partir das entradas de NF do GRV.</p>
         </div>
         <div class="sp-head-actions">
-            <a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>
+            {% if can_access('PAGE_COMPRAS_CPS') %}<a class="eui-btn eui-btn--ghost" href="/compras"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
             <button type="button" class="eui-btn eui-btn--ghost" id="sp-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </header>
@@ -108,6 +152,7 @@
                 <label class="eui-field"><span class="eui-field__label">Até</span><select class="eui-select" id="sp-ate"></select></label>
                 <label class="eui-field eui-field--largo"><span class="eui-field__label">Família</span><select class="eui-select" id="sp-familia"></select></label>
                 <label class="eui-field eui-field--largo"><span class="eui-field__label">Classificação</span><select class="eui-select" id="sp-classificacao"></select></label>
+                <label class="eui-field eui-field--largo"><span class="eui-field__label">Requisitante</span><select class="eui-select" id="sp-requisitante"></select></label>
                 <button type="button" class="eui-btn eui-btn--subtle" id="sp-limpar" hidden><i class="fas fa-filter-circle-xmark"></i> Limpar</button>
                 <div class="sp-base-info" id="sp-base-info"></div>
             </div>
@@ -119,34 +164,33 @@
             </div>
 
             <div id="sp-dados" class="sp-wrap">
-                <div class="eui-stats">
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-sack-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Gasto no período</span><span class="eui-stat__value" id="sp-k-total">—</span><span class="eui-stat__hint" id="sp-k-total-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-calendar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Média mensal</span><span class="eui-stat__value" id="sp-k-media">—</span><span class="eui-stat__hint" id="sp-k-media-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-arrow-right-arrow-left"></i></div><div class="eui-stat__body"><span class="eui-stat__label" id="sp-k-atual-label">Último mês</span><span class="eui-stat__value" id="sp-k-atual">—</span><span class="eui-stat__hint" id="sp-k-atual-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-building"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Fornecedores</span><span class="eui-stat__value" id="sp-k-forn">—</span><span class="eui-stat__hint" id="sp-k-forn-hint"></span></div></div>
-                    <div class="eui-stat"><div class="eui-stat__icon"><i class="fas fa-list"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Itens</span><span class="eui-stat__value" id="sp-k-itens">—</span><span class="eui-stat__hint" id="sp-k-itens-hint"></span></div></div>
+                <div class="sp-dk-grid">
+                    <div class="sp-dk" style="--sp-cor: var(--eui-primary);"><span class="sp-dk__label">Gasto no período</span><span class="sp-dk__valor" id="sp-k-total">—</span><span class="sp-dk__dica" id="sp-k-total-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-info, var(--eui-primary));"><span class="sp-dk__label">Média mensal</span><span class="sp-dk__valor" id="sp-k-media">—</span><span class="sp-dk__dica" id="sp-k-media-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-violet, var(--eui-primary));"><span class="sp-dk__label" id="sp-k-atual-label">Último mês</span><span class="sp-dk__valor" id="sp-k-atual">—</span><span class="sp-dk__dica" id="sp-k-atual-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-warning);"><span class="sp-dk__label">Fornecedores</span><span class="sp-dk__valor" id="sp-k-forn">—</span><span class="sp-dk__dica" id="sp-k-forn-hint"></span></div>
+                    <div class="sp-dk" style="--sp-cor: var(--eui-success);"><span class="sp-dk__label">Itens</span><span class="sp-dk__valor" id="sp-k-itens">—</span><span class="sp-dk__dica" id="sp-k-itens-hint"></span></div>
                 </div>
 
                 <div class="sp-graficos">
-                    <section class="eui-card">
-                        <div class="eui-card__head">
-                            <h2 class="eui-card__title"><i class="fas fa-layer-group"></i> Gasto por classificação</h2>
-                            <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
-                        </div>
-                        <div class="eui-card__body--tight">
-                            <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
-                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
-                        </div>
-                    </section>
-                    <section class="eui-card">
-                        <div class="eui-card__head">
-                            <h2 class="eui-card__title"><i class="fas fa-chart-column"></i> Gasto por mês</h2>
+                    <section class="sp-dc">
+                        <div class="sp-dc__topo">
+                            <div><h3>Gasto por mês</h3><p class="sp-dc__sub">Clique num mês para ver as notas.</p></div>
                             <div class="sp-toggle" data-alvo="mes"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
                         </div>
-                        <div class="eui-card__body--tight">
-                            <div class="sp-canvas sp-canvas--mes" id="sp-mes-grafico"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
-                            <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
+                        <div class="sp-canvas sp-canvas--leg" id="sp-mes-grafico">
+                            <div class="sp-leg"><span><i></i>Período atual</span><small>Valores em R$</small></div>
+                            <div class="sp-canvas__area"><canvas id="sp-chart-mes" aria-label="Gasto por mês"></canvas></div>
                         </div>
+                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-mes-tabela" hidden></div>
+                    </section>
+                    <section class="sp-dc">
+                        <div class="sp-dc__topo">
+                            <div><h3>Gasto por classificação</h3><p class="sp-dc__sub">Clique numa barra para ver as notas da classificação.</p></div>
+                            <div class="sp-toggle" data-alvo="cls"><button type="button" class="is-active" data-modo="grafico">Gráfico</button><button type="button" data-modo="tabela">Tabela</button></div>
+                        </div>
+                        <div class="sp-canvas" id="sp-cls-grafico"><canvas id="sp-chart-cls" aria-label="Gasto por classificação"></canvas></div>
+                        <div class="sp-tabela-wrap sp-tabela-wrap--solta" id="sp-cls-tabela" hidden></div>
                     </section>
                 </div>
 
@@ -226,6 +270,24 @@
 
 <datalist id="sp-lista-cls"></datalist>
 
+<dialog class="sp-dialog eui-scope" id="sp-pop" aria-labelledby="sp-pop-titulo">
+    <div class="sp-dialog__head">
+        <div><h2 class="sp-dialog__titulo" id="sp-pop-titulo"></h2><p class="sp-dialog__sub" id="sp-pop-sub"></p></div>
+        <button type="button" class="sp-dialog__fechar" id="sp-pop-fechar" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="sp-dialog__body"><table class="erp-table">
+        <thead><tr><th>Lançamento</th><th>NF</th><th>Fornecedor</th><th>Item</th><th>Classificação</th><th>OC</th><th>Requisitante</th><th class="sp-num">Valor</th></tr></thead>
+        <tbody id="sp-pop-tb"></tbody>
+    </table></div>
+    <div class="sp-dialog__foot">
+        <span id="sp-pop-info"></span>
+        <div class="sp-dialog__acoes">
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="sp-pop-mais" hidden>Mostrar mais</button>
+            <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="sp-pop-excel"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+        </div>
+    </div>
+</dialog>
+
 <div class="sp-toast" id="sp-toast"></div>
 {% endblock %}
 
@@ -270,7 +332,7 @@
     // ---------- Painel ----------
     function parametros(extra) {
         const qs = new URLSearchParams();
-        const campos = { de: "sp-de", ate: "sp-ate", familia: "sp-familia", classificacao: "sp-classificacao", anterior: "sp-anterior", atual: "sp-atual" };
+        const campos = { de: "sp-de", ate: "sp-ate", familia: "sp-familia", classificacao: "sp-classificacao", requisitante: "sp-requisitante", anterior: "sp-anterior", atual: "sp-atual" };
         Object.entries(campos).forEach(([k, id]) => { const v = $(id).value; if (v) qs.set(k, v); });
         Object.entries(extra || {}).forEach(([k, v]) => { if (v == null || v === "") qs.delete(k); else qs.set(k, v); });
         return qs;
@@ -317,10 +379,13 @@
         const classes = d.classificacoes.slice();
         if (f.classificacao && !classes.includes(f.classificacao)) classes.push(f.classificacao);
         preencherSelect("sp-classificacao", classes.map((x) => ({ valor: x, rotulo: x })), f.classificacao, "Todas");
+        const reqs = (d.requisitantes || []).slice();
+        if (f.requisitante && !reqs.includes(f.requisitante)) reqs.push(f.requisitante);
+        preencherSelect("sp-requisitante", reqs.map((x) => ({ valor: x, rotulo: x })), f.requisitante, "Todos");
         const doPeriodo = meses.filter((m) => m.valor >= f.de && m.valor <= f.ate);
         preencherSelect("sp-anterior", doPeriodo, f.anterior, f.anterior ? null : "—");
         preencherSelect("sp-atual", doPeriodo, f.atual);
-        $("sp-limpar").hidden = !(f.familia || f.classificacao);
+        $("sp-limpar").hidden = !(f.familia || f.classificacao || f.requisitante);
 
         renderInfo(d);
         renderKpis(d);
@@ -399,9 +464,10 @@
     function tema() {
         return {
             serie: cssVar("--eui-primary", "#0f62c9"),
-            texto: cssVar("--eui-muted", "#64748b"),
+            texto: cssVar("--eui-text-soft", "#475569"),
+            claro: "#60a5fa",
             grade: cssVar("--eui-border", "#e3e8ef"),
-            fonte: cssVar("--eui-font", "system-ui, sans-serif"),
+            fonte: getComputedStyle(document.body).fontFamily || cssVar("--eui-font", "system-ui, sans-serif"),
             superficie: cssVar("--eui-surface", "#ffffff"),
             tinta: cssVar("--eui-text", "#0f172a"),
         };
@@ -417,6 +483,7 @@
             valor: resto.reduce((s, x) => s + x.valor, 0),
             pct: resto.reduce((s, x) => s + x.pct, 0),
             agrupado: true,
+            membros: resto.map((x) => x.classificacao),
         }]);
     }
 
@@ -461,15 +528,13 @@
         estado.charts = {};
 
         const cls = dadosClassificacao();
-        $("sp-cls-grafico").style.height = Math.max(160, cls.length * 30 + 40) + "px";
-        const filtroCls = estado.dados.filtro.classificacao;
         estado.charts.cls = new Chart($("sp-chart-cls"), {
             type: "bar",
             data: {
                 labels: cls.map((x) => x.classificacao),
                 datasets: [{
                     data: cls.map((x) => x.valor),
-                    backgroundColor: t.serie,
+                    backgroundColor: cls.map((x) => (x.agrupado ? t.claro : t.serie)),
                     borderRadius: 4, borderSkipped: "start",
                     barPercentage: 0.78, categoryPercentage: 0.92,
                 }],
@@ -477,38 +542,64 @@
             options: Object.assign(opcoesBase(t, { label: (ctx) => `${fmtR(cls[ctx.dataIndex].valor)} · ${fmtP(cls[ctx.dataIndex].pct)}` }), {
                 indexAxis: "y",
                 scales: { x: eixoValor(t), y: eixoCategoria(t) },
-                onHover: (ev, els) => {
-                    const item = els.length ? cls[els[0].index] : null;
-                    ev.native.target.style.cursor = item && !item.agrupado && !filtroCls ? "pointer" : "default";
-                },
+                onHover: maozinha,
                 onClick: (ev, els) => {
-                    if (!els.length || filtroCls) return;
+                    if (!els.length) return;
                     const item = cls[els[0].index];
-                    if (item.agrupado) return;
-                    $("sp-classificacao").value = item.classificacao;
-                    carregar({ classificacao: item.classificacao });
+                    abrirDetalhe({ classificacao: item.membros || [item.classificacao] }, item.classificacao);
                 },
             }),
         });
 
         const meses = estado.dados.por_mes;
         estado.charts.mes = new Chart($("sp-chart-mes"), {
-            type: "bar",
+            type: "line",
             data: {
-                // ano so' no primeiro mes e em janeiro: com "mmm/aa" em todos, 12 meses nao cabem
-                labels: meses.map((m, i) => { const [a, mm] = m.competencia.split("-"); return i === 0 || mm === "01" ? [MESES[Number(mm) - 1], a] : MESES[Number(mm) - 1]; }),
+                // "Jan", "Fev"...; o ano só quando o período passa de um ano para o outro
+                labels: meses.map((m, i) => {
+                    const [a, mm] = m.competencia.split("-");
+                    const nome = MESES[Number(mm) - 1].replace(/^./, (c) => c.toUpperCase());
+                    const viraAno = meses[0].competencia.slice(0, 4) !== meses[meses.length - 1].competencia.slice(0, 4);
+                    return viraAno && (i === 0 || mm === "01") ? [nome, a] : nome;
+                }),
                 datasets: [{
                     data: meses.map((m) => m.valor),
-                    backgroundColor: t.serie,
-                    borderRadius: 4, borderSkipped: "start",
-                    barPercentage: 0.7, categoryPercentage: 0.9,
+                    // linha suavizada com degradê embaixo e ponto vazado (modelo enviado em 18/11/2026)
+                    borderColor: t.serie, borderWidth: 2.5, tension: 0.4,
+                    fill: "origin",
+                    backgroundColor: (ctx) => {
+                        const area = ctx.chart.chartArea;
+                        if (!area) return "transparent";
+                        const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+                        g.addColorStop(0, comAlfa(t.serie, 0.18));
+                        g.addColorStop(1, comAlfa(t.serie, 0));
+                        return g;
+                    },
+                    pointRadius: 4, pointHoverRadius: 6, pointBorderWidth: 2,
+                    pointBackgroundColor: t.superficie, pointBorderColor: t.serie,
+                    pointHoverBackgroundColor: t.serie,
                 }],
             },
             options: Object.assign(opcoesBase(t, {
                 title: (ctx) => fmtMes(meses[ctx[0].dataIndex].competencia),
                 label: (ctx) => fmtR(meses[ctx.dataIndex].valor),
             }), {
-                scales: { y: eixoValor(t), x: eixoCategoria(t) },
+                scales: {
+                    y: Object.assign(eixoValor(t), {
+                        grid: { color: t.grade, drawTicks: false },
+                        border: { display: false, dash: [4, 4] },
+                        ticks: { color: t.texto, font: { family: t.fonte, size: 11 }, padding: 8, maxTicksLimit: 6, callback: (v) => compacto.format(v) },
+                    }),
+                    x: Object.assign(eixoCategoria(t), { border: { display: false } }),
+                },
+                // clique em qualquer altura do mês, não só em cima do ponto
+                interaction: { mode: "index", intersect: false },
+                onHover: maozinha,
+                onClick: (ev, els) => {
+                    if (!els.length) return;
+                    const m = meses[els[0].index].competencia;
+                    abrirDetalhe({ de: m, ate: m }, "Gasto de " + fmtMes(m));
+                },
             }),
         });
 
@@ -516,6 +607,75 @@
         $("sp-mes-tabela").innerHTML = tabelaSimples(["Mês", "Valor"], meses.map((m) => [esc(fmtMes(m.competencia)), fmtR(m.valor)]));
         aplicarModos();
     }
+
+    // "#0f62c9" ou "rgb(15, 98, 201)" -> mesma cor com transparência (degradê do gráfico do mês)
+    function comAlfa(cor, alfa) {
+        const c = String(cor).trim();
+        let r, g, b;
+        if (/^#[0-9a-f]{6}$/i.test(c)) [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+        else { const m = c.match(/\d+(\.\d+)?/g); if (!m || m.length < 3) return "transparent"; [r, g, b] = m; }
+        return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+    }
+
+    function maozinha(ev, els) { ev.native.target.style.cursor = els.length ? "pointer" : "default"; }
+
+    // ---------- Detalhe de uma barra ----------
+    // Mesmos filtros do painel + a barra clicada, só o que entra no Spend:
+    // o total do pop-up bate com o valor da barra.
+    const pop = { qs: null, linhas: [], total: 0, seq: 0 };
+
+    function abrirDetalhe(barra, titulo) {
+        const f = estado.dados.filtro;
+        const qs = new URLSearchParams({ situacao: "spend", de: barra.de || f.de, ate: barra.ate || f.ate });
+        if (f.familia) qs.set("familia", f.familia);
+        if (f.requisitante) qs.set("requisitante", f.requisitante);
+        (barra.classificacao || (f.classificacao ? [f.classificacao] : [])).forEach((c) => qs.append("classificacao", c));
+        pop.qs = qs;
+        const filtros = [qs.get("de") === qs.get("ate") ? fmtMes(qs.get("de")) : `${fmtMes(qs.get("de"))} a ${fmtMes(qs.get("ate"))}`];
+        if (f.familia) filtros.push("Família: " + f.familia);
+        if (!barra.classificacao && f.classificacao) filtros.push("Classificação: " + f.classificacao);
+        if (f.requisitante) filtros.push("Requisitante: " + f.requisitante);
+        $("sp-pop-titulo").textContent = titulo;
+        $("sp-pop-sub").textContent = filtros.join(" · ");
+        $("sp-pop-tb").innerHTML = `<tr><td colspan="8" class="sp-linha-vazia"><i class="fas fa-rotate fa-spin"></i> Carregando…</td></tr>`;
+        $("sp-pop-info").textContent = "";
+        $("sp-pop-mais").hidden = true;
+        if (!$("sp-pop").open) $("sp-pop").showModal();
+        carregarDetalhe(false);
+    }
+
+    async function carregarDetalhe(maisUma) {
+        const qs = new URLSearchParams(pop.qs);
+        qs.set("offset", maisUma ? pop.linhas.length : 0);
+        const seq = ++pop.seq;
+        try {
+            const r = await api("/api/compras/spend/notas?" + qs.toString());
+            if (seq !== pop.seq) return;
+            pop.linhas = maisUma ? pop.linhas.concat(r.linhas) : r.linhas;
+            pop.total = r.total;
+            $("sp-pop-tb").innerHTML = pop.linhas.map((l) => `<tr>
+                <td class="sp-cod">${esc(l.data_lancamento)}</td>
+                <td class="sp-cod">${esc(l.nota_fiscal)}</td>
+                <td class="sp-rev-forn">${esc(l.fornecedor)}</td>
+                <td><div class="sp-desc sp-rev-desc" title="${esc(l.descricao)}">${esc(l.descricao) || '<span class="sp-muted">(sem descrição)</span>'}</div><div class="sp-muted sp-cod">${esc(l.codigo_item) || "(sem código)"}</div></td>
+                <td>${esc(l.classificacao)}</td>
+                <td class="sp-cod">${esc(l.ordem_compra) || '<span class="sp-muted">—</span>'}</td>
+                <td>${esc(l.requisitante)}</td>
+                <td class="sp-num">${fmtR(l.valor)}</td></tr>`).join("")
+                || `<tr><td colspan="8" class="sp-linha-vazia">Nenhuma nota.</td></tr>`;
+            $("sp-pop-info").innerHTML = `<b>${fmtR(r.valor_filtrado)}</b> em ${inteiro.format(r.total)} ${r.total === 1 ? "linha" : "linhas"}`
+                + (pop.linhas.length < r.total ? ` · mostrando ${inteiro.format(pop.linhas.length)}` : "");
+            $("sp-pop-mais").hidden = pop.linhas.length >= r.total;
+        } catch (err) {
+            // o toast fica atrás do pop-up (camada do dialog): o erro vai na tabela
+            if (seq === pop.seq) $("sp-pop-tb").innerHTML = `<tr><td colspan="8" class="sp-linha-vazia sp-erro-base">${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    $("sp-pop-mais").addEventListener("click", () => carregarDetalhe(true));
+    $("sp-pop-excel").addEventListener("click", () => { window.location.href = "/api/compras/spend/notas.xlsx?" + pop.qs.toString(); });
+    $("sp-pop-fechar").addEventListener("click", () => $("sp-pop").close());
+    $("sp-pop").addEventListener("click", (ev) => { if (ev.target === $("sp-pop")) $("sp-pop").close(); });
 
     function tabelaSimples(cabecalho, linhas) {
         const th = cabecalho.map((c, i) => `<th${i ? ' class="sp-num"' : ""}>${c}</th>`).join("");
@@ -828,9 +988,9 @@
     $("sp-tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button[data-tab]"); if (b) abrirTab(b.dataset.tab); });
     $("sp-alerta-rev-btn").addEventListener("click", () => { abrirTab("classificacao"); $("sp-tabs").scrollIntoView({ behavior: "smooth" }); });
 
-    ["sp-de", "sp-ate", "sp-familia", "sp-classificacao"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
+    ["sp-de", "sp-ate", "sp-familia", "sp-classificacao", "sp-requisitante"].forEach((id) => $(id).addEventListener("change", () => carregar({ atual: "", anterior: "" })));
     ["sp-anterior", "sp-atual"].forEach((id) => $(id).addEventListener("change", () => carregar()));
-    $("sp-limpar").addEventListener("click", () => carregar({ familia: "", classificacao: "" }));
+    $("sp-limpar").addEventListener("click", () => carregar({ familia: "", classificacao: "", requisitante: "" }));
 
     $("sp-busca-cons").addEventListener("input", () => { estado.consLimite = PAGINA; renderConsolidado(); });
     $("sp-cons-mais").addEventListener("click", () => { estado.consLimite += PAGINA; renderConsolidado(); });

@@ -216,7 +216,7 @@
   </div>
   <div class="cps-head-actions">
     <span id="health" class="status"><span class="dot"></span><span class="txt">verificando…</span></span>
-    <a class="eui-btn eui-btn--ghost" href="/compras/spend"><i class="fas fa-chart-column"></i> Spend de Compras</a>
+    {% if can_access('PAGE_COMPRAS_SPEND') %}<a class="eui-btn eui-btn--ghost" href="/compras/spend"><i class="fas fa-chart-column"></i> Spend de Compras</a>{% endif %}
   </div>
 </header>
 
