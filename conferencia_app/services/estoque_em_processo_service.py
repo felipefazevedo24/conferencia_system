@@ -26,7 +26,7 @@ from ..compras import queries
 from ..compras.config import get_settings
 from ..tempo import agora_br
 
-FAMILIA = "PRODUTOS EM PROCESSO"
+FAMILIA = "PRODUTO EM PROCESSO"  # GRV: "N - 03 - PRODUTO EM PROCESSO"
 DEPOSITO_PRINCIPAL = "1"
 DIAS_NO_TERCEIRO = 30
 # Quanto o kardex volta para achar a remessa. Saldo que as entradas da

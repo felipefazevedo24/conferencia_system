@@ -101,7 +101,7 @@ ESTOQUE_VISOES = {
     "embalagem": {"label": "Embalagem", "familia": "EMBALAGEM", "familia_nome": True},
     # Material no terceiro para industrializar: so' saldo, de todos os
     # depositos (estoque_em_processo_service), sem planejamento.
-    "em_processo": {"label": "Produtos em processo", "familia": "PRODUTOS EM PROCESSO", "familia_nome": True},
+    "em_processo": {"label": "Produtos em processo", "familia": "PRODUTO EM PROCESSO", "familia_nome": True},
 }
 # Visoes de material comprado e consumido: tem planejamento (minimo/lote) e OC.
 # Produto acabado e produtos em processo ficam de fora - nao sao comprados.
