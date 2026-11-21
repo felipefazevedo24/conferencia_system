@@ -4879,6 +4879,22 @@ class EstoqueValorDiario(db.Model):
     atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
 
+class EstoqueValorMensalInformado(db.Model):
+    """Valor em estoque de um mês fechado, informado à mão por visão. Cobre
+    os meses de antes da gravação automática (17/11/2026) e corrige mês
+    gravado: quando existe, vale no lugar do EstoqueValorDiario daquele mês."""
+
+    __tablename__ = "estoque_valor_mensal_informado"
+    __table_args__ = (db.UniqueConstraint("mes", "visao", name="ux_estoque_valor_mensal_informado_mes_visao"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    mes = db.Column(db.String(7), nullable=False)  # AAAA-MM
+    visao = db.Column(db.String(40), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+    informado_por = db.Column(db.String(100))
+    informado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
 class EstoqueAlertaEstado(db.Model):
     """O que o aviso de estoque por e-mail já comunicou: 1 linha por item em alerta.
 

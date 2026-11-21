@@ -93,6 +93,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_VIAGEM_RELATORIO": "Logística > Transporte > Central de Viagens > Baixar relatório",
     "PAGE_LOGISTICA_INVENTARIO": "Logística > Inventário > Inventariar (contagem)",
     "PAGE_LOGISTICA_ESTOQUE": "Logística > Estoque (consulta: saldo, mínimo/lote sugeridos e fornecimentos)",
+    "MANAGE_LOGISTICA_ESTOQUE_VALOR": "Logística > Estoque > Informar valor em estoque dos meses (gráfico do painel)",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestão (Admin)",
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
     "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",

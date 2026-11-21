@@ -294,7 +294,10 @@
             <div class="mp-dc">
                 <h3>Valor em estoque × consumo mensal</h3>
                 <p class="mp-dc__sub" id="mp-d-valor-sub">Consumo em R$ pelo custo do GRV. O valor em estoque é gravado desde 17/11/2026.</p>
-                <div class="mp-legenda" id="mp-leg-valor" style="justify-content:flex-end;"></div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    {% if can_access('MANAGE_LOGISTICA_ESTOQUE_VALOR') %}<button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-valor-open" type="button"><i class="fas fa-pen"></i> Informar valor</button>{% endif %}
+                    <div class="mp-legenda" id="mp-leg-valor" style="justify-content:flex-end;margin-left:auto;"></div>
+                </div>
                 <div class="mp-chart"><canvas id="mp-ch-valor" role="img" aria-label="Valor em estoque e consumo por mês"></canvas></div>
             </div>
             <div class="mp-dc">
@@ -476,6 +479,21 @@
         <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-param-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-param-save"><i class="fas fa-check"></i> Salvar</button></div>
     </form>
 </dialog>
+
+{% if can_access('MANAGE_LOGISTICA_ESTOQUE_VALOR') %}
+<dialog id="mp-valor-dialog" class="mp-dialog" aria-labelledby="mp-valor-titulo">
+    <form method="dialog" id="mp-valor-form">
+        <div class="mp-dialog__head"><span id="mp-valor-titulo"><i class="fas fa-pen"></i> Valor em estoque do mês</span><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-valor-close" aria-label="Fechar">&times;</button></div>
+        <div class="mp-dialog__body">
+            <div><label for="mp-valor-mes">Mês</label><input class="eui-input" id="mp-valor-mes" type="month" required></div>
+            <div id="mp-valor-campos" style="display:grid;gap:12px;"></div>
+            <p class="mp-muted" style="margin:0;">O valor informado substitui o gravado. Deixe vazio para voltar ao gravado.</p>
+            <p class="mp-erro" id="mp-valor-erro" role="alert" style="margin:0;"></p>
+        </div>
+        <div class="mp-dialog__foot"><button type="button" class="eui-btn eui-btn--ghost" id="mp-valor-cancel">Cancelar</button><button type="submit" class="eui-btn eui-btn--primary" id="mp-valor-save"><i class="fas fa-check"></i> Salvar</button></div>
+    </form>
+</dialog>
+{% endif %}
 
 <dialog id="mp-massa-dialog" class="mp-dialog" aria-labelledby="mp-massa-titulo">
     <form method="dialog" id="mp-massa-form">
@@ -1729,6 +1747,66 @@
             $('mp-param-save').disabled = false;
         }
     });
+
+    // ------------------------------------------- valor em estoque informado
+    if ($('mp-valor-open')) {
+        const mesAnterior = () => {
+            const d = new Date();
+            d.setDate(1);
+            d.setMonth(d.getMonth() - 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        };
+        async function carregarValorMes() {
+            const mes = $('mp-valor-mes').value;
+            $('mp-valor-erro').textContent = '';
+            $('mp-valor-campos').innerHTML = '';
+            if (!mes) return;
+            try {
+                const resp = await fetch('/api/logistica/estoque/valor-mensal?' + new URLSearchParams({ mes }));
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || 'Falha ao carregar o mês.');
+                $('mp-valor-campos').innerHTML = data.visoes.map((v) => {
+                    const gravado = v.gravado == null ? 'Sem valor gravado' : `Gravado: ${brl(v.gravado)}`;
+                    const informado = v.informado_por ? ` · informado por ${esc(v.informado_por)} em ${esc(v.informado_em)}` : '';
+                    return `<div><label for="mp-valor-${esc(v.visao)}">${esc(v.label)} (R$)</label>
+                        <input class="eui-input" id="mp-valor-${esc(v.visao)}" data-visao="${esc(v.visao)}" type="number" step="0.01" min="0" value="${v.informado ?? ''}" placeholder="${v.gravado ?? ''}">
+                        <span class="mp-muted">${gravado}${informado}</span></div>`;
+                }).join('');
+            } catch (err) {
+                $('mp-valor-erro').textContent = err.message;
+            }
+        }
+        $('mp-valor-open').addEventListener('click', () => {
+            $('mp-valor-mes').max = mesAnterior();
+            if (!$('mp-valor-mes').value) $('mp-valor-mes').value = mesAnterior();
+            carregarValorMes();
+            $('mp-valor-dialog').showModal();
+        });
+        $('mp-valor-mes').addEventListener('change', carregarValorMes);
+        $('mp-valor-close').addEventListener('click', () => $('mp-valor-dialog').close());
+        $('mp-valor-cancel').addEventListener('click', () => $('mp-valor-dialog').close());
+        $('mp-valor-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const valores = {};
+            $('mp-valor-campos').querySelectorAll('[data-visao]').forEach((el) => { valores[el.dataset.visao] = el.value; });
+            $('mp-valor-save').disabled = true;
+            $('mp-valor-erro').textContent = '';
+            try {
+                const resp = await fetch('/api/logistica/estoque/valor-mensal', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mes: $('mp-valor-mes').value, valores }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar.');
+                $('mp-valor-dialog').close();
+                if (visaoAtual === 'painel') carregarPainel(true);
+            } catch (err) {
+                $('mp-valor-erro').textContent = err.message;
+            } finally {
+                $('mp-valor-save').disabled = false;
+            }
+        });
+    }
 
     // ------------------------------------------------------------ painel inicial
     const graficos = {};

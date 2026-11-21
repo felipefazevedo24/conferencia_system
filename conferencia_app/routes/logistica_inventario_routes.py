@@ -69,6 +69,8 @@ PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
 # Consulta da tela de Estoque sem a contagem de inventario nem o Controle de
 # Chapas (que a PERMISSION base tambem abre). Quem tem a base continua vendo.
 PERMISSION_ESTOQUE = "PAGE_LOGISTICA_ESTOQUE"
+# Informar/corrigir o valor em estoque de meses fechados (grafico do painel).
+PERMISSION_ESTOQUE_VALOR = "MANAGE_LOGISTICA_ESTOQUE_VALOR"
 # Analisar (realizados/ajustes/analise de causa) exige permissao propria;
 # a permissao base (PERMISSION) da acesso so a aba de contagem.
 PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
@@ -980,6 +982,27 @@ def estoque_painel():
         "acoes": acoes,
         "acoes_total": len(em_acao),
     })
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/valor-mensal", methods=["GET"])
+@permission_required(PERMISSION_ESTOQUE_VALOR)
+def estoque_valor_mensal():
+    try:
+        valores = foto_svc.valores_do_mes(request.args.get("mes"), list(ESTOQUE_VISOES))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"visoes": [{"visao": v, "label": ESTOQUE_VISOES[v]["label"], **valores[v]} for v in ESTOQUE_VISOES]})
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/valor-mensal", methods=["PUT"])
+@permission_required(PERMISSION_ESTOQUE_VALOR)
+def estoque_valor_mensal_salvar():
+    p = request.get_json(silent=True) or {}
+    try:
+        foto_svc.informar_valores(p.get("mes"), p.get("valores"), list(ESTOQUE_VISOES), session.get("username") or "")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"sucesso": True})
 
 
 # Grupos que o painel abre em lista ao clicar: as fatias da saude, "itens para
