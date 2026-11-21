@@ -758,6 +758,148 @@ def resolver_saida(mov_id, endereco, usuario):
     return mov.id
 
 
+TIPO_ESTORNO = 'Estorno de saída'
+ESTORNO_JANELA_DIAS = 30
+
+
+def _quando(valor):
+    return valor if isinstance(valor, datetime) else datetime.fromisoformat(str(valor)[:19])
+
+
+def _devolver_endereco(sku, zerado, base):
+    """O material zerou e a limpeza tirou o endereço; o estorno devolveu o
+    saldo: volta a lista que ele tinha. None = ainda sem saldo (espera)."""
+    if enderecos_atuais(sku):
+        return False  # alguém já endereçou de novo: só registra
+    desativados = {normalizar(c) for (c,) in db.session.query(LocalizacaoArmazem.codigo).filter(
+        LocalizacaoArmazem.ativo.is_(False))}
+    volta = [e for e in (zerado.detalhes or {}).get('antes') or [] if normalizar(e) not in desativados]
+    if not volta:
+        return False
+    info = info_grv(sku)
+    if info is None or float(info.get('qtde_total') or 0) <= 0:
+        return None
+    base['unidade'] = str(info.get('unidade') or '').strip().upper()[:20]
+    base['detalhes'].update(antes=[], depois=volta)
+    base['sincronizado_em'] = None
+    return True
+
+
+def _creditar_estorno(sku, n, q, saidas_sku, base):
+    """Material com 2+ endereços: a quantidade estornada volta ao endereço de
+    onde a saída baixou. Saída ainda sem endereço definido deixa de ser
+    pendência (ou diminui). Devolve se a lista de endereços mudou."""
+    baixadas = [m for m in saidas_sku if m.tipo == TIPO_SAIDA]
+    sem_endereco = [m for m in saidas_sku if m.tipo == TIPO_SAIDA_SEM_ENDERECO]
+    if len(sem_endereco) == 1 and not baixadas:
+        m = sem_endereco[0]
+        detalhes = dict(m.detalhes or {})
+        detalhes['estornado'] = str(_q(Decimal(str(detalhes.get('estornado') or 0)) + q))
+        if q >= m.quantidade:
+            m.tipo = TIPO_SAIDA_NAO_BAIXADA
+            detalhes['resolvido'] = {'endereco': None, 'usuario': 'sistema', 'em': agora_br().isoformat(),
+                                     'motivo': 'Saída estornada no GRV'}
+        else:
+            m.quantidade -= q
+        m.detalhes = detalhes
+        base['detalhes']['saida_a_corrigir'] = m.id
+        return False
+    if len(baixadas) != 1 or sem_endereco:
+        return False  # saída fora do controle por endereço ou ambígua: só registra
+    m = baixadas[0]
+    ja = sum((Decimal(str((x.detalhes or {}).get('creditado') or 0))
+              for x in Movimento.query.filter_by(sku=m.sku, tipo=TIPO_ESTORNO)
+              if str((x.detalhes or {}).get('saida') or '') == n), Decimal(0))
+    credito = min(q, m.quantidade - ja)
+    atuais = enderecos_atuais(sku)
+    vigentes = [normalizar(e) for e in atuais]
+    if credito <= 0 or not vigentes:
+        return False
+    base['detalhes'].update(creditado=str(credito), endereco=m.origem)
+    base['unidade'] = m.unidade
+    if m.origem in vigentes:
+        if len(vigentes) >= 2:
+            _linha(sku, m.origem, m.unidade).quantidade += credito
+        return False
+    # O endereço zerou com a saída e saiu da lista: volta com o estornado.
+    if len(vigentes) == 1 and not Saldo.query.filter_by(sku=sku, endereco=vigentes[0]).first():
+        info = info_grv(sku) or {}
+        reg = _linha(sku, vigentes[0], m.unidade)
+        reg.quantidade, reg.conferido = max(_q(info.get('qtde_total')) - credito, Decimal(0)), False
+    reg = _linha(sku, m.origem, m.unidade)
+    reg.quantidade, reg.conferido = credito, True
+    base['detalhes'].update(antes=atuais, depois=atuais + [m.origem])
+    base['sincronizado_em'] = None
+    return True
+
+
+def tratar_estornos():
+    """Saída estornada no GRV (decisão da Logística em 21/11/2026: a produção
+    pega broca e devolve logo depois, e a baixa é estornada).
+
+    - A baixa zerou o saldo e a limpeza tirou o endereço: o estorno devolve
+      os endereços que o material tinha.
+    - Material com 2+ endereços: a quantidade volta ao endereço de onde a
+      saída baixou.
+    Cada linha de estorno do kardex entra uma vez só. Devolve quantas entraram."""
+    from ..compras import queries
+    from ..compras.db import fetch_all
+    desde = datetime.combine(max(SAIDAS_DESDE, agora_br().date() - timedelta(days=ESTORNO_JANELA_DIAS)),
+                             datetime.min.time())
+    zerados = {}
+    for m in Movimento.query.filter(Movimento.tipo == TIPO_SALDO_ZERADO, Movimento.criado_em >= desde).order_by(Movimento.id):
+        zerados[m.sku.strip().upper()] = m
+    saidas = {}
+    for m in Movimento.query.filter(Movimento.tipo.in_((TIPO_SAIDA, TIPO_SAIDA_SEM_ENDERECO)), Movimento.criado_em >= desde):
+        n = str((m.detalhes or {}).get('saida') or '').strip()
+        if n:
+            saidas.setdefault((m.sku.strip().upper(), n), []).append(m)
+    skus = sorted(set(zerados) | {s for s, _ in saidas})
+    if not skus:
+        return 0
+    linhas = fetch_all(queries.SQL_ENDERECAMENTO_ESTORNOS,
+                       {'cod_empresa': 1, 'desde': desde.date().isoformat(), 'codigos': skus})
+    chaves = [f"estorno:{l['id_kardex']}" for l in linhas]
+    feitas = {c for (c,) in db.session.query(Movimento.chave).filter(Movimento.chave.in_(chaves))} if chaves else set()
+    novas, enviar = 0, []
+    for l in linhas:
+        chave = f"estorno:{l['id_kardex']}"
+        sku = str(l['codigo']).strip().upper()
+        if chave in feitas or _ocupado(sku):
+            continue
+        try:
+            token = receb.adquirir_trava(SimpleNamespace(sku=sku))
+        except ValueError:
+            continue
+        try:
+            n, q, quando = str(l.get('saida') or '').strip(), _q(l['qtde']), _quando(l['quando'])
+            base = dict(chave=chave, sku=sku, unidade='', tipo=TIPO_ESTORNO, quantidade=q, usuario='sistema',
+                        motivo=(f'Saída {n} estornada no GRV' if n else 'Retorno ao estoque no GRV'),
+                        detalhes={'kardex': l['id_kardex'], 'saida': n or None, 'data': quando.isoformat(),
+                                  'obs': l.get('obs') or ''},
+                        sincronizado_em=agora_br())
+            zerado = zerados.get(sku)
+            if zerado and quando >= zerado.criado_em:
+                mudou = _devolver_endereco(sku, zerado, base)
+                if mudou is None:
+                    db.session.rollback()
+                    continue
+            else:
+                mudou = _creditar_estorno(sku, n, q, saidas.get((sku, n)) or [], base)
+            db.session.add(Movimento(**base))
+            db.session.commit()
+            novas += 1
+            if mudou:
+                enviar.append(sku)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Falha ao tratar o estorno %s do SKU %s', chave, sku)
+        finally:
+            _soltar(sku, token)
+    _sincronizar_sem_erro(enviar)
+    return novas
+
+
 def saidas_a_corrigir(pagina=1, busca=''):
     query = Movimento.query.filter_by(tipo=TIPO_SAIDA_SEM_ENDERECO)
     if busca:

@@ -924,6 +924,30 @@ LIMIT 5;
 # fica nula). A data não tem hora. localizacao_estoque vem COPIADA do
 # cadastro do produto - com 2+ endereços chega a lista inteira.
 # -------------------------------------------------------------------
+# Estorno de saída no depósito 1, pelo kardex (enderecamento_service.
+# tratar_estornos). Saída e transferência saem com qtde negativa; o estorno
+# vem positivo no mesmo tipo e a obs cita a saída original ("SAÍDA COD. N"),
+# como no consumo da bridge (SQL_CONSUMO_CARDEX). Transferência de volta da
+# produção (2 -> 1) também entra: é o material voltando.
+SQL_ENDERECAMENTO_ESTORNOS = """
+SELECT c.id AS id_kardex, UPPER(TRIM(p.codigo_interno)) AS codigo,
+       c.dt_hora_movimentacao AS quando,
+       COALESCE(c.qtde_movimentada, 0)::double precision AS qtde,
+       substring(UPPER(COALESCE(c.obs, '')) from 'SA.DA C.D[.] ([0-9]+)') AS saida,
+       LEFT(COALESCE(c.obs, ''), 200) AS obs
+FROM public.tproduto_cardex c
+JOIN public.tproduto p ON p.cod_empresa = c.cod_empresa AND p.codigo = c.cod_produto
+WHERE c.cod_empresa = %(cod_empresa)s
+  AND c.cod_deposito = 1
+  AND c.tipo_movimento IN (1, 2)
+  AND UPPER(COALESCE(c.tabela_link, '')) IN ('TSAIDA_E', 'TOS', 'TPRODUTO')
+  AND COALESCE(c.qtde_movimentada, 0) > 0
+  AND c.dt_hora_movimentacao >= %(desde)s
+  AND UPPER(TRIM(p.codigo_interno)) = ANY(%(codigos)s)
+ORDER BY c.dt_hora_movimentacao, c.id
+LIMIT 2000;
+"""
+
 SQL_ENDERECAMENTO_SAIDAS = """
 SELECT i.guid_linha, UPPER(TRIM(p.codigo_interno)) AS codigo, i.cod_rel AS saida,
        COALESCE(h.dt_efetiva, h.data)::date AS data,

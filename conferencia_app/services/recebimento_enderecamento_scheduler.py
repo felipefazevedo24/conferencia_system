@@ -69,8 +69,10 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
 
         # Quantidade por endereço e limpeza do material sem saldo (17/11/2026).
         # Cada etapa falha sozinha: GRV fora do ar não derruba o retry acima.
-        from .enderecamento_service import importar_saidas, limpar_sem_saldo
-        for etapa in (importar_saidas, limpar_sem_saldo):
+        # Estorno de saída (21/11/2026) depois da limpeza: devolve o endereço
+        # que a limpeza tirou e a quantidade ao endereço de onde saiu.
+        from .enderecamento_service import importar_saidas, limpar_sem_saldo, tratar_estornos
+        for etapa in (importar_saidas, limpar_sem_saldo, tratar_estornos):
             try:
                 etapa()
             except Exception:
