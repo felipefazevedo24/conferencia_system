@@ -5441,6 +5441,9 @@ class InventarioCiclicoItem(db.Model):
     grv1 = db.Column(db.Float)
     recontagem_liberada_por = db.Column(db.String(100))
     recontagem_liberada_em = db.Column(db.DateTime)
+    # A 2a e' de outro conferente, escolhido pelo gestor ao liberar. Nulo nos
+    # itens liberados antes dessa regra: ficam com o conferente da distribuicao.
+    conferente2 = db.Column(db.String(80))
     contagem2 = db.Column(db.Float)
     contagem2_por = db.Column(db.String(100))
     contagem2_em = db.Column(db.DateTime)

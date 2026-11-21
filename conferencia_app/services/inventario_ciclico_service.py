@@ -7,10 +7,12 @@
     distribuicao em aberto nao entra de novo.
   - 1a contagem (conferente, cega): bateu com o GRV -> Confere; nao bateu ->
     Divergente na 1a, e o gestor libera a 2a.
-  - 2a contagem (mesmo conferente, cega): bateu -> Confere; nao bateu ->
-    Aguardando 3a.
-  - 3a contagem (gestor): bateu -> Confere; nao bateu -> Divergencia
-    confirmada e abre o ajuste normal (Ajuste de Estoque).
+  - 2a contagem (outro conferente, cega, escolhido pelo gestor ao liberar):
+    bateu -> Confere; nao bateu -> Aguardando 3a.
+  - 3a contagem (gestor, que nao pode ter feito a 1a nem a 2a): bateu ->
+    Confere; nao bateu -> Divergencia confirmada e abre o ajuste normal
+    (Ajuste de Estoque). Quem conta de novo e' sempre outra pessoa
+    (pedido da Logistica em 19/11/2026).
   - Divergente na 1a ou aguardando a 3a, o gestor pode pular a recontagem e
     mandar direto pro ajuste com a ultima contagem do conferente.
   - Ajuste aberto pelo ciclico ja foi validado pelo gestor: se ele tem a
@@ -25,7 +27,7 @@ import math
 import re
 from datetime import timedelta
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from ..extensions import db
 from ..models import (
@@ -246,13 +248,22 @@ def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conf
     return {"distribuicao": dist, "total": len(novas), "fora": len(escolhidas) - len(novas)}
 
 
+def _conferente_da_rodada(item: Item) -> str:
+    if item.status == Item.STATUS_AGUARDA_2A:
+        return item.conferente2 or item.distribuicao.conferente
+    return item.distribuicao.conferente
+
+
 def itens_do_conferente(username: str) -> list[Item]:
     return (
         Item.query.join(Distribuicao)
         .filter(
-            Distribuicao.conferente == username,
             Distribuicao.cancelado_em.is_(None),
-            Item.status.in_(list(STATUS_CONFERENTE)),
+            or_(
+                and_(Item.status == Item.STATUS_AGUARDA_1A, Distribuicao.conferente == username),
+                and_(Item.status == Item.STATUS_AGUARDA_2A,
+                     func.coalesce(Item.conferente2, Distribuicao.conferente) == username),
+            ),
         )
         .order_by(Item.endereco, Item.codigo)
         .all()
@@ -364,7 +375,7 @@ def _fechar(item: Item, qtd: float, grv: float, custo: float | None, usuario: st
 
 def registrar_contagem_conferente(item: Item, quantidade, usuario: str) -> None:
     """1a ou 2a contagem. Nao devolve o resultado: a contagem e' cega."""
-    if item.distribuicao.cancelado_em or item.distribuicao.conferente != usuario:
+    if item.distribuicao.cancelado_em or _conferente_da_rodada(item) != usuario:
         raise ValueError("Este item não está com você para contar.")
     rodada = STATUS_CONFERENTE.get(item.status)
     if not rodada:
@@ -384,10 +395,16 @@ def registrar_contagem_conferente(item: Item, quantidade, usuario: str) -> None:
     db.session.commit()
 
 
-def liberar_recontagem(item: Item, usuario: str) -> None:
+def liberar_recontagem(item: Item, usuario: str, conferente: str) -> None:
     if item.status != Item.STATUS_DIVERGENTE_1A or item.distribuicao.cancelado_em:
         raise ValueError("Só dá para liberar a 2ª contagem de item divergente na 1ª.")
+    conferente = str(conferente or "").strip()
+    if not conferente:
+        raise ValueError("Escolha o conferente da 2ª contagem.")
+    if conferente == item.contagem1_por:
+        raise ValueError(f"{conferente} fez a 1ª contagem; a 2ª tem que ser de outro conferente.")
     item.status = Item.STATUS_AGUARDA_2A
+    item.conferente2 = conferente
     item.recontagem_liberada_por = usuario
     item.recontagem_liberada_em = agora_br()
     db.session.commit()
@@ -432,7 +449,8 @@ def manter_divergencia(item: Item, usuario: str, justificativa: str) -> None:
 ACOES_LOTE = {"liberar": "Liberar 2ª contagem", "ajuste": "Seguir para ajuste", "manter": "Manter divergência"}
 
 
-def acao_em_lote(acao: str, ids: list, usuario: str, justificativa: str | None = None) -> dict:
+def acao_em_lote(acao: str, ids: list, usuario: str, justificativa: str | None = None,
+                 conferente: str | None = None) -> dict:
     """Liberar a 2a ou seguir para ajuste varios itens de uma vez. Item que
     nao pode (status mudou, outra aba ja tratou) entra em "erros" e o resto
     segue - um nao trava os outros."""
@@ -460,7 +478,7 @@ def acao_em_lote(acao: str, ids: list, usuario: str, justificativa: str | None =
     for item in itens:
         try:
             if acao == "liberar":
-                liberar_recontagem(item, usuario)
+                liberar_recontagem(item, usuario, conferente)
             elif acao == "manter":
                 manter_divergencia(item, usuario, justificativa)
             else:
@@ -482,6 +500,8 @@ def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:
     """3a contagem. Devolve True se bateu com o GRV."""
     if item.status != Item.STATUS_AGUARDA_3A or item.distribuicao.cancelado_em:
         raise ValueError("Este item não está aguardando a 3ª contagem.")
+    if usuario in {item.contagem1_por, item.contagem2_por}:
+        raise ValueError("Você já contou este item; a 3ª tem que ser de outra pessoa.")
     qtd = _quantidade(quantidade)
     grv, custo, _ = _saldo_grv(item)
     bateu = _bate(qtd, grv)

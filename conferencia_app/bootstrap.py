@@ -1358,6 +1358,11 @@ def initialize_database(app: Flask) -> None:
             pass
 
         try:
+            _ensure_inventario_ciclico_conferente2_column()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao criar inventario_ciclico_item.conferente2")
+
+        try:
             _ensure_estoque_planejamento_parametro_columns()
         except Exception:
             app.logger.exception("Bootstrap: falha ao criar colunas novas de estoque_planejamento_parametro")
@@ -2095,6 +2100,19 @@ def _ensure_inventario_ciclico_divergencia_mantida_columns() -> None:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_inventario_ciclico_conferente2_column() -> None:
+    if not _has_table("inventario_ciclico_item"):
+        return
+    if "conferente2" in _get_column_names("inventario_ciclico_item"):
+        return
+    conn = db.engine.connect()
+    try:
+        conn.execute(db.text("ALTER TABLE inventario_ciclico_item ADD COLUMN conferente2 VARCHAR(80)"))
+        conn.commit()
     finally:
         conn.close()
 

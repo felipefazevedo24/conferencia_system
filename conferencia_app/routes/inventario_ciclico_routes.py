@@ -42,6 +42,7 @@ def _item_gestao(i: Item) -> dict:
         "codigo": i.codigo, "descricao": i.descricao, "unidade": i.unidade, "endereco": i.endereco, "status": i.status,
         "contagem1": i.contagem1, "contagem1_por": i.contagem1_por, "contagem1_em": _dt(i.contagem1_em), "grv1": i.grv1,
         "recontagem_liberada_por": i.recontagem_liberada_por, "recontagem_liberada_em": _dt(i.recontagem_liberada_em),
+        "conferente2": i.conferente2,
         "contagem2": i.contagem2, "contagem2_por": i.contagem2_por, "contagem2_em": _dt(i.contagem2_em), "grv2": i.grv2,
         "contagem3": i.contagem3, "contagem3_por": i.contagem3_por, "contagem3_em": _dt(i.contagem3_em), "grv3": i.grv3,
         "ajuste_id": i.ajuste_id,
@@ -218,12 +219,15 @@ def api_cancelar(dist_id: int):
 def api_pendencias_lote():
     p = request.get_json(silent=True) or {}
     acao = str(p.get("acao") or "")
+    conferente = str(p.get("conferente") or "").strip()
+    if acao == "liberar" and conferente not in _conferentes():
+        return jsonify({"error": "Escolha um conferente com acesso ao inventário cíclico para a 2ª contagem."}), 400
     try:
-        res = svc.acao_em_lote(acao, p.get("ids"), _usuario(), p.get("justificativa"))
+        res = svc.acao_em_lote(acao, p.get("ids"), _usuario(), p.get("justificativa"), conferente)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     if acao == "liberar":
-        msg = f"2ª contagem liberada para {res['feitos']} item(ns)."
+        msg = f"2ª contagem liberada para {conferente}: {res['feitos']} item(ns)."
     elif acao == "manter":
         msg = f"Divergência mantida em {res['feitos']} item(ns). Estoque sem ajuste."
     else:

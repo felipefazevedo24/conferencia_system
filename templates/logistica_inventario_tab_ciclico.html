@@ -175,6 +175,10 @@
             <div class="eui-card__head"><strong id="ic-confirmar-titulo"></strong></div>
             <div class="eui-card__body" style="display:grid;gap:14px;">
                 <div id="ic-confirmar-texto"></div>
+                <div class="ic-field ic-hidden" id="ic-confirmar-conf-wrap">
+                    <label for="ic-confirmar-conf">Conferente da 2ª *</label>
+                    <select class="eui-input" id="ic-confirmar-conf"></select>
+                </div>
                 <div class="ic-field ic-hidden" id="ic-confirmar-just-wrap">
                     <label for="ic-confirmar-just">Justificativa *</label>
                     <textarea class="eui-input" id="ic-confirmar-just" rows="3" maxlength="500" placeholder="Ex.: chapa - saldo fica com a diferença até o próximo corte"></textarea>
@@ -280,6 +284,7 @@
 
     // ── Gestão ──
     let familias = {};
+    let conferentes = [];
     // valores: texto simples ou {valor, rotulo}.
     function opcoesSelect(el, valores, vazio) {
         el.innerHTML = `<option value="">${esc(vazio)}</option>` + valores.map((v) => {
@@ -471,10 +476,10 @@
         atualizarLote();
     }
 
-    async function executarLote(acao, ids, btn, justificativa) {
+    async function executarLote(acao, ids, btn, justificativa, conferente) {
         btn.disabled = true;
         try {
-            const d = await api('/api/inventario-ciclico/pendencias/lote', { method: 'POST', body: JSON.stringify({ acao, ids, justificativa }) });
+            const d = await api('/api/inventario-ciclico/pendencias/lote', { method: 'POST', body: JSON.stringify({ acao, ids, justificativa, conferente }) });
             toast(d.message, d.erros && d.erros.length ? 'error' : 'success');
             ids.forEach((id) => pendMarcados.delete(id));
             $('ic-modal-confirmar').classList.remove('open');
@@ -566,6 +571,7 @@
             familias = d.familias || {};
             opcoesSelect($('ic-familia'), Object.keys(familias), Object.keys(familias).length ? 'Escolha a família' : 'Aguardando o estoque do GRV');
             if (familias[familiaAtual]) $('ic-familia').value = familiaAtual;
+            conferentes = d.conferentes || [];
             const conferenteAtual = $('ic-conferente').value;
             opcoesSelect($('ic-conferente'), d.conferentes || [], 'Escolha o conferente');
             if ((d.conferentes || []).includes(conferenteAtual)) $('ic-conferente').value = conferenteAtual;
@@ -586,7 +592,7 @@
                 const grv = i.grv3 ?? i.grv2 ?? i.grv1;
                 return `<tr><td>${end(i.endereco)}</td><td class="ic-cod">${esc(i.codigo)}</td><td>${esc(i.descricao)}</td>
                     <td class="num">${num(i.contagem1)}</td><td class="num">${num(i.contagem2)}</td><td class="num">${num(i.contagem3)}</td>
-                    <td class="num">${num(grv)}</td><td${i.divergencia_mantida_justificativa ? ` title="${esc(i.divergencia_mantida_por)}: ${esc(i.divergencia_mantida_justificativa)}"` : ''}>${st(i.status)}</td></tr>`;
+                    <td class="num">${num(grv)}</td><td${i.divergencia_mantida_justificativa ? ` title="${esc(i.divergencia_mantida_por)}: ${esc(i.divergencia_mantida_justificativa)}"` : ''}>${st(i.status)}${i.status === 'Aguardando 2ª' && i.conferente2 ? ` <span class="ic-hint">${esc(i.conferente2)}</span>` : ''}</td></tr>`;
             }).join('') || '<tr><td colspan="8" class="ic-vazio">Sem itens.</td></tr>';
             abrirModal('ic-modal-itens');
         } catch (e) { toast(e.message, 'error'); }
@@ -595,9 +601,12 @@
     let urlConfirmada = null;
     let acaoConfirmada = null;  // quando a confirmacao e' de uma acao em lote
     // comJustificativa: mostra o campo (obrigatorio) - a acao le em $('ic-confirmar-just').
-    function pedirConfirmacao(titulo, texto, botao, url, acao, comJustificativa) {
+    // opcoesConferente: lista para o select da 2a - a acao le em $('ic-confirmar-conf').
+    function pedirConfirmacao(titulo, texto, botao, url, acao, comJustificativa, opcoesConferente) {
         $('ic-confirmar-just').value = '';
         $('ic-confirmar-just-wrap').classList.toggle('ic-hidden', !comJustificativa);
+        $('ic-confirmar-conf-wrap').classList.toggle('ic-hidden', !opcoesConferente);
+        opcoesSelect($('ic-confirmar-conf'), opcoesConferente || [], 'Escolha o conferente');
         $('ic-confirmar-titulo').textContent = titulo;
         $('ic-confirmar-texto').textContent = texto;
         $('ic-confirmar-ok').textContent = botao;
@@ -666,9 +675,20 @@
             pendencias.forEach((i) => { if (ev.target.checked) pendMarcados.add(i.id); else pendMarcados.delete(i.id); });
             renderPendencias(pendencias);
         });
-        $('ic-lote-liberar').addEventListener('click', (ev) => {
-            const ids = pendencias.filter((i) => pendMarcados.has(i.id) && i.status === 'Divergente na 1ª').map((i) => i.id);
-            executarLote('liberar', ids, ev.currentTarget);
+        $('ic-lote-liberar').addEventListener('click', () => {
+            const sel = pendencias.filter((i) => pendMarcados.has(i.id) && i.status === 'Divergente na 1ª');
+            // Quem fez a 1a nao pode fazer a 2a.
+            const fizeram = new Set(sel.map((i) => i.contagem1_por));
+            const opcoes = conferentes.filter((c) => !fizeram.has(c));
+            if (!opcoes.length) { toast('Nenhum outro conferente disponível para a 2ª contagem.', 'error'); return; }
+            const texto = sel.length === 1
+                ? `${sel[0].codigo} vai para outro conferente recontar.`
+                : `${sel.length} itens vão para outro conferente recontar.`;
+            pedirConfirmacao('Liberar 2ª contagem', texto, `Liberar 2ª contagem (${sel.length})`, null, (btn) => {
+                const conferente = $('ic-confirmar-conf').value;
+                if (!conferente) { toast('Escolha o conferente da 2ª contagem.', 'error'); $('ic-confirmar-conf').focus(); return; }
+                return executarLote('liberar', sel.map((i) => i.id), btn, null, conferente);
+            }, false, opcoes);
         });
         $('ic-lote-ajuste').addEventListener('click', () => {
             const sel = pendencias.filter((i) => pendMarcados.has(i.id));
