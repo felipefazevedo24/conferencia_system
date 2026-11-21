@@ -94,6 +94,7 @@
      const materialCell = el('td', null, 'pa-description');
      materialCell.append(el('div', item.descricao || 'Material sem descrição', 'pa-desc'), el('div', item.fornecedor || '', 'pa-meta'));
      if (item.em_inventario) materialCell.append(el('span', 'Em análise de inventário', 'pa-badge pa-badge--inventario'));
+     if (item.lembranca && item.lembranca.length) materialCell.append(el('div', `Já esteve em ${item.lembranca.join(', ')}`, 'pa-meta'));
      if (bloqueado) {
       const aviso = el('div', null, 'pa-bloqueio'); const ic = el('i', null, 'fas fa-lock'); ic.setAttribute('aria-hidden', 'true');
       aviso.append(ic, el('span', item.impedimento)); materialCell.append(aviso);
@@ -227,7 +228,9 @@
     skuToken = data.token; allocations = []; setAddressEnabled(true);
     $('pa-sku-result').textContent = `SKU validado: ${data.codigo}`;
     $('pa-reason-wrap').hidden = !data.enderecos.length;
-    feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Informe o local. Se estiver lotado, marque a opção de endereço adicional.` : 'Material sem endereço no GRV. Informe a etiqueta do local onde vai guardar.', true);
+    feedback(data.enderecos.length ? `Este material já está endereçado em: ${data.enderecos.join('; ')}. Informe o local. Se estiver lotado, marque a opção de endereço adicional.`
+     : data.lembranca && data.lembranca.length ? `Material sem endereço no GRV. Já esteve em ${data.lembranca.join(', ')}: se tiver espaço, guarde lá. Informe a etiqueta do local.`
+     : 'Material sem endereço no GRV. Informe a etiqueta do local onde vai guardar.', true);
     focar('pa-address-manual');
    } else {
     const sum = allocations.reduce((n,a) => n + Number(a.quantidade || 0),0);

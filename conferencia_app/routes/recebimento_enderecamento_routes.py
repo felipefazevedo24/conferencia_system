@@ -138,7 +138,17 @@ def listar():
     from ..services import enderecamento_service as modulo_svc
     skus_da_pagina = [str(t.item.codigo_grv or "").strip() or t.sku for t in tarefas]
     inventariados = modulo_svc.skus_em_inventario(skus_da_pagina)
-    return jsonify(itens=[serializar(t, inventariados, sem_saldo) for t in tarefas], contadores=contadores,
+    itens = [serializar(t, inventariados, sem_saldo) for t in tarefas]
+    # Pendente sem endereço na foto do GRV: onde o material ficou da última vez.
+    from ..services import enderecamento_foto_service as foto_end
+    foto = foto_end.estoque(buscar_se_vazio=False)[0] if status == "Pendente" else None
+    if foto:
+        por_codigo = foto.get('por_codigo') or {}
+        lembrancas = foto_end.lembrancas(str(i['sku'] or '').upper() for i in itens
+                                         if i['sku'] and not modulo_svc.enderecos_do_agregado(por_codigo.get(str(i['sku']).strip().upper()) or {}))
+        for i in itens:
+            i['lembranca'] = lembrancas.get(str(i['sku'] or '').strip().upper())
+    return jsonify(itens=itens, contadores=contadores,
                    concluidos_hoje=concluidos_hoje, pagina=pagina)
 
 
@@ -176,8 +186,12 @@ def operar(tarefa_id, acao):
         return jsonify(erro="Dados inválidos."), 400
     try:
         if acao == "leitura":
-            return jsonify(svc.registrar_leitura(tarefa, dados.get("tipo"), dados.get("codigo"),
-                                                 manual=bool(dados.get("manual"))))
+            leitura = svc.registrar_leitura(tarefa, dados.get("tipo"), dados.get("codigo"),
+                                            manual=bool(dados.get("manual")))
+            if dados.get("tipo") == "sku" and not leitura.get("enderecos"):
+                from ..services.enderecamento_foto_service import lembrancas
+                leitura["lembranca"] = lembrancas([leitura.get("codigo")]).get(str(leitura.get("codigo") or "").strip().upper())
+            return jsonify(leitura)
         if acao == "confirmar":
             svc.confirmar(tarefa, dados, has_permission(MANAGE))
             svc.sincronizar(tarefa)
@@ -247,15 +261,15 @@ def _produto_acabado_da_os(busca):
 def saldos():
     """Endereços ocupados segundo o GRV, que é quem controla o saldo.
 
-    O Sync não guarda cópia disso: a lista é montada do snapshot do estoque do
-    GRV, e a falha da bridge não pode derrubar a tela."""
+    A lista sai da foto do estoque do GRV (enderecamento_foto_service), com o
+    que o Sync mudou depois dela; a falha da bridge não pode derrubar a tela."""
     from ..models import EnderecoMovimento as Movimento
-    from ..services.erp_estoque_service import buscar_estoque_grv
+    from ..services import enderecamento_foto_service as foto_end
     busca = str(request.args.get('busca') or '').strip()[:100].upper()
     pagina = max(1, request.args.get('pagina', 1, type=int))
     pendentes = Movimento.query.filter_by(sincronizado_em=None).count()
     try:
-        estoque = buscar_estoque_grv(forcar_atualizacao=request.args.get('atualizar') == '1')
+        estoque, foto = foto_end.estoque()
     except Exception:
         current_app.logger.exception('Falha ao consultar os endereços no GRV')
         return jsonify(itens=[], total=0, pagina=pagina, indisponivel=True,
@@ -347,12 +361,32 @@ def saldos():
         return dict(multi=True, qtd_endereco=float(linha.quantidade) if linha else None,
                     conferido=bool(linha and linha.conferido))
 
+    # Material sem endereço: onde ficou da última vez.
+    lembrancas = foto_end.lembrancas(s for e, s, *_ in visiveis if not e)
     return jsonify(itens=[dict(endereco=e, sku=s, descricao=d, unidade=u, saldo=saldo, os=os_achada.get(s),
-                               em_inventario=str(s).strip().upper() in inventariados, **no_endereco(e, s))
+                               em_inventario=str(s).strip().upper() in inventariados,
+                               lembranca=None if e else lembrancas.get(str(s).strip().upper()),
+                               **no_endereco(e, s))
                           for e, s, d, u, saldo in visiveis],
-                   total=total, pagina=pagina,
+                   total=total, pagina=pagina, foto=foto,
                    metricas=dict(materiais=materiais, enderecos=enderecos,
                                  sem_endereco=len(sem_endereco), sincronizar=pendentes))
+
+
+@recebimento_enderecamento_bp.post('/api/enderecamento/foto/atualizar')
+@permission_required(PERMISSION)
+def atualizar_foto():
+    """Busca o estoque no GRV e grava a foto da tela; a tela segue com a atual até terminar."""
+    from ..services import enderecamento_foto_service as foto_end
+    from ..services import estoque_foto_service as foto_svc
+    try:
+        if not foto_end.atualizar(session.get('username') or ''):
+            return jsonify(ja_em_andamento=True, foto=foto_svc.ler(foto_end.VISAO)[1])
+    except Exception:
+        current_app.logger.warning('Não foi possível atualizar a foto do endereçamento.', exc_info=True)
+        return jsonify(erro='Não deu para buscar o estoque no GRV agora. Tente de novo em instantes.',
+                       foto=foto_svc.ler(foto_end.VISAO)[1]), 502
+    return jsonify(sucesso=True, foto=foto_svc.ler(foto_end.VISAO)[1])
 
 
 @recebimento_enderecamento_bp.get('/api/enderecamento/historico')
@@ -532,15 +566,16 @@ def material():
         enderecos = modulo_svc.enderecos_atuais(sku)
     except ValueError as exc:
         return jsonify(erro=str(exc)), 409
-    # Descrição/unidade/saldo vêm do snapshot do estoque (com cache); faltar
-    # não impede a operação, só deixa o cartão do material mais pobre.
+    # Descrição/unidade/saldo vêm da foto do estoque; faltar não impede a
+    # operação, só deixa o cartão do material mais pobre.
+    from ..services import enderecamento_foto_service as foto_end
     info = {}
     try:
-        from ..services.erp_estoque_service import buscar_estoque_grv
-        info = (buscar_estoque_grv().get('por_codigo') or {}).get(sku.strip().upper()) or {}
+        info = (foto_end.estoque()[0].get('por_codigo') or {}).get(sku.strip().upper()) or {}
     except Exception:
         current_app.logger.warning('Diálogo de movimentação sem o snapshot do GRV.', exc_info=True)
-    return jsonify(sku=sku, enderecos=enderecos, descricao=str(info.get('item') or '').strip(),
+    lembranca = None if enderecos else foto_end.lembrancas([sku]).get(sku.strip().upper())
+    return jsonify(sku=sku, enderecos=enderecos, lembranca=lembranca, descricao=str(info.get('item') or '').strip(),
                    unidade=str(info.get('unidade') or '').strip(),
                    saldo=float(info['qtde_total']) if info.get('qtde_total') is not None else None,
                    em_inventario=bool(modulo_svc.skus_em_inventario([sku])))
@@ -552,12 +587,12 @@ def catalogo_de_locais():
     """Todos os endereços conhecidos, inclusive os que estão vazios agora.
 
     A ocupação vem do GRV; se a consulta falhar, a lista continua de pé sem ela."""
-    from ..services.erp_estoque_service import buscar_estoque_grv
+    from ..services import enderecamento_foto_service as foto_end
     from ..services import enderecamento_service as modulo_svc
     busca = str(request.args.get('busca') or '').strip()[:100].upper()
     ocupacao, indisponivel = {}, False
     try:
-        for sku, agregado in (buscar_estoque_grv().get('por_codigo') or {}).items():
+        for sku, agregado in (foto_end.estoque()[0].get('por_codigo') or {}).items():
             for bruto in agregado.get('localizacoes') or []:
                 for endereco in str(bruto).split(';'):
                     endereco = modulo_svc.normalizar(endereco)

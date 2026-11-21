@@ -60,9 +60,16 @@
    balances=data.itens; $('end-balances').replaceChildren();
    for(const [name,value] of Object.entries(data.metricas))$('end-kpi-'+name).textContent=value;
    if(data.erro)message(data.erro);
+   if(data.foto){foto=data.foto;renderFoto();
+    // No máximo 1 pedido automático a cada 2 min: com o GRV fora a foto continua velha.
+    if((foto.vazio||foto.desatualizado)&&!foto.em_andamento&&Date.now()-ultimoPedidoFoto>120000){ultimoPedidoFoto=Date.now();atualizarFoto();}
+    else if(foto.em_andamento&&!atualizandoFoto)esperarFoto();}
    for(const s of balances){
     const row=node('tr',null,s.em_inventario?'end-row--inventario':'');
-    cell(row,'Endereço',s.endereco?node('span',s.endereco,'end-location'):node('span','Sem endereço','end-badge warn'));
+    const onde=s.endereco?node('span',s.endereco,'end-location'):node('div');
+    if(!s.endereco){onde.append(node('span','Sem endereço','end-badge warn'));
+     if(s.lembranca?.length)onde.append(node('div',`Já esteve em ${s.lembranca.join(', ')}`,'end-muted'));}
+    cell(row,'Endereço',onde);
     cell(row,'SKU',s.sku,'end-code');
     const desc=node('div');desc.append(node('div',s.descricao||'—'));
     if(s.os)desc.append(node('span',`OS ${s.os.n_os} · ${s.os.situacao}`,'end-badge end-badge--os'));
@@ -87,6 +94,28 @@
    $('end-page').textContent=`Página ${page} · ${data.total} registro(s)`;$('end-prev').disabled=page===1;$('end-next').disabled=page*40>=data.total;
   }catch(e){message(e.message);}
  }
+ // Foto do estoque do GRV: a tela abre com ela e pede outra por trás quando envelhece.
+ let foto=null,atualizandoFoto=false,ultimoPedidoFoto=0,esperaFoto;
+ function renderFoto(){
+  const el=$('end-foto');if(!el)return;
+  if(!foto||foto.vazio){el.textContent=atualizandoFoto||foto?.em_andamento?' · buscando o estoque no GRV…':'';return;}
+  el.textContent=` · foto de ${foto.atualizado_em}`+(atualizandoFoto||foto.em_andamento?' · atualizando…':foto.erro?' · o GRV não respondeu na última atualização':'');
+ }
+ async function atualizarFoto(){
+  if(atualizandoFoto)return;
+  atualizandoFoto=true;renderFoto();$('end-refresh').disabled=true;
+  try{
+   const resp=await fetch(base+'/foto/atualizar',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   const data=await resp.json().catch(()=>({}));
+   if(data.foto)foto=data.foto;
+   if(data.ja_em_andamento){esperarFoto();return;}
+   if(!resp.ok&&data.erro)message(data.erro);
+  }catch(_){/* a foto atual continua na tela */}
+  finally{atualizandoFoto=false;$('end-refresh').disabled=false;renderFoto();}
+  refresh();
+ }
+ // Outra pessoa já está atualizando: confere de novo em instantes.
+ function esperarFoto(){clearTimeout(esperaFoto);esperaFoto=setTimeout(refresh,15000);}
  // Com 2+ endereços, a quantidade de cada endereço vem do Sync; com um só, é o saldo do GRV.
  function saldoCelula(s){
   const total=`${number(s.saldo)} ${s.unidade||''}`.trim();
@@ -305,7 +334,17 @@
      b.onclick=()=>{setModo('transferir');$('end-origin').value=e;$('end-destination').focus();marcarOrigem();preview();};
      chips.append(b);
     }
-   }else chips.append(node('span','Sem endereço no GRV: use "Inclusão de endereço".','end-muted'));
+   }else{
+    chips.append(node('span','Sem endereço no GRV: use "Inclusão de endereço".','end-muted'));
+    if(data.lembranca?.length){
+     chips.append(node('span','Já esteve em:','end-muted'));
+     for(const e of data.lembranca){
+      const b=node('button',e,'end-chip');b.type='button';b.title='Usar como destino';
+      b.onclick=()=>{setModo('acrescentar');$('end-destination').value=e;$('end-quantity').focus();preview();};
+      chips.append(b);
+     }
+    }
+   }
    card.append(chips);$('end-current').replaceChildren(card);
    if(!atuais.length&&modo==='transferir'&&!$('end-origin').value.trim())setModo('acrescentar');
   }catch(e){atuais=null;if($('end-sku').value.trim()===sku)$('end-current').replaceChildren(node('span',e.message,'end-muted end-erro'));}
@@ -386,7 +425,7 @@
  document.querySelectorAll('.end-mode button').forEach(b=>b.onclick=()=>{setModo(b.dataset.mode);(modo==='transferir'?$('end-origin'):$('end-destination')).focus();});
  for(const [a,b] of [['end-sku','end-origin'],['end-origin','end-destination'],['end-destination','end-quantity'],['end-quantity','end-unit'],['end-unit','end-reason']])$(a).onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$(b).focus();}};
  $('end-move').onclick=()=>open();
- $('end-refresh').onclick=refresh;$('end-search').onchange=()=>{page=1;refresh();};
+ $('end-refresh').onclick=atualizarFoto;$('end-search').onchange=()=>{page=1;refresh();};
  document.querySelectorAll('#end-por button').forEach(b=>b.onclick=()=>{setPor(b.dataset.por);page=1;$('end-search').focus();if($('end-search').value.trim())refresh();});
  document.querySelectorAll('#end-filter button').forEach(b=>b.onclick=()=>{filtro=b.dataset.filtro;marcar('end-filter','filtro',filtro);page=1;refresh();});
  $('end-only-stock').onclick=()=>{comSaldo=!comSaldo;$('end-only-stock').setAttribute('aria-pressed',String(comSaldo));$('end-only-stock').classList.toggle('active',comSaldo);page=1;refresh();};
