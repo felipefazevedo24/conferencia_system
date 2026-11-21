@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import zlib
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -213,6 +214,21 @@ def valores_do_mes(mes: str, visoes: list[str]) -> dict[str, dict[str, Any]]:
     return resultado
 
 
+def numero_br(texto: str) -> float:
+    """'4.123.456,78', '10,99', 'R$ 1.500' ou '10.99' -> float (nan se não
+    for número). Vírgula é sempre decimal; ponto sozinho seguido de 3
+    dígitos é milhar ('1.500' = mil e quinhentos), senão é decimal."""
+    texto = re.sub(r"[R$\s]", "", str(texto or ""))
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    elif texto.count(".") > 1 or re.fullmatch(r"-?\d{1,3}\.\d{3}", texto):
+        texto = texto.replace(".", "")
+    try:
+        return float(texto)
+    except ValueError:
+        return math.nan
+
+
 def informar_valores(mes: str, valores: dict, visoes: list[str], usuario: str) -> None:
     """Grava o valor informado de cada visão no mês. Vazio apaga o informado
     e o mês volta ao gravado (se houver)."""
@@ -227,10 +243,7 @@ def informar_valores(mes: str, valores: dict, visoes: list[str], usuario: str) -
         if not texto:
             novos[visao] = None
             continue
-        try:
-            valor = float(texto)
-        except ValueError:
-            valor = math.nan
+        valor = numero_br(texto)
         if not math.isfinite(valor):
             raise ValueError("Informe o valor em número.")
         if valor < 0:

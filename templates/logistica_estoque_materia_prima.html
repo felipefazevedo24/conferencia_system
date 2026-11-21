@@ -1812,7 +1812,7 @@
                     const gravado = v.gravado == null ? 'Sem valor gravado' : `Gravado: ${brl(v.gravado)}`;
                     const informado = v.informado_por ? ` · informado por ${esc(v.informado_por)} em ${esc(v.informado_em)}` : '';
                     return `<div><label for="mp-valor-${esc(v.visao)}">${esc(v.label)} (R$)</label>
-                        <input class="eui-input" id="mp-valor-${esc(v.visao)}" data-visao="${esc(v.visao)}" type="number" step="0.01" min="0" value="${v.informado ?? ''}" placeholder="${v.gravado ?? ''}">
+                        <input class="eui-input" id="mp-valor-${esc(v.visao)}" data-visao="${esc(v.visao)}" type="text" inputmode="decimal" autocomplete="off" value="${v.informado == null ? '' : fmt(v.informado, 2)}" placeholder="${v.gravado == null ? 'ex.: 1.234.567,89' : fmt(v.gravado, 2)}">
                         <span class="mp-muted">${gravado}${informado}</span></div>`;
                 }).join('');
             } catch (err) {
