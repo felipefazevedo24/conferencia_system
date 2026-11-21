@@ -55,7 +55,8 @@ from ..routes.logistica_inventario_routes import ESTOQUE_VISOES as _TODAS_VISOES
 # EPI e uniformes (17/11/2026) entraram só na tela: o aviso por e-mail
 # continua nas visões que já tinha. Para incluir, é só tirar este filtro (e
 # levar o filtro de grupo de _itens_da_visao para _planos_da_visao).
-ESTOQUE_VISOES = {v: cfg for v, cfg in _TODAS_VISOES.items() if v != "uso_consumo"}
+# Embalagem e produtos em processo (21/11/2026) também: só na tela.
+ESTOQUE_VISOES = {v: cfg for v, cfg in _TODAS_VISOES.items() if v not in {"uso_consumo", "embalagem", "em_processo"}}
 
 TIPO_RESERVA = "reserva"
 TIPO_CURVA_A = "curva_a"

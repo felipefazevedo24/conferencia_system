@@ -55,6 +55,8 @@ from ..services import logistica_inventario_ajuste_service as ajuste_svc
 from ..services import inventario_ciclico_service as ciclico_svc
 from ..services import estoque_planejamento_service as planejamento_svc
 from ..services import estoque_foto_service as foto_svc
+from ..services import estoque_em_processo_service as em_processo_svc
+from ..services import estoque_cmv_service as cmv_svc
 from ..services.estoque_analise_export import gerar_excel_analise
 from ..tempo import agora_br
 
@@ -94,10 +96,18 @@ ESTOQUE_VISOES = {
     # So' EPI (grupo 3) e uniformes (grupo 9), os mesmos do Facilities: o resto
     # da N-39 fica de fora (pedido da logistica em 17/11/2026).
     "uso_consumo": {"label": "EPI e uniformes", "familia": "N - 39 - USO E CONSUMO (C/ ESTOQUE)", "grupos": ["3", "9"]},
+    # 21/11/2026. "familia_nome": casa pelo nome sem o prefixo "N - 00 - " (o
+    # numero dessas familias no GRV nao foi conferido).
+    "embalagem": {"label": "Embalagem", "familia": "EMBALAGEM", "familia_nome": True},
+    # Material no terceiro para industrializar: so' saldo, de todos os
+    # depositos (estoque_em_processo_service), sem planejamento.
+    "em_processo": {"label": "Produtos em processo", "familia": "PRODUTOS EM PROCESSO", "familia_nome": True},
 }
 # Visoes de material comprado e consumido: tem planejamento (minimo/lote) e OC.
-# Produto acabado fica de fora - e' fabricado, nao comprado.
-VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos", "uso_consumo"}
+# Produto acabado e produtos em processo ficam de fora - nao sao comprados.
+VISOES_PLANEJAMENTO = {"materia_prima", "revenda", "insumos", "uso_consumo", "embalagem"}
+# EPI e uniformes e' despesa, nao custo da mercadoria: fica fora do CMV.
+VISOES_CMV = [v for v in ESTOQUE_VISOES if v != "uso_consumo"]
 # A foto da tela guarda a serie dos ultimos 37 meses: a maior janela aceita
 # (36) mais o mes corrente.
 ESTOQUE_FOTO_MESES_SERIE = 37
@@ -395,18 +405,33 @@ def _filtros_estoque(args, limite_padrao: int | None = 300) -> dict:
     }
 
 
+def _nome_familia(familia: str | None) -> str:
+    """'N - 05 - EMBALAGEM' -> 'EMBALAGEM'."""
+    return re.sub(r"^[A-Z]\s*-\s*\d+\s*-\s*", "", _normalizar_busca(familia))
+
+
+def _familia_da_visao(visao: str, familia: str | None, grupo: str | None) -> bool:
+    cfg = ESTOQUE_VISOES[visao]
+    if cfg.get("familia_nome"):
+        if _nome_familia(familia) != _normalizar_busca(cfg["familia"]):
+            return False
+    elif _normalizar_busca(familia) != _normalizar_busca(cfg["familia"]):
+        return False
+    grupos = set(cfg.get("grupos") or [])
+    return not grupos or str(grupo or "").strip() in grupos
+
+
+def visao_da_familia(familia: str | None, grupo: str | None) -> str | None:
+    """Visao do Estoque de um item pela familia/grupo do GRV (None = fora)."""
+    return next((v for v in ESTOQUE_VISOES if _familia_da_visao(v, familia, grupo)), None)
+
+
 def _itens_da_visao(visao: str, por_codigo: dict):
     """(codigo, item do GRV, sem_controle) de tudo o que a visao mostra."""
-    cfg = ESTOQUE_VISOES[visao]
-    familia_alvo = _normalizar_busca(cfg["familia"])
-    grupos = set(cfg.get("grupos") or [])
     for codigo, item in por_codigo.items():
         sem_controle = visao == "insumos" and codigo in INSUMOS_SEM_CONTROLE_ESTOQUE
-        if not sem_controle:
-            if _normalizar_busca(item.get("familia")) != familia_alvo:
-                continue
-            if grupos and str(item.get("grupo") or "").strip() not in grupos:
-                continue
+        if not sem_controle and not _familia_da_visao(visao, item.get("familia"), item.get("grupo")):
+            continue
         yield codigo, item, sem_controle
 
 
@@ -425,6 +450,10 @@ def _coletar_visao(visao: str, anterior: dict | None, janela_meses: int) -> dict
     saldo a atualizacao falha (a foto anterior continua valendo); se outra
     consulta falhar, fica a parte da foto anterior e a foto sai "parcial"."""
     anterior = anterior or {}
+    if visao == "em_processo":
+        # So' saldo, de todos os depositos: nada de consumo, reserva, OC nem historico.
+        return {"linhas": em_processo_svc.coletar(), "consumo": None, "reservas": {}, "ocs": {},
+                "historicos": None, "historicos_em": None, "historicos_janela_pedida": None, "parcial": []}
     estoque = buscar_estoque_grv(forcar_atualizacao=True)
     if not estoque.get("por_codigo"):
         # Estoque vazio e' bridge respondendo errado: gravar zeraria a tela.
@@ -602,6 +631,14 @@ def _montar_estoque(visao: str, dados: dict, parametros: dict, versao: str | Non
             }
             for reserva in reservas[:20]
         ]
+
+    if visao == "em_processo":
+        # Status = onde o material esta': no deposito 1 (nao deveria) ou ha
+        # mais de 30 dias no terceiro. Calculado na leitura: os dias andam.
+        hoje = agora_br().date()
+        for row in rows:
+            row.update(em_processo_svc.situacao(row, hoje))
+            row["cobertura_dias"] = None
 
     # Planejamento (historico do GRV): quando ha, substitui a cobertura pela
     # media de 90 dias, que marcava item esporadico como critico. Sem
@@ -891,6 +928,17 @@ def estoque_painel():
             variacao_pct = round((agora_comparavel / sum(anterior.values()) - 1) * 100, 1)
     serie_valor.append(round(valor_total, 2) if valor_por_visao else None)
 
+    # CMV = EI + C + DV - DC - EF (estoque_cmv_service). EF e' o valor em
+    # estoque do mes (o do mes corrente e' o de agora); EI, o do mes anterior.
+    serie_cmv = [None] * (len(meses) + 1)
+    visoes_cmv = [v for v in visoes if v in VISOES_CMV]
+    if not curvas and visoes_cmv:
+        abertura = planejamento_svc._meses_fechados(hoje, len(meses) + 1)[0]
+        estoque_fim = foto_svc.valores_por_mes(visoes_cmv, [abertura] + meses)
+        estoque_fim[mes_atual] = {v: valor_por_visao[v] for v in visoes_cmv if v in valor_por_visao}
+        movimentos = cmv_svc.movimentos_por_mes(visoes_cmv, meses + [mes_atual])
+        serie_cmv = cmv_svc.calcular([abertura] + meses + [mes_atual], estoque_fim, movimentos, visoes_cmv)
+
     saude = {"saudavel": 0, "comprar": 0, "ruptura": 0, "excesso": 0}
     for item in planos:
         grupo = _situacao_painel(item["row"], item["plano"])
@@ -974,6 +1022,8 @@ def estoque_painel():
         "meses": meses + [mes_atual],
         "serie_valor": serie_valor,
         "serie_consumo": [round(base["consumo_mes"][m], 2) for m in meses + [mes_atual]],
+        "serie_cmv": serie_cmv,
+        "cmv": {**cmv_svc.status(), "visoes": {v: ESTOQUE_VISOES[v]["label"] for v in visoes_cmv}},
         "saude": saude,
         "pareto": pareto,
         "pareto_classes": classes,
@@ -982,6 +1032,18 @@ def estoque_painel():
         "acoes": acoes,
         "acoes_total": len(em_acao),
     })
+
+
+@logistica_inventario_bp.route("/api/logistica/estoque/cmv/atualizar", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_ESTOQUE)
+def estoque_cmv_atualizar():
+    """Compras e devolucoes do GRV para o CMV do painel. A tela pede quando
+    o espelho passa de IDADE_MAXIMA_H, como as fotos."""
+    try:
+        res = cmv_svc.atualizar(session.get("username") or "", visao_da_familia)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "cmv": cmv_svc.status()}), 400
+    return jsonify({**res, "cmv": cmv_svc.status()})
 
 
 @logistica_inventario_bp.route("/api/logistica/estoque/valor-mensal", methods=["GET"])

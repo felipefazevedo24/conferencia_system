@@ -272,6 +272,8 @@
         <button class="mp-view-btn" type="button" data-visao="produto_acabado"><i class="fas fa-box"></i> Produto acabado</button>
         <button class="mp-view-btn" type="button" data-visao="insumos"><i class="fas fa-flask"></i> Insumos</button>
         <button class="mp-view-btn" type="button" data-visao="uso_consumo"><i class="fas fa-helmet-safety"></i> EPI e uniformes</button>
+        <button class="mp-view-btn" type="button" data-visao="embalagem"><i class="fas fa-box-open"></i> Embalagem</button>
+        <button class="mp-view-btn" type="button" data-visao="em_processo"><i class="fas fa-industry"></i> Em processo</button>
         <span class="mp-tabs__sep" aria-hidden="true"></span>
         {# Controle de Chapas edita cálculo: só com a permissão de inventário, não com a de consulta. #}
         {% if can_access('PAGE_LOGISTICA_INVENTARIO') %}<a class="mp-view-btn mp-view-btn--fora" href="/logistica/estoque/chapas"><i class="fas fa-layer-group"></i> Chapas <i class="fas fa-arrow-up-right-from-square" style="font-size:10px;"></i></a>{% endif %}
@@ -293,7 +295,7 @@
         <div class="mp-dg">
             <div class="mp-dc">
                 <h3>Valor em estoque × consumo mensal</h3>
-                <p class="mp-dc__sub" id="mp-d-valor-sub">Consumo em R$ pelo custo do GRV. O valor em estoque é gravado desde 17/11/2026.</p>
+                <p class="mp-dc__sub" id="mp-d-valor-sub">Consumo em R$ pelo custo do GRV. O valor em estoque é gravado desde 17/11/2026. CMV = EI + C + DV − DC − EF.</p>
                 <div style="display:flex;align-items:center;gap:10px;">
                     {% if can_access('MANAGE_LOGISTICA_ESTOQUE_VALOR') %}<button class="eui-btn eui-btn--ghost eui-btn--sm" id="mp-valor-open" type="button"><i class="fas fa-pen"></i> Informar valor</button>{% endif %}
                     <div class="mp-legenda" id="mp-leg-valor" style="justify-content:flex-end;margin-left:auto;"></div>
@@ -338,7 +340,7 @@
 
     <div id="mp-area-visao" class="mp-wrap" hidden>
     <div class="mp-dk-grid mp-dk-grid--4" id="mp-kpis">
-        <div class="mp-dk" style="--mp-cor: var(--eui-danger);"><span class="mp-dk__label">Críticos</span><span class="mp-dk__valor" id="mp-k-criticos">0</span><span class="mp-dk__dica" id="mp-k-criticos-hint"></span></div>
+        <div class="mp-dk" style="--mp-cor: var(--eui-danger);"><span class="mp-dk__label" id="mp-k-criticos-label">Críticos</span><span class="mp-dk__valor" id="mp-k-criticos">0</span><span class="mp-dk__dica" id="mp-k-criticos-hint"></span></div>
         <div class="mp-dk" style="--mp-cor: var(--eui-warning);"><span class="mp-dk__label" id="mp-k-atencao-label">Abaixo do mínimo</span><span class="mp-dk__valor" id="mp-k-atencao">0</span><span class="mp-dk__dica" id="mp-k-atencao-hint"></span></div>
         <div class="mp-dk" id="mp-k-exc-card" style="--mp-cor: var(--eui-violet, var(--eui-primary)); display:none;"><span class="mp-dk__label">Excedente</span><span class="mp-dk__valor" id="mp-k-exc">R$ 0</span><span class="mp-dk__dica" id="mp-k-exc-hint"></span></div>
         <div class="mp-dk" id="mp-k-slow-card" style="--mp-cor: var(--eui-primary); display:none;"><span class="mp-dk__label">Slow mover</span><span class="mp-dk__valor" id="mp-k-slow">R$ 0</span><span class="mp-dk__dica" id="mp-k-slow-hint"></span></div>
@@ -520,7 +522,7 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
-    const VISOES_COMPRA = ['materia_prima', 'revenda', 'insumos', 'uso_consumo'];
+    const VISOES_COMPRA = ['materia_prima', 'revenda', 'insumos', 'uso_consumo', 'embalagem'];
     let timer = null;
     // Abre no painel; as visões (matéria-prima...) ficam nas abas.
     let visaoAtual = 'painel';
@@ -578,6 +580,7 @@
     // ------------------------------------------------------------ status
 
     function statusCurto(item) {
+        if (visaoAtual === 'em_processo') return item.nivel_label || '-';
         const nivel = item.nivel || 'normal';
         const rotulos = {
             critico: 'Crítico',
@@ -727,10 +730,17 @@
         excedente: { texto: excedenteTexto, num: (i) => (i.planejamento && !i.planejamento.fora_analise ? Number(i.planejamento.excedente || 0) : null) },
         faixa: { texto: faixaTexto, num: (i) => (faixaTexto(i) === '—' ? null : ORDEM_FAIXA[faixaTexto(i)]) },
         reservas: { texto: (i) => String((i.reservas || []).length || '—'), num: (i) => (i.reservas || []).length },
+        dep1: { texto: (i) => (Number(i.saldo_deposito1 || 0) ? fmt(i.saldo_deposito1) : '—'), num: (i) => Number(i.saldo_deposito1 || 0) },
+        fora: { texto: (i) => (Number(i.saldo_fora || 0) ? fmt(i.saldo_fora) : '—'), num: (i) => Number(i.saldo_fora || 0) },
+        desde: {
+            texto: (i) => (i.terceiro_dias == null ? '—' : `${i.terceiro_desde_exato ? '' : '+'}${i.terceiro_dias} d`),
+            num: (i) => (i.terceiro_dias == null ? null : Number(i.terceiro_dias)),
+        },
         status: { texto: statusCurto, num: (i) => ORDEM_STATUS[i.nivel || 'normal'] ?? 9 },
     };
 
     function colunasAtivas() {
+        if (visaoAtual === 'em_processo') return ['codigo', 'descricao', 'unidade', 'disponivel', 'dep1', 'fora', 'desde', 'status'];
         const plano = planejamentoAtivo;
         return [
             'codigo', 'descricao', 'unidade', ...(plano ? ['curva'] : []), 'disponivel', 'consumo', 'cobertura',
@@ -857,7 +867,10 @@
             excedente: ['Excedente', ' class="num"', 'Saldo acima do máximo'],
             faixa: ['Saldo dura', '', 'Quanto tempo o saldo dura no consumo médio. Parado = sem saída na janela'],
             reservas: ['Reservas', ' class="num"'],
-            status: ['Status', '', statusAjuda],
+            dep1: ['Depósito 1', ' class="num"', 'Produto em processo não deveria ter saldo no depósito 1'],
+            fora: ['Fora do dep. 1', ' class="num"'],
+            desde: ['No terceiro há', ' class="num"', 'Desde a remessa mais antiga ainda lá (o que voltou é o que foi primeiro). "+" = antes de 1 ano'],
+            status: ['Status', '', visaoAtual === 'em_processo' ? 'Sinaliza saldo no depósito 1 e material há mais de 30 dias no terceiro' : statusAjuda],
         };
         $('mp-head').innerHTML = '<tr><th class="c-sel"><input type="checkbox" id="mp-sel-todos" aria-label="Selecionar todos os itens da lista"></th>' + colunasAtivas().map((col) => {
             const [rotulo, atributos, dica] = cabecalhos[col];
@@ -871,6 +884,20 @@
     function linha(item) {
         const p = item.planejamento;
         const sel = item.codigo === selecionado ? ' selecionado' : '';
+        if (visaoAtual === 'em_processo') {
+            return `<tr class="mp-item-row${sel}" data-codigo="${esc(item.codigo || '')}">
+            <td class="c-sel"><input type="checkbox" data-sel="${esc(item.codigo || '')}"${selecao.has(item.codigo) ? ' checked' : ''} aria-label="Selecionar ${esc(item.codigo || '')}"></td>
+            <td class="c-cod">${esc(item.codigo || '-')}</td>
+            <td class="c-desc" title="${esc(item.descricao || '')}">${esc(item.descricao || '-')}</td>
+            <td class="c-un">${esc(item.unidade || '')}</td>
+            <td class="num c-forte">${fmt(item.saldo_total)}</td>
+            <td class="num${Number(item.saldo_deposito1 || 0) ? ' c-forte' : ''}">${COLUNAS.dep1.texto(item)}</td>
+            <td class="num">${COLUNAS.fora.texto(item)}</td>
+            <td class="num" title="${item.terceiro_desde ? `desde ${esc(dataCompleta(item.terceiro_desde))}` : ''}">${COLUNAS.desde.texto(item)}</td>
+            <td>${statusCell(item)}</td>
+            <td class="c-seta"><i class="fas fa-chevron-right"></i></td>
+        </tr>`;
+        }
         return `<tr class="mp-item-row${sel}" data-codigo="${esc(item.codigo || '')}">
             <td class="c-sel"><input type="checkbox" data-sel="${esc(item.codigo || '')}"${selecao.has(item.codigo) ? ' checked' : ''} aria-label="Selecionar ${esc(item.codigo || '')}"></td>
             <td class="c-cod">${esc(item.codigo || '-')}</td>
@@ -903,8 +930,16 @@
             ? `Saldos do depósito 1 no GRV. Mínimo, lote e máximo pelo kardex dos últimos ${pr.janela_meses || 12} meses${crescimento ? `, com ${crescimento > 0 ? '+' : ''}${fmt(crescimento, 1)}% de vendas` : ''}.`
             : `Saldos do depósito 1 no GRV. Cobertura pelo consumo médio dos últimos ${janelaDias} dias.`;
         $('mp-k-criticos-hint').textContent = `${resumo.criticos_sem_oc || 0} sem OC · ` + (planejamentoAtivo ? 'acabam antes da reposição' : `até ${diasCritico} dias de cobertura`);
+        $('mp-k-criticos-label').textContent = 'Críticos';
         $('mp-k-atencao-label').textContent = planejamentoAtivo ? 'Abaixo do mínimo' : 'Monitorar';
         $('mp-k-atencao-hint').textContent = planejamentoAtivo ? 'já passaram do ponto de pedido' : `até ${diasAtencao} dias de cobertura`;
+        if (data.visao === 'em_processo') {
+            $('mp-metodo').textContent = 'Saldo de todos os depósitos no GRV. Material de terceiro não deveria ficar no depósito 1.';
+            $('mp-k-criticos-label').textContent = 'No depósito 1';
+            $('mp-k-criticos-hint').textContent = 'deveriam estar só em outros depósitos';
+            $('mp-k-atencao-label').textContent = 'Mais de 30 dias no terceiro';
+            $('mp-k-atencao-hint').textContent = 'desde a remessa mais antiga ainda lá';
+        }
         totalEncontrado = Number(resumo.total_filtrado || 0);
         $('mp-k-criticos').textContent = resumo.criticos || 0;
         $('mp-k-atencao').textContent = resumo.atencao || 0;
@@ -1040,6 +1075,14 @@
         const p = item.planejamento;
         const un = esc(item.unidade || '');
         const q = (v) => `${fmt(v)} ${un}`;
+        if (visaoAtual === 'em_processo') {
+            const deps = kv((item.depositos || []).map((d) => [
+                esc(`${d.codigo}${d.nome ? ' - ' + d.nome : ''}`),
+                `${q(d.qtde)}${d.desde ? `<small>${d.desde_exato ? 'desde' : 'antes de'} ${esc(dataCompleta(d.desde))}</small>` : ''}`,
+            ]));
+            return `<div class="mp-secao"><p class="mp-secao__titulo">Status</p>${kv([['Status', esc(item.nivel_label || '')], ['Total', q(item.saldo_total)]])}</div>`
+                + `<div class="mp-secao"><p class="mp-secao__titulo">Saldo por depósito</p>${(item.depositos || []).length ? deps : '<p class="mp-muted">Sem saldo.</p>'}</div>`;
+        }
         const grv = (v) => Number(v || 0) > 0 ? q(v) : 'não cadastrado';
         // No GRV a entrada da NF já baixa o item: o consumo é o que foi comprado.
         if (item.sem_controle_estoque) {
@@ -1858,6 +1901,8 @@
         const amarelo = corVar('--eui-warning', '#d97706');
         const vermelho = corVar('--eui-danger', '#dc2626');
         const roxo = corVar('--eui-violet', '#7c3aed');
+        const laranja = '#ea580c';
+        const cmv = d.serie_cmv || [];
         // --eui-info é quase o mesmo azul do primário: as classes B e C da curva usam um azul claro.
         const azulClaro = '#60a5fa';
         if (window.Chart) {
@@ -1872,7 +1917,12 @@
             data: {
                 labels: rotulos,
                 datasets: [
-                    { label: 'Valor em estoque', data: d.serie_valor, borderColor: azul, backgroundColor: azul, tension: .3, spanGaps: false, pointRadius: 4 },
+                    // Mês sem valor: a linha passa tracejada em vez de deixar o ponto solto.
+                    {
+                        label: 'Valor em estoque', data: d.serie_valor, borderColor: azul, backgroundColor: azul, tension: .3, spanGaps: true, pointRadius: 4,
+                        segment: { borderDash: (ctx) => (ctx.p1DataIndex - ctx.p0DataIndex > 1 ? [6, 5] : undefined) },
+                    },
+                    { label: 'CMV', data: cmv.map((c) => (c ? c.cmv : null)), borderColor: laranja, backgroundColor: laranja, tension: .3, spanGaps: false, pointRadius: 4 },
                     // Linha cheia: no Chart.js 4.6 a série tracejada apagava o texto da legenda.
                     { label: 'Consumo do mês', data: d.serie_consumo, borderColor: roxo, backgroundColor: roxo, tension: .3, pointRadius: 3 },
                 ],
@@ -1881,12 +1931,22 @@
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 // Legenda em HTML: a do Chart.js só desenhava a 1ª série no primeiro render.
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? 'sem registro' : brl(c.parsed.y, 0)}` } } },
+                plugins: { legend: { display: false }, tooltip: { callbacks: {
+                    label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? 'sem registro' : brl(c.parsed.y, 0)}`,
+                    // As partes do CMV no mês, para conferir a conta.
+                    footer: (itensTip) => {
+                        const c = cmv[itensTip[0].dataIndex];
+                        if (!c) return '';
+                        const linhas = [`EI ${brl(c.ei, 0)} + C ${brl(c.compras, 0)} + DV ${brl(c.devolucao_vendas, 0)}`, `− DC ${brl(c.devolucao_compras, 0)} − EF ${brl(c.ef, 0)}`];
+                        if (c.sem_estoque.length) linhas.push(`Sem estoque informado: ${c.sem_estoque.map((v) => (d.cmv.visoes || {})[v] || v).join(', ')}`);
+                        return linhas;
+                    },
+                } } },
                 scales: { y: eixoBrl, x: { grid: { display: false } } },
             },
         });
 
-        $('mp-leg-valor').innerHTML = `<span><i style="background:${azul}"></i>Valor em estoque</span><span><i style="background:${roxo}"></i>Consumo do mês</span>`;
+        $('mp-leg-valor').innerHTML = `<span><i style="background:${azul}"></i>Valor em estoque</span><span><i style="background:${roxo}"></i>Consumo do mês</span><span><i style="background:${laranja}"></i>CMV</span>`;
         $('mp-leg-pareto').innerHTML = `<span><i style="background:${azul}"></i>Classe A</span><span><i style="background:${azulClaro}"></i>B e C</span><span><i style="background:${amarelo}"></i>% acumulado</span>`;
 
         const saude = d.saude || {};
@@ -2095,6 +2155,7 @@
         if (visaoAtual !== 'painel') return;
         renderDashboard(data);
         renderFotosPainel(data.fotos);
+        atualizarCmv(data.cmv);
         if (painelAtualizando) return;
         // Visões sem foto ou velhas: atualiza uma de cada vez (no máximo 1
         // pedido automático a cada 2 min por visão, como na lista).
@@ -2106,6 +2167,19 @@
         else if (Object.values(data.fotos || {}).some((f) => f.em_andamento)) {
             clearTimeout(esperaPainel);
             esperaPainel = setTimeout(() => { if (visaoAtual === 'painel') carregarPainel(true); }, 15000);
+        }
+    }
+
+    // Compras e devoluções do GRV para o CMV: no máximo 1 pedido automático a cada 10 min.
+    let ultimoPedidoCmv = 0;
+    async function atualizarCmv(cmv) {
+        if (!cmv || !cmv.desatualizado || cmv.em_andamento || Date.now() - ultimoPedidoCmv < 600000) return;
+        ultimoPedidoCmv = Date.now();
+        try {
+            const resp = await fetch('/api/logistica/estoque/cmv/atualizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            if (resp.ok && visaoAtual === 'painel') carregarPainel(true);
+        } catch (err) {
+            // Fica o CMV que já havia; tenta de novo depois.
         }
     }
 

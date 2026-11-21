@@ -4895,6 +4895,44 @@ class EstoqueValorMensalInformado(db.Model):
     informado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
 
 
+class EstoqueCmvMes(db.Model):
+    """Compras (C), devolução de vendas (DV) e devolução de compras (DC) do
+    mês por visão do Estoque, do GRV: as partes do CMV do painel que não são
+    estoque (CMV = EI + C + DV - DC - EF). Espelho regravado pela
+    atualização (services/estoque_cmv_service); a tela só lê daqui."""
+
+    __tablename__ = "estoque_cmv_mes"
+    __table_args__ = (db.UniqueConstraint("competencia", "visao", name="ux_estoque_cmv_mes_competencia_visao"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    competencia = db.Column(db.String(7), nullable=False, index=True)  # AAAA-MM
+    visao = db.Column(db.String(40), nullable=False)
+    compras = db.Column(db.Float, nullable=False, default=0)
+    devolucao_vendas = db.Column(db.Float, nullable=False, default=0)
+    devolucao_compras = db.Column(db.Float, nullable=False, default=0)
+    linhas = db.Column(db.Integer, nullable=False, default=0)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, onupdate=agora_br)
+
+
+class EstoqueCmvSync(db.Model):
+    """Cada atualização do EstoqueCmvMes: quando, desde que mês e se deu erro."""
+
+    __tablename__ = "estoque_cmv_sync"
+
+    STATUS_ANDAMENTO = "Em andamento"
+    STATUS_OK = "OK"
+    STATUS_ERRO = "Erro"
+
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ANDAMENTO, index=True)
+    iniciado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime)
+    iniciado_por = db.Column(db.String(100))
+    desde = db.Column(db.String(7))
+    linhas = db.Column(db.Integer)
+    erro = db.Column(db.String(500))
+
+
 class EstoqueAlertaEstado(db.Model):
     """O que o aviso de estoque por e-mail já comunicou: 1 linha por item em alerta.
 

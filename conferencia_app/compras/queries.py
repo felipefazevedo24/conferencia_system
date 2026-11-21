@@ -2240,3 +2240,146 @@ WHERE  COALESCE(s.cancelado, 0) = 0
 ORDER  BY m.dt_solicitacao DESC, m.cod_solicitacao DESC
 LIMIT  3000;
 """
+
+# -------------------------------------------------------------------
+# Estoque > Produtos em processo (21/11/2026): material mandado para
+# terceiro industrializar. O saldo da tela de Estoque (/api/erp/estoque) e'
+# so' do deposito 1; aqui vem o saldo de TODOS os depositos, por deposito.
+# A familia e' casada pelo nome sem o prefixo "N - 02 - " (o numero nao foi
+# conferido no GRV).
+# -------------------------------------------------------------------
+SQL_ESTOQUE_SALDO_DEPOSITOS_FAMILIA = """
+SELECT p.codigo                                                     AS cod_produto,
+       TRIM(p.codigo_interno)                                       AS codigo_interno,
+       COALESCE(p.nome, '')                                         AS item,
+       COALESCE(NULLIF(p.unidade, ''), NULLIF(p.unidade_compra, ''), 'UN') AS unidade,
+       COALESCE(f.nome, '')                                         AS familia,
+       COALESCE(p.cod_grupo::text, '')                              AS grupo,
+       p.preco_custo::double precision                              AS custo_medio,
+       COALESCE((
+           SELECT jsonb_object_agg(s.cod_deposito::text, s.qtde)
+           FROM (
+               SELECT d.cod_deposito, SUM(COALESCE(d.qtde_total, 0))::double precision AS qtde
+               FROM   public.tproduto_deposito d
+               WHERE  d.cod_empresa = p.cod_empresa AND d.cod_produto = p.codigo
+               GROUP  BY d.cod_deposito
+               HAVING ABS(SUM(COALESCE(d.qtde_total, 0))) > 0.000001
+           ) s
+       ), '{}'::jsonb)                                              AS saldos
+FROM   public.tproduto p
+JOIN   public.tfamilia f
+       ON f.cod_empresa = p.cod_empresa AND f.codigo = p.cod_familia
+WHERE  p.cod_empresa = %(cod_empresa)s
+  AND  COALESCE(NULLIF(TRIM(p.codigo_interno), ''), '') <> ''
+  AND  COALESCE(p.inativo, 0) = 0
+  AND  UPPER(TRIM(regexp_replace(f.nome, '^[[:space:]]*[A-Za-z][[:space:]]*-[[:space:]]*[0-9]+[[:space:]]*-[[:space:]]*', ''))) = %(familia)s
+ORDER  BY p.codigo_interno;
+"""
+
+SQL_ESTOQUE_DEPOSITOS = """
+SELECT to_jsonb(d) AS deposito FROM public.tdeposito d;
+"""
+
+# Entradas em cada deposito (fora o 1) desde `desde`: a variacao do saldo
+# que o GRV grava na linha do kardex (qtde_total depois dela) - o mesmo
+# criterio do Cardex, que ignora linha que so' anota reserva. O Sync casa
+# as entradas com o saldo de hoje (FIFO) para saber ha quanto tempo o
+# material esta' no terceiro. Linha sem anterior em 400 dias conta como
+# vinda do zero.
+SQL_ESTOQUE_ENTRADAS_DEPOSITOS = """
+SELECT x.cod_produto, x.cod_deposito, x.data::date AS data, x.variacao
+FROM (
+    SELECT k.cod_produto,
+           k.cod_deposito,
+           k.dt_hora_movimentacao AS data,
+           (COALESCE(k.qtde_total, 0) - COALESCE(LAG(k.qtde_total) OVER (
+               PARTITION BY k.cod_produto, k.cod_deposito ORDER BY k.dt_hora_movimentacao, k.id
+           ), 0))::double precision AS variacao
+    FROM   public.tproduto_cardex k
+    WHERE  k.cod_empresa = %(cod_empresa)s
+      AND  k.cod_produto = ANY(%(produtos)s)
+      AND  k.cod_deposito <> 1
+      AND  k.dt_hora_movimentacao >= (%(desde)s::date - 400)
+) x
+WHERE  x.data >= %(desde)s::date
+  AND  x.variacao > 0.000001
+ORDER  BY x.cod_produto, x.cod_deposito, x.data DESC;
+"""
+
+# -------------------------------------------------------------------
+# CMV do painel de Estoque (21/11/2026): CMV = EI + C + DV - DC - EF.
+# Entradas do mes (competencia = lancamento, igual ao Spend) de CFOP de
+# entrada; o Sync separa compra (C) e devolucao de venda (DV) pelo sufixo.
+# Os campos de valor da tcom_aux vao crus: o Sync tira os impostos
+# recuperaveis com a mesma conta do Cardex (custo_da_nf), para C ficar na
+# base do custo medio do estoque. DV volta ao estoque pelo custo: o do
+# kardex da propria entrada (vl_custo), ou o custo medio atual.
+# -------------------------------------------------------------------
+SQL_ESTOQUE_CMV_ENTRADAS = """
+SELECT TO_CHAR(c.dt_lancamento, 'YYYY-MM')                                       AS competencia,
+       regexp_replace(COALESCE(NULLIF(TRIM(a.cfop), ''), NULLIF(TRIM(c.cfop), ''), ''), '[^0-9]', '', 'g') AS cfop,
+       COALESCE(tm.lancar_fincanceiro, 0)                                        AS lancar_financeiro,
+       NULLIF(TRIM(a.cod_interno), '')                                           AS codigo_item,
+       COALESCE(fam.nome, '')                                                    AS familia,
+       COALESCE(p.cod_grupo::text, '')                                           AS grupo,
+       p.preco_custo::double precision                                           AS preco_custo,
+       CASE WHEN SUBSTRING(regexp_replace(COALESCE(NULLIF(TRIM(a.cfop), ''), NULLIF(TRIM(c.cfop), ''), ''), '[^0-9]', '', 'g') FROM 2 FOR 3)
+                 IN ('201', '202', '203', '204', '410', '411', '503', '504')
+            THEN (SELECT MAX(COALESCE(NULLIF(k.vl_custo, 0), k.vl_custo_fiscal))::double precision
+                  FROM   public.tproduto_cardex k
+                  WHERE  k.cod_empresa = c.cod_empresa
+                    AND  k.cod_produto = a.cod_produto
+                    AND  UPPER(COALESCE(k.tabela_link, '')) = 'TCOMPRAS'
+                    AND  k.chave_primaria_link::text = c.cod_empresa::text || ';' || c.codigo::text)
+       END                                                                       AS custo_kardex,
+       (SELECT jsonb_object_agg(e.k, e.v)
+        FROM   jsonb_each(to_jsonb(a)) AS e(k, v)
+        WHERE  e.k ~* '^(total|qtde|qtde_estoque|cfop|cst_n12)$|icms|pis|cofins|ipi|frete|vseg|seguro|vdesc|desconto|outras|despesa') AS campos
+FROM   public.tcompras c
+JOIN   public.ttp_move tm
+       ON tm.cod_empresa = c.cod_empresa AND tm.codigo = c.cod_tp_mov
+JOIN   public.tcom_aux a
+       ON a.cod_empresa = c.cod_empresa AND a.realciona_auto = c.codigo
+LEFT   JOIN public.tproduto p
+       ON p.cod_empresa = a.cod_empresa AND p.codigo = a.cod_produto
+LEFT   JOIN public.tfamilia fam
+       ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
+WHERE  c.cod_empresa = %(cod_empresa)s
+  AND  c.dt_lancamento >= %(data_de)s::date
+  AND  c.dt_lancamento <  %(data_ate)s::date
+  AND  SUBSTRING(regexp_replace(COALESCE(NULLIF(TRIM(a.cfop), ''), NULLIF(TRIM(c.cfop), ''), ''), '[^0-9]', '', 'g') FROM 1 FOR 1) IN ('1', '2', '3');
+"""
+
+# Devolucao de compra (DC): NF de saida emitida (tnota_fiscal), CFOP
+# x201/x202/x410/x411. Os campos de valor do item vao crus (nomes da
+# tnota_fiscal_item nao conferidos): o Sync tira os impostos com a conta do
+# Cardex e, sem valor reconhecido, usa quantidade x custo medio.
+SQL_ESTOQUE_CMV_DEV_COMPRAS = """
+SELECT TO_CHAR(nf.dt_emissao, 'YYYY-MM')                AS competencia,
+       regexp_replace(COALESCE(i.cfop::text, ''), '[^0-9]', '', 'g') AS cfop,
+       NULLIF(TRIM(i.codigo), '')                      AS codigo_item,
+       COALESCE(fam.nome, '')                          AS familia,
+       COALESCE(p.cod_grupo::text, '')                 AS grupo,
+       COALESCE(i.qtde, 0)::double precision           AS qtde,
+       p.preco_custo::double precision                 AS preco_custo,
+       (SELECT jsonb_object_agg(e.k, e.v)
+        FROM   jsonb_each(to_jsonb(i)) AS e(k, v)
+        WHERE  e.k ~* '^(total|qtde|cfop|cst_n12)$|valor|vl_|vlr|vprod|icms|pis|cofins|ipi|frete|vseg|seguro|vdesc|desconto|outras|despesa') AS campos
+FROM   public.tnota_fiscal nf
+JOIN   public.tnota_fiscal_item i
+       ON  i.cod_empresa = nf.cod_empresa
+      AND  i.modelo = nf.modelo
+      AND  i.serie = nf.serie
+      AND  i.sub_serie = nf.sub_serie
+      AND  i.numero_nf = nf.numero
+LEFT   JOIN public.tproduto p
+       ON p.cod_empresa = i.cod_empresa AND UPPER(TRIM(p.codigo_interno)) = UPPER(TRIM(i.codigo))
+LEFT   JOIN public.tfamilia fam
+       ON fam.cod_empresa = p.cod_empresa AND fam.codigo = p.cod_familia
+WHERE  nf.cod_empresa = %(cod_empresa)s
+  AND  COALESCE(nf.cancelada, 0) = 0
+  AND  nf.dt_emissao >= %(data_de)s::date
+  AND  nf.dt_emissao <  %(data_ate)s::date
+  AND  regexp_replace(COALESCE(i.cfop::text, ''), '[^0-9]', '', 'g')
+       IN ('5201', '5202', '6201', '6202', '5410', '5411', '6410', '6411', '7201', '7202');
+"""
