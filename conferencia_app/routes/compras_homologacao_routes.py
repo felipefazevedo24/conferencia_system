@@ -122,6 +122,7 @@ def _fmt(homologacao: Homologacao, completo: bool = False) -> dict:
         "enviado_por": convite.enviado_por,
         "expira_em": _dt(convite.expira_em),
         "respondido_em": _dt(convite.respondido_em),
+        "respondido_por": convite.respondido_por,
     } if convite else None
     return dados
 
@@ -650,6 +651,13 @@ def api_enviar_fornecedor(homologacao_id):
 def api_cancelar_fornecedor(homologacao_id):
     return _acao(homologacao_id, svc.cancelar_envio_fornecedor,
                  "Envio cancelado - o link do fornecedor foi desativado.", usuario=_usuario())
+
+
+@compras_homologacao_bp.route("/api/compras/homologacao/<int:homologacao_id>/concluir-fornecedor", methods=["POST"])
+@permission_required(PERMISSION)
+def api_concluir_fornecedor(homologacao_id):
+    return _acao(homologacao_id, svc.concluir_pelo_comprador,
+                 "Autoavaliação enviada no lugar do fornecedor - revise e envie para aprovação.", usuario=_usuario())
 
 
 @compras_homologacao_bp.route("/api/compras/homologacao/evidencias/<int:evidencia_id>", methods=["GET"])

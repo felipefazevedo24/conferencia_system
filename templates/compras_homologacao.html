@@ -516,7 +516,7 @@
                 ? `<div class="hf-aviso"><i class="fas fa-clock"></i> O link enviado para <b>${esc(cv.email)}</b> <b>expirou</b> em ${esc(cv.expira_em)} sem resposta. Reenvie o link ou cancele o envio para editar.</div>`
                 : `<div class="hf-aviso"><i class="fas fa-envelope-open-text"></i> Aguardando o fornecedor responder a autoavaliação. Link enviado para <b>${esc(cv.email)}</b> em ${esc(cv.enviado_em)} por ${esc(cv.enviado_por || "—")}, válido até ${esc(cv.expira_em)}. Para editar, cancele o envio.</div>`;
         } else if (ed && cv && cv.situacao === "respondido") {
-            $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;"><i class="fas fa-circle-check"></i> Autoavaliação respondida pelo fornecedor (${esc(cv.email)}) em ${esc(cv.respondido_em)}. Revise as respostas e as evidências antes de enviar para aprovação.</div>`;
+            $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;"><i class="fas fa-circle-check"></i> Autoavaliação respondida pelo fornecedor (${esc(cv.email)}) em ${esc(cv.respondido_em)}${cv.respondido_por ? ` — envio feito por <b>${esc(cv.respondido_por)}</b> no lugar do fornecedor` : ""}. Revise as respostas e as evidências antes de enviar para aprovação.</div>`;
         }
         if (atual.status === "Validação financeira") {
             $("hf-avisos").innerHTML += `<div class="hf-aviso" style="background:#ecfeff;border-color:#a5f3fc;color:#155e75;"><i class="fas fa-coins"></i> Aguardando o parecer do <b>Financeiro</b>. Depois de aprovada, segue para a aprovação do gestor; se reprovada, volta para Compras.</div>`;
@@ -662,6 +662,7 @@
             if (PODE_COMPRAS) b += `<button class="eui-btn eui-btn--subtle" data-act="devolver"><i class="fas fa-rotate-left"></i> Recolher envio</button>`;
         }
         if (PODE_COMPRAS && atual.status === "Com fornecedor") {
+            b += `<button class="eui-btn eui-btn--success" data-act="concluir-fornecedor"><i class="fas fa-paper-plane"></i> Enviar pelo fornecedor</button>`;
             b += `<button class="eui-btn eui-btn--primary" data-act="fornecedor"><i class="fas fa-envelope"></i> Reenviar link</button>`;
             b += `<button class="eui-btn eui-btn--subtle" data-act="cancelar-fornecedor"><i class="fas fa-link-slash"></i> Cancelar envio</button>`;
         }
@@ -895,6 +896,10 @@
                 atual = r.homologacao;
                 toast(r.message, r.email_enviado ? "success" : "error");
                 if (!r.email_enviado) prompt("Copie o link e envie ao fornecedor:", r.link);
+            } else if (act === "concluir-fornecedor") {
+                if (!confirm("Enviar a autoavaliação no lugar do fornecedor, com as respostas e evidências que ele já gravou? O link dele deixa de funcionar e a homologação volta para rascunho, para você revisar e enviar para aprovação.")) { btn.disabled = false; return; }
+                const r = await api(`/api/compras/homologacao/${atual.id}/concluir-fornecedor`, { method: "POST" });
+                atual = r.homologacao; toast(r.message, "success");
             } else if (act === "cancelar-fornecedor") {
                 if (!confirm("Cancelar o envio? O link do fornecedor deixa de funcionar e a homologação volta para rascunho.")) { btn.disabled = false; return; }
                 const r = await api(`/api/compras/homologacao/${atual.id}/cancelar-fornecedor`, { method: "POST" });
