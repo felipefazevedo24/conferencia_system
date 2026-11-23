@@ -34,10 +34,13 @@ from ..models import (
 from ..tempo import agora_br
 from ..models import InventarioGeralResultado as Resultado
 from ..models import InventarioGeralCancelamento as Cancelamento
-from ..models import InventarioGeralTesteApi as TesteApi
 from ..models import InventarioGeralRecusa as Recusa
+from ..models import InventarioGeralDistribuicao as Distribuicao
+from ..models import InventarioGeralDistribuicaoItem as DistItem
 from ..models import InventarioGeralRetratoErp as RetratoErp
 from . import erp_estoque_service as erp
+from . import estoque_espelho_service as espelho
+from . import inventario_ciclico_service as ciclico
 from . import inventario_cps_client as cps
 
 TOLERANCIA = 0.0005  # contagens com casas decimais (kg, m)
@@ -229,11 +232,12 @@ def _nova_leitura(inv: Inventario, local, codigo, lote, quantidade, usuario: str
     else:
         lote = None
     qtde = _qtde(quantidade)
-    if qtde <= TOLERANCIA:
-        raise ValueError("A quantidade precisa ser maior que zero.")
 
     item = next((i for i in Item.query.filter_by(inventario_id=inv.id, cod_produto=produto.cod_produto).all()
                  if (i.lote or "").upper() == (lote or "").upper()), None)
+    if not item and qtde <= TOLERANCIA:
+        # Zero de item sem saldo criaria uma linha 0 x 0 "lida no fisico" so' de ruido.
+        raise ValueError(f"{'Lote ' + lote if lote else 'Item'} sem saldo no sistema: não precisa registrar zero.")
     if not item:
         item = Item(
             inventario_id=inv.id, cod_produto=produto.cod_produto, codigo_interno=produto.codigo_interno,
@@ -607,142 +611,112 @@ def cancelar(inv: Inventario, motivo, usuario: str) -> Cancelamento:
     return cancelamento
 
 
-# ── Teste da API (1 a 5 itens, fora de inventario) ─────────────────────
-MAX_ITENS_TESTE = 5
+# ── Distribuicao (molde do ciclico; so' orienta) ─────────────────────
+def _chave(codigo, endereco) -> tuple[str, str]:
+    return _txt(codigo).upper(), _txt(endereco).upper()
 
 
-def _produto_teste(estado: dict) -> dict:
-    return {
-        "cod_produto": int(estado["cod_produto"]), "codigo_interno": estado.get("codigo_interno"),
-        "descricao": estado.get("produto"), "unidade": estado.get("unidade"),
-        "com_lote": com_lote(estado.get("tipo_controle")), "qtde_total": estado.get("qtde_total"),
-        "estoque_produto": estado.get("estoque_produto"), "versao": estado.get("versao"),
-        "lotes": [{"nome": l.get("nome"), "qtde": l.get("qtde")} for l in (estado.get("lotes") or [])],
-        # Mesmo filtro do envio real: o CPS recusa (409) quando o geral difere dos depositos.
-        "inconsistente": estado.get("estoque_produto") is not None
-                         and not _igual(estado.get("estoque_produto"), estado.get("qtde_total")),
-    }
+def opcoes_distribuicao() -> dict:
+    """Filtros sao os do ciclico, lidos do espelho do GRV (o CPS nao tem
+    familia/grupo/endereco)."""
+    estoque = espelho.carregar()
+    return {"familias": ciclico.opcoes_familias(estoque), "enderecos": ciclico.opcoes_enderecos(estoque),
+            "espelho": espelho.status()}
 
 
-def _achar_no_erp(produtos: list[dict], codigo) -> dict | None:
-    codigo = _txt(codigo).upper()
-    for p in produtos:
-        if _txt(p.get("codigo_interno")).upper() == codigo or (codigo.isdigit() and int(p["cod_produto"]) == int(codigo)):
-            return p
-    return None
+def _linhas_distribuidas(inv: Inventario) -> dict[tuple[str, str], str]:
+    """{(codigo, endereco): conferente} das distribuicoes nao canceladas."""
+    rows = (db.session.query(DistItem.codigo, DistItem.endereco, Distribuicao.conferente)
+            .join(Distribuicao)
+            .filter(Distribuicao.inventario_id == inv.id, Distribuicao.cancelado_em.is_(None)).all())
+    return {_chave(c, e): conf for c, e, conf in rows}
 
 
-def _codigos_teste(codigos) -> list[str]:
-    if isinstance(codigos, str):
-        codigos = codigos.replace(";", ",").replace("\n", ",").split(",")
-    lista = []
-    for c in codigos or []:
-        c = _txt(c)
-        if c and c.upper() not in (x.upper() for x in lista):
-            lista.append(c)
-    if not lista:
-        raise ValueError("Informe ao menos um código de item.")
-    if len(lista) > MAX_ITENS_TESTE:
-        raise ValueError(f"O teste aceita no máximo {MAX_ITENS_TESTE} itens.")
-    return lista
+def previa_distribuicao(inv: Inventario, criterio, familia, grupo, codigos_texto, endereco) -> dict:
+    """Linhas do filtro; as que ja estao com alguem vem com o conferente e
+    nao podem ser escolhidas de novo (cancele a distribuicao antes)."""
+    criterio, familia, grupo, codigos, endereco = ciclico._validar_filtro(criterio, familia, grupo, codigos_texto, endereco)
+    linhas, nao_encontrados = ciclico.montar_linhas(ciclico._estoque(), criterio, familia, grupo, codigos, endereco)
+    ja = _linhas_distribuidas(inv)
+    for l in linhas:
+        l["conferente_atual"] = ja.get(_chave(l["codigo"], l["endereco"]))
+    return {"linhas": linhas, "nao_encontrados": nao_encontrados}
 
 
-def consultar_teste(codigos, usuario: str = "") -> tuple[TesteApi, list[dict]]:
-    """Saldo, versao e lotes ATUAIS do ERP dos itens do teste. A leitura do
-    deposito inteiro e' cara (todas as paginas de 500): ela e' feita uma vez
-    aqui e o retrato fica gravado (tipo "consulta") pro Simular usar."""
-    codigos = _codigos_teste(codigos)
-    produtos = cps.listar_deposito()
-    achados, faltando = [], []
-    for c in codigos:
-        p = _achar_no_erp(produtos, c)
-        (achados.append(p) if p else faltando.append(c))
-    if faltando:
-        raise ValueError(f"Não encontrado no depósito do ERP: {', '.join(faltando)}.")
-    consulta = TesteApi(tipo="consulta", referencia="-", payload=json.dumps(achados, ensure_ascii=False),
-                        status="CONSULTA", enviado_por=usuario, enviado_em=agora_br())
-    db.session.add(consulta)
+def distribuir(inv: Inventario, criterio, familia, grupo, codigos_texto, endereco, conferente: str,
+               usuario: str, selecionados) -> dict:
+    """Distribui so' as linhas escolhidas na previa, refeitas aqui contra o
+    espelho: linha que saiu do filtro ou ja foi para outro fica de fora."""
+    _exigir_aberto(inv)
+    criterio, familia, grupo, codigos, endereco = ciclico._validar_filtro(criterio, familia, grupo, codigos_texto, endereco)
+    conferente = _txt(conferente)
+    if not conferente:
+        raise ValueError("Escolha o conferente.")
+    escolhidas = {_chave(x.get("codigo"), x.get("endereco")) for x in (selecionados or []) if isinstance(x, dict)}
+    if not escolhidas:
+        raise ValueError("Selecione ao menos um item.")
+    linhas, _ = ciclico.montar_linhas(ciclico._estoque(), criterio, familia, grupo, codigos, endereco)
+    ja = _linhas_distribuidas(inv)
+    novas = [l for l in linhas if _chave(l["codigo"], l["endereco"]) in escolhidas
+             and _chave(l["codigo"], l["endereco"]) not in ja]
+    if not novas:
+        raise ValueError("Os itens selecionados não estão mais disponíveis: já foram para outro conferente ou saíram do filtro.")
+    dist = Distribuicao(
+        inventario_id=inv.id, criterio=criterio, conferente=conferente, criado_por=usuario, criado_em=agora_br(),
+        familia=(familia or None) if criterio in {"familia", "familia_grupo"} else None,
+        grupo=(grupo or None) if criterio in {"grupo", "familia_grupo"} else None,
+        codigos="\n".join(codigos) if criterio == "codigo" else None,
+        endereco=endereco[:120] if criterio == "endereco" else None,
+    )
+    for l in novas:
+        dist.itens.append(DistItem(codigo=l["codigo"][:60], descricao=l["descricao"][:300],
+                                   unidade=l["unidade"][:20], endereco=l["endereco"][:120]))
+    db.session.add(dist)
     db.session.commit()
-    return consulta, [_produto_teste(p) for p in achados]
+    return {"distribuicao": dist, "total": len(novas), "fora": len(escolhidas) - len(novas)}
 
 
-def simular_teste(itens, usuario: str, consulta_id=None) -> TesteApi:
-    """Monta o mesmo formato do envio real com o retrato do Buscar
-    (estoque_esperado/versao lidos ali, regra da API) e chama /simular -
-    nada e' gravado. Nao rele o deposito."""
-    itens = [i for i in (itens or []) if isinstance(i, dict)]
-    codigos = _codigos_teste([i.get("codigo") for i in itens])
-    if len(codigos) != len(itens):
-        raise ValueError("Item repetido ou sem código no teste.")
-    consulta = db.session.get(TesteApi, consulta_id) if str(consulta_id or "").isdigit() else None
-    if not consulta or consulta.tipo != "consulta":
-        raise ValueError("Busque os itens no ERP antes de simular.")
-    produtos = json.loads(consulta.payload)
-    linhas = []
-    for item, codigo in zip(itens, codigos):
-        p = _achar_no_erp(produtos, codigo)
-        if not p:
-            raise ValueError(f"{codigo} não está na última busca - busque os itens de novo.")
-        linha = {"cod_produto": int(p["cod_produto"]), "estoque_esperado": p.get("qtde_total"), "versao": p.get("versao")}
-        if com_lote(p.get("tipo_controle")):
-            lotes = []
-            for l in item.get("lotes") or []:
-                nome = _txt(l.get("nome"))[:120]
-                if not nome:
-                    continue
-                lotes.append({"nome": nome, "qtde": _qtde(l.get("qtde"))})
-            nomes = [l["nome"].upper() for l in lotes]
-            if len(set(nomes)) != len(nomes):
-                raise ValueError(f"{codigo}: lote repetido.")
-            linha["qtde_inventariada"] = round(sum(l["qtde"] for l in lotes), 6)
-            linha["lotes"] = [l for l in lotes if l["qtde"] > TOLERANCIA]
-        else:
-            linha["qtde_inventariada"] = _qtde(item.get("qtde_inventariada"))
-        linhas.append(linha)
-    teste = TesteApi(tipo="simular", referencia="-", payload="{}", enviado_por=usuario, enviado_em=agora_br())
-    db.session.add(teste)
-    db.session.flush()  # o id entra na referencia
-    payload = {"referencia": f"SYNC-TESTE-{teste.id}", "cod_empresa": cps.EMPRESA, "cod_deposito": cps.DEPOSITO,
-               "operador": (usuario or "")[:60], "itens": linhas}
-    try:
-        status_http, resposta = cps.simular(payload)
-        status = (resposta or {}).get("status") if isinstance(resposta, dict) else None
-    except cps.ErroApiInventario as exc:
-        status_http, resposta, status = exc.status, exc.corpo or str(exc), "ERRO"
-    teste.referencia = payload["referencia"]
-    _gravar_teste(teste, payload, status_http, resposta, status)
+def cancelar_distribuicao(dist: Distribuicao, usuario: str) -> None:
+    """As linhas saem da lista do conferente e podem ser distribuidas de novo.
+    Leitura ja feita nao muda."""
+    _exigir_aberto(dist.inventario)
+    if dist.cancelado_em:
+        raise ValueError("Distribuição já cancelada.")
+    dist.cancelado_em, dist.cancelado_por = agora_br(), usuario
     db.session.commit()
-    return teste
 
 
-def aplicar_teste(simulacao: TesteApi, usuario: str) -> TesteApi:
-    """Grava no CPS reenviando EXATAMENTE o payload de uma simulacao OK."""
-    if simulacao.tipo != "simular" or simulacao.status != "SIMULADO_SEM_GRAVAR":
-        raise ValueError("Só dá para aplicar uma simulação que passou (SIMULADO_SEM_GRAVAR).")
-    ja = TesteApi.query.filter_by(simulacao_id=simulacao.id, status="APLICADO").first()
-    if ja:
-        raise ValueError(f"Esta simulação já foi aplicada no ERP ({ja.referencia}).")
-    payload = json.loads(simulacao.payload)
-    try:
-        status_http, resposta = cps.aplicar(payload)
-        status = (resposta or {}).get("status") if isinstance(resposta, dict) else None
-    except cps.ErroApiInventario as exc:
-        status_http, resposta, status = exc.status, exc.corpo or str(exc), "ERRO"
-    teste = TesteApi(tipo="aplicar", referencia=simulacao.referencia, simulacao_id=simulacao.id,
-                     enviado_por=usuario, enviado_em=agora_br())
-    _gravar_teste(teste, payload, status_http, resposta, status)
-    db.session.add(teste)
-    db.session.commit()
-    return teste
+def distribuicoes(inv: Inventario) -> list[Distribuicao]:
+    return Distribuicao.query.filter_by(inventario_id=inv.id).order_by(Distribuicao.id.desc()).all()
 
 
-def _gravar_teste(teste: TesteApi, payload, status_http, resposta, status) -> None:
-    teste.payload = json.dumps(payload, ensure_ascii=False)
-    teste.http_status = status_http
-    teste.status = status or "ERRO"
-    teste.resposta = json.dumps(resposta, ensure_ascii=False) if not isinstance(resposta, str) else resposta
+def numeros_distribuicao(inv: Inventario) -> dict[int, str]:
+    """D01, D02... pela ordem dentro do inventario (calculado, nao gravado)."""
+    ids = [i for (i,) in db.session.query(Distribuicao.id).filter_by(inventario_id=inv.id).order_by(Distribuicao.id)]
+    return {i: f"D{n:02d}" for n, i in enumerate(ids, start=1)}
 
 
-def historico_teste(limite: int = 50) -> list[TesteApi]:
-    # O retrato do Buscar nao e' chamada de simular/aplicar - fica fora do historico.
-    return TesteApi.query.filter(TesteApi.tipo != "consulta").order_by(TesteApi.id.desc()).limit(limite).all()
+def locais_lidos(inv: Inventario, usuario: str | None = None) -> dict[str, set[str]]:
+    """{codigo: {locais}} com leitura no inventario (de todos ou so' do usuario)."""
+    q = (db.session.query(Item.codigo_interno, Leitura.local)
+         .join(Leitura, Leitura.item_id == Item.id)
+         .filter(Leitura.inventario_id == inv.id))
+    if usuario:
+        q = q.filter(db.func.upper(Leitura.lido_por) == usuario.upper())
+    lidos: dict[str, set[str]] = {}
+    for codigo, local in q.distinct():
+        lidos.setdefault(_txt(codigo).upper(), set()).add(_txt(local).upper())
+    return lidos
+
+
+def linha_lida(linha: DistItem, lidos: dict[str, set[str]]) -> bool:
+    """Lida = o codigo tem leitura no endereco (codigo sem endereco: em qualquer local)."""
+    locais = lidos.get(_txt(linha.codigo).upper())
+    return bool(locais) and (not linha.endereco or _txt(linha.endereco).upper() in locais)
+
+
+def minha_lista(inv: Inventario, usuario: str) -> list[DistItem]:
+    return (DistItem.query.join(Distribuicao)
+            .filter(Distribuicao.inventario_id == inv.id, Distribuicao.cancelado_em.is_(None),
+                    db.func.upper(Distribuicao.conferente) == (usuario or "").upper())
+            .order_by(DistItem.endereco, DistItem.codigo).all())

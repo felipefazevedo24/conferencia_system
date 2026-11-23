@@ -55,6 +55,8 @@ def _item_gestao(i: Item) -> dict:
 def _distribuicao(d: Distribuicao, nomes_grupos: dict | None = None) -> dict:
     if d.criterio == "codigo":
         filtro = ", ".join((d.codigos or "").split())
+    elif d.criterio == "endereco":
+        filtro = d.endereco or ""
     else:
         grupo = d.grupo
         if grupo and nomes_grupos:
@@ -70,14 +72,14 @@ def _distribuicao(d: Distribuicao, nomes_grupos: dict | None = None) -> dict:
     }
 
 
-def _conferentes() -> list[str]:
+def _conferentes(permissao: str = PERM_CONTAGEM) -> list[str]:
     """Usuarios ativos com a permissao de contar. Mesma regra do
     auth._resolve_permissions (admin > usuario > cargo > base), mas com as
     excecoes lidas uma vez so': has_permission por usuario fazia ate' 3
     consultas para cada um e deixava a tela lenta."""
     excecoes = {
         (r.scope_type, r.scope_id): bool(r.allow)
-        for r in PermissaoAcesso.query.filter_by(permission_key=PERM_CONTAGEM).all()
+        for r in PermissaoAcesso.query.filter_by(permission_key=permissao).all()
     }
     nomes = []
     for u in Usuario.query.filter_by(ativo=True).order_by(Usuario.username).all():
@@ -85,7 +87,7 @@ def _conferentes() -> list[str]:
         if is_admin_role(role):
             pode = True
         else:
-            pode = get_base_role_permissions(role).get(PERM_CONTAGEM, False)
+            pode = get_base_role_permissions(role).get(permissao, False)
             pode = excecoes.get(("ROLE", role), pode)
             pode = excecoes.get(("USER", u.username), pode)
         if pode:
@@ -125,8 +127,10 @@ def api_contar(item_id: int):
 @permission_required(PERM_GESTAO)
 def api_opcoes():
     # Le o espelho: abre na hora, mesmo com o GRV fora.
+    estoque = espelho.carregar()
     return jsonify({
-        "familias": svc.opcoes_familias(espelho.carregar()),
+        "familias": svc.opcoes_familias(estoque),
+        "enderecos": svc.opcoes_enderecos(estoque),
         "espelho": espelho.status(),
         "conferentes": _conferentes(),
     })
@@ -171,7 +175,8 @@ def api_distribuicoes():
 def api_previa():
     p = request.get_json(silent=True) or {}
     try:
-        return jsonify(svc.previa(p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos")))
+        return jsonify(svc.previa(p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos"),
+                                  p.get("endereco")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -185,7 +190,7 @@ def api_distribuir():
         return jsonify({"error": "Escolha um conferente com acesso ao inventário cíclico."}), 400
     try:
         res = svc.distribuir(p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos"),
-                             conferente, _usuario(), p.get("itens"))
+                             conferente, _usuario(), p.get("itens"), p.get("endereco"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     res["distribuicao"] = _distribuicao(res["distribuicao"], espelho.nomes_grupos())

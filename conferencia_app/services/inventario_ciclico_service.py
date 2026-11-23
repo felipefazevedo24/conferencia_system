@@ -1,7 +1,7 @@
 """Inventario ciclico dirigido - regras (definidas pela Logistica em 04/11/2026).
 
-  - O gestor distribui por codigo, familia, grupo ou familia + grupo do GRV
-    para um conferente. A lista e' congelada na hora: uma linha por codigo +
+  - O gestor distribui por codigo, familia, grupo, familia + grupo ou
+    endereco do GRV para um conferente. A lista e' congelada na hora: uma linha por codigo +
     endereco, com ou sem saldo (item zerado no sistema pode estar no fisico -
     pedido da Logistica em 04/11/2026). Linha que ja esta em outra
     distribuicao em aberto nao entra de novo.
@@ -49,6 +49,7 @@ CRITERIOS = {
     "familia": "Família",
     "grupo": "Grupo",
     "familia_grupo": "Família + grupo",
+    "endereco": "Endereço",
 }
 STATUS_FECHADOS = {Item.STATUS_CONFERE, Item.STATUS_AJUSTE, Item.STATUS_MANTIDA, Item.STATUS_CANCELADO}
 STATUS_CONFERENTE = {Item.STATUS_AGUARDA_1A: 1, Item.STATUS_AGUARDA_2A: 2}
@@ -111,6 +112,14 @@ def opcoes_familias(estoque: dict) -> dict[str, list[dict]]:
     }
 
 
+def opcoes_enderecos(estoque: dict) -> list[str]:
+    """Enderecos que existem no GRV, para o filtro por endereco."""
+    return sorted({
+        local for item in (estoque.get("por_codigo") or {}).values()
+        for local in (item.get("localizacoes") or []) if local
+    })
+
+
 def _codigos_do_texto(texto: str) -> list[str]:
     vistos, codigos = set(), []
     for parte in re.split(r"[\s,;]+", str(texto or "")):
@@ -137,10 +146,18 @@ def _linhas_do_codigo(codigo: str, agregado: dict, estoque: dict) -> list[dict]:
     return linhas
 
 
-def montar_linhas(estoque: dict, criterio: str, familia: str, grupo: str, codigos: list[str]) -> tuple[list[dict], list[str]]:
+def montar_linhas(estoque: dict, criterio: str, familia: str, grupo: str, codigos: list[str],
+                  endereco: str = "") -> tuple[list[dict], list[str]]:
     """Linhas a contar e codigos digitados que nao existem no GRV."""
     por_codigo = estoque.get("por_codigo") or {}
     linhas, nao_encontrados = [], []
+    if criterio == "endereco":
+        # So' a linha daquele endereco: o mesmo codigo em outros enderecos fica de fora.
+        endereco_n = _norm(endereco)
+        for codigo in sorted(por_codigo):
+            linhas.extend(l for l in _linhas_do_codigo(codigo, por_codigo[codigo], estoque)
+                          if l["endereco"] and _norm(l["endereco"]) == endereco_n)
+        return linhas, nao_encontrados
     if criterio == "codigo":
         for codigo in codigos:
             agregado = por_codigo.get(codigo)
@@ -171,11 +188,12 @@ def _chaves_em_aberto() -> set[tuple[str, str]]:
     return {(c, e or "") for c, e in rows}
 
 
-def _validar_filtro(criterio: str, familia: str, grupo: str, codigos_texto: str) -> tuple[str, str, str, list[str]]:
+def _validar_filtro(criterio: str, familia: str, grupo: str, codigos_texto: str,
+                    endereco: str = "") -> tuple[str, str, str, list[str], str]:
     criterio = str(criterio or "").strip()
     if criterio not in CRITERIOS:
-        raise ValueError("Escolha como distribuir: código, família, grupo ou família + grupo.")
-    familia, grupo = str(familia or "").strip(), str(grupo or "").strip()
+        raise ValueError("Escolha como distribuir: código, família, grupo, família + grupo ou endereço.")
+    familia, grupo, endereco = str(familia or "").strip(), str(grupo or "").strip(), str(endereco or "").strip()
     codigos = _codigos_do_texto(codigos_texto)
     if criterio == "codigo" and not codigos:
         raise ValueError("Informe ao menos um código.")
@@ -183,7 +201,9 @@ def _validar_filtro(criterio: str, familia: str, grupo: str, codigos_texto: str)
         raise ValueError("Escolha a família.")
     if criterio in {"grupo", "familia_grupo"} and not grupo:
         raise ValueError("Escolha o grupo.")
-    return criterio, familia, grupo, codigos
+    if criterio == "endereco" and not endereco:
+        raise ValueError("Escolha o endereço.")
+    return criterio, familia, grupo, codigos, endereco
 
 
 def _estoque() -> dict:
@@ -194,11 +214,11 @@ def _estoque() -> dict:
     return estoque
 
 
-def previa(criterio: str, familia: str, grupo: str, codigos_texto: str) -> dict:
+def previa(criterio: str, familia: str, grupo: str, codigos_texto: str, endereco: str = "") -> dict:
     """Linhas do filtro para o gestor escolher; as que ja estao em outra
     distribuicao aberta vem marcadas e nao podem ser escolhidas."""
-    criterio, familia, grupo, codigos = _validar_filtro(criterio, familia, grupo, codigos_texto)
-    linhas, nao_encontrados = montar_linhas(_estoque(), criterio, familia, grupo, codigos)
+    criterio, familia, grupo, codigos, endereco = _validar_filtro(criterio, familia, grupo, codigos_texto, endereco)
+    linhas, nao_encontrados = montar_linhas(_estoque(), criterio, familia, grupo, codigos, endereco)
     em_aberto = _chaves_em_aberto()
     recentes = contagens_recentes(l["codigo"] for l in linhas)
     for l in linhas:
@@ -210,11 +230,11 @@ def previa(criterio: str, familia: str, grupo: str, codigos_texto: str) -> dict:
 
 
 def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conferente: str,
-               usuario: str, selecionados: list) -> dict:
+               usuario: str, selecionados: list, endereco: str = "") -> dict:
     """Distribui so' as linhas escolhidas na previa. A lista e' refeita aqui
     contra o GRV: linha que saiu do filtro ou entrou em outra distribuicao
     no meio do caminho fica de fora."""
-    criterio, familia, grupo, codigos = _validar_filtro(criterio, familia, grupo, codigos_texto)
+    criterio, familia, grupo, codigos, endereco = _validar_filtro(criterio, familia, grupo, codigos_texto, endereco)
     conferente = str(conferente or "").strip()
     if not conferente:
         raise ValueError("Escolha o conferente.")
@@ -225,7 +245,7 @@ def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conf
     if not escolhidas:
         raise ValueError("Selecione ao menos um item.")
 
-    linhas, _ = montar_linhas(_estoque(), criterio, familia, grupo, codigos)
+    linhas, _ = montar_linhas(_estoque(), criterio, familia, grupo, codigos, endereco)
     em_aberto = _chaves_em_aberto()
     novas = [l for l in linhas if (l["codigo"], l["endereco"]) in escolhidas and (l["codigo"], l["endereco"]) not in em_aberto]
     if not novas:
@@ -236,6 +256,7 @@ def distribuir(criterio: str, familia: str, grupo: str, codigos_texto: str, conf
         familia=(familia or None) if criterio in {"familia", "familia_grupo"} else None,
         grupo=(grupo or None) if criterio in {"grupo", "familia_grupo"} else None,
         codigos="\n".join(codigos) if criterio == "codigo" else None,
+        endereco=endereco[:120] if criterio == "endereco" else None,
         conferente=conferente,
         criado_por=usuario,
         criado_em=agora_br(),

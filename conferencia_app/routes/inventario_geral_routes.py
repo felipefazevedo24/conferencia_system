@@ -16,9 +16,12 @@ from openpyxl import Workbook
 
 from ..auth import has_permission, permission_required, permission_required_any
 from ..extensions import db
-from ..models import InventarioGeral, InventarioGeralItem as Item, InventarioGeralLeitura as Leitura
+from ..models import InventarioGeral, InventarioGeralDistribuicao, InventarioGeralItem as Item, InventarioGeralLeitura as Leitura
 from ..services import inventario_cps_client as cps
+from ..services import estoque_espelho_service as espelho
+from ..services import inventario_ciclico_service as ciclico
 from ..services import inventario_geral_service as svc
+from .inventario_ciclico_routes import _conferentes
 
 inventario_geral_bp = Blueprint("inventario_geral", __name__)
 
@@ -171,7 +174,12 @@ def api_contagem():
                 minhas.append({**_leitura(l), "codigo_interno": i.codigo_interno, "descricao": i.descricao,
                                "unidade": i.unidade, "lote": i.lote})
     minhas.sort(key=lambda m: m["id"], reverse=True)
-    return jsonify({"inventario": {"id": inv.id, "status": inv.status}, "dirigidos": dirigidos, "minhas": minhas})
+    # Linhas distribuidas pra mim: "lida" so' pelas MINHAS leituras (contagem cega).
+    lidos = svc.locais_lidos(inv, _usuario())
+    minha_lista = [{"codigo": l.codigo, "descricao": l.descricao, "unidade": l.unidade, "endereco": l.endereco,
+                    "lida": svc.linha_lida(l, lidos)} for l in svc.minha_lista(inv, _usuario())]
+    return jsonify({"inventario": {"id": inv.id, "status": inv.status}, "dirigidos": dirigidos, "minhas": minhas,
+                    "minha_lista": minha_lista})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/conferir-numero", methods=["GET"])
@@ -353,56 +361,126 @@ def api_cancelar_inventario():
     return jsonify({"message": f"Inventário {svc.numero(inv)} cancelado."})
 
 
-# ── Teste da API (gestao) ─────────────────────────────────────────────
-def _teste_dict(t) -> dict:
-    try:
-        payload = json.loads(t.payload or "{}")
-    except ValueError:
-        payload = {}
-    return {"id": t.id, "tipo": t.tipo, "referencia": t.referencia, "simulacao_id": t.simulacao_id,
-            "status": t.status, "http": t.http_status, "enviado_em": _dt(t.enviado_em), "enviado_por": t.enviado_por,
-            "itens": len(payload.get("itens") or []), "payload": t.payload, "resposta": t.resposta}
+# ── Distribuicao (gestao, molde do ciclico) ─────────────────────────────
+def _inventario_ou_400():
+    inv = svc.inventario_ativo()
+    if not inv:
+        return None, (jsonify({"error": "Nenhum inventário geral em andamento."}), 400)
+    return inv, None
 
 
-@inventario_geral_bp.route("/api/inventario-geral/teste-api/produtos", methods=["GET"])
+def _distribuicao_dict(d, numeros: dict, nomes_grupos: dict, lidos: dict) -> dict:
+    if d.criterio == "codigo":
+        filtro = ", ".join((d.codigos or "").split())
+    elif d.criterio == "endereco":
+        filtro = d.endereco or ""
+    else:
+        grupo = d.grupo
+        nome = nomes_grupos.get((d.familia or "", grupo or "")) or (
+            None if d.familia else next((n for (f, g), n in nomes_grupos.items() if g == grupo), None))
+        grupo = f"{grupo} - {nome}" if grupo and nome else grupo
+        filtro = " / ".join(x for x in (d.familia, grupo) if x)
+    return {
+        "id": d.id, "numero": numeros.get(d.id, f"D{d.id}"), "criterio": ciclico.CRITERIOS.get(d.criterio, d.criterio),
+        "filtro": filtro, "conferente": d.conferente, "criado_por": d.criado_por, "criado_em": _dt(d.criado_em),
+        "cancelado_por": d.cancelado_por, "cancelado_em": _dt(d.cancelado_em),
+        "total": len(d.itens), "lidas": sum(1 for l in d.itens if svc.linha_lida(l, lidos)),
+    }
+
+
+@inventario_geral_bp.route("/api/inventario-geral/distribuicao/opcoes", methods=["GET"])
 @permission_required(PERM_GESTAO)
-def api_teste_produtos():
-    try:
-        consulta, produtos = svc.consultar_teste(request.args.get("codigos") or "", _usuario())
-    except (ValueError, cps.ErroApiInventario) as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"produtos": produtos, "consulta_id": consulta.id, "consultado_em": _dt(consulta.enviado_em),
-                    "gravacao_configurada": cps.configurada(gravacao=True)})
+def api_distribuicao_opcoes():
+    return jsonify({**svc.opcoes_distribuicao(), "conferentes": _conferentes(PERM_CONTAGEM)})
 
 
-@inventario_geral_bp.route("/api/inventario-geral/teste-api/simular", methods=["POST"])
+@inventario_geral_bp.route("/api/inventario-geral/espelho", methods=["GET"])
 @permission_required(PERM_GESTAO)
-def api_teste_simular():
-    try:
-        payload = request.get_json(silent=True) or {}
-        teste = svc.simular_teste(payload.get("itens"), _usuario(), payload.get("consulta_id"))
-    except (ValueError, cps.ErroApiInventario) as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"teste": _teste_dict(teste)})
+def api_espelho_status():
+    return jsonify(espelho.status())
 
 
-@inventario_geral_bp.route("/api/inventario-geral/teste-api/<int:teste_id>/aplicar", methods=["POST"])
+@inventario_geral_bp.route("/api/inventario-geral/espelho/atualizar", methods=["POST"])
 @permission_required(PERM_GESTAO)
-def api_teste_aplicar(teste_id):
-    simulacao = db.session.get(svc.TesteApi, teste_id)
-    if not simulacao:
-        return jsonify({"error": "Simulação não encontrada."}), 404
+def api_espelho_atualizar():
     try:
-        teste = svc.aplicar_teste(simulacao, _usuario())
+        res = espelho.atualizar(_usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "espelho": espelho.status()}), 400
+    return jsonify({**res, "espelho": espelho.status()})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/distribuicao/previa", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_distribuicao_previa():
+    inv, erro = _inventario_ou_400()
+    if erro:
+        return erro
+    p = request.get_json(silent=True) or {}
+    try:
+        return jsonify(svc.previa_distribuicao(inv, p.get("criterio"), p.get("familia"), p.get("grupo"),
+                                               p.get("codigos"), p.get("endereco")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"teste": _teste_dict(teste)})
 
 
-@inventario_geral_bp.route("/api/inventario-geral/teste-api/historico", methods=["GET"])
+@inventario_geral_bp.route("/api/inventario-geral/distribuicoes", methods=["GET"])
 @permission_required(PERM_GESTAO)
-def api_teste_historico():
-    return jsonify({"testes": [_teste_dict(t) for t in svc.historico_teste()]})
+def api_distribuicoes():
+    inv, erro = _inventario_ou_400()
+    if erro:
+        return erro
+    numeros, nomes, lidos = svc.numeros_distribuicao(inv), espelho.nomes_grupos(), svc.locais_lidos(inv)
+    return jsonify({"distribuicoes": [_distribuicao_dict(d, numeros, nomes, lidos) for d in svc.distribuicoes(inv)]})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/distribuicoes", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_distribuir():
+    inv, erro = _inventario_ou_400()
+    if erro:
+        return erro
+    p = request.get_json(silent=True) or {}
+    conferente = str(p.get("conferente") or "").strip()
+    if conferente not in _conferentes(PERM_CONTAGEM):
+        return jsonify({"error": "Escolha um conferente com acesso à contagem do inventário geral."}), 400
+    try:
+        res = svc.distribuir(inv, p.get("criterio"), p.get("familia"), p.get("grupo"), p.get("codigos"),
+                             p.get("endereco"), conferente, _usuario(), p.get("itens"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    numero = svc.numeros_distribuicao(inv).get(res["distribuicao"].id)
+    fora = f" {res['fora']} ficaram de fora (já com outro conferente)." if res["fora"] else ""
+    return jsonify({"message": f"{numero}: {res['total']} item(ns) para {conferente}.{fora}",
+                    "total": res["total"], "fora": res["fora"]})
+
+
+@inventario_geral_bp.route("/api/inventario-geral/distribuicoes/<int:dist_id>", methods=["GET"])
+@permission_required(PERM_GESTAO)
+def api_distribuicao(dist_id):
+    dist = db.session.get(InventarioGeralDistribuicao, dist_id)
+    if not dist:
+        return jsonify({"error": "Distribuição não encontrada."}), 404
+    inv = dist.inventario
+    lidos = svc.locais_lidos(inv)
+    return jsonify({
+        "distribuicao": _distribuicao_dict(dist, svc.numeros_distribuicao(inv), espelho.nomes_grupos(), lidos),
+        "itens": [{"codigo": l.codigo, "descricao": l.descricao, "unidade": l.unidade, "endereco": l.endereco,
+                   "lida": svc.linha_lida(l, lidos)} for l in dist.itens],
+    })
+
+
+@inventario_geral_bp.route("/api/inventario-geral/distribuicoes/<int:dist_id>/cancelar", methods=["POST"])
+@permission_required(PERM_GESTAO)
+def api_cancelar_distribuicao(dist_id):
+    dist = db.session.get(InventarioGeralDistribuicao, dist_id)
+    if not dist:
+        return jsonify({"error": "Distribuição não encontrada."}), 404
+    try:
+        svc.cancelar_distribuicao(dist, _usuario())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Distribuição cancelada: {len(dist.itens)} item(ns) saíram da lista de {dist.conferente}."})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/historico", methods=["GET"])

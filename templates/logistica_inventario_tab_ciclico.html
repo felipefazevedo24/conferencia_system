@@ -78,6 +78,7 @@
                         <option value="familia">Família</option>
                         <option value="grupo">Grupo</option>
                         <option value="codigo">Código</option>
+                        <option value="endereco">Endereço</option>
                     </select>
                 </div>
                 <div class="ic-field" id="ic-campo-familia">
@@ -87,6 +88,10 @@
                 <div class="ic-field" id="ic-campo-grupo">
                     <label for="ic-grupo">Grupo</label>
                     <select class="eui-input" id="ic-grupo"></select>
+                </div>
+                <div class="ic-field ic-hidden" id="ic-campo-endereco">
+                    <label for="ic-endereco">Endereço</label>
+                    <select class="eui-input" id="ic-endereco"></select>
                 </div>
                 <div class="ic-field">
                     <button type="button" class="eui-btn eui-btn--primary" id="ic-btn-buscar"><i class="fas fa-list-check"></i> Buscar itens</button>
@@ -315,6 +320,7 @@
         $('ic-campo-familia').classList.toggle('ic-hidden', !['familia', 'familia_grupo'].includes(criterio));
         $('ic-campo-grupo').classList.toggle('ic-hidden', !['grupo', 'familia_grupo'].includes(criterio));
         $('ic-campo-codigos').classList.toggle('ic-hidden', criterio !== 'codigo');
+        $('ic-campo-endereco').classList.toggle('ic-hidden', criterio !== 'endereco');
         const atual = $('ic-grupo').value;
         const grupos = gruposDisponiveis();
         opcoesSelect($('ic-grupo'), grupos, criterio === 'familia_grupo' && !$('ic-familia').value ? 'Escolha a família primeiro' : 'Escolha o grupo');
@@ -327,6 +333,7 @@
             familia: $('ic-familia').value,
             grupo: $('ic-grupo').value,
             codigos: $('ic-codigos').value,
+            endereco: $('ic-endereco').value,
         };
     }
 
@@ -361,6 +368,7 @@
 
     function rotuloFiltro(f) {
         if (f.criterio === 'codigo') return 'Códigos';
+        if (f.criterio === 'endereco') return f.endereco;
         const grupo = f.grupo ? ($('ic-grupo').selectedOptions[0] || {}).textContent : '';
         return [f.familia, grupo].filter(Boolean).join(' / ');
     }
@@ -571,6 +579,10 @@
             familias = d.familias || {};
             opcoesSelect($('ic-familia'), Object.keys(familias), Object.keys(familias).length ? 'Escolha a família' : 'Aguardando o estoque do GRV');
             if (familias[familiaAtual]) $('ic-familia').value = familiaAtual;
+            const enderecoAtual = $('ic-endereco').value;
+            const enderecos = d.enderecos || [];
+            opcoesSelect($('ic-endereco'), enderecos, enderecos.length ? 'Escolha o endereço' : 'Aguardando o estoque do GRV');
+            if (enderecos.includes(enderecoAtual)) $('ic-endereco').value = enderecoAtual;
             conferentes = d.conferentes || [];
             const conferenteAtual = $('ic-conferente').value;
             opcoesSelect($('ic-conferente'), d.conferentes || [], 'Escolha o conferente');
