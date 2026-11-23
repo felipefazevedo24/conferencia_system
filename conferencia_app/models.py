@@ -5344,6 +5344,48 @@ class InventarioGeralLeitura(db.Model):
                            backref=db.backref("leituras", cascade="all, delete-orphan", order_by="InventarioGeralLeitura.id"))
 
 
+class InventarioGeralDistribuicao(db.Model):
+    """Parte do inventario geral entregue pelo gestor a um conferente, no
+    molde do ciclico: filtro (codigo, familia, grupo, familia + grupo ou
+    endereco do GRV) e as linhas codigo + endereco escolhidas. So' orienta:
+    o conferente ve a lista dele, mas a leitura continua livre em qualquer
+    local (pedido da Logistica em 23/11/2026). Andamento e' calculado das
+    leituras, nao gravado."""
+
+    __tablename__ = "inventario_geral_distribuicao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    criterio = db.Column(db.String(20), nullable=False)  # codigo | familia | grupo | familia_grupo | endereco
+    familia = db.Column(db.String(160))
+    grupo = db.Column(db.String(160))
+    codigos = db.Column(db.Text)  # criterio "codigo": um por linha
+    endereco = db.Column(db.String(120))  # criterio "endereco"
+    conferente = db.Column(db.String(80), nullable=False, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    cancelado_por = db.Column(db.String(100))
+    cancelado_em = db.Column(db.DateTime)
+
+    inventario = db.relationship("InventarioGeral")
+    itens = db.relationship("InventarioGeralDistribuicaoItem", backref="distribuicao", cascade="all, delete-orphan",
+                            order_by="InventarioGeralDistribuicaoItem.id")
+
+
+class InventarioGeralDistribuicaoItem(db.Model):
+    """Linha distribuida: codigo + endereco do GRV (endereco vazio = codigo
+    sem localizacao no GRV)."""
+
+    __tablename__ = "inventario_geral_distribuicao_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    distribuicao_id = db.Column(db.Integer, db.ForeignKey("inventario_geral_distribuicao.id"), nullable=False, index=True)
+    codigo = db.Column(db.String(60), nullable=False, index=True)
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    endereco = db.Column(db.String(120), nullable=False, default="")
+
+
 class InventarioGeralResultado(db.Model):
     """Indicadores congelados no encerramento do inventario geral (tela de
     gestao). Base: linhas concluidas (confere / divergencia confirmada);
@@ -5459,6 +5501,7 @@ class InventarioCiclicoDistribuicao(db.Model):
     familia = db.Column(db.String(160))
     grupo = db.Column(db.String(160))
     codigos = db.Column(db.Text)  # criterio "codigo": um por linha
+    endereco = db.Column(db.String(120))  # criterio "endereco"
     conferente = db.Column(db.String(80), nullable=False, index=True)
     criado_por = db.Column(db.String(100))
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
