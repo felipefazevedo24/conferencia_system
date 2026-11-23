@@ -277,3 +277,66 @@ def painel(de=None, ate=None) -> dict:
         "por_mes": por_mes,
         "kpis": kpis,
     }
+
+
+# ---------------------------------------------------------------------------
+# Excel
+# ---------------------------------------------------------------------------
+# Colunas na ordem da API, com o nome do campo de la' entre parenteses quando
+# o titulo muda: quem confere contra a API acha a coluna. (titulo, atributo, formato, largura)
+_DATA, _VALOR, _QTDE = "DD/MM/YYYY", "#,##0.00", "#,##0.####"
+_XLSX_ENTRADAS = (
+    ("NF (n_nf)", "nota_fiscal", None, 12), ("Data lançamento", "data_lancamento", _DATA, 14),
+    ("Fornecedor", "fornecedor", None, 40), ("Família", "familia", None, 34), ("Grupo", "grupo", None, 24),
+    ("Código interno", "codigo_interno", None, 15), ("Item", "item", None, 50), ("Unidade", "unidade", None, 9),
+    ("Qtde", "quantidade", _QTDE, 10), ("Valor produto (vl_produto)", "valor_bruto", _VALOR, 16),
+    ("ICMS", "icms", _VALOR, 12), ("PIS", "pis", _VALOR, 12), ("COFINS", "cofins", _VALOR, 12),
+    ("IPI", "ipi", _VALOR, 12), ("Custo total (custo_total)", "custo_net", _VALOR, 16),
+    ("OS rastreada", "os_rastreada", None, 13), ("Segmento", "segmento", None, 16),
+)
+_XLSX_FATURAMENTO = (
+    ("Data emissão", "data_emissao", _DATA, 13), ("NF", "nota_fiscal", None, 10), ("Orçamento", "orcamento", None, 11),
+    ("Cliente", "cliente", None, 40), ("Código", "codigo", None, 15), ("Produto", "produto", None, 50),
+    ("Segmento", "segmento", None, 18), ("Valor faturado (vl_faturado)", "valor_bruto", _VALOR, 17),
+    ("Impostos", "impostos", _VALOR, 14), ("Faturado menos impostos", "valor_net", _VALOR, 17),
+)
+
+
+def _aba(wb, titulo: str, colunas, registros) -> None:
+    from openpyxl.styles import Font, PatternFill
+
+    ws = wb.create_sheet(titulo)
+    for col, (cab, _, _, largura) in enumerate(colunas, start=1):
+        cel = ws.cell(row=1, column=col, value=cab)
+        cel.font = Font(bold=True, color="FFFFFF")
+        cel.fill = PatternFill(start_color="0F62C9", end_color="0F62C9", fill_type="solid")
+        ws.column_dimensions[cel.column_letter].width = largura
+    for lin, r in enumerate(registros, start=2):
+        for col, (_, attr, formato, _) in enumerate(colunas, start=1):
+            cel = ws.cell(row=lin, column=col, value=getattr(r, attr))
+            if formato:
+                cel.number_format = formato
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+
+def exportar_xlsx():
+    """Tudo o que o espelho tem (sem o filtro da tela, pedido de 23/11/2026):
+    aba Entradas (custo_recebimento) e aba Faturamento (custo_faturamento).
+    Devolve (BytesIO, nome do arquivo) ou None com o espelho vazio."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    base = status()
+    if base["vazio"]:
+        return None
+    wb = Workbook()
+    wb.remove(wb.active)
+    _aba(wb, "Entradas", _XLSX_ENTRADAS, Custo.query.order_by(Custo.data_lancamento, Custo.nota_fiscal, Custo.id))
+    _aba(wb, "Faturamento", _XLSX_FATURAMENTO, Saida.query.order_by(Saida.data_emissao, Saida.nota_fiscal, Saida.id))
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    quando = datetime.strptime(base["atualizado_em"], "%d/%m/%Y %H:%M").strftime("%Y-%m-%d-%Hh%M")
+    return buffer, f"faturamento-entradas-{quando}.xlsx"

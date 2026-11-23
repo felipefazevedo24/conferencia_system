@@ -34,3 +34,16 @@ def faturamento_status():
 @permission_required(PERM)
 def faturamento_atualizar():
     return jsonify(faturamento.iniciar_atualizacao(session.get("username", "desconhecido")))
+
+
+@faturamento_bp.route("/api/faturamento/dados.xlsx")
+@permission_required(PERM)
+def faturamento_xlsx():
+    from flask import send_file
+
+    arquivo = faturamento.exportar_xlsx()
+    if arquivo is None:
+        return jsonify({"error": "Ainda não há dados do ERP. Clique em Atualizar e aguarde."}), 404
+    buffer, nome = arquivo
+    return send_file(buffer, as_attachment=True, download_name=nome,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

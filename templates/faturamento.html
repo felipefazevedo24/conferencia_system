@@ -8,7 +8,8 @@
     .ft-wrap { display: grid; gap: 16px; }
     .ft-wrap [hidden] { display: none !important; }
     .ft-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-    .ft-head .eui-btn { border-radius: 999px; }
+    .ft-head .eui-btn { border-radius: 999px; text-decoration: none; }
+    .ft-head-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 
     /* Mesma identidade do painel do Estoque e do Spend: cartões de 14px e
        faixa de cor no topo dos indicadores. */
@@ -54,7 +55,10 @@
             <h1 class="eui-page-header__title"><i class="fas fa-chart-line"></i> Faturamento x Custo</h1>
             <p class="eui-page-header__sub">Faturamento e custo de entrada, bruto e net, mês a mês. Valores net com os impostos já deduzidos na origem (ERP).</p>
         </div>
-        <button type="button" class="eui-btn eui-btn--ghost" id="ft-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        <div class="ft-head-acoes">
+            <a class="eui-btn eui-btn--ghost" id="ft-btn-excel" href="/api/faturamento/dados.xlsx" hidden title="Todas as entradas e todo o faturamento que vieram do ERP, sem o filtro de período"><i class="fas fa-file-excel"></i> Exportar Excel</a>
+            <button type="button" class="eui-btn eui-btn--ghost" id="ft-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
     </header>
 
     <div class="eui-card" id="ft-vazio" hidden>
@@ -316,6 +320,7 @@
     // pelo status e recarrega quando termina.
     function mostrarBase() {
         $("ft-btn-atualizar").disabled = estado.atualizando;
+        $("ft-btn-excel").hidden = !estado.dados || !!estado.dados.vazio;
         if (estado.dados && !estado.dados.vazio) { renderInfo(); return; }
         $("ft-vazio").hidden = false;
         $("ft-conteudo").hidden = true;
