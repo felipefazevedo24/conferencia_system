@@ -1,15 +1,20 @@
 """Rotas HTTP para envio de NF-e por e-mail ao destinatario."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from ..auth import roles_required
 from ..extensions import db
-from ..models import EmailNFEnviado
-from ..services.nfe_email_service import enviar_nfe_por_email, resolver_destinatario
+from ..models import EmailEntradaChapa, EmailNFEnviado
+from ..services.nfe_email_service import (
+    PREFIXO_ORIGEM_AVISO,
+    enviar_nfe_por_email,
+    filtro_envio_nfe,
+    resolver_destinatario,
+)
 from ..services.erp_nfe_emitidas_service import buscar_email_cadastro_erp, listar_nfes_emitidas_erp, normalizar_data_minima
 
 nfe_email_bp = Blueprint("nfe_email", __name__)
@@ -72,46 +77,144 @@ def api_nfe_email_enviar():
     return jsonify(resultado), code
 
 
+def _tipo_envio(origem: str | None) -> tuple[str, str]:
+    """(chave, rotulo) do tipo de e-mail a partir da origem gravada no log."""
+    origem = origem or ""
+    if not origem.startswith(PREFIXO_ORIGEM_AVISO):
+        return "nfe", "NF-e"
+    if origem.endswith("-Lembrete"):
+        return "lembrete", "Lembrete de coleta"
+    if origem.endswith("-SaiuEntrega"):
+        return "saiu_entrega", "Saiu para entrega"
+    modalidade = origem[len(PREFIXO_ORIGEM_AVISO):] or "FOB"
+    return "aviso_romaneio", f"Aviso de romaneio {modalidade}"
+
+
+def _iso(valor):
+    return valor.isoformat() if valor else None
+
+
 @nfe_email_bp.route("/api/nfe/email/historico", methods=["GET"])
 @roles_required("Fiscal", "Admin", "Conferente")
 def api_nfe_email_historico():
-    numero = (request.args.get("numero_nf") or "").strip()
+    """Todo e-mail ligado a NF: NF-e, avisos do romaneio e aviso de chapas."""
+    texto = (request.args.get("q") or request.args.get("numero_nf") or "").strip()
     status = (request.args.get("status") or "").strip()
-    origem = (request.args.get("origem") or "").strip()
-    limite = request.args.get("limit", type=int) or 200
-    limite = max(1, min(limite, 500))
+    tipo = (request.args.get("tipo") or "").strip()
+    data_de = (request.args.get("data_de") or "").strip()
+    data_ate = (request.args.get("data_ate") or "").strip()
+    limite = request.args.get("limit", type=int) or 300
+    limite = max(1, min(limite, 1000))
 
-    q = EmailNFEnviado.query
-    if numero:
-        q = q.filter(EmailNFEnviado.numero_nf.ilike(f"%{numero}%"))
-    if status:
-        q = q.filter(EmailNFEnviado.status == status)
-    if origem:
-        q = q.filter(EmailNFEnviado.origem == origem)
-    rows = q.order_by(desc(EmailNFEnviado.criado_em)).limit(limite).all()
-    return jsonify([
-        {
-            "id": r.id,
-            "numero_nf": r.numero_nf,
-            "chave_acesso": r.chave_acesso,
-            "destinatario_email": r.destinatario_email,
-            "destinatario_nome": r.destinatario_nome,
-            "destinatario_cnpj": r.destinatario_cnpj,
-            "cc_emails": r.cc_emails,
-            "assunto": r.assunto,
-            "fonte_email": r.fonte_email,
-            "origem": r.origem,
-            "status": r.status,
-            "tentativas": r.tentativas,
-            "erro_mensagem": r.erro_mensagem,
-            "anexou_xml": r.anexou_xml,
-            "anexou_pdf": r.anexou_pdf,
-            "disparado_por": r.disparado_por,
-            "criado_em": r.criado_em.isoformat() if r.criado_em else None,
-            "enviado_em": r.enviado_em.isoformat() if r.enviado_em else None,
-        }
-        for r in rows
-    ])
+    def _periodo(coluna):
+        filtros = []
+        try:
+            if data_de:
+                filtros.append(coluna >= datetime.strptime(data_de, "%Y-%m-%d"))
+            if data_ate:
+                filtros.append(coluna < datetime.strptime(data_ate, "%Y-%m-%d") + timedelta(days=1))
+        except ValueError:
+            pass
+        return filtros
+
+    registros: list[dict] = []
+
+    if tipo != "chapa":
+        q = EmailNFEnviado.query.filter(*_periodo(EmailNFEnviado.criado_em))
+        if texto:
+            like = f"%{texto}%"
+            q = q.filter(or_(
+                EmailNFEnviado.numero_nf.ilike(like),
+                EmailNFEnviado.destinatario_nome.ilike(like),
+                EmailNFEnviado.destinatario_email.ilike(like),
+                EmailNFEnviado.cc_emails.ilike(like),
+            ))
+        if status:
+            q = q.filter(EmailNFEnviado.status == status)
+        if tipo == "nfe":
+            q = q.filter(filtro_envio_nfe())
+        elif tipo == "lembrete":
+            q = q.filter(EmailNFEnviado.origem.like("%-Lembrete"))
+        elif tipo == "saiu_entrega":
+            q = q.filter(EmailNFEnviado.origem.like("%-SaiuEntrega"))
+        elif tipo == "aviso_romaneio":
+            q = q.filter(
+                EmailNFEnviado.origem.like(f"{PREFIXO_ORIGEM_AVISO}%"),
+                ~EmailNFEnviado.origem.like("%-%"),
+            )
+        for r in q.order_by(desc(EmailNFEnviado.criado_em)).limit(limite).all():
+            chave_tipo, rotulo = _tipo_envio(r.origem)
+            registros.append({
+                "id": r.id,
+                "tipo": chave_tipo,
+                "tipo_label": rotulo,
+                "numero_nf": r.numero_nf,
+                "chave_acesso": r.chave_acesso,
+                "destinatario_email": r.destinatario_email,
+                "destinatario_nome": r.destinatario_nome,
+                "destinatario_cnpj": r.destinatario_cnpj,
+                "cc_emails": r.cc_emails,
+                "assunto": r.assunto,
+                "fonte_email": r.fonte_email,
+                "origem": r.origem,
+                "status": r.status,
+                "tentativas": r.tentativas,
+                "erro_mensagem": r.erro_mensagem,
+                "anexou_xml": r.anexou_xml,
+                "anexou_pdf": r.anexou_pdf,
+                "disparado_por": r.disparado_por,
+                "criado_em": _iso(r.criado_em),
+                "enviado_em": _iso(r.enviado_em),
+                "pode_reenviar": chave_tipo == "nfe",
+            })
+
+    if tipo in ("", "chapa"):
+        q = EmailEntradaChapa.query.filter(*_periodo(EmailEntradaChapa.criado_em))
+        if texto:
+            like = f"%{texto}%"
+            q = q.filter(or_(
+                EmailEntradaChapa.numero_nota.ilike(like),
+                EmailEntradaChapa.numero_ar.ilike(like),
+                EmailEntradaChapa.parceiro_nome.ilike(like),
+                EmailEntradaChapa.destinatarios.ilike(like),
+            ))
+        if status:
+            q = q.filter(EmailEntradaChapa.status == status)
+        for r in q.order_by(desc(EmailEntradaChapa.criado_em)).limit(limite).all():
+            registros.append({
+                "id": r.id,
+                "tipo": "chapa",
+                "tipo_label": "Aviso de chapas",
+                "numero_nf": r.numero_nota,
+                "chave_acesso": r.chave_acesso,
+                # O log do aviso guarda Para + CC juntos numa coluna so.
+                "destinatario_email": r.destinatarios,
+                "destinatario_nome": r.parceiro_nome,
+                "destinatario_cnpj": None,
+                "cc_emails": None,
+                "assunto": r.assunto,
+                "fonte_email": None,
+                "origem": r.origem,
+                "status": r.status,
+                "tentativas": r.tentativas,
+                "erro_mensagem": r.erro_mensagem,
+                "anexou_xml": False,
+                "anexou_pdf": False,
+                "disparado_por": r.disparado_por,
+                "criado_em": _iso(r.criado_em),
+                "enviado_em": _iso(r.enviado_em),
+                "numero_ar": r.numero_ar,
+                "cfops": r.cfops,
+                "pode_reenviar": False,
+            })
+
+    registros.sort(key=lambda r: r["criado_em"] or "", reverse=True)
+    registros = registros[:limite]
+    resumo = {"total": len(registros), "Enviado": 0, "Pendente": 0, "Falha": 0, "AguardandoManual": 0}
+    for r in registros:
+        if r["status"] in resumo:
+            resumo[r["status"]] += 1
+    return jsonify({"registros": registros, "resumo": resumo})
 
 
 @nfe_email_bp.route("/api/nfe/email/<int:log_id>/reenviar", methods=["POST"])
@@ -120,6 +223,9 @@ def api_nfe_email_reenviar(log_id: int):
     log = db.session.get(EmailNFEnviado, log_id)
     if not log:
         return jsonify({"error": "Registro nao encontrado."}), 404
+    # Reenviar um aviso de romaneio mandava a NF-e no lugar do aviso.
+    if _tipo_envio(log.origem)[0] != "nfe":
+        return jsonify({"sucesso": False, "erro": "Reenvio disponível só para e-mail de NF-e."}), 400
     resultado = enviar_nfe_por_email(
         numero_nf=log.numero_nf,
         chave=log.chave_acesso,
@@ -272,7 +378,13 @@ def api_entrada_chapa_run_now():
 @nfe_email_bp.route("/faturamento/emails-nfe", methods=["GET"])
 @roles_required("Fiscal", "Admin", "Conferente")
 def pagina_emails_nfe():
-    return render_template("emails_nfe.html")
+    from ..services.nfe_email_config_store import carregar_persistido
+    carregar_persistido()
+    return render_template(
+        "emails_nfe.html",
+        modo_teste=bool(current_app.config.get("NFE_EMAIL_MODO_TESTE", True)),
+        destino_teste=current_app.config.get("NFE_EMAIL_TESTE_DESTINO") or "",
+    )
 
 
 @nfe_email_bp.route("/api/nfe/email/emitidas", methods=["GET"])
@@ -306,7 +418,7 @@ def api_nfe_email_emitidas():
         row.numero_nf: row
         for row in (
             EmailNFEnviado.query
-            .filter(EmailNFEnviado.status == "Enviado")
+            .filter(EmailNFEnviado.status == "Enviado", filtro_envio_nfe())
             .order_by(desc(EmailNFEnviado.enviado_em))
             .all()
         )
@@ -316,7 +428,7 @@ def api_nfe_email_emitidas():
         row.numero_nf: row
         for row in (
             EmailNFEnviado.query
-            .filter(EmailNFEnviado.status == "AguardandoManual")
+            .filter(EmailNFEnviado.status == "AguardandoManual", filtro_envio_nfe())
             .order_by(desc(EmailNFEnviado.criado_em))
             .all()
         )

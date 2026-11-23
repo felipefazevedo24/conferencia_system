@@ -61,6 +61,32 @@ def _emails_validos(valor: str | None) -> list[str]:
     return emails
 
 
+# Os avisos do romaneio (coleta FOB/CIF/DAP, lembrete FOB, saiu para entrega)
+# gravam na mesma tabela da NF-e com origem "Romaneio...". Toda checagem de
+# "NF-e ja enviada" precisa ignorar esses registros: sem isso, um aviso que
+# saiu antes travava o e-mail da NF-e para sempre.
+PREFIXO_ORIGEM_AVISO = "Romaneio"
+
+
+def filtro_envio_nfe():
+    return ~EmailNFEnviado.origem.like(f"{PREFIXO_ORIGEM_AVISO}%")
+
+
+def _cc_para_log(cc: list[str], limite: int = 500) -> str | None:
+    """cc_emails e String(500): no MySQL, passar disso derruba o envio inteiro.
+    O cabecalho do e-mail leva a lista completa; o log guarda o que couber."""
+    texto = ", ".join(cc)
+    if len(texto) <= limite:
+        return texto or None
+    partes: list[str] = []
+    for i, email in enumerate(cc):
+        sufixo = f" +{len(cc) - i}"
+        if len(", ".join(partes + [email])) + len(sufixo) > limite:
+            return ", ".join(partes) + sufixo
+        partes.append(email)
+    return ", ".join(partes)
+
+
 # ---------- Dados resolvidos da NF ----------
 
 
@@ -2050,6 +2076,7 @@ def enviar_nfe_por_email(
         ja_enviado = EmailNFEnviado.query.filter(
             EmailNFEnviado.numero_nf == nota.numero,
             EmailNFEnviado.status.in_(["Enviado", "Pendente"]),
+            filtro_envio_nfe(),
         ).order_by(EmailNFEnviado.id.desc()).first()
         if ja_enviado:
             return {
@@ -2090,6 +2117,17 @@ def enviar_nfe_por_email(
             e = e.strip()
             if _valido_email(e) and e not in cc_final:
                 cc_final.append(e)
+        # NF de servico de terceiro (CFOPs da tela): o fornecedor recebe
+        # normalmente e a lista interna entra em copia.
+        cfops_especiais = {
+            c for c in re.split(r"[,;\s]+", str(app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS") or "")) if c.isdigit()
+        }
+        if cfops_da_nota & cfops_especiais:
+            ja_em_copia = {item.lower() for item in cc_final} | {destino_real.lower()}
+            for email in _emails_validos(app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS")):
+                if email.lower() not in ja_em_copia:
+                    cc_final.append(email)
+                    ja_em_copia.add(email.lower())
         for email in resolvido.get("emails", [destino_real])[1:]:
             if email.lower() != destino_real.lower() and email.lower() not in {item.lower() for item in cc_final}:
                 cc_final.append(email)
@@ -2196,7 +2234,7 @@ def enviar_nfe_por_email(
         destinatario_email=destino_efetivo,
         destinatario_nome=nota.dest_nome,
         destinatario_cnpj=nota.dest_cnpj,
-        cc_emails=(", ".join(cc_final) if cc_final else None),
+        cc_emails=_cc_para_log(cc_final),
         assunto=assunto,
         fonte_email=fonte,
         origem=origem,
