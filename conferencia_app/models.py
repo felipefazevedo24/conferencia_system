@@ -2630,6 +2630,10 @@ class ComprasHomologacaoConvite(db.Model):
     enviado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
     enviado_por = db.Column(db.String(100))
     respondido_em = db.Column(db.DateTime)
+    # Preenchido so' quando o comprador concluiu no lugar do fornecedor
+    # (ele respondeu pelo link mas nao clicou em Enviar). Vazio = o proprio
+    # fornecedor enviou.
+    respondido_por = db.Column(db.String(100))
     cancelado_em = db.Column(db.DateTime)
 
 

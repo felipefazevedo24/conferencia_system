@@ -1388,6 +1388,11 @@ def initialize_database(app: Flask) -> None:
             app.logger.exception("Bootstrap: falha ao ajustar spend_entrada_grv (OC e requisitante)")
 
         try:
+            _ensure_homologacao_convite_respondido_por_column()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao criar compras_homologacao_convite.respondido_por")
+
+        try:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
@@ -2105,6 +2110,19 @@ def _ensure_inventario_ciclico_divergencia_mantida_columns() -> None:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_homologacao_convite_respondido_por_column() -> None:
+    if not _has_table("compras_homologacao_convite"):
+        return
+    if "respondido_por" in _get_column_names("compras_homologacao_convite"):
+        return
+    conn = db.engine.connect()
+    try:
+        conn.execute(db.text("ALTER TABLE compras_homologacao_convite ADD COLUMN respondido_por VARCHAR(100)"))
+        conn.commit()
     finally:
         conn.close()
 

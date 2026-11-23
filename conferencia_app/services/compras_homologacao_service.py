@@ -731,13 +731,21 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
     """Envio final do fornecedor: tudo respondido + evidencia onde exigida.
     Volta pra Rascunho pro comprador revisar e mandar pra aprovacao."""
     homologacao = salvar_self_assessment(convite, dados)
+    _validar_self_assessment(homologacao)
+    convite.respondido_em = agora_br()
+    homologacao.status = Homologacao.STATUS_RASCUNHO
+    db.session.commit()
+    return homologacao
+
+
+def _validar_self_assessment(homologacao: Homologacao, sufixo: str = "") -> None:
     _validar_iso_rev04(homologacao)
     faltando = itens_faltando(homologacao)
     if faltando:
         primeira = faltando[0]
         raise ValueError(
             f"Responda todos os itens antes de enviar - faltam {len(faltando)} "
-            f"(ex.: {primeira['secao_titulo']}, item {primeira['item']})."
+            f"(ex.: {primeira['secao_titulo']}, item {primeira['item']}).{sufixo}"
         )
     if eh_rev04(homologacao):
         _validar_rev04(homologacao)
@@ -746,10 +754,26 @@ def concluir_self_assessment(convite: ComprasHomologacaoConvite, dados: dict) ->
         primeira = sem_evidencia[0]
         raise ValueError(
             f"Anexe evidência nos itens respondidos como Sim, Parcial ou Conforme - faltam "
-            f"{len(sem_evidencia)} (ex.: {primeira['secao_titulo']}, item {primeira['item']})."
+            f"{len(sem_evidencia)} (ex.: {primeira['secao_titulo']}, item {primeira['item']}).{sufixo}"
         )
+
+
+def concluir_pelo_comprador(homologacao: Homologacao, usuario: str) -> Homologacao:
+    """O fornecedor respondeu pelo link mas nao clicou em Enviar: o comprador
+    envia no lugar dele, com o que ja' esta' gravado e as mesmas travas do
+    envio do fornecedor. Vale tambem com o link expirado. Fica registrado
+    quem concluiu (respondido_por)."""
+    if homologacao.status != Homologacao.STATUS_COM_FORNECEDOR:
+        raise ValueError("Esta homologação não está com o fornecedor.")
+    convite = convite_ativo(homologacao)
+    if not convite:
+        raise ValueError("Não há link aberto com o fornecedor.")
+    _validar_self_assessment(
+        homologacao, " Se o fornecedor não vai completar, cancele o envio e complete na tela.")
     convite.respondido_em = agora_br()
+    convite.respondido_por = usuario
     homologacao.status = Homologacao.STATUS_RASCUNHO
+    recalcular(homologacao)
     db.session.commit()
     return homologacao
 
