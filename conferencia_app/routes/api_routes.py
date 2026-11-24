@@ -3520,6 +3520,39 @@ def registrar_decisao_xml_auditor():
     return jsonify({"sucesso": True, "msg": "XML recusado. Status fiscal registrado para Documento de Entrada."})
 
 
+def _apagar_itens_nota_e_vinculos(ids_alvo: list[int], numero_nota: str, motivo: str) -> str | None:
+    """Apaga os itens da NF e o que aponta para eles (classificação contábil,
+    endereçamento). Sem isso o MySQL recusa o DELETE pela chave estrangeira
+    e a tela só mostra "Falha na operação". Devolve a mensagem de bloqueio
+    (já com rollback) ou None."""
+    from ..models import RecebimentoEnderecamento, RecebimentoEnderecamentoEvento
+    tarefas = RecebimentoEnderecamento.query.filter(
+        RecebimentoEnderecamento.item_nota_id.in_(ids_alvo)).with_for_update().all()
+    if any(t.status == 'Aguardando sincronização' or t.executando_em for t in tarefas):
+        db.session.rollback()
+        return 'Esta NF possui endereçamento aguardando sincronização. Revise a tarefa no módulo Endereçamento antes de excluir.'
+    for tarefa in tarefas:
+        eventos = RecebimentoEnderecamentoEvento.query.filter_by(tarefa_id=tarefa.id).order_by(
+            RecebimentoEnderecamentoEvento.id).all()
+        # Preserva a auditoria, inclusive saldos já registrados, antes de remover o vínculo obrigatório.
+        db.session.add(LogEventoFiscalNota(numero_nota=numero_nota,
+            evento='Endereçamento arquivado na exclusão', etapa='Exclusão', status='Excluída',
+            usuario=session.get('username', 'desconhecido'), detalhe=motivo[:1000],
+            payload_json=json.dumps({'tarefa': {c.name: getattr(tarefa, c.name) for c in tarefa.__table__.columns},
+                'eventos': [{c.name: getattr(e, c.name) for c in e.__table__.columns} for e in eventos]},
+                ensure_ascii=False, default=str)))
+        RecebimentoEnderecamentoEvento.query.filter_by(tarefa_id=tarefa.id).delete(synchronize_session=False)
+    if tarefas:
+        RecebimentoEnderecamento.query.filter(
+            RecebimentoEnderecamento.id.in_([t.id for t in tarefas])).delete(synchronize_session=False)
+    ClassificacaoContabilItem.query.filter(
+        ClassificacaoContabilItem.item_nota_id.in_(ids_alvo)
+    ).delete(synchronize_session=False)
+    ChapaControleExclusao.query.filter(ChapaControleExclusao.item_nota_id.in_(ids_alvo)).delete(synchronize_session=False)
+    ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
+    return None
+
+
 @api_bp.route("/api/xml_auditor/retirar", methods=["POST"])
 @permission_required("PAGE_XML_AUDITOR")
 def retirar_nota_da_fila_auditor_xml():
@@ -3557,8 +3590,9 @@ def retirar_nota_da_fila_auditor_xml():
 
     ids_alvo = [int(i.id) for i in itens]
     if ids_alvo:
-        ChapaControleExclusao.query.filter(ChapaControleExclusao.item_nota_id.in_(ids_alvo)).delete(synchronize_session=False)
-        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
+        erro = _apagar_itens_nota_e_vinculos(ids_alvo, numero_nota, motivo)
+        if erro:
+            return jsonify(sucesso=False, msg=erro), 409
 
     # Só limpa logs/lock globais da NF quando não existem mais itens com esse número.
     if not ItemNota.query.filter_by(numero_nota=numero_nota).first():
@@ -5668,32 +5702,9 @@ def excluir_nota_pendente():
 
     ids_alvo = [int(i.id) for i in itens]
     if ids_alvo:
-        # A classificação referencia o item: remova o vínculo na mesma transação.
-        from ..models import RecebimentoEnderecamento, RecebimentoEnderecamentoEvento
-        tarefas = RecebimentoEnderecamento.query.filter(
-            RecebimentoEnderecamento.item_nota_id.in_(ids_alvo)).with_for_update().all()
-        if any(t.status == 'Aguardando sincronização' or t.executando_em for t in tarefas):
-            db.session.rollback()
-            return jsonify(sucesso=False, msg='Esta NF possui endereçamento aguardando sincronização. Revise a tarefa no módulo Endereçamento antes de excluir.'), 409
-        for tarefa in tarefas:
-            eventos = RecebimentoEnderecamentoEvento.query.filter_by(tarefa_id=tarefa.id).order_by(
-                RecebimentoEnderecamentoEvento.id).all()
-            # Preserva a auditoria, inclusive saldos já registrados, antes de remover o vínculo obrigatório.
-            db.session.add(LogEventoFiscalNota(numero_nota=numero_nota,
-                evento='Endereçamento arquivado na exclusão', etapa='Exclusão', status='Excluída',
-                usuario=session.get('username', 'desconhecido'), detalhe=motivo[:1000],
-                payload_json=json.dumps({'tarefa': {c.name: getattr(tarefa, c.name) for c in tarefa.__table__.columns},
-                    'eventos': [{c.name: getattr(e, c.name) for c in e.__table__.columns} for e in eventos]},
-                    ensure_ascii=False, default=str)))
-            RecebimentoEnderecamentoEvento.query.filter_by(tarefa_id=tarefa.id).delete(synchronize_session=False)
-        if tarefas:
-            RecebimentoEnderecamento.query.filter(
-                RecebimentoEnderecamento.id.in_([t.id for t in tarefas])).delete(synchronize_session=False)
-        ClassificacaoContabilItem.query.filter(
-            ClassificacaoContabilItem.item_nota_id.in_(ids_alvo)
-        ).delete(synchronize_session=False)
-        ChapaControleExclusao.query.filter(ChapaControleExclusao.item_nota_id.in_(ids_alvo)).delete(synchronize_session=False)
-        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
+        erro = _apagar_itens_nota_e_vinculos(ids_alvo, numero_nota, motivo)
+        if erro:
+            return jsonify(sucesso=False, msg=erro), 409
 
     # Só limpa logs/lock globais quando não há mais itens com o mesmo número.
     if not ItemNota.query.filter_by(numero_nota=numero_nota).first():
