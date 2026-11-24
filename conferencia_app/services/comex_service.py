@@ -200,6 +200,12 @@ def _modulo_anterior(atual: str, sequencia: list[str] = MODULOS_SEQUENCIA) -> st
     return sequencia[idx - 1]
 
 
+def numero_da_po(processo) -> str:
+    """Numero da PO = numero da OC do ERP, pra fornecedor, Compras e ERP
+    falarem do mesmo documento. Processo manual (sem OC) usa o ID OP."""
+    return str(processo.cod_ordem_compra) if processo.cod_ordem_compra else processo.id_op
+
+
 def gerar_id_op(tipo_operacao: str) -> str:
     """Gera o identificador unico do processo (ID OP), ex.: IM-2026-00001.
     Sequencial por tipo de operacao + ano. Nao confundir com `ref_ff`
@@ -1057,9 +1063,9 @@ def salvar_po(
         # retroativamente - e' um numero novo a partir daqui.
         processo.tipo_operacao = tipo_operacao
         processo.id_op = gerar_id_op(tipo_operacao)
-        processo.po_numero = f"PO-{processo.id_op}"
+        processo.po_numero = numero_da_po(processo)
     elif ainda_editavel or not processo.po_numero:
-        processo.po_numero = f"PO-{processo.id_op}"
+        processo.po_numero = numero_da_po(processo)
     processo.direcao_operacao = direcao_operacao
     processo.modal_transporte = modal_transporte
     processo.pagador_frete = pagador_frete
