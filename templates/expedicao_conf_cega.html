@@ -618,6 +618,34 @@
             </div>
         </div>
 
+        <!-- Etiqueta de numero de serie (50 x 150 mm): OS e data vem da conferencia. -->
+        <div id="ce-serie-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-serie-title">
+            <div class="ce-modal__box">
+                <div class="ce-modal__head">
+                    <div class="ce-modal__ico" style="background: rgba(15,98,201,.12); color: var(--eui-primary);"><i class="fas fa-barcode"></i></div>
+                    <div>
+                        <h3 class="ce-modal__title" id="ce-serie-title">Etiqueta de número de série</h3>
+                        <p class="ce-modal__sub" id="ce-serie-sub"></p>
+                    </div>
+                </div>
+                <div class="ce-modal__body">
+                    <label for="ce-serie-cliente">Cliente</label>
+                    <input id="ce-serie-cliente" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
+                    <label for="ce-serie-monte">Nome do Monte</label>
+                    <input id="ce-serie-monte" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
+                    <label for="ce-serie-produto">Produto</label>
+                    <input id="ce-serie-produto" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
+                    <label for="ce-serie-serie">Nº de série</label>
+                    <input id="ce-serie-serie" class="eui-input" maxlength="120" style="width:100%;">
+                    <div class="ce-modal__err" id="ce-serie-err"></div>
+                </div>
+                <div class="ce-modal__foot">
+                    <button class="eui-btn eui-btn--subtle" id="ce-serie-cancelar">Cancelar</button>
+                    <button class="eui-btn eui-btn--primary" id="ce-serie-imprimir"><i class="fas fa-print"></i> Imprimir</button>
+                </div>
+            </div>
+        </div>
+
         {% if can_access('PAGE_EXPEDICAO_CONF_CEGA_RELATORIO') or can_access('PAGE_EXPEDICAO_CONF_CEGA_RELATORIO_GERENCIAL') %}
         <div id="ce-relatorio-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-relatorio-title">
             <div class="ce-modal__box" style="width: min(560px, 100%);">
@@ -1069,6 +1097,7 @@
                     else if (act === "imprimir-etiqueta-red-molds") imprimirEtiquetaRedMolds(cod);
                     else if (act === "imprimir-etiqueta-columbia") imprimirEtiquetaColumbia(cod);
                     else if (act === "imprimir-etiqueta-produto") imprimirEtiquetaProduto(cod);
+                    else if (act === "imprimir-etiqueta-serie") abrirEtiquetaSerie(cod);
                     else if (act === "desenhos-cotacao-st") abrirDesenhosCotacaoSt(cod);
                     else if (act === "anexar-comprovante") abrirUploadComprovante(cod);
                     else if (act === "expedir-sem-conf") expedirSemConferencia(cod);
@@ -1128,6 +1157,10 @@
                 }
             } else {
                 itens += it("ver", "fa-eye", "Detalhes");
+            }
+            // Numero de serie (Faturamento): precisa da conferencia (OS + data).
+            if (cfg.codKey === "cod_ordem_fat" && !["pendente", "faturado_sem_conf", "finalizado_sem_conf"].includes(s)) {
+                itens += it("imprimir-etiqueta-serie", "fa-barcode", "Imprimir etiqueta de nº de série");
             }
             // Servico de Terceiro: uma etiqueta por peca conferida (OS + descricao).
             if (cfg.codKey === "cod_ordem_compra" && !["pendente", "faturado_sem_conf", "finalizado_sem_conf"].includes(s)) {
@@ -1206,6 +1239,34 @@
                 w.document.write(`<!doctype html><meta charset="utf-8"><title>Desenhos — OC ${e(cod)}</title><body style="font-family:sans-serif; padding:20px;">${html}</body>`);
                 w.document.close();
             } catch (err) { toast(err.message, "error"); }
+        }
+
+        // Numero de serie (50 x 150 mm): cliente/monte/produto/serie digitados
+        // aqui; OS e data da conferencia o servidor completa.
+        function abrirEtiquetaSerie(cod) {
+            const modal = $("ce-serie-modal");
+            const o = ordemPorCod(cod) || {};
+            $("ce-serie-sub").textContent = `Ordem ${cod} — OS e data da conferência entram sozinhas.`;
+            $("ce-serie-cliente").value = o.cliente || "";
+            ["monte", "produto", "serie"].forEach((c) => { $("ce-serie-" + c).value = ""; });
+            $("ce-serie-err").textContent = "";
+            const fechar = () => modal.classList.remove("open");
+            $("ce-serie-cancelar").onclick = fechar;
+            $("ce-serie-imprimir").onclick = async () => {
+                const q = new URLSearchParams();
+                ["cliente", "monte", "produto", "serie"].forEach((c) => q.set(c, $("ce-serie-" + c).value.trim()));
+                const base = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-serie`;
+                try {
+                    const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl?${q}`, pdfUrl: `${base}.pdf?${q}`, papel: "50 x 150 mm" });
+                    fechar();
+                    if (r.via === "zebra") toast(`Etiqueta enviada para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
+                    else toast(`${r.motivo} Abrindo o PDF.`, "info");
+                } catch (e) {
+                    $("ce-serie-err").textContent = e.message;
+                }
+            };
+            modal.classList.add("open");
+            $("ce-serie-cliente").focus();
         }
 
         // Identificacao do produto (ST): uma etiqueta 70 x 50 por peca conferida.
