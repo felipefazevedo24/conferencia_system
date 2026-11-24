@@ -280,6 +280,75 @@ PEDIDOS_SQL = """
 """
 
 
+# Impressao da ordem de compra igual ao relatorio do GRV (anexo do e-mail da
+# NF-e). Conferido contra a OC 13074 em 24/11/2026: cabecalho/rodape sao RTF
+# gravados na propria OC; servicos de terceiros ficam em tord_serv com a OS.
+PEDIDO_IMPRESSAO_CABECALHO_SQL = """
+    select
+        oc.cod_empresa, oc.codigo::text as numero, oc.data, oc.cond_pagamento, oc.forma_pgto,
+        oc.frete_por_conta, oc.transportadora, oc.dt_prevista_entrega, oc.solicitante,
+        oc.contato, oc.obs, oc.cabecalho, oc.rodape, oc.endereco_entrega, oc.endereco_cobranca,
+        coalesce(oc.subtotal, 0) as subtotal, coalesce(oc.totalgeral, 0) as totalgeral,
+        coalesce(oc.vl_frete, 0) as vl_frete, coalesce(oc.vl_seguro, 0) as vl_seguro,
+        coalesce(oc.vl_outras_despesas, 0) as vl_outras_despesas,
+        coalesce(oc.vl_desconto, 0) as vl_desconto,
+        coalesce(oc.icms, 0) as vl_icms, coalesce(oc.ipi, 0) as vl_ipi,
+        coalesce(nullif(oc.fornecedor_razao, ''), nullif(oc.fornecedor, ''), f.razao_social, f.nome) as fornecedor,
+        coalesce(nullif(oc.fornecedor_cnpj, ''), f.cgc) as fornecedor_cnpj,
+        coalesce(nullif(oc.fornecedor_ie, ''), f.ie) as fornecedor_ie,
+        coalesce(nullif(oc.fornecedor_endeferco, ''), f.endereco) as fornecedor_endereco,
+        coalesce(nullif(oc.fornecedor_numero, ''), f.numero_imovel) as fornecedor_numero,
+        coalesce(nullif(oc.fornecedor_bairro, ''), f.bairro) as fornecedor_bairro,
+        coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as fornecedor_cidade,
+        coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as fornecedor_uf,
+        coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as fornecedor_cep,
+        coalesce(nullif(oc.fornecedor_telefone, ''), f.fone1, f.fone2) as fornecedor_telefone,
+        coalesce(nullif(oc.fornecedor_fax, ''), f.fax) as fornecedor_fax,
+        f.e_mail as fornecedor_email,
+        f.regime_federal as fornecedor_regime_federal,
+        e.nome as empresa_nome, e.endereco as empresa_endereco, e.numero as empresa_numero,
+        e.bairro as empresa_bairro, e.cidade as empresa_cidade, e.estado as empresa_uf,
+        e.cep as empresa_cep, e.cgc as empresa_cnpj, e.ie as empresa_ie,
+        e.telefones as empresa_telefone, e.site as empresa_site, e.logotipo as empresa_logo,
+        (select string_agg(a.usuario, ', ' order by a.data, a.hora)
+           from public.tord_aprovacao a
+          where a.cod_empresa = oc.cod_empresa and a.cod_ord_compra = oc.codigo) as aprovado_por
+    from public.tord_com oc
+    left join public.tfornece f on f.cod_empresa = oc.cod_empresa and f.codigo = oc.cod_fornecedor
+    left join public.tempresa e on e.codigo = oc.cod_empresa
+    where oc.codigo::text = %s
+    order by oc.cod_empresa
+    limit 1
+"""
+
+PEDIDO_IMPRESSAO_SERVICOS_SQL = """
+    select grupo_serv_ter, sub_grupo_serv_ter, descricao, coalesce(qtde, 0) as qtde, unidade,
+           coalesce(iss, 0) as iss, coalesce(icms, 0) as icms, coalesce(ipi, 0) as ipi,
+           coalesce(vl_unitario, 0) as vl_unitario, coalesce(vl_total_iss, 0) as vl_iss,
+           coalesce(vl_total, 0) as vl_total, cod_os_completo, descricao_os, posicao_os
+    from public.tord_serv
+    where cod_empresa = %s and cod_ordem_compra::text = %s and coalesce(cancelado, 0) = 0
+    order by aut_
+"""
+
+PEDIDO_IMPRESSAO_MATERIAIS_SQL = """
+    select cod_interno, descricao, coalesce(qtde_compra, qtde, 0) as qtde, unidade,
+           coalesce(icms, 0) as icms, coalesce(ipi, 0) as ipi,
+           coalesce(preco_unitario, 0) as vl_unitario,
+           coalesce(total, coalesce(qtde_compra, qtde, 0) * coalesce(preco_unitario, 0)) as vl_total
+    from public.tord_aux
+    where cod_empresa = %s and cod_ord_compra::text = %s
+    order by item
+"""
+
+
+def _texto_bytea(valor: Any) -> str:
+    """RTF/texto gravado em bytea: o RTF e ASCII com escapes \\'xx (cp1252)."""
+    if isinstance(valor, (bytes, bytearray, memoryview)):
+        return bytes(valor).decode("latin-1", "replace")
+    return str(valor or "")
+
+
 NFE_EMAIL_DATA_MINIMA = date(2026, 5, 13)
 
 
@@ -2803,6 +2872,52 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "linhas": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar pedidos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/pedido-compra-impressao")
+    def pedido_compra_impressao():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        numero = str((request.get_json(silent=True) or {}).get("pedido") or "").strip()
+        if not numero.isdigit():
+            return jsonify({"sucesso": False, "erro": "pedido_invalido"}), 400
+        try:
+            with _conectar(cfg, readonly=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(PEDIDO_IMPRESSAO_CABECALHO_SQL, (numero,))
+                    cols = [d[0] for d in cur.description]
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({"sucesso": False, "erro": "pedido_nao_encontrado"}), 404
+                    cabecalho = dict(zip(cols, row))
+                    for campo in ("cabecalho", "rodape", "obs", "endereco_entrega", "endereco_cobranca"):
+                        cabecalho[campo] = _texto_bytea(cabecalho.get(campo))
+                    empresa = cabecalho["cod_empresa"]
+
+                    cur.execute(PEDIDO_IMPRESSAO_SERVICOS_SQL, (empresa, numero))
+                    cols = [d[0] for d in cur.description]
+                    servicos = [dict(zip(cols, r)) for r in cur.fetchall()]
+                    for servico in servicos:
+                        servico["descricao"] = _texto_bytea(servico.get("descricao"))
+
+                    cur.execute(PEDIDO_IMPRESSAO_MATERIAIS_SQL, (empresa, numero))
+                    cols = [d[0] for d in cur.description]
+                    materiais = [dict(zip(cols, r)) for r in cur.fetchall()]
+                    for material in materiais:
+                        material["descricao"] = _texto_bytea(material.get("descricao"))
+
+            return jsonify(_json_safe({
+                "sucesso": True,
+                "pedido": cabecalho,
+                "servicos": servicos,
+                "materiais": materiais,
+            }))
+        except Exception as exc:
+            app.logger.exception("Falha ao montar impressao do pedido %s", numero)
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/estoque")

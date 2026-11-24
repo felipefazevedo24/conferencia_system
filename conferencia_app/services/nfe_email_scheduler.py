@@ -36,7 +36,7 @@ def _set_status(**kwargs):
 def executar_ciclo(app: Flask) -> dict[str, Any]:
     """Um ciclo de verificacao + envio. Retorna resumo."""
     from .erp_nfe_emitidas_service import listar_nfes_emitidas_erp, normalizar_data_minima
-    from .nfe_email_service import enviar_nfe_por_email
+    from .nfe_email_service import enviar_nfe_por_email, filtro_envio_nfe
     from ..models import EmailNFEnviado
 
     with app.app_context():
@@ -64,7 +64,8 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
         ja_processadas = {
             row.numero_nf
             for row in EmailNFEnviado.query.filter(
-                EmailNFEnviado.status.in_(["Enviado", "AguardandoManual", "Falha", "Pendente"])
+                EmailNFEnviado.status.in_(["Enviado", "AguardandoManual", "Falha", "Pendente"]),
+                filtro_envio_nfe(),
             ).all()
             if row.numero_nf
         }

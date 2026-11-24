@@ -1,1114 +1,827 @@
 {% extends "base.html" %}
 
-{% block title %}Administração - E-mails de NF-e{% endblock %}
+{% block title %}Faturamento - E-mails de NF-e{% endblock %}
+{% block shell_title %}Faturamento — E-mails de NF-e{% endblock %}
 
 {% block extra_head %}
 <style>
-  .nfe-wrap { max-width: 1280px; margin: 0 auto; }
-  .nfe-header {
-    background: radial-gradient(circle at top right, rgba(21, 94, 239, 0.14), transparent 32%),
-                linear-gradient(135deg, #ffffff 0%, #eef3ff 100%);
-    border: 1px solid #dbe4ec;
-    border-bottom: 3px solid #155eef;
-    border-radius: 18px;
-    padding: 20px 24px;
-    margin-bottom: 18px;
-    box-shadow: 0 14px 30px rgba(25, 45, 82, 0.08);
-    display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
-  }
-  .nfe-title { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
-  .nfe-sub { margin: 6px 0 0; color: #475569; font-size: 13px; font-weight: 600; }
-  .teste-pill {
-    padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 12px;
-    background: #fff7ed; color: #9a3412; border: 1px solid #fdba74;
-  }
-  .teste-pill.off { background: #ecfdf5; color: #047857; border-color: #6ee7b7; }
+  .em-wrap { display: grid; gap: 18px; }
+  .em-ambiente { font-size: 12px; padding: 6px 12px; }
 
-  .card {
-    background: #fff; border: 1px solid #dbe4ec; border-radius: 16px; padding: 18px;
-    box-shadow: 0 10px 24px rgba(18, 38, 58, 0.06); margin-bottom: 16px;
-  }
-  .card h3 { margin: 0 0 12px; font-size: 14px; color: #1e293b; font-weight: 800; text-transform: uppercase; }
+  .eui-stat.is-clickable { cursor: pointer; }
+  .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
 
-  .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: end; }
-  .form-grid.narrow { grid-template-columns: repeat(6, 1fr); }
-  .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #475569; }
-  .form-grid input, .form-grid select {
-    padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;
+  .em-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--eui-border); }
+  .em-tab {
+    background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    padding: 10px 16px; font-family: var(--eui-font); font-size: 13px; font-weight: 600;
+    color: var(--eui-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
   }
-  .btn {
-    border: 0; cursor: pointer; padding: 10px 16px; border-radius: 10px; font-weight: 700;
-    font-size: 13px; color: #fff; background: #155eef;
-  }
-  .btn.secondary { background: #475569; }
-  .btn.ghost { background: #e2e8f0; color: #1e293b; }
-  .btn.danger { background: #dc2626; }
+  .em-tab:hover { color: var(--eui-text); }
+  .em-tab.is-active { color: var(--eui-primary); border-bottom-color: var(--eui-primary); }
+  .em-tab-panel { display: none; }
+  .em-tab-panel.is-active { display: block; }
 
-  table.nfe-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  table.nfe-table th, table.nfe-table td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-  table.nfe-table th { background: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 11px; }
-  table.nfe-table tr:hover td { background: #f8fbff; }
+  .em-toolbar { padding: 14px 20px; border-bottom: 1px solid var(--eui-border); }
+  .em-toolbar .eui-select, .em-toolbar .eui-input[type=date] { width: auto; min-width: 150px; }
+  .em-table-wrap { overflow: auto; max-height: 640px; }
+  .em-table-wrap .erp-table td { font-size: 12.5px; padding: 10px 12px; }
+  .em-table-wrap .erp-table th { padding: 10px 12px; }
+  .em-mono { font-family: Consolas, monospace; font-size: 11.5px; color: var(--eui-text-soft); }
+  .em-muted { color: var(--eui-muted); }
+  .em-sub { display: block; font-size: 11px; color: var(--eui-muted); margin-top: 2px; }
+  .em-email { word-break: break-all; }
+  .em-cc-mais { margin-left: 4px; }
+  .em-erro { margin-top: 4px; font-size: 11px; color: var(--eui-danger); max-width: 280px; white-space: normal; }
 
-  .status { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
-  .status.enviado { background: #ecfdf5; color: #047857; }
-  .status.pendente { background: #fef3c7; color: #92400e; }
-  .status.falha    { background: #fee2e2; color: #b91c1c; }
+  tr.em-linha { cursor: pointer; }
+  tr.em-linha.is-open td { background: var(--eui-primary-soft); }
+  tr.em-detalhe td { background: var(--eui-surface-2); padding: 4px 16px 16px; }
+  .em-detalhe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; padding-top: 10px; }
+  .em-detalhe-grid span { display: block; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-muted); }
+  .em-detalhe-grid strong { font-size: 12.5px; font-weight: 600; color: var(--eui-text); word-break: break-word; }
+  .em-detalhe-grid .em-full { grid-column: 1 / -1; }
+  .em-chip-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 
-  .origem { display: inline-block; padding: 3px 9px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 700; }
-  .origem.auto { background: #e0f2fe; color: #075985; }
-  .origem.reenvio { background: #fce7f3; color: #9d174d; }
+  .em-email-inp { width: 240px; min-height: 32px; padding: 4px 8px; font-size: 12px; }
+  .em-email-inp.is-vazio { border-color: var(--eui-danger); background: var(--eui-danger-soft); }
 
-  .fonte-chip { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; background: #f1f5f9; color: #334155; }
-  .erro-envio { margin-top: 4px; color: #b91c1c; font-size: 11px; max-width: 260px; white-space: normal; }
+  .em-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .em-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
-  .sugestao-box {
-    margin-top: 10px; padding: 12px; border-radius: 10px; background: #f8fafc;
-    border: 1px dashed #cbd5e1; font-size: 13px; color: #334155;
-  }
-  .sugestao-box strong { color: #155eef; }
+  .em-cfg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .em-cfg .eui-card__body { display: grid; gap: 14px; }
+  .em-cfg-full { grid-column: 1 / -1; }
+  .em-linha-cfg { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .em-linha-cfg b { font-size: 13px; font-weight: 600; color: var(--eui-text); }
 
-  /* ===== Painel de configuracao (estilo ERP/SAP) ===== */
-  .cfg-panel {
-    background: #fff; border: 1px solid #dbe4ec; border-radius: 16px;
-    box-shadow: 0 10px 24px rgba(18, 38, 58, 0.06); margin-bottom: 16px; overflow: hidden;
+  .em-switch { display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+  .em-switch input { display: none; }
+  .em-switch span {
+    width: 40px; height: 22px; background: var(--eui-border-strong); border-radius: 999px; position: relative; transition: background .2s;
   }
-  .cfg-panel-head {
-    background: linear-gradient(135deg, #0b2a6b 0%, #155eef 100%);
-    color: #fff; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  .em-switch span::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.25);
   }
-  .cfg-panel-head h3 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #fff; }
-  .cfg-panel-head .cfg-sub { margin: 2px 0 0; font-size: 12px; color: #c7d2fe; font-weight: 500; }
-  .cfg-panel-head .cfg-badge {
-    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
-    padding: 6px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff;
-  }
+  .em-switch input:checked + span { background: var(--eui-primary); }
+  .em-switch input:checked + span::after { left: 20px; }
 
-  .cfg-body { padding: 18px 22px; }
-  .cfg-section { border-top: 1px solid #e2e8f0; padding: 16px 0; }
-  .cfg-section:first-child { border-top: 0; padding-top: 0; }
-  .cfg-section:last-child { padding-bottom: 0; }
-  .cfg-section-title {
-    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;
-    color: #0b2a6b; margin: 0 0 4px; display: flex; align-items: center; gap: 8px;
+  .em-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; padding: 6px 8px;
+    border: 1px solid var(--eui-border-strong); border-radius: var(--eui-radius-sm); background: var(--eui-surface); cursor: text;
   }
-  .cfg-section-title::before {
-    content: ""; width: 4px; height: 14px; background: #155eef; border-radius: 2px;
+  .em-chips:focus-within { border-color: var(--eui-primary); box-shadow: var(--eui-focus-ring); }
+  .em-chips input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; font-family: var(--eui-font); font-size: 13px; color: var(--eui-text); padding: 4px; }
+  .em-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px;
+    background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); font-size: 12px; font-weight: 600;
   }
-  .cfg-section-desc { font-size: 12px; color: #64748b; margin: 0 0 14px; }
+  .em-chip button {
+    border: 0; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; padding: 0; line-height: 1;
+    background: rgba(15, 98, 201, .12); color: inherit; font-size: 12px;
+  }
+  .em-chip button:hover { background: var(--eui-danger); color: #fff; }
+  .em-regras { display: grid; gap: 12px; }
+  .em-regra { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: end; padding: 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface-2); }
+  .em-regras-vazio { color: var(--eui-muted); font-size: 13px; }
+  @media (max-width: 1100px) { .em-regra { grid-template-columns: 1fr; } }
 
-  .cfg-row {
-    display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start;
-    padding: 10px 0; border-bottom: 1px dashed #e2e8f0;
-  }
-  .cfg-row:last-child { border-bottom: 0; }
-  .cfg-row-label {
-    font-size: 13px; font-weight: 700; color: #1e293b; padding-top: 8px;
-  }
-  .cfg-row-label small { display: block; font-weight: 500; color: #64748b; font-size: 11.5px; margin-top: 3px; }
-  .cfg-row-control { display: flex; flex-direction: column; gap: 4px; }
-  .cfg-row-control input[type=email],
-  .cfg-row-control input[type=text],
-  .cfg-row-control input[type=date],
-  .cfg-row-control input[type=number],
-  .cfg-row-control textarea,
-  .cfg-row-control select {
-    padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  .cfg-row-control input:focus,
-  .cfg-row-control textarea:focus,
-  .cfg-row-control select:focus {
-    outline: 0; border-color: #155eef; box-shadow: 0 0 0 3px rgba(21,94,239,0.15);
-  }
-  .cfg-hint { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+  .em-sched { font-family: Consolas, monospace; font-size: 12px; color: var(--eui-text-soft); }
+  .em-cfg-foot { position: sticky; bottom: 0; z-index: 5; justify-content: space-between; align-items: center; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); margin-top: 18px; }
+  .em-dirty { font-size: 12px; font-weight: 600; color: var(--eui-warning); visibility: hidden; }
+  .em-dirty.is-show { visibility: visible; }
 
-  /* Toggle switch */
-  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
-  .switch input { display: none; }
-  .switch-slot {
-    width: 44px; height: 24px; background: #cbd5e1; border-radius: 999px; position: relative;
-    transition: background .2s;
-  }
-  .switch-slot::after {
-    content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
-    background: #fff; border-radius: 50%; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  }
-  .switch input:checked + .switch-slot { background: #155eef; }
-  .switch input:checked + .switch-slot::after { left: 22px; }
-  .switch-label { font-size: 13px; font-weight: 600; color: #1e293b; }
-  .switch-label.off { color: #64748b; }
-
-  /* Chip input (CC padrao) */
-  .chips-input {
-    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-    padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
-    min-height: 42px; transition: border-color .15s, box-shadow .15s;
-  }
-  .chips-input:focus-within { border-color: #155eef; box-shadow: 0 0 0 3px rgba(21,94,239,0.15); }
-  .chip {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px;
-    background: #eef3ff; color: #0b2a6b; border: 1px solid #bfdbfe; border-radius: 999px;
-    font-size: 12px; font-weight: 600;
-  }
-  .chip button {
-    border: 0; background: rgba(11,42,107,0.1); color: #0b2a6b; width: 18px; height: 18px;
-    border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; padding: 0;
-  }
-  .chip button:hover { background: #ef4444; color: #fff; }
-  .chips-input input {
-    flex: 1; min-width: 180px; border: 0; outline: 0; font-size: 13px; padding: 4px 6px;
-  }
-
-  .cfg-footer {
-    border-top: 1px solid #e2e8f0; padding: 14px 22px; background: #f8fafc;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  }
-  .cfg-footer-status { font-size: 12px; color: #475569; }
-  .cfg-footer-status strong { color: #0b2a6b; }
-  .cfg-footer-actions { display: flex; gap: 8px; }
-  .btn-primary-lg {
-    background: linear-gradient(135deg, #155eef 0%, #0b2a6b 100%); color: #fff;
-    border: 0; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 13px;
-    cursor: pointer; box-shadow: 0 4px 12px rgba(21,94,239,0.3);
-    transition: transform .1s, box-shadow .1s;
-  }
-  .btn-primary-lg:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(21,94,239,0.4); }
-  .btn-primary-lg:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-  .cfg-saved-flash {
-    display: inline-block; padding: 4px 10px; border-radius: 999px;
-    background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7;
-    font-size: 11.5px; font-weight: 700; opacity: 0; transition: opacity .3s;
-  }
-  .cfg-saved-flash.show { opacity: 1; }
+  .em-modal-bg { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 10100; display: none; align-items: center; justify-content: center; padding: 20px; }
+  .em-modal-bg.is-open { display: flex; }
+  .em-modal { background: var(--eui-surface); border-radius: var(--eui-radius-lg); box-shadow: var(--eui-shadow-lg); width: 100%; max-width: 440px; padding: 22px; }
+  .em-modal p { margin: 0; font-size: 14px; color: var(--eui-text); line-height: 1.5; }
+  .em-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
   @media (max-width: 900px) {
-    .form-grid, .form-grid.narrow { grid-template-columns: 1fr 1fr; }
-    .cfg-row { grid-template-columns: 1fr; gap: 8px; }
-    .cfg-row-label { padding-top: 0; }
+    .em-form, .em-cfg { grid-template-columns: 1fr; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="nfe-wrap">
-  <div class="nfe-header">
+<div class="em-wrap eui-scope">
+  <header class="eui-page-header">
     <div>
-      <h1 class="nfe-title">E-mails de NF-e</h1>
-      <p class="nfe-sub">Envio automatico de XML + DANFE para cliente/destinatario.</p>
+      <div class="eui-page-header__eyebrow">Faturamento</div>
+      <h1 class="eui-page-header__title"><i class="fas fa-envelope-open-text"></i> E-mails de NF-e</h1>
     </div>
-    <div>
-      <span id="teste-pill" class="teste-pill">Carregando...</span>
-    </div>
+    {% if modo_teste %}
+    <span id="em-ambiente" class="eui-badge eui-badge--warning em-ambiente"><span class="eui-badge__dot"></span> Modo teste · vai tudo para {{ destino_teste or '?' }}, sem cópia</span>
+    {% else %}
+    <span id="em-ambiente" class="eui-badge eui-badge--success em-ambiente"><span class="eui-badge__dot"></span> Produção</span>
+    {% endif %}
+  </header>
+
+  <div class="eui-stats" id="em-stats">
+    <div class="eui-stat is-clickable" data-status="Enviado"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-paper-plane"></i></div><div><span class="eui-stat__label">Enviados</span><span class="eui-stat__value" id="em-s-enviado">–</span></div></div>
+    <div class="eui-stat is-clickable" data-status="Pendente"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-hourglass-half"></i></div><div><span class="eui-stat__label">Na fila</span><span class="eui-stat__value" id="em-s-pendente">–</span></div></div>
+    <div class="eui-stat is-clickable" data-status="Falha"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div><span class="eui-stat__label">Falhas</span><span class="eui-stat__value" id="em-s-falha">–</span></div></div>
+    <div class="eui-stat is-clickable" data-status="AguardandoManual"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-at"></i></div><div><span class="eui-stat__label">Sem e-mail</span><span class="eui-stat__value" id="em-s-aguardando">–</span></div></div>
   </div>
+
+  <nav class="em-tabs">
+    <button type="button" class="em-tab is-active" data-tab="envios"><i class="fas fa-list"></i> Envios</button>
+    <button type="button" class="em-tab" data-tab="emitidas"><i class="fas fa-file-invoice"></i> NFs emitidas</button>
+    <button type="button" class="em-tab" data-tab="enviar"><i class="fas fa-paper-plane"></i> Enviar NF-e</button>
+    {% if session.get('role') == 'Admin' %}
+    <button type="button" class="em-tab" data-tab="config"><i class="fas fa-gear"></i> Configuração</button>
+    {% endif %}
+  </nav>
+
+  <!-- ===== Envios ===== -->
+  <section class="em-tab-panel is-active" id="tab-envios">
+    <div class="eui-card">
+      <div class="em-toolbar eui-toolbar">
+        <div class="eui-toolbar__search">
+          <i class="fas fa-search"></i>
+          <input id="h-q" class="eui-input" type="search" placeholder="NF, destinatário ou e-mail">
+        </div>
+        <select id="h-tipo" class="eui-select">
+          <option value="">Todos os tipos</option>
+          <option value="nfe">NF-e</option>
+          <option value="aviso_romaneio">Aviso de romaneio</option>
+          <option value="lembrete">Lembrete de coleta</option>
+          <option value="saiu_entrega">Saiu para entrega</option>
+          <option value="chapa">Aviso de chapas</option>
+        </select>
+        <select id="h-status" class="eui-select">
+          <option value="">Todos os status</option>
+          <option value="Enviado">Enviado</option>
+          <option value="Pendente">Na fila</option>
+          <option value="Falha">Falha</option>
+          <option value="AguardandoManual">Sem e-mail</option>
+        </select>
+        <input id="h-de" class="eui-input" type="date" title="De">
+        <input id="h-ate" class="eui-input" type="date" title="Até">
+        <button type="button" class="eui-btn eui-btn--ghost" onclick="carregarHistorico()"><i class="fas fa-rotate"></i> Atualizar</button>
+      </div>
+      <div class="em-table-wrap">
+        <table class="erp-table">
+          <thead>
+            <tr><th>Data</th><th>Tipo</th><th>NF</th><th>Destinatário</th><th>Para</th><th>Cópia</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="h-body"><tr><td colspan="8"><div class="eui-empty"><span>Carregando...</span></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== NFs emitidas ===== -->
+  <section class="em-tab-panel" id="tab-emitidas">
+    <div class="eui-card">
+      <div class="em-toolbar eui-toolbar">
+        <input id="e-data" class="eui-input" type="date" min="2026-05-13" title="Emitidas a partir de">
+        <button type="button" class="eui-btn eui-btn--primary" onclick="carregarEmitidas()"><i class="fas fa-download"></i> Carregar</button>
+        <div class="eui-toolbar__search">
+          <i class="fas fa-search"></i>
+          <input id="e-filtro" class="eui-input" type="search" placeholder="NF, cliente, CNPJ ou e-mail" oninput="filtrarEmitidas()">
+        </div>
+        <select id="e-status" class="eui-select" onchange="filtrarEmitidas()">
+          <option value="">Todas</option>
+          <option value="pendentes">Não enviadas</option>
+          <option value="enviadas">Enviadas</option>
+          <option value="sememail">Sem e-mail</option>
+        </select>
+        <button type="button" class="eui-btn eui-btn--success" onclick="enviarSelecionadas()"><i class="fas fa-paper-plane"></i> Enviar selecionadas</button>
+      </div>
+      <div class="eui-card__body--tight em-muted" id="e-resumo" style="font-size:12px">—</div>
+      <div class="em-table-wrap">
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" id="e-sel-all" onchange="selecionarTodas(this.checked)"></th>
+              <th>Emissão</th><th>NF</th><th>Destinatário</th><th>E-mail</th><th style="text-align:right">Valor</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="emit-body"><tr><td colspan="8"><div class="eui-empty"><span>Escolha a data e clique em Carregar.</span></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Enviar manual ===== -->
+  <section class="em-tab-panel" id="tab-enviar">
+    <div class="eui-card">
+      <div class="eui-card__body">
+        <div class="em-form">
+          <label class="eui-field"><span class="eui-field__label">Número da NF</span><input id="f-numero" class="eui-input" type="text" placeholder="12345"></label>
+          <label class="eui-field"><span class="eui-field__label">Chave (opcional)</span><input id="f-chave" class="eui-input" type="text" maxlength="44"></label>
+          <label class="eui-field"><span class="eui-field__label">E-mail do destinatário</span><input id="f-email" class="eui-input" type="email" placeholder="em branco = cadastro"></label>
+          <label class="eui-field"><span class="eui-field__label">Cópia extra</span><input id="f-cc" class="eui-input" type="text" placeholder="separe por vírgula"></label>
+        </div>
+        <div class="em-actions">
+          <button type="button" class="eui-btn eui-btn--ghost" onclick="sugerir()"><i class="fas fa-magnifying-glass"></i> Buscar destinatário</button>
+          <button type="button" class="eui-btn eui-btn--primary" onclick="enviarManual()"><i class="fas fa-paper-plane"></i> Enviar</button>
+        </div>
+        <div id="sugestao" class="eui-callout eui-callout--info" style="display:none;margin-top:14px"></div>
+      </div>
+    </div>
+  </section>
 
   {% if session.get('role') == 'Admin' %}
-  <div class="cfg-panel">
-    <div class="cfg-panel-head">
-      <div>
-        <h3>Configuração de envio de NF-e</h3>
-        <p class="cfg-sub">Parâmetros globais do motor de e-mails automáticos e manuais.</p>
+  <!-- ===== Configuração ===== -->
+  <section class="em-tab-panel" id="tab-config">
+    <div class="em-cfg">
+      <div class="eui-card">
+        <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-flask"></i> Ambiente</h3></div>
+        <div class="eui-card__body">
+          <div class="em-linha-cfg"><b>Modo teste</b><label class="em-switch"><input type="checkbox" id="cfg-modo-teste"><span></span></label></div>
+          <label class="eui-field"><span class="eui-field__label">E-mail de teste</span><input id="cfg-destino-teste" class="eui-input" type="email"></label>
+          <span class="eui-field__hint">No modo teste tudo vai para esse e-mail e a cópia não é enviada.</span>
+        </div>
       </div>
-      <div id="cfg-badge-env" class="cfg-badge">—</div>
-    </div>
 
-    <div class="cfg-body">
-
-      <!-- Seção: Ambiente -->
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Ambiente de envio</h4>
-        <p class="cfg-section-desc">Controla se os e-mails vão para o cliente real ou para um endereço de teste.</p>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Modo teste
-            <small>Quando ligado, todos os envios são redirecionados ao e-mail de teste.</small>
+      <div class="eui-card">
+        <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-robot"></i> Envio automático</h3></div>
+        <div class="eui-card__body">
+          <div class="em-linha-cfg"><b>Agendador</b><label class="em-switch"><input type="checkbox" id="cfg-auto-enabled"><span></span></label></div>
+          <div class="em-linha-cfg"><b>Ao faturar no Sync</b><label class="em-switch"><input type="checkbox" id="cfg-auto"><span></span></label></div>
+          <div class="em-form" style="grid-template-columns:1fr 1fr">
+            <label class="eui-field"><span class="eui-field__label">NFs a partir de</span><input id="cfg-auto-desde" class="eui-input" type="date" min="2026-05-13"></label>
+            <label class="eui-field"><span class="eui-field__label">Intervalo (segundos)</span><input id="cfg-poll" class="eui-input" type="number" min="60" step="30"></label>
           </div>
-          <div class="cfg-row-control">
-            <label class="switch">
-              <input type="checkbox" id="cfg-modo-teste-chk">
-              <span class="switch-slot"></span>
-              <span class="switch-label" id="cfg-modo-teste-lbl">Desligado</span>
-            </label>
-            <span class="cfg-hint">Recomenda-se manter ligado em homologação.</span>
+          <div class="em-linha-cfg">
+            <span class="em-sched" id="cfg-scheduler-status">—</span>
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="rodarAgora()"><i class="fas fa-play"></i> Rodar agora</button>
           </div>
         </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            E-mail de teste
-            <small>Destino único quando o modo teste está ativo.</small>
-          </div>
-          <div class="cfg-row-control">
-            <input id="cfg-destino-teste" type="email" placeholder="seu@email.com">
-          </div>
-        </div>
-      </section>
-
-      <!-- Seção: Automação -->
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Automação</h4>
-        <p class="cfg-section-desc">Agendador periódico que verifica novas NFs e dispara e-mails automaticamente.</p>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Envio automático (polling)
-            <small>Scheduler em background verifica NFs novas e envia.</small>
-          </div>
-          <div class="cfg-row-control">
-            <label class="switch">
-              <input type="checkbox" id="cfg-auto-enabled-chk">
-              <span class="switch-slot"></span>
-              <span class="switch-label" id="cfg-auto-enabled-lbl">Desligado</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Envio no faturamento
-            <small>Dispara e-mail assim que a NF é marcada como faturada no sistema.</small>
-          </div>
-          <div class="cfg-row-control">
-            <label class="switch">
-              <input type="checkbox" id="cfg-auto-chk">
-              <span class="switch-slot"></span>
-              <span class="switch-label" id="cfg-auto-lbl">Desligado</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Considerar NFs a partir de
-            <small>O scheduler usa o ERP e nunca considera NFs anteriores a 13/05/2026.</small>
-          </div>
-          <div class="cfg-row-control">
-            <input id="cfg-auto-desde" type="date">
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Intervalo de verificação
-            <small>De quanto em quanto tempo o agendador executa (segundos).</small>
-          </div>
-          <div class="cfg-row-control">
-            <input id="cfg-poll" type="number" min="60" step="30" style="max-width:180px">
-            <span class="cfg-hint">Mínimo 60s. Padrão 300s (5 minutos).</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Seção: CC padrão -->
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Cópia fixa (CC padrão)</h4>
-        <p class="cfg-section-desc">
-          Esses e-mails receberão <strong>cópia automática</strong> em todos os envios de NF-e.
-          Digite um e-mail e pressione <kbd>Enter</kbd> ou vírgula para adicionar.
-        </p>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            E-mails em cópia
-            <small>Controladoria, fiscal, comercial etc.</small>
-          </div>
-          <div class="cfg-row-control">
-            <div class="chips-input" id="cfg-cc-chips" onclick="document.getElementById('cfg-cc-new').focus()">
-              <input id="cfg-cc-new" type="email" placeholder="adicionar e-mail..." onkeydown="onCcKeyDown(event)" onblur="onCcBlur(event)">
-            </div>
-            <span class="cfg-hint">Em modo teste, a cópia é desabilitada para evitar disparos acidentais.</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Seção: Roteamento por CFOP -->
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Roteamento por CFOP</h4>
-        <p class="cfg-section-desc">
-          Quando algum item da NF-e tiver um destes CFOPs (ex.: remessa para conserto, devolução, transferência),
-          o e-mail <strong>NÃO vai para o cliente</strong>. Ele é redirecionado para a lista de destinatários
-          internos abaixo. Útil para 5902/1902 (remessa/retorno conserto), 5124/5125 (industrialização) e similares.
-        </p>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            CFOPs que disparam o roteamento
-            <small>Pressione <kbd>Enter</kbd> ou vírgula para adicionar. Apenas dígitos (4 caracteres).</small>
-          </div>
-          <div class="cfg-row-control">
-            <div class="chips-input" id="cfg-cfop-chips" onclick="document.getElementById('cfg-cfop-new').focus()">
-              <input id="cfg-cfop-new" type="text" inputmode="numeric" maxlength="4" placeholder="ex: 5902" onkeydown="onCfopKeyDown(event)" onblur="onCfopBlur(event)">
-            </div>
-            <span class="cfg-hint">Sugestões: 5902, 1902, 5124, 5125, 5410.</span>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Destinatários internos
-            <small>Recebem a NF-e quando algum CFOP acima é detectado. Primeiro vira destinatário principal; demais entram em cópia.</small>
-          </div>
-          <div class="cfg-row-control">
-            <div class="chips-input" id="cfg-dest-esp-chips" onclick="document.getElementById('cfg-dest-esp-new').focus()">
-              <input id="cfg-dest-esp-new" type="email" placeholder="adicionar e-mail..." onkeydown="onDestEspKeyDown(event)" onblur="onDestEspBlur(event)">
-            </div>
-            <span class="cfg-hint">Se a lista estiver vazia, o roteamento é ignorado e a NF segue o fluxo normal.</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Seção: Agendador / status -->
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Aviso de chapas e barras</h4>
-        <p class="cfg-section-desc">
-          Quando uma NF de entrada for lancada com material controlado por lote/serie,
-          o Sync envia um aviso interno com NF, AR/lote, parceiro e quantidades.
-          So considera lancamentos a partir de 13/05/2026.
-        </p>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Enviar aviso automaticamente
-            <small>Dispara apos o lancamento manual ou automatico no ERP.</small>
-          </div>
-          <div class="cfg-row-control">
-            <label class="switch">
-              <input type="checkbox" id="cfg-chapa-enabled-chk">
-              <span class="switch-slot"></span>
-              <span class="switch-label" id="cfg-chapa-enabled-lbl">Desligado</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Destinatarios do aviso
-            <small>Separe por virgula, ponto e virgula ou espaco.</small>
-          </div>
-          <div class="cfg-row-control">
-            <textarea id="cfg-chapa-destinatarios" rows="3" placeholder="fiscal@colmac.com, logistica@colmac.com"></textarea>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Copia do aviso
-            <small>Opcional.</small>
-          </div>
-          <div class="cfg-row-control">
-            <textarea id="cfg-chapa-cc" rows="2" placeholder="compras@colmac.com"></textarea>
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            CFOPs de referencia
-            <small>Padrao: 1901, 1915, 1924. O disparo exige controle de lote.</small>
-          </div>
-          <div class="cfg-row-control">
-            <input id="cfg-chapa-cfops" type="text" placeholder="1901, 1915, 1924">
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Valores de controle de lote
-            <small>Padrao: 1, 3. Usado junto com o cadastro do material no ERP.</small>
-          </div>
-          <div class="cfg-row-control">
-            <input id="cfg-chapa-controles" type="text" placeholder="1, 3">
-          </div>
-        </div>
-
-        <div class="cfg-row">
-          <div class="cfg-row-label">
-            Enviar pendentes de hoje
-            <small>Procura NFs ja lancadas e envia os avisos que ainda nao foram disparados.</small>
-          </div>
-          <div class="cfg-row-control">
-            <button class="btn ghost" type="button" onclick="rodarEntradaChapaAgora()">Executar aviso de chapas agora</button>
-          </div>
-        </div>
-      </section>
-      <section class="cfg-section">
-        <h4 class="cfg-section-title">Status do agendador</h4>
-        <div id="cfg-scheduler-status" style="font-size:12.5px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-family:Consolas,monospace">
-          Carregando...
-        </div>
-        <div style="margin-top:10px">
-          <button class="btn ghost" onclick="rodarAgora()">Executar ciclo agora</button>
-        </div>
-      </section>
-    </div>
-
-    <div class="cfg-footer">
-      <div class="cfg-footer-status">
-        <span id="cfg-saved-flash" class="cfg-saved-flash">✓ Salvo com sucesso</span>
-        <span id="cfg-dirty-flag" style="display:none;color:#b45309;font-weight:600">● Alterações não salvas</span>
       </div>
-      <div class="cfg-footer-actions">
-        <button class="btn ghost" onclick="carregarConfig()">Recarregar</button>
-        <button id="cfg-save-btn" class="btn-primary-lg" onclick="salvarConfig()">Salvar configuração</button>
+
+      <div class="eui-card em-cfg-full">
+        <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-copy"></i> Cópia em toda NF-e</h3></div>
+        <div class="eui-card__body">
+          <div class="em-chips" id="cfg-cc"><input type="email" placeholder="adicionar e-mail"></div>
+          <span class="eui-field__hint">Também vai nos avisos de romaneio.</span>
+        </div>
+      </div>
+
+      <div class="eui-card em-cfg-full">
+        <div class="eui-card__head">
+          <h3 class="eui-card__title"><i class="fas fa-industry"></i> Cópia por CFOP</h3>
+          <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="adicionarRegra()"><i class="fas fa-plus"></i> Nova regra</button>
+        </div>
+        <div class="eui-card__body">
+          <div class="em-regras" id="cfg-regras"></div>
+          <span class="eui-field__hint">O cliente/fornecedor recebe normalmente. Se algum item da NF tiver um CFOP da regra, os e-mails dela entram em cópia.</span>
+        </div>
+      </div>
+
+      <div class="eui-card em-cfg-full">
+        <div class="eui-card__head">
+          <h3 class="eui-card__title"><i class="fas fa-layer-group"></i> Aviso de chapas e barras</h3>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="rodarEntradaChapaAgora()"><i class="fas fa-play"></i> Enviar pendentes</button>
+            <label class="em-switch"><input type="checkbox" id="cfg-chapa-enabled"><span></span></label>
+          </div>
+        </div>
+        <div class="eui-card__body">
+          <div class="em-form">
+            <label class="eui-field" style="grid-column:span 2"><span class="eui-field__label">Para</span><input id="cfg-chapa-destinatarios" class="eui-input" type="text"></label>
+            <label class="eui-field" style="grid-column:span 2"><span class="eui-field__label">Cópia</span><input id="cfg-chapa-cc" class="eui-input" type="text"></label>
+            <label class="eui-field"><span class="eui-field__label">CFOPs</span><input id="cfg-chapa-cfops" class="eui-input" type="text" placeholder="1901, 1915, 1924"></label>
+            <label class="eui-field"><span class="eui-field__label">Controle de lote</span><input id="cfg-chapa-controles" class="eui-input" type="text" placeholder="1, 3"></label>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+
+    <div class="eui-card__foot em-cfg-foot">
+      <span class="em-dirty" id="cfg-dirty"><i class="fas fa-circle" style="font-size:7px"></i> Alterações não salvas</span>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="eui-btn eui-btn--ghost" onclick="carregarConfig()">Descartar</button>
+        <button type="button" class="eui-btn eui-btn--primary" id="cfg-save-btn" onclick="salvarConfig()"><i class="fas fa-floppy-disk"></i> Salvar</button>
+      </div>
+    </div>
+  </section>
   {% endif %}
+</div>
 
-  <div class="card">
-    <h3>Enviar NF-e</h3>
-    <div class="form-grid">
-      <label>Numero NF<input id="f-numero" type="text" placeholder="12345"></label>
-      <label>Chave (opcional)<input id="f-chave" type="text" maxlength="44" placeholder="44 digitos"></label>
-      <label>E-mail manual (opcional)<input id="f-email" type="email" placeholder="cliente@empresa.com"></label>
-      <label>CC (virgulas)<input id="f-cc" type="text" placeholder="financeiro@..., fiscal@..."></label>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn ghost" onclick="sugerir()">Sugerir destinatario</button>
-      <button class="btn" onclick="enviar()">Enviar NF-e</button>
-    </div>
-    <div id="sugestao" class="sugestao-box" style="display:none"></div>
-  </div>
-
-  <div class="card">
-    <h3>NFs emitidas no ERP (a partir de 13/05/2026)</h3>
-    <div class="form-grid narrow" style="margin-bottom:12px">
-      <label>Data inicial<input id="e-data" type="date"></label>
-      <label>Filtro texto<input id="e-filtro" type="text" placeholder="cliente, numero..." oninput="filtrarEmitidas()"></label>
-      <label>Situacao
-        <select id="e-status" onchange="filtrarEmitidas()">
-          <option value="">Todas</option>
-          <option value="pendentes">Pendentes (sem envio)</option>
-          <option value="enviadas">Ja enviadas</option>
-          <option value="sememail">Sem e-mail na planilha</option>
-        </select>
-      </label>
-      <label>&nbsp;<button class="btn" onclick="carregarEmitidas()">Carregar</button></label>
-    </div>
-    <div id="e-resumo" style="font-size:12px;color:#64748b;margin-bottom:8px">&mdash;</div>
-    <div style="overflow-x:auto;max-height:520px;overflow-y:auto">
-      <table class="nfe-table">
-        <thead style="position:sticky;top:0;background:#f8fafc;z-index:1">
-          <tr>
-            <th style="width:32px"><input type="checkbox" id="e-sel-all" onchange="selecionarTodas(this.checked)"></th>
-            <th>Emissao</th><th>NF</th><th>Destinatario</th><th>CNPJ</th>
-            <th>E-mail sugerido</th><th style="text-align:right">Valor</th><th>Status</th><th>Acao</th>
-          </tr>
-        </thead>
-        <tbody id="emit-body"><tr><td colspan="9" style="text-align:center;color:#94a3b8">Clique em "Carregar".</td></tr></tbody>
-      </table>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="enviarSelecionadas()">Enviar selecionadas</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Historico de envios</h3>
-    <div class="form-grid narrow" style="margin-bottom:12px">
-      <label>Numero NF<input id="q-numero" type="text" oninput="carregarHistorico()"></label>
-      <label>Status
-        <select id="q-status" onchange="carregarHistorico()">
-          <option value="">Todos</option>
-          <option>Enviado</option>
-          <option>Pendente</option>
-          <option>Falha</option>
-        </select>
-      </label>
-      <label>Origem
-        <select id="q-origem" onchange="carregarHistorico()">
-          <option value="">Todas</option>
-          <option>Manual</option>
-          <option>Auto</option>
-          <option>Reenvio</option>
-        </select>
-      </label>
-      <label>&nbsp;<button class="btn secondary" onclick="carregarHistorico()">Atualizar</button></label>
-    </div>
-    <div style="overflow-x:auto">
-      <table class="nfe-table">
-        <thead>
-          <tr>
-            <th>Data</th><th>NF</th><th>Destinatario</th><th>E-mail enviado</th>
-            <th>Fonte</th><th>Origem</th><th>Status</th><th>Anexos</th><th>Acoes</th>
-          </tr>
-        </thead>
-        <tbody id="hist-body"><tr><td colspan="9" style="text-align:center;color:#94a3b8">Carregando...</td></tr></tbody>
-      </table>
+<div class="em-modal-bg" id="em-confirm">
+  <div class="em-modal">
+    <p id="em-confirm-msg"></p>
+    <div class="em-modal-foot">
+      <button type="button" class="eui-btn eui-btn--ghost" id="em-confirm-nao">Cancelar</button>
+      <button type="button" class="eui-btn eui-btn--primary" id="em-confirm-sim">Confirmar</button>
     </div>
   </div>
 </div>
+<div class="eui-toast" id="em-toast"></div>
 
 <script>
-// ===== Config (estilo ERP) =====
-const CC_STATE = { emails: [] };
-const CFOP_STATE = { cfops: [] };
-const DEST_ESP_STATE = { emails: [] };
-let CFG_DIRTY = false;
+const IS_ADMIN = {{ 'true' if session.get('role') == 'Admin' else 'false' }};
+const DATA_MINIMA_NFE = '2026-05-13';
 
+// ---------- Utilidades ----------
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function emailValido(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim()); }
+function listaEmails(txt) { return String(txt || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean); }
+function fmtDataHora(iso) { if (!iso) return '–'; const d = new Date(iso); return isNaN(d) ? String(iso) : d.toLocaleString('pt-BR', {dateStyle: 'short', timeStyle: 'short'}); }
+function fmtData(iso) { if (!iso) return '–'; const d = new Date(iso); return isNaN(d) ? String(iso).slice(0, 10) : d.toLocaleDateString('pt-BR'); }
+function fmtBRL(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+function isoHojeMenos(dias) { const d = new Date(); d.setDate(d.getDate() - dias); return d.toISOString().slice(0, 10); }
 
-function marcarDirty() {
-  CFG_DIRTY = true;
-  const f = document.getElementById('cfg-dirty-flag');
-  const s = document.getElementById('cfg-saved-flash');
-  if (f) f.style.display = 'inline';
-  if (s) s.classList.remove('show');
-}
-function limparDirty() {
-  CFG_DIRTY = false;
-  const f = document.getElementById('cfg-dirty-flag');
-  if (f) f.style.display = 'none';
+let _toastTimer = null;
+function toast(msg, tipo = 'success') {
+  const el = document.getElementById('em-toast');
+  el.className = 'eui-toast eui-toast--' + tipo + ' is-show';
+  el.textContent = msg;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('is-show'), tipo === 'error' ? 6000 : 3500);
 }
 
-function bindSwitch(chkId, lblId, onCls='', offCls='off') {
-  const chk = document.getElementById(chkId);
-  const lbl = document.getElementById(lblId);
-  if (!chk || !lbl) return;
-  const sync = () => {
-    lbl.textContent = chk.checked ? 'Ligado' : 'Desligado';
-    lbl.classList.toggle('off', !chk.checked);
+function confirmar(msg, rotulo = 'Confirmar') {
+  return new Promise(resolve => {
+    const bg = document.getElementById('em-confirm');
+    document.getElementById('em-confirm-msg').textContent = msg;
+    const sim = document.getElementById('em-confirm-sim');
+    const nao = document.getElementById('em-confirm-nao');
+    sim.textContent = rotulo;
+    const fechar = (v) => { bg.classList.remove('is-open'); sim.onclick = nao.onclick = bg.onclick = null; resolve(v); };
+    sim.onclick = () => fechar(true);
+    nao.onclick = () => fechar(false);
+    bg.onclick = (ev) => { if (ev.target === bg) fechar(false); };
+    bg.classList.add('is-open');
+    sim.focus();
+  });
+}
+
+async function postJson(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  const data = await r.json().catch(() => ({}));
+  return {ok: r.ok, data};
+}
+
+// ---------- Abas ----------
+let emitidasCarregadas = false;
+document.querySelectorAll('.em-tab').forEach(btn => btn.addEventListener('click', () => abrirAba(btn.dataset.tab)));
+function abrirAba(nome) {
+  document.querySelectorAll('.em-tab').forEach(b => b.classList.toggle('is-active', b.dataset.tab === nome));
+  document.querySelectorAll('.em-tab-panel').forEach(p => p.classList.toggle('is-active', p.id === 'tab-' + nome));
+  if (nome === 'emitidas' && !emitidasCarregadas) carregarEmitidas();
+  if (nome === 'config') carregarSchedulerStatus();
+}
+
+// ---------- Envios (histórico) ----------
+const STATUS_INFO = {
+  Enviado: ['success', 'Enviado'],
+  Pendente: ['info', 'Na fila'],
+  Falha: ['danger', 'Falha'],
+  AguardandoManual: ['warning', 'Sem e-mail'],
+};
+const TIPO_COR = { nfe: 'primary', aviso_romaneio: 'violet', lembrete: 'violet', saiu_entrega: 'info', chapa: 'neutral' };
+let HIST = [];
+
+function badgeStatus(st) {
+  const [cor, rot] = STATUS_INFO[st] || ['neutral', st || '–'];
+  return `<span class="eui-badge eui-badge--${cor}">${esc(rot)}</span>`;
+}
+
+let _histTimer = null;
+document.getElementById('h-q').addEventListener('input', () => { clearTimeout(_histTimer); _histTimer = setTimeout(carregarHistorico, 350); });
+['h-tipo', 'h-status', 'h-de', 'h-ate'].forEach(id => document.getElementById(id).addEventListener('change', carregarHistorico));
+document.querySelectorAll('#em-stats .eui-stat').forEach(el => el.addEventListener('click', () => {
+  const sel = document.getElementById('h-status');
+  sel.value = sel.value === el.dataset.status ? '' : el.dataset.status;
+  abrirAba('envios');
+  carregarHistorico();
+}));
+
+async function carregarHistorico() {
+  const params = new URLSearchParams();
+  const campos = {q: 'h-q', tipo: 'h-tipo', status: 'h-status', data_de: 'h-de', data_ate: 'h-ate'};
+  Object.entries(campos).forEach(([k, id]) => { const v = document.getElementById(id).value.trim(); if (v) params.set(k, v); });
+  const tbody = document.getElementById('h-body');
+  try {
+    const r = await fetch('/api/nfe/email/historico?' + params.toString());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const dados = await r.json();
+    HIST = dados.registros || [];
+    const res = dados.resumo || {};
+    document.getElementById('em-s-enviado').textContent = res.Enviado ?? 0;
+    document.getElementById('em-s-pendente').textContent = res.Pendente ?? 0;
+    document.getElementById('em-s-falha').textContent = res.Falha ?? 0;
+    document.getElementById('em-s-aguardando').textContent = res.AguardandoManual ?? 0;
+    const stAtivo = document.getElementById('h-status').value;
+    document.querySelectorAll('#em-stats .eui-stat').forEach(el => el.classList.toggle('is-active', el.dataset.status === stAtivo));
+    renderHistorico();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="eui-empty"><strong>Não foi possível carregar</strong><span>${esc(e.message)}</span></div></td></tr>`;
+  }
+}
+
+function celulaCopia(r) {
+  const cc = listaEmails(r.cc_emails);
+  if (!cc.length) return '<span class="em-muted">–</span>';
+  const mais = cc.length > 1 ? `<span class="eui-badge eui-badge--neutral em-cc-mais">+${cc.length - 1}</span>` : '';
+  return `<span class="em-email">${esc(cc[0])}</span>${mais}`;
+}
+
+function renderHistorico() {
+  const tbody = document.getElementById('h-body');
+  if (!HIST.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="eui-empty"><i class="fas fa-inbox"></i><strong>Nenhum e-mail</strong></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = HIST.map((r, i) => {
+    const para = listaEmails(r.destinatario_email);
+    const paraHtml = para.length
+      ? `<span class="em-email">${esc(para[0])}</span>${para.length > 1 ? `<span class="eui-badge eui-badge--neutral em-cc-mais">+${para.length - 1}</span>` : ''}`
+      : '<span class="em-muted">–</span>';
+    const acao = r.pode_reenviar
+      ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="event.stopPropagation();reenviar(${r.id})"><i class="fas fa-rotate-right"></i> Reenviar</button>`
+      : '';
+    return `<tr class="em-linha" data-i="${i}" onclick="alternarDetalhe(this)">
+      <td style="white-space:nowrap">${fmtDataHora(r.criado_em)}</td>
+      <td><span class="eui-badge eui-badge--${TIPO_COR[r.tipo] || 'neutral'}">${esc(r.tipo_label)}</span></td>
+      <td><strong>${esc(r.numero_nf || '–')}</strong>${r.numero_ar ? `<span class="em-sub">AR ${esc(r.numero_ar)}</span>` : ''}</td>
+      <td>${esc(r.destinatario_nome || '–')}</td>
+      <td>${paraHtml}</td>
+      <td>${celulaCopia(r)}</td>
+      <td>${badgeStatus(r.status)}${r.erro_mensagem ? `<div class="em-erro">${esc(r.erro_mensagem)}</div>` : ''}</td>
+      <td style="text-align:right">${acao}</td>
+    </tr>`;
+  }).join('');
+}
+
+function chips(lista) {
+  if (!lista.length) return '<strong>–</strong>';
+  return `<div class="em-chip-list">${lista.map(e => `<span class="eui-badge eui-badge--neutral">${esc(e)}</span>`).join('')}</div>`;
+}
+
+function alternarDetalhe(tr) {
+  const prox = tr.nextElementSibling;
+  if (prox && prox.classList.contains('em-detalhe')) { prox.remove(); tr.classList.remove('is-open'); return; }
+  const r = HIST[Number(tr.dataset.i)];
+  if (!r) return;
+  const anexos = [r.anexou_xml ? 'XML' : '', r.anexou_pdf ? 'DANFE' : ''].filter(Boolean).join(' + ') || '–';
+  const det = document.createElement('tr');
+  det.className = 'em-detalhe';
+  det.innerHTML = `<td colspan="8"><div class="em-detalhe-grid">
+    <div class="em-full"><span>Assunto</span><strong>${esc(r.assunto || '–')}</strong></div>
+    <div class="em-full"><span>Para</span>${chips(listaEmails(r.destinatario_email))}</div>
+    <div class="em-full"><span>Cópia</span>${chips(listaEmails(r.cc_emails))}</div>
+    <div><span>Origem</span><strong>${esc(r.origem || '–')}</strong></div>
+    <div><span>Disparado por</span><strong>${esc(r.disparado_por || '–')}</strong></div>
+    <div><span>Fonte do e-mail</span><strong>${esc(r.fonte_email || '–')}</strong></div>
+    <div><span>Enviado em</span><strong>${fmtDataHora(r.enviado_em)}</strong></div>
+    <div><span>Tentativas</span><strong>${esc(r.tentativas ?? 0)}</strong></div>
+    ${r.tipo === 'chapa' ? `<div><span>CFOPs</span><strong>${esc(r.cfops || '–')}</strong></div>` : `<div><span>Anexos</span><strong>${anexos}</strong></div>`}
+    ${r.destinatario_cnpj ? `<div><span>CNPJ</span><strong class="em-mono">${esc(r.destinatario_cnpj)}</strong></div>` : ''}
+    ${r.chave_acesso ? `<div class="em-full"><span>Chave</span><strong class="em-mono">${esc(r.chave_acesso)}</strong></div>` : ''}
+  </div></td>`;
+  tr.after(det);
+  tr.classList.add('is-open');
+}
+
+async function reenviar(id) {
+  if (!await confirmar('Reenviar este e-mail de NF-e?', 'Reenviar')) return;
+  const {data} = await postJson(`/api/nfe/email/${id}/reenviar`);
+  if (data.sucesso) { toast('Reenvio enviado para a fila.'); carregarHistorico(); }
+  else toast('Falha: ' + (data.erro || data.error || 'erro desconhecido'), 'error');
+}
+
+// ---------- NFs emitidas ----------
+let EMITIDAS = [];
+
+async function carregarEmitidas() {
+  emitidasCarregadas = true;
+  const inp = document.getElementById('e-data');
+  if (!inp.value) inp.value = isoHojeMenos(30) < DATA_MINIMA_NFE ? DATA_MINIMA_NFE : isoHojeMenos(30);
+  const tbody = document.getElementById('emit-body');
+  const resumo = document.getElementById('e-resumo');
+  tbody.innerHTML = '<tr><td colspan="8"><div class="eui-empty"><span>Consultando ERP...</span></div></td></tr>';
+  resumo.textContent = '…';
+  try {
+    const r = await fetch('/api/nfe/email/emitidas?data_inicial=' + encodeURIComponent(inp.value));
+    const dados = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(dados.error || ('HTTP ' + r.status));
+    EMITIDAS = dados.notas || [];
+    const enviadas = EMITIDAS.filter(n => n.ja_enviado).length;
+    const semEmail = EMITIDAS.filter(n => !n.email_sugerido && !n.ja_enviado).length;
+    resumo.textContent = `${dados.total} NF-e desde ${fmtData(dados.data_inicial + 'T12:00:00')} · ${enviadas} enviadas · ${EMITIDAS.length - enviadas} não enviadas · ${semEmail} sem e-mail`;
+    filtrarEmitidas();
+  } catch (e) {
+    resumo.textContent = '';
+    tbody.innerHTML = `<tr><td colspan="8"><div class="eui-empty"><strong>Falha ao consultar o ERP</strong><span>${esc(e.message)}</span></div></td></tr>`;
+  }
+}
+
+function filtrarEmitidas() {
+  const termo = document.getElementById('e-filtro').value.toLowerCase();
+  const st = document.getElementById('e-status').value;
+  const lista = EMITIDAS.filter(n => {
+    if (st === 'pendentes' && n.ja_enviado) return false;
+    if (st === 'enviadas' && !n.ja_enviado) return false;
+    if (st === 'sememail' && (n.email_sugerido || n.ja_enviado)) return false;
+    if (!termo) return true;
+    return `${n.numero} ${n.dest_nome || ''} ${n.dest_cnpj || ''} ${n.email_sugerido || ''}`.toLowerCase().includes(termo);
+  });
+  renderEmitidas(lista);
+}
+
+function renderEmitidas(lista) {
+  const tbody = document.getElementById('emit-body');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="eui-empty"><span>Nenhuma NF no filtro.</span></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(n => {
+    const idx = EMITIDAS.indexOf(n);
+    const dis = n.ja_enviado ? 'disabled' : '';
+    let status;
+    if (n.ja_enviado) status = `<span class="eui-badge eui-badge--success" title="${esc(n.ultimo_envio_para || '')}">Enviada ${fmtData(n.ultimo_envio_em)}</span>`;
+    else if (n.aguardando_manual) status = '<span class="eui-badge eui-badge--warning">Sem e-mail</span>';
+    else status = n.email_sugerido ? '<span class="eui-badge eui-badge--info">Não enviada</span>' : '<span class="eui-badge eui-badge--danger">Sem e-mail</span>';
+    const email = n.ja_enviado ? (n.ultimo_envio_para || n.email_sugerido || '') : (n.email_sugerido || '');
+    return `<tr>
+      <td><input type="checkbox" class="em-chk" data-idx="${idx}" ${dis}></td>
+      <td style="white-space:nowrap">${fmtData(n.emitido_em)}</td>
+      <td><strong>${esc(n.numero)}</strong></td>
+      <td>${esc(n.dest_nome || '–')}<span class="em-sub em-mono">${esc(n.dest_cnpj || '')}</span></td>
+      <td><input type="email" class="eui-input em-email-inp ${email ? '' : 'is-vazio'}" data-idx="${idx}" value="${esc(email)}" placeholder="informar e-mail" ${dis}></td>
+      <td style="text-align:right;white-space:nowrap">${fmtBRL(n.valor_total)}</td>
+      <td>${status}</td>
+      <td style="text-align:right"><button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="enviarUma(${idx})" ${dis}>Enviar</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function selecionarTodas(on) { document.querySelectorAll('.em-chk').forEach(c => { if (!c.disabled) c.checked = on; }); }
+function emailDaLinha(idx) { const el = document.querySelector(`.em-email-inp[data-idx="${idx}"]`); return (el && el.value || '').trim(); }
+
+async function enviarNota(nota, email) {
+  const {data} = await postJson('/api/nfe/email/enviar', {numero_nf: nota.numero, chave: nota.chave, email});
+  if (data.sucesso) {
+    nota.ja_enviado = true;
+    nota.ultimo_envio_em = new Date().toISOString();
+    nota.ultimo_envio_para = data.destinatario;
+  }
+  return data;
+}
+
+async function enviarUma(idx) {
+  const nota = EMITIDAS[idx];
+  if (!nota) return;
+  const email = emailDaLinha(idx);
+  if (!emailValido(email)) return toast('Informe um e-mail válido.', 'warning');
+  if (!await confirmar(`Enviar a NF ${nota.numero} para ${email}?`, 'Enviar')) return;
+  const data = await enviarNota(nota, email);
+  filtrarEmitidas();
+  if (data.sucesso) { toast(data.modo_teste ? `Enviada (teste) para ${data.destinatario}.` : `NF ${nota.numero} enviada.`); carregarHistorico(); }
+  else toast('Falha: ' + (data.erro || 'erro desconhecido'), 'error');
+}
+
+async function enviarSelecionadas() {
+  const idxs = [...document.querySelectorAll('.em-chk:checked')].map(c => Number(c.dataset.idx));
+  if (!idxs.length) return toast('Nenhuma NF selecionada.', 'warning');
+  const sem = idxs.filter(i => !emailValido(emailDaLinha(i)));
+  if (sem.length) return toast(`${sem.length} NF(s) sem e-mail válido.`, 'warning');
+  if (!await confirmar(`Enviar ${idxs.length} NF-e por e-mail?`, 'Enviar')) return;
+  let ok = 0, falha = 0;
+  for (const i of idxs) {
+    try { (await enviarNota(EMITIDAS[i], emailDaLinha(i))).sucesso ? ok++ : falha++; } catch { falha++; }
+  }
+  filtrarEmitidas();
+  toast(`Enviadas: ${ok}. Falhas: ${falha}.`, falha ? 'warning' : 'success');
+  carregarHistorico();
+}
+
+// ---------- Enviar manual ----------
+async function sugerir() {
+  const numero = document.getElementById('f-numero').value.trim();
+  const chave = document.getElementById('f-chave').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  if (!numero && !chave) return toast('Informe o número ou a chave.', 'warning');
+  const {data} = await postJson('/api/nfe/email/destinatario-sugerido', {numero_nf: numero, chave, email});
+  const box = document.getElementById('sugestao');
+  box.style.display = 'flex';
+  if (data.email) {
+    box.className = 'eui-callout eui-callout--info';
+    box.innerHTML = `<i class="fas fa-user"></i><div><strong>${esc(data.email)}</strong> · ${esc(data.fonte_email || '')}<br>${esc(data.dest_nome || '–')} · CNPJ ${esc(data.dest_cnpj || '–')} · NF ${esc(data.numero || numero)}</div>`;
+    document.getElementById('f-email').value = data.email;
+  } else {
+    box.className = 'eui-callout eui-callout--warning';
+    box.innerHTML = `<i class="fas fa-triangle-exclamation"></i><div><strong>Nenhum e-mail encontrado.</strong> ${esc((data.avisos || []).join(' ') || data.error || '')}</div>`;
+  }
+}
+
+async function enviarManual() {
+  const numero = document.getElementById('f-numero').value.trim();
+  const chave = document.getElementById('f-chave').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const cc = listaEmails(document.getElementById('f-cc').value);
+  if (!numero) return toast('Informe o número da NF.', 'warning');
+  const invalidos = cc.filter(e => !emailValido(e));
+  if (invalidos.length) return toast('E-mail inválido na cópia: ' + invalidos.join(', '), 'warning');
+  const {data} = await postJson('/api/nfe/email/enviar', {numero_nf: numero, chave, email, cc});
+  if (data.sucesso) {
+    toast(data.modo_teste ? `Enviada (teste) para ${data.destinatario}.` : `Enviada para ${data.destinatario}.`);
+    carregarHistorico();
+  } else toast('Falha: ' + (data.erro || data.error || 'erro desconhecido'), 'error');
+}
+
+// ---------- Configuração (Admin) ----------
+function marcarDirty() { const el = document.getElementById('cfg-dirty'); if (el) el.classList.add('is-show'); }
+function limparDirty() { const el = document.getElementById('cfg-dirty'); if (el) el.classList.remove('is-show'); }
+
+function criarChips(id, {validar, mensagem}) {
+  const wrap = typeof id === 'string' ? document.getElementById(id) : id;
+  const estado = {itens: []};
+  if (!wrap) return estado;
+  const input = wrap.querySelector('input');
+  const render = () => {
+    wrap.querySelectorAll('.em-chip').forEach(c => c.remove());
+    estado.itens.forEach((v, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'em-chip';
+      chip.innerHTML = `${esc(v)} <button type="button" title="Remover">&times;</button>`;
+      chip.querySelector('button').onclick = (ev) => { ev.stopPropagation(); estado.itens.splice(i, 1); render(); marcarDirty(); };
+      wrap.insertBefore(chip, input);
+    });
   };
-  chk.addEventListener('change', () => { sync(); marcarDirty(); });
-  sync();
-}
-
-function renderChipsCC() {
-  const wrap = document.getElementById('cfg-cc-chips');
-  if (!wrap) return;
-  // Remove chips antigos (mantém o input)
-  wrap.querySelectorAll('.chip').forEach(c => c.remove());
-  const input = document.getElementById('cfg-cc-new');
-  CC_STATE.emails.forEach((em, idx) => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.innerHTML = `${em} <button type="button" title="Remover" onclick="removerCc(${idx})">&times;</button>`;
-    wrap.insertBefore(chip, input);
+  estado.adicionar = (bruto) => {
+    let ok = true;
+    listaEmails(bruto).forEach(v => {
+      if (!validar(v)) { toast(mensagem + v, 'warning'); ok = false; return; }
+      if (!estado.itens.some(x => x.toLowerCase() === v.toLowerCase())) { estado.itens.push(v); marcarDirty(); }
+    });
+    render();
+    return ok;
+  };
+  estado.definir = (txt) => { estado.itens = listaEmails(txt).filter(validar); render(); };
+  estado.confirmarPendente = () => { if (input.value.trim() && estado.adicionar(input.value)) input.value = ''; };
+  wrap.addEventListener('click', () => input.focus());
+  input.addEventListener('keydown', (ev) => {
+    if (['Enter', ',', ';', ' '].includes(ev.key)) {
+      ev.preventDefault();
+      if (estado.adicionar(input.value)) input.value = '';
+    } else if (ev.key === 'Backspace' && !input.value && estado.itens.length) {
+      estado.itens.pop(); render(); marcarDirty();
+    }
   });
+  input.addEventListener('blur', estado.confirmarPendente);
+  return estado;
 }
 
-function adicionarCc(valorRaw) {
-  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
-  if (!v) return false;
-  if (!emailValido(v)) { alert('E-mail inválido: ' + v); return false; }
-  if (CC_STATE.emails.includes(v)) return false;
-  CC_STATE.emails.push(v);
-  renderChipsCC();
-  marcarDirty();
-  return true;
+const CC = criarChips('cfg-cc', {validar: emailValido, mensagem: 'E-mail inválido: '});
+
+// Regras de cópia por CFOP: cada linha guarda seus próprios chips.
+let REGRAS = [];
+function renderRegras(lista) {
+  const box = document.getElementById('cfg-regras');
+  if (!box) return;
+  box.innerHTML = '';
+  REGRAS = [];
+  (lista || []).forEach(r => adicionarRegra(r, false));
+  if (!REGRAS.length) box.innerHTML = '<div class="em-regras-vazio">Nenhuma regra.</div>';
 }
-function removerCc(idx) {
-  CC_STATE.emails.splice(idx, 1);
-  renderChipsCC();
-  marcarDirty();
-}
-function onCcKeyDown(ev) {
-  const inp = ev.target;
-  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';') {
-    ev.preventDefault();
-    if (adicionarCc(inp.value)) inp.value = '';
-  } else if (ev.key === 'Backspace' && !inp.value && CC_STATE.emails.length) {
-    CC_STATE.emails.pop();
-    renderChipsCC();
+function adicionarRegra(regra, marcar = true) {
+  const box = document.getElementById('cfg-regras');
+  box.querySelector('.em-regras-vazio')?.remove();
+  const el = document.createElement('div');
+  el.className = 'em-regra';
+  el.innerHTML = `
+    <label class="eui-field"><span class="eui-field__label">Nome</span><input class="eui-input" type="text" maxlength="80" placeholder="ex: Serviço de terceiro"></label>
+    <label class="eui-field"><span class="eui-field__label">CFOPs</span><div class="em-chips"><input type="text" inputmode="numeric" maxlength="4" placeholder="ex: 5901"></div></label>
+    <label class="eui-field"><span class="eui-field__label">E-mails em cópia</span><div class="em-chips"><input type="email" placeholder="adicionar e-mail"></div></label>
+    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" title="Remover regra"><i class="fas fa-trash"></i></button>`;
+  const [cfopsWrap, emailsWrap] = el.querySelectorAll('.em-chips');
+  const item = {
+    el,
+    nome: el.querySelector('input'),
+    cfops: criarChips(cfopsWrap, {validar: v => /^\d{4}$/.test(v), mensagem: 'CFOP deve ter 4 dígitos: '}),
+    emails: criarChips(emailsWrap, {validar: emailValido, mensagem: 'E-mail inválido: '}),
+  };
+  item.nome.value = regra?.nome || '';
+  item.cfops.definir((regra?.cfops || []).join(', '));
+  item.emails.definir((regra?.emails || []).join(', '));
+  el.querySelector('button[title="Remover regra"]').onclick = () => {
+    REGRAS = REGRAS.filter(x => x !== item);
+    el.remove();
+    if (!REGRAS.length) box.innerHTML = '<div class="em-regras-vazio">Nenhuma regra.</div>';
     marcarDirty();
-  }
-}
-function onCcBlur(ev) {
-  const v = ev.target.value.trim();
-  if (v) { if (adicionarCc(v)) ev.target.value = ''; }
+  };
+  box.appendChild(el);
+  REGRAS.push(item);
+  if (marcar) { marcarDirty(); item.nome.focus(); }
 }
 
-// ----- Chips de CFOP -----
-function renderChipsCfop() {
-  const wrap = document.getElementById('cfg-cfop-chips');
-  if (!wrap) return;
-  wrap.querySelectorAll('.chip').forEach(c => c.remove());
-  const input = document.getElementById('cfg-cfop-new');
-  CFOP_STATE.cfops.forEach((cf, idx) => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.innerHTML = `${cf} <button type="button" title="Remover" onclick="removerCfop(${idx})">&times;</button>`;
-    wrap.insertBefore(chip, input);
-  });
-}
-function adicionarCfop(valorRaw) {
-  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
-  if (!v) return false;
-  if (!/^\d{4}$/.test(v)) { alert('CFOP deve ter exatamente 4 dígitos: ' + v); return false; }
-  if (CFOP_STATE.cfops.includes(v)) return false;
-  CFOP_STATE.cfops.push(v);
-  renderChipsCfop();
-  marcarDirty();
-  return true;
-}
-function removerCfop(idx) {
-  CFOP_STATE.cfops.splice(idx, 1);
-  renderChipsCfop();
-  marcarDirty();
-}
-function onCfopKeyDown(ev) {
-  const inp = ev.target;
-  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';' || ev.key === ' ') {
-    ev.preventDefault();
-    if (adicionarCfop(inp.value)) inp.value = '';
-  } else if (ev.key === 'Backspace' && !inp.value && CFOP_STATE.cfops.length) {
-    CFOP_STATE.cfops.pop();
-    renderChipsCfop();
-    marcarDirty();
-  }
-}
-function onCfopBlur(ev) {
-  const v = ev.target.value.trim();
-  if (v) { if (adicionarCfop(v)) ev.target.value = ''; }
-}
-
-// ----- Chips de destinatários especiais (roteamento por CFOP) -----
-function renderChipsDestEsp() {
-  const wrap = document.getElementById('cfg-dest-esp-chips');
-  if (!wrap) return;
-  wrap.querySelectorAll('.chip').forEach(c => c.remove());
-  const input = document.getElementById('cfg-dest-esp-new');
-  DEST_ESP_STATE.emails.forEach((em, idx) => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.innerHTML = `${em} <button type="button" title="Remover" onclick="removerDestEsp(${idx})">&times;</button>`;
-    wrap.insertBefore(chip, input);
-  });
-}
-function adicionarDestEsp(valorRaw) {
-  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
-  if (!v) return false;
-  if (!emailValido(v)) { alert('E-mail inválido: ' + v); return false; }
-  if (DEST_ESP_STATE.emails.includes(v)) return false;
-  DEST_ESP_STATE.emails.push(v);
-  renderChipsDestEsp();
-  marcarDirty();
-  return true;
-}
-function removerDestEsp(idx) {
-  DEST_ESP_STATE.emails.splice(idx, 1);
-  renderChipsDestEsp();
-  marcarDirty();
-}
-function onDestEspKeyDown(ev) {
-  const inp = ev.target;
-  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';') {
-    ev.preventDefault();
-    if (adicionarDestEsp(inp.value)) inp.value = '';
-  } else if (ev.key === 'Backspace' && !inp.value && DEST_ESP_STATE.emails.length) {
-    DEST_ESP_STATE.emails.pop();
-    renderChipsDestEsp();
-    marcarDirty();
-  }
-}
-function onDestEspBlur(ev) {
-  const v = ev.target.value.trim();
-  if (v) { if (adicionarDestEsp(v)) ev.target.value = ''; }
+function atualizarAmbiente(c) {
+  const el = document.getElementById('em-ambiente');
+  if (!el) return;
+  el.className = 'eui-badge em-ambiente ' + (c.modo_teste ? 'eui-badge--warning' : 'eui-badge--success');
+  el.innerHTML = '<span class="eui-badge__dot"></span> ' + (c.modo_teste
+    ? `Modo teste · vai tudo para ${esc(c.destino_teste || '?')}, sem cópia`
+    : 'Produção');
 }
 
 async function carregarConfig() {
+  if (!IS_ADMIN) return;
   try {
     const r = await fetch('/api/nfe/email/config');
     if (!r.ok) return;
     const c = await r.json();
-
-    const pill = document.getElementById('teste-pill');
-    const badge = document.getElementById('cfg-badge-env');
-    if (c.modo_teste) {
-      if (pill) { pill.textContent = 'MODO TESTE - redirecionando para ' + (c.destino_teste || '?'); pill.classList.remove('off'); }
-      if (badge) badge.textContent = 'HOMOLOGAÇÃO';
-    } else {
-      if (pill) { pill.textContent = 'MODO PRODUÇÃO - envios reais aos clientes'; pill.classList.add('off'); }
-      if (badge) badge.textContent = 'PRODUÇÃO';
-    }
-
-    const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
-    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
-
-    setChk('cfg-modo-teste-chk', c.modo_teste);
-    setVal('cfg-destino-teste', c.destino_teste || '');
-    setChk('cfg-auto-enabled-chk', c.auto_enabled);
-    setChk('cfg-auto-chk', c.auto_no_faturamento);
-    setChk('cfg-chapa-enabled-chk', c.entrada_chapa_enabled);
-    setVal('cfg-auto-desde', c.auto_desde || '');
-    setVal('cfg-poll', c.poll_intervalo || 300);
-    setVal('cfg-chapa-destinatarios', c.entrada_chapa_destinatarios || '');
-    setVal('cfg-chapa-cc', c.entrada_chapa_cc || '');
-    setVal('cfg-chapa-cfops', c.entrada_chapa_cfops || '1901, 1915, 1924');
-    setVal('cfg-chapa-controles', c.entrada_chapa_controles || '1, 3');
-
-    // CC -> chips
-    CC_STATE.emails = String(c.cc || '')
-      .split(/[,;\s]+/).map(s => s.trim()).filter(s => s && emailValido(s));
-    renderChipsCC();
-
-    // CFOPs especiais -> chips
-    CFOP_STATE.cfops = String(c.cfops_especiais || '')
-      .split(/[,;\s]+/).map(s => s.trim()).filter(s => /^\d{4}$/.test(s));
-    renderChipsCfop();
-
-    // Destinatarios especiais -> chips
-    DEST_ESP_STATE.emails = String(c.destinatarios_especiais || '')
-      .split(/[,;\s]+/).map(s => s.trim()).filter(s => s && emailValido(s));
-    renderChipsDestEsp();
-
-    // Sync labels dos switches
-    ['cfg-modo-teste','cfg-auto-enabled','cfg-auto','cfg-chapa-enabled'].forEach(prefix => {
-      const chk = document.getElementById(prefix + '-chk');
-      const lbl = document.getElementById(prefix + '-lbl');
-      if (chk && lbl) {
-        lbl.textContent = chk.checked ? 'Ligado' : 'Desligado';
-        lbl.classList.toggle('off', !chk.checked);
-      }
-    });
-
+    const chk = (id, v) => { document.getElementById(id).checked = !!v; };
+    const val = (id, v) => { document.getElementById(id).value = v ?? ''; };
+    chk('cfg-modo-teste', c.modo_teste);
+    val('cfg-destino-teste', c.destino_teste);
+    chk('cfg-auto-enabled', c.auto_enabled);
+    chk('cfg-auto', c.auto_no_faturamento);
+    val('cfg-auto-desde', c.auto_desde);
+    val('cfg-poll', c.poll_intervalo || 300);
+    chk('cfg-chapa-enabled', c.entrada_chapa_enabled);
+    val('cfg-chapa-destinatarios', c.entrada_chapa_destinatarios);
+    val('cfg-chapa-cc', c.entrada_chapa_cc);
+    val('cfg-chapa-cfops', c.entrada_chapa_cfops);
+    val('cfg-chapa-controles', c.entrada_chapa_controles);
+    CC.definir(c.cc);
+    renderRegras(c.regras_cfop);
+    atualizarAmbiente(c);
     limparDirty();
-    carregarSchedulerStatus();
   } catch (e) { console.warn(e); }
 }
 
-async function carregarSchedulerStatus() {
-  try {
-    const r = await fetch('/api/nfe/email/scheduler/status');
-    if (!r.ok) return;
-    const s = await r.json();
-    const el = document.getElementById('cfg-scheduler-status');
-    if (!el) return;
-    const lastRun = s.last_run ? new Date(s.last_run).toLocaleString('pt-BR') : 'nunca';
-    const estado = s.rodando
-      ? '<span style="color:#047857;font-weight:700">● RODANDO</span>'
-      : '<span style="color:#b91c1c;font-weight:700">● PARADO</span>';
-    el.innerHTML = `${estado} &nbsp;|&nbsp; Última execução: <strong>${lastRun}</strong>` +
-                   (s.last_message ? `<br><span style="color:#64748b">${s.last_message}</span>` : '');
-  } catch (e) { /* silencioso */ }
-}
-
 async function salvarConfig() {
-  // Se houver e-mail digitado mas não confirmado no chip, adiciona
-  const pend = document.getElementById('cfg-cc-new');
-  if (pend && pend.value.trim()) { if (adicionarCc(pend.value)) pend.value = ''; }
-  const pendCfop = document.getElementById('cfg-cfop-new');
-  if (pendCfop && pendCfop.value.trim()) { if (adicionarCfop(pendCfop.value)) pendCfop.value = ''; }
-  const pendDest = document.getElementById('cfg-dest-esp-new');
-  if (pendDest && pendDest.value.trim()) { if (adicionarDestEsp(pendDest.value)) pendDest.value = ''; }
-
+  CC.confirmarPendente();
+  REGRAS.forEach(r => { r.cfops.confirmarPendente(); r.emails.confirmarPendente(); });
+  const regras = REGRAS
+    .map(r => ({nome: r.nome.value.trim(), cfops: [...r.cfops.itens], emails: [...r.emails.itens]}))
+    .filter(r => r.nome || r.cfops.length || r.emails.length);
+  for (const [i, r] of regras.entries()) {
+    const nome = r.nome || `Regra ${i + 1}`;
+    if (!r.cfops.length) return toast(`${nome}: informe ao menos um CFOP.`, 'warning');
+    if (!r.emails.length) return toast(`${nome}: informe ao menos um e-mail.`, 'warning');
+  }
   const btn = document.getElementById('cfg-save-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
-
+  btn.disabled = true;
   const body = {
-    modo_teste: document.getElementById('cfg-modo-teste-chk').checked,
+    modo_teste: document.getElementById('cfg-modo-teste').checked,
     destino_teste: document.getElementById('cfg-destino-teste').value.trim(),
-    auto_no_faturamento: document.getElementById('cfg-auto-chk').checked,
-    auto_enabled: document.getElementById('cfg-auto-enabled-chk').checked,
+    auto_enabled: document.getElementById('cfg-auto-enabled').checked,
+    auto_no_faturamento: document.getElementById('cfg-auto').checked,
     auto_desde: document.getElementById('cfg-auto-desde').value,
-    cc: CC_STATE.emails.join(', '),
     poll_intervalo: parseInt(document.getElementById('cfg-poll').value || '300', 10),
-    cfops_especiais: CFOP_STATE.cfops.join(', '),
-    destinatarios_especiais: DEST_ESP_STATE.emails.join(', '),
-    entrada_chapa_enabled: document.getElementById('cfg-chapa-enabled-chk').checked,
+    cc: CC.itens.join(', '),
+    regras_cfop: regras,
+    entrada_chapa_enabled: document.getElementById('cfg-chapa-enabled').checked,
     entrada_chapa_destinatarios: document.getElementById('cfg-chapa-destinatarios').value.trim(),
     entrada_chapa_cc: document.getElementById('cfg-chapa-cc').value.trim(),
     entrada_chapa_cfops: document.getElementById('cfg-chapa-cfops').value.trim(),
     entrada_chapa_controles: document.getElementById('cfg-chapa-controles').value.trim(),
   };
   try {
-    const r = await fetch('/api/nfe/email/config', {
-      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const {ok, data} = await postJson('/api/nfe/email/config', body);
+    if (!ok) throw new Error(data.error || 'erro ao salvar');
     await carregarConfig();
-    const flash = document.getElementById('cfg-saved-flash');
-    if (flash) { flash.classList.add('show'); setTimeout(() => flash.classList.remove('show'), 2500); }
+    carregarSchedulerStatus();
+    toast('Configuração salva.');
   } catch (e) {
-    alert('Falha ao salvar: ' + e);
+    toast('Falha ao salvar: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Salvar configuração'; }
+    btn.disabled = false;
   }
 }
 
-// Marca dirty quando qualquer campo textual muda
-document.addEventListener('input', (ev) => {
-  const t = ev.target;
-  if (!t || !t.id) return;
-  if ([
-    'cfg-destino-teste','cfg-auto-desde','cfg-poll',
-    'cfg-chapa-destinatarios','cfg-chapa-cc','cfg-chapa-cfops','cfg-chapa-controles',
-  ].includes(t.id)) marcarDirty();
-});
-// Bind dos switches assim que o DOM carrega
-document.addEventListener('DOMContentLoaded', () => {
-  bindSwitch('cfg-modo-teste-chk','cfg-modo-teste-lbl');
-  bindSwitch('cfg-auto-enabled-chk','cfg-auto-enabled-lbl');
-  bindSwitch('cfg-auto-chk','cfg-auto-lbl');
-  bindSwitch('cfg-chapa-enabled-chk','cfg-chapa-enabled-lbl');
-});
+if (IS_ADMIN) {
+  document.getElementById('tab-config').addEventListener('input', (ev) => { if (!ev.target.closest('.em-chips')) marcarDirty(); });
+  document.getElementById('tab-config').addEventListener('change', (ev) => { if (ev.target.type === 'checkbox') marcarDirty(); });
+}
+
+async function carregarSchedulerStatus() {
+  const el = document.getElementById('cfg-scheduler-status');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/nfe/email/scheduler/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    const ultima = s.last_run ? new Date(s.last_run).toLocaleString('pt-BR') : 'nunca';
+    el.innerHTML = `${s.rodando ? '<span style="color:var(--eui-success)">● rodando</span>' : '<span style="color:var(--eui-danger)">● parado</span>'} · última: ${esc(ultima)}`
+      + (s.last_message ? ` · ${esc(s.last_message)}` : '');
+  } catch (e) { /* status é só informativo */ }
+}
 
 async function rodarAgora() {
-  const r = await fetch('/api/nfe/email/scheduler/run-now', {method: 'POST'});
-  const data = await r.json();
+  const {data} = await postJson('/api/nfe/email/scheduler/run-now');
   if (data.ok) {
-    alert(`Ciclo executado: ${data.enviadas} enviadas, ${data.pendentes} pendentes, ${data.ignoradas} ignoradas.`);
-    carregarEmitidas();
+    toast(`${data.enviadas} enviadas, ${data.pendentes} pendentes, ${data.ignoradas} ignoradas.`);
     carregarHistorico();
     carregarSchedulerStatus();
-  } else {
-    alert('Erro: ' + (data.erro || 'desconhecido'));
-  }
+    if (emitidasCarregadas) carregarEmitidas();
+  } else toast('Erro: ' + (data.erro || 'desconhecido'), 'error');
 }
 
 async function rodarEntradaChapaAgora() {
-  const r = await fetch('/api/nfe/email/entrada-chapa/run-now', {method: 'POST'});
-  const data = await r.json();
-  if (data.ok) {
-    alert(`Aviso de chapas: ${data.enviadas} enviados, ${data.ignoradas} ignorados, ${data.falhas} falhas.`);
-  } else {
-    alert('Erro ao executar aviso de chapas.');
-  }
-}
-
-async function sugerir() {
-  const numero = document.getElementById('f-numero').value.trim();
-  const chave = document.getElementById('f-chave').value.trim();
-  const email = document.getElementById('f-email').value.trim();
-  if (!numero && !chave) return alert('Informe numero ou chave.');
-  const r = await fetch('/api/nfe/email/destinatario-sugerido', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({numero_nf: numero, chave, email}),
-  });
-  const data = await r.json();
-  const box = document.getElementById('sugestao');
-  box.style.display = 'block';
-  if (data.email) {
-    box.innerHTML = `
-      Sugestao: <strong>${data.email}</strong>
-      <span class="fonte-chip">${data.fonte_email || '-'}</span><br>
-      Destinatario: ${data.dest_nome || '-'} (CNPJ ${data.dest_cnpj || '-'}) - NF ${data.numero} - Chave ${data.chave}
-      ${data.modo_teste ? '<br><em>Modo teste: e-mail real sera redirecionado para ' + (data.destino_teste || '?') + '</em>' : ''}
-    `;
-    document.getElementById('f-email').value = data.email;
-  } else {
-    box.innerHTML = '<strong>Nenhum e-mail encontrado.</strong> ' + (data.avisos || []).join(' ');
-  }
-}
-
-async function enviar() {
-  const numero = document.getElementById('f-numero').value.trim();
-  const chave = document.getElementById('f-chave').value.trim();
-  const email = document.getElementById('f-email').value.trim();
-  const cc = document.getElementById('f-cc').value.trim();
-  if (!numero) return alert('Informe numero da NF.');
-  const r = await fetch('/api/nfe/email/enviar', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({numero_nf: numero, chave, email, cc: cc ? cc.split(',').map(s=>s.trim()) : []}),
-  });
-  const data = await r.json();
-  if (data.sucesso) {
-    alert('Enviado para ' + data.destinatario + (data.modo_teste ? ' (MODO TESTE - destino real era ' + data.destinatario_real + ')' : ''));
-    carregarHistorico();
-  } else {
-    alert('Falha: ' + (data.erro || 'erro desconhecido'));
-  }
-}
-
-async function reenviar(id) {
-  if (!confirm('Reenviar este e-mail?')) return;
-  const r = await fetch(`/api/nfe/email/${id}/reenviar`, {method: 'POST'});
-  const data = await r.json();
-  if (data.sucesso) { alert('Reenviado.'); carregarHistorico(); }
-  else alert('Falha: ' + (data.erro || ''));
-}
-
-async function carregarHistorico() {
-  const numero = document.getElementById('q-numero').value.trim();
-  const status = document.getElementById('q-status').value;
-  const origem = document.getElementById('q-origem').value;
-  const params = new URLSearchParams();
-  if (numero) params.set('numero_nf', numero);
-  if (status) params.set('status', status);
-  if (origem) params.set('origem', origem);
-  const r = await fetch('/api/nfe/email/historico?' + params.toString());
-  const rows = await r.json();
-  const tbody = document.getElementById('hist-body');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Sem registros.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map(r => {
-    const st = (r.status || '').toLowerCase();
-    const org = (r.origem || '').toLowerCase();
-    const anexos = [r.anexou_xml ? 'XML' : '', r.anexou_pdf ? 'PDF' : ''].filter(Boolean).join(' + ') || '-';
-    const data = r.criado_em ? new Date(r.criado_em).toLocaleString('pt-BR') : '-';
-    const erro = r.erro_mensagem ? String(r.erro_mensagem).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])) : '';
-    const retry = (r.status === 'Falha' || r.status === 'Pendente')
-      ? `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`
-      : `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`;
-    return `<tr>
-      <td>${data}</td>
-      <td><strong>${r.numero_nf || '-'}</strong></td>
-      <td>${r.destinatario_nome || '-'}</td>
-      <td>${r.destinatario_email || '-'}</td>
-      <td><span class="fonte-chip">${r.fonte_email || '-'}</span></td>
-      <td><span class="origem ${org}">${r.origem || '-'}</span></td>
-      <td><span class="status ${st}" title="${erro}">${r.status || '-'}</span>${erro ? `<div class="erro-envio">${erro}</div>` : ''}</td>
-      <td>${anexos}</td>
-      <td>${retry}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ---- NFs emitidas (lista) ----
-let EMITIDAS_CACHE = [];
-
-function defaultDataInicialNfe() {
-  return '2026-05-13';
-}
-
-function fmtBR(num) {
-  if (num == null || isNaN(num)) return '-';
-  return Number(num).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-}
-
-function fmtData(iso) {
-  if (!iso) return '-';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
-  return d.toLocaleDateString('pt-BR');
-}
-
-async function carregarEmitidas() {
-  const dataInput = document.getElementById('e-data');
-  const data = dataInput.value || defaultDataInicialNfe();
-  dataInput.value = data;
-  const resumo = document.getElementById('e-resumo');
-  const tbody = document.getElementById('emit-body');
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Consultando ERP...</td></tr>';
-  resumo.textContent = 'Consultando...';
-  try {
-    const r = await fetch('/api/nfe/email/emitidas?data_inicial=' + encodeURIComponent(data));
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c">Erro: ${err.error || r.status}</td></tr>`;
-      resumo.textContent = '';
-      return;
-    }
-    const dados = await r.json();
-    EMITIDAS_CACHE = dados.notas || [];
-    const comEmail = EMITIDAS_CACHE.filter(n => n.email_sugerido).length;
-    const jaEnv = EMITIDAS_CACHE.filter(n => n.ja_enviado).length;
-    resumo.textContent = `${dados.total} NF-es desde ${dados.data_inicial} | ${comEmail} com e-mail da planilha | ${jaEnv} ja enviadas.`;
-    filtrarEmitidas();
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c">Falha: ${e}</td></tr>`;
-  }
-}
-
-function renderEmitidas(lista) {
-  const tbody = document.getElementById('emit-body');
-  if (!lista.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Nenhuma NF no filtro.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = lista.map(n => {
-    const idx = EMITIDAS_CACHE.indexOf(n);
-    const disabled = n.ja_enviado ? 'disabled' : '';
-    const statusPill = n.ja_enviado
-      ? `<span class="status enviado" title="Enviado em ${fmtData(n.ultimo_envio_em)}">Enviado</span>`
-      : (n.aguardando_manual
-          ? '<span class="status falha" title="Scheduler nao achou e-mail - preencha aqui">Aguardando e-mail</span>'
-          : (n.email_sugerido
-              ? '<span class="status pendente">Pendente</span>'
-              : '<span class="status falha">Sem e-mail</span>'));
-    const emailCell = n.email_sugerido
-      ? `<input type="email" class="em-inp" data-idx="${idx}" value="${n.email_sugerido}" style="width:240px;padding:4px 7px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px">
-         <div style="font-size:10px;color:#94a3b8;margin-top:2px">Fonte: ${n.fonte_sugestao || '-'}</div>`
-      : `<input type="email" class="em-inp" data-idx="${idx}" placeholder="informe manualmente" style="width:240px;padding:4px 7px;border:1px solid #fca5a5;border-radius:7px;font-size:12px;background:#fef2f2">`;
-    return `<tr>
-      <td><input type="checkbox" class="em-chk" data-idx="${idx}" ${disabled}></td>
-      <td>${fmtData(n.emitido_em)}</td>
-      <td><strong>${n.numero}</strong></td>
-      <td>${n.dest_nome || '-'}</td>
-      <td style="font-family:Consolas,monospace;font-size:11px">${n.dest_cnpj || '-'}</td>
-      <td>${emailCell}</td>
-      <td style="text-align:right">${fmtBR(n.valor_total)}</td>
-      <td>${statusPill}</td>
-      <td><button class="btn" style="padding:5px 10px;font-size:11px" onclick="enviarUma(${idx})" ${disabled}>Enviar</button></td>
-    </tr>`;
-  }).join('');
-}
-
-function filtrarEmitidas() {
-  const termo = (document.getElementById('e-filtro').value || '').toLowerCase();
-  const status = document.getElementById('e-status').value;
-  const filt = EMITIDAS_CACHE.filter(n => {
-    if (status === 'pendentes' && n.ja_enviado) return false;
-    if (status === 'enviadas' && !n.ja_enviado) return false;
-    if (status === 'sememail' && n.email_sugerido) return false;
-    if (!termo) return true;
-    return (n.numero + ' ' + (n.dest_nome || '') + ' ' + (n.dest_cnpj || '') + ' ' + (n.email_sugerido || ''))
-      .toLowerCase().includes(termo);
-  });
-  renderEmitidas(filt);
-}
-
-function selecionarTodas(on) {
-  document.querySelectorAll('.em-chk').forEach(c => { if (!c.disabled) c.checked = on; });
-}
-
-async function enviarUma(idx) {
-  const nota = EMITIDAS_CACHE[idx];
-  if (!nota) return;
-  const inp = document.querySelector(`.em-inp[data-idx="${idx}"]`);
-  const email = (inp && inp.value || '').trim();
-  if (!email) return alert('Informe um e-mail antes de enviar.');
-  if (!confirm(`Enviar NF ${nota.numero} para ${email}?`)) return;
-  const r = await fetch('/api/nfe/email/enviar', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({numero_nf: nota.numero, chave: nota.chave, email}),
-  });
-  const data = await r.json();
-  if (data.sucesso) {
-    nota.ja_enviado = true;
-    nota.ultimo_envio_em = new Date().toISOString();
-    nota.ultimo_envio_para = data.destinatario;
-    filtrarEmitidas();
-    alert('Enviado' + (data.modo_teste ? ' (MODO TESTE - destino real era ' + data.destinatario_real + ')' : ''));
-    carregarHistorico();
-  } else {
-    alert('Falha: ' + (data.erro || 'erro'));
-  }
-}
-
-async function enviarSelecionadas() {
-  const selecionadas = Array.from(document.querySelectorAll('.em-chk:checked'))
-    .map(c => parseInt(c.dataset.idx, 10))
-    .filter(i => !isNaN(i));
-  if (!selecionadas.length) return alert('Nenhuma NF selecionada.');
-  const sem = selecionadas.filter(i => {
-    const inp = document.querySelector(`.em-inp[data-idx="${i}"]`);
-    return !inp || !inp.value.trim();
-  });
-  if (sem.length) return alert(`${sem.length} NF(s) sem e-mail. Informe antes de enviar.`);
-  if (!confirm(`Enviar ${selecionadas.length} NF-es por e-mail?`)) return;
-  let ok = 0, fail = 0;
-  for (const i of selecionadas) {
-    const nota = EMITIDAS_CACHE[i];
-    const email = document.querySelector(`.em-inp[data-idx="${i}"]`).value.trim();
-    try {
-      const r = await fetch('/api/nfe/email/enviar', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({numero_nf: nota.numero, chave: nota.chave, email}),
-      });
-      const data = await r.json();
-      if (data.sucesso) {
-        ok++;
-        nota.ja_enviado = true;
-        nota.ultimo_envio_em = new Date().toISOString();
-      } else fail++;
-    } catch { fail++; }
-  }
-  filtrarEmitidas();
-  alert(`Enviadas: ${ok}. Falhas: ${fail}.`);
-  carregarHistorico();
+  const {data} = await postJson('/api/nfe/email/entrada-chapa/run-now');
+  if (data.ok) { toast(`Chapas: ${data.enviadas} enviados, ${data.ignoradas} ignorados, ${data.falhas} falhas.`); carregarHistorico(); }
+  else toast('Erro ao executar aviso de chapas.', 'error');
 }
 
 carregarConfig();

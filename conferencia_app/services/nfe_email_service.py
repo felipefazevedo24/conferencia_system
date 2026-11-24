@@ -31,7 +31,7 @@ from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
 from .erp_nfe_emitidas_service import buscar_email_cadastro_erp, buscar_nfe_emitida_erp
 from .danfe_service import gerar_danfe
-from .pedidos_service import buscar_linhas_pedido
+from .pedido_compra_pdf_service import gerar_pdf_pedido_compra_grv
 from .cliente_portal_service import gerar_token_nf, portal_base_url
 from .grv_contas_receber_service import GRVContasReceberService
 from .smtp_service import enviar_mensagem_smtp
@@ -59,6 +59,66 @@ def _emails_validos(valor: str | None) -> list[str]:
         if _valido_email(email) and email.lower() not in {item.lower() for item in emails}:
             emails.append(email)
     return emails
+
+
+# Os avisos do romaneio (coleta FOB/CIF/DAP, lembrete FOB, saiu para entrega)
+# gravam na mesma tabela da NF-e com origem "Romaneio...". Toda checagem de
+# "NF-e ja enviada" precisa ignorar esses registros: sem isso, um aviso que
+# saiu antes travava o e-mail da NF-e para sempre.
+PREFIXO_ORIGEM_AVISO = "Romaneio"
+
+
+def filtro_envio_nfe():
+    return ~EmailNFEnviado.origem.like(f"{PREFIXO_ORIGEM_AVISO}%")
+
+
+def regras_cfop(config) -> list[dict]:
+    """Regras de copia por CFOP: [{"nome", "cfops": [...], "emails": [...]}].
+
+    Enquanto ninguem salvou regras pela tela (chave None), a regra unica antiga
+    (NFE_EMAIL_CFOPS_ESPECIAIS + NFE_EMAIL_DESTINATARIOS_ESPECIAIS) vale como a
+    primeira, para nao perder o que ja estava configurado em producao.
+    """
+    brutas = config.get("NFE_EMAIL_REGRAS_CFOP")
+    if brutas is None:
+        brutas = [{
+            "nome": "Serviço de terceiro",
+            "cfops": config.get("NFE_EMAIL_CFOPS_ESPECIAIS"),
+            "emails": config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS"),
+        }]
+    regras = []
+    for bruta in brutas if isinstance(brutas, list) else []:
+        if not isinstance(bruta, dict):
+            continue
+        cfops_raw = bruta.get("cfops")
+        if isinstance(cfops_raw, list):
+            cfops_raw = ",".join(str(c) for c in cfops_raw)
+        emails_raw = bruta.get("emails")
+        if isinstance(emails_raw, list):
+            emails_raw = ",".join(str(e) for e in emails_raw)
+        cfops = []
+        for c in re.split(r"[,;\s]+", str(cfops_raw or "")):
+            if re.fullmatch(r"\d{4}", c) and c not in cfops:
+                cfops.append(c)
+        emails = _emails_validos(emails_raw)
+        if cfops or emails:
+            regras.append({"nome": str(bruta.get("nome") or "").strip()[:80], "cfops": cfops, "emails": emails})
+    return regras
+
+
+def _cc_para_log(cc: list[str], limite: int = 500) -> str | None:
+    """cc_emails e String(500): no MySQL, passar disso derruba o envio inteiro.
+    O cabecalho do e-mail leva a lista completa; o log guarda o que couber."""
+    texto = ", ".join(cc)
+    if len(texto) <= limite:
+        return texto or None
+    partes: list[str] = []
+    for i, email in enumerate(cc):
+        sufixo = f" +{len(cc) - i}"
+        if len(", ".join(partes + [email])) + len(sufixo) > limite:
+            return ", ".join(partes) + sufixo
+        partes.append(email)
+    return ", ".join(partes)
 
 
 # ---------- Dados resolvidos da NF ----------
@@ -219,259 +279,11 @@ def _pedidos_compra_da_nota(nota: NotaEmitida) -> list[str]:
     return pedidos
 
 
-def _fmt_decimal(valor: Any, casas: int = 2) -> str:
-    try:
-        numero = float(valor or 0)
-    except (TypeError, ValueError):
-        numero = 0.0
-    texto = f"{numero:,.{casas}f}"
-    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
-
-
 def _texto_pdf(valor: Any, limite: int = 80) -> str:
     texto = str(valor or "").strip()
     if len(texto) > limite:
         return texto[: limite - 3].rstrip() + "..."
     return texto
-
-
-def _fmt_data_br(valor: Any) -> str:
-    raw = str(valor or "").strip()
-    if not raw:
-        return ""
-    try:
-        return datetime.fromisoformat(raw[:10]).strftime("%d/%m/%Y")
-    except ValueError:
-        return raw[:10]
-
-
-def _fmt_doc_br(valor: Any) -> str:
-    digitos = _somente_digitos(valor)
-    if len(digitos) == 14:
-        return f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
-    if len(digitos) == 11:
-        return f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
-    return str(valor or "").strip()
-
-
-def _meta_pedido(linhas: list[dict], chave: str, padrao: Any = "") -> Any:
-    for linha in linhas:
-        valor = linha.get(chave)
-        if valor not in (None, ""):
-            return valor
-    return padrao
-
-
-def _gerar_pdf_pedido_compra(numero_pedido: str, linhas: list[dict], nota: NotaEmitida) -> bytes | None:
-    if not numero_pedido or not linhas:
-        return None
-
-    try:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-    except Exception as exc:
-        current_app.logger.warning("ReportLab indisponivel para gerar PDF do pedido %s: %s", numero_pedido, exc)
-        return None
-
-    app = current_app._get_current_object()
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=10 * mm,
-        rightMargin=10 * mm,
-        topMargin=10 * mm,
-        bottomMargin=10 * mm,
-        title=f"PEDIDO {numero_pedido}",
-    )
-
-    normal = ParagraphStyle("normal", fontName="Helvetica", fontSize=7.2, leading=8.8, textColor=colors.black)
-    small = ParagraphStyle("small", parent=normal, fontSize=6.5, leading=8)
-    bold = ParagraphStyle("bold", parent=normal, fontName="Helvetica-Bold")
-    title = ParagraphStyle("title", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=15, alignment=1)
-    box_title = ParagraphStyle("box_title", parent=normal, fontName="Helvetica-Bold", fontSize=7, leading=8, textColor=colors.white)
-
-    def p(texto: Any, style=normal) -> Paragraph:
-        return Paragraph(str(texto or "").replace("\n", "<br/>"), style)
-
-    def label_val(label: str, valor: Any) -> Paragraph:
-        return p(f"<b>{label}</b> {valor or ''}")
-
-    fornecedor = _meta_pedido(linhas, "fornecedor_nome") or _meta_pedido(linhas, "fornecedor") or nota.dest_nome or ""
-    cnpj = _fmt_doc_br(_meta_pedido(linhas, "fornecedor_cnpj"))
-    endereco = " ".join(
-        parte for parte in [
-            str(_meta_pedido(linhas, "logradouro") or "").strip(),
-            str(_meta_pedido(linhas, "numero") or "").strip(),
-            str(_meta_pedido(linhas, "complemento") or "").strip(),
-        ] if parte
-    )
-    cidade_uf = " / ".join(
-        parte for parte in [
-            str(_meta_pedido(linhas, "cidade") or "").strip(),
-            str(_meta_pedido(linhas, "uf") or "").strip(),
-        ] if parte
-    )
-    data_pedido = _fmt_data_br(_meta_pedido(linhas, "data_pedido"))
-    total_oficial = float(_meta_pedido(linhas, "totalgeral", 0) or 0)
-    subtotal_oficial = float(_meta_pedido(linhas, "subtotal", 0) or 0)
-    frete = float(_meta_pedido(linhas, "vl_frete", 0) or 0)
-    desconto = float(_meta_pedido(linhas, "vl_desconto", 0) or 0)
-    ipi_total = float(_meta_pedido(linhas, "ipi_total", 0) or 0)
-    icms_total = float(_meta_pedido(linhas, "icms_total", 0) or 0)
-
-    logo_path = os.path.normpath(os.path.join(app.root_path, "..", "static", "columbia_logo.png"))
-    logo_cell: Any = ""
-    if os.path.exists(logo_path):
-        try:
-            logo_cell = Image(logo_path, width=22 * mm, height=15 * mm, kind="proportional")
-        except Exception:
-            logo_cell = ""
-
-    story: list[Any] = []
-    empresa = [
-        p("<b>COLUMBIA MACHINE BRASIL LTDA</b>", bold),
-        p("Rod. Waldomiro Correa de Camargo, Km 52,5 - Itu/SP", small),
-        p(f"CNPJ: {_fmt_doc_br(app.config.get('EMPRESA_CNPJ'))}", small),
-    ]
-    header = Table(
-        [[logo_cell, empresa, p("ORDEM DE COMPRA", title), p(f"<b>No. {numero_pedido}</b><br/>Emissao: {data_pedido}", bold)]],
-        colWidths=[27 * mm, 64 * mm, 58 * mm, 42 * mm],
-        rowHeights=[23 * mm],
-    )
-    header.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 0), "CENTER"),
-        ("ALIGN", (2, 0), (3, 0), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    story.append(header)
-    story.append(Spacer(1, 3 * mm))
-
-    fornecedor_tbl = Table(
-        [
-            [p("FORNECEDOR", box_title), p("DADOS DO PEDIDO", box_title)],
-            [
-                p(
-                    f"<b>{fornecedor}</b><br/>CNPJ: {cnpj}<br/>"
-                    f"Endereco: {endereco}<br/>Bairro: {_meta_pedido(linhas, 'bairro')}<br/>"
-                    f"Cidade/UF: {cidade_uf} CEP: {_meta_pedido(linhas, 'cep')}<br/>"
-                    f"Contato: {_meta_pedido(linhas, 'contato')} Tel.: {_meta_pedido(linhas, 'telefone')}<br/>"
-                    f"E-mail: {_meta_pedido(linhas, 'email')}"
-                ),
-                p(
-                    f"<b>Cond. Pagamento:</b> {_meta_pedido(linhas, 'cond_pagamento')}<br/>"
-                    f"<b>Forma Pagto:</b> {_meta_pedido(linhas, 'forma_pgto')}<br/>"
-                    f"<b>Prazo/Obs. Entrega:</b> {_meta_pedido(linhas, 'prazo_entrega') or _meta_pedido(linhas, 'observacoes')}<br/>"
-                    f"<b>Solicitante:</b> {_meta_pedido(linhas, 'solicitante')}<br/>"
-                    f"<b>Movimento:</b> {_meta_pedido(linhas, 'tipo_movimento')}<br/>"
-                    f"<b>NF-e vinculada:</b> {nota.numero}"
-                ),
-            ],
-        ],
-        colWidths=[116 * mm, 75 * mm],
-    )
-    fornecedor_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    story.append(fornecedor_tbl)
-    story.append(Spacer(1, 3 * mm))
-
-    item_rows: list[list[Any]] = [[
-        p("ITEM", bold), p("CODIGO", bold), p("DESCRICAO", bold),
-        p("UN", bold), p("QTDE", bold), p("VL UNIT.", bold), p("VL TOTAL", bold),
-    ]]
-    total_calculado = 0.0
-    for idx, linha in enumerate(linhas, start=1):
-        qtd = float(linha.get("qtd") or linha.get("pendente") or 0)
-        unitario = float(linha.get("valor_unit") or linha.get("preco_unitario") or 0)
-        total_linha = float(linha.get("total_item") or linha.get("vl_pendente") or (qtd * unitario))
-        total_calculado += total_linha
-        item_rows.append([
-            p(str(idx), small),
-            p(linha.get("codigo_material") or linha.get("cod_interno") or "", small),
-            p(linha.get("descricao_material") or linha.get("descricao") or "", small),
-            p(linha.get("unidade") or "UN", small),
-            p(_fmt_decimal(qtd, 4), small),
-            p(_fmt_decimal(unitario, 4), small),
-            p(_fmt_decimal(total_linha, 2), small),
-        ])
-
-    itens_tbl = Table(item_rows, colWidths=[10 * mm, 25 * mm, 83 * mm, 10 * mm, 20 * mm, 21 * mm, 22 * mm], repeatRows=1)
-    itens_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d9d9d9")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (0, 1), (0, -1), "CENTER"),
-        ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    story.append(itens_tbl)
-
-    total = total_oficial or total_calculado
-    totais_tbl = Table(
-        [
-            [label_val("Subtotal:", f"R$ {_fmt_decimal(subtotal_oficial or total_calculado, 2)}"),
-             label_val("Frete:", f"R$ {_fmt_decimal(frete, 2)}"),
-             label_val("Desconto:", f"R$ {_fmt_decimal(desconto, 2)}")],
-            [label_val("IPI:", f"R$ {_fmt_decimal(ipi_total, 2)}"),
-             label_val("ICMS:", f"R$ {_fmt_decimal(icms_total, 2)}"),
-             p(f"<b>TOTAL GERAL: R$ {_fmt_decimal(total, 2)}</b>", bold)],
-        ],
-        colWidths=[63.7 * mm, 63.7 * mm, 63.6 * mm],
-    )
-    totais_tbl.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
-        ("BACKGROUND", (2, 1), (2, 1), colors.HexColor("#eeeeee")),
-        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    story.append(totais_tbl)
-    story.append(Spacer(1, 3 * mm))
-
-    obs_texto = (
-        "IMPORTANTE: Favor mencionar o numero do pedido de compra na nota fiscal. "
-        "Somente receberemos material mediante nota fiscal. Horario de recebimento: das 7h as 16h."
-    )
-    story.append(Table([[p("OBSERVACOES", box_title)], [p(obs_texto)]], colWidths=[191 * mm], style=TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ])))
-
-    def add_page_number(canvas, doc_obj):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 6.5)
-        canvas.drawString(10 * mm, 6 * mm, "Gerado automaticamente a partir dos dados oficiais do ERP/Postgres.")
-        canvas.drawRightString(A4[0] - 10 * mm, 6 * mm, f"Pagina {doc_obj.page}")
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
-    return buffer.getvalue()
 
 
 def _buscar_pdf_pedido_compra_oficial(numero_pedido: str) -> bytes | None:
@@ -540,11 +352,10 @@ def _anexos_pedido_compra_industrializacao(nota: NotaEmitida, cfops_da_nota: set
             continue
 
         try:
-            linhas = buscar_linhas_pedido(pedido)
+            pdf_bytes = gerar_pdf_pedido_compra_grv(pedido)
         except Exception as exc:
-            current_app.logger.warning("Falha ao consultar pedido de compra %s para NF-e %s: %s", pedido, nota.numero, exc)
+            current_app.logger.warning("Falha ao montar pedido de compra %s para NF-e %s: %s", pedido, nota.numero, exc)
             continue
-        pdf_bytes = _gerar_pdf_pedido_compra(pedido, linhas, nota)
         if pdf_bytes:
             anexos.append((pedido, pdf_bytes))
         else:
@@ -2035,6 +1846,12 @@ def enviar_nfe_por_email(
     """Orquestra resolucao + download + envio. Retorna dict com resultado."""
     app = current_app._get_current_object()
 
+    # Cada worker tem seu app.config; a tela grava no JSON so pelo worker que
+    # atendeu o POST. Sem reler aqui, os outros workers (e o agendador deles)
+    # seguiam com o CC/CFOP/modo teste de quando subiram.
+    from .nfe_email_config_store import carregar_persistido
+    carregar_persistido(app)
+
     nota = _resolver_nota(numero_nf, chave)
     if not nota:
         return {"sucesso": False, "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.", "numero_nf": numero_nf}
@@ -2050,6 +1867,7 @@ def enviar_nfe_por_email(
         ja_enviado = EmailNFEnviado.query.filter(
             EmailNFEnviado.numero_nf == nota.numero,
             EmailNFEnviado.status.in_(["Enviado", "Pendente"]),
+            filtro_envio_nfe(),
         ).order_by(EmailNFEnviado.id.desc()).first()
         if ja_enviado:
             return {
@@ -2090,6 +1908,16 @@ def enviar_nfe_por_email(
             e = e.strip()
             if _valido_email(e) and e not in cc_final:
                 cc_final.append(e)
+        # Regras por CFOP: o destinatario recebe normalmente e a lista de cada
+        # regra que bater com algum item da NF entra em copia.
+        ja_em_copia = {item.lower() for item in cc_final} | {(destino_real or "").lower()}
+        for regra in regras_cfop(app.config):
+            if not cfops_da_nota & set(regra["cfops"]):
+                continue
+            for email in regra["emails"]:
+                if email.lower() not in ja_em_copia:
+                    cc_final.append(email)
+                    ja_em_copia.add(email.lower())
         for email in resolvido.get("emails", [destino_real])[1:]:
             if email.lower() != destino_real.lower() and email.lower() not in {item.lower() for item in cc_final}:
                 cc_final.append(email)
@@ -2196,7 +2024,7 @@ def enviar_nfe_por_email(
         destinatario_email=destino_efetivo,
         destinatario_nome=nota.dest_nome,
         destinatario_cnpj=nota.dest_cnpj,
-        cc_emails=(", ".join(cc_final) if cc_final else None),
+        cc_emails=_cc_para_log(cc_final),
         assunto=assunto,
         fonte_email=fonte,
         origem=origem,
