@@ -373,6 +373,8 @@ class Config:
     COMEX_MAIL_SENDER = os.environ.get("COMEX_MAIL_SENDER", "")
     COMEX_MAIL_PASSWORD = os.environ.get("COMEX_MAIL_PASSWORD", "")
     COMEX_MAIL_SENDER_NAME = os.environ.get("COMEX_MAIL_SENDER_NAME", "Comex | Columbia Machine Brasil")
+    # Copia dos e-mails do Comex; None = padrao fixo do comex_routes.
+    COMEX_EMAIL_CC = None
 
     # Envio automatico de NF-e emitida para cliente/destinatario
     # Em modo teste, todos os envios sao redirecionados para NFE_EMAIL_TESTE_DESTINO.

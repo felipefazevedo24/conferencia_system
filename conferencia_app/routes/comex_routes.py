@@ -32,8 +32,22 @@ comex_bp = Blueprint("comex", __name__)
 PERMISSION = "PAGE_COMEX"
 
 # E-mails sempre em copia em todo e-mail do Comex (PO, cotacao de frete e
-# instrucao de embarque).
+# instrucao de embarque). Padrao ate alguem salvar a lista na tela de
+# E-mails de NF-e (COMEX_EMAIL_CC).
 PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
+
+
+def _cc_comex() -> list[str]:
+    """Copia dos e-mails do Comex. Rele o JSON da config: cada worker tem o
+    seu app.config, e o que salvou nao e' necessariamente o que envia.
+    None = nunca configurado (usa o padrao); "" = sem copia."""
+    from ..services.nfe_email_config_store import carregar_persistido
+
+    carregar_persistido(current_app._get_current_object())
+    valor = current_app.config.get("COMEX_EMAIL_CC")
+    if valor is None:
+        return list(PO_EMAIL_CC_FIXO)
+    return _separar_emails(valor)
 
 
 
@@ -513,7 +527,9 @@ def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(destinatarios)
-    msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
+    cc = _cc_comex()
+    if cc:
+        msg["Cc"] = ", ".join(cc)
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Agradecemos o envio da cotação referente ao processo <strong>{processo.id_op}</strong>.</p>"
@@ -775,7 +791,9 @@ def api_enviar_email_po(processo_id):
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(destinatarios)
-    msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
+    cc = _cc_comex()
+    if cc:
+        msg["Cc"] = ", ".join(cc)
 
     numeros_oc = [processo.cod_ordem_compra] + [o.cod_ordem_compra for o in ocs_vinculadas]
     corpo = (
@@ -799,7 +817,7 @@ def api_enviar_email_po(processo_id):
     parte_pdf.add_header("Content-Disposition", "attachment", filename=f"{processo.po_numero}.pdf")
     msg.attach(parte_pdf)
 
-    todos_destinatarios = destinatarios + PO_EMAIL_CC_FIXO
+    todos_destinatarios = destinatarios + cc
     try:
         enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
     except Exception as exc:
@@ -1024,7 +1042,9 @@ def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, l
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = ", ".join(_separar_emails(destinatario))
-    msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
+    cc = _cc_comex()
+    if cc:
+        msg["Cc"] = ", ".join(cc)
     corpo = (
         f"<p>Prezados,</p>"
         f"<p>Solicitamos, por gentileza, a cotação de frete referente ao processo <strong>{processo.id_op}</strong>.</p>"

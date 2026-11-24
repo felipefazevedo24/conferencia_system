@@ -16,6 +16,7 @@ from ..services.nfe_email_service import (
     regras_cfop,
     resolver_destinatario,
 )
+from .comex_routes import _cc_comex
 from ..services.erp_nfe_emitidas_service import buscar_email_cadastro_erp, listar_nfes_emitidas_erp, normalizar_data_minima
 
 nfe_email_bp = Blueprint("nfe_email", __name__)
@@ -321,6 +322,11 @@ def api_nfe_email_config():
             if isinstance(valor, list):
                 valor = ", ".join([str(c).strip() for c in valor if str(c).strip()])
             parcial["ENTRADA_CHAPA_CONTROLE_LOTE_VALORES"] = str(valor or "").strip()
+        if "comex_cc" in payload:
+            valor = payload["comex_cc"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
+            parcial["COMEX_EMAIL_CC"] = str(valor or "").strip()
         salvar_persistido(parcial)
 
         # Se ligou/desligou auto_enabled, garante que o scheduler esta na situacao correta
@@ -360,6 +366,7 @@ def api_nfe_email_config():
         "entrada_chapa_cc": current_app.config.get("ENTRADA_CHAPA_EMAIL_CC", ""),
         "entrada_chapa_cfops": current_app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915,1924"),
         "entrada_chapa_controles": current_app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3"),
+        "comex_cc": ", ".join(_cc_comex()),
     })
 
 

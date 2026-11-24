@@ -273,6 +273,14 @@
       </div>
 
       <div class="eui-card em-cfg-full">
+        <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-ship"></i> Cópia nos e-mails do Comex</h3></div>
+        <div class="eui-card__body">
+          <div class="em-chips" id="cfg-comex-cc"><input type="email" placeholder="adicionar e-mail"></div>
+          <span class="eui-field__hint">PO, solicitação de cotação de frete e resultado da cotação. O modo teste não vale aqui.</span>
+        </div>
+      </div>
+
+      <div class="eui-card em-cfg-full">
         <div class="eui-card__head">
           <h3 class="eui-card__title"><i class="fas fa-layer-group"></i> Aviso de chapas e barras</h3>
           <div style="display:flex;gap:10px;align-items:center">
@@ -672,6 +680,7 @@ function criarChips(id, {validar, mensagem}) {
 }
 
 const CC = criarChips('cfg-cc', {validar: emailValido, mensagem: 'E-mail inválido: '});
+const CC_COMEX = criarChips('cfg-comex-cc', {validar: emailValido, mensagem: 'E-mail inválido: '});
 
 // Regras de cópia por CFOP: cada linha guarda seus próprios chips.
 let REGRAS = [];
@@ -743,6 +752,7 @@ async function carregarConfig() {
     val('cfg-chapa-cfops', c.entrada_chapa_cfops);
     val('cfg-chapa-controles', c.entrada_chapa_controles);
     CC.definir(c.cc);
+    CC_COMEX.definir(c.comex_cc);
     renderRegras(c.regras_cfop);
     atualizarAmbiente(c);
     limparDirty();
@@ -751,6 +761,7 @@ async function carregarConfig() {
 
 async function salvarConfig() {
   CC.confirmarPendente();
+  CC_COMEX.confirmarPendente();
   REGRAS.forEach(r => { r.cfops.confirmarPendente(); r.emails.confirmarPendente(); });
   const regras = REGRAS
     .map(r => ({nome: r.nome.value.trim(), cfops: [...r.cfops.itens], emails: [...r.emails.itens]}))
@@ -770,6 +781,7 @@ async function salvarConfig() {
     auto_desde: document.getElementById('cfg-auto-desde').value,
     poll_intervalo: parseInt(document.getElementById('cfg-poll').value || '300', 10),
     cc: CC.itens.join(', '),
+    comex_cc: CC_COMEX.itens.join(', '),
     regras_cfop: regras,
     entrada_chapa_enabled: document.getElementById('cfg-chapa-enabled').checked,
     entrada_chapa_destinatarios: document.getElementById('cfg-chapa-destinatarios').value.trim(),
