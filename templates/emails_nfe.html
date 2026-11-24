@@ -82,6 +82,10 @@
     background: rgba(15, 98, 201, .12); color: inherit; font-size: 12px;
   }
   .em-chip button:hover { background: var(--eui-danger); color: #fff; }
+  .em-regras { display: grid; gap: 12px; }
+  .em-regra { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: end; padding: 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface-2); }
+  .em-regras-vazio { color: var(--eui-muted); font-size: 13px; }
+  @media (max-width: 1100px) { .em-regra { grid-template-columns: 1fr; } }
 
   .em-sched { font-family: Consolas, monospace; font-size: 12px; color: var(--eui-text-soft); }
   .em-cfg-foot { position: sticky; bottom: 0; z-index: 5; justify-content: space-between; align-items: center; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-lg); margin-top: 18px; }
@@ -249,7 +253,7 @@
         </div>
       </div>
 
-      <div class="eui-card">
+      <div class="eui-card em-cfg-full">
         <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-copy"></i> Cópia em toda NF-e</h3></div>
         <div class="eui-card__body">
           <div class="em-chips" id="cfg-cc"><input type="email" placeholder="adicionar e-mail"></div>
@@ -257,16 +261,14 @@
         </div>
       </div>
 
-      <div class="eui-card">
-        <div class="eui-card__head"><h3 class="eui-card__title"><i class="fas fa-industry"></i> Cópia por CFOP (serviço de terceiro)</h3></div>
+      <div class="eui-card em-cfg-full">
+        <div class="eui-card__head">
+          <h3 class="eui-card__title"><i class="fas fa-industry"></i> Cópia por CFOP</h3>
+          <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="adicionarRegra()"><i class="fas fa-plus"></i> Nova regra</button>
+        </div>
         <div class="eui-card__body">
-          <label class="eui-field"><span class="eui-field__label">CFOPs</span>
-            <div class="em-chips" id="cfg-cfops"><input type="text" inputmode="numeric" maxlength="4" placeholder="ex: 5901"></div>
-          </label>
-          <label class="eui-field"><span class="eui-field__label">E-mails em cópia</span>
-            <div class="em-chips" id="cfg-dest-esp"><input type="email" placeholder="adicionar e-mail"></div>
-          </label>
-          <span class="eui-field__hint">O fornecedor recebe normalmente; esses e-mails entram em cópia.</span>
+          <div class="em-regras" id="cfg-regras"></div>
+          <span class="eui-field__hint">O cliente/fornecedor recebe normalmente. Se algum item da NF tiver um CFOP da regra, os e-mails dela entram em cópia.</span>
         </div>
       </div>
 
@@ -631,7 +633,7 @@ function marcarDirty() { const el = document.getElementById('cfg-dirty'); if (el
 function limparDirty() { const el = document.getElementById('cfg-dirty'); if (el) el.classList.remove('is-show'); }
 
 function criarChips(id, {validar, mensagem}) {
-  const wrap = document.getElementById(id);
+  const wrap = typeof id === 'string' ? document.getElementById(id) : id;
   const estado = {itens: []};
   if (!wrap) return estado;
   const input = wrap.querySelector('input');
@@ -670,8 +672,47 @@ function criarChips(id, {validar, mensagem}) {
 }
 
 const CC = criarChips('cfg-cc', {validar: emailValido, mensagem: 'E-mail inválido: '});
-const CFOPS = criarChips('cfg-cfops', {validar: v => /^\d{4}$/.test(v), mensagem: 'CFOP deve ter 4 dígitos: '});
-const DEST_ESP = criarChips('cfg-dest-esp', {validar: emailValido, mensagem: 'E-mail inválido: '});
+
+// Regras de cópia por CFOP: cada linha guarda seus próprios chips.
+let REGRAS = [];
+function renderRegras(lista) {
+  const box = document.getElementById('cfg-regras');
+  if (!box) return;
+  box.innerHTML = '';
+  REGRAS = [];
+  (lista || []).forEach(r => adicionarRegra(r, false));
+  if (!REGRAS.length) box.innerHTML = '<div class="em-regras-vazio">Nenhuma regra.</div>';
+}
+function adicionarRegra(regra, marcar = true) {
+  const box = document.getElementById('cfg-regras');
+  box.querySelector('.em-regras-vazio')?.remove();
+  const el = document.createElement('div');
+  el.className = 'em-regra';
+  el.innerHTML = `
+    <label class="eui-field"><span class="eui-field__label">Nome</span><input class="eui-input" type="text" maxlength="80" placeholder="ex: Serviço de terceiro"></label>
+    <label class="eui-field"><span class="eui-field__label">CFOPs</span><div class="em-chips"><input type="text" inputmode="numeric" maxlength="4" placeholder="ex: 5901"></div></label>
+    <label class="eui-field"><span class="eui-field__label">E-mails em cópia</span><div class="em-chips"><input type="email" placeholder="adicionar e-mail"></div></label>
+    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" title="Remover regra"><i class="fas fa-trash"></i></button>`;
+  const [cfopsWrap, emailsWrap] = el.querySelectorAll('.em-chips');
+  const item = {
+    el,
+    nome: el.querySelector('input'),
+    cfops: criarChips(cfopsWrap, {validar: v => /^\d{4}$/.test(v), mensagem: 'CFOP deve ter 4 dígitos: '}),
+    emails: criarChips(emailsWrap, {validar: emailValido, mensagem: 'E-mail inválido: '}),
+  };
+  item.nome.value = regra?.nome || '';
+  item.cfops.definir((regra?.cfops || []).join(', '));
+  item.emails.definir((regra?.emails || []).join(', '));
+  el.querySelector('button[title="Remover regra"]').onclick = () => {
+    REGRAS = REGRAS.filter(x => x !== item);
+    el.remove();
+    if (!REGRAS.length) box.innerHTML = '<div class="em-regras-vazio">Nenhuma regra.</div>';
+    marcarDirty();
+  };
+  box.appendChild(el);
+  REGRAS.push(item);
+  if (marcar) { marcarDirty(); item.nome.focus(); }
+}
 
 function atualizarAmbiente(c) {
   const el = document.getElementById('em-ambiente');
@@ -702,16 +743,23 @@ async function carregarConfig() {
     val('cfg-chapa-cfops', c.entrada_chapa_cfops);
     val('cfg-chapa-controles', c.entrada_chapa_controles);
     CC.definir(c.cc);
-    CFOPS.definir(c.cfops_especiais);
-    DEST_ESP.definir(c.destinatarios_especiais);
+    renderRegras(c.regras_cfop);
     atualizarAmbiente(c);
     limparDirty();
   } catch (e) { console.warn(e); }
 }
 
 async function salvarConfig() {
-  CC.confirmarPendente(); CFOPS.confirmarPendente(); DEST_ESP.confirmarPendente();
-  if (CFOPS.itens.length && !DEST_ESP.itens.length) return toast('Informe os e-mails em cópia para os CFOPs.', 'warning');
+  CC.confirmarPendente();
+  REGRAS.forEach(r => { r.cfops.confirmarPendente(); r.emails.confirmarPendente(); });
+  const regras = REGRAS
+    .map(r => ({nome: r.nome.value.trim(), cfops: [...r.cfops.itens], emails: [...r.emails.itens]}))
+    .filter(r => r.nome || r.cfops.length || r.emails.length);
+  for (const [i, r] of regras.entries()) {
+    const nome = r.nome || `Regra ${i + 1}`;
+    if (!r.cfops.length) return toast(`${nome}: informe ao menos um CFOP.`, 'warning');
+    if (!r.emails.length) return toast(`${nome}: informe ao menos um e-mail.`, 'warning');
+  }
   const btn = document.getElementById('cfg-save-btn');
   btn.disabled = true;
   const body = {
@@ -722,8 +770,7 @@ async function salvarConfig() {
     auto_desde: document.getElementById('cfg-auto-desde').value,
     poll_intervalo: parseInt(document.getElementById('cfg-poll').value || '300', 10),
     cc: CC.itens.join(', '),
-    cfops_especiais: CFOPS.itens.join(', '),
-    destinatarios_especiais: DEST_ESP.itens.join(', '),
+    regras_cfop: regras,
     entrada_chapa_enabled: document.getElementById('cfg-chapa-enabled').checked,
     entrada_chapa_destinatarios: document.getElementById('cfg-chapa-destinatarios').value.trim(),
     entrada_chapa_cc: document.getElementById('cfg-chapa-cc').value.trim(),

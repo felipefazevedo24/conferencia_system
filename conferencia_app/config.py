@@ -386,12 +386,14 @@ class Config:
     NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
     # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
     NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")
-    # Roteamento por CFOP: quando algum item da NF tiver um destes CFOPs, o envio
-    # NAO vai para o destinatario do XML/cadastro - vai para a lista
-    # NFE_EMAIL_DESTINATARIOS_ESPECIAIS (ex: remessa/conserto/devolucao tratados
-    # internamente pelo financeiro/fiscal). Ambas as listas sao separadas por virgula.
+    # Copia por CFOP (regra unica antiga): quando algum item da NF tiver um destes
+    # CFOPs, o destinatario recebe normalmente e NFE_EMAIL_DESTINATARIOS_ESPECIAIS
+    # entra em copia. Ambas as listas sao separadas por virgula.
     NFE_EMAIL_CFOPS_ESPECIAIS = os.environ.get("NFE_EMAIL_CFOPS_ESPECIAIS", "")
     NFE_EMAIL_DESTINATARIOS_ESPECIAIS = os.environ.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", "")
+    # Varias regras de copia por CFOP, editadas na tela. None = ainda nao salvas:
+    # vale a regra unica acima (ver regras_cfop no nfe_email_service).
+    NFE_EMAIL_REGRAS_CFOP = None
 
     # Aviso interno de entrada de chapas/barras com controle de lote.
     ENTRADA_CHAPA_EMAIL_ENABLED = os.environ.get("ENTRADA_CHAPA_EMAIL_ENABLED", "1") == "1"

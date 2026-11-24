@@ -13,6 +13,7 @@ from ..services.nfe_email_service import (
     PREFIXO_ORIGEM_AVISO,
     enviar_nfe_por_email,
     filtro_envio_nfe,
+    regras_cfop,
     resolver_destinatario,
 )
 from ..services.erp_nfe_emitidas_service import buscar_email_cadastro_erp, listar_nfes_emitidas_erp, normalizar_data_minima
@@ -289,6 +290,15 @@ def api_nfe_email_config():
             if isinstance(valor, list):
                 valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
             parcial["NFE_EMAIL_DESTINATARIOS_ESPECIAIS"] = str(valor or "").strip()
+        if "regras_cfop" in payload:
+            regras = regras_cfop({"NFE_EMAIL_REGRAS_CFOP": payload["regras_cfop"] or []})
+            for i, regra in enumerate(regras, start=1):
+                nome = regra["nome"] or f"Regra {i}"
+                if not regra["cfops"]:
+                    return jsonify({"error": f"{nome}: informe ao menos um CFOP."}), 400
+                if not regra["emails"]:
+                    return jsonify({"error": f"{nome}: informe ao menos um e-mail."}), 400
+            parcial["NFE_EMAIL_REGRAS_CFOP"] = regras
         if "entrada_chapa_enabled" in payload:
             parcial["ENTRADA_CHAPA_EMAIL_ENABLED"] = bool(payload["entrada_chapa_enabled"])
         if "entrada_chapa_destinatarios" in payload:
@@ -341,9 +351,10 @@ def api_nfe_email_config():
         "auto_desde": normalizar_data_minima(current_app.config.get("NFE_EMAIL_AUTO_DESDE")),
         "cc": current_app.config.get("NFE_EMAIL_CC", ""),
         "poll_intervalo": int(current_app.config.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", 300)),
-        "smtp_timeout": int(current_app.config.get("MAIL_SMTP_TIMEOUT", 90)),
+        "smtp_timeout": int(current_app.config.get("MAIL_SMTP_TIMEOUT") or 90),
         "cfops_especiais": current_app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS", ""),
         "destinatarios_especiais": current_app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", ""),
+        "regras_cfop": regras_cfop(current_app.config),
         "entrada_chapa_enabled": bool(current_app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True)),
         "entrada_chapa_destinatarios": current_app.config.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", ""),
         "entrada_chapa_cc": current_app.config.get("ENTRADA_CHAPA_EMAIL_CC", ""),

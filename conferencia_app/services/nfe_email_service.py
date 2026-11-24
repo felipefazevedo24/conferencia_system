@@ -72,6 +72,40 @@ def filtro_envio_nfe():
     return ~EmailNFEnviado.origem.like(f"{PREFIXO_ORIGEM_AVISO}%")
 
 
+def regras_cfop(config) -> list[dict]:
+    """Regras de copia por CFOP: [{"nome", "cfops": [...], "emails": [...]}].
+
+    Enquanto ninguem salvou regras pela tela (chave None), a regra unica antiga
+    (NFE_EMAIL_CFOPS_ESPECIAIS + NFE_EMAIL_DESTINATARIOS_ESPECIAIS) vale como a
+    primeira, para nao perder o que ja estava configurado em producao.
+    """
+    brutas = config.get("NFE_EMAIL_REGRAS_CFOP")
+    if brutas is None:
+        brutas = [{
+            "nome": "Serviço de terceiro",
+            "cfops": config.get("NFE_EMAIL_CFOPS_ESPECIAIS"),
+            "emails": config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS"),
+        }]
+    regras = []
+    for bruta in brutas if isinstance(brutas, list) else []:
+        if not isinstance(bruta, dict):
+            continue
+        cfops_raw = bruta.get("cfops")
+        if isinstance(cfops_raw, list):
+            cfops_raw = ",".join(str(c) for c in cfops_raw)
+        emails_raw = bruta.get("emails")
+        if isinstance(emails_raw, list):
+            emails_raw = ",".join(str(e) for e in emails_raw)
+        cfops = []
+        for c in re.split(r"[,;\s]+", str(cfops_raw or "")):
+            if re.fullmatch(r"\d{4}", c) and c not in cfops:
+                cfops.append(c)
+        emails = _emails_validos(emails_raw)
+        if cfops or emails:
+            regras.append({"nome": str(bruta.get("nome") or "").strip()[:80], "cfops": cfops, "emails": emails})
+    return regras
+
+
 def _cc_para_log(cc: list[str], limite: int = 500) -> str | None:
     """cc_emails e String(500): no MySQL, passar disso derruba o envio inteiro.
     O cabecalho do e-mail leva a lista completa; o log guarda o que couber."""
@@ -2061,6 +2095,12 @@ def enviar_nfe_por_email(
     """Orquestra resolucao + download + envio. Retorna dict com resultado."""
     app = current_app._get_current_object()
 
+    # Cada worker tem seu app.config; a tela grava no JSON so pelo worker que
+    # atendeu o POST. Sem reler aqui, os outros workers (e o agendador deles)
+    # seguiam com o CC/CFOP/modo teste de quando subiram.
+    from .nfe_email_config_store import carregar_persistido
+    carregar_persistido(app)
+
     nota = _resolver_nota(numero_nf, chave)
     if not nota:
         return {"sucesso": False, "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.", "numero_nf": numero_nf}
@@ -2117,14 +2157,13 @@ def enviar_nfe_por_email(
             e = e.strip()
             if _valido_email(e) and e not in cc_final:
                 cc_final.append(e)
-        # NF de servico de terceiro (CFOPs da tela): o fornecedor recebe
-        # normalmente e a lista interna entra em copia.
-        cfops_especiais = {
-            c for c in re.split(r"[,;\s]+", str(app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS") or "")) if c.isdigit()
-        }
-        if cfops_da_nota & cfops_especiais:
-            ja_em_copia = {item.lower() for item in cc_final} | {destino_real.lower()}
-            for email in _emails_validos(app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS")):
+        # Regras por CFOP: o destinatario recebe normalmente e a lista de cada
+        # regra que bater com algum item da NF entra em copia.
+        ja_em_copia = {item.lower() for item in cc_final} | {(destino_real or "").lower()}
+        for regra in regras_cfop(app.config):
+            if not cfops_da_nota & set(regra["cfops"]):
+                continue
+            for email in regra["emails"]:
                 if email.lower() not in ja_em_copia:
                     cc_final.append(email)
                     ja_em_copia.add(email.lower())
