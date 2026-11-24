@@ -64,7 +64,9 @@ def gerar_pdf(p: ComexProvisao) -> bytes:
     corpo += [Spacer(1, 6), Paragraph("<br/>".join(f"Obs.: {a}" for a in avisos), estilos["Normal"])] if avisos else []
     corpo += [Spacer(1, 6), Paragraph(
         f"Base do frete pelo Incoterm {p.incoterm}: {', '.join(resultado.get('etapas_na_base') or [])}. "
-        "Impostos na PTAX (taxa fiscal); frete provisionado = cotação escolhida em R$ com o markup do forwarder.", estilos["Normal"])]
+        "Impostos na PTAX (taxa fiscal); frete provisionado = cotação escolhida em R$ com o markup do forwarder."
+        + (f" Mercadoria em {resultado['moeda']}, convertida a {resultado['cambio_moeda']:g} R$/{resultado['moeda']}."
+           if resultado.get("cambio_moeda") else ""), estilos["Normal"])]
     doc.build(corpo)
     return buf.getvalue()
 
@@ -81,6 +83,7 @@ def gerar_xlsx(p: ComexProvisao) -> bytes:
     for linha in (
         ["Processo", proc.id_op], ["Fornecedor", proc.fornecedor], ["POs", ", ".join(resultado.get("pos") or [])],
         ["Versão", p.versao], ["Modelo", p.modelo], ["Incoterm", p.incoterm], ["PTAX", p.ptax],
+        *([[f"Câmbio {resultado['moeda']} (mercadoria)", resultado["cambio_moeda"]]] if resultado.get("cambio_moeda") else []),
         ["Gerada em", p.criado_em.strftime("%d/%m/%Y %H:%M")], ["Gerada por", p.criado_por], [],
         ["Impostos e taxas", p.impostos_brl], ["Frete internacional (cotação)", p.frete_brl],
         ["Despesas de desembaraço", p.despesas_brl], [],

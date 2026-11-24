@@ -82,6 +82,8 @@ def _motivo_bloqueio(principal: ComexProcesso, outro: ComexProcesso, checar_prin
         return "Escolha outro processo."
     if not svc._mesmo_fornecedor([principal, outro]):
         return f"{outro.id_op} é de outro fornecedor."
+    if svc.moeda_do_processo(outro) != svc.moeda_do_processo(principal):
+        return f"{outro.id_op} está em {svc.moeda_do_processo(outro)} e este embarque em {svc.moeda_do_processo(principal)}."
     if svc.exportacao_da_expedicao(outro):
         return f"{outro.id_op} é exportação."
     if not outro.po_numero or outro.po_status != "Finalizada":

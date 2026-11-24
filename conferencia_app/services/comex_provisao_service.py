@@ -102,6 +102,18 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
         raise ValueError("Informe a PTAX.")
     cotacao = _cotacao_escolhida(processo)
     itens = _itens(processo, dados.get("itens"))
+    moeda = svc.moeda_do_processo(processo)
+    cambio_moeda = None
+    if moeda != "USD":
+        # O motor do simulador trabalha em US$: a mercadoria em JPY/EUR/CNY
+        # vira US$ pela taxa cruzada (cambio da moeda / PTAX do dolar), o
+        # que da' o mesmo valor em R$ de valor x cambio da moeda. O frete
+        # continua em US$ na PTAX do dolar.
+        cambio_moeda = custo._num(dados.get("cambio_moeda"))
+        if not cambio_moeda or cambio_moeda <= 0:
+            raise ValueError(f"Informe o câmbio do {moeda} (R$ por 1 {moeda}).")
+        for i in itens:
+            i["valor_usd"] = round(custo._num(i.get("valor_usd")) * cambio_moeda / ptax, 6)
     if cotacao:
         frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
         cambio = svc.cambio_da_cotacao(cotacao, ptax)
@@ -122,6 +134,7 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
         resultado[modelo]["avisos"] = [a for a in resultado[modelo]["avisos"] if not a.startswith("Frete rateado pelo valor FOB")]
     resultado.update({
         "incoterm": incoterm, "frete_cif_usd": frete_usd, "seguro_cif_usd": seguro_usd,
+        "moeda": moeda, "cambio_moeda": cambio_moeda,
         "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]) if cotacao else ["informado na tela"],
         "frete_brl": cambio["custo_total_consolidado_brl"], "taxa_agente": cambio["taxa_agente"],
         "markup_pct": cambio["markup_pct"], "forwarder": cotacao.fornecedor_frete if cotacao else None,

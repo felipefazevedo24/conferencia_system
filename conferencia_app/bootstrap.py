@@ -1388,6 +1388,11 @@ def initialize_database(app: Flask) -> None:
             app.logger.exception("Bootstrap: falha ao ajustar spend_entrada_grv (OC e requisitante)")
 
         try:
+            _ensure_comex_processo_moeda_column()
+        except Exception:
+            app.logger.exception("Bootstrap: falha ao criar comex_processo.moeda")
+
+        try:
             _ensure_homologacao_convite_respondido_por_column()
         except Exception:
             app.logger.exception("Bootstrap: falha ao criar compras_homologacao_convite.respondido_por")
@@ -2110,6 +2115,19 @@ def _ensure_inventario_ciclico_divergencia_mantida_columns() -> None:
             if column_name not in cols:
                 conn.execute(db.text(ddl))
                 conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_comex_processo_moeda_column() -> None:
+    if not _has_table("comex_processo"):
+        return
+    if "moeda" in _get_column_names("comex_processo"):
+        return
+    conn = db.engine.connect()
+    try:
+        conn.execute(db.text("ALTER TABLE comex_processo ADD COLUMN moeda VARCHAR(3)"))
+        conn.commit()
     finally:
         conn.close()
 

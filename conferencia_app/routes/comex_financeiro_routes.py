@@ -18,6 +18,7 @@ from ..models import ComexProcesso, ComexProvisao
 from ..services import comex_custo_service as custo
 from ..services import comex_provisao_relatorio as relatorio
 from ..services import comex_provisao_service as svc
+from ..services import comex_service as comex_svc
 from ..services.smtp_service import enviar_mensagem_smtp
 from .comex_routes import _remetente_comex
 
@@ -114,6 +115,7 @@ def api_financeiro_processo(processo_id):
         # se ha' cotacao escolhida (senao o frete e' informado na tela).
         "itens_po": [{k: v for k, v in i.items() if k != "aliquotas"} for i in svc.itens_da_po(processo)],
         "tem_cotacao": bool(cotacao),
+        "moeda": comex_svc.moeda_do_processo(processo),
         "padroes": {**(json.loads(ultima.parametros) if ultima else {}),
                     "incoterm": ultima.incoterm if ultima else (incoterm if incoterm in svc.INCOTERMS else "")},
         "provisoes": [_provisao_payload(p) for p in reversed(processo.provisoes)],
@@ -131,8 +133,13 @@ def api_simular_provisao(processo_id):
     if not dados.get("ptax"):
         ptax = custo.ptax_do_dia()
         dados["ptax"] = ptax["cotacao"] if ptax else None
+    moeda = comex_svc.moeda_do_processo(processo)
+    if moeda != "USD" and not dados.get("cambio_moeda"):
+        cambio = custo.ptax_do_dia(moeda)
+        dados["cambio_moeda"] = cambio["cotacao"] if cambio else None
     try:
-        return jsonify({"ptax": dados["ptax"], "resultado": svc.calcular(processo, dados)})
+        return jsonify({"ptax": dados["ptax"], "cambio_moeda": dados.get("cambio_moeda"),
+                        "resultado": svc.calcular(processo, dados)})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 

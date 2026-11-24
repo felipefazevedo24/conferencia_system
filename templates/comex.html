@@ -341,6 +341,17 @@
                 </div>
                 <div class="cx-field"><label>Data PO</label><input type="date" id="cx-po-data" class="eui-input"></div>
             </div>
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>Moeda da mercadoria</label>
+                    <select id="cx-po-moeda" class="eui-select">
+                        <option value="USD">USD — Dólar</option>
+                        <option value="JPY">JPY — Iene</option>
+                        <option value="EUR">EUR — Euro</option>
+                        <option value="CNY">CNY — Yuan</option>
+                    </select>
+                </div>
+            </div>
             <div class="cx-field">
                 <label>Itens da PO
                     <small style="font-weight:400; color:var(--eui-muted);"> — preenchido manualmente por enquanto (código, NCM, PN, descrição, quantidade e valores)</small>
@@ -355,8 +366,8 @@
                                 <th style="width:100px;">PN</th>
                                 <th>Descrição</th>
                                 <th style="width:90px;">Qtde</th>
-                                <th style="width:120px;">Unit. US$</th>
-                                <th style="width:120px;">Total US$</th>
+                                <th style="width:120px;">Unit. <span class="cx-po-moeda-rot">US$</span></th>
+                                <th style="width:120px;">Total <span class="cx-po-moeda-rot">US$</span></th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
@@ -532,7 +543,7 @@
                 <div class="cx-field"><label>UN</label><input type="text" id="cx-cot-un" class="eui-input" placeholder="Número UN ou NA"></div>
             </div>
             <div class="cx-field">
-                <label>Valor da mercadoria (USD) <small style="font-weight:400; color:var(--eui-muted);">— essencial pro prestador calcular o seguro</small></label>
+                <label>Valor da mercadoria (<span id="cx-cot-moeda">USD</span>) <small style="font-weight:400; color:var(--eui-muted);">— essencial pro prestador calcular o seguro</small></label>
                 <input type="text" inputmode="decimal" id="cx-cot-valor-mercadoria" class="eui-input">
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -1334,10 +1345,19 @@
     // ── Itens da PO (código/NCM/PN/descrição/quantidade/valores) ───────
     let itensPoAtual = [];
 
+    // Moeda da mercadoria do processo (USD padrao). O frete do forwarder
+    // continua em USD/BRL.
+    const SIMBOLO_MOEDA = { USD: "US$", JPY: "¥", EUR: "€", CNY: "CN¥" };
+    const _simbolo = (m) => SIMBOLO_MOEDA[m || "USD"] || m;
     function _fmtMoeda(v) {
         const n = Number(v);
-        return "US$ " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        return _simbolo($("cx-po-moeda").value) + " " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
+    function _atualizarMoedaPo() {
+        document.querySelectorAll(".cx-po-moeda-rot").forEach((el) => { el.textContent = _simbolo($("cx-po-moeda").value); });
+        _atualizarSubtotalPo();
+    }
+    $("cx-po-moeda").addEventListener("change", _atualizarMoedaPo);
 
     // Campos numericos da tabela de itens aceitam tanto "10.50" quanto
     // "10,50" (o teclado numerico do celular e o costume brasileiro usam
@@ -1480,12 +1500,14 @@
         $("cx-po-modal").value = p.po_numero ? (p.modal_transporte || "") : "";
         atualizarLabelFornecedor();
         $("cx-po-pagador-frete").value = p.pagador_frete || "";
+        $("cx-po-moeda").value = p.moeda || "USD";
         // Sugere a data da OC (ja trazida da bridge na importacao) como
         // ponto de partida - o operador pode ajustar antes de salvar.
         $("cx-po-data").value = p.po_data || (p.dt_lancamento_oc ? p.dt_lancamento_oc.slice(0, 10) : "");
         $("cx-po-outras-ocs").innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
         itensPoAtual = [];
         renderItensPo();
+        _atualizarMoedaPo();
         docsPo.carregar(p.id);
         comentariosPo.carregar(p.id);
 
@@ -1591,6 +1613,7 @@
                     direcao_operacao: direcao,
                     modal_transporte: modal,
                     pagador_frete: pagador,
+                    moeda: $("cx-po-moeda").value,
                     ocs_vinculadas_ids: _ocsSelecionadas(),
                     finalizar: !!finalizar,
                     po_data: $("cx-po-data").value || null,
@@ -1719,14 +1742,14 @@
                 <td><strong>${escapeHtml(x.po_numero || "—")}</strong>${idx === 0 ? ' <span class="eui-badge eui-badge--info">principal</span>' : ""}</td>
                 <td>${escapeHtml(x.id_op)}</td>
                 <td>${escapeHtml(x.cod_ordem_compra != null ? String(x.cod_ordem_compra) : "—")}</td>
-                <td>${x.valor_usd != null ? _fmtMoedaGenerico(x.valor_usd, "US$") : "—"}</td>
+                <td>${x.valor_usd != null ? _fmtMoedaGenerico(x.valor_usd, _simbolo(emb.moeda)) : "—"}</td>
                 <td style="text-align:right;">${idx > 0 && emb.editavel ? `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-emb-remover="${x.processo_id}" title="Tirar do embarque"><i class="fas fa-xmark"></i></button>` : ""}</td>
             </tr>`).join("") + (emb.pos.length > 1
-                ? `<tr><td colspan="3" style="text-align:right; font-weight:600;">Total do embarque</td><td style="font-weight:600;">${emb.subtotal_usd != null ? _fmtMoedaGenerico(emb.subtotal_usd, "US$") : "—"}</td><td></td></tr>`
+                ? `<tr><td colspan="3" style="text-align:right; font-weight:600;">Total do embarque</td><td style="font-weight:600;">${emb.subtotal_usd != null ? _fmtMoedaGenerico(emb.subtotal_usd, _simbolo(emb.moeda)) : "—"}</td><td></td></tr>`
                 : "");
         $("cx-emb-add").classList.toggle("hidden", !emb.editavel || !emb.candidatas.length);
         $("cx-emb-candidatas").innerHTML = emb.candidatas.map((x) =>
-            `<option value="${x.id}">${escapeHtml(x.po_numero || x.id_op)} — ${escapeHtml(x.id_op)}${x.valor_usd != null ? " — " + _fmtMoedaGenerico(x.valor_usd, "US$") : ""}</option>`).join("");
+            `<option value="${x.id}">${escapeHtml(x.po_numero || x.id_op)} — ${escapeHtml(x.id_op)}${x.valor_usd != null ? " — " + _fmtMoedaGenerico(x.valor_usd, _simbolo(emb.moeda)) : ""}</option>`).join("");
         $("cx-emb-motivo").textContent = !emb.editavel ? emb.motivo
             : !emb.candidatas.length ? "Nenhuma outra PO finalizada deste fornecedor disponível para incluir." : "";
     }
@@ -1841,6 +1864,7 @@
         // da PO (o prestador precisa do valor real pra calcular o seguro) -
         // so cai pro valor salvo numa cotacao anterior se a PO ainda nao tem
         // itens lancados.
+        $("cx-cot-moeda").textContent = p.moeda || "USD";
         const subtotalPos = p.embarque_subtotal_usd != null ? p.embarque_subtotal_usd : p.po_subtotal_usd;
         const valorMercadoria = subtotalPos != null ? subtotalPos : (base ? base.valor_mercadoria_usd : null);
         $("cx-cot-valor-mercadoria").value = valorMercadoria != null ? valorMercadoria : "";

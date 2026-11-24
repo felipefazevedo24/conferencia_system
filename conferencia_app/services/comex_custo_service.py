@@ -213,14 +213,26 @@ PTAX_URL = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
             "CotacaoDolarDia(dataCotacao=@dataCotacao)")
 
 
-def ptax_venda(hoje: date | None = None, timeout: int = 8) -> dict | None:
+PTAX_MOEDA_URL = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
+                  "CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)")
+# Moedas com PTAX no Banco Central (as outras, ex. CNY, o cambio e' digitado).
+MOEDAS_PTAX = ("USD", "JPY", "EUR", "GBP", "CHF", "CAD", "AUD", "DKK", "NOK", "SEK")
+
+
+def ptax_venda(hoje: date | None = None, timeout: int = 8, moeda: str = "USD") -> dict | None:
     """PTAX de venda mais recente (volta ate' 7 dias: fim de semana/feriado
     nao tem). Integracao externa nunca derruba a tela: falhou, None e o
-    operador digita o cambio."""
+    operador digita o cambio. Fora do dolar o BCB devolve os boletins do
+    dia; o ultimo e' o de fechamento (ou o mais recente, antes dele sair)."""
+    if moeda not in MOEDAS_PTAX:
+        return None
     dia = hoje or date.today()
     for _ in range(8):
+        params = {"@dataCotacao": f"'{dia:%m-%d-%Y}'", "$format": "json"}
+        if moeda != "USD":
+            params["@moeda"] = f"'{moeda}'"
         try:
-            resp = requests.get(PTAX_URL, params={"@dataCotacao": f"'{dia:%m-%d-%Y}'", "$format": "json"}, timeout=timeout)
+            resp = requests.get(PTAX_URL if moeda == "USD" else PTAX_MOEDA_URL, params=params, timeout=timeout)
             resp.raise_for_status()
             valores = resp.json().get("value") or []
         except Exception:
@@ -234,16 +246,16 @@ def ptax_venda(hoje: date | None = None, timeout: int = 8) -> dict | None:
 _PTAX_CACHE: dict = {}
 
 
-def ptax_do_dia() -> dict | None:
+def ptax_do_dia(moeda: str = "USD") -> dict | None:
     """`ptax_venda` com cache: a analise de propostas abre varias vezes e o
     BCB e' lento. Acerto vale 1h (a PTAX do dia sai a tarde); falha, 10 min,
     pra nao travar cada abertura esperando o timeout."""
     agora = time.monotonic()
-    em_cache = _PTAX_CACHE.get("ptax")
+    em_cache = _PTAX_CACHE.get(moeda)
     if em_cache and agora - em_cache[1] < (3600 if em_cache[0] else 600):
         return em_cache[0]
-    valor = ptax_venda()
-    _PTAX_CACHE["ptax"] = (valor, agora)
+    valor = ptax_venda(moeda=moeda)
+    _PTAX_CACHE[moeda] = (valor, agora)
     return valor
 
 

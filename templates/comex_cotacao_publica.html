@@ -216,7 +216,7 @@
               </div>
             </div>`}
             <div class="field">
-              <label>Valor da mercadoria (USD)</label>
+              <label>Valor da mercadoria (${esc(pre.moeda_mercadoria || 'USD')})</label>
               <input type="text" inputmode="decimal" id="valor_mercadoria_usd" value="${v(pre.valor_mercadoria_usd)}">
             </div>
           </div>

@@ -3930,6 +3930,10 @@ class ComexProcesso(db.Model):
     # comparacao entre fornecedores use a mesma taxa, nao a que cada um
     # informou por conta propria.
     taxa_cambio_referencia = db.Column(db.Float)
+    # Moeda da mercadoria (itens da PO, valor da mercadoria na cotacao,
+    # base da provisao). Vazio = USD, o padrao de sempre. O frete do
+    # forwarder continua em USD/BRL independente disso.
+    moeda = db.Column(db.String(3))
 
     # ── Modulo 4: Instrucao de Embarque (versao minima) ────────────────────
     # So depois que a instrucao e enviada (cotacao ja escolhida) que os

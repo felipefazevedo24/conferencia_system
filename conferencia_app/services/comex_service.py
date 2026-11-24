@@ -90,6 +90,13 @@ TIPOS_OPERACAO = ("IM", "IA", "EM", "EA")  # IM/IA = Importacao Mar./Aer. | EM/E
 DIRECOES_OPERACAO = ("IMPO", "EXPO")
 MODAIS_TRANSPORTE = ("Aéreo", "Marítimo")
 PAGADORES_FRETE = ("Columbia", "Cliente-Fornecedor")
+# Moeda da mercadoria do processo -> simbolo. CNY nao tem PTAX no Banco
+# Central: o cambio e' digitado.
+MOEDAS = {"USD": "US$", "JPY": "¥", "EUR": "€", "CNY": "CN¥"}
+
+
+def moeda_do_processo(processo) -> str:
+    return (processo.moeda or "USD") if processo else "USD"
 
 # Prefixo do ID OP a partir de (direcao_operacao, modal_transporte) - mantem
 # o formato simples de 2 letras que ja existia (IM/IA), so estendido para
@@ -1089,10 +1096,25 @@ def salvar_po(
         processo.status_slug = status_slug("PO")
     if dados_operacionais:
         _aplicar_campos_operacionais(processo, dados_operacionais)
+        if "moeda" in dados_operacionais:
+            _aplicar_moeda(processo, dados_operacionais.get("moeda"))
     processo.atualizado_em = agora
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
+
+
+def _aplicar_moeda(processo: ComexProcesso, moeda) -> None:
+    moeda = str(moeda or "USD").strip().upper()
+    if moeda not in MOEDAS:
+        raise ValueError("Moeda inválida.")
+    if moeda == moeda_do_processo(processo):
+        return
+    # Embarque soma o valor das POs: com moedas diferentes o total nao faz
+    # sentido.
+    if processo.pos_embarque or processo.embarque_principal:
+        raise ValueError("Esta PO está num embarque com outras POs - tire-a do embarque antes de trocar a moeda.")
+    processo.moeda = moeda
 
 
 def avancar_modulo_apos_po_finalizada(processo: ComexProcesso) -> None:
@@ -1160,7 +1182,7 @@ def listar_itens_po(processo: ComexProcesso) -> list[ComexPoItem]:
 
 
 def subtotal_itens_po(processo: ComexProcesso) -> float | None:
-    """Soma do valor_total dos itens da PO (USD) - usado como sugestao de
+    """Soma do valor_total dos itens da PO (na moeda do processo) - usado como sugestao de
     "Valor da mercadoria" ao gerar uma cotacao de frete (o prestador precisa
     disso pra calcular o seguro). None se ainda nao ha itens."""
     total = sum(float(it.valor_total or 0) for it in listar_itens_po(processo))

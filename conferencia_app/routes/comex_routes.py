@@ -145,6 +145,8 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "cotacao_vencedora_fornecedor": _cotacao_vencedora_fornecedor(p),
         "cotacao_substatus": svc.cotacao_substatus(p),
         "po_subtotal_usd": svc.subtotal_itens_po(p),
+        # Moeda da mercadoria: os campos *_usd de PO/embarque vem nela.
+        "moeda": svc.moeda_do_processo(p),
         "taxa_cambio_referencia": p.taxa_cambio_referencia,
         "po_ocs_vinculadas": _ocs_vinculadas_lista(p),
         "po_processo_principal_id": p.po_processo_principal_id,
@@ -1215,6 +1217,7 @@ def api_cotacao_publica_dados(token):
             "qtd_40hc": cotacao.qtd_40hc,
             "qtd_20dry": cotacao.qtd_20dry,
             "valor_mercadoria_usd": cotacao.valor_mercadoria_usd,
+            "moeda_mercadoria": svc.moeda_do_processo(cotacao.processo),
             "volumes": [
                 {"comprimento": v.comprimento, "largura": v.largura, "altura": v.altura, "peso": v.peso}
                 for v in cotacao.volumes
@@ -1242,6 +1245,7 @@ def _embarque_payload(principal: ComexProcesso) -> dict:
     return {
         "pos": comex_embarque_service.resumo_pos(principal),
         "subtotal_usd": comex_embarque_service.subtotal_embarque(principal),
+        "moeda": svc.moeda_do_processo(principal),
         "editavel": motivo is None,
         "motivo": motivo,
         "candidatas": [] if motivo else [

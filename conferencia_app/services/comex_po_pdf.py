@@ -79,12 +79,12 @@ def _fmt_qtd(v):
         return str(v)
 
 
-def _fmt_valor(v, com_simbolo=True):
+def _fmt_valor(v, com_simbolo=True, simbolo="$"):
     if v is None:
         return "—"
     try:
         texto = f"{float(v):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-        return f"$ {texto}" if com_simbolo else texto
+        return f"{simbolo} {texto}" if com_simbolo else texto
     except (TypeError, ValueError):
         return str(v)
 
@@ -184,14 +184,17 @@ def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | Non
 
     # ---- Tabela de itens (CODE / Quantity / NCM-HS / PN / DESCRIPTION / UNIT US$ / Line Total) ----
     itens = itens or []
+    moeda = processo.moeda or "USD"
+    # Dolar fica "$" como sempre saiu na PO.
+    simbolo = {"USD": "$", "JPY": "¥", "EUR": "€", "CNY": "CN¥"}.get(moeda, moeda)
     cabecalho_itens = [
         _p("CODE", size=8, bold=True, color=colors.white),
         _p("Quantity", size=8, bold=True, color=colors.white),
         _p("NCM/<br/>HS CODE", size=8, bold=True, color=colors.white),
         _p("PN", size=8, bold=True, color=colors.white),
         _p("DESCRIPTION", size=8, bold=True, color=colors.white),
-        _p("UNIT US$", size=8, bold=True, color=colors.white, align=TA_RIGHT),
-        _p("Line Total USD", size=8, bold=True, color=colors.white, align=TA_RIGHT),
+        _p(f"UNIT {moeda}", size=8, bold=True, color=colors.white, align=TA_RIGHT),
+        _p(f"Line Total {moeda}", size=8, bold=True, color=colors.white, align=TA_RIGHT),
     ]
     linhas = [cabecalho_itens]
     subtotal = 0.0
@@ -203,7 +206,7 @@ def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | Non
             _p(it.pn, size=8.5),
             _p(it.descricao, size=8.5),
             _p(_fmt_valor(it.valor_unitario, com_simbolo=False), size=8.5, align=TA_RIGHT),
-            _p(_fmt_valor(it.valor_total), size=8.5, align=TA_RIGHT),
+            _p(_fmt_valor(it.valor_total, simbolo=simbolo), size=8.5, align=TA_RIGHT),
         ])
         subtotal += float(it.valor_total or 0)
 
@@ -235,9 +238,9 @@ def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | Non
     # ---- Subtotal / TOTAL ----
     totais = Table(
         [
-            [_p("Subtotal", size=9, bold=True, align=TA_RIGHT), _p(_fmt_valor(subtotal), size=9, bold=True, align=TA_RIGHT)],
+            [_p("Subtotal", size=9, bold=True, align=TA_RIGHT), _p(_fmt_valor(subtotal, simbolo=simbolo), size=9, bold=True, align=TA_RIGHT)],
             [_p("TOTAL", size=10, bold=True, color=colors.white, align=TA_RIGHT),
-             _p(_fmt_valor(subtotal), size=10, bold=True, color=colors.white, align=TA_RIGHT)],
+             _p(_fmt_valor(subtotal, simbolo=simbolo), size=10, bold=True, color=colors.white, align=TA_RIGHT)],
         ],
         colWidths=[largura - 45 * mm, 45 * mm],
     )
