@@ -5,30 +5,48 @@
 
 {% block extra_head %}
 <style>
-    /* Ajustes de padrão visual: links e bordas de tabela */
-    .rom-container a { text-decoration: none; color: #464feb; }
-    .rom-container tr th, .rom-container tr td { border: 1px solid #e6e6e6; }
-    .rom-container tr th { background-color: #f5f5f5; }
+    .rom-container a { text-decoration: none; color: var(--eui-primary); }
 
-    /* LAYOUT PRINCIPAL */
-    .rom-container { max-width: 1200px; margin: 0 auto; }
-    
+    /* LAYOUT PRINCIPAL: largura toda e a lista ocupando a altura da tela
+       (embutida na Conferência de Expedição sobrava espaço e rolava dentro
+       de uma caixa de 65vh). */
+    .rom-container { overflow: hidden; }
+
     /* TOOLBAR */
-    .rom-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 12px 0; }
-    .rom-toolbar input { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
-    .rom-toolbar select { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
-    
+    .rom-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--eui-border); }
+    .rom-busca { position: relative; flex: 0 1 320px; min-width: 220px; }
+    .rom-busca i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--eui-muted); font-size: 13px; pointer-events: none; }
+    .rom-busca input { width: 100%; padding-left: 34px; }
+    .rom-filtros { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+    .rom-filtro { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--eui-border); border-radius: 999px; background: var(--eui-surface); color: var(--eui-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background var(--eui-trans), border-color var(--eui-trans), color var(--eui-trans); }
+    .rom-filtro:hover { border-color: var(--eui-border-strong); color: var(--eui-text); }
+    .rom-filtro b { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--eui-surface-2); font-size: 11px; font-variant-numeric: tabular-nums; text-align: center; }
+    .rom-filtro.is-active { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast, #fff); }
+    .rom-filtro.is-active b { background: rgba(255,255,255,.22); color: inherit; }
+    .rom-filtro--alerta b { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
+    .rom-filtro--alerta.is-active { background: var(--eui-danger); border-color: var(--eui-danger); }
+
     /* LISTA DE ROMANEIOS */
-    .rom-list-wrap { overflow-x: auto; overflow-y: auto; max-height: 65vh; margin: 20px 0; }
+    .rom-list-wrap { overflow: auto; max-height: calc(100vh - 210px); min-height: 260px; }
+    .rom-embed .rom-list-wrap { max-height: calc(100vh - 135px); }
+    .rom-rodape { padding: 8px 18px; border-top: 1px solid var(--eui-border); font-size: 12px; color: var(--eui-muted); }
     .rom-table { width: 100%; border-collapse: collapse; }
-    .rom-table thead { background: #f3f4f6; }
-    .rom-table thead th { position: sticky; top: 0; background: #f3f4f6; z-index: 5; }
-    .rom-table th { padding: 12px; text-align: left; font-size: 13px; font-weight: 700; border-bottom: 2px solid #e5e7eb; }
-    .rom-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-    .rom-table tbody tr.rom-row-header:hover { background: #f9fafb; }
+    .rom-table thead th { position: sticky; top: 0; z-index: 5; background: var(--eui-surface-2); }
+    .rom-table th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .rom-table td { padding: 10px 12px; border-bottom: 1px solid var(--eui-border); font-size: 13px; color: var(--eui-text); vertical-align: middle; }
+    .rom-table .rom-col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rom-row-header { cursor: pointer; transition: background var(--eui-trans); }
+    .rom-table tbody tr.rom-row-header:hover { background: var(--eui-surface-2); }
+    .rom-table tbody tr.rom-row-header.is-open { background: var(--eui-primary-soft); }
+    .rom-numero { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .rom-data { color: var(--eui-text-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .rom-cliente { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+    .rom-cliente-mais { color: var(--eui-muted); font-size: 12px; }
+    .rom-badges { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
     
     /* LINHA-CABEÇALHO (resumo) E DETALHE EXPANSÍVEL */
-    .rom-expand-btn { border: 1px solid #d1d5db; background: white; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; color: #4338ca; display: inline-flex; align-items: center; justify-content: center; transition: transform .15s ease; }
+    .rom-expand-btn { border: none; background: transparent; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; color: var(--eui-muted); display: inline-flex; align-items: center; justify-content: center; transition: transform .15s ease, color .15s ease; }
+    .rom-row-header:hover .rom-expand-btn, .rom-expand-btn.is-open { color: var(--eui-primary); }
     .rom-expand-btn.is-open { transform: rotate(90deg); }
     .rom-row-detail td { background: #f9fafb; padding: 0; border-bottom: 1px solid #e5e7eb; }
     .rom-row-detail.hidden { display: none; }
@@ -42,7 +60,7 @@
     .rom-add-nf-inline { display: flex; gap: 8px; margin-top: 12px; max-width: 420px; }
 
     /* MENU DE AÇÕES (…) */
-    .rom-actions-btn { border: 1px solid #d1d5db; background: white; border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: #374151; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .rom-actions-btn { border: 1px solid transparent; background: transparent; border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: #374151; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
     .rom-actions-btn:hover { background: #f3f4f6; }
     .rom-actions-menu { position: fixed; width: max-content; margin: 0; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 190px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
     .rom-actions-menu.open { display: flex; }
@@ -52,15 +70,16 @@
     .rom-actions-menu hr { border: none; border-top: 1px solid #eef0f3; margin: 4px 0; }
     
     /* BADGES */
-    .rom-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-    .rom-badge--rascunho { background: #fef3c7; color: #b45309; }
-    .rom-badge--pronto { background: #dbeafe; color: #1e40af; }
-    .rom-badge--fob { background: #e0e7ff; color: #4338ca; }
-    .rom-badge--cif { background: #fce7f3; color: #a21caf; }
-    .rom-badge--proprio { background: #cffafe; color: #0e7490; }
-    .rom-badge--cce { background: #fef3c7; color: #b45309; }
-    .rom-badge--expedido { background: #dcfce7; color: #15803d; }
-    .rom-badge--pendente { background: #fee2e2; color: #991b1b; }
+    .rom-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .rom-badge .fa-circle { font-size: 6px; }
+    .rom-badge--rascunho { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .rom-badge--pronto { background: var(--eui-info-soft); color: var(--eui-info-soft-text); }
+    .rom-badge--fob { background: var(--eui-primary-soft); color: var(--eui-primary-soft-text); }
+    .rom-badge--cif { background: var(--eui-violet-soft); color: var(--eui-violet-soft-text); }
+    .rom-badge--proprio { background: var(--eui-surface-3); color: var(--eui-text-soft); }
+    .rom-badge--cce { background: var(--eui-warning-soft); color: var(--eui-warning-soft-text); }
+    .rom-badge--expedido { background: var(--eui-success-soft); color: var(--eui-success-soft-text); }
+    .rom-badge--pendente { background: var(--eui-danger-soft); color: var(--eui-danger-soft-text); }
     
     /* MODAL */
     .rom-modal { display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
@@ -263,7 +282,7 @@
     @keyframes slideIn { from { transform: translateX(450px); } to { transform: translateX(0); } }
     
     @media print {
-        .rom-toolbar, .rom-list-wrap, .rom-modal, .btn-no-print, .rom-actions-toolbar { display: none !important; }
+        .rom-toolbar, .rom-list-wrap, .rom-rodape, .rom-modal, .btn-no-print, .rom-actions-toolbar { display: none !important; }
         body { background: #fff !important; }
         .rom-container { max-width: none; }
         .rom-document { border: none; padding: 0; margin: 0; }
@@ -272,44 +291,46 @@
 {% endblock %}
 
 {% block content %}
-<div class="rom-container eui-card" id="rom-root" data-can-manage-romaneio="{{ 'true' if can_manage_romaneio else 'false' }}">
+<div class="rom-container eui-card{{ ' rom-embed' if request.args.get('embed') == '1' else '' }}" id="rom-root" data-can-manage-romaneio="{{ 'true' if can_manage_romaneio else 'false' }}">
     <!-- TOOLBAR -->
-    <div class="rom-toolbar" style="padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
-        <div style="display: flex; gap: 8px; flex: 1;">
-            <input type="search" id="rom-busca" class="eui-input" placeholder="Buscar por número ou orçamento…" style="flex: 1; max-width: 300px;">
-            <select id="rom-filtro-status" class="eui-input" style="width: 150px;">
-                <option value="">Todos os status</option>
-                <option value="Rascunho">Rascunho</option>
-                <option value="Pronto">Pronto</option>
-                <option value="Expedido">Expedido</option>
-            </select>
+    <div class="rom-toolbar">
+        <div class="rom-busca">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" id="rom-busca" class="eui-input" placeholder="Número, orçamento, NF ou cliente">
+        </div>
+        <div class="rom-filtros" id="rom-filtros">
+            <button type="button" class="rom-filtro is-active" data-status="">Todos <b data-cont="">0</b></button>
+            <button type="button" class="rom-filtro" data-status="Rascunho">Rascunho <b data-cont="Rascunho">0</b></button>
+            <button type="button" class="rom-filtro" data-status="Pronto">Pronto <b data-cont="Pronto">0</b></button>
+            <button type="button" class="rom-filtro" data-status="Expedido">Expedido <b data-cont="Expedido">0</b></button>
+            <button type="button" class="rom-filtro rom-filtro--alerta" data-status="sem_comprovante">Sem comprovante <b data-cont="sem_comprovante">0</b></button>
         </div>
         <button class="eui-btn eui-btn--primary" id="rom-btn-novo"><i class="fas fa-plus"></i> Novo Romaneio</button>
     </div>
 
     <!-- TABELA -->
-    <div class="eui-card__body">
-        <div class="rom-list-wrap">
-            <table class="rom-table">
-                <thead>
-                    <tr>
-                        <th style="width: 40px;"></th>
-                        <th style="width: 130px;">Número</th>
-                        <th style="width: 100px;">Data</th>
-                        <th>Cliente</th>
-                        <th style="width: 110px; text-align: center;">Ordens/NF</th>
-                        <th style="width: 100px; text-align: center;">Volumes</th>
-                        <th style="width: 90px;">Frete</th>
-                        <th style="width: 100px;">Status</th>
-                        <th style="width: 230px; text-align: right;">Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="rom-tbody">
-                    <tr><td colspan="9" class="rom-empty">Carregando…</td></tr>
-                </tbody>
-            </table>
-        </div>
+    <div class="rom-list-wrap">
+        <table class="rom-table">
+            <thead>
+                <tr>
+                    <th style="width: 38px;"></th>
+                    <th style="width: 140px;">Número</th>
+                    <th style="width: 100px;">Data</th>
+                    <th>Cliente</th>
+                    <th class="rom-col-num" style="width: 60px;">NFs</th>
+                    <th class="rom-col-num" style="width: 80px;">Volumes</th>
+                    <th class="rom-col-num" style="width: 100px;">Peso</th>
+                    <th style="width: 110px;">Frete</th>
+                    <th style="width: 190px;">Status</th>
+                    <th style="width: 52px;"></th>
+                </tr>
+            </thead>
+            <tbody id="rom-tbody">
+                <tr><td colspan="10" class="rom-empty">Carregando…</td></tr>
+            </tbody>
+        </table>
     </div>
+    <div class="rom-rodape" id="rom-rodape"></div>
 </div>
 
 <!-- MODAL DE EDIÇÃO/NOVO -->
@@ -625,19 +646,76 @@
         });
     }
 
+    // Carrega a lista uma vez e filtra aqui: antes cada tecla da busca pedia
+    // todos os romaneios de novo ao servidor.
+    let romaneiosTodos = [];
+    let filtroStatus = "";
+
     async function carregarRomaneios() {
         try {
-            const status = ($("rom-filtro-status").value || "").trim();
-            const busca = ($("rom-busca").value || "").trim();
-            const params = new URLSearchParams();
-            if (status) params.set("status", status);
-            if (busca) params.set("q", busca);
-            
-            const data = await api("/api/expedicao/romaneio-fat?" + params.toString());
-            renderTabela(data.romaneios || []);
+            const data = await api("/api/expedicao/romaneio-fat");
+            romaneiosTodos = data.romaneios || [];
+            atualizarContadores();
+            aplicarFiltros();
         } catch (e) {
             toast(e.message, "error");
+            if (!romaneiosTodos.length) {
+                $("rom-tbody").innerHTML = '<tr><td colspan="10" class="rom-empty">Não foi possível carregar os romaneios.</td></tr>';
+            }
         }
+    }
+
+    function semAcento(v) {
+        return String(v == null ? "" : v).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    }
+
+    function filtrarRomaneios() {
+        const busca = semAcento($("rom-busca").value.trim());
+        return romaneiosTodos.filter((r) => {
+            if (filtroStatus === "sem_comprovante") {
+                if (!r.tem_pendencia_comprovante) return false;
+            } else if (filtroStatus && r.status !== filtroStatus) {
+                return false;
+            }
+            if (!busca) return true;
+            const campos = [r.numero_romaneio, r.orcamento, r.cliente, ...(r.clientes || [])];
+            (r.nfs || []).forEach((nf) => campos.push(nf.numero_nf, nf.cliente, nf.orcamento, nf.ordem_compra));
+            return campos.some((c) => semAcento(c).includes(busca));
+        });
+    }
+
+    function aplicarFiltros() {
+        const lista = filtrarRomaneios();
+        renderTabela(lista);
+        const total = romaneiosTodos.length;
+        $("rom-rodape").textContent = lista.length === total
+            ? `${total} romaneio${total === 1 ? "" : "s"}`
+            : `${lista.length} de ${total} romaneios`;
+    }
+
+    function atualizarContadores() {
+        const cont = { "": romaneiosTodos.length, Rascunho: 0, Pronto: 0, Expedido: 0, sem_comprovante: 0 };
+        romaneiosTodos.forEach((r) => {
+            if (r.status in cont) cont[r.status] += 1;
+            if (r.tem_pendencia_comprovante) cont.sem_comprovante += 1;
+        });
+        document.querySelectorAll("#rom-filtros [data-cont]").forEach((el) => {
+            el.textContent = cont[el.dataset.cont] || 0;
+        });
+        // "Sem comprovante" só aparece quando tem o que mostrar.
+        const alerta = document.querySelector('#rom-filtros [data-status="sem_comprovante"]');
+        alerta.style.display = cont.sem_comprovante || filtroStatus === "sem_comprovante" ? "" : "none";
+    }
+
+    function formatarData(iso) {
+        // "2026-11-23" vira 22/11 com new Date() no fuso do Brasil (lê como UTC).
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : "—";
+    }
+
+    function formatarPeso(kg) {
+        const v = Number(kg) || 0;
+        return v ? v.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " kg" : "—";
     }
 
     let romaneiosCacheLista = [];
@@ -664,7 +742,7 @@
         romaneiosCacheLista = romaneios;
         const tb = $("rom-tbody");
         if (!romaneios.length) {
-            tb.innerHTML = '<tr><td colspan="9" class="rom-empty">Nenhum romaneio encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="10" class="rom-empty">Nenhum romaneio encontrado</td></tr>';
             return;
         }
 
@@ -681,23 +759,24 @@
 
         const clientes = (r.clientes && r.clientes.length) ? r.clientes : (r.cliente ? [r.cliente] : []);
         const clientesHtml = clientes.length
-            ? escapeHtml(clientes.join(", "))
-            : '<span style="color:#9ca3af;">—</span>';
+            ? `<div class="rom-cliente" title="${escapeHtml(clientes.join("\n"))}">${escapeHtml(clientes[0])}${clientes.length > 1 ? ` <span class="rom-cliente-mais">+${clientes.length - 1}</span>` : ""}</div>`
+            : '<span style="color:var(--eui-muted);">—</span>';
 
-        const linhaHeader = `<tr class="rom-row-header" data-id="${r.id}">
+        const linhaHeader = `<tr class="rom-row-header${aberto ? " is-open" : ""}" data-id="${r.id}" onclick="if (!event.target.closest('button')) toggleExpandirRomaneio(${r.id})">
             <td><button class="rom-expand-btn${aberto ? " is-open" : ""}" onclick="toggleExpandirRomaneio(${r.id})" title="Ver detalhes"><i class="fas fa-chevron-right"></i></button></td>
-            <td><strong>${escapeHtml(r.numero_romaneio)}</strong></td>
-            <td>${new Date(r.data_romaneio).toLocaleDateString("pt-BR")}</td>
+            <td><span class="rom-numero">${escapeHtml(r.numero_romaneio)}</span></td>
+            <td class="rom-data">${formatarData(r.data_romaneio)}</td>
             <td>${clientesHtml}</td>
-            <td style="text-align: center;">${r.qtde_nfs}</td>
-            <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
-            <td><span class="rom-badge ${freteClass}">${escapeHtml(freteLabel(r.tipo_frete))}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
-            <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span>${r.tem_pendencia_comprovante ? ' <span class="rom-badge rom-badge--pendente">Sem comprovante</span>' : ""}</td>
+            <td class="rom-col-num">${r.qtde_nfs}</td>
+            <td class="rom-col-num">${r.qtde_volumes_total || 0}</td>
+            <td class="rom-col-num">${formatarPeso(r.peso_bruto_total)}</td>
+            <td><div class="rom-badges"><span class="rom-badge ${freteClass}">${escapeHtml(freteLabel(r.tipo_frete))}</span>${r.cce_modalidade_pendente ? `<span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</div></td>
+            <td><div class="rom-badges"><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${escapeHtml(r.status)}</span>${r.tem_pendencia_comprovante ? '<span class="rom-badge rom-badge--pendente"><i class="fas fa-file-circle-exclamation"></i> Sem comprovante</span>' : ""}${r.exclusao_pendente ? '<span class="rom-badge rom-badge--pendente" title="Exclusão solicitada"><i class="fas fa-trash"></i> Exclusão</span>' : ""}</div></td>
             <td style="text-align: right;"><button class="rom-actions-btn" onclick="toggleMenuAcoesRomaneio(event, ${r.id})" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>`;
 
         const linhaDetalhe = `<tr class="rom-row-detail${aberto ? "" : " hidden"}" data-id="${r.id}">
-            <td colspan="9">${aberto ? renderDetalheRomaneio(r) : ""}</td>
+            <td colspan="10">${aberto ? renderDetalheRomaneio(r) : ""}</td>
         </tr>`;
 
         return linhaHeader + linhaDetalhe;
@@ -1450,8 +1529,15 @@
         if (ev.key === "Enter") { ev.preventDefault(); consultarCnpjTransportadora(); }
     });
 
-    $("rom-filtro-status").addEventListener("change", () => carregarRomaneios());
-    $("rom-busca").addEventListener("input", () => carregarRomaneios());
+    document.querySelectorAll("#rom-filtros .rom-filtro").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            filtroStatus = btn.dataset.status;
+            document.querySelectorAll("#rom-filtros .rom-filtro").forEach((b) => b.classList.toggle("is-active", b === btn));
+            atualizarContadores();
+            aplicarFiltros();
+        });
+    });
+    $("rom-busca").addEventListener("input", () => aplicarFiltros());
 
     carregarRomaneios();
 

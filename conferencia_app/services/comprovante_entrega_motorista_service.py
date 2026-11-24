@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime
 
 from flask import current_app
@@ -262,3 +263,30 @@ def sincronizar_automatico() -> dict | None:
             "Falha na sincronizacao automatica dos canhotos do motorista."
         )
         return None
+
+
+_LOCK_SYNC_AUTO = threading.Lock()
+
+
+def sincronizar_automatico_em_segundo_plano(app) -> None:
+    """Dispara o sincronizar_automatico numa thread, para a listagem de
+    romaneios nao esperar por ele. Uma por vez por processo; o intervalo de
+    60 s continua valendo la dentro."""
+    if not _LOCK_SYNC_AUTO.acquire(blocking=False):
+        return
+
+    def _rodar():
+        try:
+            with app.app_context():
+                try:
+                    sincronizar_automatico()
+                finally:
+                    db.session.remove()
+        finally:
+            _LOCK_SYNC_AUTO.release()
+
+    try:
+        threading.Thread(target=_rodar, daemon=True, name="romaneio-sync-canhotos").start()
+    except Exception:
+        _LOCK_SYNC_AUTO.release()
+        raise

@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, session, current_app
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from ..extensions import db
 from ..models import (
     ExpedicaoRomaneio,
@@ -511,16 +512,61 @@ def _registro_conferencia_da_nf(numero_nf: str) -> ExpedicaoConferenciaSimples |
     )
 
 
-def _info_comprovantes_romaneio(romaneio) -> tuple[dict, bool]:
+def _registros_por_nf(numeros_nf) -> dict:
+    """Mesmo resultado de _registro_conferencia_da_nf, para varias NFs em 4
+    consultas no total. A listagem chamava a versao de uma NF para cada NF
+    expedida (ate 4 consultas cada) e passava de mil idas ao MySQL."""
+    numeros = sorted({str(n or "").strip() for n in numeros_nf if str(n or "").strip()})
+    if not numeros:
+        return {}
+
+    def _em_lotes(modelo, *filtros, ordem):
+        linhas = []
+        for i in range(0, len(numeros), 500):
+            lote = numeros[i:i + 500]
+            linhas += modelo.query.filter(modelo.numero_nf.in_(lote), *filtros).order_by(ordem).all()
+        return linhas
+
+    ordens: dict = {}
+    for ordem in _em_lotes(ExpedicaoOrdemFat, ordem=ExpedicaoOrdemFat.id):
+        ordens.setdefault(ordem.numero_nf, ordem)
+    for ordem in _em_lotes(ExpedicaoOrdemST, ordem=ExpedicaoOrdemST.id):
+        ordens.setdefault(ordem.numero_nf, ordem)
+
+    ids = sorted({o.expedicao_registro_id for o in ordens.values() if o.expedicao_registro_id})
+    por_id: dict = {}
+    for i in range(0, len(ids), 500):
+        for registro in ExpedicaoConferenciaSimples.query.filter(ExpedicaoConferenciaSimples.id.in_(ids[i:i + 500])):
+            por_id[registro.id] = registro
+
+    fallback: dict = {}
+    for registro in _em_lotes(ExpedicaoConferenciaSimples, ExpedicaoConferenciaSimples.origem == "Romaneio",
+                              ordem=ExpedicaoConferenciaSimples.id.desc()):
+        fallback.setdefault(registro.numero_nf, registro)
+
+    resultado = {}
+    for numero in numeros:
+        ordem = ordens.get(numero)
+        registro = por_id.get(ordem.expedicao_registro_id) if ordem is not None and ordem.expedicao_registro_id else None
+        registro = registro or fallback.get(numero)
+        if registro is not None:
+            resultado[numero] = registro
+    return resultado
+
+
+def _info_comprovantes_romaneio(romaneio, registros: dict | None = None) -> tuple[dict, bool]:
     """Para romaneios Expedidos, retorna {numero_nf: {registro_id, canhoto_pendente}}
     e se ha qualquer NF ainda sem comprovante anexado. Para os demais status
-    nao faz nenhuma consulta extra."""
+    nao faz nenhuma consulta extra. `registros` vem de _registros_por_nf
+    quando quem chama ja buscou de varios romaneios de uma vez."""
     info: dict = {}
     if romaneio.status != "Expedido":
         return info, False
+    if registros is None:
+        registros = _registros_por_nf(nf.numero_nf for nf in romaneio.nfs or [])
     tem_pendencia = False
     for nf in romaneio.nfs or []:
-        registro = _registro_conferencia_da_nf(nf.numero_nf)
+        registro = registros.get(str(nf.numero_nf or "").strip())
         if registro is None:
             continue
         # So e pendente enquanto o registro segue Expedido sem canhoto. Registros
@@ -636,12 +682,14 @@ def listar_romaneios():
     """Lista todos os romaneios com filtros opcionais."""
     # Puxa automaticamente os canhotos ja tirados pelos motoristas no app para
     # os romaneios CIF pendentes (best-effort, com throttle interno).
+    # Em segundo plano: a varredura (LIKE em todas as solicitacoes de entrega
+    # para cada NF CIF sem canhoto) segurava a tela em "Carregando...".
     try:
         from ..services.comprovante_entrega_motorista_service import (
-            sincronizar_automatico,
+            sincronizar_automatico_em_segundo_plano,
         )
 
-        sincronizar_automatico()
+        sincronizar_automatico_em_segundo_plano(current_app._get_current_object())
     except Exception:
         current_app.logger.exception(
             "Falha ao sincronizar canhotos do motorista na listagem de romaneios."
@@ -650,8 +698,9 @@ def listar_romaneios():
     status = (request.args.get("status") or "").strip()
     busca = (request.args.get("q") or "").strip().lower()
 
-    query = ExpedicaoRomaneio.query.order_by(ExpedicaoRomaneio.criado_em.desc())
-    
+    query = ExpedicaoRomaneio.query.options(selectinload(ExpedicaoRomaneio.nfs)).order_by(
+        ExpedicaoRomaneio.criado_em.desc())
+
     if status:
         query = query.filter_by(status=status)
     
@@ -681,10 +730,26 @@ def listar_romaneios():
             nomes.append(r.cliente)
         return nomes
 
+    registros = _registros_por_nf(
+        nf.numero_nf for r in romaneios if r.status == "Expedido" for nf in r.nfs or [])
+    exclusoes: dict = {}
+    ids_rascunho = [r.id for r in romaneios if r.status == "Rascunho"]
+    if ids_rascunho:
+        for exclusao in (ExpedicaoRomaneioExclusao.query
+                         .filter(ExpedicaoRomaneioExclusao.romaneio_id.in_(ids_rascunho),
+                                 ExpedicaoRomaneioExclusao.status == "Pendente")
+                         .order_by(ExpedicaoRomaneioExclusao.created_at.desc())):
+            exclusoes.setdefault(exclusao.romaneio_id, {
+                "id": exclusao.id,
+                "solicitante": exclusao.solicitante,
+                "motivo": exclusao.motivo,
+                "created_at": exclusao.created_at.isoformat() if exclusao.created_at else None,
+            })
+
     data = []
     for r in romaneios:
         peso_total, volumes_total = _calcular_totais_nfs(r.nfs or [])
-        comprovantes_info, tem_pendencia_comprovante = _info_comprovantes_romaneio(r)
+        comprovantes_info, tem_pendencia_comprovante = _info_comprovantes_romaneio(r, registros)
         data.append({
             "id": r.id,
             "numero_romaneio": r.numero_romaneio,
@@ -718,7 +783,7 @@ def listar_romaneios():
             "criado_em": r.criado_em.isoformat() if r.criado_em else None,
             "cce_modalidade_pendente": bool(r.cce_modalidade_pendente),
             "cce_modalidade_detalhe": r.cce_modalidade_detalhe,
-            "exclusao_pendente": _exclusao_pendente_dict(r.id) if r.status == "Rascunho" else None,
+            "exclusao_pendente": exclusoes.get(r.id),
         })
     
     return jsonify({"romaneios": data})
