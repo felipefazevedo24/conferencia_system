@@ -1311,6 +1311,9 @@ def finalizar_romaneio(romaneio_id):
 
     payload = request.get_json(silent=True) or {}
     aprovar = bool(payload.get("aprovar"))
+    # Operador decidiu seguir com a divergência sem pedir CC-e: finaliza, mas
+    # não marca pendência nem avisa o Faturamento no Teams.
+    sem_cce = aprovar and bool(payload.get("sem_cce"))
 
     analise = _analisar_divergencia_frete(romaneio)
     divergentes = analise["divergentes"]
@@ -1333,7 +1336,9 @@ def finalizar_romaneio(romaneio_id):
             f"NF {d['numero_nf']}: romaneio {d['frete_romaneio']} × nota {d['frete_nf_label']}"
             for d in divergentes
         )
-        romaneio.cce_modalidade_pendente = True
+        if sem_cce:
+            detalhe = "Seguiu sem CC-e — " + detalhe
+        romaneio.cce_modalidade_pendente = not sem_cce
         romaneio.cce_modalidade_aprovado_por = session["username"]
         romaneio.cce_modalidade_aprovado_em = agora_br()
         romaneio.cce_modalidade_detalhe = detalhe[:1000]
@@ -1343,13 +1348,15 @@ def finalizar_romaneio(romaneio_id):
     romaneio.atualizado_em = agora_br()
     db.session.commit()
 
-    if divergentes and aprovar:
+    if divergentes and aprovar and not sem_cce:
         _notificar_cce_modalidade_faturamento(romaneio, divergentes)
 
     entrega_criada, entrega_mensagem = _gerar_solicitacao_entrega_cif(romaneio)
     _gerar_viagem_automatica_st(romaneio)
 
-    if divergentes and aprovar:
+    if divergentes and sem_cce:
+        mensagem = "Romaneio finalizado sem carta de correção."
+    elif divergentes and aprovar:
         mensagem = (
             "Romaneio finalizado. Solicitada carta de correção da modalidade "
             "de transporte ao Faturamento."
