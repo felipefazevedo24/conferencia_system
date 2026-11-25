@@ -1219,10 +1219,26 @@
             menu.innerHTML = montarAcoes(o);
             menu.dataset.cod = String(cod);
             const rect = btnEl.getBoundingClientRect();
-            menu.style.top = (rect.bottom + 4) + "px";
             menu.style.left = "auto";
             menu.style.right = (window.innerWidth - rect.right) + "px";
+            menu.style.maxHeight = "";
+            menu.style.overflowY = "";
             menu.classList.add("open");
+            // Nas ultimas linhas o menu passava do fim da tela: abre pra cima
+            // quando nao cabe embaixo; sem espaco em nenhum lado, rola.
+            const margem = 8;
+            const alturaMenu = menu.offsetHeight;
+            const espacoAbaixo = window.innerHeight - rect.bottom - margem;
+            const espacoAcima = rect.top - margem;
+            let top = rect.bottom + 4;
+            if (alturaMenu > espacoAbaixo && espacoAcima > espacoAbaixo) {
+                top = Math.max(margem, rect.top - 4 - alturaMenu);
+                if (alturaMenu > espacoAcima) menu.style.maxHeight = (espacoAcima - 4) + "px";
+            } else if (alturaMenu > espacoAbaixo) {
+                menu.style.maxHeight = (espacoAbaixo - 4) + "px";
+            }
+            if (menu.style.maxHeight) menu.style.overflowY = "auto";
+            menu.style.top = top + "px";
         }
 
         function fecharMenuAcoes() {
