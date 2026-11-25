@@ -2849,7 +2849,7 @@ async function cbHtmlNfe() {
   const tabAguardando = aguardando.length
     ? `<table class="erp-table"><thead><tr><th>Data</th><th>NFC-e</th><th>Veículo</th><th>Litros</th><th>Total</th></tr></thead><tbody>${aguardando.map((a) => `<tr>
         <td>${formatDateTime(a.data)}</td><td>${a.numero_nfce || '-'}</td><td>${a.veiculo_label || '-'}</td>
-        <td>${cbNum(a.litros, 2)}</td><td>${cbMoeda(a.valor_total)}</td>
+        <td>${a.litros != null ? cbNum(a.litros, 2) : '-'}</td><td>${cbMoeda(a.valor_total)}</td>
       </tr>`).join('')}</tbody></table>`
     : '<div class="vt-mini" style="padding:0 16px 16px;">Nenhuma.</div>';
   const mesAtual = new Date().toISOString().slice(0, 7);

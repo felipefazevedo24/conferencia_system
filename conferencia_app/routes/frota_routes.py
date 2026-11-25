@@ -666,9 +666,24 @@ def listar_faturas():
     faturas = FrotaFaturaCombustivel.query.order_by(FrotaFaturaCombustivel.emitida_em.desc()).limit(200).all()
     faturadas = combustivel_svc.chaves_faturadas()
     com_chave = FrotaAbastecimento.query.filter(FrotaAbastecimento.chave_nfce.isnot(None)).all()
+    aguardando = [_abast_dict(a) for a in com_chave if a.chave_nfce not in faturadas]
+    # Outras compras (óleo etc.) também são faturadas pela NF-e do posto.
+    for c in FrotaCompraPosto.query.all():
+        if c.chave_nfce in faturadas:
+            continue
+        aguardando.append({
+            "id": c.id,
+            "outra_compra": True,
+            "data": c.data.isoformat() if c.data else None,
+            "numero_nfce": c.numero_nfce,
+            "veiculo_label": f"Outra compra: {c.descricao or '-'} · {c.departamento or 'sem departamento'}",
+            "litros": None,
+            "valor_total": c.valor_total,
+        })
+    aguardando.sort(key=lambda x: x["data"] or "")
     return jsonify({
         "faturas": [combustivel_svc.fatura_dict(f) for f in faturas],
-        "aguardando_nfe": [_abast_dict(a) for a in com_chave if a.chave_nfce not in faturadas],
+        "aguardando_nfe": aguardando,
     })
 
 
