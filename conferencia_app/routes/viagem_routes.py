@@ -32,6 +32,7 @@ from ..models import (
 from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
 from ..services.agendamento_service import sincronizar_motoristas_usuarios
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
+from ..services import departamento_service as departamento_svc
 from ..services.solicitacao_coleta_service import validar_liberacao_coleta
 from ..services.frota_combustivel_service import KM_LIMITE_VIAGEM
 from ..services import motorista_app_service as motorista_app_svc
@@ -2142,19 +2143,17 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "liberacao_revogada": liberacao_revogada})
 
 
-DEPARTAMENTOS_SOLICITANTES = ("COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES")
-
-
 def _exigir_departamentos(solicitacoes: list, payload: dict):
     """Solicitação só entra em viagem com departamento: é ele que paga o
     combustível no rateio. Aplica o que veio em payload["departamentos"]
     ({id: depto}) e, se ainda faltar algum, devolve a lista para a tela pedir."""
     informados = payload.get("departamentos") if isinstance(payload.get("departamentos"), dict) else {}
+    validos = departamento_svc.nomes_ativos()
     for sol in solicitacoes:
         dep = str(informados.get(str(sol.id)) or "").strip().upper()
         if not dep:
             continue
-        if dep not in DEPARTAMENTOS_SOLICITANTES:
+        if dep not in validos:
             return jsonify({"sucesso": False, "msg": f"Departamento inválido: {dep}."}), 400
         sol.departamento_solicitante = dep
     faltando = [s for s in solicitacoes if not str(s.departamento_solicitante or "").strip()]

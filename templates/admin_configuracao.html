@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Configuração - Columbia Sync{% endblock %}
+{% block shell_title %}Configuração{% endblock %}
+{% block shell_subtitle %}Cadastros usados em vários módulos.{% endblock %}
+
+{% block extra_head %}
+<style>
+.cfg-shell{max-width:760px;margin:0 auto;padding:24px}
+.cfg-add{display:flex;gap:10px;margin-bottom:14px}
+.cfg-add .eui-input{flex:1}
+.cfg-lista{display:grid;gap:6px}
+.cfg-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.cfg-item.inativo .cfg-nome{color:#94a3b8;text-decoration:line-through}
+.cfg-nome{font-weight:700;color:#0f172a}
+.cfg-switch{display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;cursor:pointer}
+.cfg-switch input{width:18px;height:18px;cursor:pointer}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cfg-shell eui-scope">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Administração</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-sliders"></i> Configuração</h1>
+        </div>
+    </header>
+
+    <section class="eui-card">
+        <div class="eui-card__head">
+            <div>
+                <div class="eui-card__title">Departamentos</div>
+                <div class="eui-card__sub">Usados na solicitação de veículo, nas viagens e no rateio do combustível.</div>
+            </div>
+        </div>
+        <div class="eui-card__body">
+            <form class="cfg-add" id="cfgAddForm">
+                <input class="eui-input" id="cfgNome" maxlength="50" placeholder="Novo departamento" autocomplete="off">
+                <button type="submit" class="eui-btn eui-btn--primary"><i class="fas fa-plus"></i> Adicionar</button>
+            </form>
+            <div class="cfg-lista" id="cfgLista"><div class="eui-empty">Carregando...</div></div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const cfgEsc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function cfgToast(msg, tipo) {
+    if (typeof showToast === 'function') { showToast(msg, tipo); return; }
+    const el = document.createElement('div');
+    el.className = 'eui-toast ' + (tipo === 'error' ? 'eui-toast--error' : 'eui-toast--success');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:9999';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+}
+
+function cfgRender(lista) {
+    const box = document.getElementById('cfgLista');
+    if (!lista.length) { box.innerHTML = '<div class="eui-empty">Nenhum departamento.</div>'; return; }
+    box.innerHTML = lista.map((d) => `
+        <div class="cfg-item ${d.ativo ? '' : 'inativo'}">
+            <span class="cfg-nome">${cfgEsc(d.nome)}</span>
+            <label class="cfg-switch"><input type="checkbox" ${d.ativo ? 'checked' : ''} onchange="cfgAtivar(${d.id}, this)"> Ativo</label>
+        </div>`).join('');
+}
+
+async function cfgReq(url, opts) {
+    const r = await fetch(url, opts);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.msg || 'Não foi possível salvar.');
+    return d;
+}
+
+async function cfgCarregar() {
+    try { cfgRender((await cfgReq('/api/admin/departamentos')).departamentos); }
+    catch (e) { document.getElementById('cfgLista').innerHTML = `<div class="eui-empty">${cfgEsc(e.message)}</div>`; }
+}
+
+async function cfgAtivar(id, input) {
+    try {
+        const d = await cfgReq(`/api/admin/departamentos/${id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: input.checked }),
+        });
+        cfgRender(d.departamentos);
+    } catch (e) {
+        input.checked = !input.checked;
+        cfgToast(e.message, 'error');
+    }
+}
+
+document.getElementById('cfgAddForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('cfgNome');
+    if (!input.value.trim()) return;
+    try {
+        const d = await cfgReq('/api/admin/departamentos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome: input.value }),
+        });
+        input.value = '';
+        cfgRender(d.departamentos);
+    } catch (err) {
+        cfgToast(err.message, 'error');
+    }
+});
+
+cfgCarregar();
+</script>
+{% endblock %}

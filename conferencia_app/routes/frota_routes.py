@@ -17,6 +17,7 @@ from ..models import (
     AgendamentoVeiculo,
     FrotaAbastecimento,
     FrotaChecklistDiario,
+    FrotaCompraPosto,
     FrotaDocumento,
     FrotaFaturaCombustivel,
     FrotaManutencao,
@@ -613,6 +614,50 @@ def importar_xml_combustivel():
         return jsonify({"sucesso": False, "msg": "Selecione os XMLs do posto."}), 400
     resultados = combustivel_svc.importar_xmls(arquivos, _user())
     return jsonify({"sucesso": True, "resultados": resultados})
+
+
+@frota_bp.route("/compras-posto", methods=["GET"])
+@permission_required(PERM)
+def listar_compras_posto():
+    return jsonify(combustivel_svc.compras_dict())
+
+
+@frota_bp.route("/compras-posto/<int:cid>", methods=["PATCH"])
+@permission_required(PERM)
+def departamento_compra_posto(cid: int):
+    compra = db.session.get(FrotaCompraPosto, cid)
+    if not compra:
+        return jsonify({"sucesso": False, "msg": "Não encontrada."}), 404
+    p = request.get_json(silent=True) or {}
+    try:
+        combustivel_svc.definir_departamento_compra(compra, p.get("departamento"), _user())
+    except ValueError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 400
+    return jsonify({"sucesso": True})
+
+
+@frota_bp.route("/compras-posto/<int:cid>", methods=["DELETE"])
+@permission_required(PERM)
+def excluir_compra_posto(cid: int):
+    compra = db.session.get(FrotaCompraPosto, cid)
+    if not compra:
+        return jsonify({"sucesso": False, "msg": "Não encontrada."}), 404
+    fechada = combustivel_svc.fatura_fechada_da_nfce(compra.chave_nfce)
+    if fechada:
+        return jsonify({"sucesso": False, "msg": f"NFC-e da NF-e {fechada.numero}, que está fechada. Reabra a NF-e antes."}), 400
+    db.session.delete(compra)
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@frota_bp.route("/compras-posto/<int:cid>/xml", methods=["GET"])
+@permission_required(PERM)
+def xml_compra_posto(cid: int):
+    compra = db.session.get(FrotaCompraPosto, cid)
+    if not compra or not compra.xml_nfce:
+        return jsonify({"sucesso": False, "msg": "XML não encontrado."}), 404
+    return send_file(BytesIO(compra.xml_nfce), mimetype="application/xml", as_attachment=True,
+                     download_name=f"{compra.chave_nfce}.xml")
 
 
 @frota_bp.route("/faturas", methods=["GET"])

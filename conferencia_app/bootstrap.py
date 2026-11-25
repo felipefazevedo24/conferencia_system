@@ -1464,6 +1464,12 @@ def initialize_database(app: Flask) -> None:
             pass
 
         try:
+            from .services.departamento_service import semear_padrao
+            semear_padrao()
+        except Exception:
+            db.session.rollback()
+
+        try:
             _ensure_solicitacao_coleta_tabelas()
         except Exception:
             pass

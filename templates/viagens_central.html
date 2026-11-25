@@ -192,6 +192,7 @@
                 <div class="vt-tabs">
                     <button class="vt-tab is-active" data-cb="ABAST" onclick="cbTrocar('ABAST')">Abastecimentos</button>
                     <button class="vt-tab" data-cb="NFE" onclick="cbTrocar('NFE')">NF-e do posto</button>
+                    <button class="vt-tab" data-cb="OUTRAS" onclick="cbTrocar('OUTRAS')">Outras compras</button>
                 </div>
                 <label class="eui-btn eui-btn--primary" style="margin-left:auto; cursor:pointer;"><i class="fas fa-file-import"></i> Importar XML do posto<input type="file" accept=".xml" multiple hidden onchange="cbImportar(this)"></label>
             </div>
@@ -1730,7 +1731,8 @@ function acaoAbrirOrigem(id) {
 // ---------------------------------------------------------------- Departamento
 // Sem valor padrão de propósito: com LOGÍSTICA pré-selecionado o gestor só
 // confirmava, e o rateio de combustível caía 99% em Logística.
-const DEPARTAMENTOS = ['COMPRAS', 'ASSISTÊNCIA TÉCNICA', 'ENGENHARIA/PCP', 'LOGÍSTICA', 'FACILITIES'];
+// Lista vem de Administração > Configuração.
+const DEPARTAMENTOS = {{ departamentos|tojson }};
 const opcoesDepartamento = (valor = '') => '<option value="">Selecione...</option>'
   + DEPARTAMENTOS.map((d) => `<option value="${d}" ${d === valor ? 'selected' : ''}>${d}</option>`).join('');
 
@@ -2775,7 +2777,9 @@ async function cbCarregar() {
   const el = document.getElementById('cb-conteudo');
   el.innerHTML = '<div class="vt-empty">Carregando...</div>';
   try {
-    el.innerHTML = cbState.sub === 'NFE' ? await cbHtmlNfe() : await cbHtmlAbast();
+    el.innerHTML = cbState.sub === 'NFE' ? await cbHtmlNfe()
+      : cbState.sub === 'OUTRAS' ? await cbHtmlOutras()
+      : await cbHtmlAbast();
   } catch (e) {
     el.innerHTML = `<div class="vt-empty">${e.message}</div>`;
   }
@@ -2796,6 +2800,34 @@ async function cbHtmlAbast() {
     <td>${a.fatura_numero ? `<a href="#" onclick="cbAbrirNfe(${a.fatura_id}); return false;">${a.fatura_numero}</a>` : (a.chave_nfce ? '<span class="eui-badge eui-badge--warning">Aguardando</span>' : '-')}</td>
     <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" title="Excluir" onclick="cbExcluir('/api/frota/abastecimentos/${a.id}', this)"><i class="fas fa-trash"></i></button></td>
   </tr>`).join('')}</tbody></table>`;
+}
+
+// NFC-e do posto sem combustível (óleo, aditivo...): não entra no rateio por
+// km, vai inteira para o departamento escolhido aqui.
+async function cbHtmlOutras() {
+  const lista = await cbGet('/api/frota/compras-posto');
+  if (!lista.length) return '<div class="vt-empty">Nenhuma. NFC-e do posto sem combustível aparecem aqui ao importar o XML.</div>';
+  return `<table class="erp-table"><thead><tr><th>Data</th><th>NFC-e</th><th>Itens</th><th>Total</th><th>Departamento</th><th>NF-e</th><th></th></tr></thead><tbody>${lista.map((c) => `<tr>
+    <td>${formatDateTime(c.data)}</td>
+    <td>${c.numero_nfce ? `<a href="/api/frota/compras-posto/${c.id}/xml" title="Baixar XML">${rtEsc(c.numero_nfce)}</a>` : '-'}</td>
+    <td>${rtEsc(c.descricao || '-')}</td>
+    <td><strong>${cbMoeda(c.valor_total)}</strong></td>
+    <td><select class="eui-select" style="min-width:190px;${c.departamento ? '' : 'border-color:var(--eui-warning, #b45309);'}" ${c.fatura_fechada ? 'disabled title="NF-e fechada"' : ''} onchange="cbDepCompra(${c.id}, this)">${opcoesDepartamento(c.departamento || '')}</select></td>
+    <td>${c.fatura_numero ? `<a href="#" onclick="cbAbrirNfe(${c.fatura_id}); return false;">${rtEsc(c.fatura_numero)}</a>` : '<span class="eui-badge eui-badge--warning">Aguardando</span>'}</td>
+    <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" title="Excluir" onclick="cbExcluir('/api/frota/compras-posto/${c.id}', this)"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('')}</tbody></table>`;
+}
+
+async function cbDepCompra(id, sel) {
+  if (!sel.value) return;
+  const r = await fetch(`/api/frota/compras-posto/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ departamento: sel.value }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { showToast(d.msg || 'Não foi possível salvar.', 'error'); cbCarregar(); return; }
+  sel.style.borderColor = '';
+  showToast('Departamento salvo.', 'success');
 }
 
 async function cbHtmlNfe() {
@@ -2892,8 +2924,8 @@ async function cbAbrirNfe(id) {
     <table class="erp-table"><thead><tr><th>NFC-e</th><th>Data</th><th>Veículo</th><th>Litros</th><th>Valor</th><th></th></tr></thead><tbody>${d.notas.map((n) => `<tr>
       <td>${n.numero} <span class="vt-mini">série ${n.serie}</span></td>
       <td>${n.lancada ? formatDateTime(n.data) : '-'}</td>
-      <td>${n.veiculo_label || '-'}</td>
-      <td>${n.lancada ? cbNum(n.litros, 2) : '-'}</td>
+      <td>${n.outra_compra ? `${rtEsc(n.veiculo_label)} · <strong>${rtEsc(n.departamento || 'sem departamento')}</strong>` : (n.veiculo_label || '-')}</td>
+      <td>${n.lancada && !n.outra_compra ? cbNum(n.litros, 2) : '-'}</td>
       <td>${n.lancada ? cbMoeda(n.valor) : '-'}</td>
       <td><span class="eui-badge ${n.lancada ? 'eui-badge--success' : 'eui-badge--danger'}">${n.lancada ? 'Lançada' : 'Não lançada'}</span></td>
     </tr>`).join('')}</tbody></table>

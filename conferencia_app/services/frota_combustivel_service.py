@@ -25,11 +25,13 @@ from ..models import (
     AgendamentoSolicitacao,
     AgendamentoVeiculo,
     FrotaAbastecimento,
+    FrotaCompraPosto,
     FrotaFaturaCombustivel,
     Viagem,
     ViagemParada,
 )
 from ..tempo import agora_br
+from . import departamento_service
 
 NS = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 DEPARTAMENTO_PADRAO = "LOGÍSTICA"
@@ -151,11 +153,12 @@ def _fmt_moeda(valor: float) -> str:
 # ----------------------------------------------------------------------------- importação
 def _importar_nfce(d: dict, conteudo: bytes, usuario: str) -> str:
     numero = d["numero"]
-    if FrotaAbastecimento.query.filter_by(chave_nfce=d["chave"]).first():
+    if (FrotaAbastecimento.query.filter_by(chave_nfce=d["chave"]).first()
+            or FrotaCompraPosto.query.filter_by(chave_nfce=d["chave"]).first()):
         raise ValueError(f"NFC-e {numero} já foi lançada.")
     combustiveis = [i for i in d["itens"] if i["combustivel"]]
     if not combustiveis:
-        raise ValueError(f"NFC-e {numero} não tem item de combustível.")
+        return _importar_outra_compra(d, conteudo, usuario)
     if not d["placa"]:
         raise ValueError(f"NFC-e {numero} sem placa nas informações complementares.")
     veiculo = _veiculo_por_placa(d["placa"])
@@ -182,6 +185,24 @@ def _importar_nfce(d: dict, conteudo: bytes, usuario: str) -> str:
         xml_nfce=conteudo,
     ))
     return f"NFC-e {numero} · {d['placa']} · {_fmt_moeda(d['valor_total'])}"
+
+
+def _importar_outra_compra(d: dict, conteudo: bytes, usuario: str) -> str:
+    """NFC-e sem combustível (óleo, aditivo...): não é de veículo, então não
+    exige placa nem KM. O departamento é escolhido depois, na tela."""
+    numero = d["numero"]
+    descricao = ", ".join(i["descricao"] for i in d["itens"] if i["descricao"]) or "Sem descrição"
+    db.session.add(FrotaCompraPosto(
+        chave_nfce=d["chave"],
+        numero_nfce=numero[:20],
+        data=d["emitida_em"] or agora_br(),
+        descricao=descricao[:400],
+        valor_total=d["valor_total"],
+        posto=d["emitente_nome"][:160] or None,
+        xml_nfce=conteudo,
+        criado_por=usuario,
+    ))
+    return f"NFC-e {numero} · outra compra ({descricao[:60]}) · {_fmt_moeda(d['valor_total'])} · defina o departamento"
 
 
 def _importar_fatura(d: dict, conteudo: bytes, usuario: str) -> str:
@@ -260,9 +281,31 @@ def conferir_fatura(fatura: FrotaFaturaCombustivel) -> dict:
         {a.chave_nfce: a for a in FrotaAbastecimento.query.filter(FrotaAbastecimento.chave_nfce.in_(refs)).all()}
         if refs else {}
     )
+    compras = (
+        {c.chave_nfce: c for c in FrotaCompraPosto.query.filter(FrotaCompraPosto.chave_nfce.in_(refs)).all()}
+        if refs else {}
+    )
     veiculos = _veiculos()
     notas = []
     for chave in refs:
+        c = compras.get(chave)
+        if c:
+            notas.append({
+                "chave": chave,
+                "numero": numero_da_chave(chave),
+                "serie": serie_da_chave(chave),
+                "lancada": True,
+                "outra_compra": True,
+                "compra_id": c.id,
+                "departamento": c.departamento,
+                "abastecimento_id": None,
+                "veiculo_id": None,
+                "veiculo_label": f"Outra compra: {c.descricao or '-'}"[:120],
+                "data": c.data.isoformat() if c.data else None,
+                "litros": None,
+                "valor": c.valor_total,
+            })
+            continue
         a = lancadas.get(chave)
         notas.append({
             "chave": chave,
@@ -276,7 +319,7 @@ def conferir_fatura(fatura: FrotaFaturaCombustivel) -> dict:
             "litros": a.litros if a else None,
             "valor": a.valor_total if a else None,
         })
-    soma = round(sum(a.valor_total or 0 for a in lancadas.values()), 2)
+    soma = round(sum(n["valor"] or 0 for n in notas if n["lancada"]), 2)
     diferenca = round((fatura.valor_total or 0) - soma, 2)
     faltando = sum(1 for n in notas if not n["lancada"])
     return {
@@ -284,6 +327,7 @@ def conferir_fatura(fatura: FrotaFaturaCombustivel) -> dict:
         "soma_nfce": soma,
         "diferenca": diferenca,
         "faltando": faltando,
+        "sem_departamento": sum(1 for n in notas if n.get("outra_compra") and not n.get("departamento")),
         "status": "Conferida" if refs and not faltando and abs(diferenca) < 0.01 else "Divergente",
     }
 
@@ -314,6 +358,7 @@ def fatura_dict(fatura: FrotaFaturaCombustivel, conferencia: dict | None = None)
         "soma_nfce": conferencia["soma_nfce"],
         "diferenca": conferencia["diferenca"],
         "faltando": conferencia["faltando"],
+        "sem_departamento": conferencia.get("sem_departamento", 0),
         "status": conferencia["status"],
     }
 
@@ -410,14 +455,27 @@ def ratear_fatura(fatura: FrotaFaturaCombustivel, conferencia: dict | None = Non
     veiculos = _veiculos()
 
     custo_veiculo: dict[int, float] = defaultdict(float)
-    for nota in conferencia["notas"]:
-        if nota["lancada"]:
-            custo_veiculo[nota["veiculo_id"]] += nota["valor"] or 0
-
     dep_valor: dict[str, float] = defaultdict(float)
     dep_km: dict[str, float] = defaultdict(float)
     por_veiculo = []
     avisos = []
+    total_compras = 0.0
+    for nota in conferencia["notas"]:
+        if not nota["lancada"]:
+            continue
+        if nota.get("outra_compra"):
+            # Não é combustível de veículo: vai inteira para o departamento
+            # escolhido, sem km.
+            if nota.get("departamento"):
+                dep_valor[nota["departamento"]] += nota["valor"] or 0
+                total_compras += nota["valor"] or 0
+            else:
+                avisos.append(
+                    f"NFC-e {nota['numero']} (outra compra, {_fmt_moeda(nota['valor'] or 0)}) sem departamento: "
+                    "fora do rateio até ser definido."
+                )
+            continue
+        custo_veiculo[nota["veiculo_id"]] += nota["valor"] or 0
     for vid, custo in custo_veiculo.items():
         km_dep, ignoradas = km_por_departamento(vid, inicio, fim)
         total_km = sum(km_dep.values())
@@ -438,7 +496,7 @@ def ratear_fatura(fatura: FrotaFaturaCombustivel, conferencia: dict | None = Non
             "custo_km": round(custo / total_km, 2) if total_km > 0 else None,
         })
 
-    total = round(sum(custo_veiculo.values()), 2)
+    total = round(sum(custo_veiculo.values()) + total_compras, 2)
     departamentos = [
         {"departamento": dep, "km": round(dep_km.get(dep, 0), 1), "valor": round(valor, 2)}
         for dep, valor in dep_valor.items()
@@ -487,6 +545,10 @@ def fechar_fatura(fatura: FrotaFaturaCombustivel, usuario: str) -> None:
             else f"diferença de {_fmt_moeda(conferencia['diferenca'])}"
         )
         raise ValueError(f"Só dá para fechar NF-e conferida: {motivo}.")
+    if conferencia["sem_departamento"]:
+        raise ValueError(
+            f"Defina o departamento de {conferencia['sem_departamento']} NFC-e de outra compra antes de fechar."
+        )
     fatura.fechamento_json = json.dumps(
         {"conferencia": conferencia, "rateio": ratear_fatura(fatura, conferencia)},
         ensure_ascii=False,
@@ -510,6 +572,38 @@ def fatura_fechada_da_nfce(chave: str | None) -> FrotaFaturaCombustivel | None:
         return None
     fatura = chaves_faturadas().get(chave)
     return fatura if fatura and fatura.fechada_em else None
+
+
+# ----------------------------------------------------------------------------- outras compras
+def compras_dict() -> list[dict]:
+    faturadas = chaves_faturadas()
+    saida = []
+    for c in FrotaCompraPosto.query.order_by(FrotaCompraPosto.data.desc()).limit(500).all():
+        fatura = faturadas.get(c.chave_nfce)
+        saida.append({
+            "id": c.id,
+            "data": c.data.isoformat() if c.data else None,
+            "numero_nfce": c.numero_nfce,
+            "descricao": c.descricao,
+            "valor_total": c.valor_total,
+            "departamento": c.departamento,
+            "fatura_id": fatura.id if fatura else None,
+            "fatura_numero": fatura.numero if fatura else None,
+            "fatura_fechada": bool(fatura and fatura.fechada_em),
+        })
+    return saida
+
+
+def definir_departamento_compra(compra: FrotaCompraPosto, departamento, usuario: str) -> None:
+    fechada = fatura_fechada_da_nfce(compra.chave_nfce)
+    if fechada:
+        raise ValueError(f"NFC-e da NF-e {fechada.numero}, que está fechada. Reabra a NF-e antes.")
+    departamento = departamento_service.normalizar(departamento)
+    if departamento not in departamento_service.nomes_ativos():
+        raise ValueError("Escolha um departamento da lista.")
+    compra.departamento = departamento
+    compra.departamento_por = usuario
+    db.session.commit()
 
 
 # ----------------------------------------------------------------------------- excel

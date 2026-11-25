@@ -280,17 +280,17 @@ HOME_MODULES = [
         "metric_key": "sessoes_ativas",
     },
     {
-        "id": "dashboard_admin",
-        "title": "Painel de Controle",
+        "id": "configuracao",
+        "title": "Configuração",
         "subtitle": "Administração",
-        "description": "Tenha visão executiva da operação e gargalos da rotina fiscal.",
-        "href": "/admin",
-        "icon": "fa-chart-line",
-        "permission": "PAGE_ADMIN_DASHBOARD",
+        "description": "Cadastre os departamentos usados nas viagens e no rateio do combustível.",
+        "href": "/admin/configuracao",
+        "icon": "fa-sliders",
+        "permission": "PAGE_ADMIN_CONFIGURACAO",
         "section": "Administração",
         "tone": "navy",
         "priority": 78,
-        "keywords": ["dashboard", "admin", "painel", "controle"],
+        "keywords": ["configuracao", "departamento", "admin", "cadastro"],
         "metric_key": "sessoes_ativas",
     },
     {
@@ -409,7 +409,7 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
         "expedicao_conferencia": _fmt_metric(value, "operação aberta", "operações abertas"),
         "romaneios": _fmt_metric(value, "operação aberta", "operações abertas"),
         "emails_nfe": _fmt_metric(value, "sessão ativa", "sessões ativas"),
-        "dashboard_admin": _fmt_metric(value, "sessão ativa", "sessões ativas"),
+        "configuracao": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "usuarios": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "historico": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "auditoria_acessos": _fmt_metric(value, "sessão ativa", "sessões ativas"),
@@ -631,12 +631,6 @@ def portaria_page():
     return render_template("portaria.html", user=session["username"])
 
 
-@page_bp.route("/admin")
-@permission_required("PAGE_ADMIN_DASHBOARD")
-def dashboard():
-    return render_template("dashboard.html", user=session["username"])
-
-
 @page_bp.route("/upload")
 @permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 def upload_page():
@@ -767,7 +761,7 @@ def frota_page():
 @login_required
 def viagens_page():
     from conferencia_app.auth import has_permission
-    from conferencia_app.services import viagem_relatorio_service
+    from conferencia_app.services import departamento_service, viagem_relatorio_service
     if not (has_permission("PAGE_LOGISTICA_VIAGEM") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
         return render_template("acesso_negado.html", user=session.get("username")), 403
     return render_template(
@@ -776,6 +770,7 @@ def viagens_page():
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
         relatorio_opcoes=viagem_relatorio_service.opcoes() if has_permission("PAGE_LOGISTICA_VIAGEM_RELATORIO") else None,
+        departamentos=departamento_service.nomes_ativos(),
     )
 
 

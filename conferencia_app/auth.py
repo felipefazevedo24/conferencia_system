@@ -76,7 +76,7 @@ PERMISSION_CATALOG = {
     "PAGE_ASSISTENCIA_PRODUCAO_PECAS": "Assistência Técnica > Solicitação de Produção de Peças (efetivar, estornar e cancelar)",
     "MANAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Gerenciar romaneios (editar, estornar e excluir)",
     "PAGE_EXPEDICAO_ROMANEIO": "Logística > Expedição > Romaneios",
-    "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
+    "PAGE_ADMIN_CONFIGURACAO": "Administração > Configuração (departamentos)",
     "PAGE_ADMIN_ATUALIZACOES": "Administração > Avisos de atualizações",
     "PAGE_ADMIN_ATUALIZACOES_CADASTRAIS": "Administração > Atualizações cadastrais recebidas",
     "PAGE_ADMIN_USUARIOS": "Administração > Gestão de acessos",

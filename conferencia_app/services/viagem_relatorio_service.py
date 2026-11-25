@@ -23,9 +23,8 @@ from sqlalchemy import and_, exists, func
 from ..extensions import db
 from ..models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Viagem, ViagemParada
 from ..tempo import agora_br
+from . import departamento_service as departamento_svc
 
-# Mesma lista da alocação (agendamento_routes, departamentos_validos).
-DEPARTAMENTOS = ("COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES")
 TIPOS = {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Uso avulso"}
 _ORIGENS = {
     "ORDEM_DE_COMPRA": "Ordem de Compra",
@@ -58,7 +57,7 @@ def opcoes() -> dict:
     return {
         "veiculos": [{"id": v.id, "nome": _rotulo_veiculo(v), "ativo": bool(v.ativo)} for v in veiculos],
         "motoristas": [{"id": m.id, "nome": m.nome, "ativo": bool(m.ativo)} for m in motoristas],
-        "departamentos": list(DEPARTAMENTOS),
+        "departamentos": departamento_svc.nomes_todos(),
         "tipos": [{"valor": k, "nome": v} for k, v in TIPOS.items()],
     }
 
@@ -69,7 +68,7 @@ def montar_filtros(args) -> dict:
     if fim < inicio:
         raise ValueError("A data final é anterior à inicial.")
     departamento = str(args.get("departamento") or "").strip()
-    if departamento and departamento not in DEPARTAMENTOS:
+    if departamento and departamento not in departamento_svc.nomes_todos():
         raise ValueError("Departamento inválido.")
     tipo = str(args.get("tipo") or "").strip().upper()
     if tipo and tipo not in TIPOS:

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from flask import Blueprint, abort, g, jsonify, render_template, request, session
 from sqlalchemy.exc import IntegrityError
 
-from ..auth import has_permission, is_admin_role, permission_required
+from ..auth import is_admin_role, permission_required
 from ..extensions import db
 from ..models import (
     PlannerBoard,
@@ -77,7 +77,7 @@ def _admin_responsaveis() -> list[str]:
     users = Usuario.query.order_by(Usuario.username.asc()).all()
     nomes = []
     for user in users:
-        if is_admin_role(user.role) or has_permission("PAGE_ADMIN_DASHBOARD", username=user.username, role=user.role):
+        if is_admin_role(user.role):
             nomes.append(user.username)
     return sorted(set(nomes), key=lambda x: x.casefold())
 

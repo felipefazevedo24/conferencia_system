@@ -295,7 +295,7 @@ def upload_fotos_preexpedicao_st(cod_ordem_compra):
 def excluir_ordem_conf_st(cod_ordem_compra):
     """Exclui (soft-delete) uma ordem ST do dashboard/fila. Mesma logica do
     FAT (ver expedicao_fat_routes.py::excluir_ordem_conf_cega): a linha e o
-    historico continuam no banco, localizaveis pela Auditoria de Expedicao."""
+    historico continuam no banco."""
     ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra, excluido=False).first()
     if not ordem:
         return jsonify({"error": "Ordem de compra nao encontrada."}), 404

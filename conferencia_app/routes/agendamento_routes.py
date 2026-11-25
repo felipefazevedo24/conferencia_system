@@ -30,6 +30,7 @@ from ..models import (
 )
 from ..services.email_service import enviar_email_agendamento_update
 from ..services.viagem_vinculo_service import filtro_vinculo_solicitacao
+from ..services import departamento_service as departamento_svc
 from ..compras.services import compras_service
 from ..services.erp_estoque_service import buscar_consumo_kardex_grv, buscar_estoque_grv
 from ..services.agendamento_service import (
@@ -3044,7 +3045,7 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         return jsonify({"error": "Selecione um motorista válido."}), 400
 
     departamento = str(payload.get("departamento_solicitante") or "").strip().upper()
-    departamentos_validos = ["COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES"]
+    departamentos_validos = departamento_svc.nomes_ativos()
     if not departamento or departamento not in departamentos_validos:
         return jsonify({"error": "Selecione o departamento solicitante."}), 400
 
@@ -3200,7 +3201,7 @@ def alocar_solicitacoes_lote_agendamento():
         return jsonify({"error": "A previsão de retorno deve ser maior que a saída."}), 400
 
     departamento = str(payload.get("departamento_solicitante") or "").strip().upper()
-    departamentos_validos = ["COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES"]
+    departamentos_validos = departamento_svc.nomes_ativos()
     # Departamento por solicitação (lote com departamentos diferentes); o
     # campo único continua valendo para quem não veio no mapa.
     mapa_raw = payload.get("departamentos") if isinstance(payload.get("departamentos"), dict) else {}
@@ -3516,44 +3517,6 @@ def rejeitar_cancelamento_solicitacao(solicitacao_id: int):
     _notificar_solicitante_agendamento(row, "Cancelamento rejeitado", f"Cancelamento rejeitado por {username}.")
     veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
-
-
-@agendamento_bp.route("/api/logistica/agendamento-veiculos/motoristas-km")
-@permission_required("PAGE_ADMIN_DASHBOARD")
-def motoristas_km_dashboard():
-    """Retorna km acumulado por motorista para exibir no dashboard principal."""
-    dias = int(request.args.get("dias", 30))
-    desde = agora_br() - timedelta(days=dias)
-    rows = (
-        db.session.query(
-            AgendamentoSolicitacao.motorista_id,
-            AgendamentoSolicitacao.motorista_nome,
-            db.func.count(AgendamentoSolicitacao.id).label("viagens"),
-            db.func.sum(AgendamentoSolicitacao.km_estimado).label("km_total"),
-        )
-        .filter(
-            AgendamentoSolicitacao.motorista_id.isnot(None),
-            AgendamentoSolicitacao.km_estimado.isnot(None),
-            AgendamentoSolicitacao.status.in_(["Alocada", "EmRota", "Concluida"]),
-            _filtro_solicitacao_visivel(),
-            AgendamentoSolicitacao.criado_em >= desde,
-        )
-        .group_by(AgendamentoSolicitacao.motorista_id, AgendamentoSolicitacao.motorista_nome)
-        .all()
-    )
-    motoristas = []
-    for r in rows:
-        km_total = float(r.km_total or 0)
-        viagens = int(r.viagens or 0)
-        motoristas.append({
-            "motorista_id": r.motorista_id,
-            "motorista_nome": str(r.motorista_nome or "").strip(),
-            "viagens": viagens,
-            "km_total": round(km_total, 1),
-            "km_medio": round(km_total / viagens, 1) if viagens else 0,
-        })
-    motoristas.sort(key=lambda x: x["km_total"], reverse=True)
-    return jsonify({"motoristas": motoristas, "dias": dias})
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/disponibilidade")

@@ -174,13 +174,12 @@
   **Relatório de custos** (`/financeiro/relatorio-custos`).
 
 ### Administração
-- **Dashboard** (`/admin`): visão gerencial.
+- **Configuração** (`/admin/configuracao`): cadastro dos departamentos usados
+  nas viagens e no rateio do combustível.
 - **Avisos de atualizações** (`/admin/atualizacoes`) e **Atualizações
   cadastrais** (`/admin/atualizacoes-cadastrais`).
 - **Gestão de acessos** (`/admin/usuarios`): usuários, papéis e permissões.
 - **Planejamento de tarefas** (`/planejamento`).
-- **Auditoria de Expedição** (`/expedicao/auditoria`): trilha de auditoria da
-  expedição (só Admin).
 - **E-mails de NF-e** (`/faturamento/emails-nfe`): configuração/envio de e-mails
   de NF-e.
 

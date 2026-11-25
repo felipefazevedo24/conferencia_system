@@ -61,7 +61,9 @@ from .routes.assistencia_producao_peca_routes import assistencia_producao_peca_b
 from .routes.expedicao_fat_routes import expedicao_fat_bp
 from .routes.expedicao_st_routes import expedicao_st_bp
 from .routes.expedicao_romaneio_routes import expedicao_romaneio_bp
-from .routes.expedicao_auditoria_routes import expedicao_auditoria_bp
+# A trilha de auditoria do Registro de expedição e do Romaneio é gravada por
+# listeners que se registram no import deste service.
+from .services import expedicao_trilha_service  # noqa: F401
 from .routes.expedicao_assistente_routes import expedicao_assistente_bp
 from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
@@ -91,6 +93,7 @@ from .routes.comex_financeiro_routes import comex_financeiro_bp
 from .routes.comex_fornecedor_routes import comex_fornecedor_bp
 from .routes.divergencia_aprovacao_routes import divergencia_aprovacao_bp
 from .routes.comunicado_routes import comunicado_bp
+from .routes.configuracao_routes import configuracao_bp
 
 
 def create_app(test_config=None) -> Flask:
@@ -133,7 +136,6 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(assistencia_tecnica_bp)
     app.register_blueprint(assistencia_producao_peca_bp)
     app.register_blueprint(expedicao_romaneio_bp)
-    app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(expedicao_assistente_bp)
     app.register_blueprint(comex_bp)
     app.register_blueprint(comex_custo_bp)
@@ -161,6 +163,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(solicitacao_nf_bp)
     app.register_blueprint(divergencia_aprovacao_bp)
     app.register_blueprint(comunicado_bp)
+    app.register_blueprint(configuracao_bp)
 
     register_error_handlers(app)
 

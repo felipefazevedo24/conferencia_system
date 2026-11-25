@@ -60,6 +60,22 @@ class AvisoAtualizacao(db.Model):
     atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
+class Departamento(db.Model):
+    """Departamentos da empresa (Administração > Configuração): quem paga a
+    viagem (departamento_solicitante) e o combustível no rateio.
+
+    Solicitações e NFC-e guardam o NOME, não o id: por isso departamento não
+    se apaga nem se renomeia, só se desativa — o histórico continua batendo.
+    """
+    __tablename__ = "departamento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(50), nullable=False, unique=True, index=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class PermissaoAcesso(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     scope_type = db.Column(db.String(10), nullable=False, index=True)  # ROLE|USER
@@ -704,8 +720,8 @@ class ExpedicaoOrdemFat(db.Model):
     expedicao_registro_id = db.Column(db.Integer, index=True)
 
     # Exclusao (Admin): a ordem some do dashboard/fila normal, mas a linha e
-    # todo o historico de conferencia continuam no banco para auditoria (ver
-    # expedicao_auditoria_routes.py) - nunca e apagada de fato.
+    # todo o historico de conferencia continuam no banco - nunca e apagada
+    # de fato.
     excluido = db.Column(db.Boolean, nullable=False, default=False, index=True)
     excluido_at = db.Column(db.DateTime)
     excluido_by = db.Column(db.String(100))
@@ -852,7 +868,7 @@ class ExpedicaoOrdemST(db.Model):
     expedicao_registro_id = db.Column(db.Integer, index=True)
 
     # Exclusao (Admin): mesma logica do FAT - some do dashboard, mas fica
-    # no banco para auditoria (ver expedicao_auditoria_routes.py).
+    # no banco.
     excluido = db.Column(db.Boolean, nullable=False, default=False, index=True)
     excluido_at = db.Column(db.DateTime)
     excluido_by = db.Column(db.String(100))
@@ -901,8 +917,7 @@ class ExpedicaoConferenciaLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     # ID interno permanente e rastreavel (ex.: CNF-000123) para citar/buscar
-    # este evento de conferencia especifico na auditoria (ver
-    # expedicao_auditoria_routes.py).
+    # este evento de conferencia especifico.
     codigo_interno = db.Column(db.String(20), unique=True, index=True)
     origem = db.Column(db.String(10), nullable=False, index=True)  # "fat" | "st"
     ordem_id = db.Column(db.Integer, nullable=False, index=True)
@@ -1567,6 +1582,27 @@ class FrotaFaturaCombustivel(db.Model):
     fechada_em = db.Column(db.DateTime, index=True)
     fechada_por = db.Column(db.String(100))
     fechamento_json = db.Column(db.Text)
+
+
+class FrotaCompraPosto(db.Model):
+    """NFC-e do posto que NÃO é abastecimento (ex.: óleo lubrificante para uma
+    máquina). Entra na conferência da NF-e semanal como as outras NFC-e, mas no
+    rateio vai inteira para o departamento escolhido, sem passar por km.
+    Enquanto não tiver departamento, a NF-e que a fatura não fecha."""
+    __tablename__ = "frota_compra_posto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    chave_nfce = db.Column(db.String(44), nullable=False, unique=True, index=True)
+    numero_nfce = db.Column(db.String(20))
+    data = db.Column(db.DateTime, nullable=False, index=True)
+    descricao = db.Column(db.String(400))
+    valor_total = db.Column(db.Float, nullable=False, default=0)
+    posto = db.Column(db.String(160))
+    departamento = db.Column(db.String(50), index=True)
+    departamento_por = db.Column(db.String(100))
+    xml_nfce = db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql"))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
 class FrotaMulta(db.Model):
