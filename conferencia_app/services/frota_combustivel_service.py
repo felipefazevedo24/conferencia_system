@@ -79,6 +79,18 @@ def serie_da_chave(chave: str) -> str:
     return str(int(chave[22:25])) if len(chave) == 44 else ""
 
 
+# Lubrificante também vem com o grupo <comb> na NFC-e (NFC-e 86918, óleo
+# ULTRAGEAR: cProdANP 620501001, "CICLO OTTO"), então a tag sozinha não diz que
+# é combustível. Vale o código ANP: 32 gasolina, 81 etanol, 82 diesel, 22 GNV.
+PREFIXOS_ANP_COMBUSTIVEL = ("32", "81", "82", "22")
+
+
+def _eh_combustivel(codigo_anp: str, desc_anp: str) -> bool:
+    if codigo_anp:
+        return codigo_anp.startswith(PREFIXOS_ANP_COMBUSTIVEL)
+    return any(p in desc_anp.upper() for p in ("DIESEL", "GASOLINA", "ETANOL", "GNV"))
+
+
 def ler_xml(conteudo: bytes) -> dict:
     """Lê NFC-e ou NF-e. Levanta ValueError com mensagem para o usuário."""
     try:
@@ -99,10 +111,13 @@ def ler_xml(conteudo: bytes) -> dict:
     itens = []
     for det in inf.findall("nfe:det", NS):
         prod = det.find("nfe:prod", NS)
+        tem_comb = prod is not None and prod.find("nfe:comb", NS) is not None
         itens.append({
             "descricao": _txt(prod, "nfe:xProd"),
             "anp": _txt(prod, "nfe:comb/nfe:descANP"),
-            "combustivel": prod is not None and prod.find("nfe:comb", NS) is not None,
+            "combustivel": tem_comb and _eh_combustivel(
+                _txt(prod, "nfe:comb/nfe:cProdANP"), _txt(prod, "nfe:comb/nfe:descANP")
+            ),
             "litros": _float(_txt(prod, "nfe:qCom")),
             "valor_unitario": _float(_txt(prod, "nfe:vUnCom")),
         })
