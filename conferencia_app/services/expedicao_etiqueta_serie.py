@@ -6,6 +6,9 @@ girado 90 graus no sentido horario), lado a lado da direita pra esquerda:
 Cliente, Nome do Monte, Produto, OS, Data e N. de serie. OS e data saem da
 conferencia; os outros quatro sao digitados na hora de imprimir.
 
+Uma etiqueta por OS da ordem: cliente e data valem pra todas; monte, produto
+e serie sao digitados por OS (a OS marcada "nao aplicavel" nao imprime).
+
 ZPL e' o caminho padrao (ver .claude/skills/etiqueta-zebra); o PDF desenha a
 mesma etiqueta como alternativa.
 """
@@ -19,6 +22,8 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from .expedicao_etiqueta_zpl import DPI_PADRAO, DPIS_SUPORTADOS, _Escala, _limpar
+
+IMPRESSA, NAO_APLICAVEL = "Impressa", "Não aplicável"
 
 LARGURA, ALTURA = 50.0, 150.0
 TOPO_CAMPOS, COMPRIMENTO_CAMPO = 85.0, 35.0
@@ -68,6 +73,56 @@ def _altura_mm(pt: float) -> float:
     return pt * 25.4 / 72
 
 
+def os_da_ordem(ordem) -> list[str]:
+    """OS distintas dos itens, na ordem em que aparecem; sem OS, [""]."""
+    oss = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    return oss or [""]
+
+
+def registros(ordem) -> dict:
+    from ..models import ExpedicaoEtiquetaSerie
+    return {r.n_os: r for r in ExpedicaoEtiquetaSerie.query.filter_by(ordem_id=ordem.id)}
+
+
+def os_pendentes(ordem) -> list[str]:
+    """OS sem etiqueta impressa nem "Nao aplicavel". So' cobra de ordem
+    conferida: expedida sem conferencia nao tem OS/data pra etiqueta."""
+    if not ordem.conferido_at or ordem.expedido_sem_conferencia:
+        return []
+    feitos = registros(ordem)
+    return [os_ for os_ in os_da_ordem(ordem) if os_ not in feitos]
+
+
+def registrar(ordem, linhas: list[dict], cliente: str, usuario: str) -> int:
+    """Grava (ou atualiza) a situacao de cada OS. `linhas`: {os, situacao,
+    monte, produto, serie}. Levanta ValueError com mensagem pro usuario."""
+    from ..extensions import db
+    from ..models import ExpedicaoEtiquetaSerie
+    from ..tempo import agora_br
+
+    if not ordem.conferido_at:
+        raise ValueError("Conclua a conferência antes da etiqueta de nº de série.")
+    validas = set(os_da_ordem(ordem))
+    existentes = registros(ordem)
+    limpo = lambda v: str(v or "").strip()[:120]
+    for linha in linhas:
+        os_ = limpo(linha.get("os"))
+        if os_ not in validas:
+            raise ValueError(f"OS {os_ or '—'} não pertence a esta ordem.")
+        situacao = {"impressa": IMPRESSA, "nao_aplicavel": NAO_APLICAVEL}.get(linha.get("situacao"))
+        if not situacao:
+            raise ValueError("Situação da etiqueta inválida.")
+        reg = existentes.get(os_) or ExpedicaoEtiquetaSerie(ordem_id=ordem.id, n_os=os_)
+        reg.situacao, reg.usuario, reg.registrado_em = situacao, usuario, agora_br()
+        if situacao == IMPRESSA:
+            reg.cliente, reg.monte = limpo(cliente), limpo(linha.get("monte"))
+            reg.produto, reg.serie = limpo(linha.get("produto")), limpo(linha.get("serie"))
+        db.session.add(reg)
+        existentes[os_] = reg
+    db.session.commit()
+    return len(linhas)
+
+
 # ── ZPL ──────────────────────────────────────────────────────────────────
 def _zpl_etiqueta(e: _Escala, et: Etiqueta) -> str:
     partes = ["^XA", "^CI28", f"^PW{e.mm(LARGURA)}", f"^LL{e.mm(ALTURA)}", "^LH0,0", "^PON"]
@@ -82,17 +137,27 @@ def _zpl_etiqueta(e: _Escala, et: Etiqueta) -> str:
     return "\n".join(partes)
 
 
-def gerar_zpl(et: Etiqueta, dpi: int = DPI_PADRAO) -> str:
+def gerar_zpl(etiquetas: list[Etiqueta], dpi: int = DPI_PADRAO) -> str:
+    """Um ^XA...^XZ por OS."""
     escala = _Escala(dpi if dpi in DPIS_SUPORTADOS else DPI_PADRAO)
-    return _zpl_etiqueta(escala, et) + "\n"
+    return "\n".join(_zpl_etiqueta(escala, et) for et in etiquetas) + "\n"
 
 
 # ── PDF (alternativa sem o Browser Print) ────────────────────────────────
-def gerar_pdf(et: Etiqueta) -> bytes:
+def gerar_pdf(etiquetas: list[Etiqueta]) -> bytes:
+    """Uma pagina de 50 x 150 mm por OS."""
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(LARGURA * mm, ALTURA * mm), pageCompression=0)
     c.setTitle("Etiqueta de número de série")
     c.setViewerPreference("PrintScaling", "None")  # sem isso o driver reduz a etiqueta
+    for et in etiquetas:
+        _pdf_etiqueta(c, et)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _pdf_etiqueta(c: canvas.Canvas, et: Etiqueta):
     topo = (ALTURA - TOPO_CAMPOS) * mm
     for i, campo in enumerate(_campos(et)):
         texto, pt = _ajustar(campo)
@@ -105,6 +170,3 @@ def gerar_pdf(et: Etiqueta) -> bytes:
         c.setFont("Helvetica-Bold", pt)
         c.drawString(0, 0, texto)
         c.restoreState()
-    c.showPage()
-    c.save()
-    return buf.getvalue()

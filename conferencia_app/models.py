@@ -791,6 +791,29 @@ class ExpedicaoOrdemFatItem(db.Model):
     divergente = db.Column(db.Boolean, nullable=False, default=False)
 
 
+class ExpedicaoEtiquetaSerie(db.Model):
+    """Etiqueta de numero de serie de cada OS de uma ordem de faturamento.
+
+    Requisito do romaneio: a NF so' entra no romaneio quando toda OS da
+    ordem tem a etiqueta impressa ou foi marcada "Nao aplicavel" (uma linha
+    por OS; reimprimir atualiza a mesma linha). Ordem sem OS usa n_os = "".
+    """
+
+    __tablename__ = "expedicao_etiqueta_serie"
+    __table_args__ = (db.UniqueConstraint("ordem_id", "n_os", name="uq_etiqueta_serie_ordem_os"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(db.Integer, db.ForeignKey("expedicao_ordem_fat.id"), nullable=False, index=True)
+    n_os = db.Column(db.String(80), nullable=False, default="")
+    situacao = db.Column(db.String(20), nullable=False)  # Impressa | Não aplicável
+    cliente = db.Column(db.String(120))
+    monte = db.Column(db.String(120))
+    produto = db.Column(db.String(120))
+    serie = db.Column(db.String(120))
+    usuario = db.Column(db.String(100), nullable=False)
+    registrado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+
 class ExpedicaoFatComparacaoNF(db.Model):
     """Resultado da comparação entre o que foi conferido e o que saiu na NF
     (código e quantidade de cada item) de uma ordem de faturamento.
