@@ -41,11 +41,9 @@ class Etiqueta:
 
 
 def _campos(et: Etiqueta) -> list[str]:
-    """Na ordem do desenho: o primeiro fica na coluna da direita."""
-    return [
-        f"Cliente: {et.cliente}", f"Nome do Monte: {et.monte}", f"Produto: {et.produto}",
-        f"OS: {et.os}", f"Data: {et.data}", f"Nº de série: {et.serie}",
-    ]
+    """Na ordem do desenho: o primeiro fica na coluna da direita. So' o
+    valor, sem rotulo (pedido do usuario em 25/11/2026)."""
+    return [et.cliente, et.monte, et.produto, et.os, et.data, et.serie]
 
 
 def _ajustar(texto: str) -> tuple[str, float]:
