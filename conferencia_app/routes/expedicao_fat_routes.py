@@ -487,6 +487,43 @@ def _etiqueta_serie(cod_ordem_fat):
     ], None
 
 
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-serie/registro")
+@permission_required(PERMISSION)
+def etiqueta_serie_registros(cod_ordem_fat):
+    """O que ja' foi impresso/marcado por OS - a janela reabre preenchida."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    feitos = etiqueta_serie.registros(ordem)
+    return jsonify({"os": [
+        {"os": os_, "situacao": r.situacao if r else None, "monte": r.monte if r else "",
+         "produto": r.produto if r else "", "serie": r.serie if r else "",
+         "cliente": r.cliente if r else "", "usuario": r.usuario if r else None,
+         "registrado_em": _iso(r.registrado_em) if r else None}
+        for os_ in etiqueta_serie.os_da_ordem(ordem) for r in [feitos.get(os_)]
+    ], "pendentes": etiqueta_serie.os_pendentes(ordem)})
+
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-serie/registro", methods=["POST"])
+@permission_required(PERMISSION)
+def etiqueta_serie_registrar(cod_ordem_fat):
+    """Chamado pela tela depois de imprimir: grava cada OS como Impressa ou
+    Nao aplicavel (requisito pra NF entrar no romaneio)."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    linhas = payload.get("linhas")
+    if not isinstance(linhas, list) or not linhas:
+        return jsonify({"error": "Nenhuma OS informada."}), 400
+    try:
+        etiqueta_serie.registrar(ordem, linhas, payload.get("cliente"), session["username"])
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"pendentes": etiqueta_serie.os_pendentes(ordem)})
+
+
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-serie.zpl")
 @permission_required(PERMISSION)
 def etiqueta_serie_zpl(cod_ordem_fat):

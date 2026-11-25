@@ -23,6 +23,8 @@ from reportlab.pdfgen import canvas
 
 from .expedicao_etiqueta_zpl import DPI_PADRAO, DPIS_SUPORTADOS, _Escala, _limpar
 
+IMPRESSA, NAO_APLICAVEL = "Impressa", "Não aplicável"
+
 LARGURA, ALTURA = 50.0, 150.0
 TOPO_CAMPOS, COMPRIMENTO_CAMPO = 85.0, 35.0
 MARGEM_ESQUERDA, MARGEM_DIREITA = 11.0, 4.0
@@ -69,6 +71,56 @@ def _coluna_x(indice: int) -> float:
 
 def _altura_mm(pt: float) -> float:
     return pt * 25.4 / 72
+
+
+def os_da_ordem(ordem) -> list[str]:
+    """OS distintas dos itens, na ordem em que aparecem; sem OS, [""]."""
+    oss = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    return oss or [""]
+
+
+def registros(ordem) -> dict:
+    from ..models import ExpedicaoEtiquetaSerie
+    return {r.n_os: r for r in ExpedicaoEtiquetaSerie.query.filter_by(ordem_id=ordem.id)}
+
+
+def os_pendentes(ordem) -> list[str]:
+    """OS sem etiqueta impressa nem "Nao aplicavel". So' cobra de ordem
+    conferida: expedida sem conferencia nao tem OS/data pra etiqueta."""
+    if not ordem.conferido_at or ordem.expedido_sem_conferencia:
+        return []
+    feitos = registros(ordem)
+    return [os_ for os_ in os_da_ordem(ordem) if os_ not in feitos]
+
+
+def registrar(ordem, linhas: list[dict], cliente: str, usuario: str) -> int:
+    """Grava (ou atualiza) a situacao de cada OS. `linhas`: {os, situacao,
+    monte, produto, serie}. Levanta ValueError com mensagem pro usuario."""
+    from ..extensions import db
+    from ..models import ExpedicaoEtiquetaSerie
+    from ..tempo import agora_br
+
+    if not ordem.conferido_at:
+        raise ValueError("Conclua a conferência antes da etiqueta de nº de série.")
+    validas = set(os_da_ordem(ordem))
+    existentes = registros(ordem)
+    limpo = lambda v: str(v or "").strip()[:120]
+    for linha in linhas:
+        os_ = limpo(linha.get("os"))
+        if os_ not in validas:
+            raise ValueError(f"OS {os_ or '—'} não pertence a esta ordem.")
+        situacao = {"impressa": IMPRESSA, "nao_aplicavel": NAO_APLICAVEL}.get(linha.get("situacao"))
+        if not situacao:
+            raise ValueError("Situação da etiqueta inválida.")
+        reg = existentes.get(os_) or ExpedicaoEtiquetaSerie(ordem_id=ordem.id, n_os=os_)
+        reg.situacao, reg.usuario, reg.registrado_em = situacao, usuario, agora_br()
+        if situacao == IMPRESSA:
+            reg.cliente, reg.monte = limpo(cliente), limpo(linha.get("monte"))
+            reg.produto, reg.serie = limpo(linha.get("produto")), limpo(linha.get("serie"))
+        db.session.add(reg)
+        existentes[os_] = reg
+    db.session.commit()
+    return len(linhas)
 
 
 # ── ZPL ──────────────────────────────────────────────────────────────────

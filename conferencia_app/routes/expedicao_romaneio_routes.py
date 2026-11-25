@@ -1126,6 +1126,15 @@ def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None, *, commit=T
                 "É necessário anexar a foto do cliente antes de incluir esta "
                 "NF no romaneio."
             )
+    if ordem_fat:
+        from ..services import expedicao_etiqueta_serie as etiqueta_serie
+        faltam = etiqueta_serie.os_pendentes(ordem_fat)
+        if faltam:
+            lista = ", ".join(os_ or "sem OS" for os_ in faltam)
+            return None, (
+                f"NF {numero_nf}: imprima a etiqueta de nº de série (ou marque "
+                f"\"Não aplicável\") da OS {lista} antes de incluir no romaneio."
+            )
 
     if ordem_fat:
         orcamento = ordem_fat.orcamento or payload.get("orcamento") or romaneio.orcamento

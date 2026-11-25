@@ -650,7 +650,7 @@
                 </div>
                 <div class="ce-modal__foot">
                     <button class="eui-btn eui-btn--subtle" id="ce-serie-cancelar">Cancelar</button>
-                    <button class="eui-btn eui-btn--primary" id="ce-serie-imprimir"><i class="fas fa-print"></i> Imprimir</button>
+                    <button class="eui-btn eui-btn--primary" id="ce-serie-imprimir"><i class="fas fa-print"></i> Imprimir / salvar</button>
                 </div>
             </div>
         </div>
@@ -1272,26 +1272,33 @@
 
         // Numero de serie (50 x 150 mm): uma etiqueta por OS da ordem. Cliente
         // e data valem pra todas; monte/produto/serie sao digitados por OS, e a
-        // OS marcada "Nao aplicavel" nao imprime.
+        // OS marcada "Nao aplicavel" nao imprime. Cada OS precisa estar
+        // impressa ou "Nao aplicavel" pra NF entrar no romaneio - a tela grava
+        // isso depois de imprimir e reabre com o que ja' foi feito.
         async function abrirEtiquetaSerie(cod) {
             const modal = $("ce-serie-modal");
             const o = ordemPorCod(cod) || {};
-            let ordem;
+            const baseReg = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-serie/registro`;
+            let reg;
             try {
-                const resp = await fetch(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}`);
-                ordem = await resp.json();
-                if (!resp.ok) throw new Error(ordem.error || "Falha ao carregar a ordem.");
+                const resp = await fetch(baseReg);
+                reg = await resp.json();
+                if (!resp.ok) throw new Error(reg.error || "Falha ao carregar a ordem.");
             } catch (e) { toast(e.message, "error"); return; }
-            const oss = [...new Set((ordem.itens || []).map((i) => String(i.n_os || "").trim()).filter(Boolean))];
-            if (!oss.length) oss.push("");
-            $("ce-serie-sub").textContent = `Ordem ${cod} — ${oss.filter(Boolean).length || "nenhuma"} OS. A data da conferência entra sozinha.`;
-            $("ce-serie-cliente").value = o.cliente || ordem.cliente || "";
-            const campo = (c) => `<input class="eui-input" data-campo="${c}" maxlength="120" style="width:100%;">`;
-            $("ce-serie-linhas").innerHTML = oss.map((os) => `<tr data-os="${escapeHtml(os)}">
-                <td><strong>${escapeHtml(os || "—")}</strong></td><td>${campo("monte")}</td><td>${campo("produto")}</td><td>${campo("serie")}</td>
-                <td style="text-align:center;"><input type="checkbox" data-campo="na"></td></tr>`).join("");
+            const oss = reg.os;
+            const reais = oss.filter((x) => x.os).length;
+            $("ce-serie-sub").textContent = `Ordem ${cod} — ${reais || "nenhuma"} OS. Obrigatória para o romaneio: cada OS impressa ou "Não aplicável".`;
+            $("ce-serie-cliente").value = (oss.find((x) => x.cliente) || {}).cliente || o.cliente || "";
+            const campo = (c, v) => `<input class="eui-input" data-campo="${c}" maxlength="120" style="width:100%;" value="${escapeHtml(v || "")}">`;
+            const situacao = (x) => x.situacao
+                ? `<br><small style="color:var(--eui-text-soft);">${escapeHtml(x.situacao)} — ${escapeHtml(x.usuario || "")} ${x.registrado_em ? escapeHtml(new Date(x.registrado_em).toLocaleDateString("pt-BR")) : ""}</small>`
+                : `<br><small style="color:var(--eui-danger);">Pendente</small>`;
+            $("ce-serie-linhas").innerHTML = oss.map((x) => `<tr data-os="${escapeHtml(x.os)}">
+                <td><strong>${escapeHtml(x.os || "—")}</strong>${situacao(x)}</td><td>${campo("monte", x.monte)}</td><td>${campo("produto", x.produto)}</td><td>${campo("serie", x.serie)}</td>
+                <td style="text-align:center;"><input type="checkbox" data-campo="na"${x.situacao === "Não aplicável" ? " checked" : ""}></td></tr>`).join("");
             $("ce-serie-linhas").querySelectorAll('input[data-campo="na"]').forEach((cb) => {
                 cb.onchange = () => cb.closest("tr").querySelectorAll("input.eui-input").forEach((i) => { i.disabled = cb.checked; });
+                cb.onchange();
             });
             $("ce-serie-err").textContent = "";
             const fechar = () => modal.classList.remove("open");
@@ -1299,23 +1306,42 @@
             $("ce-serie-imprimir").onclick = async () => {
                 $("ce-serie-err").textContent = "";
                 const cliente = $("ce-serie-cliente").value.trim();
-                const linhas = [...$("ce-serie-linhas").querySelectorAll("tr")].filter((tr) => !tr.querySelector('[data-campo="na"]').checked);
+                const todas = [...$("ce-serie-linhas").querySelectorAll("tr")];
+                const naoAplicaveis = todas.filter((tr) => tr.querySelector('[data-campo="na"]').checked);
+                const linhas = todas.filter((tr) => !naoAplicaveis.includes(tr));
+                const v = (tr, c) => tr.querySelector(`[data-campo="${c}"]`).value.trim();
+                const registrar = async () => {
+                    const resp = await fetch(baseReg, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+                        cliente,
+                        linhas: [
+                            ...linhas.map((tr) => ({ os: tr.dataset.os, situacao: "impressa", monte: v(tr, "monte"), produto: v(tr, "produto"), serie: v(tr, "serie") })),
+                            ...naoAplicaveis.map((tr) => ({ os: tr.dataset.os, situacao: "nao_aplicavel" })),
+                        ],
+                    }) });
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) throw new Error(data.error || "Falha ao registrar a etiqueta.");
+                };
+                if (!linhas.length) {
+                    // So' "Nao aplicavel": nada a imprimir, so' registra.
+                    try { await registrar(); fechar(); toast("OS registradas como não aplicável.", "success"); }
+                    catch (e) { $("ce-serie-err").textContent = e.message; }
+                    return;
+                }
                 if (!cliente) { $("ce-serie-err").textContent = "Informe o cliente."; return; }
-                if (!linhas.length) { $("ce-serie-err").textContent = "Todas as OS estão como não aplicável - nada para imprimir."; return; }
                 const q = new URLSearchParams();
                 q.set("cliente", cliente);
                 for (const tr of linhas) {
-                    const v = (c) => tr.querySelector(`[data-campo="${c}"]`).value.trim();
-                    if (!v("monte") || !v("produto") || !v("serie")) {
+                    if (!v(tr, "monte") || !v(tr, "produto") || !v(tr, "serie")) {
                         $("ce-serie-err").textContent = `Preencha monte, produto e nº de série da OS ${tr.dataset.os || "—"} (ou marque não aplicável).`;
                         return;
                     }
                     q.append("os", tr.dataset.os);
-                    ["monte", "produto", "serie"].forEach((c) => q.append(c, v(c)));
+                    ["monte", "produto", "serie"].forEach((c) => q.append(c, v(tr, c)));
                 }
                 const base = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-serie`;
                 try {
                     const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl?${q}`, pdfUrl: `${base}.pdf?${q}`, papel: "50 x 150 mm" });
+                    await registrar();
                     fechar();
                     if (r.via === "zebra") toast(`${linhas.length} etiqueta(s) enviada(s) para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
                     else toast(`${r.motivo} Abrindo o PDF.`, "info");
