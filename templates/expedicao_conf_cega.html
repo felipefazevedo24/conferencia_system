@@ -629,7 +629,7 @@
 
         <!-- Etiqueta de numero de serie (50 x 150 mm): OS e data vem da conferencia. -->
         <div id="ce-serie-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-serie-title">
-            <div class="ce-modal__box">
+            <div class="ce-modal__box" style="width: min(760px, 100%);">
                 <div class="ce-modal__head">
                     <div class="ce-modal__ico" style="background: rgba(15,98,201,.12); color: var(--eui-primary);"><i class="fas fa-barcode"></i></div>
                     <div>
@@ -638,14 +638,14 @@
                     </div>
                 </div>
                 <div class="ce-modal__body">
-                    <label for="ce-serie-cliente">Cliente</label>
+                    <label for="ce-serie-cliente">Cliente (vale para todas as OS)</label>
                     <input id="ce-serie-cliente" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
-                    <label for="ce-serie-monte">Nome do Monte</label>
-                    <input id="ce-serie-monte" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
-                    <label for="ce-serie-produto">Produto</label>
-                    <input id="ce-serie-produto" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
-                    <label for="ce-serie-serie">Nº de série</label>
-                    <input id="ce-serie-serie" class="eui-input" maxlength="120" style="width:100%;">
+                    <div style="max-height: 50vh; overflow: auto;">
+                        <table class="erp-table ce-table" style="width:100%;">
+                            <thead><tr><th>OS</th><th>Nome do Monte</th><th>Produto</th><th>Nº de série</th><th title="Não imprime a etiqueta desta OS">Não aplicável</th></tr></thead>
+                            <tbody id="ce-serie-linhas"></tbody>
+                        </table>
+                    </div>
                     <div class="ce-modal__err" id="ce-serie-err"></div>
                 </div>
                 <div class="ce-modal__foot">
@@ -1270,32 +1270,62 @@
             } catch (err) { toast(err.message, "error"); }
         }
 
-        // Numero de serie (50 x 150 mm): cliente/monte/produto/serie digitados
-        // aqui; OS e data da conferencia o servidor completa.
-        function abrirEtiquetaSerie(cod) {
+        // Numero de serie (50 x 150 mm): uma etiqueta por OS da ordem. Cliente
+        // e data valem pra todas; monte/produto/serie sao digitados por OS, e a
+        // OS marcada "Nao aplicavel" nao imprime.
+        async function abrirEtiquetaSerie(cod) {
             const modal = $("ce-serie-modal");
             const o = ordemPorCod(cod) || {};
-            $("ce-serie-sub").textContent = `Ordem ${cod} — OS e data da conferência entram sozinhas.`;
-            $("ce-serie-cliente").value = o.cliente || "";
-            ["monte", "produto", "serie"].forEach((c) => { $("ce-serie-" + c).value = ""; });
+            let ordem;
+            try {
+                const resp = await fetch(`/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}`);
+                ordem = await resp.json();
+                if (!resp.ok) throw new Error(ordem.error || "Falha ao carregar a ordem.");
+            } catch (e) { toast(e.message, "error"); return; }
+            const oss = [...new Set((ordem.itens || []).map((i) => String(i.n_os || "").trim()).filter(Boolean))];
+            if (!oss.length) oss.push("");
+            $("ce-serie-sub").textContent = `Ordem ${cod} — ${oss.filter(Boolean).length || "nenhuma"} OS. A data da conferência entra sozinha.`;
+            $("ce-serie-cliente").value = o.cliente || ordem.cliente || "";
+            const campo = (c) => `<input class="eui-input" data-campo="${c}" maxlength="120" style="width:100%;">`;
+            $("ce-serie-linhas").innerHTML = oss.map((os) => `<tr data-os="${escapeHtml(os)}">
+                <td><strong>${escapeHtml(os || "—")}</strong></td><td>${campo("monte")}</td><td>${campo("produto")}</td><td>${campo("serie")}</td>
+                <td style="text-align:center;"><input type="checkbox" data-campo="na"></td></tr>`).join("");
+            $("ce-serie-linhas").querySelectorAll('input[data-campo="na"]').forEach((cb) => {
+                cb.onchange = () => cb.closest("tr").querySelectorAll("input.eui-input").forEach((i) => { i.disabled = cb.checked; });
+            });
             $("ce-serie-err").textContent = "";
             const fechar = () => modal.classList.remove("open");
             $("ce-serie-cancelar").onclick = fechar;
             $("ce-serie-imprimir").onclick = async () => {
+                $("ce-serie-err").textContent = "";
+                const cliente = $("ce-serie-cliente").value.trim();
+                const linhas = [...$("ce-serie-linhas").querySelectorAll("tr")].filter((tr) => !tr.querySelector('[data-campo="na"]').checked);
+                if (!cliente) { $("ce-serie-err").textContent = "Informe o cliente."; return; }
+                if (!linhas.length) { $("ce-serie-err").textContent = "Todas as OS estão como não aplicável - nada para imprimir."; return; }
                 const q = new URLSearchParams();
-                ["cliente", "monte", "produto", "serie"].forEach((c) => q.set(c, $("ce-serie-" + c).value.trim()));
+                q.set("cliente", cliente);
+                for (const tr of linhas) {
+                    const v = (c) => tr.querySelector(`[data-campo="${c}"]`).value.trim();
+                    if (!v("monte") || !v("produto") || !v("serie")) {
+                        $("ce-serie-err").textContent = `Preencha monte, produto e nº de série da OS ${tr.dataset.os || "—"} (ou marque não aplicável).`;
+                        return;
+                    }
+                    q.append("os", tr.dataset.os);
+                    ["monte", "produto", "serie"].forEach((c) => q.append(c, v(c)));
+                }
                 const base = `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}/etiqueta-serie`;
                 try {
                     const r = await ZebraPrint.imprimir({ zplUrl: `${base}.zpl?${q}`, pdfUrl: `${base}.pdf?${q}`, papel: "50 x 150 mm" });
                     fechar();
-                    if (r.via === "zebra") toast(`Etiqueta enviada para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
+                    if (r.via === "zebra") toast(`${linhas.length} etiqueta(s) enviada(s) para a Zebra${r.impressora ? " (" + r.impressora + ")" : ""}.`, "success");
                     else toast(`${r.motivo} Abrindo o PDF.`, "info");
                 } catch (e) {
                     $("ce-serie-err").textContent = e.message;
                 }
             };
             modal.classList.add("open");
-            $("ce-serie-cliente").focus();
+            const primeiro = $("ce-serie-linhas").querySelector("input.eui-input");
+            (primeiro || $("ce-serie-cliente")).focus();
         }
 
         // Identificacao do produto (ST): uma etiqueta 70 x 50 por peca conferida.

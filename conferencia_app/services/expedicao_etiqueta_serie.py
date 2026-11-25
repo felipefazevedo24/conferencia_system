@@ -6,6 +6,9 @@ girado 90 graus no sentido horario), lado a lado da direita pra esquerda:
 Cliente, Nome do Monte, Produto, OS, Data e N. de serie. OS e data saem da
 conferencia; os outros quatro sao digitados na hora de imprimir.
 
+Uma etiqueta por OS da ordem: cliente e data valem pra todas; monte, produto
+e serie sao digitados por OS (a OS marcada "nao aplicavel" nao imprime).
+
 ZPL e' o caminho padrao (ver .claude/skills/etiqueta-zebra); o PDF desenha a
 mesma etiqueta como alternativa.
 """
@@ -82,17 +85,27 @@ def _zpl_etiqueta(e: _Escala, et: Etiqueta) -> str:
     return "\n".join(partes)
 
 
-def gerar_zpl(et: Etiqueta, dpi: int = DPI_PADRAO) -> str:
+def gerar_zpl(etiquetas: list[Etiqueta], dpi: int = DPI_PADRAO) -> str:
+    """Um ^XA...^XZ por OS."""
     escala = _Escala(dpi if dpi in DPIS_SUPORTADOS else DPI_PADRAO)
-    return _zpl_etiqueta(escala, et) + "\n"
+    return "\n".join(_zpl_etiqueta(escala, et) for et in etiquetas) + "\n"
 
 
 # ── PDF (alternativa sem o Browser Print) ────────────────────────────────
-def gerar_pdf(et: Etiqueta) -> bytes:
+def gerar_pdf(etiquetas: list[Etiqueta]) -> bytes:
+    """Uma pagina de 50 x 150 mm por OS."""
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(LARGURA * mm, ALTURA * mm), pageCompression=0)
     c.setTitle("Etiqueta de número de série")
     c.setViewerPreference("PrintScaling", "None")  # sem isso o driver reduz a etiqueta
+    for et in etiquetas:
+        _pdf_etiqueta(c, et)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _pdf_etiqueta(c: canvas.Canvas, et: Etiqueta):
     topo = (ALTURA - TOPO_CAMPOS) * mm
     for i, campo in enumerate(_campos(et)):
         texto, pt = _ajustar(campo)
@@ -105,6 +118,3 @@ def gerar_pdf(et: Etiqueta) -> bytes:
         c.setFont("Helvetica-Bold", pt)
         c.drawString(0, 0, texto)
         c.restoreState()
-    c.showPage()
-    c.save()
-    return buf.getvalue()

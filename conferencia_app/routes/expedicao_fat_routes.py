@@ -462,45 +462,51 @@ def etiqueta_zpl(cod_ordem_fat, modelo):
     return current_app.response_class(zpl, mimetype="text/plain; charset=utf-8")
 
 
-# Etiqueta de numero de serie (50 x 150 mm): OS e data vem da conferencia;
-# cliente, monte, produto e serie sao digitados na tela e chegam na query.
+# Etiqueta de numero de serie (50 x 150 mm), uma por OS: OS e data vem da
+# conferencia; cliente (unico) e monte/produto/serie (listas paralelas a
+# ?os=, uma posicao por OS a imprimir) sao digitados na tela.
 def _etiqueta_serie(cod_ordem_fat):
-    """(etiqueta, None) ou (None, resposta de erro)."""
+    """(etiquetas, None) ou (None, resposta de erro)."""
     ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
     if not ordem:
         return None, (jsonify({"error": "Ordem de faturamento nao encontrada."}), 404)
     if not ordem.conferido_at:
         return None, (jsonify({"error": "Conclua a conferencia antes de imprimir a etiqueta."}), 400)
-    os_texto = "/".join(
-        dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip())
-    )
-    campo = lambda nome: str(request.args.get(nome) or "").strip()[:120]
-    return etiqueta_serie.Etiqueta(
-        cliente=campo("cliente"), monte=campo("monte"), produto=campo("produto"),
-        os=os_texto, data=ordem.conferido_at.strftime("%d/%m/%Y"), serie=campo("serie"),
-    ), None
+    os_da_ordem = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    limpo = lambda v: str(v or "").strip()[:120]
+    pedidas = [limpo(v) for v in request.args.getlist("os")] or os_da_ordem or [""]
+    if any(os_ not in os_da_ordem for os_ in pedidas if os_):
+        return None, (jsonify({"error": "OS nao pertence a esta ordem."}), 400)
+    montes, produtos, series = ([limpo(v) for v in request.args.getlist(nome)] for nome in ("monte", "produto", "serie"))
+    pos = lambda valores, i: valores[i] if i < len(valores) else ""
+    data = ordem.conferido_at.strftime("%d/%m/%Y")
+    return [
+        etiqueta_serie.Etiqueta(cliente=limpo(request.args.get("cliente")), monte=pos(montes, i),
+                                produto=pos(produtos, i), os=os_, data=data, serie=pos(series, i))
+        for i, os_ in enumerate(pedidas)
+    ], None
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-serie.zpl")
 @permission_required(PERMISSION)
 def etiqueta_serie_zpl(cod_ordem_fat):
-    et, erro = _etiqueta_serie(cod_ordem_fat)
+    etiquetas, erro = _etiqueta_serie(cod_ordem_fat)
     if erro:
         return erro
     try:
         dpi = int(request.args.get("dpi") or etiqueta_serie.DPI_PADRAO)
     except (TypeError, ValueError):
         dpi = etiqueta_serie.DPI_PADRAO
-    return current_app.response_class(etiqueta_serie.gerar_zpl(et, dpi), mimetype="text/plain; charset=utf-8")
+    return current_app.response_class(etiqueta_serie.gerar_zpl(etiquetas, dpi), mimetype="text/plain; charset=utf-8")
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/etiqueta-serie.pdf")
 @permission_required(PERMISSION)
 def etiqueta_serie_pdf(cod_ordem_fat):
-    et, erro = _etiqueta_serie(cod_ordem_fat)
+    etiquetas, erro = _etiqueta_serie(cod_ordem_fat)
     if erro:
         return erro
-    return current_app.response_class(etiqueta_serie.gerar_pdf(et), mimetype="application/pdf", headers={
+    return current_app.response_class(etiqueta_serie.gerar_pdf(etiquetas), mimetype="application/pdf", headers={
         "Content-Disposition": f'inline; filename="etiqueta_serie_{cod_ordem_fat}.pdf"',
     })
 
