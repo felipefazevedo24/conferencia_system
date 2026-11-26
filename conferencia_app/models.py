@@ -5493,6 +5493,29 @@ class InventarioGeralRetratoErp(db.Model):
     lido_em = db.Column(db.DateTime, default=agora_br, nullable=False)
 
 
+class InventarioGeralRetratoGrv(db.Model):
+    """Foto do estoque do GRV (espelho) tirada na abertura do inventario:
+    endereco, familia e grupo de cada codigo do inventario. A distribuicao
+    usa so' ela ate' o fim - o espelho segue se atualizando por causa do
+    ciclico, mas o inventario aberto as 13:17 continua vendo o estoque das
+    13:17 (pedido da Logistica em 26/11/2026). Tabela a parte pra nao
+    precisar de migration."""
+
+    __tablename__ = "inventario_geral_retrato_grv"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey("inventario_geral.id"), nullable=False, index=True)
+    codigo = db.Column(db.String(60), nullable=False)
+    localizacao = db.Column(db.String(120), nullable=False, default="")
+    descricao = db.Column(db.String(300))
+    unidade = db.Column(db.String(20))
+    familia = db.Column(db.String(160))
+    grupo = db.Column(db.String(20))
+    grupo_nome = db.Column(db.String(160))
+    qtde_total = db.Column(db.Float, nullable=False, default=0)
+    foto_em = db.Column(db.DateTime, nullable=False)  # quando o espelho copiado foi lido do GRV
+
+
 class InventarioGeralRecusa(db.Model):
     """Produto que o proprio Sync deixou fora do envio ao ERP na ultima
     simulacao (saldo mudou, geral != depositos, sumiu do ERP). Retrato da
