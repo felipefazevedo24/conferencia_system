@@ -107,7 +107,10 @@
             </div></div>
         </div>
 
-        <div><button type="button" class="eui-btn eui-btn--primary" id="sc-btn-simular"><i class="fas fa-scale-balanced"></i> Simular e comparar</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="eui-btn eui-btn--primary" id="sc-btn-simular"><i class="fas fa-scale-balanced"></i> Simular e comparar</button>
+            <button type="button" class="eui-btn eui-btn--subtle" id="sc-btn-pdf"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+        </div>
 
         <div id="sc-resultado" class="sc-wrap hidden">
             <div class="sc-resumo" id="sc-resumo"></div>
@@ -343,6 +346,21 @@
     $("sc-btn-simular").addEventListener("click", async () => {
         try { desenharResultado(await api("/api/comex/simulador-custo", { method: "POST", body: JSON.stringify(coletar()) })); }
         catch (e) { toast(e.message, "error"); }
+    });
+    // PDF: o servidor recalcula com o que esta' na tela agora (nao depende de
+    // ter clicado em Simular antes) e devolve o arquivo pra download.
+    $("sc-btn-pdf").addEventListener("click", async () => {
+        const btn = $("sc-btn-pdf");
+        btn.disabled = true;
+        try {
+            const r = await fetch("/api/comex/simulador-custo/pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(coletar()) });
+            if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ("Erro " + r.status)); }
+            const url = URL.createObjectURL(await r.blob());
+            const a = Object.assign(document.createElement("a"), { href: url, download: `simulacao_custo_${new Date().toISOString().slice(0, 10)}.pdf` });
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (e) { toast(e.message, "error"); }
+        finally { btn.disabled = false; }
     });
 
     adicionarItem();

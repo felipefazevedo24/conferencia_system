@@ -497,9 +497,13 @@
             <small style="color:var(--eui-muted); margin-top:-8px;" id="cx-cot-secao-sub">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
             <div class="cx-field">
                 <label>Tipo de frete</label>
+                <!-- Um campo so': FCL ou o modal a cotar. O backend continua com
+                     tipo_frete FCL/LCL_AEREO + modal_solicitado (ver tipoFreteDoForm). -->
                 <select id="cx-cot-tipo-frete" class="eui-select">
                     <option value="FCL">FCL (Container fechado)</option>
-                    <option value="LCL_AEREO">LCL / Aéreo (volumes soltos)</option>
+                    <option value="LCL">LCL (marítimo)</option>
+                    <option value="AEREO">Aéreo</option>
+                    <option value="AMBOS">LCL e Aéreo (cotar os dois)</option>
                 </select>
             </div>
             <div class="cx-field" id="cx-cot-forwarders-wrap">
@@ -516,13 +520,6 @@
             </div>
             <div class="cx-grid-2" id="cx-cot-incoterm-wrap">
                 <div class="cx-field"><label>Incoterm</label><input type="text" id="cx-cot-incoterm" class="eui-input" placeholder="Ex.: FOB, EXW, CIF..."></div>
-                <div class="cx-field"><label>Modal a cotar</label>
-                    <select id="cx-cot-modal-solicitado" class="eui-select">
-                        <option value="LCL">LCL (marítimo)</option>
-                        <option value="AEREO">Aéreo</option>
-                        <option value="AMBOS">LCL e Aéreo (cotar os dois)</option>
-                    </select>
-                </div>
             </div>
             <div class="cx-grid-2 hidden" id="cx-cot-equipamento-wrap">
                 <div class="cx-field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="cx-cot-qtd-40hc" class="eui-input"></div>
@@ -1848,14 +1845,15 @@
         // nao reflete exatamente como o frete vai ser cotado.
         const tipoFreteSel = $("cx-cot-tipo-frete");
         tipoFreteSel.disabled = false;
-        tipoFreteSel.value = base ? base.tipo_frete : (p.modal_transporte === "Aéreo" ? "LCL_AEREO" : "FCL");
         $("cx-cot-origem").value = base ? (base.origem || "") : "";
         $("cx-cot-destino").value = base ? (base.destino || "") : "";
         $("cx-cot-incoterm").value = base ? (base.incoterm || "") : "";
         // A base pode ser a cotacao Aereo "irma" (nasce sem pedido) - vale o
         // ultimo pedido feito no processo.
         const pedidoAnterior = (base && base.modal_solicitado) || (cotacoesExistentesAtual.find((c) => c.modal_solicitado) || {}).modal_solicitado;
-        $("cx-cot-modal-solicitado").value = pedidoAnterior || (p.modal_transporte === "Aéreo" ? "AEREO" : "LCL");
+        const naoFcl = pedidoAnterior || (p.modal_transporte === "Aéreo" ? "AEREO" : "LCL");
+        tipoFreteSel.value = base ? (base.tipo_frete === "FCL" ? "FCL" : naoFcl)
+            : (p.modal_transporte === "Aéreo" ? naoFcl : "FCL");
         $("cx-cot-qtd-40hc").value = base && base.qtd_40hc != null ? base.qtd_40hc : "";
         $("cx-cot-qtd-20dry").value = base && base.qtd_20dry != null ? base.qtd_20dry : "";
         $("cx-cot-imo").value = base ? (base.imo_classe || "") : "";
@@ -1903,6 +1901,12 @@
         if (processoCotacaoAtual) preencherFormularioCotacao(processoCotacaoAtual, cotacoesExistentesAtual[0] || null);
     }
     $("cx-cot-btn-cancelar-edicao").addEventListener("click", cancelarEdicaoCotacao);
+
+    // O select junta tipo de frete e modal a cotar; a API recebe separado.
+    function tipoFreteDoForm() {
+        const v = $("cx-cot-tipo-frete").value;
+        return v === "FCL" ? { tipo_frete: "FCL", modal_solicitado: "" } : { tipo_frete: "LCL_AEREO", modal_solicitado: v };
+    }
 
     function atualizarCamposTipoFreteCotacao() {
         const isFcl = $("cx-cot-tipo-frete").value === "FCL";
@@ -2067,11 +2071,10 @@
                 await api(`/api/comex/cotacoes/${cotacaoEditandoId}/editar`, {
                     method: "POST",
                     body: JSON.stringify({
-                        tipo_frete: $("cx-cot-tipo-frete").value,
+                        ...tipoFreteDoForm(),
                         origem: $("cx-cot-origem").value.trim(),
                         destino: $("cx-cot-destino").value.trim(),
                         incoterm: $("cx-cot-incoterm").value.trim(),
-                        modal_solicitado: $("cx-cot-modal-solicitado").value,
                         qtd_40hc: $("cx-cot-qtd-40hc").value || null,
                         qtd_20dry: $("cx-cot-qtd-20dry").value || null,
                         imo_classe: $("cx-cot-imo").value.trim(),
@@ -2111,13 +2114,12 @@
         if (emailAvulso && !destinatarios.includes(emailAvulso)) destinatarios.push(emailAvulso);
 
         const montarBody = (email) => ({
-            tipo_frete: $("cx-cot-tipo-frete").value,
+            ...tipoFreteDoForm(),
             email_instrucao_embarque: email,
             enviar_para: email,
             origem: $("cx-cot-origem").value.trim(),
             destino: $("cx-cot-destino").value.trim(),
             incoterm: $("cx-cot-incoterm").value.trim(),
-            modal_solicitado: $("cx-cot-modal-solicitado").value,
             qtd_40hc: $("cx-cot-qtd-40hc").value || null,
             qtd_20dry: $("cx-cot-qtd-20dry").value || null,
             imo_classe: $("cx-cot-imo").value.trim(),

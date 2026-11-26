@@ -3,7 +3,7 @@ cadastro de aliquotas por NCM. O calculo mora em
 services/comex_custo_service.py (motor reutilizavel pela provisao)."""
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, make_response, render_template, request, session
 
 from ..auth import permission_required
 from ..services import comex_custo_service as svc
@@ -65,17 +65,16 @@ def api_ptax():
     return jsonify({"ptax": ptax})
 
 
-@comex_custo_bp.route("/api/comex/simulador-custo", methods=["POST"])
-@permission_required(PERMISSION)
-def api_simular():
-    payload = request.get_json(silent=True) or {}
+def _simular(payload: dict):
+    """(resultado, None) ou (None, resposta de erro 400) - o mesmo calculo
+    serve a tela e o PDF."""
     itens = [i for i in (payload.get("itens") or []) if any(str(v or "").strip() for v in i.values())]
     aliquotas = svc.aliquotas_do_cadastro(i.get("ncm") for i in itens)
     sem_cadastro = sorted({svc.formatar_ncm(i.get("ncm")) or "(vazio)" for i in itens
                            if svc.normalizar_ncm(i.get("ncm")) not in aliquotas})
     if sem_cadastro:
-        return jsonify({"error": f"NCM sem alíquota cadastrada: {', '.join(sem_cadastro)}. Cadastre na aba NCMs.",
-                        "ncms_sem_cadastro": sem_cadastro}), 400
+        return None, (jsonify({"error": f"NCM sem alíquota cadastrada: {', '.join(sem_cadastro)}. Cadastre na aba NCMs.",
+                               "ncms_sem_cadastro": sem_cadastro}), 400)
     for item in itens:
         item["aliquotas"] = aliquotas[svc.normalizar_ncm(item.get("ncm"))]
     desp = payload.get("despachante") or {}
@@ -89,5 +88,28 @@ def api_simular():
             courier={**{c: cour.get(c) for c in _CAMPOS_COURIER}, "icms_courier": icms_courier, "ii_courier": ii_courier},
         )
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify(resultado)
+        return None, (jsonify({"error": str(exc)}), 400)
+    return resultado, None
+
+
+@comex_custo_bp.route("/api/comex/simulador-custo", methods=["POST"])
+@permission_required(PERMISSION)
+def api_simular():
+    resultado, erro = _simular(request.get_json(silent=True) or {})
+    return erro or jsonify(resultado)
+
+
+@comex_custo_bp.route("/api/comex/simulador-custo/pdf", methods=["POST"])
+@permission_required(PERMISSION)
+def api_simular_pdf():
+    """Mesma simulacao da tela, recalculada aqui, em PDF pra download."""
+    from ..services import comex_custo_pdf
+
+    payload = request.get_json(silent=True) or {}
+    resultado, erro = _simular(payload)
+    if erro:
+        return erro
+    resp = make_response(comex_custo_pdf.gerar_pdf(payload, resultado, _usuario()))
+    resp.headers["Content-Type"] = "application/pdf"
+    resp.headers["Content-Disposition"] = 'attachment; filename="simulacao_custo_importacao.pdf"'
+    return resp
