@@ -59,6 +59,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/tabela_ordenavel.js') }}?v={{ asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/selecao_arrastar.js') }}?v={{ asset_version }}"></script>
 <script>
 (function () {
     // Clique no cabecalho ordena as listagens de todas as abas (a ordem e'
@@ -66,6 +67,10 @@
     ['tb-consulta', 'ia-tbody', 'ac-tbody'].forEach((id) => {
         const tbody = document.getElementById(id);
         if (tbody) TabelaOrdenavel.ativar(tbody.closest('table'));
+    });
+    // Caixinhas: clicar e arrastar marca varias (ver selecao_arrastar.js).
+    ['ia-tbody', 'ia-forms-tbody', 'ic-sel-tbody', 'ic-pend-tbody'].forEach((id) => {
+        SelecaoArrastar.ativar(document.getElementById(id));
     });
 
     const botoes = Array.from(document.querySelectorAll('#invu-tabs [data-aba]'));

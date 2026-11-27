@@ -103,6 +103,7 @@
                     <strong><span id="ia-bulk-count">0</span> item(ns) selecionado(s) — <span id="ia-bulk-etapa">Emissão do Formulário</span></strong>
                     <div style="display:flex; gap:8px;">
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-limpar">Limpar seleção</button>
+                        <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ia-bulk-voltar"><i class="fas fa-rotate-left"></i> Voltar para o inventário</button>
                         <button class="eui-btn eui-btn--subtle eui-btn--sm" id="ia-bulk-saida-avulsa"><i class="fas fa-dolly"></i> Baixado por saída avulsa</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm" id="ia-bulk-gerar"><i class="fas fa-file-invoice"></i> Gerar Relatório (FORM-08.52) e Enviar ao Financeiro</button>
                         <button class="eui-btn eui-btn--primary eui-btn--sm hidden" id="ia-bulk-finance"><i class="fas fa-coins"></i> Confirmar ajuste executado</button>
@@ -483,9 +484,11 @@
             const temCusto = a.custo_medio !== null && a.custo_medio !== undefined;
             const valorClasse = temCusto ? (a.diferenca_valor >= 0 ? "ia-dif-pos" : "ia-dif-neg") : "";
             const valorTexto = temCusto ? `${a.diferenca_valor >= 0 ? "+" : ""}${fmtMoeda(a.diferenca_valor)}` : "—";
-            // Selecao em lote serve a duas etapas: gerar o FORM-08.52
-            // (Relatorio) e confirmar o ajuste executado (Finance).
+            // Selecao em lote serve a tres etapas: voltar pro inventario
+            // ciclico (Validacao), gerar o FORM-08.52 (Relatorio) e
+            // confirmar o ajuste executado (Finance).
             const podeSelecionar = (PODE_VALIDAR && a.status_modulo === "Relatorio")
+                || (PODE_VALIDAR && a.status_modulo === "Validacao" && a.do_ciclico)
                 || (PODE_FINANCE && a.status_modulo === "Finance");
             const marcado = selecionados.has(a.id);
             const checkboxHtml = podeSelecionar
@@ -642,12 +645,15 @@
     function atualizarBulkbar() {
         const etapa = statusDaSelecao();
         const ehFinance = etapa === "Finance";
+        const ehRelatorio = !etapa || etapa === "Relatorio";
         $("ia-bulk-count").textContent = selecionados.size;
-        $("ia-bulk-etapa").textContent = ehFinance ? LABEL_STATUS.Finance : LABEL_STATUS.Relatorio;
+        $("ia-bulk-etapa").textContent = LABEL_STATUS[etapa] || LABEL_STATUS.Relatorio;
         $("ia-bulkbar").classList.toggle("show", selecionados.size > 0);
-        $("ia-bulk-gerar").classList.toggle("hidden", ehFinance);
-        $("ia-bulk-saida-avulsa").classList.toggle("hidden", ehFinance);
+        $("ia-bulk-gerar").classList.toggle("hidden", !ehRelatorio);
+        $("ia-bulk-saida-avulsa").classList.toggle("hidden", !ehRelatorio);
         $("ia-bulk-finance").classList.toggle("hidden", !ehFinance);
+        $("ia-bulk-voltar").classList.toggle("hidden", !(selecionados.size > 0
+            && Array.from(selecionados).every((id) => podeVoltarProInventario(ajustePorId(id)))));
         const todosSaidaAvulsa = selecionados.size > 0
             && Array.from(selecionados).every((id) => (ajustePorId(id) || {}).saida_avulsa_numero);
         $("ia-bulk-gerar").innerHTML = todosSaidaAvulsa
@@ -784,6 +790,36 @@
         }
     });
 
+    // Ajuste do inventario ciclico volta pra la', no ponto em que o item
+    // estava (ver ciclico_svc.voltar_do_ajuste). So' antes do FORM-08.52.
+    function podeVoltarProInventario(a) {
+        return !!(a && PODE_VALIDAR && a.do_ciclico && !a.relatorio_id && !a.saida_avulsa_numero
+            && (a.status_modulo === "Validacao" || a.status_modulo === "Relatorio"));
+    }
+
+    async function voltarProInventario(ids) {
+        const motivo = await dialogo({
+            titulo: "Voltar para o inventário",
+            texto: `${ids.length > 1 ? `Os ${ids.length} itens voltam` : "O item volta"} para o inventário cíclico, no ponto em que estava antes do ajuste. O ajuste fica improcedente.`,
+            campo: "Motivo (opcional)", botao: "Voltar para o inventário",
+        });
+        if (motivo === null) return;
+        try {
+            const resp = await api("/api/logistica/inventario-ajustes/voltar-inventario", {
+                method: "POST", body: JSON.stringify({ ajuste_ids: ids, motivo }),
+            });
+            ids.forEach((id) => selecionados.delete(id));
+            toast(resp.message, resp.erros && resp.erros.length ? "error" : "success");
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    $("ia-bulk-voltar").addEventListener("click", () => {
+        if (selecionados.size) voltarProInventario(Array.from(selecionados));
+    });
+
     $("ia-bulk-limpar").addEventListener("click", () => {
         selecionados.clear();
         renderTabela(filtrarPorBusca(ajustesCache));
@@ -856,6 +892,8 @@
             const doc = a.relatorio_numero_documento ? ` ${a.relatorio_numero_documento}` : "";
             itens += (itens ? "<hr>" : "") + it("ver-pdf", "fa-file-pdf", `Ver PDF (FORM-08.52${doc})`);
         }
+
+        if (podeVoltarProInventario(a)) itens += it("voltar-inventario", "fa-rotate-left", "Voltar para o inventário");
 
         const pular = btnPularEtapa();
         if (pular) itens += (itens ? "<hr>" : "") + pular;
@@ -1085,6 +1123,9 @@
                 const anterior = etapaAnteriorDe(ajustePorId(id));
                 if (await dialogo({ titulo: "Estornar etapa", texto: `Volta para "${LABEL_STATUS[anterior] || anterior}". Só os dados da etapa atual são limpos.`, botao: "Estornar", perigo: true }) === null) return;
                 await api(`/api/logistica/inventario-ajustes/${id}/estornar`, { method: "POST" });
+            } else if (act === "voltar-inventario") {
+                await voltarProInventario([Number(id)]);
+                return;
             } else if (act === "saida-avulsa") {
                 if (!await pedirSaidaAvulsa([Number(id)])) return;
             } else if (act === "remover-saida-avulsa") {

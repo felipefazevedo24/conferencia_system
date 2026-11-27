@@ -33,6 +33,7 @@ from ..extensions import db
 from ..models import (
     InventarioCiclicoDistribuicao as Distribuicao,
     InventarioCiclicoItem as Item,
+    LogisticaInventarioAjuste,
     LogisticaInventarioInicial,
 )
 from ..auth import has_permission
@@ -515,6 +516,62 @@ def acao_em_lote(acao: str, ids: list, usuario: str, justificativa: str | None =
         numeros = sorted({numero(i.distribuicao) for i in itens})
         _avisar_teams(abertos, f"Inventário cíclico {', '.join(numeros)} · enviado ao ajuste por {usuario} sem recontagem")
     return {"feitos": feitos, "ajustes": len(abertos), "erros": erros}
+
+
+ETAPAS_VOLTAM_PRO_CICLICO = ("Validacao", "Relatorio")
+
+
+def voltar_do_ajuste(ajuste_ids: list, usuario: str, motivo: str | None = None) -> dict:
+    """Ajuste aberto pelo ciclico volta pro inventario, no ponto em que o
+    item estava antes de ir pro ajuste: Divergente na 1a (veio da 1a) ou
+    Aguardando 3a (veio da 2a ou da 3a; a 3a e' apagada pra ser refeita). O
+    ajuste fica Improcedente, com o motivo no historico; a contagem que ja
+    foi pros Realizados fica la, e' historico. Pedido da Logistica em
+    27/11/2026. So' ate' a Emissao do Formulario: depois ja ha documento."""
+    try:
+        ids = sorted({int(i) for i in (ajuste_ids or [])})
+    except (TypeError, ValueError):
+        raise ValueError("Seleção inválida.") from None
+    if not ids:
+        raise ValueError("Selecione ao menos um item.")
+    motivo = str(motivo or "").strip()
+    feitos, erros = 0, []
+    for ajuste_id in ids:
+        ajuste = db.session.get(LogisticaInventarioAjuste, ajuste_id)
+        item = Item.query.filter_by(ajuste_id=ajuste_id).first() if ajuste else None
+        codigo = ajuste.codigo_produto if ajuste else str(ajuste_id)
+        try:
+            if not ajuste:
+                raise ValueError("ajuste não encontrado.")
+            if ajuste.status_modulo not in ETAPAS_VOLTAM_PRO_CICLICO or ajuste.relatorio_id:
+                raise ValueError("só volta na Validação ou na Emissão do Formulário, antes do FORM-08.52.")
+            if not item:
+                raise ValueError("não veio do inventário cíclico.")
+            if ajuste.saida_avulsa_numero:
+                raise ValueError(f"baixado por saída avulsa nº {ajuste.saida_avulsa_numero}; remova a saída avulsa antes.")
+            if item.distribuicao.cancelado_em:
+                raise ValueError(f"a distribuição {numero(item.distribuicao)} foi cancelada.")
+            if item.status != Item.STATUS_AJUSTE:
+                raise ValueError(f"no inventário cíclico o item está como \"{item.status}\".")
+            if item.contagem2 is not None or item.contagem3 is not None:
+                item.status = Item.STATUS_AGUARDA_3A
+                item.contagem3 = item.contagem3_por = item.contagem3_em = item.grv3 = None
+            else:
+                item.status = Item.STATUS_DIVERGENTE_1A
+            item.ajuste_id = None
+            item.contagem_id = None
+            nota = f"Voltou para o inventário cíclico {numero(item.distribuicao)} por {usuario}" + (f": {motivo}" if motivo else "")
+            ajuste.gestor_justificativa = " | ".join(t for t in (ajuste.gestor_justificativa, nota) if t)[:500]
+            ajuste.gestor_confirmado_em = agora_br()
+            ajuste.gestor_confirmado_por = usuario
+            ajuste.status_modulo = "Descartado"
+            ajuste.status_slug = ajuste_svc.status_slug("Descartado")
+            db.session.commit()
+            feitos += 1
+        except ValueError as exc:
+            db.session.rollback()
+            erros.append({"codigo": codigo, "erro": str(exc)})
+    return {"feitos": feitos, "erros": erros}
 
 
 def registrar_contagem_gestor(item: Item, quantidade, usuario: str) -> bool:

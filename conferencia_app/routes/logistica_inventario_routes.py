@@ -1729,8 +1729,14 @@ def inventario_ajustes_page():
 def api_listar_ajustes():
     status_modulo = request.args.get("status") or None
     ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo)
+    # Ajuste aberto pelo inventario ciclico pode voltar pra la' (ver
+    # ciclico_svc.voltar_do_ajuste). Uma consulta so' pra lista toda.
+    do_ciclico = {
+        ajuste_id for (ajuste_id,) in db.session.query(InventarioCiclicoItem.ajuste_id)
+        .filter(InventarioCiclicoItem.ajuste_id.in_([a.id for a in ajustes])).all()
+    } if ajustes else set()
     return jsonify({
-        "ajustes": [_fmt_ajuste(a) for a in ajustes],
+        "ajustes": [{**_fmt_ajuste(a), "do_ciclico": a.id in do_ciclico} for a in ajustes],
         "pode_pular_etapa": has_permission(PERMISSION_PULAR_ETAPA),
         "pode_validar": has_permission(PERMISSION_VALIDACAO),
         "pode_finance": has_permission(PERMISSION_FINANCE),
@@ -2083,6 +2089,24 @@ def api_descartar_ajuste(ajuste_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "Diferença marcada como improcedente.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/voltar-inventario", methods=["POST"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_voltar_ajuste_inventario():
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        r = ciclico_svc.voltar_do_ajuste(payload.get("ajuste_ids") or [], session.get("username", "desconhecido"), payload.get("motivo"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not r["feitos"]:
+        return jsonify({"error": "Nenhum item voltou: " + "; ".join(f"{e['codigo']}: {e['erro']}" for e in r["erros"])}), 400
+    msg = f"{r['feitos']} item(ns) voltaram para o inventário cíclico."
+    if r["erros"]:
+        msg += " Não voltaram: " + "; ".join(f"{e['codigo']}: {e['erro']}" for e in r["erros"])
+    return jsonify({"message": msg, **r})
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes/saida-avulsa", methods=["POST"])
