@@ -84,7 +84,7 @@ def _buscar_desenhos(itens) -> tuple[dict[str, str], list]:
             situacao[n_os] = ERP_FORA
             continue
         try:
-            conteudo, nome = desenho_svc.obter_arquivo(n_os)
+            arquivos = desenho_svc.obter_arquivos(n_os)
         except LookupError:
             situacao[n_os] = SEM_DESENHO
             continue
@@ -93,12 +93,14 @@ def _buscar_desenhos(itens) -> tuple[dict[str, str], list]:
             situacao[n_os] = ERP_FORA
             erp_fora = True
             continue
-        try:
-            anexos.append(_abrir_como_pdf(conteudo, nome))
-            situacao[n_os] = EM_ANEXO
-        except Exception:  # noqa: BLE001 - DWG, arquivo corrompido etc.
-            logger.warning("Desenho da OS %s (%s) nao pode ser anexado ao PDF", n_os, nome, exc_info=True)
-            situacao[n_os] = NAO_IMPRIMIVEL
+        # Vao todos os desenhos da OS; basta um abrir para contar como anexado.
+        situacao[n_os] = NAO_IMPRIMIVEL
+        for conteudo, nome in arquivos:
+            try:
+                anexos.append(_abrir_como_pdf(conteudo, nome))
+                situacao[n_os] = EM_ANEXO
+            except Exception:  # noqa: BLE001 - DWG, arquivo corrompido etc.
+                logger.warning("Desenho da OS %s (%s) nao pode ser anexado ao PDF", n_os, nome, exc_info=True)
     return situacao, anexos
 
 
