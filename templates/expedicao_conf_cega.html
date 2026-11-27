@@ -640,6 +640,9 @@
                 <div class="ce-modal__body">
                     <label for="ce-serie-cliente">Cliente (vale para todas as OS)</label>
                     <input id="ce-serie-cliente" class="eui-input" maxlength="120" style="width:100%; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+                        <button type="button" class="eui-btn eui-btn--subtle" id="ce-serie-todas-na"><i class="fas fa-check-double"></i> <span>Todas não aplicável</span></button>
+                    </div>
                     <div style="max-height: 50vh; overflow: auto;">
                         <table class="erp-table ce-table" style="width:100%;">
                             <thead><tr><th>OS</th><th>Nome do Monte</th><th>Produto</th><th>Nº de série</th><th title="Não imprime a etiqueta desta OS">Não aplicável</th></tr></thead>
@@ -1312,10 +1315,23 @@
             $("ce-serie-linhas").innerHTML = oss.map((x) => `<tr data-os="${escapeHtml(x.os)}">
                 <td><strong>${escapeHtml(x.os || "—")}</strong>${situacao(x)}</td><td>${campo("monte", x.monte)}</td><td>${campo("produto", x.produto)}</td><td>${campo("serie", x.serie)}</td>
                 <td style="text-align:center;"><input type="checkbox" data-campo="na"${x.situacao === "Não aplicável" ? " checked" : ""}></td></tr>`).join("");
-            $("ce-serie-linhas").querySelectorAll('input[data-campo="na"]').forEach((cb) => {
-                cb.onchange = () => cb.closest("tr").querySelectorAll("input.eui-input").forEach((i) => { i.disabled = cb.checked; });
+            const caixasNa = [...$("ce-serie-linhas").querySelectorAll('input[data-campo="na"]')];
+            // Botao alterna: marca todas como "Nao aplicavel"; se ja' estao todas, desmarca.
+            const rotuloTodasNa = () => {
+                $("ce-serie-todas-na").querySelector("span").textContent =
+                    caixasNa.length && caixasNa.every((c) => c.checked) ? "Desmarcar todas" : "Todas não aplicável";
+            };
+            caixasNa.forEach((cb) => {
+                cb.onchange = () => {
+                    cb.closest("tr").querySelectorAll("input.eui-input").forEach((i) => { i.disabled = cb.checked; });
+                    rotuloTodasNa();
+                };
                 cb.onchange();
             });
+            $("ce-serie-todas-na").onclick = () => {
+                const marcar = !caixasNa.every((c) => c.checked);
+                caixasNa.forEach((cb) => { cb.checked = marcar; cb.onchange(); });
+            };
             $("ce-serie-err").textContent = "";
             const fechar = () => modal.classList.remove("open");
             $("ce-serie-cancelar").onclick = fechar;
