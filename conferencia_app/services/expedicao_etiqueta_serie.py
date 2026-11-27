@@ -4,7 +4,8 @@ Rolo 50 x 150 mm em pe. Os 8,5 cm de cima ficam em branco (layout do
 usuario); abaixo, seis campos de 3,5 cm escritos de cima pra baixo (texto
 girado 90 graus no sentido horario), lado a lado da direita pra esquerda:
 Cliente, Nome do Monte, Produto, OS, Data e N. de serie. OS e data saem da
-conferencia; os outros quatro sao digitados na hora de imprimir.
+conferencia; os outros quatro sao digitados na hora de imprimir (monte,
+produto e serie ja' vem sugeridos - ver `sugestao`).
 
 Uma etiqueta por OS da ordem: cliente e data valem pra todas; monte, produto
 e serie sao digitados por OS (a OS marcada "nao aplicavel" nao imprime).
@@ -14,6 +15,7 @@ mesma etiqueta como alternativa.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -77,6 +79,59 @@ def os_da_ordem(ordem) -> list[str]:
     """OS distintas dos itens, na ordem em que aparecem; sem OS, [""]."""
     oss = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
     return oss or [""]
+
+
+# Sugestao automatica (regras do usuario, 27/11/2026), a partir da descricao
+# do item e da OS. Fica editavel na tela; o que nao bater na regra sai vazio.
+_PRODUTO_POR_TERMO = [  # primeiro que aparecer na descricao ganha
+    (r"\bCOMPLETO\b", "MOLD COMP"),
+    (r"\bGRID P/B\b", "GRID P/B"),
+    (r"\bSHOE ASSY\b", "SAPATA"),
+    (r"\bSPT\b", "SAPATA"),
+    (r"\bCAST\b", "CASTELO"),
+]
+
+
+def sugerir_monte(descricao: str) -> str:
+    """Piso: "MOLD HTX1100 FP SEXT25CM H8 8V COMPLETO" -> "FP HTX1100 H8 8V"
+    (tipo + maquina + altura + vias). Bloco: "MOLD SPM30 FBV19X39CM P20MM 3V"
+    -> "FBV SPM30 19X39 3V" (tipo + maquina + medida + vias)."""
+    tokens = str(descricao or "").upper().split()
+    if len(tokens) < 3 or tokens[0] not in ("MOLD", "MOLDE"):
+        return ""
+    maquina = tokens[1]
+    vias = next((t for t in tokens[2:] if re.fullmatch(r"\d+V", t)), "")
+    if not vias:
+        return ""
+    if tokens[2] == "FP":
+        altura = next((t for t in tokens[3:] if re.fullmatch(r"H\d+", t)), "")
+        return f"FP {maquina} {altura} {vias}" if altura else ""
+    bloco = re.fullmatch(r"([A-Z]{3})(\d+X\d+)(?:CM)?", tokens[2])
+    return f"{bloco.group(1)} {maquina} {bloco.group(2)} {vias}" if bloco else ""
+
+
+def sugerir_produto(descricao: str) -> str:
+    texto = str(descricao or "").upper()
+    return next((produto for termo, produto in _PRODUTO_POR_TERMO if re.search(termo, texto)), "")
+
+
+def sugerir_serie(os_: str, conferido_at) -> str:
+    """OS + data da conferencia: 8539 conferida em 27/11/2026 -> "8539-271126".
+    Campo de OS com mais de uma ("9154 | 9155") fica pra digitar."""
+    os_ = str(os_ or "").strip()
+    if not os_.isdigit() or not conferido_at:
+        return ""
+    return f"{os_}-{conferido_at:%d%m%y}"
+
+
+def sugestao(ordem, os_: str) -> dict:
+    """{monte, produto, serie} sugeridos pra OS. Com varios itens na OS, usa
+    o primeiro que e' molde (ou o primeiro, se nenhum for)."""
+    itens = [it for it in ordem.itens if str(it.n_os or "").strip() == os_]
+    item = next((it for it in itens if str(it.item or "").upper().startswith("MOLD")), itens[0] if itens else None)
+    descricao = item.item if item else ""
+    return {"monte": sugerir_monte(descricao), "produto": sugerir_produto(descricao),
+            "serie": sugerir_serie(os_, ordem.conferido_at)}
 
 
 def registros(ordem) -> dict:

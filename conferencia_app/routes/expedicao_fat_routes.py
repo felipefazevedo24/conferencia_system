@@ -495,12 +495,16 @@ def etiqueta_serie_registros(cod_ordem_fat):
     if not ordem:
         return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
     feitos = etiqueta_serie.registros(ordem)
+    # Campo ainda vazio (OS pendente ou "Nao aplicavel") vem com a sugestao
+    # tirada da descricao do item e da OS; o que ja' foi impresso prevalece.
     return jsonify({"os": [
-        {"os": os_, "situacao": r.situacao if r else None, "monte": r.monte if r else "",
-         "produto": r.produto if r else "", "serie": r.serie if r else "",
+        {"os": os_, "situacao": r.situacao if r else None,
+         "monte": (r and r.monte) or sug["monte"], "produto": (r and r.produto) or sug["produto"],
+         "serie": (r and r.serie) or sug["serie"],
          "cliente": r.cliente if r else "", "usuario": r.usuario if r else None,
          "registrado_em": _iso(r.registrado_em) if r else None}
-        for os_ in etiqueta_serie.os_da_ordem(ordem) for r in [feitos.get(os_)]
+        for os_ in etiqueta_serie.os_da_ordem(ordem)
+        for r, sug in [(feitos.get(os_), etiqueta_serie.sugestao(ordem, os_))]
     ], "pendentes": etiqueta_serie.os_pendentes(ordem)})
 
 
