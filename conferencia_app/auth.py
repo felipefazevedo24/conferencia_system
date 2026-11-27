@@ -102,6 +102,7 @@ PERMISSION_CATALOG = {
     "PAGE_MINHAS_TAREFAS": "Planejamento > Minhas tarefas (quadro pessoal)",
     "PAGE_COMEX": "Comex > Processos de importação/exportação",
     "PAGE_COMEX_PULAR_STATUS": "Comex > Pular Status (gerência)",
+    "PAGE_COMEX_REABRIR_COTACAO": "Comex > Reabrir cotação para o fornecedor revisar o preço (gestor)",
     "PAGE_LOGISTICA_INVENTARIO_VALIDACAO": "Logística > Inventário > Validação de diferenças (gestor)",
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",

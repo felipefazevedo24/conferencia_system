@@ -1779,10 +1779,70 @@ def _cotacao_aereo_irma(cotacao: ComexCotacao, dados_aereo: dict, volumes: list 
     return irma
 
 
+def irma_aereo(cotacao: ComexCotacao) -> ComexCotacao | None:
+    """A cotacao Aereo que nasceu junto desta (prestador cotou "os dois" no
+    mesmo link). Nao ha' chave ligando as duas: a irma e' a sem link do
+    mesmo processo, modal Aereo, recebida no mesmo instante."""
+    if not cotacao.token_publico_hash or not cotacao.recebida_em:
+        return None
+    candidatas = ComexCotacao.query.filter(
+        ComexCotacao.processo_id == cotacao.processo_id,
+        ComexCotacao.id != cotacao.id,
+        ComexCotacao.token_publico_hash.is_(None),
+        ComexCotacao.recebida_em == cotacao.recebida_em,
+    ).all()
+    return next((c for c in candidatas if c.modal_cotado and c.modal_cotado.modal == "AEREO"), None)
+
+
+def _mae_em_revisao(cotacao: ComexCotacao) -> ComexCotacao | None:
+    """Para a irma Aereo: a cotacao do link, se ela foi reaberta e o
+    prestador ainda nao reenviou (o reenvio substitui a irma)."""
+    if cotacao.token_publico_hash or not cotacao.recebida_em:
+        return None
+    return ComexCotacao.query.filter(
+        ComexCotacao.processo_id == cotacao.processo_id,
+        ComexCotacao.status == "Pendente",
+        ComexCotacao.token_publico_hash.isnot(None),
+        ComexCotacao.recebida_em == cotacao.recebida_em,
+    ).first()
+
+
+def reabrir_cotacao(cotacao: ComexCotacao, *, usuario: str, validade_dias: int = 14) -> ComexCotacao:
+    """Gestor reabre uma cotacao ja' recebida para o prestador revisar o
+    preco (pedido de 27/11/2026). O MESMO link do e-mail original volta a
+    valer (prazo renovado) e abre com os valores enviados antes; o reenvio
+    sobrescreve a cotacao - sem historico, por decisao do usuario."""
+    if cotacao.status != "Recebida":
+        raise ValueError("Só é possível reabrir uma cotação que já foi recebida do prestador.")
+    if not cotacao.token_publico_hash:
+        raise ValueError("Esta cotação Aérea veio no mesmo link da LCL deste prestador - reabra a cotação LCL.")
+    irma = irma_aereo(cotacao)
+    if cotacao.is_escolhida or (irma and irma.is_escolhida):
+        raise ValueError("Esta cotação já foi escolhida como vencedora e não pode ser reaberta.")
+    agora = agora_br()
+    cotacao.status = "Pendente"
+    cotacao.is_sugerida_pelo_sistema = False
+    validade = agora + timedelta(days=max(1, validade_dias))
+    if not cotacao.token_publico_expira_em or cotacao.token_publico_expira_em < validade:
+        cotacao.token_publico_expira_em = validade
+    processo = cotacao.processo
+    processo.atualizado_em = agora
+    processo.atualizado_por = usuario
+    db.session.commit()
+
+    from . import comex_custo_service
+    ptax = comex_custo_service.ptax_do_dia()
+    if not processo.cotacao_vencedora_id:
+        recalcular_sugerida(cotacao.processo_id, ptax["cotacao"] if ptax else None)
+        db.session.commit()
+    return cotacao
+
+
 def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao:
     """Recebe o formulario publico preenchido pelo prestador de frete e
     fecha a cotacao (Modulo 3). So aceita uma vez - o link fica invalido
-    depois (`link_cotacao_valido`)."""
+    depois (`link_cotacao_valido`), a nao ser que o gestor reabra
+    (`reabrir_cotacao`): ai' este reenvio sobrescreve a anterior."""
     if not link_cotacao_valido(cotacao):
         raise ValueError("Este link de cotação já foi usado ou expirou.")
     if not dados.get("termos_aceitos"):
@@ -1798,6 +1858,17 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         aereo = dados.get("aereo") or {}
         if modal_cotado == "AMBOS" and not any(_to_float(aereo.get(c)) for c in _CAMPOS_COTACAO_CUSTO):
             raise ValueError("Informe os custos do frete Aéreo ou marque que está cotando só LCL.")
+
+    # Reenvio de cotacao reaberta: a Aerea "irma" do envio anterior sai (se
+    # ele cotar os dois de novo, nasce outra) - antes de recebida_em mudar.
+    irma_anterior = irma_aereo(cotacao)
+    if irma_anterior:
+        # Os 1-para-1 nao tem cascade: sem isso o delete tenta anular o FK.
+        for filho in (irma_anterior.composicao, irma_anterior.modal_cotado,
+                      irma_anterior.modal_solicitado, irma_anterior.destinatarios_completos):
+            if filho is not None:
+                db.session.delete(filho)
+        db.session.delete(irma_anterior)
 
     for campo, tamanho in _CAMPOS_COTACAO_TEXTO.items():
         if campo in dados:
@@ -1821,7 +1892,11 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         ComexCotacaoVolume.query.filter_by(cotacao_id=cotacao.id).delete()
         _adicionar_volumes(cotacao, dados.get("volumes"))
         # "Os dois": a cotacao do link fica LCL e o Aereo vira outra cotacao.
-        db.session.add(ComexCotacaoModal(cotacao=cotacao, modal="LCL" if modal_cotado == "AMBOS" else modal_cotado))
+        modal = "LCL" if modal_cotado == "AMBOS" else modal_cotado
+        if cotacao.modal_cotado:  # reenvio de cotacao reaberta
+            cotacao.modal_cotado.modal = modal
+        else:
+            db.session.add(ComexCotacaoModal(cotacao=cotacao, modal=modal))
 
     agora = agora_br()
     cotacao.termos_aceitos = True
@@ -1979,6 +2054,8 @@ def escolher_cotacao(
     e o que vai no e-mail de selecao enviado ao prestador escolhido."""
     if cotacao.status != "Recebida":
         raise ValueError("Só é possível escolher uma cotação que já foi recebida do prestador.")
+    if _mae_em_revisao(cotacao):
+        raise ValueError("A cotação deste prestador foi reaberta para revisão - aguarde o reenvio.")
     justificativa = (justificativa or "").strip()
     if not cotacao.is_sugerida_pelo_sistema and not justificativa:
         raise ValueError("Informe a justificativa para escolher uma cotação diferente da sugerida pelo sistema (menor custo do modal).")

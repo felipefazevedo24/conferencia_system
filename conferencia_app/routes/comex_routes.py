@@ -214,6 +214,7 @@ def comex_page():
         user=session.get("username"),
         is_admin=session.get("role") == "Admin",
         pode_pular_status=has_permission("PAGE_COMEX_PULAR_STATUS"),
+        pode_reabrir_cotacao=has_permission("PAGE_COMEX_REABRIR_COTACAO"),
     )
 
 
@@ -1200,6 +1201,45 @@ def api_escolher_cotacao(cotacao_id):
     return jsonify({"message": "Cotação escolhida.", "processo": _processo_payload(processo)})
 
 
+@comex_bp.route("/api/comex/cotacoes/<int:cotacao_id>/reabrir", methods=["POST"])
+@permission_required("PAGE_COMEX_REABRIR_COTACAO")
+def api_reabrir_cotacao(cotacao_id):
+    """Gestor reabre a cotacao recebida: o link original volta a valer pro
+    prestador revisar o preco (ver comex_service.reabrir_cotacao)."""
+    cotacao = ComexCotacao.query.get(cotacao_id)
+    if not cotacao:
+        return jsonify({"error": "Cotação não encontrada."}), 404
+    try:
+        cotacao = svc.reabrir_cotacao(cotacao, usuario=session.get("username", "desconhecido"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({
+        "message": f"Cotação reaberta até {cotacao.token_publico_expira_em:%d/%m/%Y}. "
+                   "O link do e-mail original voltou a valer - avise o prestador.",
+        "cotacao": _cotacao_payload(cotacao),
+    })
+
+
+def _cotacao_anterior_publica(cotacao: ComexCotacao) -> dict | None:
+    """Cotacao reaberta: o que o prestador enviou antes, pra ele so' revisar.
+    Sem markup nem total em R$ (o link publico nao ve isso)."""
+    if cotacao.status != "Pendente" or not cotacao.recebida_em:
+        return None
+    campos = ("fornecedor_frete", "transit_time", "rota", "ptax", "proximas_saidas") + svc._CAMPOS_COTACAO_CUSTO
+
+    def dados(c):
+        d = {k: getattr(c, k) for k in campos}
+        d["validade"] = c.validade.isoformat() if c.validade else None
+        return d
+
+    irma = svc.irma_aereo(cotacao)
+    return {
+        **dados(cotacao),
+        "modal_cotado": "AMBOS" if irma else (cotacao.modal_cotado.modal if cotacao.modal_cotado else None),
+        "aereo": dados(irma) if irma else None,
+    }
+
+
 # ── Formulário público (sem login) ─────────────────────────────────────
 @comex_bp.route("/cotacao-fornecedor/<token>")
 def cotacao_publica_page(token):
@@ -1225,6 +1265,7 @@ def api_cotacao_publica_dados(token):
         "termos": svc.TERMOS_COTACAO,
         "etapas_custo": [{"campo": p, "label": l} for p, l in svc.ETAPAS_CUSTO_COTACAO],
         "cotacao": _cotacao_payload(cotacao) if cotacao.status == "Recebida" else None,
+        "anterior": _cotacao_anterior_publica(cotacao),
         # Dados de embarque que a Columbia ja preencheu ao gerar o link -
         # aparecem mesmo antes da submissao, pra pre-preencher o formulario
         # do prestador (ele so confirma/ajusta, nao digita do zero).
