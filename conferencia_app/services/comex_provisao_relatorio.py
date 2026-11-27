@@ -37,7 +37,7 @@ def gerar_pdf(p: ComexProvisao) -> bytes:
     modelo = "Despachante (DUIMP)" if p.modelo == "despachante" else "Courier"
     pos = ", ".join(resultado.get("pos") or []) or "—"
     cabecalho = (
-        f"<b>Provisão de custo de importação — {proc.id_op}</b> (versão {p.versao})<br/>"
+        f"<b>Provisão de custo de importação — {proc.id_op}</b> (atualizada em {p.criado_em:%d/%m/%Y %H:%M})<br/>"
         f"Fornecedor: {proc.fornecedor or '—'} · POs: {pos}<br/>"
         f"Modelo: {modelo} · Incoterm: {p.incoterm} · PTAX: {p.ptax:.4f} · "
         f"Forwarder: {resultado.get('forwarder') or '—'}{markup}<br/>"
@@ -92,10 +92,10 @@ def gerar_xlsx(p: ComexProvisao) -> bytes:
     proc = p.processo
     for linha in (
         ["Processo", proc.id_op], ["Fornecedor", proc.fornecedor], ["POs", ", ".join(resultado.get("pos") or [])],
-        ["Versão", p.versao], ["Modelo", p.modelo], ["Incoterm", p.incoterm], ["PTAX", p.ptax],
+        ["Modelo", p.modelo], ["Incoterm", p.incoterm], ["PTAX", p.ptax],
         *([[f"Paridade {resultado['moeda']} (mercadoria)", resultado["paridade_texto"]]] if resultado.get("paridade_texto") else []),
         *([[f"Câmbio {resultado['moeda']} (mercadoria)", resultado["cambio_moeda"]]] if resultado.get("cambio_moeda") else []),
-        ["Gerada em", p.criado_em.strftime("%d/%m/%Y %H:%M")], ["Gerada por", p.criado_por], [],
+        ["Atualizada em", p.criado_em.strftime("%d/%m/%Y %H:%M")], ["Atualizada por", p.criado_por], [],
         ["Impostos e taxas", p.impostos_brl], ["Frete internacional (cotação)", p.frete_brl],
         ["Despesas de desembaraço", p.despesas_brl], [],
     ):

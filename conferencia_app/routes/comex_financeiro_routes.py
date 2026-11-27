@@ -65,14 +65,14 @@ def _realizado_payload(processo: ComexProcesso) -> dict | None:
 def _enviar_email_controladoria(p: ComexProvisao) -> None:
     proc = p.processo
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Provisão de custo de importação – {proc.id_op} (versão {p.versao})"
+    msg["Subject"] = f"Provisão de custo de importação – {proc.id_op}"
     remetente, smtp_kwargs = _remetente_comex()
     msg["From"] = remetente
     msg["To"] = svc.EMAIL_CONTROLADORIA
     total = (p.impostos_brl or 0) + (p.frete_brl or 0) + (p.despesas_brl or 0)
     corpo = (
         f"<p>Prezados,</p><p>Segue a provisão de custo da importação <strong>{proc.id_op}</strong> "
-        f"({proc.fornecedor or ''}), versão {p.versao}, gerada por {p.criado_por}.</p>"
+        f"({proc.fornecedor or ''}), atualizada em {p.criado_em:%d/%m/%Y %H:%M} por {p.criado_por}.</p>"
         f"<ul><li>Impostos e taxas: {relatorio._brl(p.impostos_brl)}</li>"
         f"<li>Frete internacional: {relatorio._brl(p.frete_brl)}</li>"
         f"<li>Despesas de desembaraço: {relatorio._brl(p.despesas_brl)}</li>"
@@ -81,7 +81,7 @@ def _enviar_email_controladoria(p: ComexProvisao) -> None:
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
     parte = MIMEApplication(relatorio.gerar_pdf(p), _subtype="pdf")
-    parte.add_header("Content-Disposition", "attachment", filename=f"provisao-{proc.id_op}-v{p.versao}.pdf")
+    parte.add_header("Content-Disposition", "attachment", filename=f"provisao-{proc.id_op}.pdf")
     msg.attach(parte)
     enviar_mensagem_smtp(current_app, msg, **smtp_kwargs)
 
@@ -156,20 +156,37 @@ def api_gravar_provisao(processo_id):
     processo = _processo(processo_id)
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404
+    ja_tinha = bool(svc.vigente(processo))
     try:
         p = svc.gravar(processo, request.get_json(silent=True) or {}, _usuario())
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    mensagem = f"Provisão versão {p.versao} gravada e enviada à Controladoria."
+    # Gravar so' grava: o e-mail e' o botao "Enviar a' Controladoria".
+    return jsonify({"message": "Provisão atualizada." if ja_tinha else "Provisão gravada.", "provisao": _provisao_payload(p)})
+
+
+@comex_financeiro_bp.route("/api/comex/processos/<int:processo_id>/provisao/enviar", methods=["POST"])
+@permission_required(PERM_EDITAR)
+def api_enviar_provisao(processo_id):
+    """Manda a provisao vigente a' Controladoria - quantas vezes o operador
+    quiser (pedido do usuario, 27/11/2026)."""
+    processo = _processo(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    p = svc.vigente(processo)
+    if not p:
+        return jsonify({"error": "Grave a provisão antes de enviar."}), 400
     try:
         _enviar_email_controladoria(p)
-        p.email_enviado = True
+        p.email_enviado, p.email_erro = True, None
+        mensagem, status = "Provisão enviada à Controladoria.", 200
     except Exception as exc:
         current_app.logger.exception("Comex: falha no e-mail da provisao %s", processo.id_op)
         p.email_enviado, p.email_erro = False, str(exc)[:500]
-        mensagem = f"Provisão versão {p.versao} gravada, mas o e-mail à Controladoria NÃO foi enviado: {exc}"
+        mensagem, status = f"O e-mail à Controladoria NÃO foi enviado: {exc}", 502
     db.session.commit()
-    return jsonify({"message": mensagem, "provisao": _provisao_payload(p)})
+    return jsonify({"message": mensagem, "error": mensagem if status != 200 else None,
+                    "provisao": _provisao_payload(p)}), status
 
 
 @comex_financeiro_bp.route("/api/comex/provisoes/<int:provisao_id>.<formato>")
@@ -178,7 +195,7 @@ def api_baixar_provisao(provisao_id, formato):
     p = db.session.get(ComexProvisao, provisao_id)
     if not p or formato not in ("pdf", "xlsx"):
         return jsonify({"error": "Provisão não encontrada."}), 404
-    nome = f"provisao-{p.processo.id_op}-v{p.versao}.{formato}"
+    nome = f"provisao-{p.processo.id_op}.{formato}"
     if formato == "pdf":
         return send_file(BytesIO(relatorio.gerar_pdf(p)), mimetype="application/pdf", download_name=nome)
     return send_file(BytesIO(relatorio.gerar_xlsx(p)), as_attachment=True, download_name=nome,

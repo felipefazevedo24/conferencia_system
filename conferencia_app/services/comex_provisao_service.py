@@ -10,7 +10,9 @@ Provisao (na instrucao de embarque, so' importacao, cotacao escolhida):
     release e Delivery ficam fora da base;
   - impostos na PTAX pura (taxa fiscal); frete provisionado = cotacao
     escolhida em R$ com o markup do forwarder;
-  - grava retrato com versao; recalcular cria versao nova.
+  - uma provisao por processo: gravar de novo ATUALIZA a mesma (pedido do
+    usuario, 27/11/2026 - antes cada gravacao criava uma versao nova). O
+    e-mail a' Controladoria e' um botao a parte.
 Realizado: impostos federais lidos da DUIMP/DIR (comex_di_parser); ICMS,
 fatura do frete e despesas digitados.
 """
@@ -165,14 +167,18 @@ def gravar(processo: ComexProcesso, dados: dict, usuario: str) -> ComexProvisao:
         raise ValueError("Escolha o modelo da provisão: Despachante ou Courier.")
     resultado = calcular(processo, dados)
     totais = resultado[modelo]["totais"]
-    versao = (processo.provisoes[-1].versao + 1) if processo.provisoes else 1
-    provisao = ComexProvisao(
-        processo=processo, versao=versao, modelo=modelo, incoterm=resultado["incoterm"], ptax=custo._num(dados["ptax"]),
-        impostos_brl=_impostos(totais), frete_brl=resultado["frete_brl"], despesas_brl=totais["despesas"],
-        parametros=json.dumps({k: v for k, v in dados.items() if k != "modelo"}, ensure_ascii=False, default=str),
-        resultado=json.dumps(resultado, ensure_ascii=False, default=str), criado_em=agora_br(), criado_por=usuario,
-    )
-    db.session.add(provisao)
+    provisao = vigente(processo)
+    if not provisao:
+        provisao = ComexProvisao(processo=processo, versao=1)
+        db.session.add(provisao)
+    # criado_em/criado_por passam a ser "ultima atualizacao". O envio a'
+    # Controladoria volta a "nao enviada": o numero mudou.
+    provisao.modelo, provisao.incoterm, provisao.ptax = modelo, resultado["incoterm"], custo._num(dados["ptax"])
+    provisao.impostos_brl, provisao.frete_brl, provisao.despesas_brl = _impostos(totais), resultado["frete_brl"], totais["despesas"]
+    provisao.parametros = json.dumps({k: v for k, v in dados.items() if k != "modelo"}, ensure_ascii=False, default=str)
+    provisao.resultado = json.dumps(resultado, ensure_ascii=False, default=str)
+    provisao.criado_em, provisao.criado_por = agora_br(), usuario
+    provisao.email_enviado = provisao.email_erro = None
     db.session.commit()
     return provisao
 
@@ -261,5 +267,6 @@ def linha_gestao(p: ComexProcesso) -> dict:
         "mes": p.em_transito_eta.strftime("%Y-%m") if p.em_transito_eta else None,
         "situacao": situacao, "provisao": previsto, "realizado": real,
         "provisao_versao": prov.versao if prov else None, "provisao_modelo": prov.modelo if prov else None,
+        "provisao_atualizada": prov.criado_em.strftime("%d/%m/%Y") if prov else None,
         "pos": [x.po_numero for x in embarque.processos_do_embarque(p) if x.po_numero],
     }
