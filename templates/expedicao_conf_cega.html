@@ -1706,8 +1706,8 @@
             const linhas = (o.itens || []).map((it) => {
                 const celulas = `<td style="text-align:center"><span class="ce-status-dot"></span></td>
                     <td class="ce-col-cod">${escapeHtml(it.cod_interno || "—")}</td>
-                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS <span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span><span data-os-filhas="${escapeHtml(it.n_os || "")}"></span></span></td>
-                    <td class="ce-col-centro ce-col-os"><span data-os="${escapeHtml(it.n_os || "")}">${escapeHtml(it.n_os || "—")}</span><span data-os-filhas="${escapeHtml(it.n_os || "")}"></span></td>`;
+                    <td class="ce-col-desc">${escapeHtml(it.item || "—")}<span class="ce-os-mobile">OS ${celulaOs(it.n_os)}</span></td>
+                    <td class="ce-col-centro ce-col-os">${celulaOs(it.n_os)}</td>`;
                 if (conferido && !editavel) {
                     const cls = it.divergente ? "divergente" : "ok-line";
                     // Conferencia CEGA: nunca exibimos a quantidade esperada.
@@ -1759,39 +1759,55 @@
         // OS filhas (aba Dependencias do GRV) abrem embaixo do item, so' para
         // consulta: nao entram na contagem. Mesmo esquema do desenho - consulta
         // depois da tabela na tela, uma vez por OS; ERP fora so' nao mostra.
-        function marcarOsFilhas(wrap) {
+        // O ERP manda item com mais de uma OS no mesmo campo ("11071 | 11072"):
+        // cada uma vira o seu link de desenho e entra nas OS filhas.
+        function osDoItem(nOs) {
+            return String(nOs || "").split(/[|,;]/).map((s) => s.trim()).filter(Boolean);
+        }
+
+        function celulaOs(nOs) {
+            const lista = osDoItem(nOs);
+            if (!lista.length) return "—";
+            return lista.map((os) => `<span data-os="${escapeHtml(os)}">${escapeHtml(os)}</span>`).join(" | ")
+                + `<span data-os-filhas="${escapeHtml(lista.join("|"))}"></span>`;
+        }
+
+        function buscarOsFilhas(os) {
             const cache = (window.__ceOsFilhas = window.__ceOsFilhas || new Map());
-            const porOs = new Map();
+            if (!cache.has(os)) {
+                cache.set(os, fetch("/api/expedicao/conf-cega/os-filhas/" + encodeURIComponent(os), { headers: { "Accept": "application/json" } })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((d) => {
+                        if (!d || d.erp_indisponivel) cache.delete(os);
+                        return (d && d.filhas) || [];
+                    })
+                    .catch(() => { cache.delete(os); return []; }));
+            }
+            return cache.get(os);
+        }
+
+        function marcarOsFilhas(wrap) {
             wrap.querySelectorAll("[data-os-filhas]").forEach((slot) => {
-                const os = (slot.dataset.osFilhas || "").trim();
-                if (!/^[A-Za-z0-9._-]+$/.test(os)) return;
-                if (!porOs.has(os)) porOs.set(os, []);
-                porOs.get(os).push(slot);
-            });
-            porOs.forEach((slots, os) => {
-                if (!cache.has(os)) {
-                    cache.set(os, fetch("/api/expedicao/conf-cega/os-filhas/" + encodeURIComponent(os), { headers: { "Accept": "application/json" } })
-                        .then((r) => (r.ok ? r.json() : null))
-                        .then((d) => {
-                            if (!d || d.erp_indisponivel) cache.delete(os);
-                            return d;
-                        })
-                        .catch(() => { cache.delete(os); return null; }));
-                }
-                cache.get(os).then((d) => {
-                    const filhas = (d && d.filhas) || [];
-                    if (!filhas.length) return;
-                    slots.forEach((slot) => {
-                        if (!slot.isConnected) return;
-                        const btn = document.createElement("button");
-                        btn.type = "button";
-                        btn.className = "ce-os-filhas-btn";
-                        btn.innerHTML = rotuloOsFilhas(filhas.length, false);
-                        btn.addEventListener("click", () => alternarOsFilhas(btn, filhas));
-                        slot.replaceWith(btn);
-                    });
+                const lista = osDoItem(slot.dataset.osFilhas).filter((os) => /^[A-Za-z0-9._-]+$/.test(os));
+                if (!lista.length) return;
+                Promise.all(lista.map(buscarOsFilhas)).then((porOs) => {
+                    // Mais de uma OS no item: as filhas de cada uma vem debaixo dela.
+                    const filhas = lista.length === 1 ? porOs[0] : lista.flatMap((os, i) => porOs[i].length
+                        ? [{ numero: os, titulo: "OS do item", nivel: 1, cabecalho: true }, ...porOs[i].map((f) => ({ ...f, nivel: f.nivel + 1 }))]
+                        : []);
+                    if (!filhas.length || !slot.isConnected) return;
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "ce-os-filhas-btn";
+                    btn.innerHTML = rotuloOsFilhas(qtdOsFilhas(filhas), false);
+                    btn.addEventListener("click", () => alternarOsFilhas(btn, filhas));
+                    slot.replaceWith(btn);
                 });
             });
+        }
+
+        function qtdOsFilhas(filhas) {
+            return filhas.filter((f) => !f.cabecalho).length;
         }
 
         function rotuloOsFilhas(qtd, aberta) {
@@ -1815,7 +1831,7 @@
                 row.after(sub);
                 marcarDesenhos(sub);
             }
-            row.querySelectorAll(".ce-os-filhas-btn").forEach((b) => { b.innerHTML = rotuloOsFilhas(filhas.length, !aberta); });
+            row.querySelectorAll(".ce-os-filhas-btn").forEach((b) => { b.innerHTML = rotuloOsFilhas(qtdOsFilhas(filhas), !aberta); });
         }
 
         // Nº OS com desenho no ERP vira link (negrito + sublinhado) que abre o

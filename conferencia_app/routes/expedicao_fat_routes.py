@@ -164,7 +164,8 @@ def consultar_desenho_os(n_os):
         return jsonify({"tem_desenho": False})
     base = f"/api/expedicao/conf-cega/desenho/{documento['numero_os']}/arquivo"
     desenhos = [
-        {"arquivo": d["filename"], "url": f"{base}?i={i}" if i else base}
+        {"arquivo": f"{d['subdivisao']} – {d['filename']}" if d.get("subdivisao") else d["filename"],
+         "url": f"{base}?i={i}" if i else base}
         for i, d in enumerate(documento["documentos"])
     ]
     return jsonify({

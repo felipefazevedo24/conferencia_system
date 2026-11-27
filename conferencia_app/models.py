@@ -3719,6 +3719,48 @@ class ExpedicaoCobrancaLog(db.Model):
     criado_em = db.Column(db.DateTime, default=agora_br, nullable=False, index=True)
 
 
+class ExpedicaoDesenhoFoto(db.Model):
+    """Foto dos desenhos de uma OS para a Conferencia de Expedicao: buscar no
+    ERP a cada Nº OS da tela demorava. Vale 1h (expedicao_desenho_service);
+    vencida, a proxima consulta refaz. Foto sem arquivo = OS sem desenho."""
+
+    __tablename__ = "expedicao_desenho_foto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    n_os = db.Column(db.String(40), nullable=False, unique=True)
+    foto_em = db.Column(db.DateTime, nullable=False, index=True)
+
+    arquivos = db.relationship(
+        "ExpedicaoDesenhoFotoArquivo",
+        backref="foto",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoDesenhoFotoArquivo.posicao",
+    )
+
+
+class ExpedicaoDesenhoFotoArquivo(db.Model):
+    """Um desenho da foto, com a referencia de onde ele esta' no ERP. O PDF
+    (conteudo) so' vem no primeiro clique: assim o link aparece sem esperar
+    baixar todos."""
+
+    __tablename__ = "expedicao_desenho_foto_arquivo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    foto_id = db.Column(db.Integer, db.ForeignKey("expedicao_desenho_foto.id"), nullable=False, index=True)
+    posicao = db.Column(db.Integer, nullable=False, default=0)
+    nome_arquivo = db.Column(db.String(260), nullable=False, default="")
+    subdivisao = db.Column(db.String(20), nullable=False, default="")
+    # Referencia no ERP (tos_aux_desenhos/anexos/imagens)
+    tipo = db.Column(db.String(20), nullable=False)
+    documento_id = db.Column(db.Integer, nullable=False)
+    aux_code = db.Column(db.Integer, nullable=False)
+    origem_cod_os = db.Column(db.Integer, nullable=False)
+    origem_aux_code = db.Column(db.Integer, nullable=False)
+    # xmin da linha no ERP: igual na foto nova = mesmo arquivo, o PDF ja' baixado e' aproveitado.
+    revisao_conteudo = db.Column(db.String(40))
+    conteudo = db.deferred(db.Column(db.LargeBinary().with_variant(LONGBLOB, "mysql")))
+
+
 class PlannerBoard(db.Model):
     __tablename__ = "planner_board"
 
