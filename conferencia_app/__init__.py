@@ -81,6 +81,7 @@ from .routes.logistica_cardex_routes import logistica_cardex_bp
 from .routes.recebimento_enderecamento_routes import recebimento_enderecamento_bp
 from .routes.logistica_consumo_chapa_routes import logistica_consumo_chapa_bp
 from .routes.intralog_picking_routes import intralog_picking_bp
+from .routes.projetos_routes import projetos_bp
 from .routes.compras_homologacao_routes import compras_homologacao_bp
 from .routes.compras_st_routes import compras_st_bp
 from .routes.compras_divergencia_recebimento_routes import compras_divergencia_recebimento_bp
@@ -153,6 +154,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(recebimento_enderecamento_bp)
     app.register_blueprint(logistica_consumo_chapa_bp)
     app.register_blueprint(intralog_picking_bp)
+    app.register_blueprint(projetos_bp)
     app.register_blueprint(compras_homologacao_bp)
     app.register_blueprint(compras_st_bp)
     app.register_blueprint(compras_divergencia_recebimento_bp)

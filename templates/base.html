@@ -399,6 +399,18 @@
                 </div>
                 {% endif %}
 
+                {% if can_access('PAGE_PROJETOS') or can_access('PAGE_PROJETOS_GESTAO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-projetos" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-diagram-project"></i><span>Projetos</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-projetos">
+                        <a href="/projetos" class="list-group-item list-group-item-action"><i class="fas fa-chart-pie"></i> Painel de projetos</a>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if can_access('PAGE_COMEX') or can_access('PAGE_COMEX_FINANCEIRO_CONSULTA') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-comex" aria-expanded="false">

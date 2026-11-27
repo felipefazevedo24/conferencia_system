@@ -117,6 +117,8 @@ PERMISSION_CATALOG = {
     "PAGE_INTRALOG_PICKING": "Logística > Intralog > Picking Almoxarifado",
     "PAGE_PRODUCAO": "Produção > Acompanhamento de OS",
     "EXECUTE_RPA_GRV": "Produção > Executar apontamento agrupado no GRV",
+    "PAGE_PROJETOS": "Projetos > Ver projetos e atualizar tarefas (iniciar, concluir, observação)",
+    "PAGE_PROJETOS_GESTAO": "Projetos > Gestão (criar/editar projetos e tarefas, dependências, importar planilha)",
 }
 
 
