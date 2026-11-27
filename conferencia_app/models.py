@@ -6126,3 +6126,76 @@ class CompraStRespostaItem(db.Model):
     bruto_calculado = db.Column(db.Float)
 
     item = db.relationship("CompraStCotacaoItem")
+
+
+class Projeto(db.Model):
+    """Gestao de projetos (menu Projetos): um projeto tem tarefas com datas,
+    responsaveis e dependencias.
+
+    Uma tarefa so' pode ser iniciada ou concluida depois que TODAS as tarefas
+    de que ela depende estiverem concluidas. A situacao da tarefa (concluida,
+    concluida com atraso, bloqueada, atrasada) e' calculada na leitura a partir
+    de `status`, `termino_real`, das datas e das dependencias - nao e' gravada,
+    pra nunca sair de sincronia."""
+    __tablename__ = "projeto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False)
+    descricao = db.Column(db.Text)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    tarefas = db.relationship("ProjetoTarefa", backref="projeto", cascade="all, delete-orphan",
+                              order_by="ProjetoTarefa.numero")
+
+
+class ProjetoTarefa(db.Model):
+    __tablename__ = "projeto_tarefa"
+
+    id = db.Column(db.Integer, primary_key=True)
+    projeto_id = db.Column(db.Integer, db.ForeignKey("projeto.id"), nullable=False, index=True)
+    numero = db.Column(db.Integer, nullable=False)  # o "#" da planilha, por projeto
+    grupo = db.Column(db.String(80))
+    descricao = db.Column(db.String(500), nullable=False)
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False)
+    termino_real = db.Column(db.Date)  # preenchido = concluida
+    area = db.Column(db.String(120))
+    observacao = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="nao_iniciada")  # nao_iniciada | em_andamento
+    iniciado_em = db.Column(db.DateTime)
+    concluido_por = db.Column(db.String(100))
+    # Avisos do Teams ja' mandados (nao repetir)
+    aviso_liberada_em = db.Column(db.DateTime)
+    aviso_prazo_em = db.Column(db.Date)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=agora_br, nullable=False)
+
+    responsaveis = db.relationship("ProjetoTarefaResponsavel", backref="tarefa", cascade="all, delete-orphan",
+                                   order_by="ProjetoTarefaResponsavel.id")
+    dependencias = db.relationship("ProjetoTarefaDependencia", foreign_keys="ProjetoTarefaDependencia.tarefa_id",
+                                   backref="tarefa", cascade="all, delete-orphan")
+    sucessoras = db.relationship("ProjetoTarefaDependencia", foreign_keys="ProjetoTarefaDependencia.depende_de_id",
+                                 backref="depende_de", cascade="all, delete-orphan")
+
+
+class ProjetoTarefaResponsavel(db.Model):
+    """Usuario do Sync (username) ou nome digitado de quem nao tem login."""
+    __tablename__ = "projeto_tarefa_responsavel"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tarefa_id = db.Column(db.Integer, db.ForeignKey("projeto_tarefa.id"), nullable=False, index=True)
+    username = db.Column(db.String(80), index=True)
+    nome = db.Column(db.String(120), nullable=False)
+
+
+class ProjetoTarefaDependencia(db.Model):
+    """`tarefa` so' pode comecar depois que `depende_de` estiver concluida."""
+    __tablename__ = "projeto_tarefa_dependencia"
+    __table_args__ = (db.UniqueConstraint("tarefa_id", "depende_de_id", name="uq_projeto_tarefa_dependencia"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    tarefa_id = db.Column(db.Integer, db.ForeignKey("projeto_tarefa.id"), nullable=False, index=True)
+    depende_de_id = db.Column(db.Integer, db.ForeignKey("projeto_tarefa.id"), nullable=False, index=True)

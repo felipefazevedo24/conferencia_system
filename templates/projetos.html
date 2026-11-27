@@ -1,0 +1,846 @@
+{% extends "base.html" %}
+
+{% block title %}Projetos{% endblock %}
+{% block shell_title %}Projetos{% endblock %}
+
+{% block extra_head %}
+<style>
+    .pj-wrap { display: grid; gap: 18px; }
+    .pj-muted { color: var(--eui-muted); font-size: 12.5px; }
+    .pj-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pj-acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pj-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 18px; }
+    .pj-grid-2b { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 980px) { .pj-grid-2, .pj-grid-2b { grid-template-columns: 1fr; } }
+    .pj-card-title { font-size: 14px; font-weight: 800; margin: 0 0 4px; color: var(--eui-text); }
+    .pj-chart { position: relative; height: 260px; }
+    .pj-legenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--eui-text); }
+    .pj-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+    .pj-legenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .pj-table-wrap { overflow-x: auto; }
+    .pj-empty { padding: 28px 16px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .pj-prog { height: 8px; background: var(--eui-surface-2, #e5e7eb); border-radius: 999px; overflow: hidden; min-width: 90px; }
+    .pj-prog span { display: block; height: 100%; background: #0ca30c; border-radius: 999px; }
+    .pj-link { cursor: pointer; }
+    .pj-link:hover td { background: var(--eui-surface-2, #f8fafc); }
+    .pj-grupo td { background: var(--eui-surface-2, #f1f5f9); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--eui-muted); }
+    .pj-num { font-family: monospace; font-weight: 700; white-space: nowrap; }
+    .pj-obs { display: block; font-size: 11.5px; color: var(--eui-muted); margin-top: 3px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pj-dep { font-family: monospace; font-size: 12px; white-space: nowrap; }
+    .pj-dep .aberta { color: var(--eui-danger); font-weight: 700; }
+    .pj-nowrap { white-space: nowrap; }
+    .pj-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pj-tab { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 7px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--eui-text); }
+    .pj-tab.active { background: var(--eui-primary); color: #fff; border-color: var(--eui-primary); }
+    .pj-filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pj-filtros .eui-input, .pj-filtros .eui-select { width: auto; min-width: 160px; }
+    .pj-lista-mini { display: grid; gap: 8px; max-height: 340px; overflow-y: auto; }
+    .pj-mini { border: 1px solid var(--eui-border); border-radius: 10px; padding: 9px 12px; cursor: pointer; display: grid; gap: 3px; }
+    .pj-mini:hover { border-color: var(--eui-primary); }
+    .pj-mini b { font-size: 13px; }
+    .hidden { display: none !important; }
+
+    /* Linha do tempo */
+    .pj-gantt { border: 1px solid var(--eui-border); border-radius: 12px; overflow: hidden; display: grid; grid-template-columns: 340px minmax(0, 1fr); }
+    @media (max-width: 720px) { .pj-gantt { grid-template-columns: 160px minmax(0, 1fr); } }
+    .pj-g-esq { border-right: 1px solid var(--eui-border); background: var(--eui-surface); }
+    .pj-g-dir { overflow-x: auto; position: relative; }
+    .pj-g-cab { height: 46px; border-bottom: 1px solid var(--eui-border); display: flex; align-items: flex-end; padding: 0 10px 6px; font-size: 11px; font-weight: 800; color: var(--eui-muted); text-transform: uppercase; }
+    .pj-g-lin { height: 34px; border-bottom: 1px solid var(--eui-border); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12.5px; overflow: hidden; white-space: nowrap; }
+    .pj-g-lin.grupo { background: var(--eui-surface-2, #f1f5f9); font-weight: 800; font-size: 11px; text-transform: uppercase; color: var(--eui-muted); }
+    .pj-g-lin .txt { overflow: hidden; text-overflow: ellipsis; }
+    .pj-g-area { position: relative; }
+    .pj-g-meses, .pj-g-dias { position: relative; height: 23px; border-bottom: 1px solid var(--eui-border); }
+    .pj-g-meses div, .pj-g-dias div { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--eui-border); font-size: 11px; padding: 4px 5px; color: var(--eui-muted); white-space: nowrap; overflow: hidden; font-weight: 700; }
+    .pj-g-fundo { position: absolute; inset: 0; }
+    .pj-g-fundo .fds { position: absolute; top: 0; bottom: 0; background: rgba(100, 116, 139, .07); }
+    .pj-g-fundo .grupo { position: absolute; left: 0; right: 0; background: var(--eui-surface-2, #f1f5f9); }
+    .pj-g-fundo .linha { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--eui-border); }
+    .pj-g-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #d03b3b; z-index: 3; }
+    .pj-g-hoje span { position: absolute; top: 2px; left: 4px; font-size: 10px; font-weight: 800; color: #d03b3b; background: var(--eui-surface); padding: 0 3px; border-radius: 4px; }
+    .pj-g-barra { position: absolute; height: 18px; border-radius: 4px; z-index: 2; cursor: pointer; box-shadow: 0 0 0 2px var(--eui-surface); }
+    .pj-g-barra.bloqueada { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.45) 0 4px, transparent 4px 9px); }
+    .pj-g-extra { position: absolute; height: 6px; border-radius: 3px; background: #d03b3b; z-index: 2; opacity: .85; }
+    .pj-g-setas { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: visible; }
+    .pj-g-zoom { display: inline-flex; border: 1px solid var(--eui-border); border-radius: 999px; overflow: hidden; }
+    .pj-g-zoom button { border: none; background: var(--eui-surface); padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--eui-text); }
+    .pj-g-zoom button.active { background: var(--eui-primary); color: #fff; }
+    .pj-tip { position: fixed; z-index: 10300; pointer-events: none; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 10px; box-shadow: var(--eui-shadow-md); padding: 9px 12px; font-size: 12px; color: var(--eui-text); max-width: 340px; display: none; }
+
+    /* Modais */
+    .pj-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 20px; }
+    .pj-modal.open { display: flex; }
+    .pj-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(760px, 100%); max-height: 92vh; overflow-y: auto; }
+    .pj-modal__box.is-narrow { width: min(520px, 100%); }
+    .pj-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--eui-border); }
+    .pj-modal__title { font-size: 16px; font-weight: 800; margin: 0; color: var(--eui-text); }
+    .pj-modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: var(--eui-muted); }
+    .pj-modal__body { padding: 18px 22px; display: grid; gap: 14px; }
+    .pj-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--eui-border); flex-wrap: wrap; }
+    .pj-field { display: grid; gap: 6px; }
+    .pj-field > label { font-size: 12.5px; font-weight: 700; color: var(--eui-text); }
+    .pj-form-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .pj-form-2 { grid-template-columns: 1fr; } }
+    .pj-err { color: var(--eui-danger); font-size: 13px; font-weight: 600; min-height: 1em; }
+    .pj-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pj-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--eui-border); border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 12.5px; background: var(--eui-surface-2, #f8fafc); }
+    .pj-chip button { border: none; background: transparent; cursor: pointer; color: var(--eui-muted); }
+    .pj-deps { display: grid; gap: 4px; max-height: 200px; overflow-y: auto; border: 1px solid var(--eui-border); border-radius: 10px; padding: 8px 10px; }
+    .pj-deps label { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--eui-text); }
+    .pj-deps label.off { opacity: .5; }
+    .pj-det { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 6px 14px; font-size: 13px; }
+    .pj-det dt { color: var(--eui-muted); font-weight: 700; }
+    .pj-det dd { margin: 0; }
+    .pj-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 420px; display: none; white-space: pre-line; }
+    .pj-toast.error { border-left-color: var(--eui-danger); }
+    .pj-toast.success { border-left-color: var(--eui-success); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pj-wrap">
+
+<!-- ═══════════════ PAINEL (todos os projetos) ═══════════════ -->
+<section id="pj-view-painel" class="pj-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Projetos</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-diagram-project"></i> Painel de projetos</h1>
+            <p class="eui-page-header__sub">Todos os projetos, a situação das tarefas e a carga de cada pessoa. Uma tarefa só começa quando as tarefas de que ela depende estiverem concluídas.</p>
+        </div>
+        {% if pode_gerir %}
+        <div class="pj-acoes">
+            <button class="eui-btn eui-btn--subtle" id="pj-btn-importar"><i class="fas fa-file-import"></i> Importar planilha</button>
+            <button class="eui-btn eui-btn--primary" id="pj-btn-novo"><i class="fas fa-plus"></i> Novo projeto</button>
+        </div>
+        {% endif %}
+    </header>
+
+    <div class="eui-stats">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-folder-tree"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Projetos</span><span class="eui-stat__value" id="pj-k-projetos">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-list-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Tarefas</span><span class="eui-stat__value" id="pj-k-tarefas">0</span><span class="eui-stat__hint" id="pj-k-prog"></span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-lock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Bloqueadas</span><span class="eui-stat__value" id="pj-k-bloq">0</span><span class="eui-stat__hint">esperando outra tarefa</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Atrasadas</span><span class="eui-stat__value" id="pj-k-atras">0</span><span class="eui-stat__hint">prazo vencido, não concluída</span></div></div>
+    </div>
+
+    <div class="pj-grid-2">
+        <div class="eui-card">
+            <h3 class="pj-card-title">Situação das tarefas</h3>
+            <p class="pj-muted">Todos os projetos.</p>
+            <div class="pj-chart"><canvas id="pj-ch-status" aria-label="Gráfico de situação das tarefas" role="img"></canvas></div>
+            <div class="pj-legenda" id="pj-leg-status"></div>
+        </div>
+        <div class="eui-card">
+            <h3 class="pj-card-title">Tarefas por pessoa</h3>
+            <p class="pj-muted">Responsáveis de todos os projetos, por situação. A tabela abaixo do gráfico traz os números e as atrasadas.</p>
+            <div class="pj-chart" id="pj-ch-pessoas-box"><canvas id="pj-ch-pessoas" aria-label="Gráfico de tarefas por pessoa" role="img"></canvas></div>
+            <div class="pj-legenda" id="pj-leg-pessoas"></div>
+            <details style="margin-top:10px;"><summary class="pj-muted" style="cursor:pointer;font-weight:700;">Ver em tabela</summary>
+                <div class="pj-table-wrap"><table class="erp-table" style="width:100%;margin-top:8px;">
+                    <thead><tr><th>Pessoa</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Não iniciadas</th><th>Bloqueadas</th><th>Atrasadas</th></tr></thead>
+                    <tbody id="pj-tb-pessoas"></tbody>
+                </table></div>
+            </details>
+        </div>
+    </div>
+
+    <div class="eui-card">
+        <div class="pj-bar"><h3 class="pj-card-title">Projetos</h3></div>
+        <div class="pj-table-wrap">
+            <table class="erp-table" style="width:100%;">
+                <thead><tr><th>Projeto</th><th>Período</th><th>Progresso</th><th>Tarefas</th><th>Em andamento</th><th>Bloqueadas</th><th>Atrasadas</th></tr></thead>
+                <tbody id="pj-tb-projetos"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pj-grid-2b">
+        <div class="eui-card">
+            <h3 class="pj-card-title"><i class="fas fa-user-check"></i> Minhas tarefas abertas</h3>
+            <p class="pj-muted">Onde você é responsável.</p>
+            <div class="pj-lista-mini" id="pj-minhas"></div>
+        </div>
+        <div class="eui-card">
+            <h3 class="pj-card-title"><i class="fas fa-calendar-xmark"></i> Vencidas e vencendo em 7 dias</h3>
+            <p class="pj-muted">Tarefas abertas de todos os projetos.</p>
+            <div class="pj-lista-mini" id="pj-alerta"></div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ PROJETO ═══════════════ -->
+<section id="pj-view-projeto" class="pj-wrap hidden">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow"><a href="#" id="pj-voltar" style="color:inherit;"><i class="fas fa-arrow-left"></i> Painel de projetos</a></div>
+            <h1 class="eui-page-header__title" id="pj-p-nome">Projeto</h1>
+            <p class="eui-page-header__sub" id="pj-p-sub"></p>
+        </div>
+        <div class="pj-acoes">
+            <a class="eui-btn eui-btn--subtle" id="pj-btn-excel" href="#"><i class="fas fa-file-excel"></i> Excel</a>
+            {% if pode_gerir %}
+            <button class="eui-btn eui-btn--subtle" id="pj-btn-editar-projeto"><i class="fas fa-pen"></i> Editar</button>
+            <button class="eui-btn eui-btn--danger" id="pj-btn-excluir-projeto"><i class="fas fa-trash"></i> Excluir</button>
+            <button class="eui-btn eui-btn--primary" id="pj-btn-nova-tarefa"><i class="fas fa-plus"></i> Nova tarefa</button>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="eui-stats">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluídas</span><span class="eui-stat__value" id="pj-pk-conc">0</span><span class="eui-stat__hint" id="pj-pk-prog"></span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-person-running"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em andamento</span><span class="eui-stat__value" id="pj-pk-and">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-lock"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Bloqueadas</span><span class="eui-stat__value" id="pj-pk-bloq">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Atrasadas</span><span class="eui-stat__value" id="pj-pk-atras">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="pj-bar" style="margin-bottom:12px;">
+            <div class="pj-tabs">
+                <button class="pj-tab active" data-aba="tarefas"><i class="fas fa-list-check"></i> Tarefas</button>
+                <button class="pj-tab" data-aba="timeline"><i class="fas fa-chart-gantt"></i> Linha do tempo</button>
+            </div>
+            <div class="pj-filtros">
+                <input class="eui-input" id="pj-f-busca" placeholder="Buscar tarefa, grupo, área...">
+                <select class="eui-select" id="pj-f-sit">
+                    <option value="">Todas as situações</option>
+                    <option value="abertas">Abertas (não concluídas)</option>
+                    <option value="nao_iniciada">Não iniciada</option>
+                    <option value="em_andamento">Em andamento</option>
+                    <option value="bloqueada">Bloqueada</option>
+                    <option value="atrasada">Atrasada</option>
+                    <option value="concluidas">Concluídas</option>
+                </select>
+                <select class="eui-select" id="pj-f-pessoa"><option value="">Todos os responsáveis</option></select>
+                <label class="pj-muted" style="display:flex;gap:6px;align-items:center;font-weight:700;"><input type="checkbox" id="pj-f-minhas"> Só minhas</label>
+            </div>
+        </div>
+
+        <div id="pj-aba-tarefas" class="pj-table-wrap">
+            <table class="erp-table" style="width:100%;">
+                <thead><tr><th>#</th><th>Tarefa</th><th>Situação</th><th>Responsáveis</th><th>Início</th><th>Fim</th><th>Término</th><th>Depende de</th><th></th></tr></thead>
+                <tbody id="pj-tb-tarefas"></tbody>
+            </table>
+        </div>
+
+        <div id="pj-aba-timeline" class="hidden">
+            <div class="pj-bar" style="margin-bottom:10px;">
+                <div class="pj-legenda" id="pj-leg-gantt" style="margin-top:0;"></div>
+                <div class="pj-g-zoom" id="pj-g-zoom">
+                    <button data-px="26">Dia</button><button data-px="9" class="active">Semana</button><button data-px="3.2">Mês</button>
+                </div>
+            </div>
+            <div id="pj-gantt"></div>
+            <p class="pj-muted" style="margin-top:8px;">Barra = período planejado. Traço vermelho depois da barra = atraso (até o término real ou até hoje). Seta = dependência: a tarefa da ponta da seta só começa depois da outra.</p>
+        </div>
+    </div>
+</section>
+</div>
+
+<div class="pj-tip" id="pj-tip"></div>
+<div class="pj-toast" id="pj-toast"></div>
+
+<!-- Projeto -->
+<div class="pj-modal" id="pj-m-projeto">
+    <div class="pj-modal__box is-narrow">
+        <div class="pj-modal__head"><h3 class="pj-modal__title" id="pj-mp-titulo">Novo projeto</h3><button class="pj-modal__close" data-fechar><i class="fas fa-xmark"></i></button></div>
+        <div class="pj-modal__body">
+            <div class="pj-field"><label for="pj-mp-nome">Nome</label><input class="eui-input" id="pj-mp-nome" maxlength="160"></div>
+            <div class="pj-field"><label for="pj-mp-desc">Descrição / objetivo</label><textarea class="eui-textarea" id="pj-mp-desc" rows="3"></textarea></div>
+            <div class="pj-err" id="pj-mp-err"></div>
+        </div>
+        <div class="pj-modal__foot"><button class="eui-btn eui-btn--subtle" data-fechar>Cancelar</button><button class="eui-btn eui-btn--primary" id="pj-mp-salvar">Salvar</button></div>
+    </div>
+</div>
+
+<!-- Importar -->
+<div class="pj-modal" id="pj-m-importar">
+    <div class="pj-modal__box is-narrow">
+        <div class="pj-modal__head"><h3 class="pj-modal__title">Importar planilha</h3><button class="pj-modal__close" data-fechar><i class="fas fa-xmark"></i></button></div>
+        <div class="pj-modal__body">
+            <p class="pj-muted">Cria um projeto novo a partir de uma planilha com as colunas: #, Grupo, Descrição, Data Inicio, Data Fim, Termino Real, Área / Responsável, Ass. Responsável, status, Dependencia e Definição/observação. Na Dependência, use o # da tarefa anterior (ex.: 1 ou 1, 3).</p>
+            <div class="pj-field"><label for="pj-mi-nome">Nome do projeto</label><input class="eui-input" id="pj-mi-nome" maxlength="160"></div>
+            <div class="pj-field"><label for="pj-mi-arq">Planilha (.xlsx)</label><input type="file" id="pj-mi-arq" accept=".xlsx"></div>
+            <div class="pj-err" id="pj-mi-err"></div>
+        </div>
+        <div class="pj-modal__foot"><button class="eui-btn eui-btn--subtle" data-fechar>Cancelar</button><button class="eui-btn eui-btn--primary" id="pj-mi-enviar"><i class="fas fa-file-import"></i> Importar</button></div>
+    </div>
+</div>
+
+<!-- Tarefa (cadastro) -->
+<div class="pj-modal" id="pj-m-tarefa">
+    <div class="pj-modal__box">
+        <div class="pj-modal__head"><h3 class="pj-modal__title" id="pj-mt-titulo">Nova tarefa</h3><button class="pj-modal__close" data-fechar><i class="fas fa-xmark"></i></button></div>
+        <div class="pj-modal__body">
+            <div class="pj-field"><label for="pj-mt-desc">Descrição</label><input class="eui-input" id="pj-mt-desc" maxlength="500"></div>
+            <div class="pj-form-2">
+                <div class="pj-field"><label for="pj-mt-grupo">Grupo</label><input class="eui-input" id="pj-mt-grupo" maxlength="80" list="pj-dl-grupos"><datalist id="pj-dl-grupos"></datalist></div>
+                <div class="pj-field"><label for="pj-mt-area">Área</label><input class="eui-input" id="pj-mt-area" maxlength="120" list="pj-dl-areas"><datalist id="pj-dl-areas"></datalist></div>
+                <div class="pj-field"><label for="pj-mt-ini">Início</label><input type="date" class="eui-input" id="pj-mt-ini"></div>
+                <div class="pj-field"><label for="pj-mt-fim">Fim (prazo)</label><input type="date" class="eui-input" id="pj-mt-fim"></div>
+            </div>
+            <div class="pj-field"><label>Responsáveis</label>
+                <div class="pj-chips" id="pj-mt-resp"></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <select class="eui-select" id="pj-mt-usuario" style="flex:1;min-width:200px;"><option value="">+ Usuário do Sync…</option></select>
+                    <input class="eui-input" id="pj-mt-nome-livre" placeholder="ou digite um nome e Enter" style="flex:1;min-width:200px;">
+                </div>
+            </div>
+            <div class="pj-field"><label>Depende de <span class="pj-muted">(só começa depois que estas forem concluídas)</span></label>
+                <input class="eui-input" id="pj-mt-dep-busca" placeholder="Filtrar tarefas...">
+                <div class="pj-deps" id="pj-mt-deps"></div>
+            </div>
+            <div class="pj-field"><label for="pj-mt-obs">Definição / observação</label><textarea class="eui-textarea" id="pj-mt-obs" rows="4"></textarea></div>
+            <div class="pj-err" id="pj-mt-err"></div>
+        </div>
+        <div class="pj-modal__foot"><button class="eui-btn eui-btn--subtle" data-fechar>Cancelar</button><button class="eui-btn eui-btn--primary" id="pj-mt-salvar">Salvar</button></div>
+    </div>
+</div>
+
+<!-- Tarefa (detalhe) -->
+<div class="pj-modal" id="pj-m-det">
+    <div class="pj-modal__box">
+        <div class="pj-modal__head"><h3 class="pj-modal__title" id="pj-md-titulo">Tarefa</h3><button class="pj-modal__close" data-fechar><i class="fas fa-xmark"></i></button></div>
+        <div class="pj-modal__body">
+            <dl class="pj-det" id="pj-md-det"></dl>
+            <div class="pj-field"><label for="pj-md-obs">Definição / observação</label><textarea class="eui-textarea" id="pj-md-obs" rows="5"></textarea>
+                <div><button class="eui-btn eui-btn--subtle eui-btn--sm" id="pj-md-obs-salvar"><i class="fas fa-floppy-disk"></i> Salvar observação</button></div></div>
+            <div class="pj-err" id="pj-md-err"></div>
+        </div>
+        <div class="pj-modal__foot" id="pj-md-foot"></div>
+    </div>
+</div>
+
+<!-- Concluir -->
+<div class="pj-modal" id="pj-m-concluir">
+    <div class="pj-modal__box is-narrow">
+        <div class="pj-modal__head"><h3 class="pj-modal__title" id="pj-mc-titulo">Concluir tarefa</h3><button class="pj-modal__close" data-fechar><i class="fas fa-xmark"></i></button></div>
+        <div class="pj-modal__body">
+            <div class="pj-field"><label for="pj-mc-data">Término real</label><input type="date" class="eui-input" id="pj-mc-data"></div>
+            <div class="pj-err" id="pj-mc-err"></div>
+        </div>
+        <div class="pj-modal__foot"><button class="eui-btn eui-btn--subtle" data-fechar>Cancelar</button><button class="eui-btn eui-btn--success" id="pj-mc-ok"><i class="fas fa-check"></i> Concluir</button></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+    const PODE_GERIR = {{ 'true' if pode_gerir else 'false' }};
+    const EU = {{ user|tojson }}, MEU_NOME = {{ (meu_nome or '')|tojson }};
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const semAcento = (v) => String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+    const dataBR = (iso) => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "—";
+    const dia = (iso) => new Date(iso + "T00:00:00");
+    const DIA_MS = 86400000;
+
+    // Cores de status (validadas no script do dataviz): sempre com rotulo/legenda.
+    const SIT = {
+        concluida: { rot: "Concluída", cor: "#0ca30c", badge: "success", ic: "fa-circle-check" },
+        concluida_atraso: { rot: "Concluída com atraso", cor: "#0ca30c", badge: "success", ic: "fa-circle-check" },
+        em_andamento: { rot: "Em andamento", cor: "#2a78d6", badge: "info", ic: "fa-person-running" },
+        nao_iniciada: { rot: "Não iniciada", cor: "#a3a29b", badge: "neutral", ic: "fa-circle" },
+        bloqueada: { rot: "Bloqueada", cor: "#fab219", badge: "warning", ic: "fa-lock" },
+    };
+    const ORDEM_GRAF = ["concluida", "em_andamento", "nao_iniciada", "bloqueada"];
+    const corTexto = () => getComputedStyle(document.body).getPropertyValue("--eui-text").trim() || "#334155";
+    const corGrade = () => getComputedStyle(document.body).getPropertyValue("--eui-border").trim() || "#e2e8f0";
+
+    function toast(msg, tipo) {
+        const t = $("pj-toast");
+        t.textContent = msg; t.className = "pj-toast " + (tipo || ""); t.style.display = "block";
+        clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = "none"; }, tipo === "error" ? 6000 : 3500);
+    }
+    async function api(url, opts = {}) {
+        const init = { method: opts.method || "GET", headers: {} };
+        if (opts.body instanceof FormData) init.body = opts.body;
+        else if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers["Content-Type"] = "application/json"; }
+        const r = await fetch(url, init);
+        const dados = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(dados.error || dados.msg || "Falha na operação.");
+        return dados;
+    }
+    const abrir = (id) => $(id).classList.add("open");
+    const fechar = (id) => $(id).classList.remove("open");
+    document.querySelectorAll(".pj-modal").forEach((m) => {
+        m.addEventListener("click", (e) => { if (e.target === m || e.target.closest("[data-fechar]")) m.classList.remove("open"); });
+    });
+    const badge = (t) => {
+        const s = SIT[t.situacao];
+        let h = `<span class="eui-badge eui-badge--${s.badge}"><i class="fas ${s.ic}"></i> ${esc(s.rot)}</span>`;
+        if (t.atrasada) h += ` <span class="eui-badge eui-badge--danger"><i class="fas fa-triangle-exclamation"></i> Atrasada</span>`;
+        return h;
+    };
+    const nomes = (t) => t.responsaveis.map((r) => r.nome).join(", ");
+
+    // ─────────── Painel ───────────
+    const charts = {};
+    function legenda(el) {
+        $(el).innerHTML = ORDEM_GRAF.map((k) => `<span><i style="background:${SIT[k].cor}"></i>${esc(SIT[k].rot)}</span>`).join("");
+    }
+    function grafico(id, cfg) {
+        if (charts[id]) charts[id].destroy();
+        if (typeof Chart === "undefined") return;
+        charts[id] = new Chart($(id), cfg);
+    }
+    function miniTarefa(t) {
+        const prazo = t.atrasada ? `<span class="eui-badge eui-badge--danger">venceu ${dataBR(t.data_fim)}</span>` : `<span class="pj-muted">prazo ${dataBR(t.data_fim)}</span>`;
+        return `<div class="pj-mini" data-projeto="${t.projeto_id}" data-tarefa="${t.id}">
+            <span class="pj-muted">${esc(t.projeto)} · #${t.numero}</span><b>${esc(t.descricao)}</b>
+            <span>${badge(t)} ${prazo} <span class="pj-muted">${esc(nomes(t))}</span></span></div>`;
+    }
+    async function carregarPainel() {
+        let d;
+        try { d = await api("/api/projetos/painel"); } catch (e) { toast(e.message, "error"); return; }
+        const g = d.geral;
+        $("pj-k-projetos").textContent = d.projetos.length;
+        $("pj-k-tarefas").textContent = g.total;
+        $("pj-k-prog").textContent = g.total ? `${g.progresso}% concluídas` : "";
+        $("pj-k-bloq").textContent = g.por_situacao.bloqueada;
+        $("pj-k-atras").textContent = g.atrasadas;
+
+        const conc = (o) => (o.concluida || 0) + (o.concluida_atraso || 0);
+        const valores = [conc(g.por_situacao), g.por_situacao.em_andamento, g.por_situacao.nao_iniciada, g.por_situacao.bloqueada];
+        legenda("pj-leg-status"); legenda("pj-leg-pessoas");
+        grafico("pj-ch-status", {
+            type: "doughnut",
+            data: { labels: ORDEM_GRAF.map((k) => SIT[k].rot), datasets: [{ data: valores, backgroundColor: ORDEM_GRAF.map((k) => SIT[k].cor), borderColor: getComputedStyle(document.body).getPropertyValue("--eui-surface").trim() || "#fff", borderWidth: 2 }] },
+            options: { maintainAspectRatio: false, cutout: "62%", plugins: { legend: { display: false },
+                tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed} (${g.total ? Math.round(100 * c.parsed / g.total) : 0}%)` } } } },
+            plugins: [{ id: "centro", afterDraw(ch) {
+                const { ctx, chartArea: a } = ch; ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = corTexto();
+                ctx.font = "800 26px sans-serif"; ctx.fillText(`${g.progresso}%`, (a.left + a.right) / 2, (a.top + a.bottom) / 2 + 4);
+                ctx.font = "600 11px sans-serif"; ctx.fillText("concluído", (a.left + a.right) / 2, (a.top + a.bottom) / 2 + 22); ctx.restore(); } }],
+        });
+
+        const pessoas = d.pessoas;
+        $("pj-ch-pessoas-box").style.height = Math.max(220, 34 * pessoas.length + 60) + "px";
+        grafico("pj-ch-pessoas", {
+            type: "bar",
+            data: { labels: pessoas.map((p) => p.nome),
+                datasets: ORDEM_GRAF.map((k) => ({ label: SIT[k].rot, backgroundColor: SIT[k].cor, borderRadius: 4, borderSkipped: false,
+                    borderColor: getComputedStyle(document.body).getPropertyValue("--eui-surface").trim() || "#fff", borderWidth: { right: 2 },
+                    data: pessoas.map((p) => k === "concluida" ? conc(p) : p[k]), barThickness: 18 })) },
+            options: { indexAxis: "y", maintainAspectRatio: false,
+                scales: { x: { stacked: true, ticks: { precision: 0, color: corTexto() }, grid: { color: corGrade() } },
+                          y: { stacked: true, ticks: { color: corTexto() }, grid: { display: false } } },
+                plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false,
+                    callbacks: { footer: (items) => { const p = pessoas[items[0].dataIndex]; return `Total ${p.total}` + (p.atrasadas ? ` · ${p.atrasadas} atrasada(s)` : ""); } } } } },
+        });
+        $("pj-tb-pessoas").innerHTML = pessoas.map((p) => `<tr><td>${esc(p.nome)}</td><td>${p.total}</td><td>${conc(p)}</td><td>${p.em_andamento}</td><td>${p.nao_iniciada}</td><td>${p.bloqueada}</td><td>${p.atrasadas ? `<b style="color:var(--eui-danger)">${p.atrasadas}</b>` : 0}</td></tr>`).join("")
+            || `<tr><td colspan="7" class="pj-empty">Nenhuma tarefa ainda.</td></tr>`;
+
+        $("pj-tb-projetos").innerHTML = d.projetos.map((p) => `<tr class="pj-link" data-projeto="${p.id}">
+            <td><b>${esc(p.nome)}</b>${p.descricao ? `<span class="pj-obs">${esc(p.descricao)}</span>` : ""}</td>
+            <td class="pj-nowrap">${dataBR(p.inicio)} – ${dataBR(p.fim)}</td>
+            <td><div style="display:flex;align-items:center;gap:8px;"><div class="pj-prog" style="flex:1"><span style="width:${p.progresso}%"></span></div><b>${p.progresso}%</b></div></td>
+            <td>${p.concluidas}/${p.total}</td><td>${p.por_situacao.em_andamento}</td><td>${p.por_situacao.bloqueada}</td>
+            <td>${p.atrasadas ? `<span class="eui-badge eui-badge--danger">${p.atrasadas}</span>` : "0"}</td></tr>`).join("")
+            || `<tr><td colspan="7" class="pj-empty">Nenhum projeto ainda.${PODE_GERIR ? " Crie um ou importe a planilha." : ""}</td></tr>`;
+        $("pj-minhas").innerHTML = d.minhas.map(miniTarefa).join("") || `<div class="pj-empty">Nenhuma tarefa aberta com você.</div>`;
+        $("pj-alerta").innerHTML = d.alerta.map(miniTarefa).join("") || `<div class="pj-empty">Nada vencido ou vencendo.</div>`;
+    }
+    document.addEventListener("click", (e) => {
+        const linha = e.target.closest("[data-projeto]");
+        if (!linha || !linha.closest("#pj-view-painel")) return;
+        location.hash = `projeto=${linha.dataset.projeto}` + (linha.dataset.tarefa ? `&tarefa=${linha.dataset.tarefa}` : "");
+    });
+
+    // ─────────── Projeto ───────────
+    let P = null, ABA = "tarefas", PX = 9, USUARIOS = null;
+    const porId = () => Object.fromEntries((P ? P.tarefas : []).map((t) => [t.id, t]));
+    const ehMinha = (t) => t.responsaveis.some((r) => r.username === EU || (MEU_NOME && semAcento(r.nome) === semAcento(MEU_NOME)));
+
+    function filtradas() {
+        const busca = semAcento($("pj-f-busca").value), sit = $("pj-f-sit").value, pessoa = $("pj-f-pessoa").value, minhas = $("pj-f-minhas").checked;
+        return P.tarefas.filter((t) => {
+            if (busca && !semAcento([t.numero, t.descricao, t.grupo, t.area, t.observacao, nomes(t)].join(" ")).includes(busca)) return false;
+            const fim = t.situacao.startsWith("concluida");
+            if (sit === "abertas" && fim) return false;
+            if (sit === "concluidas" && !fim) return false;
+            if (sit === "atrasada" && !t.atrasada) return false;
+            if (["nao_iniciada", "em_andamento", "bloqueada"].includes(sit) && t.situacao !== sit) return false;
+            if (pessoa && !t.responsaveis.some((r) => semAcento(r.nome) === pessoa)) return false;
+            if (minhas && !ehMinha(t)) return false;
+            return true;
+        });
+    }
+    function botoesAcao(t, compacto) {
+        const b = [];
+        const cls = compacto ? "eui-btn eui-btn--sm" : "eui-btn";
+        if (!t.situacao.startsWith("concluida")) {
+            if (t.situacao === "nao_iniciada") b.push(`<button class="${cls} eui-btn--subtle" data-acao="iniciar" data-id="${t.id}"><i class="fas fa-play"></i> Iniciar</button>`);
+            if (t.situacao !== "bloqueada") b.push(`<button class="${cls} eui-btn--success" data-acao="concluir" data-id="${t.id}"><i class="fas fa-check"></i> Concluir</button>`);
+            else b.push(`<span class="pj-muted pj-nowrap"><i class="fas fa-lock"></i> espera ${t.pendencias.map((n) => "#" + n).join(", ")}</span>`);
+        } else b.push(`<button class="${cls} eui-btn--subtle" data-acao="reabrir" data-id="${t.id}"><i class="fas fa-rotate-left"></i> Reabrir</button>`);
+        if (PODE_GERIR) {
+            b.push(`<button class="${cls} eui-btn--subtle eui-btn--icon" title="Editar" data-acao="editar" data-id="${t.id}"><i class="fas fa-pen"></i></button>`);
+            b.push(`<button class="${cls} eui-btn--subtle eui-btn--icon" title="Excluir" data-acao="excluir" data-id="${t.id}"><i class="fas fa-trash"></i></button>`);
+        }
+        return b.join(" ");
+    }
+    function depsHtml(t) {
+        if (!t.dependencias_numeros.length) return `<span class="pj-muted">—</span>`;
+        return `<span class="pj-dep">${t.dependencias_numeros.map((n) => t.pendencias.includes(n) ? `<span class="aberta" title="Ainda não concluída">#${n}</span>` : `#${n}`).join(", ")}</span>`;
+    }
+    function renderTarefas() {
+        const lista = filtradas();
+        let grupo = null;
+        const linhas = [];
+        for (const t of lista) {
+            if ((t.grupo || "") !== grupo) { grupo = t.grupo || ""; linhas.push(`<tr class="pj-grupo"><td colspan="9">${esc(grupo || "Sem grupo")}</td></tr>`); }
+            linhas.push(`<tr class="pj-link" data-det="${t.id}">
+                <td class="pj-num">${t.numero}</td>
+                <td><b>${esc(t.descricao)}</b>${t.area ? ` <span class="pj-muted">· ${esc(t.area)}</span>` : ""}${t.observacao ? `<span class="pj-obs">${esc(t.observacao)}</span>` : ""}</td>
+                <td class="pj-nowrap">${badge(t)}</td>
+                <td>${esc(nomes(t)) || `<span class="pj-muted">—</span>`}</td>
+                <td class="pj-nowrap">${dataBR(t.data_inicio)}</td><td class="pj-nowrap">${dataBR(t.data_fim)}</td>
+                <td class="pj-nowrap">${t.termino_real ? dataBR(t.termino_real) : "—"}</td>
+                <td>${depsHtml(t)}</td>
+                <td class="pj-nowrap" style="text-align:right;">${botoesAcao(t, true)}</td></tr>`);
+        }
+        $("pj-tb-tarefas").innerHTML = linhas.join("") || `<tr><td colspan="9" class="pj-empty">${P.tarefas.length ? "Nenhuma tarefa com esse filtro." : "Nenhuma tarefa ainda."}</td></tr>`;
+    }
+
+    // Linha do tempo: barras pelo periodo planejado, traco de atraso e setas de dependencia.
+    function renderGantt() {
+        const lista = filtradas();
+        const box = $("pj-gantt");
+        $("pj-leg-gantt").innerHTML = ORDEM_GRAF.map((k) => `<span><i style="background:${SIT[k].cor}"></i>${esc(SIT[k].rot)}</span>`).join("")
+            + `<span><i style="background:#d03b3b;height:4px"></i>Atraso</span>`;
+        if (!lista.length) { box.innerHTML = `<div class="pj-empty">Nenhuma tarefa para mostrar.</div>`; return; }
+        const hoje = dia(P.hoje);
+        let ini = Math.min(...lista.map((t) => dia(t.data_inicio)), hoje);
+        let fim = Math.max(...lista.map((t) => Math.max(dia(t.data_fim), t.termino_real ? dia(t.termino_real) : 0, t.atrasada ? hoje : 0)), hoje);
+        ini = new Date(ini); ini.setDate(ini.getDate() - 3);
+        fim = new Date(fim); fim.setDate(fim.getDate() + 7);
+        const nDias = Math.round((fim - ini) / DIA_MS) + 1;
+        const x = (d) => Math.round((d - ini) / DIA_MS) * PX;
+        const largura = nDias * PX;
+        const ALT = 34;
+
+        const linhas = []; let grupo = null;
+        for (const t of lista) {
+            if ((t.grupo || "") !== grupo) { grupo = t.grupo || ""; linhas.push({ grupo }); }
+            linhas.push({ t });
+        }
+        const esq = [`<div class="pj-g-cab">Tarefa</div>`];
+        const fundo = [], barras = [], pos = {};
+        linhas.forEach((l, i) => {
+            const y = i * ALT;
+            if (l.grupo !== undefined) {
+                esq.push(`<div class="pj-g-lin grupo">${esc(l.grupo || "Sem grupo")}</div>`);
+                fundo.push(`<div class="grupo" style="top:${y}px;height:${ALT}px"></div>`);
+                return;
+            }
+            const t = l.t, s = SIT[t.situacao];
+            esq.push(`<div class="pj-g-lin pj-link" data-det="${t.id}"><span class="pj-num">${t.numero}</span><span class="txt" title="${esc(t.descricao)}">${esc(t.descricao)}</span></div>`);
+            fundo.push(`<div class="linha" style="top:${y}px;height:${ALT}px"></div>`);
+            const x0 = x(dia(t.data_inicio)), x1 = x(dia(t.data_fim)) + PX;
+            pos[t.id] = { x0, x1, y: y + ALT / 2 };
+            barras.push(`<div class="pj-g-barra ${t.situacao === "bloqueada" ? "bloqueada" : ""}" data-det="${t.id}" data-tip="${t.id}" style="left:${x0}px;width:${Math.max(x1 - x0, 4)}px;top:${y + 8}px;background:${s.cor}"></div>`);
+            const limite = t.termino_real ? dia(t.termino_real) : (t.atrasada ? hoje : null);
+            if (limite && limite > dia(t.data_fim)) {
+                const e0 = x1, e1 = x(limite) + PX;
+                barras.push(`<div class="pj-g-extra" data-tip="${t.id}" style="left:${e0}px;width:${Math.max(e1 - e0, 3)}px;top:${y + 14}px"></div>`);
+            }
+        });
+        // Cabecalho: meses e marcas (dia ou inicio da semana)
+        const meses = [], marcas = [], fds = [];
+        for (let i = 0; i < nDias; i++) {
+            const d = new Date(ini.getTime() + i * DIA_MS);
+            // 1o rotulo so' se sobrar espaco ate' o mes seguinte (senao sobrepoe)
+            const diasNoMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            if (d.getDate() === 1 || (i === 0 && (diasNoMes - d.getDate()) * PX > 70)) meses.push(`<div style="left:${i * PX}px">${d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })}</div>`);
+            if (PX >= 20) marcas.push(`<div style="left:${i * PX}px;width:${PX}px;padding:4px 0;text-align:center">${d.getDate()}</div>`);
+            else if (PX >= 6 && d.getDay() === 1) marcas.push(`<div style="left:${i * PX}px">${d.getDate()}/${d.getMonth() + 1}</div>`);
+            if (PX >= 6 && (d.getDay() === 0 || d.getDay() === 6)) fds.push(`<div class="fds" style="left:${i * PX}px;width:${PX}px"></div>`);
+        }
+        // Setas: do fim da anterior ao inicio da seguinte (cotovelo).
+        const ids = porId();
+        const setas = [];
+        for (const t of lista) for (const depId of t.dependencias) {
+            const a = pos[depId], b = pos[t.id];
+            if (!a || !b) continue;
+            const meio = Math.max(a.x1 + 8, Math.min(b.x0 - 8, a.x1 + 8));
+            const cor = (ids[depId] && !ids[depId].situacao.startsWith("concluida")) ? "#d03b3b" : "#94a3b8";
+            setas.push(`<path d="M${a.x1} ${a.y} H${meio} V${b.y} H${b.x0 - 2}" fill="none" stroke="${cor}" stroke-width="1.6" marker-end="url(#pj-ponta-${cor === "#d03b3b" ? "r" : "c"})"/>`);
+        }
+        const altura = linhas.length * ALT;
+        box.innerHTML = `<div class="pj-gantt">
+            <div class="pj-g-esq">${esq.join("")}</div>
+            <div class="pj-g-dir"><div style="width:${largura}px">
+                <div class="pj-g-meses">${meses.join("")}</div><div class="pj-g-dias">${marcas.join("")}</div>
+                <div class="pj-g-area" style="height:${altura}px">
+                    <div class="pj-g-fundo">${fds.join("")}${fundo.join("")}</div>
+                    <svg class="pj-g-setas" width="${largura}" height="${altura}"><defs>
+                        <marker id="pj-ponta-c" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#94a3b8"/></marker>
+                        <marker id="pj-ponta-r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#d03b3b"/></marker>
+                    </defs>${setas.join("")}</svg>
+                    ${barras.join("")}
+                    <div class="pj-g-hoje" style="left:${x(hoje) + PX / 2}px"><span>hoje</span></div>
+                </div>
+            </div></div></div>`;
+        const dir = box.querySelector(".pj-g-dir");
+        dir.scrollLeft = Math.max(0, x(hoje) - dir.clientWidth / 2);
+    }
+    // Tooltip das barras
+    const tip = $("pj-tip");
+    document.addEventListener("mousemove", (e) => {
+        const alvo = e.target.closest("[data-tip]");
+        if (!alvo || !P) { tip.style.display = "none"; return; }
+        const t = porId()[alvo.dataset.tip];
+        if (!t) return;
+        tip.innerHTML = `<b>#${t.numero} ${esc(t.descricao)}</b><br>${badge(t)}<br>
+            ${dataBR(t.data_inicio)} → ${dataBR(t.data_fim)}${t.termino_real ? ` · término ${dataBR(t.termino_real)}` : ""}<br>
+            <span class="pj-muted">${esc(nomes(t)) || "sem responsável"}${t.dependencias_numeros.length ? " · depende de " + t.dependencias_numeros.map((n) => "#" + n).join(", ") : ""}</span>`;
+        tip.style.display = "block";
+        const w = tip.offsetWidth, h = tip.offsetHeight;
+        tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px";
+        tip.style.top = Math.min(e.clientY + 14, innerHeight - h - 8) + "px";
+    });
+
+    function render() {
+        if (!P) return;
+        $("pj-aba-tarefas").classList.toggle("hidden", ABA !== "tarefas");
+        $("pj-aba-timeline").classList.toggle("hidden", ABA !== "timeline");
+        if (ABA === "tarefas") renderTarefas(); else renderGantt();
+    }
+    async function carregarProjeto(id, abrirTarefa) {
+        try { P = await api(`/api/projetos/${id}`); } catch (e) { toast(e.message, "error"); location.hash = ""; return; }
+        $("pj-p-nome").textContent = P.nome;
+        $("pj-p-sub").textContent = [P.descricao, P.inicio ? `${dataBR(P.inicio)} – ${dataBR(P.fim)}` : "", `${P.total} tarefa(s)`].filter(Boolean).join(" · ");
+        $("pj-btn-excel").href = `/api/projetos/${P.id}/excel`;
+        const s = P.por_situacao;
+        $("pj-pk-conc").textContent = P.concluidas; $("pj-pk-prog").textContent = `${P.progresso}%`;
+        $("pj-pk-and").textContent = s.em_andamento; $("pj-pk-bloq").textContent = s.bloqueada; $("pj-pk-atras").textContent = P.atrasadas;
+        const pessoas = new Map();
+        P.tarefas.forEach((t) => t.responsaveis.forEach((r) => pessoas.set(semAcento(r.nome), r.nome)));
+        const atual = $("pj-f-pessoa").value;
+        $("pj-f-pessoa").innerHTML = `<option value="">Todos os responsáveis</option>` + [...pessoas].sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join("");
+        if (pessoas.has(atual)) $("pj-f-pessoa").value = atual;
+        render();
+        if (abrirTarefa) abrirDetalhe(Number(abrirTarefa));
+    }
+    ["pj-f-busca", "pj-f-sit", "pj-f-pessoa", "pj-f-minhas"].forEach((id) => $(id).addEventListener("input", render));
+    document.querySelectorAll(".pj-tab").forEach((b) => b.addEventListener("click", () => {
+        document.querySelectorAll(".pj-tab").forEach((x) => x.classList.toggle("active", x === b));
+        ABA = b.dataset.aba; render();
+    }));
+    $("pj-g-zoom").addEventListener("click", (e) => {
+        const b = e.target.closest("button"); if (!b) return;
+        $("pj-g-zoom").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+        PX = Number(b.dataset.px); renderGantt();
+    });
+    $("pj-voltar").addEventListener("click", (e) => { e.preventDefault(); location.hash = ""; });
+
+    // Acoes da tarefa (tabela, linha do tempo e detalhe)
+    document.addEventListener("click", async (e) => {
+        const b = e.target.closest("[data-acao]");
+        if (b) {
+            e.stopPropagation();
+            const t = porId()[b.dataset.id];
+            if (!t) return;
+            const acao = b.dataset.acao;
+            if (acao === "editar") return abrirTarefa(t);
+            if (acao === "concluir") return abrirConcluir(t);
+            if (acao === "excluir") {
+                if (!confirm(`Excluir a tarefa #${t.numero}? As dependências ligadas a ela também saem.`)) return;
+                try { await api(`/api/projetos/tarefas/${t.id}`, { method: "DELETE" }); toast("Tarefa excluída.", "success"); fechar("pj-m-det"); carregarProjeto(P.id); }
+                catch (err) { toast(err.message, "error"); }
+                return;
+            }
+            try {
+                await api(`/api/projetos/tarefas/${t.id}/${acao}`, { method: "POST", body: {} });
+                toast(acao === "iniciar" ? `#${t.numero} em andamento.` : `#${t.numero} reaberta.`, "success");
+                fechar("pj-m-det"); carregarProjeto(P.id);
+            } catch (err) { toast(err.message, "error"); }
+            return;
+        }
+        const det = e.target.closest("[data-det]");
+        if (det && det.closest("#pj-view-projeto")) abrirDetalhe(Number(det.dataset.det));
+    });
+
+    function abrirDetalhe(id) {
+        const t = porId()[id];
+        if (!t) return;
+        const ids = porId();
+        const anteriores = t.dependencias.map((d) => ids[d]).filter(Boolean);
+        const seguintes = P.tarefas.filter((x) => x.dependencias.includes(t.id));
+        const linkT = (x) => `<a href="#" data-ir="${x.id}">#${x.numero} ${esc(x.descricao)}</a> ${badge(x)}`;
+        $("pj-md-titulo").textContent = `#${t.numero} · ${t.descricao}`;
+        $("pj-md-det").innerHTML = `
+            <dt>Situação</dt><dd>${badge(t)}</dd>
+            <dt>Grupo / área</dt><dd>${esc(t.grupo || "—")} · ${esc(t.area || "—")}</dd>
+            <dt>Responsáveis</dt><dd>${esc(nomes(t)) || "—"}</dd>
+            <dt>Planejado</dt><dd>${dataBR(t.data_inicio)} → ${dataBR(t.data_fim)}</dd>
+            <dt>Término real</dt><dd>${t.termino_real ? `${dataBR(t.termino_real)} <span class="pj-muted">por ${esc(t.concluido_por || "—")}</span>` : "—"}</dd>
+            <dt>Depende de</dt><dd>${anteriores.map(linkT).join("<br>") || "—"}</dd>
+            <dt>Libera</dt><dd>${seguintes.map(linkT).join("<br>") || "—"}</dd>`;
+        $("pj-md-obs").value = t.observacao || "";
+        $("pj-md-err").textContent = "";
+        $("pj-md-foot").innerHTML = botoesAcao(t, false);
+        $("pj-md-obs-salvar").onclick = async () => {
+            try { await api(`/api/projetos/tarefas/${t.id}/observacao`, { method: "POST", body: { observacao: $("pj-md-obs").value } }); toast("Observação salva.", "success"); carregarProjeto(P.id); }
+            catch (err) { $("pj-md-err").textContent = err.message; }
+        };
+        $("pj-md-det").querySelectorAll("[data-ir]").forEach((a) => a.addEventListener("click", (ev) => { ev.preventDefault(); abrirDetalhe(Number(a.dataset.ir)); }));
+        abrir("pj-m-det");
+    }
+
+    function abrirConcluir(t) {
+        $("pj-mc-titulo").textContent = `Concluir #${t.numero}`;
+        $("pj-mc-data").value = P.hoje; $("pj-mc-data").max = P.hoje;
+        $("pj-mc-err").textContent = "";
+        $("pj-mc-ok").onclick = async () => {
+            try {
+                const r = await api(`/api/projetos/tarefas/${t.id}/concluir`, { method: "POST", body: { termino_real: $("pj-mc-data").value } });
+                fechar("pj-m-concluir"); fechar("pj-m-det");
+                toast(`#${t.numero} concluída.` + (r.liberadas.length ? `\nLiberou: ${r.liberadas.map((n) => "#" + n).join(", ")}` : ""), "success");
+                carregarProjeto(P.id);
+            } catch (err) { $("pj-mc-err").textContent = err.message; }
+        };
+        abrir("pj-m-concluir");
+    }
+
+    // ─────────── Cadastro de tarefa ───────────
+    let RESP = [], EDITANDO = null;
+    function desenharResp() {
+        $("pj-mt-resp").innerHTML = RESP.map((r, i) => `<span class="pj-chip">${r.username ? '<i class="fas fa-user"></i>' : '<i class="fas fa-user-pen"></i>'} ${esc(r.nome)}<button type="button" data-rm="${i}" title="Remover"><i class="fas fa-xmark"></i></button></span>`).join("")
+            || `<span class="pj-muted">Nenhum responsável.</span>`;
+        $("pj-mt-resp").querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { RESP.splice(Number(b.dataset.rm), 1); desenharResp(); });
+    }
+    function addResp(r) {
+        const chave = r.username || semAcento(r.nome);
+        if (!r.nome || RESP.some((x) => (x.username || semAcento(x.nome)) === chave)) return;
+        RESP.push(r); desenharResp();
+    }
+    $("pj-mt-usuario").addEventListener("change", (e) => {
+        const u = (USUARIOS || []).find((x) => x.username === e.target.value);
+        if (u) addResp({ username: u.username, nome: u.nome });
+        e.target.value = "";
+    });
+    $("pj-mt-nome-livre").addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const nome = e.target.value.trim();
+        const u = (USUARIOS || []).find((x) => semAcento(x.nome) === semAcento(nome));
+        addResp(u ? { username: u.username, nome: u.nome } : { nome });
+        e.target.value = "";
+    });
+    function desenharDeps(marcadas) {
+        const filtro = semAcento($("pj-mt-dep-busca").value);
+        // Nao oferece a propria tarefa nem as que ja' dependem dela (fecharia ciclo).
+        const proibidas = new Set();
+        if (EDITANDO) {
+            const fila = [EDITANDO.id];
+            while (fila.length) { const id = fila.pop(); if (proibidas.has(id)) continue; proibidas.add(id); P.tarefas.filter((x) => x.dependencias.includes(id)).forEach((x) => fila.push(x.id)); }
+        }
+        $("pj-mt-deps").innerHTML = P.tarefas.filter((x) => !filtro || semAcento(`${x.numero} ${x.descricao} ${x.grupo}`).includes(filtro) || marcadas.has(x.id)).map((x) => {
+            const off = proibidas.has(x.id);
+            return `<label class="${off ? "off" : ""}"><input type="checkbox" value="${x.id}" ${marcadas.has(x.id) ? "checked" : ""} ${off ? "disabled" : ""}>
+                <span><b class="pj-num">#${x.numero}</b> ${esc(x.descricao)} <span class="pj-muted">${esc(SIT[x.situacao].rot)}${off && EDITANDO && x.id !== EDITANDO.id ? " · já depende desta" : ""}</span></span></label>`;
+        }).join("") || `<span class="pj-muted">Nenhuma outra tarefa no projeto.</span>`;
+    }
+    const depsMarcadas = () => new Set([...$("pj-mt-deps").querySelectorAll("input:checked")].map((c) => Number(c.value)));
+    let DEPS_SEL = new Set();
+    $("pj-mt-deps").addEventListener("change", (e) => { const id = Number(e.target.value); if (e.target.checked) DEPS_SEL.add(id); else DEPS_SEL.delete(id); });
+    $("pj-mt-dep-busca").addEventListener("input", () => desenharDeps(DEPS_SEL));
+
+    async function abrirTarefa(t) {
+        if (!USUARIOS) { try { USUARIOS = (await api("/api/projetos/usuarios")).usuarios; } catch (e) { USUARIOS = []; } }
+        $("pj-mt-usuario").innerHTML = `<option value="">+ Usuário do Sync…</option>` + USUARIOS.map((u) => `<option value="${esc(u.username)}">${esc(u.nome)}${u.nome !== u.username ? ` (${esc(u.username)})` : ""}</option>`).join("");
+        EDITANDO = t || null;
+        $("pj-mt-titulo").textContent = t ? `Editar #${t.numero}` : "Nova tarefa";
+        $("pj-mt-desc").value = t ? t.descricao : "";
+        $("pj-mt-grupo").value = t ? t.grupo : "";
+        $("pj-mt-area").value = t ? t.area : "";
+        $("pj-mt-ini").value = t ? t.data_inicio : P.hoje;
+        $("pj-mt-fim").value = t ? t.data_fim : "";
+        $("pj-mt-obs").value = t ? t.observacao : "";
+        $("pj-mt-err").textContent = ""; $("pj-mt-dep-busca").value = "";
+        const uniq = (k) => [...new Set(P.tarefas.map((x) => x[k]).filter(Boolean))].sort();
+        $("pj-dl-grupos").innerHTML = uniq("grupo").map((g) => `<option value="${esc(g)}">`).join("");
+        $("pj-dl-areas").innerHTML = uniq("area").map((g) => `<option value="${esc(g)}">`).join("");
+        RESP = t ? t.responsaveis.map((r) => ({ ...r })) : [];
+        desenharResp();
+        DEPS_SEL = new Set(t ? t.dependencias : []);
+        desenharDeps(DEPS_SEL);
+        fechar("pj-m-det");
+        abrir("pj-m-tarefa");
+        $("pj-mt-desc").focus();
+    }
+    $("pj-mt-salvar").addEventListener("click", async () => {
+        const corpo = {
+            descricao: $("pj-mt-desc").value, grupo: $("pj-mt-grupo").value, area: $("pj-mt-area").value,
+            data_inicio: $("pj-mt-ini").value, data_fim: $("pj-mt-fim").value, observacao: $("pj-mt-obs").value,
+            responsaveis: RESP, dependencias: [...DEPS_SEL],
+        };
+        try {
+            const url = EDITANDO ? `/api/projetos/${P.id}/tarefas/${EDITANDO.id}` : `/api/projetos/${P.id}/tarefas`;
+            const r = await api(url, { method: EDITANDO ? "PUT" : "POST", body: corpo });
+            fechar("pj-m-tarefa"); toast(`Tarefa #${r.numero} salva.`, "success"); carregarProjeto(P.id);
+        } catch (err) { $("pj-mt-err").textContent = err.message; }
+    });
+
+    // ─────────── Projeto: criar / editar / excluir / importar ───────────
+    let PROJ_EDIT = null;
+    function abrirProjeto(p) {
+        PROJ_EDIT = p || null;
+        $("pj-mp-titulo").textContent = p ? "Editar projeto" : "Novo projeto";
+        $("pj-mp-nome").value = p ? p.nome : ""; $("pj-mp-desc").value = p ? p.descricao : "";
+        $("pj-mp-err").textContent = ""; abrir("pj-m-projeto"); $("pj-mp-nome").focus();
+    }
+    $("pj-mp-salvar").addEventListener("click", async () => {
+        try {
+            const corpo = { nome: $("pj-mp-nome").value, descricao: $("pj-mp-desc").value };
+            const r = await api(PROJ_EDIT ? `/api/projetos/${PROJ_EDIT.id}` : "/api/projetos", { method: PROJ_EDIT ? "PUT" : "POST", body: corpo });
+            fechar("pj-m-projeto"); toast("Projeto salvo.", "success");
+            if (PROJ_EDIT) carregarProjeto(r.id); else location.hash = `projeto=${r.id}`;
+        } catch (err) { $("pj-mp-err").textContent = err.message; }
+    });
+    if (PODE_GERIR) {
+        $("pj-btn-novo").addEventListener("click", () => abrirProjeto(null));
+        $("pj-btn-editar-projeto").addEventListener("click", () => abrirProjeto(P));
+        $("pj-btn-nova-tarefa").addEventListener("click", () => abrirTarefa(null));
+        $("pj-btn-excluir-projeto").addEventListener("click", async () => {
+            if (!confirm(`Excluir o projeto "${P.nome}" e as ${P.total} tarefa(s)? Não tem volta.`)) return;
+            try { await api(`/api/projetos/${P.id}`, { method: "DELETE" }); toast("Projeto excluído.", "success"); location.hash = ""; }
+            catch (err) { toast(err.message, "error"); }
+        });
+        $("pj-btn-importar").addEventListener("click", () => { $("pj-mi-nome").value = ""; $("pj-mi-arq").value = ""; $("pj-mi-err").textContent = ""; abrir("pj-m-importar"); });
+        $("pj-mi-arq").addEventListener("change", (e) => {
+            const f = e.target.files[0];
+            if (f && !$("pj-mi-nome").value) $("pj-mi-nome").value = f.name.replace(/\.xlsx$/i, "");
+        });
+        $("pj-mi-enviar").addEventListener("click", async () => {
+            const f = $("pj-mi-arq").files[0];
+            if (!f) { $("pj-mi-err").textContent = "Escolha a planilha."; return; }
+            const fd = new FormData(); fd.append("arquivo", f); fd.append("nome", $("pj-mi-nome").value);
+            $("pj-mi-enviar").disabled = true;
+            try {
+                const r = await api("/api/projetos/importar", { method: "POST", body: fd });
+                fechar("pj-m-importar");
+                toast(`${r.tarefas} tarefa(s) importada(s).` + (r.avisos.length ? `\n\nConfira:\n• ${r.avisos.join("\n• ")}` : ""), r.avisos.length ? "" : "success");
+                if (r.avisos.length) { const t = $("pj-toast"); clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = "none"; }, 15000); }
+                location.hash = `projeto=${r.id}`;
+            } catch (err) { $("pj-mi-err").textContent = err.message; }
+            finally { $("pj-mi-enviar").disabled = false; }
+        });
+    }
+
+    // ─────────── Navegacao (#projeto=ID) ───────────
+    function rota() {
+        const m = /projeto=(\d+)(?:&tarefa=(\d+))?/.exec(location.hash);
+        $("pj-view-painel").classList.toggle("hidden", !!m);
+        $("pj-view-projeto").classList.toggle("hidden", !m);
+        if (m) carregarProjeto(Number(m[1]), m[2]);
+        else { P = null; carregarPainel(); }
+        window.scrollTo(0, 0);
+    }
+    window.addEventListener("hashchange", rota);
+    rota();
+})();
+</script>
+{% endblock %}
