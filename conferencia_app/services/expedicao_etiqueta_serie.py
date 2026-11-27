@@ -4,7 +4,8 @@ Rolo 50 x 150 mm em pe. Os 8,5 cm de cima ficam em branco (layout do
 usuario); abaixo, seis campos de 3,5 cm escritos de cima pra baixo (texto
 girado 90 graus no sentido horario), lado a lado da direita pra esquerda:
 Cliente, Nome do Monte, Produto, OS, Data e N. de serie. OS e data saem da
-conferencia; os outros quatro sao digitados na hora de imprimir.
+conferencia; os outros quatro sao digitados na hora de imprimir (monte,
+produto e serie ja' vem sugeridos - ver `sugestao`).
 
 Uma etiqueta por OS da ordem: cliente e data valem pra todas; monte, produto
 e serie sao digitados por OS (a OS marcada "nao aplicavel" nao imprime).
@@ -14,6 +15,7 @@ mesma etiqueta como alternativa.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -73,15 +75,93 @@ def _altura_mm(pt: float) -> float:
     return pt * 25.4 / 72
 
 
+def separar_os(n_os) -> list[str]:
+    """Item com varias OS ("9154 | 9155 | 9156") gera uma etiqueta por OS."""
+    return [p.strip() for p in str(n_os or "").split("|") if p.strip()]
+
+
 def os_da_ordem(ordem) -> list[str]:
     """OS distintas dos itens, na ordem em que aparecem; sem OS, [""]."""
-    oss = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    oss = list(dict.fromkeys(os_ for it in ordem.itens for os_ in separar_os(it.n_os)))
     return oss or [""]
 
 
-def registros(ordem) -> dict:
+# Sugestao automatica (regras do usuario, 27/11/2026), a partir da descricao
+# do item e da OS. Fica editavel na tela; o que nao bater na regra sai vazio.
+_PRODUTO_POR_TERMO = [  # primeiro que aparecer na descricao ganha
+    (r"\bCOMPLETO\b", "MOLD COMP"),
+    (r"\bGRID P/B\b", "GRID P/B"),
+    (r"\bP/B\b", "GRID P/B"),
+    (r"\bSHOE ASSY\b", "SAPATA"),
+    (r"\bSPT\b", "SAPATA"),
+    (r"\bCAST\b", "CASTELO"),
+]
+
+
+def sugerir_monte(descricao: str) -> str:
+    """Piso: "MOLD HTX1100 FP SEXT25CM H8 8V COMPLETO" -> "FP HTX1100 H8 8V"
+    (tipo + maquina + altura + vias). Bloco: "MOLD SPM30 FBV19X39CM P20MM 3V"
+    -> "FBV SPM30 19X39CM 3V" (tipo + maquina + medida + vias)."""
+    tokens = str(descricao or "").upper().split()
+    if len(tokens) < 3 or tokens[0] not in ("MOLD", "MOLDE"):
+        return ""
+    maquina = tokens[1].lstrip("@")  # "@CONSTROE" -> "CONSTROE" (pedido do usuario)
+    vias = next((t for t in tokens[2:] if re.fullmatch(r"\d+V", t)), "")
+    if not vias:
+        return ""
+    if tokens[2] == "FP":
+        altura = next((t for t in tokens[3:] if re.fullmatch(r"H\d+", t)), "")
+        return f"FP {maquina} {altura} {vias}" if altura else ""
+    # Tipo = 3 primeiras letras ("FBEDESM" -> "FBE"); a medida vem colada
+    # ("FBV19X39CM") ou no token seguinte ("FBEDESM 14X39CM").
+    bloco = re.fullmatch(r"([A-Z]{3})[A-Z]*(\d+X\d+(?:CM)?)?", tokens[2])
+    if not bloco:
+        return ""
+    medida = bloco.group(2)
+    if not medida and len(tokens) > 3:
+        solta = re.fullmatch(r"(\d+X\d+(?:CM)?)", tokens[3])
+        medida = solta.group(1) if solta else ""
+    return f"{bloco.group(1)} {maquina} {medida} {vias}" if medida else ""
+
+
+def sugerir_produto(descricao: str) -> str:
+    texto = str(descricao or "").upper()
+    return next((produto for termo, produto in _PRODUTO_POR_TERMO if re.search(termo, texto)), "")
+
+
+def sugerir_serie(os_: str, conferido_at) -> str:
+    """OS + data da conferencia: 8539 conferida em 27/11/2026 -> "8539-271126".
+    (o item com varias OS ja' chega aqui separado, uma OS por vez)."""
+    os_ = str(os_ or "").strip()
+    if not os_.isdigit() or not conferido_at:
+        return ""
+    return f"{os_}-{conferido_at:%d%m%y}"
+
+
+def sugestao(ordem, os_: str) -> dict:
+    """{monte, produto, serie} sugeridos pra OS. Com varios itens na OS, usa
+    o primeiro que e' molde (ou o primeiro, se nenhum for)."""
+    itens = [it for it in ordem.itens if os_ in separar_os(it.n_os)]
+    item = next((it for it in itens if str(it.item or "").upper().startswith("MOLD")), itens[0] if itens else None)
+    descricao = item.item if item else ""
+    return {"monte": sugerir_monte(descricao), "produto": sugerir_produto(descricao),
+            "serie": sugerir_serie(os_, ordem.conferido_at)}
+
+
+def _registros_gravados(ordem) -> dict:
     from ..models import ExpedicaoEtiquetaSerie
     return {r.n_os: r for r in ExpedicaoEtiquetaSerie.query.filter_by(ordem_id=ordem.id)}
+
+
+def registros(ordem) -> dict:
+    """Por OS. Registro antigo gravado com as OS juntas ("9154 | 9155", antes
+    de separar em 27/11/2026) continua valendo pra cada uma delas."""
+    gravados = _registros_gravados(ordem)
+    por_os = dict(gravados)
+    for chave, reg in gravados.items():
+        for os_ in separar_os(chave):
+            por_os.setdefault(os_, reg)
+    return por_os
 
 
 def os_pendentes(ordem) -> list[str]:
@@ -103,7 +183,7 @@ def registrar(ordem, linhas: list[dict], cliente: str, usuario: str) -> int:
     if not ordem.conferido_at:
         raise ValueError("Conclua a conferência antes da etiqueta de nº de série.")
     validas = set(os_da_ordem(ordem))
-    existentes = registros(ordem)
+    existentes = _registros_gravados(ordem)
     limpo = lambda v: str(v or "").strip()[:120]
     for linha in linhas:
         os_ = limpo(linha.get("os"))

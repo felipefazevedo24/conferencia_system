@@ -478,7 +478,7 @@ def _etiqueta_serie(cod_ordem_fat):
         return None, (jsonify({"error": "Ordem de faturamento nao encontrada."}), 404)
     if not ordem.conferido_at:
         return None, (jsonify({"error": "Conclua a conferencia antes de imprimir a etiqueta."}), 400)
-    os_da_ordem = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    os_da_ordem = [os_ for os_ in etiqueta_serie.os_da_ordem(ordem) if os_]
     limpo = lambda v: str(v or "").strip()[:120]
     pedidas = [limpo(v) for v in request.args.getlist("os")] or os_da_ordem or [""]
     if any(os_ not in os_da_ordem for os_ in pedidas if os_):
@@ -501,12 +501,16 @@ def etiqueta_serie_registros(cod_ordem_fat):
     if not ordem:
         return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
     feitos = etiqueta_serie.registros(ordem)
+    # Campo ainda vazio (OS pendente ou "Nao aplicavel") vem com a sugestao
+    # tirada da descricao do item e da OS; o que ja' foi impresso prevalece.
     return jsonify({"os": [
-        {"os": os_, "situacao": r.situacao if r else None, "monte": r.monte if r else "",
-         "produto": r.produto if r else "", "serie": r.serie if r else "",
+        {"os": os_, "situacao": r.situacao if r else None,
+         "monte": (r and r.monte) or sug["monte"], "produto": (r and r.produto) or sug["produto"],
+         "serie": (r and r.serie) or sug["serie"],
          "cliente": r.cliente if r else "", "usuario": r.usuario if r else None,
          "registrado_em": _iso(r.registrado_em) if r else None}
-        for os_ in etiqueta_serie.os_da_ordem(ordem) for r in [feitos.get(os_)]
+        for os_ in etiqueta_serie.os_da_ordem(ordem)
+        for r, sug in [(feitos.get(os_), etiqueta_serie.sugestao(ordem, os_))]
     ], "pendentes": etiqueta_serie.os_pendentes(ordem)})
 
 
