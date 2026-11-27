@@ -472,7 +472,7 @@ def _etiqueta_serie(cod_ordem_fat):
         return None, (jsonify({"error": "Ordem de faturamento nao encontrada."}), 404)
     if not ordem.conferido_at:
         return None, (jsonify({"error": "Conclua a conferencia antes de imprimir a etiqueta."}), 400)
-    os_da_ordem = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    os_da_ordem = [os_ for os_ in etiqueta_serie.os_da_ordem(ordem) if os_]
     limpo = lambda v: str(v or "").strip()[:120]
     pedidas = [limpo(v) for v in request.args.getlist("os")] or os_da_ordem or [""]
     if any(os_ not in os_da_ordem for os_ in pedidas if os_):

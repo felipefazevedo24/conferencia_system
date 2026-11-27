@@ -75,9 +75,14 @@ def _altura_mm(pt: float) -> float:
     return pt * 25.4 / 72
 
 
+def separar_os(n_os) -> list[str]:
+    """Item com varias OS ("9154 | 9155 | 9156") gera uma etiqueta por OS."""
+    return [p.strip() for p in str(n_os or "").split("|") if p.strip()]
+
+
 def os_da_ordem(ordem) -> list[str]:
     """OS distintas dos itens, na ordem em que aparecem; sem OS, [""]."""
-    oss = list(dict.fromkeys(str(it.n_os).strip() for it in ordem.itens if str(it.n_os or "").strip()))
+    oss = list(dict.fromkeys(os_ for it in ordem.itens for os_ in separar_os(it.n_os)))
     return oss or [""]
 
 
@@ -86,6 +91,7 @@ def os_da_ordem(ordem) -> list[str]:
 _PRODUTO_POR_TERMO = [  # primeiro que aparecer na descricao ganha
     (r"\bCOMPLETO\b", "MOLD COMP"),
     (r"\bGRID P/B\b", "GRID P/B"),
+    (r"\bP/B\b", "GRID P/B"),
     (r"\bSHOE ASSY\b", "SAPATA"),
     (r"\bSPT\b", "SAPATA"),
     (r"\bCAST\b", "CASTELO"),
@@ -106,8 +112,16 @@ def sugerir_monte(descricao: str) -> str:
     if tokens[2] == "FP":
         altura = next((t for t in tokens[3:] if re.fullmatch(r"H\d+", t)), "")
         return f"FP {maquina} {altura} {vias}" if altura else ""
-    bloco = re.fullmatch(r"([A-Z]{3})(\d+X\d+)(?:CM)?", tokens[2])
-    return f"{bloco.group(1)} {maquina} {bloco.group(2)} {vias}" if bloco else ""
+    # Tipo = 3 primeiras letras ("FBEDESM" -> "FBE"); a medida vem colada
+    # ("FBV19X39CM") ou no token seguinte ("FBEDESM 14X39CM").
+    bloco = re.fullmatch(r"([A-Z]{3})[A-Z]*(\d+X\d+)?(?:CM)?", tokens[2])
+    if not bloco:
+        return ""
+    medida = bloco.group(2)
+    if not medida and len(tokens) > 3:
+        solta = re.fullmatch(r"(\d+X\d+)(?:CM)?", tokens[3])
+        medida = solta.group(1) if solta else ""
+    return f"{bloco.group(1)} {maquina} {medida} {vias}" if medida else ""
 
 
 def sugerir_produto(descricao: str) -> str:
@@ -117,7 +131,7 @@ def sugerir_produto(descricao: str) -> str:
 
 def sugerir_serie(os_: str, conferido_at) -> str:
     """OS + data da conferencia: 8539 conferida em 27/11/2026 -> "8539-271126".
-    Campo de OS com mais de uma ("9154 | 9155") fica pra digitar."""
+    (o item com varias OS ja' chega aqui separado, uma OS por vez)."""
     os_ = str(os_ or "").strip()
     if not os_.isdigit() or not conferido_at:
         return ""
@@ -127,16 +141,27 @@ def sugerir_serie(os_: str, conferido_at) -> str:
 def sugestao(ordem, os_: str) -> dict:
     """{monte, produto, serie} sugeridos pra OS. Com varios itens na OS, usa
     o primeiro que e' molde (ou o primeiro, se nenhum for)."""
-    itens = [it for it in ordem.itens if str(it.n_os or "").strip() == os_]
+    itens = [it for it in ordem.itens if os_ in separar_os(it.n_os)]
     item = next((it for it in itens if str(it.item or "").upper().startswith("MOLD")), itens[0] if itens else None)
     descricao = item.item if item else ""
     return {"monte": sugerir_monte(descricao), "produto": sugerir_produto(descricao),
             "serie": sugerir_serie(os_, ordem.conferido_at)}
 
 
-def registros(ordem) -> dict:
+def _registros_gravados(ordem) -> dict:
     from ..models import ExpedicaoEtiquetaSerie
     return {r.n_os: r for r in ExpedicaoEtiquetaSerie.query.filter_by(ordem_id=ordem.id)}
+
+
+def registros(ordem) -> dict:
+    """Por OS. Registro antigo gravado com as OS juntas ("9154 | 9155", antes
+    de separar em 27/11/2026) continua valendo pra cada uma delas."""
+    gravados = _registros_gravados(ordem)
+    por_os = dict(gravados)
+    for chave, reg in gravados.items():
+        for os_ in separar_os(chave):
+            por_os.setdefault(os_, reg)
+    return por_os
 
 
 def os_pendentes(ordem) -> list[str]:
@@ -158,7 +183,7 @@ def registrar(ordem, linhas: list[dict], cliente: str, usuario: str) -> int:
     if not ordem.conferido_at:
         raise ValueError("Conclua a conferência antes da etiqueta de nº de série.")
     validas = set(os_da_ordem(ordem))
-    existentes = registros(ordem)
+    existentes = _registros_gravados(ordem)
     limpo = lambda v: str(v or "").strip()[:120]
     for linha in linhas:
         os_ = limpo(linha.get("os"))
