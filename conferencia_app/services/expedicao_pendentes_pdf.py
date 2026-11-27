@@ -11,6 +11,7 @@ impressao: a lista sai do mesmo jeito, marcando que o desenho nao veio.
 from __future__ import annotations
 
 import logging
+import re
 from io import BytesIO
 
 from reportlab.lib import colors
@@ -69,6 +70,22 @@ def _abrir_como_pdf(conteudo: bytes, nome: str):
     return convertido
 
 
+def _os_do_item(n_os) -> list[str]:
+    """O ERP manda item com mais de uma OS no mesmo campo ("11071 | 11072").
+    Mesma separacao da tela; a "/" da subdivisao (11101/001) fica."""
+    return [p.strip() for p in re.split(r"[|,;]", str(n_os or "")) if p.strip()]
+
+
+def _situacao_item(n_os, situacao: dict[str, str]) -> str:
+    oss = _os_do_item(n_os)
+    if not oss:
+        return "-"
+    todas = [situacao.get(os_, SEM_DESENHO) for os_ in oss]
+    if len(set(todas)) == 1:
+        return todas[0]
+    return " · ".join(f"{os_}: {s}" for os_, s in zip(oss, todas))
+
+
 def _buscar_desenhos(itens) -> tuple[dict[str, str], list]:
     """Situacao do desenho por OS + os desenhos abertos, na ordem da lista.
     Cada OS e' buscada uma vez. Na primeira falha do ERP para de tentar: as
@@ -76,9 +93,8 @@ def _buscar_desenhos(itens) -> tuple[dict[str, str], list]:
     situacao: dict[str, str] = {}
     anexos = []
     erp_fora = False
-    for it in itens:
-        n_os = str(it.n_os or "").strip()
-        if not n_os or n_os in situacao:
+    for n_os in (os_ for it in itens for os_ in _os_do_item(it.n_os)):
+        if n_os in situacao:
             continue
         if erp_fora:
             situacao[n_os] = ERP_FORA
@@ -131,7 +147,7 @@ def _lista_pdf(cabecalho: list[tuple[str, str]], itens, situacao: dict[str, str]
             _p(it.cod_interno),
             _p(it.item),
             _p(n_os),
-            _p(situacao.get(n_os, SEM_DESENHO) if n_os else "-", size=8),
+            _p(_situacao_item(n_os, situacao), size=8),
             "",
         ])
     tabela = Table(
