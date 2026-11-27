@@ -256,7 +256,7 @@
     function renderSimulacao() {
         const res = simulacao.resultado;
         $("gf-simulacao").innerHTML = `
-            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.paridade_texto ? ` · mercadoria em ${esc(res.moeda)} → US$ pela paridade <strong>${esc(res.paridade_texto)}</strong>${res.paridade_fonte ? ` (${esc(res.paridade_fonte)})` : ""}, depois R$ pela PTAX` : ""} · base do frete (${esc(res.incoterm)}): US$ ${res.frete_cif_usd.toLocaleString("pt-BR")} + seguro US$ ${res.seguro_cif_usd.toLocaleString("pt-BR")} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
+            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.paridade_texto ? ` · mercadoria em ${esc(res.moeda)} → US$ pela paridade <strong>${esc(res.paridade_texto)}</strong>${res.paridade_fonte ? ` (${esc(res.paridade_fonte)})` : ""}, depois R$ pela PTAX` : ""} · base do frete (${esc(res.incoterm)}): ${brl(res.frete_cif_brl ?? res.frete_cif_usd * simulacao.ptax)} + seguro ${brl(res.seguro_cif_brl ?? res.seguro_cif_usd * simulacao.ptax)} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
             <div class="gf-modelos">${blocoModelo("despachante", "Despachante (DUIMP)", res)}${blocoModelo("courier", "Courier", res)}</div>
             <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> ${atual.provisoes.length ? "Atualizar" : "Gravar"} provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"})</button></div>`;
     }

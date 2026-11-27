@@ -6,8 +6,11 @@ Provisao (na instrucao de embarque, so' importacao, cotacao escolhida):
     Courier lado a lado - o operador escolhe qual vira a provisao;
   - itens = POs do embarque (principal + incluidas); NCM sem aliquota
     cadastrada bloqueia;
-  - base CIF pelo Incoterm (CUSTOS_CIF_POR_INCOTERM); Destination, Docs
-    release e Delivery ficam fora da base;
+  - base CIF = o frete da cotacao inteiro, como a Columbia paga: US$ na
+    PTAX com o markup do forwarder, R$ como esta' (pedido do usuario,
+    27/11/2026 - antes ia so' ate' a chegada, sem Destination/Docs
+    release/Delivery e sem markup). O Incoterm so' tira o que o fornecedor
+    paga (coleta/origem em FCA/FAS/FOB);
   - impostos na PTAX pura (taxa fiscal); frete provisionado = cotacao
     escolhida em R$ com o markup do forwarder;
   - uma provisao por processo: gravar de novo ATUALIZA a mesma (pedido do
@@ -29,14 +32,15 @@ from . import comex_service as svc
 
 INCOTERMS = ("EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")
 EMAIL_CONTROLADORIA = "lucmor@colmac.com"
-_ATE_O_DESTINO = ("pick_up", "origem_charges", "frete_internacional", "seguro")
-# Quem paga ate' o embarque e' o fornecedor (FCA/FAS/FOB): so' frete e seguro
-# internacionais entram. EXW: a coleta e a origem tambem. Termos C/D: o
-# fornecedor ja' pagou o frete - entra o que a cotacao trouxer.
+_TODAS_AS_ETAPAS = ("pick_up", "origem_charges", "frete_internacional", "seguro",
+                    "destination_charges", "docs_release", "delivery")
+_DEPOIS_DO_EMBARQUE = ("frete_internacional", "seguro", "destination_charges", "docs_release", "delivery")
+# Quem paga ate' o embarque e' o fornecedor (FCA/FAS/FOB): coleta e origem
+# ficam de fora. EXW: entra tudo. Termos C/D: o fornecedor ja' pagou o
+# frete - entra o que a cotacao trouxer.
 CUSTOS_CIF_POR_INCOTERM = {
-    "EXW": _ATE_O_DESTINO, "FCA": ("frete_internacional", "seguro"), "FAS": ("frete_internacional", "seguro"),
-    "FOB": ("frete_internacional", "seguro"),
-    **{t: _ATE_O_DESTINO for t in ("CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")},
+    "EXW": _TODAS_AS_ETAPAS, "FCA": _DEPOIS_DO_EMBARQUE, "FAS": _DEPOIS_DO_EMBARQUE, "FOB": _DEPOIS_DO_EMBARQUE,
+    **{t: _TODAS_AS_ETAPAS for t in ("CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")},
 }
 CAMPOS_REALIZADO_NUM = ("cambio", "ii", "ipi", "pis", "cofins", "taxa_siscomex", "afrmm", "cbs_ibs", "multas", "icms",
                         "frete_fatura_brl", "despesa_despachante", "despesa_armazenagem", "despesa_capatazia", "despesa_outras")
@@ -83,13 +87,15 @@ def _itens(processo: ComexProcesso, informados: list | None) -> list[dict]:
     return itens
 
 
-def _frete_cif(cotacao: ComexCotacao, incoterm: str, ptax: float) -> tuple[float, float]:
-    """(frete_usd, seguro_usd) que entram na base - parte em R$ da cotacao
-    convertida pela PTAX."""
-    def usd(etapa):
-        return float(getattr(cotacao, f"{etapa}_usd") or 0) + float(getattr(cotacao, f"{etapa}_brl") or 0) / ptax
+def _frete_cif(cotacao: ComexCotacao, incoterm: str, ptax: float, taxa_agente: float | None) -> tuple[float, float]:
+    """(frete, seguro) que entram na base, em R$: US$ x taxa do agente
+    (PTAX + markup - o markup so' incide no que esta' em US$) + R$."""
+    taxa = taxa_agente or ptax
+
+    def brl(etapa):
+        return float(getattr(cotacao, f"{etapa}_usd") or 0) * taxa + float(getattr(cotacao, f"{etapa}_brl") or 0)
     etapas = CUSTOS_CIF_POR_INCOTERM[incoterm]
-    return round(sum(usd(e) for e in etapas if e != "seguro"), 2), round(usd("seguro") if "seguro" in etapas else 0, 2)
+    return round(sum(brl(e) for e in etapas if e != "seguro"), 2), round(brl("seguro") if "seguro" in etapas else 0, 2)
 
 
 def texto_paridade(moeda: str, paridade: float | None) -> str | None:
@@ -127,8 +133,11 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
         for i in itens:
             i["valor_usd"] = round(custo._num(i.get("valor_usd")) * fator, 6)
     if cotacao:
-        frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
         cambio = svc.cambio_da_cotacao(cotacao, ptax)
+        frete_brl_base, seguro_brl_base = _frete_cif(cotacao, incoterm, ptax, cambio["taxa_agente"])
+        # O motor do simulador recebe US$ e multiplica pela PTAX: manda o
+        # equivalente, sem arredondar, pra base em R$ sair exata.
+        frete_usd, seguro_usd = frete_brl_base / ptax, seguro_brl_base / ptax
     else:
         # Sem cotacao escolhida (ex.: frete por conta do fornecedor): base e
         # frete informados na tela, como no Simulador de custo.
@@ -145,7 +154,8 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     for modelo in ("despachante", "courier"):
         resultado[modelo]["avisos"] = [a for a in resultado[modelo]["avisos"] if not a.startswith("Frete rateado pelo valor FOB")]
     resultado.update({
-        "incoterm": incoterm, "frete_cif_usd": frete_usd, "seguro_cif_usd": seguro_usd,
+        "incoterm": incoterm, "frete_cif_usd": round(frete_usd, 2), "seguro_cif_usd": round(seguro_usd, 2),
+        "frete_cif_brl": round(frete_usd * ptax, 2), "seguro_cif_brl": round(seguro_usd * ptax, 2),
         "moeda": moeda, "paridade": paridade, "paridade_texto": texto_paridade(moeda, paridade),
         "paridade_fonte": dados.get("paridade_fonte") if paridade else None,
         "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]) if cotacao else ["informado na tela"],

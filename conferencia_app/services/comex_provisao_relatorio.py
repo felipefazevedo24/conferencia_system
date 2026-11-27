@@ -64,7 +64,8 @@ def gerar_pdf(p: ComexProvisao) -> bytes:
     corpo += [Spacer(1, 6), Paragraph("<br/>".join(f"Obs.: {a}" for a in avisos), estilos["Normal"])] if avisos else []
     corpo += [Spacer(1, 6), Paragraph(
         f"Base do frete pelo Incoterm {p.incoterm}: {', '.join(resultado.get('etapas_na_base') or [])}. "
-        "Impostos na PTAX (taxa fiscal); frete provisionado = cotação escolhida em R$ com o markup do forwarder."
+        "Frete na base = cotação em R$, com o markup do forwarder sobre os valores em US$; "
+        "impostos na PTAX (taxa fiscal)."
         + _txt_cambio_moeda(resultado), estilos["Normal"])]
     doc.build(corpo)
     return buf.getvalue()
