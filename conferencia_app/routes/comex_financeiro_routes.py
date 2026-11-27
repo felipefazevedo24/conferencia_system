@@ -134,11 +134,17 @@ def api_simular_provisao(processo_id):
         ptax = custo.ptax_do_dia()
         dados["ptax"] = ptax["cotacao"] if ptax else None
     moeda = comex_svc.moeda_do_processo(processo)
-    if moeda != "USD" and not dados.get("cambio_moeda"):
-        cambio = custo.ptax_do_dia(moeda)
-        dados["cambio_moeda"] = cambio["cotacao"] if cambio else None
+    # Paridade moeda -> US$ vem sozinha (PTAX do BCB; CNY pelo BCE); digitada
+    # so' quando a fonte esta' fora do ar.
+    if moeda != "USD" and not dados.get("paridade"):
+        par = custo.paridade_do_dia(moeda)
+        if par:
+            dados["paridade"] = par["paridade"]
+            dados["paridade_fonte"] = f"{par['fonte']} {par['data'][8:10]}/{par['data'][5:7]}/{par['data'][:4]}"
+    elif moeda != "USD":
+        dados["paridade_fonte"] = dados.get("paridade_fonte") or "informada"
     try:
-        return jsonify({"ptax": dados["ptax"], "cambio_moeda": dados.get("cambio_moeda"),
+        return jsonify({"ptax": dados["ptax"], "paridade": dados.get("paridade"), "paridade_fonte": dados.get("paridade_fonte"),
                         "resultado": svc.calcular(processo, dados)})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

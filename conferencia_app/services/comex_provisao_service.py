@@ -90,6 +90,14 @@ def _frete_cif(cotacao: ComexCotacao, incoterm: str, ptax: float) -> tuple[float
     return round(sum(usd(e) for e in etapas if e != "seguro"), 2), round(usd("seguro") if "seguro" in etapas else 0, 2)
 
 
+def texto_paridade(moeda: str, paridade: float | None) -> str | None:
+    """"1 US$ = 159,33 JPY" / "1 EUR = 1,0974 US$" (convencao do mercado)."""
+    if not paridade:
+        return None
+    valor = f"{paridade:,.6f}".rstrip("0").rstrip(".").replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"1 {moeda} = {valor} US$" if custo.paridade_em_usd_por_unidade(moeda) else f"1 US$ = {valor} {moeda}"
+
+
 def calcular(processo: ComexProcesso, dados: dict) -> dict:
     motivo = motivo_sem_provisao(processo)
     if motivo:
@@ -103,17 +111,19 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     cotacao = _cotacao_escolhida(processo)
     itens = _itens(processo, dados.get("itens"))
     moeda = svc.moeda_do_processo(processo)
-    cambio_moeda = None
+    paridade = None
     if moeda != "USD":
-        # O motor do simulador trabalha em US$: a mercadoria em JPY/EUR/CNY
-        # vira US$ pela taxa cruzada (cambio da moeda / PTAX do dolar), o
-        # que da' o mesmo valor em R$ de valor x cambio da moeda. O frete
-        # continua em US$ na PTAX do dolar.
-        cambio_moeda = custo._num(dados.get("cambio_moeda"))
-        if not cambio_moeda or cambio_moeda <= 0:
-            raise ValueError(f"Informe o câmbio do {moeda} (R$ por 1 {moeda}).")
+        # A mercadoria em JPY/EUR/CNY vira US$ pela paridade da moeda contra
+        # o dolar; o US$ so' vira R$ no calculo dos impostos, pela PTAX do
+        # dolar (pedido do usuario, 27/11/2026 - antes pedia R$ por moeda e
+        # cruzava com a PTAX). O frete continua em US$ na PTAX do dolar.
+        paridade = custo._num(dados.get("paridade"))
+        if not paridade or paridade <= 0:
+            cotacao_txt = f"US$ por 1 {moeda}" if custo.paridade_em_usd_por_unidade(moeda) else f"{moeda} por US$ 1"
+            raise ValueError(f"Informe a paridade do {moeda} ({cotacao_txt}).")
+        fator = custo.usd_por_unidade(moeda, paridade)
         for i in itens:
-            i["valor_usd"] = round(custo._num(i.get("valor_usd")) * cambio_moeda / ptax, 6)
+            i["valor_usd"] = round(custo._num(i.get("valor_usd")) * fator, 6)
     if cotacao:
         frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
         cambio = svc.cambio_da_cotacao(cotacao, ptax)
@@ -134,7 +144,8 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
         resultado[modelo]["avisos"] = [a for a in resultado[modelo]["avisos"] if not a.startswith("Frete rateado pelo valor FOB")]
     resultado.update({
         "incoterm": incoterm, "frete_cif_usd": frete_usd, "seguro_cif_usd": seguro_usd,
-        "moeda": moeda, "cambio_moeda": cambio_moeda,
+        "moeda": moeda, "paridade": paridade, "paridade_texto": texto_paridade(moeda, paridade),
+        "paridade_fonte": dados.get("paridade_fonte") if paridade else None,
         "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]) if cotacao else ["informado na tela"],
         "frete_brl": cambio["custo_total_consolidado_brl"], "taxa_agente": cambio["taxa_agente"],
         "markup_pct": cambio["markup_pct"], "forwarder": cotacao.fornecedor_frete if cotacao else None,

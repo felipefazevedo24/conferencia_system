@@ -171,7 +171,7 @@
                 <div class="gf-grid">
                     <div class="gf-field"><label>Incoterm *</label><select id="gf-incoterm" class="eui-select"><option value="">Selecione…</option>${INCOTERMS.map((i) => `<option ${pad.incoterm === i ? "selected" : ""}>${i}</option>`).join("")}</select></div>
                     <div class="gf-field"><label>PTAX (vazio = do dia)</label>${input("gf-ptax", "")}</div>
-                    ${d.moeda !== "USD" ? `<div class="gf-field"><label>Câmbio ${esc(d.moeda)} (R$ por 1 ${esc(d.moeda)}) <span class="gf-muted">${d.moeda === "CNY" ? "sem PTAX no Banco Central — informe" : "vazio = PTAX do dia"}</span></label>${input("gf-cambio_moeda", "")}</div>` : ""}
+                    ${d.moeda !== "USD" ? `<div class="gf-field"><label>Paridade ${esc(rotuloParidade(d.moeda))} <span class="gf-muted">vazio = ${d.moeda === "CNY" ? "Banco Central Europeu" : "PTAX do Banco Central"} do dia</span></label>${input("gf-paridade", "")}</div>` : ""}
                     ${CAMPOS_PROV.map(([c, rot, m]) => `<div class="gf-field"><label>${rot} <span class="gf-muted">${m === "d" ? "despachante" : "courier"}</span></label>${input("gf-" + c, pad[c])}</div>`).join("")}
                 </div>
                 ${d.tem_cotacao ? `<div class="gf-muted">Frete: cotação escolhida (base pelo Incoterm; provisionado em R$ com o markup do forwarder).</div>` : `
@@ -224,9 +224,13 @@
             <td><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-rem-item="${idx}"><i class="fas fa-trash"></i></button></td></tr>`).join("");
     }
 
+    // Paridade na convencao do mercado (a do boletim PTAX): EUR/GBP/AUD em
+    // US$ por 1 unidade; JPY/CNY e as demais em unidades por US$ 1.
+    const rotuloParidade = (m) => ["EUR", "GBP", "AUD"].includes(m) ? `(US$ por 1 ${m})` : `(${m} por US$ 1)`;
+
     function parametros() {
         const p = { incoterm: $("gf-incoterm").value, ptax: num($("gf-ptax").value) };
-        if ($("gf-cambio_moeda")) p.cambio_moeda = num($("gf-cambio_moeda").value);
+        if ($("gf-paridade")) p.paridade = num($("gf-paridade").value);
         CAMPOS_PROV.forEach(([c]) => { p[c] = num($("gf-" + c).value); });
         ["frete_usd", "seguro_usd", "frete_brl"].forEach((c) => { const el = $("gf-" + c); if (el) p[c] = num(el.value); });
         p.itens = itensProv.map((i) => ({ ...i, quantidade: num(i.quantidade), valor_usd: num(i.valor_usd) }));
@@ -250,7 +254,7 @@
     function renderSimulacao() {
         const res = simulacao.resultado;
         $("gf-simulacao").innerHTML = `
-            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.cambio_moeda ? ` · mercadoria em ${esc(res.moeda)} a ${String(res.cambio_moeda).replace(".", ",")}` : ""} · base do frete (${esc(res.incoterm)}): US$ ${res.frete_cif_usd.toLocaleString("pt-BR")} + seguro US$ ${res.seguro_cif_usd.toLocaleString("pt-BR")} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
+            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.paridade_texto ? ` · mercadoria em ${esc(res.moeda)} → US$ pela paridade <strong>${esc(res.paridade_texto)}</strong>${res.paridade_fonte ? ` (${esc(res.paridade_fonte)})` : ""}, depois R$ pela PTAX` : ""} · base do frete (${esc(res.incoterm)}): US$ ${res.frete_cif_usd.toLocaleString("pt-BR")} + seguro US$ ${res.seguro_cif_usd.toLocaleString("pt-BR")} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
             <div class="gf-modelos">${blocoModelo("despachante", "Despachante (DUIMP)", res)}${blocoModelo("courier", "Courier", res)}</div>
             <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> Gravar provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"}) e enviar à Controladoria</button></div>`;
     }
@@ -268,12 +272,12 @@
             if (e.target.closest("#gf-calcular")) {
                 simulacao = await api(`/api/comex/processos/${atual.linha.id}/provisao/simular`, { method: "POST", body: JSON.stringify(parametros()) });
                 if (!$("gf-ptax").value) $("gf-ptax").value = String(simulacao.ptax).replace(".", ",");
-                if ($("gf-cambio_moeda") && !$("gf-cambio_moeda").value && simulacao.cambio_moeda) $("gf-cambio_moeda").value = String(simulacao.cambio_moeda).replace(".", ",");
+                if ($("gf-paridade") && !$("gf-paridade").value && simulacao.paridade) $("gf-paridade").value = String(simulacao.paridade).replace(".", ",");
                 modeloSel = null; renderSimulacao();
             } else if (e.target.closest("[data-modelo]")) {
                 modeloSel = e.target.closest("[data-modelo]").dataset.modelo; renderSimulacao();
             } else if (e.target.closest("#gf-gravar")) {
-                const r = await api(`/api/comex/processos/${atual.linha.id}/provisao`, { method: "POST", body: JSON.stringify({ ...parametros(), ptax: simulacao.ptax, cambio_moeda: simulacao.cambio_moeda, modelo: modeloSel }) });
+                const r = await api(`/api/comex/processos/${atual.linha.id}/provisao`, { method: "POST", body: JSON.stringify({ ...parametros(), ptax: simulacao.ptax, paridade: simulacao.paridade, paridade_fonte: simulacao.paridade_fonte, modelo: modeloSel }) });
                 toast(r.message, r.message.includes("NÃO") ? "error" : "success");
                 abrir(atual.linha.id); carregar();
             } else if (e.target.closest("#gf-salvar-real")) {
