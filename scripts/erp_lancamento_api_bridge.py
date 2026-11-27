@@ -1451,19 +1451,22 @@ _SQL_PLANEJAMENTO_BASE = """
 SQL_PLANEJAMENTO_MENSAL = _SQL_PLANEJAMENTO_BASE + """
     ,
     ajuste as (
-        -- Inventario: so' o liquido negativo do mes e' consumo (o GRV zera o
+        -- Inventario: so' o liquido negativo do mes e' perda (o GRV zera o
         -- saldo e lanca o contado; somar so' a baixa contaria o estoque todo).
+        -- Vai separado da saida desde 23/11/2026: uma baixa de inventario
+        -- caia inteira num mes e inflava o desvio e o minimo do ano todo
+        -- (11 -> 39 num item de 10/mes). O Sync mostra, nao soma.
         select codigo, to_char(dia, 'YYYY-MM') as mes, sum(qtde) as liquido
         from mov where classe = 'ajuste'
         group by codigo, to_char(dia, 'YYYY-MM')
     )
-    select codigo, mes, sum(saida) as saida, sum(saida_os) as saida_os
+    select codigo, mes, sum(saida) as saida, sum(saida_os) as saida_os, sum(perda_inventario) as perda_inventario
     from (
         select codigo, to_char(dia, 'YYYY-MM') as mes, -liquido as saida,
-               case when para_os then -liquido else 0 end as saida_os
+               case when para_os then -liquido else 0 end as saida_os, 0 as perda_inventario
         from doc where liquido < 0
         union all
-        select codigo, mes, -liquido, 0 from ajuste where liquido < 0
+        select codigo, mes, 0, 0, -liquido from ajuste where liquido < 0
     ) s
     group by codigo, mes
     order by codigo, mes
@@ -2055,11 +2058,12 @@ def _planejamento_estoque(cur, *, empresa: int, codigos: list[str], inicio: date
     }
 
     cur.execute(SQL_PLANEJAMENTO_MENSAL, params)
-    for codigo, mes, saida, saida_os in cur.fetchall():
+    for codigo, mes, saida, saida_os, perda_inventario in cur.fetchall():
         if codigo in por_codigo:
-            por_codigo[codigo]["serie_mensal"].append(
-                {"mes": mes, "saida": round(float(saida or 0), 6), "saida_os": round(float(saida_os or 0), 6)}
-            )
+            por_codigo[codigo]["serie_mensal"].append({
+                "mes": mes, "saida": round(float(saida or 0), 6), "saida_os": round(float(saida_os or 0), 6),
+                "perda_inventario": round(float(perda_inventario or 0), 6),
+            })
 
     cur.execute(SQL_PLANEJAMENTO_RETIRADAS, params)
     for codigo, retiradas, p50, p80 in cur.fetchall():

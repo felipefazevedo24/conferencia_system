@@ -32,7 +32,8 @@ meses de consumo, ou parado (sem saída na janela).
 
 Todo o consumo entra na conta, inclusive o de material comprado para uma OS
 específica; a tela só mostra quanto dele foi (decisão da logística em
-28/09/2026).
+28/09/2026). Baixa de inventário não é consumo: caía inteira num mês e
+inflava o mínimo do ano todo. A tela mostra a perda à parte (23/11/2026).
 """
 from __future__ import annotations
 
@@ -501,6 +502,9 @@ def calcular_item(
     valores = [float((serie.get(m) or {}).get("saida") or 0) for m in meses]
     consumo_janela = math.fsum(valores)
     consumo_os = math.fsum(float((serie.get(m) or {}).get("saida_os") or 0) for m in meses)
+    # Baixa de inventário fica fora do consumo (desde 23/11/2026): só aparece.
+    # Bridge antiga ainda manda ela somada na saída e sem este campo (= 0).
+    perda_inventario = math.fsum(float((serie.get(m) or {}).get("perda_inventario") or 0) for m in meses)
     consumo_mensal = (consumo_janela / len(meses) if meses else 0.0) * fator
     desvio_mensal = (_desvio(valores) if len(valores) >= 2 else 0.0) * fator
     com_saida = [v for v in valores if v > 0]
@@ -666,6 +670,7 @@ def calcular_item(
         "fora_analise": bool(ajuste.get("fora_analise")),
         "nao_comprar": bool(ajuste.get("nao_comprar")),
         "consumo_os_pct": consumo_os_pct,
+        "perda_inventario_janela": r(perda_inventario),
         "oc_para_os": oc_para_os,
         "oc_estoque": int(historico.get("oc_estoque_12m") or 0),
         "candidato_estoque": oc_para_os >= CANDIDATO_MIN_OC_PARA_OS and consumo_os_pct >= CANDIDATO_MIN_PCT_OS,

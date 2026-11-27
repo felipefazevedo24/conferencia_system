@@ -1122,6 +1122,7 @@
                 ['Tipo de demanda', esc(p.tipo_demanda_label)],
                 ['Confiança da sugestão', `${CONFIANCA[p.confianca] || '-'}<small>${esc((p.confianca_motivos || []).join(' · '))}</small>`],
                 p.consumo_os_pct > 0 ? [`Comprado para OS (${p.janela_meses} meses)`, `${fmt(p.consumo_os_pct, 1)}% do consumo${p.candidato_estoque ? '<small>candidato a item de estoque</small>' : ''}`] : null,
+                p.perda_inventario_janela > 0 ? [`Perda em inventário (${p.janela_meses} meses)`, `${q(p.perda_inventario_janela)}<small>fora do consumo</small>`] : null,
             ]);
             return `<div class="mp-secao"><p class="mp-secao__titulo">Saldo</p>${saldo}</div>
                 <div class="mp-secao"><p class="mp-secao__titulo">Situação</p>${situacao}</div>
@@ -1157,6 +1158,7 @@
             [`Consumo ${janela} meses`, `${fmt(p.consumo_janela)} ${un}<small>${fmt(p.consumo_mensal)}/mês${p.crescimento_vendas_pct ? ` já com ${p.crescimento_vendas_pct > 0 ? '+' : ''}${fmt(p.crescimento_vendas_pct, 1)}% de vendas` : ''}</small>`],
             p.adi != null ? ['Intervalo médio · variação (CV²)', `${fmt(p.adi)} mês · ${fmt(p.cv2)}`] : null,
             ['Classificação', esc(p.tipo_demanda_label)],
+            p.perda_inventario_janela > 0 ? [`Perda em inventário (${janela} meses)`, `${fmt(p.perda_inventario_janela)} ${un}<small>não entra no consumo</small>`] : null,
         ]);
         const ltTexto = {
             historico: `${fmt(p.lead_time_dias, 1)} dia(s)<small>${p.lead_time_amostras} entrega(s) do item · desvio ${fmt(p.lead_time_desvio, 1)}</small>`,
