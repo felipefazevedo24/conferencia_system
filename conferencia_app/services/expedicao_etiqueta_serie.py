@@ -99,7 +99,7 @@ def sugerir_monte(descricao: str) -> str:
     tokens = str(descricao or "").upper().split()
     if len(tokens) < 3 or tokens[0] not in ("MOLD", "MOLDE"):
         return ""
-    maquina = tokens[1]
+    maquina = tokens[1].lstrip("@")  # "@CONSTROE" -> "CONSTROE" (pedido do usuario)
     vias = next((t for t in tokens[2:] if re.fullmatch(r"\d+V", t)), "")
     if not vias:
         return ""
