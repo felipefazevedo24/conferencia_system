@@ -215,7 +215,7 @@ PTAX_URL = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
 
 PTAX_MOEDA_URL = ("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
                   "CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)")
-# Moedas com PTAX no Banco Central (as outras, ex. CNY, o cambio e' digitado).
+# Moedas com PTAX no Banco Central (as outras, ex. CNY, vem do BCE - ver paridade_venda).
 MOEDAS_PTAX = ("USD", "JPY", "EUR", "GBP", "CHF", "CAD", "AUD", "DKK", "NOK", "SEK")
 
 
@@ -256,6 +256,74 @@ def ptax_do_dia(moeda: str = "USD") -> dict | None:
         return em_cache[0]
     valor = ptax_venda(moeda=moeda)
     _PTAX_CACHE[moeda] = (valor, agora)
+    return valor
+
+
+# ── Paridade (moeda da invoice -> US$) ──────────────────────────────────
+# A mercadoria em JPY/EUR/CNY vira US$ pela paridade; so' depois o US$ vira
+# R$ pela PTAX do dolar (pedido do usuario, 27/11/2026). A paridade segue a
+# convencao do mercado (a mesma do boletim PTAX): moeda "tipo B" e' cotada
+# em US$ por 1 unidade (1 EUR = 1,0974 US$); as demais em unidades por
+# US$ 1 (1 US$ = 159,33 JPY).
+MOEDAS_US_POR_UNIDADE = ("EUR", "GBP", "AUD")  # tipo B no cadastro de moedas do BCB
+FRANKFURTER_URL = "https://api.frankfurter.app/{data}"  # referencia diaria do Banco Central Europeu
+
+
+def paridade_em_usd_por_unidade(moeda: str) -> bool:
+    return moeda in MOEDAS_US_POR_UNIDADE
+
+
+def usd_por_unidade(moeda: str, paridade: float) -> float:
+    """Quantos US$ vale 1 unidade da moeda, a partir da paridade cotada."""
+    return paridade if paridade_em_usd_por_unidade(moeda) else 1 / paridade
+
+
+def paridade_venda(moeda: str, hoje: date | None = None, timeout: int = 8) -> dict | None:
+    """Paridade mais recente da moeda contra o US$. Moeda com PTAX: boletim
+    do Banco Central (paridade de venda do fechamento). Sem PTAX (CNY):
+    referencia do Banco Central Europeu. Falhou, None e o operador digita."""
+    if moeda == "USD":
+        return None
+    dia = hoje or date.today()
+    if moeda in MOEDAS_PTAX:
+        for _ in range(8):
+            params = {"@moeda": f"'{moeda}'", "@dataCotacao": f"'{dia:%m-%d-%Y}'", "$format": "json"}
+            try:
+                resp = requests.get(PTAX_MOEDA_URL, params=params, timeout=timeout)
+                resp.raise_for_status()
+                # So' o boletim de FECHAMENTO: a PTAX do dolar so' existe
+                # depois dele (~13h). Pegar o intermediario de hoje com o
+                # dolar de ontem misturava dias - era o "conflito" do usuario.
+                valores = [v for v in resp.json().get("value") or [] if v.get("tipoBoletim") == "Fechamento PTAX"]
+            except Exception:
+                return None
+            if valores:
+                return {"paridade": float(valores[-1]["paridadeVenda"]), "data": dia.isoformat(), "fonte": "PTAX Banco Central"}
+            dia -= timedelta(days=1)
+        return None
+    try:
+        # O BCE devolve o ultimo dia util quando o dia pedido nao tem cotacao.
+        resp = requests.get(FRANKFURTER_URL.format(data=dia.isoformat()), params={"from": "USD", "to": moeda}, timeout=timeout)
+        resp.raise_for_status()
+        dados = resp.json()
+        unidades_por_usd = float(dados["rates"][moeda])
+    except Exception:
+        return None
+    paridade = 1 / unidades_por_usd if paridade_em_usd_por_unidade(moeda) else unidades_por_usd
+    return {"paridade": round(paridade, 6), "data": dados.get("date") or dia.isoformat(), "fonte": "Banco Central Europeu"}
+
+
+_PARIDADE_CACHE: dict = {}
+
+
+def paridade_do_dia(moeda: str) -> dict | None:
+    """`paridade_venda` com cache (mesma regra da PTAX: acerto 1h, falha 10 min)."""
+    agora = time.monotonic()
+    em_cache = _PARIDADE_CACHE.get(moeda)
+    if em_cache and agora - em_cache[1] < (3600 if em_cache[0] else 600):
+        return em_cache[0]
+    valor = paridade_venda(moeda)
+    _PARIDADE_CACHE[moeda] = (valor, agora)
     return valor
 
 

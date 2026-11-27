@@ -6,11 +6,16 @@ Provisao (na instrucao de embarque, so' importacao, cotacao escolhida):
     Courier lado a lado - o operador escolhe qual vira a provisao;
   - itens = POs do embarque (principal + incluidas); NCM sem aliquota
     cadastrada bloqueia;
-  - base CIF pelo Incoterm (CUSTOS_CIF_POR_INCOTERM); Destination, Docs
-    release e Delivery ficam fora da base;
+  - base CIF = o frete da cotacao inteiro, como a Columbia paga: US$ na
+    PTAX com o markup do forwarder, R$ como esta' (pedido do usuario,
+    27/11/2026 - antes ia so' ate' a chegada, sem Destination/Docs
+    release/Delivery e sem markup). O Incoterm so' tira o que o fornecedor
+    paga (coleta/origem em FCA/FAS/FOB);
   - impostos na PTAX pura (taxa fiscal); frete provisionado = cotacao
     escolhida em R$ com o markup do forwarder;
-  - grava retrato com versao; recalcular cria versao nova.
+  - uma provisao por processo: gravar de novo ATUALIZA a mesma (pedido do
+    usuario, 27/11/2026 - antes cada gravacao criava uma versao nova). O
+    e-mail a' Controladoria e' um botao a parte.
 Realizado: impostos federais lidos da DUIMP/DIR (comex_di_parser); ICMS,
 fatura do frete e despesas digitados.
 """
@@ -27,14 +32,15 @@ from . import comex_service as svc
 
 INCOTERMS = ("EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")
 EMAIL_CONTROLADORIA = "lucmor@colmac.com"
-_ATE_O_DESTINO = ("pick_up", "origem_charges", "frete_internacional", "seguro")
-# Quem paga ate' o embarque e' o fornecedor (FCA/FAS/FOB): so' frete e seguro
-# internacionais entram. EXW: a coleta e a origem tambem. Termos C/D: o
-# fornecedor ja' pagou o frete - entra o que a cotacao trouxer.
+_TODAS_AS_ETAPAS = ("pick_up", "origem_charges", "frete_internacional", "seguro",
+                    "destination_charges", "docs_release", "delivery")
+_DEPOIS_DO_EMBARQUE = ("frete_internacional", "seguro", "destination_charges", "docs_release", "delivery")
+# Quem paga ate' o embarque e' o fornecedor (FCA/FAS/FOB): coleta e origem
+# ficam de fora. EXW: entra tudo. Termos C/D: o fornecedor ja' pagou o
+# frete - entra o que a cotacao trouxer.
 CUSTOS_CIF_POR_INCOTERM = {
-    "EXW": _ATE_O_DESTINO, "FCA": ("frete_internacional", "seguro"), "FAS": ("frete_internacional", "seguro"),
-    "FOB": ("frete_internacional", "seguro"),
-    **{t: _ATE_O_DESTINO for t in ("CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")},
+    "EXW": _TODAS_AS_ETAPAS, "FCA": _DEPOIS_DO_EMBARQUE, "FAS": _DEPOIS_DO_EMBARQUE, "FOB": _DEPOIS_DO_EMBARQUE,
+    **{t: _TODAS_AS_ETAPAS for t in ("CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP")},
 }
 CAMPOS_REALIZADO_NUM = ("cambio", "ii", "ipi", "pis", "cofins", "taxa_siscomex", "afrmm", "cbs_ibs", "multas", "icms",
                         "frete_fatura_brl", "despesa_despachante", "despesa_armazenagem", "despesa_capatazia", "despesa_outras")
@@ -81,13 +87,23 @@ def _itens(processo: ComexProcesso, informados: list | None) -> list[dict]:
     return itens
 
 
-def _frete_cif(cotacao: ComexCotacao, incoterm: str, ptax: float) -> tuple[float, float]:
-    """(frete_usd, seguro_usd) que entram na base - parte em R$ da cotacao
-    convertida pela PTAX."""
-    def usd(etapa):
-        return float(getattr(cotacao, f"{etapa}_usd") or 0) + float(getattr(cotacao, f"{etapa}_brl") or 0) / ptax
+def _frete_cif(cotacao: ComexCotacao, incoterm: str, ptax: float, taxa_agente: float | None) -> tuple[float, float]:
+    """(frete, seguro) que entram na base, em R$: US$ x taxa do agente
+    (PTAX + markup - o markup so' incide no que esta' em US$) + R$."""
+    taxa = taxa_agente or ptax
+
+    def brl(etapa):
+        return float(getattr(cotacao, f"{etapa}_usd") or 0) * taxa + float(getattr(cotacao, f"{etapa}_brl") or 0)
     etapas = CUSTOS_CIF_POR_INCOTERM[incoterm]
-    return round(sum(usd(e) for e in etapas if e != "seguro"), 2), round(usd("seguro") if "seguro" in etapas else 0, 2)
+    return round(sum(brl(e) for e in etapas if e != "seguro"), 2), round(brl("seguro") if "seguro" in etapas else 0, 2)
+
+
+def texto_paridade(moeda: str, paridade: float | None) -> str | None:
+    """"1 US$ = 159,33 JPY" / "1 EUR = 1,0974 US$" (convencao do mercado)."""
+    if not paridade:
+        return None
+    valor = f"{paridade:,.6f}".rstrip("0").rstrip(".").replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"1 {moeda} = {valor} US$" if custo.paridade_em_usd_por_unidade(moeda) else f"1 US$ = {valor} {moeda}"
 
 
 def calcular(processo: ComexProcesso, dados: dict) -> dict:
@@ -103,20 +119,25 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     cotacao = _cotacao_escolhida(processo)
     itens = _itens(processo, dados.get("itens"))
     moeda = svc.moeda_do_processo(processo)
-    cambio_moeda = None
+    paridade = None
     if moeda != "USD":
-        # O motor do simulador trabalha em US$: a mercadoria em JPY/EUR/CNY
-        # vira US$ pela taxa cruzada (cambio da moeda / PTAX do dolar), o
-        # que da' o mesmo valor em R$ de valor x cambio da moeda. O frete
-        # continua em US$ na PTAX do dolar.
-        cambio_moeda = custo._num(dados.get("cambio_moeda"))
-        if not cambio_moeda or cambio_moeda <= 0:
-            raise ValueError(f"Informe o câmbio do {moeda} (R$ por 1 {moeda}).")
+        # A mercadoria em JPY/EUR/CNY vira US$ pela paridade da moeda contra
+        # o dolar; o US$ so' vira R$ no calculo dos impostos, pela PTAX do
+        # dolar (pedido do usuario, 27/11/2026 - antes pedia R$ por moeda e
+        # cruzava com a PTAX). O frete continua em US$ na PTAX do dolar.
+        paridade = custo._num(dados.get("paridade"))
+        if not paridade or paridade <= 0:
+            cotacao_txt = f"US$ por 1 {moeda}" if custo.paridade_em_usd_por_unidade(moeda) else f"{moeda} por US$ 1"
+            raise ValueError(f"Informe a paridade do {moeda} ({cotacao_txt}).")
+        fator = custo.usd_por_unidade(moeda, paridade)
         for i in itens:
-            i["valor_usd"] = round(custo._num(i.get("valor_usd")) * cambio_moeda / ptax, 6)
+            i["valor_usd"] = round(custo._num(i.get("valor_usd")) * fator, 6)
     if cotacao:
-        frete_usd, seguro_usd = _frete_cif(cotacao, incoterm, ptax)
         cambio = svc.cambio_da_cotacao(cotacao, ptax)
+        frete_brl_base, seguro_brl_base = _frete_cif(cotacao, incoterm, ptax, cambio["taxa_agente"])
+        # O motor do simulador recebe US$ e multiplica pela PTAX: manda o
+        # equivalente, sem arredondar, pra base em R$ sair exata.
+        frete_usd, seguro_usd = frete_brl_base / ptax, seguro_brl_base / ptax
     else:
         # Sem cotacao escolhida (ex.: frete por conta do fornecedor): base e
         # frete informados na tela, como no Simulador de custo.
@@ -133,8 +154,10 @@ def calcular(processo: ComexProcesso, dados: dict) -> dict:
     for modelo in ("despachante", "courier"):
         resultado[modelo]["avisos"] = [a for a in resultado[modelo]["avisos"] if not a.startswith("Frete rateado pelo valor FOB")]
     resultado.update({
-        "incoterm": incoterm, "frete_cif_usd": frete_usd, "seguro_cif_usd": seguro_usd,
-        "moeda": moeda, "cambio_moeda": cambio_moeda,
+        "incoterm": incoterm, "frete_cif_usd": round(frete_usd, 2), "seguro_cif_usd": round(seguro_usd, 2),
+        "frete_cif_brl": round(frete_usd * ptax, 2), "seguro_cif_brl": round(seguro_usd * ptax, 2),
+        "moeda": moeda, "paridade": paridade, "paridade_texto": texto_paridade(moeda, paridade),
+        "paridade_fonte": dados.get("paridade_fonte") if paridade else None,
         "etapas_na_base": list(CUSTOS_CIF_POR_INCOTERM[incoterm]) if cotacao else ["informado na tela"],
         "frete_brl": cambio["custo_total_consolidado_brl"], "taxa_agente": cambio["taxa_agente"],
         "markup_pct": cambio["markup_pct"], "forwarder": cotacao.fornecedor_frete if cotacao else None,
@@ -154,14 +177,18 @@ def gravar(processo: ComexProcesso, dados: dict, usuario: str) -> ComexProvisao:
         raise ValueError("Escolha o modelo da provisão: Despachante ou Courier.")
     resultado = calcular(processo, dados)
     totais = resultado[modelo]["totais"]
-    versao = (processo.provisoes[-1].versao + 1) if processo.provisoes else 1
-    provisao = ComexProvisao(
-        processo=processo, versao=versao, modelo=modelo, incoterm=resultado["incoterm"], ptax=custo._num(dados["ptax"]),
-        impostos_brl=_impostos(totais), frete_brl=resultado["frete_brl"], despesas_brl=totais["despesas"],
-        parametros=json.dumps({k: v for k, v in dados.items() if k != "modelo"}, ensure_ascii=False, default=str),
-        resultado=json.dumps(resultado, ensure_ascii=False, default=str), criado_em=agora_br(), criado_por=usuario,
-    )
-    db.session.add(provisao)
+    provisao = vigente(processo)
+    if not provisao:
+        provisao = ComexProvisao(processo=processo, versao=1)
+        db.session.add(provisao)
+    # criado_em/criado_por passam a ser "ultima atualizacao". O envio a'
+    # Controladoria volta a "nao enviada": o numero mudou.
+    provisao.modelo, provisao.incoterm, provisao.ptax = modelo, resultado["incoterm"], custo._num(dados["ptax"])
+    provisao.impostos_brl, provisao.frete_brl, provisao.despesas_brl = _impostos(totais), resultado["frete_brl"], totais["despesas"]
+    provisao.parametros = json.dumps({k: v for k, v in dados.items() if k != "modelo"}, ensure_ascii=False, default=str)
+    provisao.resultado = json.dumps(resultado, ensure_ascii=False, default=str)
+    provisao.criado_em, provisao.criado_por = agora_br(), usuario
+    provisao.email_enviado = provisao.email_erro = None
     db.session.commit()
     return provisao
 
@@ -250,5 +277,6 @@ def linha_gestao(p: ComexProcesso) -> dict:
         "mes": p.em_transito_eta.strftime("%Y-%m") if p.em_transito_eta else None,
         "situacao": situacao, "provisao": previsto, "realizado": real,
         "provisao_versao": prov.versao if prov else None, "provisao_modelo": prov.modelo if prov else None,
+        "provisao_atualizada": prov.criado_em.strftime("%d/%m/%Y") if prov else None,
         "pos": [x.po_numero for x in embarque.processos_do_embarque(p) if x.po_numero],
     }

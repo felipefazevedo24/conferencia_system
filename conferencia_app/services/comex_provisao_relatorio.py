@@ -37,7 +37,7 @@ def gerar_pdf(p: ComexProvisao) -> bytes:
     modelo = "Despachante (DUIMP)" if p.modelo == "despachante" else "Courier"
     pos = ", ".join(resultado.get("pos") or []) or "—"
     cabecalho = (
-        f"<b>Provisão de custo de importação — {proc.id_op}</b> (versão {p.versao})<br/>"
+        f"<b>Provisão de custo de importação — {proc.id_op}</b> (atualizada em {p.criado_em:%d/%m/%Y %H:%M})<br/>"
         f"Fornecedor: {proc.fornecedor or '—'} · POs: {pos}<br/>"
         f"Modelo: {modelo} · Incoterm: {p.incoterm} · PTAX: {p.ptax:.4f} · "
         f"Forwarder: {resultado.get('forwarder') or '—'}{markup}<br/>"
@@ -64,11 +64,22 @@ def gerar_pdf(p: ComexProvisao) -> bytes:
     corpo += [Spacer(1, 6), Paragraph("<br/>".join(f"Obs.: {a}" for a in avisos), estilos["Normal"])] if avisos else []
     corpo += [Spacer(1, 6), Paragraph(
         f"Base do frete pelo Incoterm {p.incoterm}: {', '.join(resultado.get('etapas_na_base') or [])}. "
-        "Impostos na PTAX (taxa fiscal); frete provisionado = cotação escolhida em R$ com o markup do forwarder."
-        + (f" Mercadoria em {resultado['moeda']}, convertida a {resultado['cambio_moeda']:g} R$/{resultado['moeda']}."
-           if resultado.get("cambio_moeda") else ""), estilos["Normal"])]
+        "Frete na base = cotação em R$, com o markup do forwarder sobre os valores em US$; "
+        "impostos na PTAX (taxa fiscal)."
+        + _txt_cambio_moeda(resultado), estilos["Normal"])]
     doc.build(corpo)
     return buf.getvalue()
+
+
+def _txt_cambio_moeda(resultado: dict) -> str:
+    """Provisao nova: paridade moeda -> US$. Gravada antes de 27/11/2026:
+    cambio R$ por moeda (o retrato antigo continua legivel)."""
+    if resultado.get("paridade_texto"):
+        fonte = f" ({resultado['paridade_fonte']})" if resultado.get("paridade_fonte") else ""
+        return f" Mercadoria em {resultado['moeda']}, convertida em US$ pela paridade {resultado['paridade_texto']}{fonte}."
+    if resultado.get("cambio_moeda"):
+        return f" Mercadoria em {resultado['moeda']}, convertida a {resultado['cambio_moeda']:g} R$/{resultado['moeda']}."
+    return ""
 
 
 def gerar_xlsx(p: ComexProvisao) -> bytes:
@@ -82,9 +93,10 @@ def gerar_xlsx(p: ComexProvisao) -> bytes:
     proc = p.processo
     for linha in (
         ["Processo", proc.id_op], ["Fornecedor", proc.fornecedor], ["POs", ", ".join(resultado.get("pos") or [])],
-        ["Versão", p.versao], ["Modelo", p.modelo], ["Incoterm", p.incoterm], ["PTAX", p.ptax],
+        ["Modelo", p.modelo], ["Incoterm", p.incoterm], ["PTAX", p.ptax],
+        *([[f"Paridade {resultado['moeda']} (mercadoria)", resultado["paridade_texto"]]] if resultado.get("paridade_texto") else []),
         *([[f"Câmbio {resultado['moeda']} (mercadoria)", resultado["cambio_moeda"]]] if resultado.get("cambio_moeda") else []),
-        ["Gerada em", p.criado_em.strftime("%d/%m/%Y %H:%M")], ["Gerada por", p.criado_por], [],
+        ["Atualizada em", p.criado_em.strftime("%d/%m/%Y %H:%M")], ["Atualizada por", p.criado_por], [],
         ["Impostos e taxas", p.impostos_brl], ["Frete internacional (cotação)", p.frete_brl],
         ["Despesas de desembaraço", p.despesas_brl], [],
     ):

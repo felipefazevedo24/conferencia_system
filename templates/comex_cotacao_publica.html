@@ -309,6 +309,31 @@
       document.getElementById('blocoAereo').classList.toggle('hidden-bloco', sel.value !== 'AMBOS');
     }
 
+    // Cotacao reaberta pela Columbia: abre com o que o prestador enviou
+    // antes, pra ele so' revisar o preco.
+    function preencherAnterior(a) {
+      const por = (prefixo, d) => {
+        ['transit_time', 'rota', 'validade', 'ptax'].forEach((k) => {
+          const el = document.getElementById(prefixo + k);
+          if (el && d[k] != null) el.value = d[k];
+        });
+        const attr = prefixo ? 'data-custo-aereo' : 'data-custo';
+        document.querySelectorAll(`[${attr}]`).forEach((inp) => {
+          const v = d[inp.getAttribute(attr)];
+          if (v != null) inp.value = v;
+        });
+      };
+      document.getElementById('fornecedor_frete').value = a.fornecedor_frete || '';
+      document.getElementById('proximas_saidas').value = a.proximas_saidas || '';
+      const sel = document.getElementById('modal_cotado');
+      if (sel && a.modal_cotado) { sel.value = a.modal_cotado; atualizarModalCotado(); }
+      por('', a);
+      if (a.aereo) por('aereo_', a.aereo);
+      calcularTotais();
+      document.getElementById('formCotacao').insertAdjacentHTML('afterbegin',
+        '<div class="section" style="border-left:4px solid #2a78d6;"><p style="margin:0;"><strong>Cotação reaberta para revisão.</strong> Os valores que você enviou antes já estão preenchidos — ajuste o que mudou e envie de novo. O novo envio substitui o anterior.</p></div>');
+    }
+
     function coletarPayload(data) {
       const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
       const payload = {
@@ -372,6 +397,7 @@
           // O link ja' abre com o que a Columbia pediu; o prestador pode
           // trocar, mas confirma no envio.
           if (selModal && data.modal_solicitado) { selModal.value = data.modal_solicitado; atualizarModalCotado(); }
+          if (data.anterior) preencherAnterior(data.anterior);
           const btnAdd = document.getElementById('btnAddVolume');
           if (btnAdd) {
             btnAdd.addEventListener('click', () => {

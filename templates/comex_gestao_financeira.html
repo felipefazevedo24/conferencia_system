@@ -46,7 +46,7 @@
 <div class="gf-wrap">
     <div class="gf-kpis" id="gf-kpis"></div>
     <div class="eui-card">
-        <div class="gf-muted" style="margin-bottom:10px;">Importações agrupadas pelo mês previsto de chegada (ETA). Provisão = versão vigente gravada na instrução de embarque; realizado = DUIMP/DIR + ICMS, fatura do frete e despesas lançados. Diferença positiva (vermelho) = gastou mais que o provisionado.</div>
+        <div class="gf-muted" style="margin-bottom:10px;">Importações agrupadas pelo mês previsto de chegada (ETA). Provisão = a gravada na instrução de embarque (uma por processo, atualizada quando recalculada); realizado = DUIMP/DIR + ICMS, fatura do frete e despesas lançados. Diferença positiva (vermelho) = gastou mais que o provisionado.</div>
         <div class="gf-table-wrap">
             <table class="erp-table">
                 <thead>
@@ -125,7 +125,7 @@
                 lista.map((p) => `
                 <tr>
                     <td><strong>${esc(p.id_op)}</strong> <span class="gf-muted">${esc(p.status_modulo)}</span><br><span class="gf-muted">${esc(p.fornecedor || "")}${p.pos.length ? " · " + esc(p.pos.join(", ")) : ""}</span></td>
-                    <td><span class="eui-badge" style="background:${COR[p.situacao]}1a; color:${COR[p.situacao]};">${esc(p.situacao)}</span>${p.provisao_versao ? `<br><span class="gf-muted">v${p.provisao_versao} · ${esc(p.provisao_modelo)}</span>` : ""}</td>
+                    <td><span class="eui-badge" style="background:${COR[p.situacao]}1a; color:${COR[p.situacao]};">${esc(p.situacao)}</span>${p.provisao_versao ? `<br><span class="gf-muted">${esc(p.provisao_modelo)} · ${esc(p.provisao_atualizada || "")}</span>` : ""}</td>
                     <td class="gf-num">${par(p.provisao.impostos, p.realizado.impostos)}</td>
                     <td class="gf-num">${par(p.provisao.frete, p.realizado.frete)}</td>
                     <td class="gf-num">${par(p.provisao.despesas, p.realizado.despesas)}</td>
@@ -153,10 +153,12 @@
         atual = d; simulacao = null; modeloSel = null;
         const l = d.linha, r = d.realizado || {}, pad = d.padroes || {};
         $("gf-titulo").innerHTML = `<i class="fas fa-scale-balanced"></i> ${esc(l.id_op)} — ${esc(l.fornecedor || "")}`;
-        const versoes = d.provisoes.map((p) => `
-            <tr><td>v${p.versao}</td><td>${esc(p.criado_em)}<br><span class="gf-muted">${esc(p.criado_por)}</span></td><td>${esc(p.modelo)} · ${esc(p.incoterm)} · PTAX ${p.ptax.toFixed(4).replace(".", ",")}</td>
+        // Uma provisao por processo (a vigente); o envio a' Controladoria e' um botao.
+        const versoes = d.provisoes.slice(0, 1).map((p) => `
+            <tr><td>${esc(p.criado_em)}<br><span class="gf-muted">${esc(p.criado_por)}</span></td><td>${esc(p.modelo)} · ${esc(p.incoterm)} · PTAX ${p.ptax.toFixed(4).replace(".", ",")}</td>
             <td class="gf-num">${brl(p.impostos_brl)}</td><td class="gf-num">${brl(p.frete_brl)}</td><td class="gf-num">${brl(p.despesas_brl)}</td>
-            <td>${p.email_enviado === false ? `<span class="gf-warn" title="${esc(p.email_erro)}">e-mail falhou</span>` : p.email_enviado ? "enviado" : ""}</td>
+            <td>${p.email_enviado === false ? `<span class="gf-warn" title="${esc(p.email_erro)}">e-mail falhou</span>` : p.email_enviado ? '<span class="eui-badge eui-badge--success">enviada</span>' : '<span class="gf-muted">não enviada</span>'}
+                ${PODE_EDITAR ? `<br><button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" id="gf-enviar-controladoria" style="margin-top:4px;"><i class="fas fa-paper-plane"></i> Enviar à Controladoria</button>` : ""}</td>
             <td style="white-space:nowrap;"><a href="/api/comex/provisoes/${p.id}.pdf" target="_blank">PDF</a> · <a href="/api/comex/provisoes/${p.id}.xlsx">Excel</a></td></tr>`).join("");
         const ROTULO_GRUPO = { impostos: "Impostos e taxas", frete: "Frete internacional", despesas: "Despesas de desembaraço" };
         const comparativo = ["impostos", "frete", "despesas"].map((k) => `<tr><td>${ROTULO_GRUPO[k]}</td>
@@ -171,7 +173,7 @@
                 <div class="gf-grid">
                     <div class="gf-field"><label>Incoterm *</label><select id="gf-incoterm" class="eui-select"><option value="">Selecione…</option>${INCOTERMS.map((i) => `<option ${pad.incoterm === i ? "selected" : ""}>${i}</option>`).join("")}</select></div>
                     <div class="gf-field"><label>PTAX (vazio = do dia)</label>${input("gf-ptax", "")}</div>
-                    ${d.moeda !== "USD" ? `<div class="gf-field"><label>Câmbio ${esc(d.moeda)} (R$ por 1 ${esc(d.moeda)}) <span class="gf-muted">${d.moeda === "CNY" ? "sem PTAX no Banco Central — informe" : "vazio = PTAX do dia"}</span></label>${input("gf-cambio_moeda", "")}</div>` : ""}
+                    ${d.moeda !== "USD" ? `<div class="gf-field"><label>Paridade ${esc(rotuloParidade(d.moeda))} <span class="gf-muted">vazio = ${d.moeda === "CNY" ? "Banco Central Europeu" : "PTAX do Banco Central"} do dia</span></label>${input("gf-paridade", "")}</div>` : ""}
                     ${CAMPOS_PROV.map(([c, rot, m]) => `<div class="gf-field"><label>${rot} <span class="gf-muted">${m === "d" ? "despachante" : "courier"}</span></label>${input("gf-" + c, pad[c])}</div>`).join("")}
                 </div>
                 ${d.tem_cotacao ? `<div class="gf-muted">Frete: cotação escolhida (base pelo Incoterm; provisionado em R$ com o markup do forwarder).</div>` : `
@@ -190,7 +192,7 @@
                 </div>
                 <div><button class="eui-btn eui-btn--ghost" id="gf-calcular"><i class="fas fa-calculator"></i> Calcular Despachante x Courier</button></div>
                 <div id="gf-simulacao"></div>` : ""}
-            ${versoes ? `<div class="gf-table-wrap"><table class="erp-table"><thead><tr><th>Versão</th><th>Gerada</th><th>Parâmetros</th><th class="gf-num">Impostos</th><th class="gf-num">Frete</th><th class="gf-num">Despesas</th><th>Controladoria</th><th></th></tr></thead><tbody>${versoes}</tbody></table></div>` : '<div class="gf-muted">Nenhuma provisão gravada ainda.</div>'}
+            ${versoes ? `<div class="gf-table-wrap"><table class="erp-table"><thead><tr><th>Atualizada</th><th>Parâmetros</th><th class="gf-num">Impostos</th><th class="gf-num">Frete</th><th class="gf-num">Despesas</th><th>Controladoria</th><th></th></tr></thead><tbody>${versoes}</tbody></table></div>` : '<div class="gf-muted">Nenhuma provisão gravada ainda.</div>'}
 
             <div class="gf-section">Realizado</div>
             <div class="gf-field"><label>DUIMP (formal) ou DIR (courier) em PDF — lê os impostos federais automaticamente</label>
@@ -224,9 +226,13 @@
             <td><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-rem-item="${idx}"><i class="fas fa-trash"></i></button></td></tr>`).join("");
     }
 
+    // Paridade na convencao do mercado (a do boletim PTAX): EUR/GBP/AUD em
+    // US$ por 1 unidade; JPY/CNY e as demais em unidades por US$ 1.
+    const rotuloParidade = (m) => ["EUR", "GBP", "AUD"].includes(m) ? `(US$ por 1 ${m})` : `(${m} por US$ 1)`;
+
     function parametros() {
         const p = { incoterm: $("gf-incoterm").value, ptax: num($("gf-ptax").value) };
-        if ($("gf-cambio_moeda")) p.cambio_moeda = num($("gf-cambio_moeda").value);
+        if ($("gf-paridade")) p.paridade = num($("gf-paridade").value);
         CAMPOS_PROV.forEach(([c]) => { p[c] = num($("gf-" + c).value); });
         ["frete_usd", "seguro_usd", "frete_brl"].forEach((c) => { const el = $("gf-" + c); if (el) p[c] = num(el.value); });
         p.itens = itensProv.map((i) => ({ ...i, quantidade: num(i.quantidade), valor_usd: num(i.valor_usd) }));
@@ -250,9 +256,9 @@
     function renderSimulacao() {
         const res = simulacao.resultado;
         $("gf-simulacao").innerHTML = `
-            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.cambio_moeda ? ` · mercadoria em ${esc(res.moeda)} a ${String(res.cambio_moeda).replace(".", ",")}` : ""} · base do frete (${esc(res.incoterm)}): US$ ${res.frete_cif_usd.toLocaleString("pt-BR")} + seguro US$ ${res.seguro_cif_usd.toLocaleString("pt-BR")} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
+            <div class="gf-muted">PTAX ${Number(simulacao.ptax).toFixed(4).replace(".", ",")}${res.paridade_texto ? ` · mercadoria em ${esc(res.moeda)} → US$ pela paridade <strong>${esc(res.paridade_texto)}</strong>${res.paridade_fonte ? ` (${esc(res.paridade_fonte)})` : ""}, depois R$ pela PTAX` : ""} · base do frete (${esc(res.incoterm)}): ${brl(res.frete_cif_brl ?? res.frete_cif_usd * simulacao.ptax)} + seguro ${brl(res.seguro_cif_brl ?? res.seguro_cif_usd * simulacao.ptax)} · forwarder ${esc(res.forwarder || "")}${res.markup_pct ? " (markup " + res.markup_pct + "%)" : ""}</div>
             <div class="gf-modelos">${blocoModelo("despachante", "Despachante (DUIMP)", res)}${blocoModelo("courier", "Courier", res)}</div>
-            <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> Gravar provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"}) e enviar à Controladoria</button></div>`;
+            <div><button class="eui-btn eui-btn--primary" id="gf-gravar" ${modeloSel ? "" : "disabled"}><i class="fas fa-floppy-disk"></i> ${atual.provisoes.length ? "Atualizar" : "Gravar"} provisão (${modeloSel ? esc(modeloSel) : "escolha o modelo"})</button></div>`;
     }
 
     $("gf-corpo").addEventListener("input", (e) => {
@@ -268,12 +274,18 @@
             if (e.target.closest("#gf-calcular")) {
                 simulacao = await api(`/api/comex/processos/${atual.linha.id}/provisao/simular`, { method: "POST", body: JSON.stringify(parametros()) });
                 if (!$("gf-ptax").value) $("gf-ptax").value = String(simulacao.ptax).replace(".", ",");
-                if ($("gf-cambio_moeda") && !$("gf-cambio_moeda").value && simulacao.cambio_moeda) $("gf-cambio_moeda").value = String(simulacao.cambio_moeda).replace(".", ",");
+                if ($("gf-paridade") && !$("gf-paridade").value && simulacao.paridade) $("gf-paridade").value = String(simulacao.paridade).replace(".", ",");
                 modeloSel = null; renderSimulacao();
             } else if (e.target.closest("[data-modelo]")) {
                 modeloSel = e.target.closest("[data-modelo]").dataset.modelo; renderSimulacao();
+            } else if (e.target.closest("#gf-enviar-controladoria")) {
+                e.target.closest("#gf-enviar-controladoria").disabled = true;
+                try {
+                    const r = await api(`/api/comex/processos/${atual.linha.id}/provisao/enviar`, { method: "POST", body: "{}" });
+                    toast(r.message, "success");
+                } finally { abrir(atual.linha.id); carregar(); }
             } else if (e.target.closest("#gf-gravar")) {
-                const r = await api(`/api/comex/processos/${atual.linha.id}/provisao`, { method: "POST", body: JSON.stringify({ ...parametros(), ptax: simulacao.ptax, cambio_moeda: simulacao.cambio_moeda, modelo: modeloSel }) });
+                const r = await api(`/api/comex/processos/${atual.linha.id}/provisao`, { method: "POST", body: JSON.stringify({ ...parametros(), ptax: simulacao.ptax, paridade: simulacao.paridade, paridade_fonte: simulacao.paridade_fonte, modelo: modeloSel }) });
                 toast(r.message, r.message.includes("NÃO") ? "error" : "success");
                 abrir(atual.linha.id); carregar();
             } else if (e.target.closest("#gf-salvar-real")) {
