@@ -53,6 +53,7 @@ from ..services.erp_estoque_service import (
 )
 from ..services import logistica_inventario_ajuste_service as ajuste_svc
 from ..services import inventario_ciclico_service as ciclico_svc
+from ..services import inventario_painel_service as painel_svc
 from ..services import estoque_planejamento_service as planejamento_svc
 from ..services import estoque_foto_service as foto_svc
 from ..services import estoque_em_processo_service as em_processo_svc
@@ -81,7 +82,7 @@ PERMISSOES_ANALISE = (PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCA
 # gestor. Quem ja tem PERMISSOES_ANALISE continua vendo a fila.
 PERMISSION_ANALISE_CAUSA = "PAGE_LOGISTICA_INVENTARIO_ANALISE_CAUSA"
 PERMISSOES_ANALISE_CAUSA = PERMISSOES_ANALISE + (PERMISSION_ANALISE_CAUSA,)
-ABAS_INVENTARIO = ("inventariar", "realizados", "ajustes", "analise", "ciclico")
+ABAS_INVENTARIO = ("painel", "inventariar", "realizados", "ajustes", "analise", "ciclico")
 # Inventario ciclico dirigido: aba desta tela, regras em inventario_ciclico_routes/service.
 PERMISSOES_CICLICO = ("PAGE_INVENTARIO_CICLICO_CONTAGEM", "PAGE_INVENTARIO_CICLICO_GESTAO")
 INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
@@ -1722,6 +1723,27 @@ def _fmt_analise_causa(a: LogisticaInventarioAnaliseCausa) -> dict:
 @permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
 def inventario_ajustes_page():
     return _render_inventario("ajustes")
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-painel", methods=["GET"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_inventario_painel():
+    dados = painel_svc.montar(request.args.get("periodo"))
+    dados.pop("ajustados_periodo", None)  # a lista inteira so' vai no Excel
+    return jsonify(dados)
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-painel/exportar", methods=["GET"])
+@permission_required_any(PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_inventario_painel_exportar():
+    conteudo, periodo = painel_svc.gerar_excel(request.args.get("periodo"))
+    nome = f"painel_inventario_{periodo}_{agora_br().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        BytesIO(conteudo),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=nome,
+    )
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-ajustes", methods=["GET"])

@@ -1,0 +1,303 @@
+{# Painel do Inventario (aba "Painel"): ajustado no mes, em andamento, acuracidade
+   e maiores ajustes. Regras em services/inventario_painel_service.py. #}
+<style>
+    .ip-dash { display: grid; gap: 16px; }
+    .ip-topo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ip-topo__info { font-size: 12.5px; color: var(--eui-muted); margin-right: auto; }
+    .ip-topo select { height: 34px; border-radius: 999px; padding: 0 12px; border: 1px solid var(--eui-border); background: var(--eui-surface); color: var(--eui-text); font: inherit; font-size: 13px; font-weight: 600; }
+    .ip-topo .eui-btn { border-radius: 999px; }
+    .ip-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .ip-k { position: relative; overflow: hidden; border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 14px 16px 16px; display: grid; gap: 4px; text-align: left; font: inherit; }
+    .ip-k::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--ip-cor, var(--eui-primary)); }
+    button.ip-k { cursor: pointer; transition: border-color .15s, transform .15s; }
+    button.ip-k:hover { border-color: var(--ip-cor, var(--eui-primary)); transform: translateY(-1px); }
+    .ip-k__label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); }
+    .ip-k__valor { font-size: 24px; font-weight: 700; color: var(--eui-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .ip-k__valor.neg { color: var(--eui-danger, #dc2626); }
+    .ip-k__valor.pos { color: var(--eui-success, #16a34a); }
+    .ip-k__dica { font-size: 12px; color: var(--eui-text-soft); }
+    .ip-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    .ip-grid--meio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ip-card { border: 1px solid var(--eui-border); border-radius: 14px; background: var(--eui-surface); padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .ip-card h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--eui-text); }
+    .ip-card__sub { margin: -6px 0 0; font-size: 12px; color: var(--eui-muted); }
+    .ip-chart { position: relative; height: 270px; }
+    .ip-legenda { display: flex; gap: 6px 14px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; color: var(--eui-text-soft); }
+    .ip-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+    .ip-legenda i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .ip-etapas { display: grid; gap: 6px; }
+    .ip-etapa { display: grid; gap: 6px; text-align: left; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--eui-text-soft); }
+    .ip-etapa:hover { border-color: var(--eui-border); background: var(--eui-surface-2); }
+    .ip-etapa__topo { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+    .ip-etapa__nome { font-size: 13px; font-weight: 700; color: var(--eui-text); }
+    .ip-etapa__nome small { font-weight: 500; color: var(--eui-muted); }
+    .ip-etapa__num { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ip-etapa__num b { color: var(--eui-text); }
+    .ip-barra { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--eui-surface-2); }
+    .ip-barra span { display: block; height: 100%; }
+    .ip-tab-wrap { overflow-x: auto; }
+    .ip-tab { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .ip-tab th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); padding: 6px 8px; border-bottom: 1px solid var(--eui-border); white-space: nowrap; }
+    .ip-tab td { padding: 8px; border-bottom: 1px solid var(--eui-border); color: var(--eui-text-soft); white-space: nowrap; }
+    .ip-tab .num { text-align: right; }
+    .ip-tab td.desc { white-space: normal; min-width: 220px; color: var(--eui-text); }
+    .ip-tab td.desc small { display: block; color: var(--eui-muted); }
+    .ip-tab .neg { color: var(--eui-danger, #dc2626); font-weight: 700; }
+    .ip-tab .pos { color: var(--eui-success, #16a34a); font-weight: 700; }
+    .ip-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--eui-surface-2); color: var(--eui-text-soft); }
+    .ip-tag.avulsa { background: #ffedd5; color: #9a3412; }
+    .ip-vazio { padding: 18px; text-align: center; color: var(--eui-muted); font-size: 13px; }
+    @media (max-width: 1100px) {
+        .ip-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ip-grid, .ip-grid--meio { grid-template-columns: minmax(0, 1fr); }
+    }
+</style>
+
+<div class="ip-dash">
+    <div class="ip-topo">
+        <span class="ip-topo__info" id="ip-info">Carregando...</span>
+        <select id="ip-periodo" aria-label="Período"></select>
+        <button class="eui-btn eui-btn--ghost eui-btn--sm" id="ip-atualizar" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
+        <a class="eui-btn eui-btn--primary eui-btn--sm" id="ip-exportar" href="/api/logistica/inventario-painel/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
+    </div>
+
+    <div class="ip-kpis">
+        <div class="ip-k" style="--ip-cor: var(--eui-primary);"><span class="ip-k__label" id="ip-k-periodo-label">Ajustado no mês</span><span class="ip-k__valor" id="ip-k-periodo">—</span><span class="ip-k__dica" id="ip-k-periodo-dica"></span></div>
+        <div class="ip-k" style="--ip-cor: var(--eui-violet, #7c3aed);"><span class="ip-k__label">Ajustado total</span><span class="ip-k__valor" id="ip-k-total">—</span><span class="ip-k__dica" id="ip-k-total-dica"></span></div>
+        <div class="ip-k" style="--ip-cor: #ea580c;"><span class="ip-k__label" id="ip-k-avulsa-label">Saída avulsa no mês</span><span class="ip-k__valor" id="ip-k-avulsa">—</span><span class="ip-k__dica" id="ip-k-avulsa-dica"></span></div>
+        <button class="ip-k" type="button" id="ip-k-andamento-btn" style="--ip-cor: var(--eui-warning, #d97706);" title="Ver na aba Ajuste de Estoque"><span class="ip-k__label">A ajustar</span><span class="ip-k__valor" id="ip-k-andamento">—</span><span class="ip-k__dica" id="ip-k-andamento-dica"></span></button>
+        <div class="ip-k" style="--ip-cor: var(--eui-success, #16a34a);"><span class="ip-k__label" id="ip-k-acur-label">Acuracidade no mês</span><span class="ip-k__valor" id="ip-k-acur">—</span><span class="ip-k__dica" id="ip-k-acur-dica"></span></div>
+    </div>
+
+    <div class="ip-grid">
+        <div class="ip-card">
+            <h3>Ajustado por mês</h3>
+            <p class="ip-card__sub">Pelo mês em que o Financeiro executou o ajuste no ERP. Saída avulsa pelo mês da baixa. Clique num mês para ver só ele.</p>
+            <div class="ip-legenda" id="ip-leg-ajustado"></div>
+            <div class="ip-chart"><canvas id="ip-ch-ajustado" role="img" aria-label="Valor ajustado por mês"></canvas></div>
+        </div>
+        <div class="ip-card">
+            <h3>Ajustes em andamento</h3>
+            <p class="ip-card__sub">O que ainda está no fluxo. Clique para ver os itens.</p>
+            <div class="ip-etapas" id="ip-etapas"></div>
+        </div>
+    </div>
+
+    <div class="ip-grid ip-grid--meio">
+        <div class="ip-card">
+            <h3>Contagens e acuracidade</h3>
+            <p class="ip-card__sub">Contagens registradas por mês (avulso e fechamento do cíclico) e quantas bateram com o GRV na hora.</p>
+            <div class="ip-legenda" id="ip-leg-contagens"></div>
+            <div class="ip-chart"><canvas id="ip-ch-contagens" role="img" aria-label="Contagens e acuracidade por mês"></canvas></div>
+        </div>
+        <div class="ip-card">
+            <h3 id="ip-maiores-titulo">Maiores ajustes</h3>
+            <p class="ip-card__sub">Os 20 itens de maior valor ajustado no período. A lista completa vai no Excel.</p>
+            <div class="ip-tab-wrap">
+                <table class="ip-tab">
+                    <thead><tr><th>Item</th><th class="num">Diferença</th><th class="num">Valor</th><th>Motivo</th><th>Data</th></tr></thead>
+                    <tbody id="ip-maiores"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const MESES_NOME = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    const graficos = {};
+    let carregado = false;
+    let periodo = '';
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt = (v, casas = 0) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    const brl = (v, casas = 2) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: casas, maximumFractionDigits: casas });
+    const brlSinal = (v, casas = 0) => (v > 0 ? '+' : v < 0 ? '−' : '') + brl(Math.abs(v || 0), casas);
+    function brlCurto(v) {
+        const a = Math.abs(Number(v || 0));
+        const s = v < 0 ? '−' : '';
+        if (a >= 1e6) return `${s}R$ ${fmt(a / 1e6, 1)} mi`;
+        if (a >= 1e3) return `${s}R$ ${fmt(a / 1e3, 1)} mil`;
+        return `${s}R$ ${fmt(a, 0)}`;
+    }
+    const rotuloMes = (m) => `${MESES_NOME[Number(m.slice(5)) - 1]}/${m.slice(2, 4)}`;
+    const corVar = (nome, padrao) => (getComputedStyle(document.body).getPropertyValue(nome) || '').trim() || padrao;
+    const classeSinal = (v) => (v < 0 ? 'neg' : v > 0 ? 'pos' : '');
+
+    function grafico(id, config) {
+        if (!window.Chart) return;
+        if (graficos[id]) graficos[id].destroy();
+        graficos[id] = new Chart($(id), config);
+    }
+
+    // Abre a aba Ajuste de Estoque ja' filtrada na etapa.
+    function verEtapa(etapa) {
+        const aba = document.querySelector('#invu-tabs [data-aba="ajustes"]');
+        if (aba) aba.click();
+        const filtro = document.querySelector(`#ia-metrics .eui-stat[data-filter="${etapa}"]`);
+        if (filtro) filtro.click();
+    }
+
+    function montarPeriodos(meses) {
+        const sel = $('ip-periodo');
+        const atual = periodo;
+        sel.innerHTML = meses.slice().reverse().map((m, i) => `<option value="${m}">${rotuloMes(m)}${i === 0 ? ' (mês atual)' : ''}</option>`).join('')
+            + '<option value="12m">Últimos 12 meses</option>';
+        sel.value = atual || meses[meses.length - 1];
+    }
+
+    function render(d) {
+        periodo = d.periodo;
+        montarPeriodos(d.meses);
+        const doze = d.periodo === '12m';
+        const nomePer = doze ? 'nos 12 meses' : `em ${rotuloMes(d.periodo)}`;
+        $('ip-info').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+        $('ip-exportar').href = '/api/logistica/inventario-painel/exportar?periodo=' + encodeURIComponent(d.periodo);
+
+        const p = d.ajustado_periodo, t = d.ajustado_total;
+        $('ip-k-periodo-label').textContent = doze ? 'Ajustado em 12 meses' : `Ajustado em ${rotuloMes(d.periodo)}`;
+        $('ip-k-periodo').textContent = brlSinal(p.liquido);
+        $('ip-k-periodo').className = 'ip-k__valor ' + classeSinal(p.liquido);
+        $('ip-k-periodo-dica').innerHTML = `perda ${brlCurto(p.perda + p.saida_avulsa)} · sobra ${brlCurto(p.sobra)} · ${p.itens} ${p.itens === 1 ? 'item' : 'itens'}${p.sem_custo ? ` (${p.sem_custo} sem custo)` : ''}`;
+        $('ip-k-total').textContent = brlSinal(t.liquido);
+        $('ip-k-total').className = 'ip-k__valor ' + classeSinal(t.liquido);
+        $('ip-k-total-dica').textContent = `perda ${brlCurto(t.perda + t.saida_avulsa)} · sobra ${brlCurto(t.sobra)} · ${t.itens} itens desde o início`;
+        $('ip-k-avulsa-label').textContent = doze ? 'Saída avulsa em 12 meses' : `Saída avulsa em ${rotuloMes(d.periodo)}`;
+        $('ip-k-avulsa').textContent = p.saida_avulsa ? '−' + brl(p.saida_avulsa, 0) : brl(0, 0);
+        $('ip-k-avulsa-dica').textContent = 'perda já baixada no ERP, sem passar pelo Financeiro';
+
+        const aAjustar = d.andamento.filter((e) => e.etapa !== 'Fiscal');
+        const itensAjustar = aAjustar.reduce((s, e) => s + e.itens, 0);
+        const liqAjustar = aAjustar.reduce((s, e) => s + e.liquido, 0);
+        $('ip-k-andamento').textContent = `${fmt(itensAjustar)} ${itensAjustar === 1 ? 'item' : 'itens'}`;
+        $('ip-k-andamento-dica').textContent = `${brlSinal(liqAjustar)} líquido ainda não lançado no ERP`;
+
+        const c = d.contagens_periodo;
+        $('ip-k-acur-label').textContent = doze ? 'Acuracidade em 12 meses' : `Acuracidade em ${rotuloMes(d.periodo)}`;
+        $('ip-k-acur').textContent = c.acuracidade == null ? '—' : `${fmt(c.acuracidade, 1)}%`;
+        $('ip-k-acur-dica').textContent = `${fmt(c.bateram)} de ${fmt(c.comparadas)} contagens bateram com o GRV · ${fmt(c.total)} no total`;
+
+        renderEtapas(d.andamento);
+        renderGraficos(d);
+        $('ip-maiores-titulo').textContent = `Maiores ajustes ${nomePer}`;
+        $('ip-maiores').innerHTML = d.maiores.length ? d.maiores.map((x) => `<tr>
+                <td class="desc">${esc(x.codigo)}${x.tipo === 'saida_avulsa' ? ' <span class="ip-tag avulsa">saída avulsa</span>' : ''}<small>${esc(x.descricao)}${x.local ? ' · ' + esc(x.local) : ''}</small></td>
+                <td class="num">${x.diferenca > 0 ? '+' : ''}${fmt(x.diferenca, 3).replace(/,?0+$/, '')} ${esc(x.unidade)}</td>
+                <td class="num ${classeSinal(x.valor)}">${x.valor == null ? '—' : brlSinal(x.valor, 2)}</td>
+                <td>${esc(x.motivo || '—')}</td>
+                <td>${esc(x.data || '')}</td>
+            </tr>`).join('') : `<tr><td colspan="5" class="ip-vazio">Nenhum ajuste executado ${nomePer}.</td></tr>`;
+    }
+
+    function renderEtapas(andamento) {
+        const vermelho = corVar('--eui-danger', '#dc2626');
+        const verde = corVar('--eui-success', '#16a34a');
+        const maior = Math.max(1, ...andamento.map((e) => e.perda + e.sobra));
+        $('ip-etapas').innerHTML = andamento.map((e) => `<button type="button" class="ip-etapa" data-etapa="${e.etapa}">
+                <span class="ip-etapa__topo">
+                    <span class="ip-etapa__nome">${esc(e.label)}${e.etapa === 'Fiscal' ? ' <small>· já ajustado, falta a NF</small>' : ''}</span>
+                    <span class="ip-etapa__num"><b>${fmt(e.itens)}</b> ${e.itens === 1 ? 'item' : 'itens'} · <span class="${classeSinal(e.liquido)}">${brlSinal(e.liquido)}</span></span>
+                </span>
+                <span class="ip-barra" title="Perda ${brl(e.perda, 0)} · sobra ${brl(e.sobra, 0)}">
+                    <span style="width:${(e.perda / maior) * 100}%;background:${vermelho}"></span>
+                    <span style="width:${(e.sobra / maior) * 100}%;background:${verde}"></span>
+                </span>
+            </button>`).join('');
+    }
+
+    function renderGraficos(d) {
+        const texto = corVar('--eui-text-soft', '#475569');
+        const grade = corVar('--eui-border', '#e2e8f0');
+        const azul = corVar('--eui-primary', '#2563eb');
+        const verde = corVar('--eui-success', '#16a34a');
+        const vermelho = corVar('--eui-danger', '#dc2626');
+        const roxo = corVar('--eui-violet', '#7c3aed');
+        const laranja = '#ea580c';
+        const azulClaro = '#60a5fa';
+        if (window.Chart) {
+            Chart.defaults.color = texto;
+            Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+        }
+        const rotulos = d.meses.map((m, i, l) => rotuloMes(m) + (i === l.length - 1 ? '*' : ''));
+
+        grafico('ip-ch-ajustado', {
+            data: {
+                labels: rotulos,
+                datasets: [
+                    { type: 'bar', label: 'Sobra', data: d.serie.map((s) => s.sobra), backgroundColor: verde, stack: 'v', borderRadius: 4 },
+                    { type: 'bar', label: 'Perda', data: d.serie.map((s) => -s.perda), backgroundColor: vermelho, stack: 'v', borderRadius: 4 },
+                    { type: 'bar', label: 'Saída avulsa', data: d.serie.map((s) => -s.saida_avulsa), backgroundColor: laranja, stack: 'v', borderRadius: 4 },
+                    { type: 'line', label: 'Líquido', data: d.serie.map((s) => s.liquido), borderColor: azul, backgroundColor: azul, tension: .3, pointRadius: 4 },
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: false }, tooltip: { callbacks: {
+                    label: (x) => `${x.dataset.label}: ${brlSinal(x.parsed.y, 2)}`,
+                    footer: (itens) => { const s = d.serie[itens[0].dataIndex]; return `${s.itens} itens${s.sem_custo ? ` · ${s.sem_custo} sem custo` : ''}`; },
+                } } },
+                scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: grade }, ticks: { callback: (v) => brlCurto(v) } } },
+                onClick: (_e, el) => { if (el.length) trocarPeriodo(d.meses[el[0].index]); },
+            },
+        });
+        $('ip-leg-ajustado').innerHTML = `<span><i style="background:${verde}"></i>Sobra</span><span><i style="background:${vermelho}"></i>Perda</span><span><i style="background:${laranja}"></i>Saída avulsa</span><span><i style="background:${azul}"></i>Líquido</span>`;
+
+        grafico('ip-ch-contagens', {
+            data: {
+                labels: rotulos,
+                datasets: [
+                    { type: 'bar', label: 'Avulso', data: d.contagens.map((c) => c.avulso), backgroundColor: azulClaro, stack: 'c', yAxisID: 'y', borderRadius: 4 },
+                    { type: 'bar', label: 'Cíclico', data: d.contagens.map((c) => c.ciclico), backgroundColor: roxo, stack: 'c', yAxisID: 'y', borderRadius: 4 },
+                    { type: 'line', label: 'Acuracidade', data: d.contagens.map((c) => c.acuracidade), borderColor: verde, backgroundColor: verde, tension: .3, pointRadius: 4, yAxisID: 'y1', spanGaps: true },
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: false }, tooltip: { callbacks: {
+                    label: (x) => (x.dataset.yAxisID === 'y1' ? `Acuracidade: ${x.parsed.y == null ? '—' : fmt(x.parsed.y, 1) + '%'}` : `${x.dataset.label}: ${fmt(x.parsed.y)} contagens`),
+                    footer: (itens) => { const c = d.contagens[itens[0].dataIndex]; return c.comparadas ? `${fmt(c.bateram)} de ${fmt(c.comparadas)} bateram com o GRV` : ''; },
+                } } },
+                scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: { stacked: true, beginAtZero: true, grid: { color: grade }, ticks: { precision: 0 } },
+                    y1: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { callback: (v) => v + '%' } },
+                },
+            },
+        });
+        $('ip-leg-contagens').innerHTML = `<span><i style="background:${azulClaro}"></i>Avulso</span><span><i style="background:${roxo}"></i>Cíclico</span><span><i style="background:${verde}"></i>Acuracidade</span>`;
+    }
+
+    async function carregar() {
+        $('ip-info').textContent = 'Carregando...';
+        try {
+            const resp = await fetch('/api/logistica/inventario-painel?periodo=' + encodeURIComponent(periodo || ''), { headers: { Accept: 'application/json' } });
+            const d = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(d.error || 'Erro ' + resp.status);
+            render(d);
+            carregado = true;
+        } catch (err) {
+            $('ip-info').textContent = 'Não foi possível carregar o painel: ' + err.message;
+        }
+    }
+
+    function trocarPeriodo(valor) {
+        periodo = valor;
+        carregar();
+    }
+
+    $('ip-periodo').addEventListener('change', (e) => trocarPeriodo(e.target.value));
+    $('ip-atualizar').addEventListener('click', carregar);
+    $('ip-k-andamento-btn').addEventListener('click', () => verEtapa('Validacao'));
+    $('ip-etapas').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-etapa]');
+        if (b) verEtapa(b.dataset.etapa);
+    });
+
+    // A pagina chama ao mostrar a aba: so' carrega quando alguem abre o painel.
+    window.InventarioPainel = { abrir: () => { if (!carregado) carregar(); } };
+})();
+</script>
