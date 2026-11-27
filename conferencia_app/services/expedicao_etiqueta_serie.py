@@ -101,7 +101,7 @@ _PRODUTO_POR_TERMO = [  # primeiro que aparecer na descricao ganha
 def sugerir_monte(descricao: str) -> str:
     """Piso: "MOLD HTX1100 FP SEXT25CM H8 8V COMPLETO" -> "FP HTX1100 H8 8V"
     (tipo + maquina + altura + vias). Bloco: "MOLD SPM30 FBV19X39CM P20MM 3V"
-    -> "FBV SPM30 19X39 3V" (tipo + maquina + medida + vias)."""
+    -> "FBV SPM30 19X39CM 3V" (tipo + maquina + medida + vias)."""
     tokens = str(descricao or "").upper().split()
     if len(tokens) < 3 or tokens[0] not in ("MOLD", "MOLDE"):
         return ""
@@ -114,12 +114,12 @@ def sugerir_monte(descricao: str) -> str:
         return f"FP {maquina} {altura} {vias}" if altura else ""
     # Tipo = 3 primeiras letras ("FBEDESM" -> "FBE"); a medida vem colada
     # ("FBV19X39CM") ou no token seguinte ("FBEDESM 14X39CM").
-    bloco = re.fullmatch(r"([A-Z]{3})[A-Z]*(\d+X\d+)?(?:CM)?", tokens[2])
+    bloco = re.fullmatch(r"([A-Z]{3})[A-Z]*(\d+X\d+(?:CM)?)?", tokens[2])
     if not bloco:
         return ""
     medida = bloco.group(2)
     if not medida and len(tokens) > 3:
-        solta = re.fullmatch(r"(\d+X\d+)(?:CM)?", tokens[3])
+        solta = re.fullmatch(r"(\d+X\d+(?:CM)?)", tokens[3])
         medida = solta.group(1) if solta else ""
     return f"{bloco.group(1)} {maquina} {medida} {vias}" if medida else ""
 
