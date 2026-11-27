@@ -23,6 +23,9 @@ import json
 import re
 from datetime import datetime
 
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import contains_eager, selectinload
+
 from ..extensions import db
 from ..models import (
     InventarioGeral as Inventario,
@@ -38,6 +41,8 @@ from ..models import InventarioGeralRecusa as Recusa
 from ..models import InventarioGeralDistribuicao as Distribuicao
 from ..models import InventarioGeralDistribuicaoItem as DistItem
 from ..models import InventarioGeralRetratoErp as RetratoErp
+from ..models import InventarioGeralRetratoGrv as RetratoGrv
+from ..models import EstoqueGrvEspelho as EspelhoLinha, EstoqueGrvEspelhoSync as EspelhoSync
 from . import erp_estoque_service as erp
 from . import estoque_espelho_service as espelho
 from . import inventario_ciclico_service as ciclico
@@ -138,8 +143,57 @@ def abrir(usuario: str, descricao: str = "") -> Inventario:
         else:
             db.session.add(Item(inventario_id=inv.id, qtde_sistema=total, **base))
     _gravar_inconsistentes(inv, produtos)
+    _tirar_foto_grv(inv, {_txt(p.get("codigo_interno")).upper() for p in produtos})
     db.session.commit()
     return inv
+
+
+def _tirar_foto_grv(inv: Inventario, codigos: set[str]) -> int:
+    """Copia do espelho do GRV so' os codigos do inventario (o que nao
+    esta' no print do CPS nem da' pra ler). Se nenhum codigo bater, copia
+    tudo: melhor uma lista maior que uma distribuicao vazia."""
+    ok = espelho._ultima(EspelhoSync.STATUS_OK)
+    foto_em = (ok.concluido_em if ok and ok.concluido_em else None) or agora_br()
+    rows = db.session.query(EspelhoLinha.codigo, EspelhoLinha.localizacao, EspelhoLinha.descricao, EspelhoLinha.unidade,
+                            EspelhoLinha.familia, EspelhoLinha.grupo, EspelhoLinha.grupo_nome, EspelhoLinha.qtde_total).all()
+    do_inventario = [r for r in rows if _txt(r[0]).upper() in codigos]
+    linhas = [
+        {"inventario_id": inv.id, "codigo": c, "localizacao": l or "", "descricao": d, "unidade": u, "familia": f,
+         "grupo": g, "grupo_nome": gn, "qtde_total": q or 0, "foto_em": foto_em}
+        for c, l, d, u, f, g, gn, q in (do_inventario or rows)
+    ]
+    for i in range(0, len(linhas), 1000):
+        db.session.bulk_insert_mappings(RetratoGrv, linhas[i:i + 1000])
+    return len(linhas)
+
+
+def foto_grv(inv: Inventario) -> tuple[dict, datetime | None]:
+    """(estoque no formato do espelho, quando foi tirada). Inventario aberto
+    antes da foto existir tira a dele na primeira vez que a distribuicao abre."""
+    colunas = (RetratoGrv.codigo, RetratoGrv.localizacao, RetratoGrv.descricao, RetratoGrv.unidade, RetratoGrv.familia,
+               RetratoGrv.grupo, RetratoGrv.grupo_nome, RetratoGrv.qtde_total, RetratoGrv.foto_em)
+    rows = db.session.query(*colunas).filter(RetratoGrv.inventario_id == inv.id).all()
+    if not rows:
+        codigos = {_txt(c).upper() for (c,) in db.session.query(Produto.codigo_interno).filter_by(inventario_id=inv.id)}
+        if _tirar_foto_grv(inv, codigos):
+            db.session.commit()
+            rows = db.session.query(*colunas).filter(RetratoGrv.inventario_id == inv.id).all()
+    itens = [{"codigo_interno": c, "localizacao_estoque": l, "item": d, "unidade": u, "familia": f, "grupo": g,
+              "grupo_nome": gn, "qtde_total": q} for c, l, d, u, f, g, gn, q, _ in rows]
+    return erp._agregar_itens(itens), (rows[0][-1] if rows else None)
+
+
+def _estoque_da_foto(inv: Inventario) -> dict:
+    estoque, _ = foto_grv(inv)
+    if not estoque.get("por_codigo"):
+        raise ValueError("A foto do estoque do GRV deste inventário está vazia: o espelho ainda não tinha sido carregado.")
+    return estoque
+
+
+def nomes_grupos(inv: Inventario) -> dict[tuple[str, str], str]:
+    rows = (db.session.query(RetratoGrv.familia, RetratoGrv.grupo, RetratoGrv.grupo_nome)
+            .filter(RetratoGrv.inventario_id == inv.id).distinct().all())
+    return {(f or "", g or ""): n for f, g, n in rows if n}
 
 
 def _gravar_inconsistentes(inv: Inventario, produtos: list[dict]) -> RetratoErp:
@@ -277,7 +331,7 @@ def encerrar_rodada(inv: Inventario, rodada: int, usuario: str) -> dict:
     agora = agora_br()
     apurados = {}
     if rodada == 2:
-        for item in [i for i in inv.itens if i.status == Item.STATUS_PENDENTE]:
+        for item in _itens_com_leituras(inv, Item.STATUS_PENDENTE):
             leituras = _leituras(item, 2)
             item.contagem2 = round(sum(l.quantidade for l in leituras), 6)
             item.contagem2_por, item.contagem2_em = _leitores(leituras) or None, agora
@@ -287,7 +341,7 @@ def encerrar_rodada(inv: Inventario, rodada: int, usuario: str) -> dict:
                 item.status = Item.STATUS_AGUARDA_3A
             apurados[item.status] = apurados.get(item.status, 0) + 1
     elif rodada == 3:
-        for item in [i for i in inv.itens if i.status == Item.STATUS_AGUARDA_3A]:
+        for item in _itens_com_leituras(inv, Item.STATUS_AGUARDA_3A):
             leituras = _leituras(item, 3)
             item.contagem3 = round(sum(l.quantidade for l in leituras), 6)
             item.contagem3_por, item.contagem3_em = _leitores(leituras) or None, agora
@@ -331,14 +385,64 @@ def locais_anteriores(item: Item) -> list[str]:
     return sorted({l.local for l in leituras})
 
 
+def _itens_com_leituras(inv: Inventario, status: str | None = None) -> list[Item]:
+    """Linhas com as leituras carregadas de uma vez: item a item eram
+    milhares de consultas e a tela levava segundos no MySQL."""
+    q = Item.query.filter(Item.inventario_id == inv.id).options(selectinload(Item.leituras))
+    if status:
+        q = q.filter(Item.status == status)
+    return q.order_by(Item.id).all()
+
+
+def itens_com_leituras(inv: Inventario) -> list[Item]:
+    return _itens_com_leituras(inv)
+
+
+def _leitura_da_rodada_atual():
+    """Leitura que ainda vale: da recontagem atual do item e da rodada em que ele esta'."""
+    return and_(
+        Leitura.recontagem == Item.recontagens,
+        or_(and_(Leitura.rodada == 2, Item.status == Item.STATUS_PENDENTE),
+            and_(Leitura.rodada == 3, Item.status == Item.STATUS_AGUARDA_3A)),
+    )
+
+
 def resumo(inv: Inventario) -> dict:
     contagem = {s: 0 for s in (Item.STATUS_PENDENTE, Item.STATUS_AGUARDA_3A, Item.STATUS_CONFERE,
                                Item.STATUS_DIVERGENCIA, Item.STATUS_SEM_CORRESPONDENCIA)}
-    for i in inv.itens:
-        contagem[i.status] = contagem.get(i.status, 0) + 1
-    contagem["total"] = len(inv.itens)
+    for status, n in (db.session.query(Item.status, db.func.count(Item.id))
+                      .filter(Item.inventario_id == inv.id).group_by(Item.status)):
+        contagem[status] = n
+    contagem["total"] = sum(contagem.values())
     contagem["abertos"] = contagem[Item.STATUS_PENDENTE] + contagem[Item.STATUS_AGUARDA_3A] + contagem[Item.STATUS_SEM_CORRESPONDENCIA]
+    # Linhas da 2a/3a em andamento que ja tem alguma leitura (andamento da rodada).
+    lidas = dict(db.session.query(Leitura.rodada, db.func.count(db.distinct(Leitura.item_id)))
+                 .join(Item, Leitura.item_id == Item.id)
+                 .filter(Leitura.inventario_id == inv.id, _leitura_da_rodada_atual())
+                 .group_by(Leitura.rodada).all())
+    contagem["lidas_2a"], contagem["lidas_3a"] = lidas.get(2, 0), lidas.get(3, 0)
     return contagem
+
+
+def foto_em(inv: Inventario) -> datetime | None:
+    row = db.session.query(RetratoGrv.foto_em).filter(RetratoGrv.inventario_id == inv.id).first()
+    return row[0] if row else None
+
+
+def dirigidos(inv: Inventario) -> list[Item]:
+    """Linhas que voltaram pra contar: 3a contagem ou recontagem."""
+    return (Item.query.filter(Item.inventario_id == inv.id,
+                              or_(Item.status == Item.STATUS_AGUARDA_3A,
+                                  and_(Item.status == Item.STATUS_PENDENTE, Item.recontagens > 0)))
+            .options(selectinload(Item.leituras)).order_by(Item.id).all())
+
+
+def minhas_leituras(inv: Inventario, usuario: str) -> list[Leitura]:
+    """Leituras do usuario na contagem em andamento (as que ele ainda pode excluir)."""
+    return (Leitura.query.join(Item, Leitura.item_id == Item.id).options(contains_eager(Leitura.item))
+            .filter(Leitura.inventario_id == inv.id, db.func.upper(Leitura.lido_por) == (usuario or "").upper(),
+                    _leitura_da_rodada_atual())
+            .order_by(Leitura.id.desc()).all())
 
 
 def finalizar(inv: Inventario, usuario: str) -> Inventario:
@@ -589,8 +693,8 @@ def historico() -> list[Inventario]:
 def aplicado_no_erp(inv: Inventario) -> bool:
     """Algum lote de envio ja' foi gravado no CPS (mesmo que outro tenha
     falhado e o inventario continue Finalizado)."""
-    return inv.status == Inventario.STATUS_ENVIADO or any(
-        e.tipo == "aplicar" and e.status == "APLICADO" for e in inv.envios)
+    return inv.status == Inventario.STATUS_ENVIADO or db.session.query(Envio.id).filter_by(
+        inventario_id=inv.id, tipo="aplicar", status="APLICADO").first() is not None
 
 
 def cancelar(inv: Inventario, motivo, usuario: str) -> Cancelamento:
@@ -616,12 +720,12 @@ def _chave(codigo, endereco) -> tuple[str, str]:
     return _txt(codigo).upper(), _txt(endereco).upper()
 
 
-def opcoes_distribuicao() -> dict:
-    """Filtros sao os do ciclico, lidos do espelho do GRV (o CPS nao tem
-    familia/grupo/endereco)."""
-    estoque = espelho.carregar()
+def opcoes_distribuicao(inv: Inventario) -> dict:
+    """Filtros sao os do ciclico, lidos da foto do GRV tirada na abertura
+    (o CPS nao tem familia/grupo/endereco)."""
+    estoque, foto_em = foto_grv(inv)
     return {"familias": ciclico.opcoes_familias(estoque), "enderecos": ciclico.opcoes_enderecos(estoque),
-            "espelho": espelho.status()}
+            "foto_em": foto_em.strftime("%d/%m/%Y %H:%M") if foto_em else None}
 
 
 def _linhas_distribuidas(inv: Inventario) -> dict[tuple[str, str], str]:
@@ -636,7 +740,7 @@ def previa_distribuicao(inv: Inventario, criterio, familia, grupo, codigos_texto
     """Linhas do filtro; as que ja estao com alguem vem com o conferente e
     nao podem ser escolhidas de novo (cancele a distribuicao antes)."""
     criterio, familia, grupo, codigos, endereco = ciclico._validar_filtro(criterio, familia, grupo, codigos_texto, endereco)
-    linhas, nao_encontrados = ciclico.montar_linhas(ciclico._estoque(), criterio, familia, grupo, codigos, endereco)
+    linhas, nao_encontrados = ciclico.montar_linhas(_estoque_da_foto(inv), criterio, familia, grupo, codigos, endereco)
     ja = _linhas_distribuidas(inv)
     for l in linhas:
         l["conferente_atual"] = ja.get(_chave(l["codigo"], l["endereco"]))
@@ -655,7 +759,7 @@ def distribuir(inv: Inventario, criterio, familia, grupo, codigos_texto, enderec
     escolhidas = {_chave(x.get("codigo"), x.get("endereco")) for x in (selecionados or []) if isinstance(x, dict)}
     if not escolhidas:
         raise ValueError("Selecione ao menos um item.")
-    linhas, _ = ciclico.montar_linhas(ciclico._estoque(), criterio, familia, grupo, codigos, endereco)
+    linhas, _ = ciclico.montar_linhas(_estoque_da_foto(inv), criterio, familia, grupo, codigos, endereco)
     ja = _linhas_distribuidas(inv)
     novas = [l for l in linhas if _chave(l["codigo"], l["endereco"]) in escolhidas
              and _chave(l["codigo"], l["endereco"]) not in ja]
@@ -687,7 +791,8 @@ def cancelar_distribuicao(dist: Distribuicao, usuario: str) -> None:
 
 
 def distribuicoes(inv: Inventario) -> list[Distribuicao]:
-    return Distribuicao.query.filter_by(inventario_id=inv.id).order_by(Distribuicao.id.desc()).all()
+    return (Distribuicao.query.filter_by(inventario_id=inv.id).options(selectinload(Distribuicao.itens))
+            .order_by(Distribuicao.id.desc()).all())
 
 
 def numeros_distribuicao(inv: Inventario) -> dict[int, str]:

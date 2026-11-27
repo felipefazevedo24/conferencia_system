@@ -77,13 +77,18 @@ def api_estado():
         "aberto_por": inv.aberto_por, "finalizado_em": _dt(inv.finalizado_em), "finalizado_por": inv.finalizado_por,
     }
     if gestao:
-        envios = [{"tipo": e.tipo, "referencia": e.referencia, "status": e.status, "http": e.http_status,
-                   "enviado_em": _dt(e.enviado_em), "enviado_por": e.enviado_por, "resposta": e.resposta}
-                  for e in inv.envios]
-        return jsonify({"inventario": cab, "resumo": svc.resumo(inv), "gestao": True,
-                        "api_configurada": cps.configurada(), "gravacao_configurada": cps.configurada(gravacao=True),
-                        "aplicado_no_erp": svc.aplicado_no_erp(inv), "painel_envio": _painel_envio(inv),
-                        "itens": [_item_gestao(i) for i in inv.itens], "envios": envios})
+        resposta = {"inventario": cab, "resumo": svc.resumo(inv), "gestao": True,
+                    "api_configurada": cps.configurada(), "gravacao_configurada": cps.configurada(gravacao=True),
+                    "aplicado_no_erp": svc.aplicado_no_erp(inv), "foto_em": _dt(svc.foto_em(inv))}
+        # As linhas (milhares, com as leituras) e o envio ao ERP so' a aba
+        # Resultado usa: as outras abas abrem sem esperar por elas.
+        if request.args.get("itens"):
+            envios = [{"tipo": e.tipo, "referencia": e.referencia, "status": e.status, "http": e.http_status,
+                       "enviado_em": _dt(e.enviado_em), "enviado_por": e.enviado_por, "resposta": e.resposta}
+                      for e in inv.envios]
+            resposta.update(itens=[_item_gestao(i) for i in svc.itens_com_leituras(inv)],
+                            painel_envio=_painel_envio(inv), envios=envios)
+        return jsonify(resposta)
     return jsonify({"inventario": cab, "gestao": False})
 
 
@@ -151,29 +156,18 @@ def api_contagem():
     if not inv:
         return jsonify({"inventario": None, "dirigidos": [], "minhas": []})
     usuario = _usuario().upper()
-    dirigidos, minhas = [], []
-    for i in inv.itens:
-        if i.status == Item.STATUS_PENDENTE and i.recontagens:
-            etapa = "Recontagem"
-        elif i.status == Item.STATUS_AGUARDA_3A:
-            etapa = "3ª contagem"
-        else:
-            etapa = None
-        if etapa:
-            fiz_2a = any(l.lido_por.upper() == usuario for l in i.leituras
-                         if l.rodada == 2 and l.recontagem == (i.recontagens or 0))
-            dirigidos.append({
-                "codigo_interno": i.codigo_interno, "descricao": i.descricao, "unidade": i.unidade, "lote": i.lote,
-                "etapa": etapa, "locais": svc.locais_anteriores(i),
-                "pode_contar": not (etapa == "3ª contagem" and fiz_2a),
-            })
-        for l in i.leituras:
-            if l.lido_por.upper() == usuario and l.recontagem == (i.recontagens or 0) and (
-                    (l.rodada == 2 and i.status == Item.STATUS_PENDENTE)
-                    or (l.rodada == 3 and i.status == Item.STATUS_AGUARDA_3A)):
-                minhas.append({**_leitura(l), "codigo_interno": i.codigo_interno, "descricao": i.descricao,
-                               "unidade": i.unidade, "lote": i.lote})
-    minhas.sort(key=lambda m: m["id"], reverse=True)
+    dirigidos = []
+    for i in svc.dirigidos(inv):
+        etapa = "3ª contagem" if i.status == Item.STATUS_AGUARDA_3A else "Recontagem"
+        fiz_2a = any(l.lido_por.upper() == usuario for l in i.leituras
+                     if l.rodada == 2 and l.recontagem == (i.recontagens or 0))
+        dirigidos.append({
+            "codigo_interno": i.codigo_interno, "descricao": i.descricao, "unidade": i.unidade, "lote": i.lote,
+            "etapa": etapa, "locais": svc.locais_anteriores(i),
+            "pode_contar": not (etapa == "3ª contagem" and fiz_2a),
+        })
+    minhas = [{**_leitura(l), "codigo_interno": l.item.codigo_interno, "descricao": l.item.descricao,
+               "unidade": l.item.unidade, "lote": l.item.lote} for l in svc.minhas_leituras(inv, _usuario())]
     # Linhas distribuidas pra mim: "lida" so' pelas MINHAS leituras (contagem cega).
     lidos = svc.locais_lidos(inv, _usuario())
     minha_lista = [{"codigo": l.codigo, "descricao": l.descricao, "unidade": l.unidade, "endereco": l.endereco,
@@ -391,7 +385,10 @@ def _distribuicao_dict(d, numeros: dict, nomes_grupos: dict, lidos: dict) -> dic
 @inventario_geral_bp.route("/api/inventario-geral/distribuicao/opcoes", methods=["GET"])
 @permission_required(PERM_GESTAO)
 def api_distribuicao_opcoes():
-    return jsonify({**svc.opcoes_distribuicao(), "conferentes": _conferentes(PERM_CONTAGEM)})
+    inv, erro = _inventario_ou_400()
+    if erro:
+        return erro
+    return jsonify({**svc.opcoes_distribuicao(inv), "conferentes": _conferentes(PERM_CONTAGEM)})
 
 
 @inventario_geral_bp.route("/api/inventario-geral/espelho", methods=["GET"])
@@ -430,7 +427,7 @@ def api_distribuicoes():
     inv, erro = _inventario_ou_400()
     if erro:
         return erro
-    numeros, nomes, lidos = svc.numeros_distribuicao(inv), espelho.nomes_grupos(), svc.locais_lidos(inv)
+    numeros, nomes, lidos = svc.numeros_distribuicao(inv), svc.nomes_grupos(inv), svc.locais_lidos(inv)
     return jsonify({"distribuicoes": [_distribuicao_dict(d, numeros, nomes, lidos) for d in svc.distribuicoes(inv)]})
 
 
@@ -464,7 +461,7 @@ def api_distribuicao(dist_id):
     inv = dist.inventario
     lidos = svc.locais_lidos(inv)
     return jsonify({
-        "distribuicao": _distribuicao_dict(dist, svc.numeros_distribuicao(inv), espelho.nomes_grupos(), lidos),
+        "distribuicao": _distribuicao_dict(dist, svc.numeros_distribuicao(inv), svc.nomes_grupos(inv), lidos),
         "itens": [{"codigo": l.codigo, "descricao": l.descricao, "unidade": l.unidade, "endereco": l.endereco,
                    "lida": svc.linha_lida(l, lidos)} for l in dist.itens],
     })
@@ -516,13 +513,14 @@ def api_exportar():
     if not inv:
         return jsonify({"error": "Nenhum inventário geral em andamento."}), 400
     custos = json.loads(inv.resultado.custos or "{}") if inv.resultado else {}
+    itens = svc.itens_com_leituras(inv)
     wb = Workbook()
     ws = wb.active
     ws.title = "Inventario geral"
     ws.append(["Código", "Descrição", "Unidade", "Lote", "1ª (sistema)", "2ª contagem", "2ª por",
                "3ª contagem", "3ª por", "Status", "Qtde final", "Diferença", "Adicionado no físico", "Recontagens"]
               + (["Custo médio", "Valor sistema", "Valor final", "Diferença (R$)"] if inv.resultado else []))
-    for i in inv.itens:
+    for i in itens:
         dif = (i.qtde_final - i.qtde_sistema) if i.qtde_final is not None else None
         linha = [i.codigo_interno, i.descricao, i.unidade, i.lote or "", i.qtde_sistema, i.contagem2, i.contagem2_por,
                  i.contagem3, i.contagem3_por, i.status, i.qtde_final, dif, "Sim" if i.adicionado_manual else "",
@@ -535,7 +533,7 @@ def api_exportar():
         ws.append(linha)
     ws = wb.create_sheet("Leituras por local")
     ws.append(["Código", "Descrição", "Lote", "Contagem", "Local", "Quantidade", "Lido por", "Lido em", "Recontagem"])
-    for i in inv.itens:
+    for i in itens:
         for l in i.leituras:
             ws.append([i.codigo_interno, i.descricao, i.lote or "", f"{l.rodada}ª", l.local, l.quantidade,
                        l.lido_por, _dt(l.lido_em), l.recontagem])
