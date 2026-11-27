@@ -28,9 +28,25 @@ def _item_da_os(numero_os: str, ordem: dict) -> int | None:
     return codigos[0] if codigos else None
 
 
+def _para_abrir(documentos: list[dict]) -> list[dict]:
+    """O que estiver em tos_aux_desenhos manda: vao todos, o principal da
+    Producao na frente. So' sem nenhum desenho cai pro anexo/PDF - antes o
+    principal da Producao (que em OS CMS e' anexo) passava na frente do
+    desenho e a expedicao abria arquivo errado."""
+    desenhos = [d for d in documentos if d.get("kind") == "drawing"]
+    if desenhos:
+        return sorted(desenhos, key=lambda d: not d.get("is_primary"))
+    reserva = (
+        next((d for d in documentos if d.get("is_primary")), None)
+        or next((d for d in documentos if str(d.get("filename") or "").lower().endswith(".pdf")), None)
+    )
+    return [reserva] if reserva else []
+
+
 def localizar(n_os) -> dict | None:
-    """Documento que serve de desenho da OS, ou None se ela nao tiver.
-    Levanta excecao se o ERP estiver fora - quem chama decide o que mostrar."""
+    """Documentos que servem de desenho da OS ({"documentos": [...]}), ou None
+    se ela nao tiver. Levanta excecao se o ERP estiver fora - quem chama
+    decide o que mostrar."""
     numero_os = _numero_os(n_os)
     if not numero_os:
         return None
@@ -42,14 +58,10 @@ def localizar(n_os) -> dict | None:
         documentos = producao_service.obter_documentos(numero_os, aux_code, ordem=ordem)
     except LookupError:
         return None
-    escolhido = (
-        next((d for d in documentos if d.get("is_primary")), None)
-        or next((d for d in documentos if d.get("kind") == "drawing"), None)
-        or next((d for d in documentos if str(d.get("filename") or "").lower().endswith(".pdf")), None)
-    )
-    if not escolhido:
+    escolhidos = _para_abrir(documentos)
+    if not escolhidos:
         return None
-    return {**escolhido, "numero_os": numero_os, "ordem": ordem}
+    return {"documentos": escolhidos, "numero_os": numero_os, "ordem": ordem}
 
 
 def os_filhas(n_os) -> list[dict]:
@@ -85,16 +97,32 @@ def os_filhas(n_os) -> list[dict]:
     return resultado
 
 
-def obter_arquivo(n_os) -> tuple[bytes, str]:
-    documento = localizar(n_os)
-    if not documento:
+def obter_arquivo(n_os, indice: int = 0) -> tuple[bytes, str]:
+    """`indice` e' a posicao em localizar()["documentos"]; 0 e' o principal."""
+    achado = localizar(n_os)
+    if not achado:
         raise LookupError("Esta OS não tem desenho anexado no ERP.")
+    if not 0 <= indice < len(achado["documentos"]):
+        raise LookupError("Desenho não encontrado nesta OS.")
+    return _baixar(achado, achado["documentos"][indice])
+
+
+def obter_arquivos(n_os) -> list[tuple[bytes, str]]:
+    """Todos os desenhos da OS, na ordem de localizar(). Consulta o ERP uma
+    vez so' para a lista, em vez de uma por arquivo."""
+    achado = localizar(n_os)
+    if not achado:
+        raise LookupError("Esta OS não tem desenho anexado no ERP.")
+    return [_baixar(achado, documento) for documento in achado["documentos"]]
+
+
+def _baixar(achado: dict, documento: dict) -> tuple[bytes, str]:
     return producao_service.obter_arquivo(
-        documento["numero_os"],
+        achado["numero_os"],
         documento["aux_code"],
         documento["source_kind"],
         documento["id"],
-        ordem=documento["ordem"],
+        ordem=achado["ordem"],
         source_cod_os=documento["source_cod_os"],
         source_aux_code=documento["source_aux_code"],
     )

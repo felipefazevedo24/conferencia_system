@@ -162,10 +162,16 @@ def consultar_desenho_os(n_os):
         return jsonify({"tem_desenho": False, "erp_indisponivel": True})
     if not documento:
         return jsonify({"tem_desenho": False})
+    base = f"/api/expedicao/conf-cega/desenho/{documento['numero_os']}/arquivo"
+    desenhos = [
+        {"arquivo": d["filename"], "url": f"{base}?i={i}" if i else base}
+        for i, d in enumerate(documento["documentos"])
+    ]
     return jsonify({
         "tem_desenho": True,
-        "arquivo": documento["filename"],
-        "url": f"/api/expedicao/conf-cega/desenho/{documento['numero_os']}/arquivo",
+        "arquivo": desenhos[0]["arquivo"],
+        "url": desenhos[0]["url"],
+        "desenhos": desenhos,
     })
 
 
@@ -186,7 +192,7 @@ def consultar_os_filhas(n_os):
 @permission_required(PERMISSION)
 def abrir_desenho_os(n_os):
     try:
-        conteudo, nome = desenho_svc.obter_arquivo(n_os)
+        conteudo, nome = desenho_svc.obter_arquivo(n_os, request.args.get("i", 0, type=int))
     except LookupError as exc:
         return jsonify({"error": str(exc)}), 404
     except Exception:  # noqa: BLE001
